@@ -40,11 +40,10 @@ export async function GET() {
       resOi.json(),
     ]);
 
-    // Mapping Binance kline format to { t, o, h, l, c, v }
-    // c[0] is open_time in raw milliseconds
+    const utcPlus3OffsetMs = 3 * 60 * 60 * 1000;
     const formatCandles = (data: any[]) => {
       return data.map((c) => ({
-        t: c[0],
+        t: c[0] + utcPlus3OffsetMs,
         o: parseFloat(c[1]),
         h: parseFloat(c[2]),
         l: parseFloat(c[3]),
@@ -53,15 +52,107 @@ export async function GET() {
       }));
     };
 
+    const candles1h = formatCandles(data1h);
+    const candles15m = formatCandles(data15m);
+    const candles5m = formatCandles(data5m);
+
+    // 1. Macro Context
+    const lastCandle = candles1h[candles1h.length - 1];
+    const lastDate = new Date(lastCandle.t);
+    const currentYear = lastDate.getUTCFullYear();
+    const currentMonth = lastDate.getUTCMonth();
+    const currentDate = lastDate.getUTCDate();
+
+    const previousDayDate = new Date(Date.UTC(currentYear, currentMonth, currentDate - 1));
+    const prevYear = previousDayDate.getUTCFullYear();
+    const prevMonth = previousDayDate.getUTCMonth();
+    const prevDate = previousDayDate.getUTCDate();
+
+    let pdh = 0;
+    let pdl = Infinity;
+    candles1h.forEach(c => {
+      const d = new Date(c.t);
+      if (d.getUTCFullYear() === prevYear && d.getUTCMonth() === prevMonth && d.getUTCDate() === prevDate) {
+        if (c.h > pdh) pdh = c.h;
+        if (c.l < pdl) pdl = c.l;
+      }
+    });
+    if (pdl === Infinity) pdl = 0;
+
+    // 2. Target Exhaustion
+    let target_status = "PENDING";
+    const last3_15m = candles15m.slice(-3);
+    for (const c of last3_15m) {
+      if (c.h >= pdh || c.l <= pdl) {
+        target_status = "EXHAUSTED";
+        break;
+      }
+    }
+
+    // 3. Killzone Stepped Liquidity (UTC+3)
+    const getSessionLiquidity = (candles: any[], startHour: number, endHour: number) => {
+      const sessionCandles = candles.filter(c => {
+        const h = new Date(c.t).getUTCHours();
+        return h >= startHour && h < endHour;
+      });
+
+      if (sessionCandles.length === 0) return { high: null, low: null };
+
+      const latestSessionDate = new Date(sessionCandles[sessionCandles.length - 1].t).toDateString();
+      const latestSessionCandles = sessionCandles.filter(c => new Date(c.t).toDateString() === latestSessionDate);
+
+      return {
+        high: Math.max(...latestSessionCandles.map(c => c.h)),
+        low: Math.min(...latestSessionCandles.map(c => c.l))
+      };
+    };
+
+    const asianLiquidity = getSessionLiquidity(candles15m, 3, 9);
+    const londonLiquidity = getSessionLiquidity(candles15m, 9, 13);
+
+    // 4. SMT/Equal Highs Detector
+    const scanWindow = candles15m.slice(-20);
+    const swingHighs: { index: number, price: number, time: number }[] = [];
+    for (let i = 1; i < scanWindow.length - 1; i++) {
+      const prev = scanWindow[i - 1];
+      const curr = scanWindow[i];
+      const next = scanWindow[i + 1];
+      if (curr.h > prev.h && curr.h > next.h) {
+        swingHighs.push({ index: i, price: curr.h, time: curr.t });
+      }
+    }
+
+    const smt_traps = [];
+    for (let i = 0; i < swingHighs.length; i++) {
+      for (let j = i + 1; j < swingHighs.length; j++) {
+        if (Math.abs(swingHighs[i].price - swingHighs[j].price) <= 0.50) {
+          smt_traps.push({
+            type: "engineered_liquidity",
+            price: parseFloat(((swingHighs[i].price + swingHighs[j].price) / 2).toFixed(2)),
+            time1: swingHighs[i].time,
+            time2: swingHighs[j].time,
+          });
+        }
+      }
+    }
+
     const payload = {
       ticker: "ETHUSDC.p",
-      timestamp_utc: new Date().toISOString(),
-      market_structure_framework: "V6_Naked_Data",
+      timezone: "UTC+3",
       open_interest: parseFloat(dataOi.openInterest),
       data_payload: {
-        candles_1h: formatCandles(data1h),
-        candles_15m: formatCandles(data15m),
-        candles_5m: formatCandles(data5m),
+        candles_1h: candles1h,
+        candles_15m: candles15m,
+        candles_5m: candles5m,
+      },
+      ipda_metrics: {
+        target_status,
+        macro_levels: { pdh, pdl },
+        stepped_liquidity: {
+          asian: asianLiquidity,
+          london: londonLiquidity
+        },
+        smt_traps
       }
     };
 

@@ -11,14 +11,14 @@ export interface Candle {
 
 export interface MarketDataPayload {
   ticker: string;
-  timestamp_utc: string;
-  market_structure_framework: string;
+  timezone: string;
   open_interest: number;
   data_payload: {
     candles_1h: Candle[];
     candles_15m: Candle[];
     candles_5m: Candle[];
   };
+  ipda_metrics: any;
 }
 
 export function useMarketData() {
@@ -48,39 +48,48 @@ export function useMarketData() {
     // Intentionally only fetching once on mount as per V6 requirements.
   }, [fetchData]);
 
-  const downloadJSON = useCallback(() => {
+  const downloadV6 = useCallback(() => {
     if (!data) return;
 
-    // Create a copy of the data shifted to UTC+3
-    const utcPlus3OffsetMs = 3 * 60 * 60 * 1000;
-    
-    // Shift the ISO string as well
-    const originalDate = new Date(data.timestamp_utc);
-    const shiftedDate = new Date(originalDate.getTime() + utcPlus3OffsetMs);
-
-    const shiftCandles = (candles: Candle[]) => 
-      candles.map(c => ({ ...c, t: c.t + utcPlus3OffsetMs }));
-
-    const shiftedData = {
-      ...data,
-      timestamp_utc: shiftedDate.toISOString().replace('Z', '+03:00'), // Indicate it's not pure UTC anymore
-      data_payload: {
-        candles_1h: shiftCandles(data.data_payload.candles_1h),
-        candles_15m: shiftCandles(data.data_payload.candles_15m),
-        candles_5m: shiftCandles(data.data_payload.candles_5m),
-      }
+    const v6Data = {
+      ticker: data.ticker,
+      timezone: data.timezone,
+      open_interest: data.open_interest,
+      data_payload: data.data_payload
     };
 
-    const blob = new Blob([JSON.stringify(shiftedData, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(v6Data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `V6_Gem_Data_${data.ticker}_UTC+3_${shiftedData.timestamp_utc.replace(/:/g, '-')}.json`;
+    a.download = `V6_Naked_Data_${data.ticker}_UTC+3.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }, [data]);
 
-  return { data, isLoading, error, refetch: fetchData, downloadJSON };
+  const downloadV7 = useCallback(() => {
+    if (!data) return;
+
+    const v7Data = {
+      ticker: data.ticker,
+      timezone: data.timezone,
+      open_interest: data.open_interest,
+      data_payload: data.data_payload,
+      ipda_metrics: data.ipda_metrics
+    };
+
+    const blob = new Blob([JSON.stringify(v7Data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `V7.4_Enriched_Data_${data.ticker}_UTC+3.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [data]);
+
+  return { data, isLoading, error, refetch: fetchData, downloadV6, downloadV7 };
 }

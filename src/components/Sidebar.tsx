@@ -5,11 +5,12 @@ import { DownloadCloud, TrendingUp, Activity } from 'lucide-react';
 interface SidebarProps {
   currentPrice: number | null;
   openInterest: number | null;
-  onDownload: () => void;
+  onDownloadV6: () => void;
+  onDownloadV7: () => void;
   isLoading?: boolean;
 }
 
-export default function Sidebar({ currentPrice, openInterest, onDownload, isLoading }: SidebarProps) {
+export default function Sidebar({ currentPrice, openInterest, onDownloadV6, onDownloadV7, isLoading }: SidebarProps) {
   return (
     <div className="w-80 h-full bg-[#0a0a0a] border-l border-white/5 p-6 flex flex-col gap-6 relative z-10 shadow-2xl">
       <div className="flex items-center gap-3">
@@ -58,17 +59,30 @@ export default function Sidebar({ currentPrice, openInterest, onDownload, isLoad
 
       <div className="flex-1" />
 
-      <button
-        onClick={onDownload}
-        disabled={isLoading}
-        className="w-full relative group overflow-hidden rounded-2xl p-[1px] disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-purple-500 rounded-2xl opacity-70 group-hover:opacity-100 transition-opacity duration-300" />
-        <div className="relative flex items-center justify-center gap-2 px-6 py-4 bg-[#0a0a0a] rounded-2xl group-hover:bg-transparent transition-colors duration-300">
-          <DownloadCloud className="w-5 h-5 text-cyan-400 group-hover:text-white transition-colors duration-300" />
-          <span className="font-semibold text-white">Download V6 JSON for Gem</span>
-        </div>
-      </button>
+      <div className="flex flex-col gap-3 mt-4">
+        <button
+          onClick={onDownloadV6}
+          disabled={isLoading}
+          className="w-full relative group overflow-hidden rounded-2xl p-[1px] disabled:opacity-50 disabled:cursor-not-allowed border border-white/10 hover:border-white/20 transition-colors"
+        >
+          <div className="relative flex items-center justify-center gap-2 px-6 py-3 bg-[#111] rounded-2xl transition-colors duration-300 hover:bg-[#1a1a1a]">
+            <span className="text-xl">⬇️</span>
+            <span className="font-semibold text-gray-300 group-hover:text-white transition-colors">Download V6 Naked JSON</span>
+          </div>
+        </button>
+
+        <button
+          onClick={onDownloadV7}
+          disabled={isLoading}
+          className="w-full relative group overflow-hidden rounded-2xl p-[1px] disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-purple-500 rounded-2xl opacity-70 group-hover:opacity-100 transition-opacity duration-300" />
+          <div className="relative flex items-center justify-center gap-2 px-6 py-4 bg-[#0a0a0a] rounded-2xl group-hover:bg-transparent transition-colors duration-300">
+            <span className="text-xl">🚀</span>
+            <span className="font-bold text-white">Download V7.4 Enriched JSON</span>
+          </div>
+        </button>
+      </div>
     </div>
   );
 }

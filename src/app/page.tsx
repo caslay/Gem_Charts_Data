@@ -9,7 +9,7 @@ import { Loader2 } from 'lucide-react';
 type Timeframe = '5m' | '15m' | '1h';
 
 export default function Home() {
-  const { data, isLoading, error, downloadJSON } = useMarketData();
+  const { data, isLoading, error, downloadV6, downloadV7 } = useMarketData();
   const [timeframe, setTimeframe] = useState<Timeframe>('5m');
 
   const getChartData = () => {
@@ -82,7 +82,8 @@ export default function Home() {
       <Sidebar 
         currentPrice={currentPrice} 
         openInterest={data?.open_interest ?? null} 
-        onDownload={downloadJSON}
+        onDownloadV6={downloadV6}
+        onDownloadV7={downloadV7}
         isLoading={isLoading}
       />
     </main>
