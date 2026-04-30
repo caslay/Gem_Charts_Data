@@ -51,11 +51,31 @@ export function useMarketData() {
   const downloadJSON = useCallback(() => {
     if (!data) return;
 
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    // Create a copy of the data shifted to UTC+3
+    const utcPlus3OffsetMs = 3 * 60 * 60 * 1000;
+    
+    // Shift the ISO string as well
+    const originalDate = new Date(data.timestamp_utc);
+    const shiftedDate = new Date(originalDate.getTime() + utcPlus3OffsetMs);
+
+    const shiftCandles = (candles: Candle[]) => 
+      candles.map(c => ({ ...c, t: c.t + utcPlus3OffsetMs }));
+
+    const shiftedData = {
+      ...data,
+      timestamp_utc: shiftedDate.toISOString().replace('Z', '+03:00'), // Indicate it's not pure UTC anymore
+      data_payload: {
+        candles_1h: shiftCandles(data.data_payload.candles_1h),
+        candles_15m: shiftCandles(data.data_payload.candles_15m),
+        candles_5m: shiftCandles(data.data_payload.candles_5m),
+      }
+    };
+
+    const blob = new Blob([JSON.stringify(shiftedData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `V6_Gem_Data_${data.ticker}_${data.timestamp_utc.replace(/:/g, '-')}.json`;
+    a.download = `V6_Gem_Data_${data.ticker}_UTC+3_${shiftedData.timestamp_utc.replace(/:/g, '-')}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
