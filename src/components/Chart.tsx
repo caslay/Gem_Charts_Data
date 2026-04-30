@@ -94,14 +94,24 @@ export default function Chart({ data, colors }: ChartProps) {
 
   useEffect(() => {
     if (seriesRef.current && data && data.length > 0) {
-      // lightweight-charts expects time in seconds for Unix timestamps, but our `t` is in milliseconds
-      const formattedData = data.map((d) => ({
-        time: (Math.floor(d.t / 1000)) as any,
-        open: d.o,
-        high: d.h,
-        low: d.l,
-        close: d.c,
-      }));
+      // lightweight-charts expects time in seconds, and displays in the local browser's timezone.
+      // To force it to display UTC+3 for all users, we calculate a fake timestamp:
+      // fakeTime = originalTime + localTimezoneOffset + (3 hours)
+      const formattedData = data.map((d) => {
+        const date = new Date(d.t);
+        // getTimezoneOffset() returns minutes, positive if behind UTC, negative if ahead.
+        const localOffsetMs = date.getTimezoneOffset() * 60 * 1000;
+        const utcPlus3OffsetMs = 3 * 60 * 60 * 1000; // +3 hours in ms
+        const fakeTimeMs = d.t + localOffsetMs + utcPlus3OffsetMs;
+        
+        return {
+          time: (Math.floor(fakeTimeMs / 1000)) as any,
+          open: d.o,
+          high: d.h,
+          low: d.l,
+          close: d.c,
+        };
+      });
 
       // Data must be sorted in ascending order for lightweight-charts
       formattedData.sort((a, b) => a.time - b.time);
