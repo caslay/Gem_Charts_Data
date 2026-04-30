@@ -22,6 +22,14 @@ export async function GET() {
     ]);
 
     if (!res5m.ok || !res15m.ok || !res1h.ok || !resOi.ok) {
+      const errorText = await res5m.text();
+      console.error('Binance API Error:', {
+        status5m: res5m.status,
+        status15m: res15m.status,
+        status1h: res1h.status,
+        statusOi: resOi.status,
+        response: errorText
+      });
       throw new Error('Failed to fetch from Binance API');
     }
 
