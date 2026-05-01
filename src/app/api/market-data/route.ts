@@ -8,35 +8,44 @@ export async function GET() {
     const limit = 350;
 
     const urls = {
-      '5m': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=${limit}`,
+      '5m':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=${limit}`,
       '15m': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=15m&limit=${limit}`,
-      '1h': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=${limit}`,
+      '1h':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=${limit}`,
+      // HTF — fetched for background calculations only, NEVER exposed in data_payload
+      '1d':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=100`,
+      '1w':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1w&limit=100`,
       'openInterest': `https://fapi.binance.com/fapi/v1/openInterest?symbol=${symbol}`,
     };
 
-    const [res5m, res15m, res1h, resOi] = await Promise.all([
+    const [res5m, res15m, res1h, res1d, res1w, resOi] = await Promise.all([
       fetch(urls['5m']),
       fetch(urls['15m']),
       fetch(urls['1h']),
+      fetch(urls['1d']),
+      fetch(urls['1w']),
       fetch(urls['openInterest']),
     ]);
 
-    if (!res5m.ok || !res15m.ok || !res1h.ok || !resOi.ok) {
+    if (!res5m.ok || !res15m.ok || !res1h.ok || !res1d.ok || !res1w.ok || !resOi.ok) {
       const errorText = await res5m.text();
       console.error('Binance API Error:', {
         status5m: res5m.status,
         status15m: res15m.status,
         status1h: res1h.status,
+        status1d: res1d.status,
+        status1w: res1w.status,
         statusOi: resOi.status,
         response: errorText
       });
       throw new Error('Failed to fetch from Binance API');
     }
 
-    const [data5m, data15m, data1h, dataOi] = await Promise.all([
+    const [data5m, data15m, data1h, data1d, data1w, dataOi] = await Promise.all([
       res5m.json(),
       res15m.json(),
       res1h.json(),
+      res1d.json(),
+      res1w.json(),
       resOi.json(),
     ]);
 
@@ -52,9 +61,12 @@ export async function GET() {
       }));
     };
 
-    const candles1h = formatCandles(data1h);
+    const candles1h  = formatCandles(data1h);
     const candles15m = formatCandles(data15m);
-    const candles5m = formatCandles(data5m);
+    const candles5m  = formatCandles(data5m);
+    // HTF — kept in local scope only; NEVER added to data_payload
+    const candles1d  = formatCandles(data1d);
+    const candles1w  = formatCandles(data1w);
 
     // 1. Macro Context
     const lastCandle = candles1h[candles1h.length - 1];
@@ -212,7 +224,66 @@ export async function GET() {
 
     const active_fvgs = findUnmitigatedFVGs(candles15m);
 
-    // 7. Killzone Clock (Current Time Window)
+    // 7. Historical Magnets Scanner (HTF — 1w / 1d)
+    const livePrice = candles5m[candles5m.length - 1].c;
+
+    // 7a. Weekly High / Low — last 4 completed weekly candles (exclude current open)
+    const last4Weeks = candles1w.slice(-5, -1);
+    const nearest_weekly_high = last4Weeks.length > 0
+      ? Math.max(...last4Weeks.map((c: any) => c.h))
+      : null;
+    const nearest_weekly_low = last4Weeks.length > 0
+      ? Math.min(...last4Weeks.map((c: any) => c.l))
+      : null;
+
+    // 7b. Daily FVG Scanner — last 30 daily candles (exclude current open)
+    const last30Daily = candles1d.slice(-31, -1);
+    const dailyFVGs = findUnmitigatedFVGs(last30Daily);
+
+    // Find nearest unmitigated SIBI above price and BISI below price
+    const sibisAbove = dailyFVGs
+      .filter((fvg: any) => fvg.type === 'Bearish_SIBI' && fvg.bottom > livePrice)
+      .sort((a: any, b: any) => a.bottom - b.bottom);
+    const bisiBelow = dailyFVGs
+      .filter((fvg: any) => fvg.type === 'Bullish_BISI' && fvg.top < livePrice)
+      .sort((a: any, b: any) => b.top - a.top);
+
+    const historical_magnets = {
+      nearest_weekly_high,
+      nearest_weekly_low,
+      nearest_daily_sibi: sibisAbove.length > 0 ? sibisAbove[0] : null,
+      nearest_daily_bisi: bisiBelow.length > 0 ? bisiBelow[0] : null,
+    };
+
+    // 8. Price Discovery & Standard Deviations (Asian Range Projections)
+    const asianHigh = asianLiquidity.high;
+    const asianLow  = asianLiquidity.low;
+
+    let projected_targets: Record<string, number | null>;
+    if (!asianHigh || !asianLow || asianHigh === 0 || asianLow === 0) {
+      projected_targets = {
+        asian_range_size:  null,
+        upward_dev_1_5:    null,
+        upward_dev_2_0:    null,
+        upward_dev_2_5:    null,
+        downward_dev_1_5:  null,
+        downward_dev_2_0:  null,
+        downward_dev_2_5:  null,
+      };
+    } else {
+      const range = asianHigh - asianLow;
+      projected_targets = {
+        asian_range_size:  parseFloat(range.toFixed(4)),
+        upward_dev_1_5:    parseFloat((asianHigh + range * 1.5).toFixed(2)),
+        upward_dev_2_0:    parseFloat((asianHigh + range * 2.0).toFixed(2)),
+        upward_dev_2_5:    parseFloat((asianHigh + range * 2.5).toFixed(2)),
+        downward_dev_1_5:  parseFloat((asianLow  - range * 1.5).toFixed(2)),
+        downward_dev_2_0:  parseFloat((asianLow  - range * 2.0).toFixed(2)),
+        downward_dev_2_5:  parseFloat((asianLow  - range * 2.5).toFixed(2)),
+      };
+    }
+
+    // 9. Killzone Clock (Current Time Window)
     const getCurrentKillzone = () => {
       const now = new Date();
       const shiftedTime = new Date(now.getTime() + (3 * 60 * 60 * 1000));
@@ -254,6 +325,7 @@ export async function GET() {
       ticker: "ETHUSDC.p",
       timezone: "UTC+3",
       open_interest: parseFloat(dataOi.openInterest),
+      // V6 Naked payload — OHLCV only, no HTF arrays, no calculations
       data_payload: {
         candles_1h: candles1h,
         candles_15m: candles15m,
@@ -270,6 +342,8 @@ export async function GET() {
           asian: asianLiquidity,
           london: londonLiquidity
         },
+        historical_magnets,
+        projected_targets,
         smt_traps,
         active_fvgs
       }
