@@ -11,19 +11,23 @@ export function slicePayloadByLookback(
   data: MarketDataPayload,
   lookbackDays: number
 ): MarketDataPayload {
+  const limit1H  = lookbackDays * 24;
+  const limit15m = lookbackDays * 96;
+  const limit5m  = lookbackDays * 288;
+
   return {
     ...data,
     data_payload: {
-      candles_1h: data.data_payload.candles_1h.slice(-(lookbackDays * 24)),
-      candles_15m: data.data_payload.candles_15m.slice(-(lookbackDays * 96)),
-      candles_5m: data.data_payload.candles_5m.slice(-(lookbackDays * 288)),
+      candles_1h:  Array.isArray(data.data_payload?.candles_1h)  ? data.data_payload.candles_1h.slice(-limit1H)   : [],
+      candles_15m: Array.isArray(data.data_payload?.candles_15m) ? data.data_payload.candles_15m.slice(-limit15m) : [],
+      candles_5m:  Array.isArray(data.data_payload?.candles_5m)  ? data.data_payload.candles_5m.slice(-limit5m)   : [],
     },
   };
 }
 
 // ─── AI Prompt Prefix ────────────────────────────────────────────────────────
 const AI_PROMPT_PREFIX =
-  'Act as the Institutional Flow Synthesizer V7.6. Analyze the following quantitative data and provide a mechanical bias report: \n\n';
+  'Act as the Institutional Flow Synthesizer V7.8. Analyze the following quantitative data and provide a mechanical bias report: \n\n';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
@@ -47,7 +51,7 @@ export default function Sidebar({
   isOpen,
   onClose,
 }: SidebarProps) {
-  const [lookbackDays, setLookbackDays] = useState(3);
+  const [lookbackDays, setLookbackDays] = useState(1);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
 
   // ── One-Click Context handler ────────────────────────────────────────────
@@ -172,11 +176,12 @@ export default function Sidebar({
 
             {/* Custom-styled range slider */}
             <div className="relative z-10">
+              {/* Visible track */}
               <div
-                className="relative w-full h-2 rounded-full bg-white/10 mb-2 overflow-hidden"
+                className="w-full h-2 rounded-full pointer-events-none"
                 style={{ background: `linear-gradient(to right, #22d3ee ${sliderPct}%, rgba(255,255,255,0.1) ${sliderPct}%)` }}
-              >
-              </div>
+              />
+              {/* Transparent interactive input overlays the track */}
               <input
                 id="lookback-slider"
                 type="range"
@@ -185,10 +190,9 @@ export default function Sidebar({
                 step={1}
                 value={lookbackDays}
                 onChange={(e) => setLookbackDays(Number(e.target.value))}
-                className="absolute inset-0 w-full opacity-0 cursor-pointer h-2"
-                style={{ top: 0 }}
+                className="absolute inset-x-0 top-0 w-full h-2 opacity-0 cursor-pointer"
               />
-              <div className="flex justify-between text-[10px] text-gray-600 mt-1 px-0.5">
+              <div className="flex justify-between text-[10px] text-gray-600 mt-2 px-0.5">
                 {[1, 2, 3, 4, 5, 6, 7].map(d => (
                   <span
                     key={d}
