@@ -107,8 +107,30 @@ export async function GET() {
       };
     };
 
-    const asianLiquidity = getSessionLiquidity(candles15m, 3, 9);
-    const londonLiquidity = getSessionLiquidity(candles15m, 9, 13);
+    const asianLiquidity = getSessionLiquidity(candles15m, 3, 7);
+    const londonLiquidity = getSessionLiquidity(candles15m, 9, 12);
+
+    // 5. True Day Open (07:00 Anchor)
+    let true_day_open_0700: number | null = null;
+    for (let i = candles15m.length - 1; i >= 0; i--) {
+      const d = new Date(candles15m[i].t);
+      if (d.getUTCHours() === 7 && d.getUTCMinutes() === 0) {
+        true_day_open_0700 = candles15m[i].o;
+        break;
+      }
+    }
+
+    let current_pricing = "UNKNOWN";
+    if (true_day_open_0700 !== null && candles5m.length > 0) {
+      const livePrice = candles5m[candles5m.length - 1].c;
+      if (livePrice > true_day_open_0700) {
+        current_pricing = "PREMIUM";
+      } else if (livePrice < true_day_open_0700) {
+        current_pricing = "DISCOUNT";
+      } else {
+        current_pricing = "FAIR_VALUE";
+      }
+    }
 
     // 4. SMT/Equal Highs Detector
     const scanWindow = candles15m.slice(-20);
@@ -146,6 +168,8 @@ export async function GET() {
         candles_5m: candles5m,
       },
       ipda_metrics: {
+        true_day_open_0700,
+        current_pricing,
         target_status,
         macro_levels: { pdh, pdl },
         stepped_liquidity: {
