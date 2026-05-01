@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { slicePayloadByLookback } from '@/components/Sidebar';
 
 export interface Candle {
   t: number;
@@ -48,6 +49,7 @@ export function useMarketData() {
     // Intentionally only fetching once on mount as per V6 requirements.
   }, [fetchData]);
 
+  // ── V6 Naked — always full, unsliced ─────────────────────────────────────
   const downloadV6 = useCallback(() => {
     if (!data) return;
 
@@ -55,41 +57,43 @@ export function useMarketData() {
       ticker: data.ticker,
       timezone: data.timezone,
       open_interest: data.open_interest,
-      data_payload: data.data_payload
-    };
-
-    const blob = new Blob([JSON.stringify(v6Data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `V6_Naked_Data_${data.ticker}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [data]);
-
-  const downloadV7 = useCallback(() => {
-    if (!data) return;
-
-    const v7Data = {
-      ticker: data.ticker,
-      timezone: data.timezone,
-      open_interest: data.open_interest,
       data_payload: data.data_payload,
-      ipda_metrics: data.ipda_metrics
     };
 
-    const blob = new Blob([JSON.stringify(v7Data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `V7.6_Enriched_Data_${data.ticker}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    triggerDownload(v6Data, `V6_Naked_Data_${data.ticker}.json`);
   }, [data]);
 
-  return { data, isLoading, error, refetch: fetchData, downloadV6, downloadV7 };
+  // ── V7.6 Enriched — sliced by lookbackDays ───────────────────────────────
+  const downloadV7Sliced = useCallback(
+    (lookbackDays: number) => {
+      if (!data) return;
+
+      const sliced = slicePayloadByLookback(data, lookbackDays);
+      const v7Data = {
+        ticker: sliced.ticker,
+        timezone: sliced.timezone,
+        open_interest: sliced.open_interest,
+        data_payload: sliced.data_payload,
+        ipda_metrics: sliced.ipda_metrics,
+      };
+
+      triggerDownload(v7Data, `V7.6_Enriched_Data_${data.ticker}_${lookbackDays}d.json`);
+    },
+    [data]
+  );
+
+  return { data, isLoading, error, refetch: fetchData, downloadV6, downloadV7Sliced };
+}
+
+// ── Shared file-download helper ───────────────────────────────────────────────
+function triggerDownload(payload: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
