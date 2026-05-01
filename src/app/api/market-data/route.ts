@@ -212,6 +212,44 @@ export async function GET() {
 
     const active_fvgs = findUnmitigatedFVGs(candles15m);
 
+    // 7. Killzone Clock (Current Time Window)
+    const getCurrentKillzone = () => {
+      const now = new Date();
+      const shiftedTime = new Date(now.getTime() + (3 * 60 * 60 * 1000));
+      const hour = shiftedTime.getUTCHours();
+      
+      if (hour >= 3 && hour <= 6) return "ASIAN_RANGE";
+      if (hour >= 9 && hour <= 11) return "LONDON_AM_KILLZONE";
+      if (hour >= 15 && hour <= 17) return "NY_AM_KILLZONE";
+      if (hour >= 20 && hour <= 21) return "NY_PM_KILLZONE";
+      return "DEAD_ZONE";
+    };
+
+    // 8. Displacement & Volume Anomaly Scanner
+    const checkDisplacement = (candles: any[]) => {
+      if (candles.length < 16) return { displacement_active: false };
+      
+      // Get the last closed candle (Binance API returns current open candle at length - 1, so last closed is length - 2)
+      const latestCandle = candles[candles.length - 2];
+      // 14 candles prior to latestCandle
+      const priorCandles = candles.slice(candles.length - 16, candles.length - 2);
+
+      const latestBodySize = Math.abs(latestCandle.o - latestCandle.c);
+      const latestVolume = latestCandle.v;
+
+      const avgBodySize = priorCandles.reduce((sum, c) => sum + Math.abs(c.o - c.c), 0) / 14;
+      const avgVolume = priorCandles.reduce((sum, c) => sum + c.v, 0) / 14;
+
+      if (latestBodySize > (avgBodySize * 2.0) && latestVolume > (avgVolume * 1.5)) {
+        return {
+          displacement_active: true,
+          direction: latestCandle.c >= latestCandle.o ? "BULLISH" : "BEARISH"
+        };
+      }
+
+      return { displacement_active: false };
+    };
+
     const payload = {
       ticker: "ETHUSDC.p",
       timezone: "UTC+3",
@@ -222,6 +260,8 @@ export async function GET() {
         candles_5m: candles5m,
       },
       ipda_metrics: {
+        current_time_window: getCurrentKillzone(),
+        institutional_sponsorship: checkDisplacement(candles15m),
         true_day_open_0700,
         current_pricing,
         target_status,

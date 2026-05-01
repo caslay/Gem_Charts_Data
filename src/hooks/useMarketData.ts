@@ -62,7 +62,7 @@ export function useMarketData() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `V6_Naked_Data_${data.ticker}_UTC+3.json`;
+    a.download = `V6_Naked_Data_${data.ticker}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -84,7 +84,7 @@ export function useMarketData() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `V7.4_Enriched_Data_${data.ticker}_UTC+3.json`;
+    a.download = `V7.6_Enriched_Data_${data.ticker}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

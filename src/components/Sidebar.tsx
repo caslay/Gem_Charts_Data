@@ -66,8 +66,7 @@ export default function Sidebar({ currentPrice, openInterest, onDownloadV6, onDo
           className="w-full relative group overflow-hidden rounded-2xl p-[1px] disabled:opacity-50 disabled:cursor-not-allowed border border-white/10 hover:border-white/20 transition-colors"
         >
           <div className="relative flex items-center justify-center gap-2 px-6 py-3 bg-[#111] rounded-2xl transition-colors duration-300 hover:bg-[#1a1a1a]">
-            <span className="text-xl">⬇️</span>
-            <span className="font-semibold text-gray-300 group-hover:text-white transition-colors">Download V6 Naked JSON</span>
+            <span className="font-semibold text-gray-300 group-hover:text-white transition-colors">⬇️ Download V6 Naked Data</span>
           </div>
         </button>
 
@@ -78,8 +77,7 @@ export default function Sidebar({ currentPrice, openInterest, onDownloadV6, onDo
         >
           <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-purple-500 rounded-2xl opacity-70 group-hover:opacity-100 transition-opacity duration-300" />
           <div className="relative flex items-center justify-center gap-2 px-6 py-4 bg-[#0a0a0a] rounded-2xl group-hover:bg-transparent transition-colors duration-300">
-            <span className="text-xl">🚀</span>
-            <span className="font-bold text-white">Download V7.4 Enriched JSON</span>
+            <span className="font-bold text-white">🚀 Download V7.6 Enriched Data</span>
           </div>
         </button>
       </div>
