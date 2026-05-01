@@ -8,8 +8,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "V6 Market Visualizer | Gem Dashboard",
-  description: "Advanced Multi-Timeframe Naked Market Data Visualizer",
+  title: "Flow-State Quant Engine V7.6",
+  description: "Flow-State Quant Engine V7.6",
 };
 
 export default function RootLayout({

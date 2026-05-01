@@ -33,8 +33,8 @@ export default function Home() {
         <div className="h-20 border-b border-white/5 flex items-center justify-between px-8 relative z-10 bg-black/40 backdrop-blur-md">
           <div className="flex items-center gap-3">
             <div className="w-2 h-8 rounded-full bg-gradient-to-b from-cyan-400 to-blue-600" />
-            <h1 className="text-2xl font-bold text-white tracking-tight">Market Visualizer</h1>
-            <span className="px-2 py-1 rounded bg-white/10 text-xs font-bold text-cyan-400 border border-white/5 ml-2 shadow-[0_0_10px_rgba(34,211,238,0.2)]">V6</span>
+            <h1 className="text-2xl font-bold text-white tracking-tight">Flow-State Quant Engine</h1>
+            <span className="px-2 py-1 rounded bg-white/10 text-xs font-bold text-cyan-400 border border-white/5 ml-2 shadow-[0_0_10px_rgba(34,211,238,0.2)]">V7.6</span>
           </div>
 
           <div className="flex items-center gap-1 bg-[#0f0f0f] p-1.5 rounded-xl border border-white/10 shadow-inner">
