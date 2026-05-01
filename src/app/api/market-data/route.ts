@@ -158,6 +158,60 @@ export async function GET() {
       }
     }
 
+    // 6. Unmitigated FVG Scanner (V7.5 Enriched Only)
+    const findUnmitigatedFVGs = (candles: any[]) => {
+      const active_fvgs = [];
+      for (let i = 0; i < candles.length - 2; i++) {
+        const c1 = candles[i];
+        const c3 = candles[i + 2];
+
+        let type = null;
+        let gapTop = null;
+        let gapBottom = null;
+
+        // Bearish FVG (SIBI): c1.l > c3.h
+        if (c1.l > c3.h) {
+          type = "Bearish_SIBI";
+          gapTop = c1.l;
+          gapBottom = c3.h;
+        } 
+        // Bullish FVG (BISI): c1.h < c3.l
+        else if (c1.h < c3.l) {
+          type = "Bullish_BISI";
+          gapTop = c3.l;
+          gapBottom = c1.h;
+        }
+
+        if (type) {
+          let isMitigated = false;
+          // Loop through all subsequent candles that came after c3 up to the live price
+          for (let j = i + 3; j < candles.length; j++) {
+            const futureCandle = candles[j];
+            if (type === "Bearish_SIBI" && futureCandle.h >= gapBottom) {
+              isMitigated = true;
+              break;
+            }
+            if (type === "Bullish_BISI" && futureCandle.l <= gapTop) {
+              isMitigated = true;
+              break;
+            }
+          }
+
+          if (!isMitigated) {
+            active_fvgs.push({
+              type,
+              top: gapTop,
+              bottom: gapBottom,
+              ce_50: Number(((gapTop + gapBottom) / 2).toFixed(2))
+            });
+          }
+        }
+      }
+      return active_fvgs;
+    };
+
+    const active_fvgs = findUnmitigatedFVGs(candles15m);
+
     const payload = {
       ticker: "ETHUSDC.p",
       timezone: "UTC+3",
@@ -176,7 +230,8 @@ export async function GET() {
           asian: asianLiquidity,
           london: londonLiquidity
         },
-        smt_traps
+        smt_traps,
+        active_fvgs
       }
     };
 
