@@ -296,7 +296,7 @@ export async function GET() {
       return "DEAD_ZONE";
     };
 
-    // 8. Displacement & Volume Anomaly Scanner
+    // 10. Displacement & Volume Anomaly Scanner
     const checkDisplacement = (candles: any[]) => {
       if (candles.length < 16) return { displacement_active: false };
       
@@ -320,6 +320,85 @@ export async function GET() {
 
       return { displacement_active: false };
     };
+
+    // 11. Local Dealing Range & Dual-Pricing Context (V7.9)
+    //     c.t already has +3h baked in, so getUTCHours() reads Cairo local time.
+    const todayCairo = new Date(lastCandle.t); // reference from last 1h candle
+    const todayDayStr = `${todayCairo.getUTCFullYear()}-${todayCairo.getUTCMonth()}-${todayCairo.getUTCDate()}`;
+
+    // Filter intraday candles: same calendar day AND at or after 07:00 Cairo
+    const intradayCandles = candles15m.filter(c => {
+      const d = new Date(c.t);
+      const candleDayStr = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+      const candleHour = d.getUTCHours();
+      const candleMin  = d.getUTCMinutes();
+      return candleDayStr === todayDayStr && (candleHour > 7 || (candleHour === 7 && candleMin === 0));
+    });
+
+    let pricing_context: {
+      vs_daily_open: string;
+      local_dealing_range: {
+        high: number;
+        low: number;
+        equilibrium: number;
+        current_status: string;
+      };
+    };
+
+    const currentLivePrice = candles5m[candles5m.length - 1].c;
+
+    if (intradayCandles.length > 0) {
+      const intradayHigh = parseFloat(Math.max(...intradayCandles.map(c => c.h)).toFixed(2));
+      const intradayLow  = parseFloat(Math.min(...intradayCandles.map(c => c.l)).toFixed(2));
+      const equilibrium  = parseFloat(((intradayHigh + intradayLow) / 2).toFixed(2));
+
+      pricing_context = {
+        vs_daily_open: (true_day_open_0700 !== null)
+          ? (currentLivePrice > true_day_open_0700 ? "ABOVE_OPEN" : "BELOW_OPEN")
+          : "UNKNOWN",
+        local_dealing_range: {
+          high: intradayHigh,
+          low:  intradayLow,
+          equilibrium,
+          current_status: currentLivePrice > equilibrium ? "PREMIUM" : "DISCOUNT",
+        },
+      };
+    } else {
+      // Edge-case: exactly 07:00 and no range has formed yet — seed from the 07:00 candle itself
+      const anchorCandle = candles15m.find(c => {
+        const d = new Date(c.t);
+        const candleDayStr = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+        return candleDayStr === todayDayStr && d.getUTCHours() === 7 && d.getUTCMinutes() === 0;
+      });
+
+      if (anchorCandle) {
+        const seedHigh  = parseFloat(anchorCandle.h.toFixed(2));
+        const seedLow   = parseFloat(anchorCandle.l.toFixed(2));
+        const seedEquil = parseFloat(((seedHigh + seedLow) / 2).toFixed(2));
+        pricing_context = {
+          vs_daily_open: (true_day_open_0700 !== null)
+            ? (currentLivePrice > true_day_open_0700 ? "ABOVE_OPEN" : "BELOW_OPEN")
+            : "UNKNOWN",
+          local_dealing_range: {
+            high: seedHigh,
+            low:  seedLow,
+            equilibrium: seedEquil,
+            current_status: currentLivePrice > seedEquil ? "PREMIUM" : "DISCOUNT",
+          },
+        };
+      } else {
+        // Pre-open: no 07:00 candle exists yet
+        pricing_context = {
+          vs_daily_open: "UNKNOWN",
+          local_dealing_range: {
+            high: currentLivePrice,
+            low:  currentLivePrice,
+            equilibrium: currentLivePrice,
+            current_status: "FAIR_VALUE",
+          },
+        };
+      }
+    }
 
     const payload = {
       ticker: "ETHUSDC.p",
@@ -345,7 +424,8 @@ export async function GET() {
         historical_magnets,
         projected_targets,
         smt_traps,
-        active_fvgs
+        active_fvgs,
+        pricing_context,
       }
     };
 
