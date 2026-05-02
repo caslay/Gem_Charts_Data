@@ -8,8 +8,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Flow-State Quant Engine V7.6",
-  description: "Flow-State Quant Engine V7.6",
+  title: "Flow-State Quant Engine V7.9",
+  description: "Flow-State Quant Engine V7.9",
 };
 
 export default function RootLayout({

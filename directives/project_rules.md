@@ -6,7 +6,7 @@ DO NOT DEVIATE FROM THESE RULES UNDER ANY CIRCUMSTANCES.
    - The `V6_Naked_Data` export must ALWAYS remain pure. It only contains `ticker`, `timezone`, `open_interest`, and the raw `data_payload` arrays.
    - NEVER inject calculations, moving averages, or IPDA logic into the Naked payload.
 
-2. THE ENRICHED DATA RULE (V7.6+):
+2. THE ENRICHED DATA RULE (V7.9+):
    - ALL mathematical and quantitative calculations (Killzones, FVG Scanners, SMT traps, Daily Open) must be injected EXCLUSIVELY into the `ipda_metrics` object of the Enriched export.
 
 3. THE TIMEZONE ANCHOR (CAIRO UTC+3):

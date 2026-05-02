@@ -15,9 +15,9 @@ export default function Home() {
 
   const getChartData = () => {
     if (!data) return [];
-    if (timeframe === '5m')  return data.data_payload.candles_5m;
+    if (timeframe === '5m') return data.data_payload.candles_5m;
     if (timeframe === '15m') return data.data_payload.candles_15m;
-    if (timeframe === '1h')  return data.data_payload.candles_1h;
+    if (timeframe === '1h') return data.data_payload.candles_1h;
     return [];
   };
 
@@ -41,7 +41,7 @@ export default function Home() {
               Flow-State Quant Engine
             </h1>
             <span className="px-2 py-1 rounded bg-white/10 text-[10px] lg:text-xs font-bold text-cyan-400 border border-white/5 ml-1 shadow-[0_0_10px_rgba(34,211,238,0.2)] shrink-0">
-              V7.6
+              V7.9
             </span>
           </div>
 
@@ -53,11 +53,10 @@ export default function Home() {
                   key={tf}
                   id={`tf-${tf}`}
                   onClick={() => setTimeframe(tf)}
-                  className={`px-3 lg:px-6 py-1.5 lg:py-2 rounded-lg text-xs lg:text-sm font-bold transition-all duration-300 ${
-                    timeframe === tf
+                  className={`px-3 lg:px-6 py-1.5 lg:py-2 rounded-lg text-xs lg:text-sm font-bold transition-all duration-300 ${timeframe === tf
                       ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.15)] border border-cyan-500/30'
                       : 'text-gray-500 hover:text-white hover:bg-white/5 border border-transparent'
-                  }`}
+                    }`}
                 >
                   {tf.toUpperCase()}
                 </button>

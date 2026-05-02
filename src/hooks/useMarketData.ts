@@ -63,7 +63,7 @@ export function useMarketData() {
     triggerDownload(v6Data, `V6_Naked_Data_${data.ticker}.json`);
   }, [data]);
 
-  // ── V7.6 Enriched — sliced by lookbackDays ───────────────────────────────
+  // ── V7.9 Enriched — sliced by lookbackDays ───────────────────────────────
   const downloadV7Sliced = useCallback(
     (lookbackDays: number) => {
       if (!data) return;
@@ -77,7 +77,7 @@ export function useMarketData() {
         ipda_metrics: sliced.ipda_metrics,
       };
 
-      triggerDownload(v7Data, `V7.6_Enriched_Data_${data.ticker}_${lookbackDays}d.json`);
+      triggerDownload(v7Data, `V7.9_Enriched_Data_${data.ticker}_${lookbackDays}d.json`);
     },
     [data]
   );

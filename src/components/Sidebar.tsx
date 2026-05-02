@@ -11,16 +11,16 @@ export function slicePayloadByLookback(
   data: MarketDataPayload,
   lookbackDays: number
 ): MarketDataPayload {
-  const limit1H  = lookbackDays * 24;
+  const limit1H = lookbackDays * 24;
   const limit15m = lookbackDays * 96;
-  const limit5m  = lookbackDays * 288;
+  const limit5m = lookbackDays * 288;
 
   return {
     ...data,
     data_payload: {
-      candles_1h:  Array.isArray(data.data_payload?.candles_1h)  ? data.data_payload.candles_1h.slice(-limit1H)   : [],
+      candles_1h: Array.isArray(data.data_payload?.candles_1h) ? data.data_payload.candles_1h.slice(-limit1H) : [],
       candles_15m: Array.isArray(data.data_payload?.candles_15m) ? data.data_payload.candles_15m.slice(-limit15m) : [],
-      candles_5m:  Array.isArray(data.data_payload?.candles_5m)  ? data.data_payload.candles_5m.slice(-limit5m)   : [],
+      candles_5m: Array.isArray(data.data_payload?.candles_5m) ? data.data_payload.candles_5m.slice(-limit5m) : [],
     },
   };
 }
@@ -251,7 +251,7 @@ export default function Sidebar({
               </div>
             </button>
 
-            {/* V7.6 Enriched Download — respects slider */}
+            {/* V7.9 Enriched Download — respects slider */}
             <button
               id="btn-download-v7"
               onClick={() => onDownloadV7Sliced(lookbackDays)}
@@ -261,7 +261,7 @@ export default function Sidebar({
               <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-purple-500 rounded-2xl opacity-60 group-hover:opacity-90 transition-opacity duration-300" />
               <div className="relative flex items-center justify-center gap-2 px-5 py-3 bg-[#0a0a0a] rounded-2xl group-hover:bg-transparent transition-colors duration-300">
                 <DownloadCloud className="w-4 h-4 text-cyan-300 group-hover:text-white shrink-0 transition-colors duration-300" />
-                <span className="font-bold text-white text-sm">⬇ Download V7.6 Enriched Data</span>
+                <span className="font-bold text-white text-sm">⬇ Download V7.9 Enriched Data</span>
               </div>
             </button>
 
