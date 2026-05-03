@@ -466,7 +466,7 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
   const copyPayload = useCallback(async () => {
     if (!enrichedPayload) return;
     const text =
-      'Act as the Institutional Flow Synthesizer V7.8. ' +
+      'Act as the Institutional Flow Synthesizer V7.9. ' +
       'Analyze the following HISTORICAL backtest data and provide a mechanical bias report:\n\n' +
       JSON.stringify(enrichedPayload, null, 2);
     try {
