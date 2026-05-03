@@ -77,7 +77,19 @@ export function useMarketData() {
         ipda_metrics: sliced.ipda_metrics,
       };
 
-      triggerDownload(v7Data, `V7.9_Enriched_Data_${data.ticker}_${lookbackDays}d.json`);
+      const now = new Date();
+      let hours = now.getHours();
+      const minutes = now.getMinutes();
+      const ampm = hours >= 12 ? 'pm' : 'am';
+
+      hours = hours % 12;
+      hours = hours ? hours : 12; // تحويل الصفر لـ 12
+
+      const hoursStr = hours < 10 ? '0' + hours : hours.toString();
+      const minutesStr = minutes < 10 ? '0' + minutes : minutes.toString();
+      const timeString = `${hoursStr}-${minutesStr}-${ampm}`;
+
+      triggerDownload(v7Data, `V7.9_Enriched_Data_${data.ticker}_${lookbackDays}d_${timeString}.json`);
     },
     [data]
   );

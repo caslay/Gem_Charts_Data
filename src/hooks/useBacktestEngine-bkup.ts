@@ -4,7 +4,7 @@
  * Isolated Market Replay / Backtesting hook.
  *
  * ZERO dependencies on the live `useMarketData` hook or `/api/market-data`.
- * All data flows through Binance public REST (fapi.binance.com/fapi/v1/klines).
+ * All data flows through Binance public REST (fapi.binance.com/api/v3/klines).
  *
  * Timezone anchor: Cairo UTC+3 (same rule as project_rules.md §3).
  * ─────────────────────────────────────────────────────────────────────────────
@@ -13,6 +13,7 @@
 import { useState, useCallback, useMemo } from 'react';
 
 // ── Internal types ────────────────────────────────────────────────────────────
+// Intentionally NOT imported from useMarketData to maintain full isolation.
 export interface BtCandle {
   /** Open time in **milliseconds**, already shifted +3 h to Cairo local time. */
   t: number;
@@ -43,7 +44,7 @@ export type BacktestTimeframe = '5m' | '15m' | '1h';
 const SYMBOL = 'ETHUSDC';
 const UTC_PLUS3_MS = 3 * 60 * 60 * 1000;
 
-/** Binance Futures REST base — public, no auth required. */
+/** Binance REST base — public, no auth required. */
 const BINANCE_REST = 'https://fapi.binance.com/fapi/v1/klines';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -66,20 +67,22 @@ function parseBinanceKlines(raw: unknown[][]): BtCandle[] {
 }
 
 /**
- * Fetch klines for a given interval.
- * Limit set to 1500 to accommodate 5 days of 5m candles (5 * 24 * 12 = 1440).
+ * Fetch ALL klines for a given interval within a UTC day.
+ * Binance caps each request at 1 000 candles, so we page if needed.
+ * For a single UTC day: max 1440 (1m) so 1 h = 24, 15 m = 96, 5 m = 288 —
+ * all fit in a single request.
  */
-async function fetchLookbackKlines(
+async function fetchDayKlines(
   intervalLabel: '1h' | '15m' | '5m',
-  startMs: number,   // UTC start (4 days ago)
-  endMs: number      // UTC end (midnight after target date)
+  startMs: number,   // UTC midnight of selected date
+  endMs: number      // UTC midnight of next date (exclusive)
 ): Promise<BtCandle[]> {
   const url =
     `${BINANCE_REST}?symbol=${SYMBOL}` +
     `&interval=${intervalLabel}` +
     `&startTime=${startMs}` +
     `&endTime=${endMs - 1}` +   // Binance endTime is inclusive, subtract 1 ms
-    `&limit=1500`;
+    `&limit=1000`;
 
   const res = await fetch(url);
   if (!res.ok) {
@@ -101,15 +104,21 @@ function utcDayRange(dateStr: string): [number, number] {
 }
 
 /**
- * Find the index in a SORTED BtCandle[] array where the target date's Cairo time
- * reaches or exceeds cutoffHour:cutoffMinute.
+ * Find the index in a SORTED BtCandle[] array where Cairo time (c.t, already
+ * shifted) reaches or exceeds cutoffHour:cutoffMinute.
+ *
+ * Returns 0 if no candle is before the cutoff (edge case), or the length of
+ * the array if the cutoff is after all candles.
  */
-function findCutoffIndex(candles: BtCandle[], dateStr: string, cutoffHour: number, cutoffMinute: number): number {
-  // exactCutoffMs represents the cutoff exact time in shifted +3h ms.
-  const exactCutoffMs = Date.parse(`${dateStr}T00:00:00.000Z`) + (cutoffHour * 60 + cutoffMinute) * 60 * 1000;
+function findCutoffIndex(candles: BtCandle[], cutoffHour: number, cutoffMinute: number): number {
+  // Cutoff in terms of milliseconds since midnight (Cairo).
+  const cutoffMsFromMidnight = (cutoffHour * 60 + cutoffMinute) * 60 * 1000;
 
   for (let i = 0; i < candles.length; i++) {
-    if (candles[i].t >= exactCutoffMs) {
+    const d = new Date(candles[i].t);
+    // c.t is already +3h shifted, so UTC hours/minutes read as Cairo hours/minutes.
+    const cairoMsFromMidnight = (d.getUTCHours() * 60 + d.getUTCMinutes()) * 60 * 1000;
+    if (cairoMsFromMidnight >= cutoffMsFromMidnight) {
       return i;
     }
   }
@@ -119,33 +128,37 @@ function findCutoffIndex(candles: BtCandle[], dateStr: string, cutoffHour: numbe
 // ─────────────────────────────────────────────────────────────────────────────
 // Enriched JSON builder
 // ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Builds a lightweight "Enriched" JSON payload from visible arrays only.
+ * Mirrors the live V7.9 structure so the AI prompt remains identical.
+ * Only the fields computable client-side from the OHLCV slice are included.
+ */
 function buildEnrichedPayload(
   visible: BtMasterArrays,
   selectedDate: string
 ): Record<string, unknown> {
   const { candles_1h, candles_15m, candles_5m } = visible;
 
-  // ── True Day Open (07:00 Cairo) ─────────────────────────────
+  // ── True Day Open (07:00 Cairo = UTC 04:00) ─────────────────────────────
   let trueDayOpen0700: number | null = null;
-  let dayOpenIndex = -1;
-
   for (let i = candles_15m.length - 1; i >= 0; i--) {
     const d = new Date(candles_15m[i].t);
     if (d.getUTCHours() === 7 && d.getUTCMinutes() === 0) {
       trueDayOpen0700 = candles_15m[i].o;
-      dayOpenIndex = i;
       break;
     }
   }
 
   // ── Previous Day H/L from 1h candles ────────────────────────────────────
-  const [targetStartMs] = utcDayRange(selectedDate);
-  const prevDayStart = targetStartMs - 24 * 60 * 60 * 1000;
-  const prevDayEnd = targetStartMs;
+  // The selected date string "YYYY-MM-DD" → previous UTC day.
+  const [startMs] = utcDayRange(selectedDate);
+  const prevDayStart = startMs - 24 * 60 * 60 * 1000;
+  const prevDayEnd = startMs;
 
   let pdh = 0;
   let pdl = Infinity;
   candles_1h.forEach((c) => {
+    // c.t is Cairo-shifted; strip the +3h to get UTC open time.
     const rawUtcMs = c.t - UTC_PLUS3_MS;
     if (rawUtcMs >= prevDayStart && rawUtcMs < prevDayEnd) {
       if (c.h > pdh) pdh = c.h;
@@ -203,7 +216,10 @@ function buildEnrichedPayload(
   }
 
   // ── Intraday Dealing Range (07:00 Cairo → last visible candle) ──────────
-  const intradayCandles = dayOpenIndex !== -1 ? candles_15m.slice(dayOpenIndex) : [];
+  const intradayCandles = candles_15m.filter((c) => {
+    const d = new Date(c.t);
+    return d.getUTCHours() >= 7;
+  });
 
   let localDealingRange: Record<string, unknown> = {
     high: null, low: null, equilibrium: null, current_status: 'UNKNOWN',
@@ -248,43 +264,80 @@ function buildEnrichedPayload(
 // The Hook
 // ─────────────────────────────────────────────────────────────────────────────
 export interface UseBacktestEngineReturn {
+  /** Current status of the engine. */
   status: BacktestStatus;
+  /** Human-readable error message, null when no error. */
   error: string | null;
+  /**
+   * Full 24 h dataset for the selected date, all three timeframes.
+   * `null` until a successful fetch.
+   */
   masterArrays: BtMasterArrays | null;
+  /**
+   * The sliced "visible" dataset — what the chart renders at any given step.
+   * Updated by Next/Prev/RevealDay actions.
+   */
   visibleArrays: BtMasterArrays | null;
+  /**
+   * Index into `masterArrays.candles_5m` that marks the "current" candle.
+   * `visibleArrays.candles_5m` = `masterArrays.candles_5m.slice(0, currentIndex)`.
+   */
   currentIndex: number;
+  /** Total number of 5m candles in the master dataset. */
   totalCandles: number;
+  /** Currently active display timeframe (controls which array feeds the chart). */
   timeframe: BacktestTimeframe;
+  /** The selected date string "YYYY-MM-DD". */
   selectedDate: string;
+  /**
+   * Cut-off time expressed as "HH:MM" in Cairo local time.
+   * Default: "09:00".
+   */
   cutoffTime: string;
+  /**
+   * Silent enriched JSON payload — updated on every Next/Prev/Reveal action.
+   * Ready to download or copy to clipboard.
+   */
   enrichedPayload: Record<string, unknown> | null;
+  /** Whether the full day has been revealed. */
   isDayRevealed: boolean;
 
+  // ── Actions ─────────────────────────────────────────────────────────────
   setSelectedDate: (date: string) => void;
   setCutoffTime: (time: string) => void;
   setTimeframe: (tf: BacktestTimeframe) => void;
+  /** Fetch the full day klines and slice to cutoff. */
   loadDay: () => Promise<void>;
+  /** Advance by one 5m candle (Next Candle ⏩). */
   nextCandle: () => void;
+  /** Step back by one 5m candle (Prev Candle ⏪). */
   prevCandle: () => void;
+  /** Reveal the remaining candles of the day (Reveal Day 👁️). */
   revealDay: () => void;
+  /** Download the current enriched JSON payload as a file. */
   downloadPayload: () => void;
+  /** Copy the current enriched JSON payload to the clipboard. */
   copyPayload: () => Promise<void>;
 }
 
 export function useBacktestEngine(): UseBacktestEngineReturn {
+  // ── Core state ───────────────────────────────────────────────────────────
   const [status, setStatus] = useState<BacktestStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [masterArrays, setMasterArrays] = useState<BtMasterArrays | null>(null);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isDayRevealed, setIsDayRevealed] = useState<boolean>(false);
 
+  // ── UI config state ──────────────────────────────────────────────────────
+  // Default date = today in Cairo (UTC+3)
   const todayCairo = new Date(Date.now() + UTC_PLUS3_MS);
-  const todayStr = todayCairo.toISOString().slice(0, 10);
+  const todayStr = todayCairo.toISOString().slice(0, 10); // "YYYY-MM-DD"
 
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [cutoffTime, setCutoffTime] = useState<string>('09:00');
   const [timeframe, setTimeframe] = useState<BacktestTimeframe>('5m');
 
+  // ── Derived: cutoff hour/minute ──────────────────────────────────────────
   const { cutoffHour, cutoffMinute } = useMemo(() => {
     const [hStr, mStr] = cutoffTime.split(':');
     return {
@@ -293,14 +346,25 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     };
   }, [cutoffTime]);
 
+  // ── Derived: cutoffIndex in the 5m master array ──────────────────────────
+  const cutoffIndex5m = useMemo(() => {
+    if (!masterArrays) return 0;
+    return findCutoffIndex(masterArrays.candles_5m, cutoffHour, cutoffMinute);
+  }, [masterArrays, cutoffHour, cutoffMinute]);
+
+  // ── Derived: total candles ───────────────────────────────────────────────
   const totalCandles = masterArrays?.candles_5m.length ?? 0;
 
+  // ── Derived: visible arrays (sliced at currentIndex for 5m) ─────────────
+  // For 1h and 15m we find the matching time boundary from currentIndex.
   const visibleArrays = useMemo<BtMasterArrays | null>(() => {
     if (!masterArrays || currentIndex === 0) return null;
 
     const visible5m = masterArrays.candles_5m.slice(0, currentIndex);
+
+    // Derive a UTC ms boundary from the last visible 5m candle
     const boundaryMs = visible5m.length > 0
-      ? visible5m[visible5m.length - 1].t + 5 * 60 * 1000
+      ? visible5m[visible5m.length - 1].t + 5 * 60 * 1000  // exclusive upper bound
       : 0;
 
     const visible15m = masterArrays.candles_15m.filter((c) => c.t < boundaryMs);
@@ -313,11 +377,15 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     };
   }, [masterArrays, currentIndex]);
 
+  // ── Derived: enriched payload (silently recalculated) ────────────────────
   const enrichedPayload = useMemo<Record<string, unknown> | null>(() => {
     if (!visibleArrays) return null;
     return buildEnrichedPayload(visibleArrays, selectedDate);
   }, [visibleArrays, selectedDate]);
 
+  // ── Actions ──────────────────────────────────────────────────────────────
+
+  /** Fetch a fresh 24 h day, store in masterArrays, set currentIndex to cutoff. */
   const loadDay = useCallback(async () => {
     setStatus('fetching');
     setError(null);
@@ -326,16 +394,12 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     setIsDayRevealed(false);
 
     try {
-      const [targetStartMs, targetEndMs] = utcDayRange(selectedDate);
-
-      // Lookback exactly 4 days before target date
-      const startMs = targetStartMs - (4 * 24 * 60 * 60 * 1000);
-      const endMs = targetEndMs;
+      const [startMs, endMs] = utcDayRange(selectedDate);
 
       const [raw1h, raw15m, raw5m] = await Promise.all([
-        fetchLookbackKlines('1h', startMs, endMs),
-        fetchLookbackKlines('15m', startMs, endMs),
-        fetchLookbackKlines('5m', startMs, endMs),
+        fetchDayKlines('1h', startMs, endMs),
+        fetchDayKlines('15m', startMs, endMs),
+        fetchDayKlines('5m', startMs, endMs),
       ]);
 
       const arrays: BtMasterArrays = {
@@ -346,8 +410,11 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
 
       setMasterArrays(arrays);
 
-      const ci = findCutoffIndex(raw5m, selectedDate, cutoffHour, cutoffMinute);
+      // Compute cutoffIndex immediately with the fresh data
+      const ci = findCutoffIndex(raw5m, cutoffHour, cutoffMinute);
+      // Guarantee at least 1 candle is visible (ci = 0 means before all data)
       setCurrentIndex(Math.max(1, ci));
+
       setStatus('ready');
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown fetch error';
@@ -356,21 +423,25 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     }
   }, [selectedDate, cutoffHour, cutoffMinute]);
 
+  /** ⏩ Next Candle — increment currentIndex by 1 (capped at totalCandles). */
   const nextCandle = useCallback(() => {
     if (!masterArrays) return;
     setCurrentIndex((prev) => Math.min(prev + 1, masterArrays.candles_5m.length));
   }, [masterArrays]);
 
+  /** ⏪ Prev Candle — decrement currentIndex by 1 (floor at 1). */
   const prevCandle = useCallback(() => {
     setCurrentIndex((prev) => Math.max(prev - 1, 1));
   }, []);
 
+  /** 👁️ Reveal Day — push all remaining candles to visible. */
   const revealDay = useCallback(() => {
     if (!masterArrays) return;
     setCurrentIndex(masterArrays.candles_5m.length);
     setIsDayRevealed(true);
   }, [masterArrays]);
 
+  /** Download enrichedPayload as a JSON file. */
   const downloadPayload = useCallback(() => {
     if (!enrichedPayload) return;
     const lastCandle = visibleArrays?.candles_5m.slice(-1)[0];
@@ -391,6 +462,7 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     URL.revokeObjectURL(url);
   }, [enrichedPayload, visibleArrays, selectedDate]);
 
+  /** Copy enrichedPayload to clipboard. */
   const copyPayload = useCallback(async () => {
     if (!enrichedPayload) return;
     const text =
@@ -400,6 +472,7 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
+      // Fallback for non-secure contexts
       const ta = document.createElement('textarea');
       ta.value = text;
       ta.style.position = 'fixed';
@@ -412,6 +485,7 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
   }, [enrichedPayload]);
 
   return {
+    // State
     status,
     error,
     masterArrays,
@@ -423,6 +497,7 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     cutoffTime,
     enrichedPayload,
     isDayRevealed,
+    // Actions
     setSelectedDate,
     setCutoffTime,
     setTimeframe,
