@@ -13,8 +13,8 @@ import Link from 'next/link';
 // ─── Isolated chart component (no shared state with live Chart.tsx) ──────────
 function BacktestChart({ data }: { data: BtCandle[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef     = useRef<IChartApi | null>(null);
-  const seriesRef    = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
 
   // Init chart once
   useEffect(() => {
@@ -29,7 +29,7 @@ function BacktestChart({ data }: { data: BtCandle[] }) {
         vertLines: { color: 'rgba(255,255,255,0.04)' },
         horzLines: { color: 'rgba(255,255,255,0.04)' },
       },
-      width:  containerRef.current.clientWidth,
+      width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight,
       timeScale: {
         timeVisible: true,
@@ -59,10 +59,10 @@ function BacktestChart({ data }: { data: BtCandle[] }) {
     chartRef.current = chart;
 
     const series = chart.addSeries(CandlestickSeries, {
-      upColor:      '#22d3ee',
-      downColor:    '#c084fc',
+      upColor: '#22d3ee',
+      downColor: '#c084fc',
       borderVisible: false,
-      wickUpColor:   '#22d3ee',
+      wickUpColor: '#22d3ee',
       wickDownColor: '#c084fc',
     });
     seriesRef.current = series;
@@ -70,7 +70,7 @@ function BacktestChart({ data }: { data: BtCandle[] }) {
     const onResize = () => {
       if (containerRef.current && chartRef.current) {
         chartRef.current.applyOptions({
-          width:  containerRef.current.clientWidth,
+          width: containerRef.current.clientWidth,
           height: containerRef.current.clientHeight,
         });
       }
@@ -122,7 +122,7 @@ export default function BacktestPage() {
   const handleKey = useCallback((e: KeyboardEvent) => {
     if (engine.status !== 'ready') return;
     if (e.key === 'ArrowRight') engine.nextCandle();
-    if (e.key === 'ArrowLeft')  engine.prevCandle();
+    if (e.key === 'ArrowLeft') engine.prevCandle();
     if (e.key === 'r' || e.key === 'R') engine.revealDay();
   }, [engine]);
 
@@ -141,24 +141,24 @@ export default function BacktestPage() {
   // Which candle array feeds the chart?
   const chartData = (() => {
     if (!engine.visibleArrays) return [];
-    if (activeTimeframe === '1h')  return engine.visibleArrays.candles_1h;
+    if (activeTimeframe === '1h') return engine.visibleArrays.candles_1h;
     if (activeTimeframe === '15m') return engine.visibleArrays.candles_15m;
     return engine.visibleArrays.candles_5m;
   })();
 
   const lastCandle = engine.visibleArrays?.candles_5m.slice(-1)[0] ?? null;
-  const lastPrice  = lastCandle?.c ?? null;
+  const lastPrice = lastCandle?.c ?? null;
   // lastCandle.t is already Cairo-local (UTC+3 baked in).
   // Use getUTC* to read it as-is without another timezone conversion.
   const cairoTime = lastCandle
     ? (() => {
-        const d  = new Date(lastCandle.t);
-        const hh = d.getUTCHours();
-        const mm = d.getUTCMinutes().toString().padStart(2, '0');
-        const suffix = hh >= 12 ? 'PM' : 'AM';
-        const h12 = (hh % 12 || 12).toString().padStart(2, '0');
-        return `${h12}:${mm} ${suffix}`;
-      })()
+      const d = new Date(lastCandle.t);
+      const hh = d.getUTCHours();
+      const mm = d.getUTCMinutes().toString().padStart(2, '0');
+      const suffix = hh >= 12 ? 'PM' : 'AM';
+      const h12 = (hh % 12 || 12).toString().padStart(2, '0');
+      return `${h12}:${mm} ${suffix}`;
+    })()
     : '--:--';
 
   const progressPct = engine.totalCandles > 0
@@ -203,11 +203,10 @@ export default function BacktestPage() {
               key={tf}
               id={`bt-tf-${tf}`}
               onClick={() => setActiveTimeframe(tf)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${
-                activeTimeframe === tf
-                  ? 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 border border-amber-500/30 shadow-[0_0_12px_rgba(251,191,36,0.12)]'
-                  : 'text-gray-500 hover:text-white hover:bg-white/5 border border-transparent'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${activeTimeframe === tf
+                ? 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 border border-amber-500/30 shadow-[0_0_12px_rgba(251,191,36,0.12)]'
+                : 'text-gray-500 hover:text-white hover:bg-white/5 border border-transparent'
+                }`}
             >
               {tf.toUpperCase()}
             </button>
@@ -369,7 +368,7 @@ export default function BacktestPage() {
                 </div>
                 <div className="text-center">
                   <p className="text-sm font-semibold text-gray-500">Select a date and load the day</p>
-                  <p className="text-xs text-gray-700 mt-1">Full 24 h ETHUSDT klines will be fetched from Binance</p>
+                  <p className="text-xs text-gray-700 mt-1">Full 24 h ETHUSDC klines will be fetched from Binance</p>
                 </div>
               </div>
             )}

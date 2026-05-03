@@ -4,7 +4,7 @@
  * Isolated Market Replay / Backtesting hook.
  *
  * ZERO dependencies on the live `useMarketData` hook or `/api/market-data`.
- * All data flows through Binance public REST (api.binance.com/api/v3/klines).
+ * All data flows through Binance public REST (fapi.binance.com/api/v3/klines).
  *
  * Timezone anchor: Cairo UTC+3 (same rule as project_rules.md §3).
  * ─────────────────────────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ const SYMBOL = 'ETHUSDC';
 const UTC_PLUS3_MS = 3 * 60 * 60 * 1000;
 
 /** Binance REST base — public, no auth required. */
-const BINANCE_REST = 'https://api.binance.com/api/v3/klines';
+const BINANCE_REST = 'https://fapi.binance.com/fapi/v1/klines';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal helpers
