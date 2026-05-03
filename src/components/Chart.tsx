@@ -37,7 +37,7 @@ export default function Chart({ data, colors }: ChartProps) {
       localization: {
         timeFormatter: (timestamp: number) => {
           return new Date(timestamp * 1000).toLocaleTimeString('en-EG', {
-            timeZone: 'Africa/Cairo',
+            timeZone: 'UTC',
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
@@ -56,7 +56,7 @@ export default function Chart({ data, colors }: ChartProps) {
         borderColor: 'rgba(255, 255, 255, 0.1)',
         tickMarkFormatter: (time: number) => {
           return new Date(time * 1000).toLocaleTimeString('en-EG', {
-            timeZone: 'Africa/Cairo',
+            timeZone: 'UTC',
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,

@@ -27,7 +27,7 @@ export function slicePayloadByLookback(
 
 // ─── AI Prompt Prefix ────────────────────────────────────────────────────────
 const AI_PROMPT_PREFIX =
-  'Act as the Institutional Flow Synthesizer V7.8. Analyze the following quantitative data and provide a mechanical bias report: \n\n';
+  'Act as the Institutional Flow Synthesizer V7.9. Analyze the following quantitative data and provide a mechanical bias report: \n\n';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
