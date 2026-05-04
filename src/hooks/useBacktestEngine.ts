@@ -269,8 +269,8 @@ export interface UseBacktestEngineReturn {
   nextCandle: () => void;
   prevCandle: () => void;
   revealDay: () => void;
-  downloadPayload: () => void;
-  copyPayload: () => Promise<void>;
+  downloadPayload: (counts: { '5m': number, '15m': number, '1h': number, '4h': number }) => void;
+  copyPayload: (counts: { '5m': number, '15m': number, '1h': number, '4h': number }) => Promise<void>;
 }
 
 export function useBacktestEngine(): UseBacktestEngineReturn {
@@ -373,14 +373,41 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     setIsDayRevealed(true);
   }, [masterArrays]);
 
-  const downloadPayload = useCallback(() => {
+  const downloadPayload = useCallback((counts: { '5m': number, '15m': number, '1h': number, '4h': number }) => {
     if (!enrichedPayload) return;
+
+    const payloadToExport = { ...enrichedPayload };
+    const data_payload: any = {};
+
+    if (counts['1h'] > 0 && Array.isArray((payloadToExport.data_payload as any).candles_1h)) {
+      data_payload.candles_1h = (payloadToExport.data_payload as any).candles_1h.slice(-counts['1h']);
+    }
+    if (counts['15m'] > 0 && Array.isArray((payloadToExport.data_payload as any).candles_15m)) {
+      data_payload.candles_15m = (payloadToExport.data_payload as any).candles_15m.slice(-counts['15m']);
+    }
+    if (counts['5m'] > 0 && Array.isArray((payloadToExport.data_payload as any).candles_5m)) {
+      data_payload.candles_5m = (payloadToExport.data_payload as any).candles_5m.slice(-counts['5m']);
+    }
+
+    payloadToExport.data_payload = data_payload;
+
     const lastCandle = visibleArrays?.candles_5m.slice(-1)[0];
     const ts = lastCandle
       ? new Date(lastCandle.t).toISOString().replace(/[:.]/g, '-').slice(0, 19)
       : 'snapshot';
-    const filename = `BT_Enriched_${SYMBOL}_${selectedDate}_@${ts}.json`;
-    const blob = new Blob([JSON.stringify(enrichedPayload, null, 2)], {
+
+    const now = new Date();
+    let hours = now.getHours();
+    const minutes = now.getMinutes();
+    const ampm = hours >= 12 ? 'pm' : 'am';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const hoursStr = hours < 10 ? '0' + hours : hours.toString();
+    const minutesStr = minutes < 10 ? '0' + minutes : minutes.toString();
+    const timeString = `${hoursStr}-${minutesStr}-${ampm}`;
+
+    const filename = `BT_Enriched_${SYMBOL}_${selectedDate}_@${ts}_${timeString}.json`;
+    const blob = new Blob([JSON.stringify(payloadToExport, null, 2)], {
       type: 'application/json',
     });
     const url = URL.createObjectURL(blob);
@@ -393,12 +420,28 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     URL.revokeObjectURL(url);
   }, [enrichedPayload, visibleArrays, selectedDate]);
 
-  const copyPayload = useCallback(async () => {
+  const copyPayload = useCallback(async (counts: { '5m': number, '15m': number, '1h': number, '4h': number }) => {
     if (!enrichedPayload) return;
+
+    const payloadToExport = { ...enrichedPayload };
+    const data_payload: any = {};
+
+    if (counts['1h'] > 0 && Array.isArray((payloadToExport.data_payload as any).candles_1h)) {
+      data_payload.candles_1h = (payloadToExport.data_payload as any).candles_1h.slice(-counts['1h']);
+    }
+    if (counts['15m'] > 0 && Array.isArray((payloadToExport.data_payload as any).candles_15m)) {
+      data_payload.candles_15m = (payloadToExport.data_payload as any).candles_15m.slice(-counts['15m']);
+    }
+    if (counts['5m'] > 0 && Array.isArray((payloadToExport.data_payload as any).candles_5m)) {
+      data_payload.candles_5m = (payloadToExport.data_payload as any).candles_5m.slice(-counts['5m']);
+    }
+
+    payloadToExport.data_payload = data_payload;
+
     const text =
       'Act as the Institutional Flow Synthesizer V7.9. ' +
       'Analyze the following HISTORICAL backtest data and provide a mechanical bias report:\n\n' +
-      JSON.stringify(enrichedPayload, null, 2);
+      JSON.stringify(payloadToExport, null, 2);
     try {
       await navigator.clipboard.writeText(text);
     } catch {

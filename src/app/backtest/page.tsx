@@ -6,7 +6,7 @@ import { useBacktestEngine, BacktestTimeframe, BtCandle } from '@/hooks/useBackt
 import {
   ChevronLeft, ChevronRight, Eye, Download, Copy,
   Calendar, Clock, BarChart2, Loader2, AlertTriangle,
-  ArrowLeft, Zap, CheckCheck,
+  ArrowLeft, Zap, CheckCheck, Brain,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -117,6 +117,12 @@ export default function BacktestPage() {
   const engine = useBacktestEngine();
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   const [activeTimeframe, setActiveTimeframe] = useState<BacktestTimeframe>('5m');
+  const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
+
+  const handleCountChange = (tf: '5m' | '15m' | '1h' | '4h', value: string) => {
+    const num = parseInt(value, 10);
+    setCounts(prev => ({ ...prev, [tf]: isNaN(num) ? 0 : num }));
+  };
 
   // keyboard shortcuts
   const handleKey = useCallback((e: KeyboardEvent) => {
@@ -133,7 +139,7 @@ export default function BacktestPage() {
 
   // copy with feedback
   const handleCopy = async () => {
-    await engine.copyPayload();
+    await engine.copyPayload(counts);
     setCopyState('copied');
     setTimeout(() => setCopyState('idle'), 2000);
   };
@@ -319,6 +325,31 @@ export default function BacktestPage() {
             <div className="flex flex-col gap-2">
               <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">AI Export</p>
 
+              {/* ── Dynamic UI Inputs ───────────────────────────────────── */}
+              <div className="bg-white/[0.02] rounded-2xl p-4 border border-white/[0.05] backdrop-blur-md relative overflow-hidden mb-2">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-3xl -mr-6 -mt-6 pointer-events-none" />
+                <div className="flex items-center gap-2 mb-3 relative z-10">
+                  <Brain className="w-4 h-4 text-amber-400 shrink-0" />
+                  <p className="text-xs font-semibold text-amber-400 tracking-wide uppercase">AI Context Settings</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 relative z-10">
+                  {(['5m', '15m', '1h', '4h'] as const).map((tf) => (
+                    <div key={tf} className="flex flex-col bg-black/30 rounded-xl p-2 border border-white/5">
+                      <label htmlFor={`input-${tf}`} className="text-[10px] text-gray-500 font-medium mb-1 uppercase text-center">{tf} Candles</label>
+                      <input
+                        id={`input-${tf}`}
+                        type="number"
+                        min="0"
+                        value={counts[tf]}
+                        onChange={(e) => handleCountChange(tf, e.target.value)}
+                        className="w-full bg-transparent text-white text-sm font-bold text-center outline-none border-b border-white/10 focus:border-amber-400 transition-colors"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Copy */}
               <button
                 id="bt-copy-payload"
@@ -338,7 +369,7 @@ export default function BacktestPage() {
               {/* Download */}
               <button
                 id="bt-download-payload"
-                onClick={engine.downloadPayload}
+                onClick={() => engine.downloadPayload(counts)}
                 disabled={!engine.enrichedPayload}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
                            border border-white/10 bg-white/[0.02] hover:bg-white/[0.05] hover:border-white/20
