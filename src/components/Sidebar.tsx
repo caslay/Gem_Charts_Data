@@ -9,19 +9,26 @@ import type { MarketDataPayload } from '@/hooks/useMarketData';
 // ipda_metrics is preserved intact.
 export function slicePayloadByLookback(
   data: MarketDataPayload,
-  lookbackDays: number
+  counts: { '5m': number, '15m': number, '1h': number, '4h': number }
 ): MarketDataPayload {
-  const limit1H = lookbackDays * 24;
-  const limit15m = lookbackDays * 96;
-  const limit5m = lookbackDays * 288;
+  const data_payload: any = {};
+  
+  if (counts['4h'] > 0 && Array.isArray(data.data_payload?.candles_4h)) {
+    data_payload.candles_4h = data.data_payload.candles_4h.slice(-counts['4h']);
+  }
+  if (counts['1h'] > 0 && Array.isArray(data.data_payload?.candles_1h)) {
+    data_payload.candles_1h = data.data_payload.candles_1h.slice(-counts['1h']);
+  }
+  if (counts['15m'] > 0 && Array.isArray(data.data_payload?.candles_15m)) {
+    data_payload.candles_15m = data.data_payload.candles_15m.slice(-counts['15m']);
+  }
+  if (counts['5m'] > 0 && Array.isArray(data.data_payload?.candles_5m)) {
+    data_payload.candles_5m = data.data_payload.candles_5m.slice(-counts['5m']);
+  }
 
   return {
     ...data,
-    data_payload: {
-      candles_1h: Array.isArray(data.data_payload?.candles_1h) ? data.data_payload.candles_1h.slice(-limit1H) : [],
-      candles_15m: Array.isArray(data.data_payload?.candles_15m) ? data.data_payload.candles_15m.slice(-limit15m) : [],
-      candles_5m: Array.isArray(data.data_payload?.candles_5m) ? data.data_payload.candles_5m.slice(-limit5m) : [],
-    },
+    data_payload,
   };
 }
 
@@ -35,7 +42,7 @@ interface SidebarProps {
   openInterest: number | null;
   data: MarketDataPayload | null;
   onDownloadV6: () => void;
-  onDownloadV7Sliced: (lookbackDays: number) => void;
+  onDownloadV7Sliced: (counts: { '5m': number, '15m': number, '1h': number, '4h': number }) => void;
   isLoading?: boolean;
   isOpen: boolean;
   onClose: () => void;
@@ -51,13 +58,13 @@ export default function Sidebar({
   isOpen,
   onClose,
 }: SidebarProps) {
-  const [lookbackDays, setLookbackDays] = useState(1);
+  const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
 
   // ── One-Click Context handler ────────────────────────────────────────────
   const handleOneClickContext = async () => {
     if (!data) return;
-    const sliced = slicePayloadByLookback(data, lookbackDays);
+    const sliced = slicePayloadByLookback(data, counts);
     const text = AI_PROMPT_PREFIX + JSON.stringify(sliced, null, 2);
     try {
       await navigator.clipboard.writeText(text);
@@ -78,8 +85,10 @@ export default function Sidebar({
     }
   };
 
-  // ── Slider percentage for track fill ────────────────────────────────────
-  const sliderPct = ((lookbackDays - 1) / 6) * 100;
+  const handleCountChange = (tf: '5m' | '15m' | '1h' | '4h', value: string) => {
+    const num = parseInt(value, 10);
+    setCounts(prev => ({ ...prev, [tf]: isNaN(num) ? 0 : num }));
+  };
 
   return (
     <>
@@ -160,61 +169,26 @@ export default function Sidebar({
             </div>
           </div>
 
-          {/* ── AI Context Window Slider ───────────────────────────────────── */}
+          {/* ── Dynamic UI Inputs ───────────────────────────────────── */}
           <div className="bg-white/[0.02] rounded-2xl p-5 border border-white/[0.05] backdrop-blur-md relative overflow-hidden">
             <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 rounded-full blur-3xl -mr-6 -mt-6 pointer-events-none" />
-            <div className="flex items-center gap-2 mb-3 relative z-10">
+            <div className="flex items-center gap-2 mb-4 relative z-10">
               <Brain className="w-4 h-4 text-cyan-400 shrink-0" />
-              <p className="text-sm font-semibold text-cyan-400 tracking-wide uppercase">AI Context Window</p>
-            </div>
-            <p className="text-xs text-gray-500 mb-4 relative z-10">
-              Lookback:{' '}
-              <span className="text-white font-bold">
-                {lookbackDays} Day{lookbackDays > 1 ? 's' : ''}
-              </span>
-            </p>
-
-            {/* Custom-styled range slider */}
-            <div className="relative z-10">
-              {/* Visible track */}
-              <div
-                className="w-full h-2 rounded-full pointer-events-none"
-                style={{ background: `linear-gradient(to right, #22d3ee ${sliderPct}%, rgba(255,255,255,0.1) ${sliderPct}%)` }}
-              />
-              {/* Transparent interactive input overlays the track */}
-              <input
-                id="lookback-slider"
-                type="range"
-                min={1}
-                max={7}
-                step={1}
-                value={lookbackDays}
-                onChange={(e) => setLookbackDays(Number(e.target.value))}
-                className="absolute inset-x-0 top-0 w-full h-2 opacity-0 cursor-pointer"
-              />
-              <div className="flex justify-between text-[10px] text-gray-600 mt-2 px-0.5">
-                {[1, 2, 3, 4, 5, 6, 7].map(d => (
-                  <span
-                    key={d}
-                    className={d === lookbackDays ? 'text-cyan-400 font-bold' : ''}
-                  >
-                    {d}d
-                  </span>
-                ))}
-              </div>
+              <p className="text-sm font-semibold text-cyan-400 tracking-wide uppercase">AI Context Settings</p>
             </div>
 
-            {/* Candle count preview */}
-            <div className="mt-4 grid grid-cols-3 gap-2 relative z-10">
-              {[
-                { label: '1H', count: lookbackDays * 24 },
-                { label: '15M', count: lookbackDays * 96 },
-                { label: '5M', count: lookbackDays * 288 },
-              ].map(({ label, count }) => (
-                <div key={label} className="flex flex-col items-center bg-black/30 rounded-xl p-2 border border-white/5">
-                  <span className="text-[10px] text-gray-500 font-medium">{label}</span>
-                  <span className="text-sm font-bold text-white">{count}</span>
-                  <span className="text-[9px] text-gray-600">candles</span>
+            <div className="grid grid-cols-2 gap-3 relative z-10">
+              {(['5m', '15m', '1h', '4h'] as const).map((tf) => (
+                <div key={tf} className="flex flex-col bg-black/30 rounded-xl p-2 border border-white/5">
+                  <label htmlFor={`input-${tf}`} className="text-[10px] text-gray-500 font-medium mb-1 uppercase text-center">{tf} Candles</label>
+                  <input
+                    id={`input-${tf}`}
+                    type="number"
+                    min="0"
+                    value={counts[tf]}
+                    onChange={(e) => handleCountChange(tf, e.target.value)}
+                    className="w-full bg-transparent text-white text-sm font-bold text-center outline-none border-b border-white/10 focus:border-cyan-400 transition-colors"
+                  />
                 </div>
               ))}
             </div>
@@ -251,10 +225,10 @@ export default function Sidebar({
               </div>
             </button>
 
-            {/* V7.9 Enriched Download — respects slider */}
+            {/* V7.9 Enriched Download — respects counts */}
             <button
               id="btn-download-v7"
-              onClick={() => onDownloadV7Sliced(lookbackDays)}
+              onClick={() => onDownloadV7Sliced(counts)}
               disabled={isLoading || !data}
               className="w-full relative group overflow-hidden rounded-2xl p-[1px] disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
             >

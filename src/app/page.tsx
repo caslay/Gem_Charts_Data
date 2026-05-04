@@ -15,9 +15,9 @@ export default function Home() {
 
   const getChartData = () => {
     if (!data) return [];
-    if (timeframe === '5m') return data.data_payload.candles_5m;
-    if (timeframe === '15m') return data.data_payload.candles_15m;
-    if (timeframe === '1h') return data.data_payload.candles_1h;
+    if (timeframe === '5m') return data.data_payload.candles_5m ?? [];
+    if (timeframe === '15m') return data.data_payload.candles_15m ?? [];
+    if (timeframe === '1h') return data.data_payload.candles_1h ?? [];
     return [];
   };
 

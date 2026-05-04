@@ -12,14 +12,17 @@ export interface Candle {
 
 export interface MarketDataPayload {
   ticker: string;
+  timestamp?: string;
   timezone: string;
   open_interest: number;
-  data_payload: {
-    candles_1h: Candle[];
-    candles_15m: Candle[];
-    candles_5m: Candle[];
-  };
   ipda_metrics: any;
+  active_arrays: any;
+  data_payload: {
+    candles_4h?: Candle[];
+    candles_1h?: Candle[];
+    candles_15m?: Candle[];
+    candles_5m?: Candle[];
+  };
 }
 
 export function useMarketData() {
@@ -63,18 +66,20 @@ export function useMarketData() {
     triggerDownload(v6Data, `V6_Naked_Data_${data.ticker}.json`);
   }, [data]);
 
-  // ── V7.9 Enriched — sliced by lookbackDays ───────────────────────────────
+  // ── V7.9 Enriched — sliced by candle counts ───────────────────────────────
   const downloadV7Sliced = useCallback(
-    (lookbackDays: number) => {
+    (counts: { '5m': number, '15m': number, '1h': number, '4h': number }) => {
       if (!data) return;
 
-      const sliced = slicePayloadByLookback(data, lookbackDays);
+      const sliced = slicePayloadByLookback(data, counts);
       const v7Data = {
         ticker: sliced.ticker,
+        timestamp: new Date().toISOString(),
         timezone: sliced.timezone,
+        ipda_metrics: sliced.ipda_metrics,
+        active_arrays: sliced.active_arrays,
         open_interest: sliced.open_interest,
         data_payload: sliced.data_payload,
-        ipda_metrics: sliced.ipda_metrics,
       };
 
       const now = new Date();
@@ -89,7 +94,7 @@ export function useMarketData() {
       const minutesStr = minutes < 10 ? '0' + minutes : minutes.toString();
       const timeString = `${hoursStr}-${minutesStr}-${ampm}`;
 
-      triggerDownload(v7Data, `V7.9_Enriched_Data_${data.ticker}_${lookbackDays}d_${timeString}.json`);
+      triggerDownload(v7Data, `V7.9_Enriched_Data_${data.ticker}_${timeString}.json`);
     },
     [data]
   );
