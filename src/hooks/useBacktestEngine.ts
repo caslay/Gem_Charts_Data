@@ -222,17 +222,11 @@ function buildEnrichedPayload(
     ticker: `${SYMBOL}.backtest`,
     timezone: 'UTC+3 (Cairo)',
     replay_date: selectedDate,
-    data_payload: {
-      candles_1h,
-      candles_15m,
-      candles_5m,
-    },
     ipda_metrics: {
       note: 'Backtest replay — metrics computed from visible slice only.',
-      true_day_open_0700: trueDayOpen0700,
+      true_day_open: trueDayOpen0700,
       current_pricing: currentPricing,
       macro_levels: { pdh, pdl },
-      active_fvgs: activeFVGs,
       pricing_context: {
         vs_daily_open:
           trueDayOpen0700 !== null && livePrice !== null
@@ -240,6 +234,14 @@ function buildEnrichedPayload(
             : 'UNKNOWN',
         local_dealing_range: localDealingRange,
       },
+    },
+    active_arrays: {
+      fvgs: activeFVGs,
+    },
+    data_payload: {
+      candles_1h,
+      candles_15m,
+      candles_5m,
     },
   };
 }

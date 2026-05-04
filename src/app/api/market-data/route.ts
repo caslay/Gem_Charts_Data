@@ -11,27 +11,30 @@ export async function GET() {
       '5m':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=${limit}`,
       '15m': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=15m&limit=${limit}`,
       '1h':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=${limit}`,
+      '4h':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=4h&limit=${limit}`,
       // HTF — fetched for background calculations only, NEVER exposed in data_payload
       '1d':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=100`,
       '1w':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1w&limit=100`,
       'openInterest': `https://fapi.binance.com/fapi/v1/openInterest?symbol=${symbol}`,
     };
 
-    const [res5m, res15m, res1h, res1d, res1w, resOi] = await Promise.all([
+    const [res5m, res15m, res1h, res4h, res1d, res1w, resOi] = await Promise.all([
       fetch(urls['5m']),
       fetch(urls['15m']),
       fetch(urls['1h']),
+      fetch(urls['4h']),
       fetch(urls['1d']),
       fetch(urls['1w']),
       fetch(urls['openInterest']),
     ]);
 
-    if (!res5m.ok || !res15m.ok || !res1h.ok || !res1d.ok || !res1w.ok || !resOi.ok) {
+    if (!res5m.ok || !res15m.ok || !res1h.ok || !res4h.ok || !res1d.ok || !res1w.ok || !resOi.ok) {
       const errorText = await res5m.text();
       console.error('Binance API Error:', {
         status5m: res5m.status,
         status15m: res15m.status,
         status1h: res1h.status,
+        status4h: res4h.status,
         status1d: res1d.status,
         status1w: res1w.status,
         statusOi: resOi.status,
@@ -40,10 +43,11 @@ export async function GET() {
       throw new Error('Failed to fetch from Binance API');
     }
 
-    const [data5m, data15m, data1h, data1d, data1w, dataOi] = await Promise.all([
+    const [data5m, data15m, data1h, data4h, data1d, data1w, dataOi] = await Promise.all([
       res5m.json(),
       res15m.json(),
       res1h.json(),
+      res4h.json(),
       res1d.json(),
       res1w.json(),
       resOi.json(),
@@ -61,6 +65,7 @@ export async function GET() {
       }));
     };
 
+    const candles4h  = formatCandles(data4h);
     const candles1h  = formatCandles(data1h);
     const candles15m = formatCandles(data15m);
     const candles5m  = formatCandles(data5m);
@@ -400,33 +405,41 @@ export async function GET() {
       }
     }
 
+    const ipda_metrics = {
+      true_day_open: true_day_open_0700,
+      current_time_window: getCurrentKillzone(),
+      institutional_sponsorship: checkDisplacement(candles15m),
+      current_pricing,
+      target_status,
+      macro_levels: { pdh, pdl },
+      historical_magnets,
+      projected_targets,
+      smt_traps,
+      pricing_context,
+    };
+
+    const active_arrays = {
+      fvgs: active_fvgs,
+      liquidity_pools: {
+        asian: asianLiquidity,
+        london: londonLiquidity
+      }
+    };
+
     const payload = {
       ticker: "ETHUSDC.p",
+      timestamp: new Date().toISOString(),
       timezone: "UTC+3",
+      ipda_metrics,
+      active_arrays,
       open_interest: parseFloat(dataOi.openInterest),
       // V6 Naked payload — OHLCV only, no HTF arrays, no calculations
       data_payload: {
+        candles_4h: candles4h,
         candles_1h: candles1h,
         candles_15m: candles15m,
         candles_5m: candles5m,
       },
-      ipda_metrics: {
-        current_time_window: getCurrentKillzone(),
-        institutional_sponsorship: checkDisplacement(candles15m),
-        true_day_open_0700,
-        current_pricing,
-        target_status,
-        macro_levels: { pdh, pdl },
-        stepped_liquidity: {
-          asian: asianLiquidity,
-          london: londonLiquidity
-        },
-        historical_magnets,
-        projected_targets,
-        smt_traps,
-        active_fvgs,
-        pricing_context,
-      }
     };
 
     return NextResponse.json(payload);
