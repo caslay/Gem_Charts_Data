@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, createSeriesMarkers, ISeriesMarkersPluginApi } from 'lightweight-charts';
+import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
 import { useBacktestEngine, BacktestTimeframe, BtCandle } from '@/hooks/useBacktestEngine';
 import {
   ChevronLeft, ChevronRight, Eye, Download, Copy,
@@ -15,6 +16,7 @@ function BacktestChart({ data }: { data: BtCandle[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<any> | null>(null);
 
   // Init chart once
   useEffect(() => {
@@ -66,6 +68,7 @@ function BacktestChart({ data }: { data: BtCandle[] }) {
       wickDownColor: '#c084fc',
     });
     seriesRef.current = series;
+    seriesMarkersRef.current = createSeriesMarkers(series);
 
     const onResize = () => {
       if (containerRef.current && chartRef.current) {
@@ -82,6 +85,7 @@ function BacktestChart({ data }: { data: BtCandle[] }) {
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      seriesMarkersRef.current = null;
     };
   }, []);
 
@@ -96,6 +100,10 @@ function BacktestChart({ data }: { data: BtCandle[] }) {
       .sort((a, b) => (a.time as number) - (b.time as number));
 
     seriesRef.current.setData(formatted as never);
+
+    const sortedDataForMarkers = [...data].sort((a, b) => a.t - b.t);
+    seriesMarkersRef.current?.setMarkers(generateVolumetricMarkers(sortedDataForMarkers));
+
     chartRef.current?.timeScale().fitContent();
   }, [data]);
 
