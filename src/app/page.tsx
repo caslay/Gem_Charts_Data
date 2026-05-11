@@ -12,6 +12,7 @@ export default function Home() {
   const { data, isLoading, error, downloadV6, downloadV7Sliced } = useMarketData();
   const [timeframe, setTimeframe] = useState<Timeframe>('5m');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
 
   const getChartData = () => {
     if (!data) return [];
@@ -104,9 +105,12 @@ export default function Home() {
 
       {/* ── Sidebar ────────────────────────────────────────────────────────── */}
       <Sidebar
-        currentPrice={currentPrice}
-        openInterest={data?.open_interest ?? null}
         data={data}
+        counts={counts}
+        onCountChange={(tf, val) => {
+          const num = parseInt(val, 10);
+          setCounts(prev => ({ ...prev, [tf]: isNaN(num) ? 0 : num }));
+        }}
         onDownloadV6={downloadV6}
         onDownloadV7Sliced={downloadV7Sliced}
         isLoading={isLoading}
