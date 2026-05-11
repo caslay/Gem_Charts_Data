@@ -38,9 +38,9 @@ const AI_PROMPT_PREFIX =
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
-  currentPrice: number | null;
-  openInterest: number | null;
   data: MarketDataPayload | null;
+  counts: { '5m': number, '15m': number, '1h': number, '4h': number };
+  onCountChange: (tf: '5m' | '15m' | '1h' | '4h', value: string) => void;
   onDownloadV6: () => void;
   onDownloadV7Sliced: (counts: { '5m': number, '15m': number, '1h': number, '4h': number }) => void;
   isLoading?: boolean;
@@ -49,16 +49,15 @@ interface SidebarProps {
 }
 
 export default function Sidebar({
-  currentPrice,
-  openInterest,
   data,
+  counts,
+  onCountChange,
   onDownloadV6,
   onDownloadV7Sliced,
   isLoading,
   isOpen,
   onClose,
 }: SidebarProps) {
-  const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
 
   // ── One-Click Context handler ────────────────────────────────────────────
@@ -85,10 +84,7 @@ export default function Sidebar({
     }
   };
 
-  const handleCountChange = (tf: '5m' | '15m' | '1h' | '4h', value: string) => {
-    const num = parseInt(value, 10);
-    setCounts(prev => ({ ...prev, [tf]: isNaN(num) ? 0 : num }));
-  };
+
 
   return (
     <>
@@ -133,39 +129,46 @@ export default function Sidebar({
             </button>
           </div>
 
-          {/* Live Price card */}
-          <div className="bg-white/[0.02] rounded-2xl p-5 border border-white/[0.05] backdrop-blur-md relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-150 duration-500" />
-            <p className="text-sm font-medium text-gray-400 mb-1 relative z-10">Live Price</p>
-            <div className="flex items-baseline gap-2 relative z-10">
-              <span className="text-3xl font-bold text-white tracking-tight">
-                {isLoading ? (
-                  <span className="animate-pulse text-gray-600">---</span>
-                ) : currentPrice !== null ? (
-                  `$${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                ) : (
-                  '---'
-                )}
-              </span>
+          {/* ── IPDA Metrics Grid ───────────────────────────────────────────── */}
+          <div className="grid grid-cols-2 gap-3 relative z-10">
+            {/* Pricing Context */}
+            <div className="bg-white/[0.02] rounded-xl p-3 border border-white/[0.05] backdrop-blur-md">
+               <p className="text-[10px] text-gray-500 uppercase font-semibold">Pricing Context</p>
+               <p className={`text-sm font-bold mt-1 ${data?.ipda_metrics?.current_pricing === 'PREMIUM' ? 'text-red-500' : data?.ipda_metrics?.current_pricing === 'DISCOUNT' ? 'text-green-500' : 'text-white'}`}>
+                 {data?.ipda_metrics?.current_pricing || '---'}
+               </p>
             </div>
-          </div>
-
-          {/* Open Interest card */}
-          <div className="bg-white/[0.02] rounded-2xl p-5 border border-white/[0.05] backdrop-blur-md relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-150 duration-500" />
-            <p className="text-sm font-medium text-gray-400 mb-1 relative z-10">Open Interest</p>
-            <div className="flex items-center gap-2 relative z-10">
-              <TrendingUp className="w-4 h-4 text-purple-400" />
-              <span className="text-2xl font-bold text-white tracking-tight">
-                {isLoading ? (
-                  <span className="animate-pulse text-gray-600">---</span>
-                ) : openInterest !== null ? (
-                  openInterest.toLocaleString(undefined, { maximumFractionDigits: 2 })
-                ) : (
-                  '---'
-                )}
-              </span>
-              <span className="text-sm text-gray-500 font-medium ml-1">ETH</span>
+            {/* True Day Open */}
+            <div className="bg-white/[0.02] rounded-xl p-3 border border-white/[0.05] backdrop-blur-md">
+               <p className="text-[10px] text-gray-500 uppercase font-semibold">True Day Open</p>
+               <p className="text-sm font-bold text-white mt-1">
+                 {data?.ipda_metrics?.true_day_open ? `$${data?.ipda_metrics?.true_day_open}` : '---'}
+               </p>
+            </div>
+            {/* Target Status */}
+            <div className="bg-white/[0.02] rounded-xl p-3 border border-white/[0.05] backdrop-blur-md">
+               <p className="text-[10px] text-gray-500 uppercase font-semibold">Target Status</p>
+               {data?.ipda_metrics?.target_status === 'PENDING' ? (
+                  <span className="inline-block px-2 py-0.5 mt-1 rounded text-xs font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">PENDING</span>
+               ) : data?.ipda_metrics?.target_status === 'EXHAUSTED' ? (
+                  <span className="inline-block px-2 py-0.5 mt-1 rounded text-xs font-bold bg-gray-500/20 text-gray-400 border border-gray-500/30">EXHAUSTED</span>
+               ) : <span className="text-sm font-bold text-white mt-1 block">---</span>}
+            </div>
+            {/* Inst. Sponsorship */}
+            <div className="bg-white/[0.02] rounded-xl p-3 border border-white/[0.05] backdrop-blur-md">
+               <p className="text-[10px] text-gray-500 uppercase font-semibold">Inst. Sponsorship</p>
+               {data?.ipda_metrics?.institutional_sponsorship?.displacement_active ? (
+                 <span className="text-sm font-bold text-yellow-400 flex items-center gap-1 mt-1">⚡ ACTIVE</span>
+               ) : (
+                 <span className="text-sm font-bold text-gray-500 mt-1 block">INACTIVE</span>
+               )}
+            </div>
+            {/* Time Window */}
+            <div className="col-span-2 bg-white/[0.02] rounded-xl p-3 border border-white/[0.05] backdrop-blur-md">
+               <p className="text-[10px] text-gray-500 uppercase font-semibold">Time Window</p>
+               <p className="text-sm font-bold text-cyan-400 mt-1">
+                 {data?.ipda_metrics?.current_time_window || '---'}
+               </p>
             </div>
           </div>
 
@@ -186,7 +189,7 @@ export default function Sidebar({
                     type="number"
                     min="0"
                     value={counts[tf]}
-                    onChange={(e) => handleCountChange(tf, e.target.value)}
+                    onChange={(e) => onCountChange(tf, e.target.value)}
                     className="w-full bg-transparent text-white text-sm font-bold text-center outline-none border-b border-white/10 focus:border-cyan-400 transition-colors"
                   />
                 </div>
@@ -225,33 +228,27 @@ export default function Sidebar({
               </div>
             </button>
 
-            {/* V7.9 Enriched Download — respects counts */}
-            <button
-              id="btn-download-v7"
-              onClick={() => onDownloadV7Sliced(counts)}
-              disabled={isLoading || !data}
-              className="w-full relative group overflow-hidden rounded-2xl p-[1px] disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]"
-            >
-              <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-purple-500 rounded-2xl opacity-60 group-hover:opacity-90 transition-opacity duration-300" />
-              <div className="relative flex items-center justify-center gap-2 px-5 py-3 bg-[#0a0a0a] rounded-2xl group-hover:bg-transparent transition-colors duration-300">
-                <DownloadCloud className="w-4 h-4 text-cyan-300 group-hover:text-white shrink-0 transition-colors duration-300" />
-                <span className="font-bold text-white text-sm">⬇ Download V7.9 Enriched Data</span>
-              </div>
-            </button>
-
-            {/* V6 Naked — unaffected by slider (raw full payload) */}
-            <button
-              id="btn-download-v6"
-              onClick={onDownloadV6}
-              disabled={isLoading || !data}
-              className="w-full relative group overflow-hidden rounded-2xl p-[1px] disabled:opacity-50 disabled:cursor-not-allowed border border-white/10 hover:border-white/20 transition-colors min-h-[44px]"
-            >
-              <div className="relative flex items-center justify-center gap-2 px-5 py-3 bg-[#111] rounded-2xl transition-colors duration-300 hover:bg-[#1a1a1a]">
-                <span className="font-semibold text-gray-300 group-hover:text-white text-sm transition-colors">
-                  ⬇️ Download V6 Naked Data
-                </span>
-              </div>
-            </button>
+            {/* ── JSON Download Buttons ── */}
+            <div className="flex items-center gap-2 mt-2">
+              <button
+                onClick={onDownloadV6}
+                disabled={!data}
+                className="flex-1 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/5 hover:border-white/20 rounded-xl text-xs font-semibold text-gray-400 hover:text-white transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                title="Download V6 Naked JSON"
+              >
+                <span className="text-gray-500">{"{}"}</span>
+                Raw V6
+              </button>
+              <button
+                onClick={() => onDownloadV7Sliced(counts)}
+                disabled={!data}
+                className="flex-1 px-3 py-2 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 border border-cyan-500/20 hover:border-cyan-500/40 rounded-xl text-xs font-bold text-cyan-300 hover:text-cyan-100 transition-all disabled:opacity-50 shadow-[0_0_10px_rgba(34,211,238,0.1)] flex items-center justify-center gap-1.5"
+                title="Download V7.9 Enriched JSON (Sliced)"
+              >
+                <span className="text-cyan-500">{"{}"}</span>
+                Sliced V7.9
+              </button>
+            </div>
           </div>
         </div>
       </aside>
