@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { slicePayloadByLookback } from '@/components/Sidebar';
+import { useLiveAlerts } from './useLiveAlerts';
 
 export interface Candle {
   t: number;
@@ -39,7 +40,9 @@ export function useMarketData() {
         throw new Error('Failed to fetch market data');
       }
       const jsonData: MarketDataPayload = await res.json();
-      setData(jsonData);
+      const newData = { ...jsonData };
+      setData(newData);
+      console.log('State Updated with new data', newData);
     } catch (err: any) {
       setError(err.message || 'An error occurred');
     } finally {
@@ -51,6 +54,9 @@ export function useMarketData() {
     fetchData();
     // Intentionally only fetching once on mount as per V6 requirements.
   }, [fetchData]);
+
+  // Hook into live alerts: Triggers Binance WS, performs diffs, fires audio/push alerts
+  useLiveAlerts(data, fetchData);
 
   // ── V6 Naked — always full, unsliced ─────────────────────────────────────
   const downloadV6 = useCallback(() => {
