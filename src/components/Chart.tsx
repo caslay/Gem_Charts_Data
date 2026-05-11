@@ -20,6 +20,7 @@ export default function Chart({ data, colors }: ChartProps) {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<any> | null>(null);
+  const isInitialLoad = useRef(true);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -130,14 +131,15 @@ export default function Chart({ data, colors }: ChartProps) {
 
       seriesRef.current.setData(formattedData);
 
-      // Apply the generated volumetric markers based on original data (which is in original order / mapped appropriately)
-      // Since generateVolumetricMarkers relies on the structure, we'll pass original data but we must ensure we map markers properly.
-      // Wait, 'data' is original candles. Let's make sure 'data' is also sorted ascending or our prev/mid/curr logic works correctly.
-      // Usually 'data' from API is oldest to newest, so i=2.. works.
+      // Apply the generated volumetric markers based on original data
       const sortedDataForMarkers = [...data].sort((a, b) => a.t - b.t);
-      seriesMarkersRef.current?.setMarkers(generateVolumetricMarkers(sortedDataForMarkers));
+      const markers = generateVolumetricMarkers(sortedDataForMarkers);
+      seriesMarkersRef.current?.setMarkers(markers);
 
-      chartRef.current?.timeScale().fitContent();
+      if (isInitialLoad.current) {
+        chartRef.current?.timeScale().fitContent();
+        isInitialLoad.current = false;
+      }
     }
   }, [data]);
 
