@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     // 1. Initialize the Google Generative AI client
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // 2. Extract the incoming V7.9 JSON payload
+    // 2. Extract the incoming V8.0 JSON payload
     const payload = await req.json();
 
     // 3. Select gemini-2.5-flash for handling large JSON contexts

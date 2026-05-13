@@ -439,7 +439,7 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     payloadToExport.data_payload = data_payload;
 
     const text =
-      'Act as the Institutional Flow Synthesizer V7.9. ' +
+      'Act as the Institutional Flow Synthesizer V8.0. ' +
       'Analyze the following HISTORICAL backtest data and provide a mechanical bias report:\n\n' +
       JSON.stringify(payloadToExport, null, 2);
     try {

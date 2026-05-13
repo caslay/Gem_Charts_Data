@@ -30,7 +30,7 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
-      
+
       const result = await response.json();
       if (response.ok) {
         setAiAnalysis(result.analysis);
@@ -73,7 +73,7 @@ export default function Home() {
               Flow-State Quant Engine
             </h1>
             <span className="px-2 py-1 rounded bg-white/10 text-[10px] lg:text-xs font-bold text-cyan-400 border border-white/5 ml-1 shadow-[0_0_10px_rgba(34,211,238,0.2)] shrink-0">
-              V7.9
+              V8.0
             </span>
           </div>
 
@@ -86,8 +86,8 @@ export default function Home() {
                   id={`tf-${tf}`}
                   onClick={() => setTimeframe(tf)}
                   className={`px-3 lg:px-6 py-1.5 lg:py-2 rounded-lg text-xs lg:text-sm font-bold transition-all duration-300 ${timeframe === tf
-                      ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.15)] border border-cyan-500/30'
-                      : 'text-gray-500 hover:text-white hover:bg-white/5 border border-transparent'
+                    ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.15)] border border-cyan-500/30'
+                    : 'text-gray-500 hover:text-white hover:bg-white/5 border border-transparent'
                     }`}
                 >
                   {tf.toUpperCase()}
@@ -124,13 +124,13 @@ export default function Home() {
               </div>
             )}
           </div>
-          
+
           {aiAnalysis && (
             <div className="relative p-6 rounded-2xl bg-[#0a0a0a]/90 backdrop-blur-xl border border-cyan-500/30 shadow-[0_0_30px_rgba(34,211,238,0.15)] max-h-[40vh] overflow-y-auto">
               <div className="text-gray-300 text-sm leading-relaxed space-y-4 [&>h1]:text-xl [&>h1]:font-bold [&>h1]:text-white [&>h2]:text-lg [&>h2]:font-bold [&>h2]:text-cyan-400 [&>h3]:text-base [&>h3]:font-bold [&>h3]:text-cyan-300 [&>p]:mb-4 [&>ul]:list-disc [&>ul]:ml-5 [&>li]:mb-1 [&>strong]:text-white">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiAnalysis}</ReactMarkdown>
               </div>
-              <button 
+              <button
                 onClick={() => setAiAnalysis(null)}
                 className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/10 transition-colors"
                 title="Dismiss Analysis"

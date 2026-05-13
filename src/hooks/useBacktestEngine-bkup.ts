@@ -130,7 +130,7 @@ function findCutoffIndex(candles: BtCandle[], cutoffHour: number, cutoffMinute: 
 // ─────────────────────────────────────────────────────────────────────────────
 /**
  * Builds a lightweight "Enriched" JSON payload from visible arrays only.
- * Mirrors the live V7.9 structure so the AI prompt remains identical.
+ * Mirrors the live V8.0 structure so the AI prompt remains identical.
  * Only the fields computable client-side from the OHLCV slice are included.
  */
 function buildEnrichedPayload(
@@ -466,7 +466,7 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
   const copyPayload = useCallback(async () => {
     if (!enrichedPayload) return;
     const text =
-      'Act as the Institutional Flow Synthesizer V7.9. ' +
+      'Act as the Institutional Flow Synthesizer V8.0. ' +
       'Analyze the following HISTORICAL backtest data and provide a mechanical bias report:\n\n' +
       JSON.stringify(enrichedPayload, null, 2);
     try {
