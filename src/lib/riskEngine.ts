@@ -27,3 +27,65 @@ export function calculateDynamicRisk(
     reason: "Clear pricing runway with no immediate macro blockades."
   };
 }
+
+import { MappedFVG } from './fvgEngine';
+import { RestingLiquidityPools } from './orderFlowEngine';
+
+export interface HardInvalidationLevels {
+  bearish_invalidation: number | null;
+  bullish_invalidation: number | null;
+}
+
+export interface TradeExecutionParameters {
+  risk_mode: "HALF_RISK_OR_STAND_DOWN" | "FULL_MACRO_RISK" | "STANDARD_RISK";
+  closest_active_fvg_ce: number | null;
+  hard_invalidation_levels: HardInvalidationLevels;
+}
+
+export function generateTradeExecutionParameters(
+  target_status: string,
+  current_time_window: string,
+  institutional_sponsorship_status: string,
+  currentPrice: number,
+  active_fvgs: MappedFVG[],
+  resting_liquidity_pools: RestingLiquidityPools
+): TradeExecutionParameters {
+  let risk_mode: "HALF_RISK_OR_STAND_DOWN" | "FULL_MACRO_RISK" | "STANDARD_RISK" = "STANDARD_RISK";
+
+  if (target_status === "EXHAUSTED" || current_time_window === "DEAD_ZONE") {
+    risk_mode = "HALF_RISK_OR_STAND_DOWN";
+  } else if (target_status === "PENDING" && institutional_sponsorship_status.includes("ACTIVE")) {
+    risk_mode = "FULL_MACRO_RISK";
+  }
+
+  let closest_active_fvg_ce: number | null = null;
+  if (active_fvgs.length > 0) {
+    let closestDiff = Infinity;
+    for (const fvg of active_fvgs) {
+      const diff = Math.abs(fvg.ce - currentPrice);
+      if (diff < closestDiff) {
+        closestDiff = diff;
+        closest_active_fvg_ce = parseFloat(fvg.ce.toFixed(2));
+      }
+    }
+  }
+
+  const { BSL_Magnets, SSL_Magnets } = resting_liquidity_pools;
+
+  const bearish_invalidation = BSL_Magnets.length > 0 
+    ? parseFloat((Math.max(...BSL_Magnets) + 0.50).toFixed(2)) 
+    : null;
+    
+  const bullish_invalidation = SSL_Magnets.length > 0 
+    ? parseFloat((Math.min(...SSL_Magnets) - 0.50).toFixed(2)) 
+    : null;
+
+  return {
+    risk_mode,
+    closest_active_fvg_ce,
+    hard_invalidation_levels: {
+      bearish_invalidation,
+      bullish_invalidation
+    }
+  };
+}
