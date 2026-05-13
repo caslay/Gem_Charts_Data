@@ -3,6 +3,7 @@ import { fetchRestingLiquidity } from '@/lib/orderFlowEngine';
 import { fetchOIMetrics } from '@/lib/oiLiquidationEngine';
 import { fetchSmartMoneySentiment } from '@/lib/smartMoneyEngine';
 import { detectActiveFVGs } from '@/lib/fvgEngine';
+import { verifyDisplacement } from '@/lib/displacementEngine';
 
 export const dynamic = 'force-dynamic';
 
@@ -270,31 +271,6 @@ export async function GET(req: Request) {
       return "DEAD_ZONE";
     };
 
-    // 10. Displacement & Volume Anomaly Scanner
-    const checkDisplacement = (candles: any[]) => {
-      if (candles.length < 16) return { displacement_active: false };
-      
-      // Get the last closed candle (Binance API returns current open candle at length - 1, so last closed is length - 2)
-      const latestCandle = candles[candles.length - 2];
-      // 14 candles prior to latestCandle
-      const priorCandles = candles.slice(candles.length - 16, candles.length - 2);
-
-      const latestBodySize = Math.abs(latestCandle.o - latestCandle.c);
-      const latestVolume = latestCandle.v;
-
-      const avgBodySize = priorCandles.reduce((sum, c) => sum + Math.abs(c.o - c.c), 0) / 14;
-      const avgVolume = priorCandles.reduce((sum, c) => sum + c.v, 0) / 14;
-
-      if (latestBodySize > (avgBodySize * 2.0) && latestVolume > (avgVolume * 1.5)) {
-        return {
-          displacement_active: true,
-          direction: latestCandle.c >= latestCandle.o ? "BULLISH" : "BEARISH"
-        };
-      }
-
-      return { displacement_active: false };
-    };
-
     // 11. Local Dealing Range & Dual-Pricing Context (V7.9)
     //     c.t already has +3h baked in, so getUTCHours() reads Cairo local time.
     const todayCairo = new Date(lastCandle.t); // reference from last 1h candle
@@ -377,7 +353,7 @@ export async function GET(req: Request) {
     const ipda_metrics = {
       true_day_open: true_day_open_0700,
       current_time_window: getCurrentKillzone(),
-      institutional_sponsorship: checkDisplacement(candles15m),
+      institutional_sponsorship: verifyDisplacement(candles15m),
       current_pricing,
       target_status,
       macro_levels: { pdh, pdl },
