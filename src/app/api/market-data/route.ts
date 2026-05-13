@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+import { fetchRestingLiquidity } from '@/lib/orderFlowEngine';
+import { fetchOIMetrics } from '@/lib/oiLiquidationEngine';
+import { fetchSmartMoneySentiment } from '@/lib/smartMoneyEngine';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +20,10 @@ export async function GET() {
       '1w':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1w&limit=100`,
       'openInterest': `https://fapi.binance.com/fapi/v1/openInterest?symbol=${symbol}`,
     };
+
+    const restingLiquidityPromise = fetchRestingLiquidity(symbol);
+    const oiMetricsPromise = fetchOIMetrics(symbol);
+    const smartMoneyPromise = fetchSmartMoneySentiment(symbol);
 
     const [res5m, res15m, res1h, res4h, res1d, res1w, resOi] = await Promise.all([
       fetch(urls['5m']),
@@ -43,7 +50,7 @@ export async function GET() {
       throw new Error('Failed to fetch from Binance API');
     }
 
-    const [data5m, data15m, data1h, data4h, data1d, data1w, dataOi] = await Promise.all([
+    const [data5m, data15m, data1h, data4h, data1d, data1w, dataOi, resting_liquidity_pools, oi_metrics, smart_money_sentiment] = await Promise.all([
       res5m.json(),
       res15m.json(),
       res1h.json(),
@@ -51,6 +58,9 @@ export async function GET() {
       res1d.json(),
       res1w.json(),
       resOi.json(),
+      restingLiquidityPromise,
+      oiMetricsPromise,
+      smartMoneyPromise,
     ]);
 
     const utcPlus3OffsetMs = 3 * 60 * 60 * 1000;
@@ -432,6 +442,11 @@ export async function GET() {
       timezone: "UTC+3",
       ipda_metrics,
       active_arrays,
+      order_flow_engine: {
+        resting_liquidity_pools,
+        ...oi_metrics,
+        ...smart_money_sentiment,
+      },
       open_interest: parseFloat(dataOi.openInterest),
       // V6 Naked payload — OHLCV only, no HTF arrays, no calculations
       data_payload: {
