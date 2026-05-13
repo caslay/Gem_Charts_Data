@@ -8,9 +8,10 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "V6 Market Visualizer | Gem Dashboard",
-  description: "Advanced Multi-Timeframe Naked Market Data Visualizer",
+  title: "Flow-State Quant Engine V7.9",
+  description: "Flow-State Quant Engine V7.9",
 };
+import { NavigationHeader } from "@/components/NavigationHeader";
 
 export default function RootLayout({
   children,
@@ -22,7 +23,8 @@ export default function RootLayout({
       <body
         className={`${inter.variable} font-sans antialiased bg-black text-white`}
       >
-        {children}
+        <NavigationHeader />
+        <main>{children}</main>
       </body>
     </html>
   );

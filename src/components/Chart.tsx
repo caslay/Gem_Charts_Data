@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, SeriesMarker, createSeriesMarkers, ISeriesMarkersPluginApi } from 'lightweight-charts';
 import { Candle } from '@/hooks/useMarketData';
+import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
 
 interface ChartProps {
   data: Candle[];
@@ -18,6 +19,8 @@ export default function Chart({ data, colors }: ChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
+  const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<any> | null>(null);
+  const isInitialLoad = useRef(true);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -37,7 +40,7 @@ export default function Chart({ data, colors }: ChartProps) {
       localization: {
         timeFormatter: (timestamp: number) => {
           return new Date(timestamp * 1000).toLocaleTimeString('en-EG', {
-            timeZone: 'Africa/Cairo',
+            timeZone: 'UTC',
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
@@ -56,7 +59,7 @@ export default function Chart({ data, colors }: ChartProps) {
         borderColor: 'rgba(255, 255, 255, 0.1)',
         tickMarkFormatter: (time: number) => {
           return new Date(time * 1000).toLocaleTimeString('en-EG', {
-            timeZone: 'Africa/Cairo',
+            timeZone: 'UTC',
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
@@ -90,6 +93,7 @@ export default function Chart({ data, colors }: ChartProps) {
       wickDownColor: downColor,
     });
     seriesRef.current = candlestickSeries;
+    seriesMarkersRef.current = createSeriesMarkers(candlestickSeries);
 
     const handleResize = () => {
       if (chartContainerRef.current && chartRef.current) {
@@ -107,6 +111,7 @@ export default function Chart({ data, colors }: ChartProps) {
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      seriesMarkersRef.current = null;
     };
   }, [colors]);
 
@@ -125,7 +130,16 @@ export default function Chart({ data, colors }: ChartProps) {
       formattedData.sort((a, b) => a.time - b.time);
 
       seriesRef.current.setData(formattedData);
-      chartRef.current?.timeScale().fitContent();
+
+      // Apply the generated volumetric markers based on original data
+      const sortedDataForMarkers = [...data].sort((a, b) => a.t - b.t);
+      const markers = generateVolumetricMarkers(sortedDataForMarkers);
+      seriesMarkersRef.current?.setMarkers(markers);
+
+      if (isInitialLoad.current) {
+        chartRef.current?.timeScale().fitContent();
+        isInitialLoad.current = false;
+      }
     }
   }, [data]);
 

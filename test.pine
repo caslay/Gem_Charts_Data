@@ -1,0 +1,145 @@
+// ============================================================
+// Swings Settings
+// ============================================================
+var GRP2 = "Swings"
+
+enableSwings            = input(true,  "Enable Swings",                             group=GRP2)
+enableLiquiditySwings   = input(false, "Enable Liquidity Swings",                   group=GRP2)
+show_intraday           = input(false, "Show Intraday Swings",                      group=GRP2)
+swingsColor             = input(color.rgb(255, 235, 59, 82), "Swings Color",        group=GRP2)
+swingsDoubleColor       = input(color.maroon, "Double Swings",                      group=GRP2)
+enableTempSignal        = input(true,  "Enable Temporary (Live) Signal",            group=GRP2, inline="temp")
+tempSignalColor         = input(color.new(color.orange, 50), "Temp Signal Color",   group=GRP2, inline="temp")
+
+enableVolumeIncrease    = input(true,  "Enable Middle Candle Volume > Previous",    group=GRP2)
+volumeIncreaseColor     = input(color.aqua,  "Volume Increase Color",               group=GRP2)
+checkCandleDirection    = input(true,  "Check 2nd Candle Different from Previous",  group=GRP2)
+
+// Special color: middle candle weighted vol > previous candle weighted vol
+specialVolumeColor      = input(color.white, "Special Vol Color",                   group=GRP2)
+
+prevLow1  = low[1],  prevLow2  = low[2],  prevLow3  = low[3]
+prevHigh1 = high[1], prevHigh2 = high[2], prevHigh3 = high[3]
+close2    = close[2], open2    = open[2]
+volume2   = volume[2], volume3 = volume[3]
+
+isLowerSwing  = prevLow2  < prevLow1  and prevLow2  < prevLow3
+isHigherSwing = prevHigh2 > prevHigh1 and prevHigh2 > prevHigh3
+
+// Candle directions
+isBullish1      = close[1] > open[1]
+isBearish1      = close[1] < open[1]
+isBullish2      = close2   > open2
+isBearish2      = close2   < open2
+isBullish2_live = close[2] > open[2]
+isBearish2_live = close[2] < open[2]
+isBullish3      = close[3] > open[3]
+isBearish3      = close[3] < open[3]
+
+candleDirectionDifferent      = (isBullish2 and isBearish3) or (isBearish2 and isBullish3)
+candleDirectionDifferent_live = (isBullish1 and isBearish2_live) or (isBearish1 and isBullish2_live)
+directionCheck_live           = not checkCandleDirection or candleDirectionDifferent_live
+
+// ============================================================
+// Special Volume Condition
+// Uses body-weighted volume to estimate directional strength.
+// Body ratio = body size / candle range (0=doji, 1=full body)
+// A strong directional candle has high volume AND large body.
+// Special fires when middle candle's weighted vol > previous candle's.
+// ============================================================
+
+// Confirmed bars (bar[2] = middle, bar[3] = previous)
+bodyRatio2 = (high[2] - low[2]) != 0.0 ? math.abs(close[2] - open[2]) / (high[2] - low[2]) : 0.0
+bodyRatio3 = (high[3] - low[3]) != 0.0 ? math.abs(close[3] - open[3]) / (high[3] - low[3]) : 0.0
+dirVol2    = volume[2] * bodyRatio2
+dirVol3    = volume[3] * bodyRatio3
+
+isSpecialBullish = buyPatternVolumeIncrease  and isBullish2 and isBearish3 and dirVol2 > dirVol3
+isSpecialBearish = sellPatternVolumeIncrease and isBearish2 and isBullish3 and dirVol2 > dirVol3
+
+// Live bars (bar[1] = middle, bar[2] = previous)
+bodyRatio1  = (high[1] - low[1]) != 0.0 ? math.abs(close[1] - open[1]) / (high[1] - low[1]) : 0.0
+bodyRatio2l = (high[2] - low[2]) != 0.0 ? math.abs(close[2] - open[2]) / (high[2] - low[2]) : 0.0
+dirVol1     = volume[1] * bodyRatio1
+dirVol2l    = volume[2] * bodyRatio2l
+
+// Live pattern conditions
+isPotentialLowerSwing  = low[1]  < low[2]  and low[0]  > low[1]
+isPotentialHigherSwing = high[1] > high[2] and high[0] < high[1]
+volumeIncrease_live    = volume[1] > volume[2]
+
+liveSellPattern = barstate.isrealtime and isPotentialHigherSwing and isBearish1 and volumeIncrease_live and directionCheck_live
+liveBuyPattern  = barstate.isrealtime and isPotentialLowerSwing  and isBullish1 and volumeIncrease_live and directionCheck_live
+
+isSpecialBearish_live = liveSellPattern and isBearish1 and isBullish2_live and dirVol1 > dirVol2l
+isSpecialBullish_live = liveBuyPattern  and isBullish1 and isBearish2_live and dirVol1 > dirVol2l
+
+// ============================================================
+// Plots — Swing Arrows
+// ============================================================
+plotshape(isLowerSwing and enableSwings and (not show_intraday or isHigherSwing or timeframe.isintraday),
+     title="Swing Low", style=shape.arrowup, location=location.belowbar,
+     color=swingsColor, size=size.tiny, offset=-2)
+
+plotshape(isHigherSwing and enableSwings and (not show_intraday or isLowerSwing or timeframe.isintraday),
+     title="Swing High", style=shape.arrowdown, location=location.abovebar,
+     color=swingsColor, size=size.tiny, offset=-2)
+
+plotshape(isHigherSwing and isLowerSwing and enableSwings and (not show_intraday or timeframe.isintraday),
+     title="Double Swing High", style=shape.cross, location=location.abovebar,
+     color=swingsDoubleColor, size=size.tiny, offset=-2)
+
+plotshape(isHigherSwing and isLowerSwing and enableSwings and (not show_intraday or timeframe.isintraday),
+     title="Double Swing Low", style=shape.cross, location=location.belowbar,
+     color=swingsDoubleColor, size=size.tiny, offset=-2)
+
+// ============================================================
+// Plots — Volume Breakout (orange dots)
+// ============================================================
+plotshape(sellPattern and enableSwings and enableVolumeBreakout,
+     title="Sell Breakout", style=shape.circle, location=location.abovebar,
+     color=volumeBreakoutColor, size=size.tiny, offset=-2)
+
+plotshape(buyPattern and enableSwings and enableVolumeBreakout,
+     title="Buy Breakout", style=shape.circle, location=location.belowbar,
+     color=volumeBreakoutColor, size=size.tiny, offset=-2)
+
+// ============================================================
+// Plots — Volume Increase (confirmed, offset -2)
+// Special (white) takes priority over normal (cyan)
+// ============================================================
+plotshape(sellPatternVolumeIncrease and enableVolumeIncrease and isSpecialBearish,
+     title="Sell Special Vol", style=shape.circle, location=location.abovebar,
+     color=specialVolumeColor, size=size.tiny, offset=-2)
+
+plotshape(sellPatternVolumeIncrease and enableVolumeIncrease and not isSpecialBearish,
+     title="Sell Vol Increase", style=shape.circle, location=location.abovebar,
+     color=volumeIncreaseColor, size=size.tiny, offset=-2)
+
+plotshape(buyPatternVolumeIncrease and enableVolumeIncrease and isSpecialBullish,
+     title="Buy Special Vol", style=shape.circle, location=location.belowbar,
+     color=specialVolumeColor, size=size.tiny, offset=-2)
+
+plotshape(buyPatternVolumeIncrease and enableVolumeIncrease and not isSpecialBullish,
+     title="Buy Vol Increase", style=shape.circle, location=location.belowbar,
+     color=volumeIncreaseColor, size=size.tiny, offset=-2)
+
+// ============================================================
+// Plots — Temporary Live Signals (offset -1)
+// Special (white) takes priority over normal (orange)
+// ============================================================
+plotshape(liveSellPattern and enableVolumeIncrease and enableTempSignal and isSpecialBearish_live,
+     title="Temp Sell Special", style=shape.circle, location=location.abovebar,
+     color=specialVolumeColor, size=size.tiny, offset=-1)
+
+plotshape(liveSellPattern and enableVolumeIncrease and enableTempSignal and not isSpecialBearish_live,
+     title="Temp Sell Pattern", style=shape.circle, location=location.abovebar,
+     color=tempSignalColor, size=size.tiny, offset=-1)
+
+plotshape(liveBuyPattern and enableVolumeIncrease and enableTempSignal and isSpecialBullish_live,
+     title="Temp Buy Special", style=shape.circle, location=location.belowbar,
+     color=specialVolumeColor, size=size.tiny, offset=-1)
+
+plotshape(liveBuyPattern and enableVolumeIncrease and enableTempSignal and not isSpecialBullish_live,
+     title="Temp Buy Pattern", style=shape.circle, location=location.belowbar,
+     color=tempSignalColor, size=size.tiny, offset=-1)

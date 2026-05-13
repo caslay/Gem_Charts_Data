@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { slicePayloadByLookback } from '@/components/Sidebar';
+import { useLiveAlerts } from './useLiveAlerts';
 
 export interface Candle {
   t: number;
@@ -11,14 +13,17 @@ export interface Candle {
 
 export interface MarketDataPayload {
   ticker: string;
+  timestamp?: string;
   timezone: string;
   open_interest: number;
-  data_payload: {
-    candles_1h: Candle[];
-    candles_15m: Candle[];
-    candles_5m: Candle[];
-  };
   ipda_metrics: any;
+  active_arrays: any;
+  data_payload: {
+    candles_4h?: Candle[];
+    candles_1h?: Candle[];
+    candles_15m?: Candle[];
+    candles_5m?: Candle[];
+  };
 }
 
 export function useMarketData() {
@@ -35,7 +40,9 @@ export function useMarketData() {
         throw new Error('Failed to fetch market data');
       }
       const jsonData: MarketDataPayload = await res.json();
-      setData(jsonData);
+      const newData = { ...jsonData };
+      setData(newData);
+      console.log('State Updated with new data', newData);
     } catch (err: any) {
       setError(err.message || 'An error occurred');
     } finally {
@@ -48,6 +55,10 @@ export function useMarketData() {
     // Intentionally only fetching once on mount as per V6 requirements.
   }, [fetchData]);
 
+  // Hook into live alerts: Triggers Binance WS, performs diffs, fires audio/push alerts
+  useLiveAlerts(data, fetchData);
+
+  // ── V6 Naked — always full, unsliced ─────────────────────────────────────
   const downloadV6 = useCallback(() => {
     if (!data) return;
 
@@ -55,41 +66,57 @@ export function useMarketData() {
       ticker: data.ticker,
       timezone: data.timezone,
       open_interest: data.open_interest,
-      data_payload: data.data_payload
-    };
-
-    const blob = new Blob([JSON.stringify(v6Data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `V6_Naked_Data_${data.ticker}_UTC+3.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }, [data]);
-
-  const downloadV7 = useCallback(() => {
-    if (!data) return;
-
-    const v7Data = {
-      ticker: data.ticker,
-      timezone: data.timezone,
-      open_interest: data.open_interest,
       data_payload: data.data_payload,
-      ipda_metrics: data.ipda_metrics
     };
 
-    const blob = new Blob([JSON.stringify(v7Data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `V7.4_Enriched_Data_${data.ticker}_UTC+3.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    triggerDownload(v6Data, `V6_Naked_Data_${data.ticker}.json`);
   }, [data]);
 
-  return { data, isLoading, error, refetch: fetchData, downloadV6, downloadV7 };
+  // ── V7.9 Enriched — sliced by candle counts ───────────────────────────────
+  const downloadV7Sliced = useCallback(
+    (counts: { '5m': number, '15m': number, '1h': number, '4h': number }) => {
+      if (!data) return;
+
+      const sliced = slicePayloadByLookback(data, counts);
+      const v7Data = {
+        ticker: sliced.ticker,
+        timestamp: new Date().toISOString(),
+        timezone: sliced.timezone,
+        ipda_metrics: sliced.ipda_metrics,
+        active_arrays: sliced.active_arrays,
+        open_interest: sliced.open_interest,
+        data_payload: sliced.data_payload,
+      };
+
+      const now = new Date();
+      let hours = now.getHours();
+      const minutes = now.getMinutes();
+      const ampm = hours >= 12 ? 'pm' : 'am';
+
+      hours = hours % 12;
+      hours = hours ? hours : 12; // تحويل الصفر لـ 12
+
+      const hoursStr = hours < 10 ? '0' + hours : hours.toString();
+      const minutesStr = minutes < 10 ? '0' + minutes : minutes.toString();
+      const timeString = `${hoursStr}-${minutesStr}-${ampm}`;
+
+      triggerDownload(v7Data, `V7.9_Enriched_Data_${data.ticker}_${timeString}.json`);
+    },
+    [data]
+  );
+
+  return { data, isLoading, error, refetch: fetchData, downloadV6, downloadV7Sliced };
+}
+
+// ── Shared file-download helper ───────────────────────────────────────────────
+function triggerDownload(payload: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
