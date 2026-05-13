@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { fetchRestingLiquidity, fetchOIMetricsAndLiquidations, fetchSmartMoneySentiment } from '@/lib/orderFlowEngine';
 import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
 import { verifyDisplacement } from '@/lib/displacementEngine';
-import { calculateDynamicRisk } from '@/lib/riskEngine';
+import { calculateDynamicRisk, generateTradeExecutionParameters } from '@/lib/riskEngine';
 
 export const dynamic = 'force-dynamic';
 
@@ -350,10 +350,23 @@ export async function GET(req: Request) {
       }
     }
 
+    const active_fvgs = mapAndConsolidateFVGs(detectActiveFVGs(candles15m), detectActiveFVGs(candles5m));
+    const institutional_sponsorship = verifyDisplacement(candles15m);
+    const current_time_window = getCurrentKillzone();
+
+    const trade_execution_parameters = generateTradeExecutionParameters(
+      target_status,
+      current_time_window,
+      institutional_sponsorship.status,
+      currentLivePrice,
+      active_fvgs,
+      resting_liquidity_pools
+    );
+
     const ipda_metrics = {
       true_day_open: true_day_open_0700,
-      current_time_window: getCurrentKillzone(),
-      institutional_sponsorship: verifyDisplacement(candles15m),
+      current_time_window,
+      institutional_sponsorship,
       current_pricing,
       target_status,
       macro_levels: { pdh, pdl },
@@ -363,12 +376,13 @@ export async function GET(req: Request) {
       pricing_context,
       order_flow_engine: {
         open_interest_trend,
-        displacement_sponsorship: verifyDisplacement(candles15m).status !== "INACTIVE" ? "ACTIVE" : "INACTIVE",
+        displacement_sponsorship: institutional_sponsorship.status !== "INACTIVE" ? "ACTIVE" : "INACTIVE",
         resting_liquidity_pools,
         liquidation_events,
         smart_money_sentiment,
       },
-      active_fvgs: mapAndConsolidateFVGs(detectActiveFVGs(candles15m), detectActiveFVGs(candles5m))
+      active_fvgs,
+      trade_execution_parameters
     };
 
 
