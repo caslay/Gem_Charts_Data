@@ -4,6 +4,7 @@ import { fetchOIMetrics } from '@/lib/oiLiquidationEngine';
 import { fetchSmartMoneySentiment } from '@/lib/smartMoneyEngine';
 import { detectActiveFVGs } from '@/lib/fvgEngine';
 import { verifyDisplacement } from '@/lib/displacementEngine';
+import { calculateDynamicRisk } from '@/lib/riskEngine';
 
 export const dynamic = 'force-dynamic';
 
@@ -372,11 +373,20 @@ export async function GET(req: Request) {
       }
     };
 
+    const risk_management = calculateDynamicRisk(
+      currentLivePrice,
+      target_status,
+      pdh,
+      pdl,
+      oi_metrics.liquidation_events.status
+    );
+
     const payload = {
       ticker: "ETHUSDC.p",
       timestamp: new Date().toISOString(),
       timezone: "UTC+3",
       ipda_metrics,
+      risk_management,
       active_arrays,
       order_flow_engine: {
         resting_liquidity_pools,
