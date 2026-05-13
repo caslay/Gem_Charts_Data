@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   description: "Flow-State Quant Engine V8.0",
 };
 import { NavigationHeader } from "@/components/NavigationHeader";
+import { Analytics } from "@vercel/analytics/next"
 
 export default function RootLayout({
   children,
@@ -25,6 +26,7 @@ export default function RootLayout({
       >
         <NavigationHeader />
         <main>{children}</main>
+        <Analytics />
       </body>
     </html>
   );
