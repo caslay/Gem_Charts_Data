@@ -1,4 +1,4 @@
-export async function fetchSmartMoneySentiment(symbol: string = 'ETHUSDT') {
+export async function fetchSmartMoneySentiment(symbol: string = 'ETHUSDC') {
   try {
     const [fundingResult, ratioResult] = await Promise.allSettled([
       fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`),

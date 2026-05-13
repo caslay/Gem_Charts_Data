@@ -1,4 +1,4 @@
-export async function fetchOIMetrics(symbol: string = 'ETHUSDT') {
+export async function fetchOIMetrics(symbol: string = 'ETHUSDC') {
   try {
     const [oiResult, liqResult] = await Promise.allSettled([
       fetch(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=5m&limit=2`),
@@ -18,7 +18,7 @@ export async function fetchOIMetrics(symbol: string = 'ETHUSDT') {
         if (Array.isArray(oiData) && oiData.length === 2) {
           const prevOI = parseFloat(oiData[0].sumOpenInterestValue || oiData[0].sumOpenInterest);
           const currOI = parseFloat(oiData[1].sumOpenInterestValue || oiData[1].sumOpenInterest);
-          
+
           if (!isNaN(prevOI) && !isNaN(currOI)) {
             open_interest_trend = currOI > prevOI ? 'RISING' : 'FALLING';
           }
@@ -53,7 +53,7 @@ export async function fetchOIMetrics(symbol: string = 'ETHUSDT') {
           }
 
           const totalPurged = totalLongsUsd + totalShortsUsd;
-          
+
           let dominantSide = '';
           let dominantVolume = 0;
 

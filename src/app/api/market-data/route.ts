@@ -2,12 +2,20 @@ import { NextResponse } from 'next/server';
 import { fetchRestingLiquidity } from '@/lib/orderFlowEngine';
 import { fetchOIMetrics } from '@/lib/oiLiquidationEngine';
 import { fetchSmartMoneySentiment } from '@/lib/smartMoneyEngine';
+import { detectActiveFVGs } from '@/lib/fvgEngine';
+import { verifyDisplacement } from '@/lib/displacementEngine';
+import { calculateDynamicRisk } from '@/lib/riskEngine';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const symbol = 'ETHUSDC';
+    const url = new URL(req.url);
+    const symbol = url.searchParams.get('symbol') || 'ETHUSDC';
+    const limit5m = parseInt(url.searchParams.get('limit5m') || '100', 10);
+    const limit15m = parseInt(url.searchParams.get('limit15m') || '100', 10);
+    const limit1h = parseInt(url.searchParams.get('limit1h') || '50', 10);
+    const limit4h = parseInt(url.searchParams.get('limit4h') || '50', 10);
     const limit = 350;
 
     const urls = {
@@ -65,14 +73,21 @@ export async function GET() {
 
     const utcPlus3OffsetMs = 3 * 60 * 60 * 1000;
     const formatCandles = (data: any[]) => {
-      return data.map((c) => ({
-        t: c[0] + utcPlus3OffsetMs,
-        o: parseFloat(c[1]),
-        h: parseFloat(c[2]),
-        l: parseFloat(c[3]),
-        c: parseFloat(c[4]),
-        v: parseFloat(c[5]),
-      }));
+      return data.map((c) => {
+        const v = parseFloat(c[5]);
+        const taker_buy_vol = parseFloat(c[9]);
+        const taker_sell_vol = v - taker_buy_vol;
+        return {
+          t: c[0] + utcPlus3OffsetMs,
+          o: parseFloat(c[1]),
+          h: parseFloat(c[2]),
+          l: parseFloat(c[3]),
+          c: parseFloat(c[4]),
+          v: v,
+          taker_buy_vol,
+          taker_sell_vol,
+        };
+      });
     };
 
     const candles4h  = formatCandles(data4h);
@@ -185,60 +200,6 @@ export async function GET() {
       }
     }
 
-    // 6. Unmitigated FVG Scanner (V7.5 Enriched Only)
-    const findUnmitigatedFVGs = (candles: any[]) => {
-      const active_fvgs = [];
-      for (let i = 0; i < candles.length - 2; i++) {
-        const c1 = candles[i];
-        const c3 = candles[i + 2];
-
-        let type = null;
-        let gapTop = null;
-        let gapBottom = null;
-
-        // Bearish FVG (SIBI): c1.l > c3.h
-        if (c1.l > c3.h) {
-          type = "Bearish_SIBI";
-          gapTop = c1.l;
-          gapBottom = c3.h;
-        } 
-        // Bullish FVG (BISI): c1.h < c3.l
-        else if (c1.h < c3.l) {
-          type = "Bullish_BISI";
-          gapTop = c3.l;
-          gapBottom = c1.h;
-        }
-
-        if (type) {
-          let isMitigated = false;
-          // Loop through all subsequent candles that came after c3 up to the live price
-          for (let j = i + 3; j < candles.length; j++) {
-            const futureCandle = candles[j];
-            if (type === "Bearish_SIBI" && futureCandle.h >= gapBottom) {
-              isMitigated = true;
-              break;
-            }
-            if (type === "Bullish_BISI" && futureCandle.l <= gapTop) {
-              isMitigated = true;
-              break;
-            }
-          }
-
-          if (!isMitigated) {
-            active_fvgs.push({
-              type,
-              top: gapTop,
-              bottom: gapBottom,
-              ce_50: Number(((gapTop + gapBottom) / 2).toFixed(2))
-            });
-          }
-        }
-      }
-      return active_fvgs;
-    };
-
-    const active_fvgs = findUnmitigatedFVGs(candles15m);
-
     // 7. Historical Magnets Scanner (HTF — 1w / 1d)
     const livePrice = candles5m[candles5m.length - 1].c;
 
@@ -253,15 +214,15 @@ export async function GET() {
 
     // 7b. Daily FVG Scanner — last 30 daily candles (exclude current open)
     const last30Daily = candles1d.slice(-31, -1);
-    const dailyFVGs = findUnmitigatedFVGs(last30Daily);
+    const dailyFVGs = detectActiveFVGs(last30Daily);
 
     // Find nearest unmitigated SIBI above price and BISI below price
     const sibisAbove = dailyFVGs
-      .filter((fvg: any) => fvg.type === 'Bearish_SIBI' && fvg.bottom > livePrice)
-      .sort((a: any, b: any) => a.bottom - b.bottom);
+      .filter((fvg: any) => fvg.type === 'SIBI' && fvg.coordinates.bottom > livePrice)
+      .sort((a: any, b: any) => a.coordinates.bottom - b.coordinates.bottom);
     const bisiBelow = dailyFVGs
-      .filter((fvg: any) => fvg.type === 'Bullish_BISI' && fvg.top < livePrice)
-      .sort((a: any, b: any) => b.top - a.top);
+      .filter((fvg: any) => fvg.type === 'BISI' && fvg.coordinates.top < livePrice)
+      .sort((a: any, b: any) => b.coordinates.top - a.coordinates.top);
 
     const historical_magnets = {
       nearest_weekly_high,
@@ -309,31 +270,6 @@ export async function GET() {
       if (hour >= 15 && hour <= 17) return "NY_AM_KILLZONE";
       if (hour >= 20 && hour <= 21) return "NY_PM_KILLZONE";
       return "DEAD_ZONE";
-    };
-
-    // 10. Displacement & Volume Anomaly Scanner
-    const checkDisplacement = (candles: any[]) => {
-      if (candles.length < 16) return { displacement_active: false };
-      
-      // Get the last closed candle (Binance API returns current open candle at length - 1, so last closed is length - 2)
-      const latestCandle = candles[candles.length - 2];
-      // 14 candles prior to latestCandle
-      const priorCandles = candles.slice(candles.length - 16, candles.length - 2);
-
-      const latestBodySize = Math.abs(latestCandle.o - latestCandle.c);
-      const latestVolume = latestCandle.v;
-
-      const avgBodySize = priorCandles.reduce((sum, c) => sum + Math.abs(c.o - c.c), 0) / 14;
-      const avgVolume = priorCandles.reduce((sum, c) => sum + c.v, 0) / 14;
-
-      if (latestBodySize > (avgBodySize * 2.0) && latestVolume > (avgVolume * 1.5)) {
-        return {
-          displacement_active: true,
-          direction: latestCandle.c >= latestCandle.o ? "BULLISH" : "BEARISH"
-        };
-      }
-
-      return { displacement_active: false };
     };
 
     // 11. Local Dealing Range & Dual-Pricing Context (V7.9)
@@ -418,7 +354,7 @@ export async function GET() {
     const ipda_metrics = {
       true_day_open: true_day_open_0700,
       current_time_window: getCurrentKillzone(),
-      institutional_sponsorship: checkDisplacement(candles15m),
+      institutional_sponsorship: verifyDisplacement(candles15m),
       current_pricing,
       target_status,
       macro_levels: { pdh, pdl },
@@ -429,18 +365,28 @@ export async function GET() {
     };
 
     const active_arrays = {
-      fvgs: active_fvgs,
+      "15m_fvgs": detectActiveFVGs(candles15m),
+      "5m_fvgs": detectActiveFVGs(candles5m),
       liquidity_pools: {
         asian: asianLiquidity,
         london: londonLiquidity
       }
     };
 
+    const risk_management = calculateDynamicRisk(
+      currentLivePrice,
+      target_status,
+      pdh,
+      pdl,
+      oi_metrics.liquidation_events.status
+    );
+
     const payload = {
       ticker: "ETHUSDC.p",
       timestamp: new Date().toISOString(),
       timezone: "UTC+3",
       ipda_metrics,
+      risk_management,
       active_arrays,
       order_flow_engine: {
         resting_liquidity_pools,
@@ -450,10 +396,10 @@ export async function GET() {
       open_interest: parseFloat(dataOi.openInterest),
       // V6 Naked payload — OHLCV only, no HTF arrays, no calculations
       data_payload: {
-        candles_4h: candles4h,
-        candles_1h: candles1h,
-        candles_15m: candles15m,
-        candles_5m: candles5m,
+        candles_4h: limit4h > 0 ? candles4h.slice(-limit4h) : [],
+        candles_1h: limit1h > 0 ? candles1h.slice(-limit1h) : [],
+        candles_15m: limit15m > 0 ? candles15m.slice(-limit15m) : [],
+        candles_5m: limit5m > 0 ? candles5m.slice(-limit5m) : [],
       },
     };
 
