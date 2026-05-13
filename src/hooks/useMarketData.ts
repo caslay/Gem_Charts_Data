@@ -72,7 +72,7 @@ export function useMarketData() {
     triggerDownload(v6Data, `V6_Naked_Data_${data.ticker}.json`);
   }, [data]);
 
-  // ── V7.9 Enriched — sliced by candle counts ───────────────────────────────
+  // ── V8.0 Enriched — sliced by candle counts ───────────────────────────────
   const downloadV7Sliced = useCallback(
     (counts: { '5m': number, '15m': number, '1h': number, '4h': number }) => {
       if (!data) return;
@@ -100,7 +100,7 @@ export function useMarketData() {
       const minutesStr = minutes < 10 ? '0' + minutes : minutes.toString();
       const timeString = `${hoursStr}-${minutesStr}-${ampm}`;
 
-      triggerDownload(v7Data, `V7.9_Enriched_Data_${data.ticker}_${timeString}.json`);
+      triggerDownload(v7Data, `V8.0_Enriched_Data_${data.ticker}_${timeString}.json`);
     },
     [data]
   );
