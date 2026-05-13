@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchRestingLiquidity, fetchOIMetricsAndLiquidations, fetchSmartMoneySentiment } from '@/lib/orderFlowEngine';
-import { detectActiveFVGs } from '@/lib/fvgEngine';
+import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
 import { verifyDisplacement } from '@/lib/displacementEngine';
 import { calculateDynamicRisk } from '@/lib/riskEngine';
 
@@ -367,17 +367,11 @@ export async function GET(req: Request) {
         resting_liquidity_pools,
         liquidation_events,
         smart_money_sentiment,
-      }
+      },
+      active_fvgs: mapAndConsolidateFVGs(detectActiveFVGs(candles15m), detectActiveFVGs(candles5m))
     };
 
-    const active_arrays = {
-      "15m_fvgs": detectActiveFVGs(candles15m),
-      "5m_fvgs": detectActiveFVGs(candles5m),
-      liquidity_pools: {
-        asian: asianLiquidity,
-        london: londonLiquidity
-      }
-    };
+
 
     const risk_management = calculateDynamicRisk(
       currentLivePrice,
@@ -393,7 +387,6 @@ export async function GET(req: Request) {
       timezone: "UTC+3",
       ipda_metrics,
       risk_management,
-      active_arrays,
       open_interest: parseFloat(dataOi.openInterest),
       // V6 Naked payload — OHLCV only, no HTF arrays, no calculations
       data_payload: {

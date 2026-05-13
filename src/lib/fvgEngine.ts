@@ -66,3 +66,28 @@ export function detectActiveFVGs(candles: Candle[]) {
 
   return active_fvgs;
 }
+
+export interface MappedFVG {
+  timeframe: string;
+  type: 'BULLISH' | 'BEARISH';
+  top: number;
+  bottom: number;
+  ce: number;
+  status: 'UNMITIGATED' | 'MITIGATED';
+}
+
+export function mapAndConsolidateFVGs(fvgs15m: any[], fvgs5m: any[]): MappedFVG[] {
+  const mapFVG = (fvg: any, tf: string): MappedFVG => ({
+    timeframe: tf,
+    type: fvg.type === 'BISI' ? 'BULLISH' : 'BEARISH',
+    top: fvg.coordinates.top,
+    bottom: fvg.coordinates.bottom,
+    ce: fvg.coordinates.ce_50_percent,
+    status: fvg.status === 'ACTIVE_UNMITIGATED' ? 'UNMITIGATED' : 'MITIGATED'
+  });
+
+  return [
+    ...fvgs15m.map(f => mapFVG(f, '15m')),
+    ...fvgs5m.map(f => mapFVG(f, '5m'))
+  ];
+}
