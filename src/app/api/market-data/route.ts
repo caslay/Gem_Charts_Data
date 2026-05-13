@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { fetchRestingLiquidity } from '@/lib/orderFlowEngine';
 import { fetchOIMetrics } from '@/lib/oiLiquidationEngine';
 import { fetchSmartMoneySentiment } from '@/lib/smartMoneyEngine';
+import { detectActiveFVGs } from '@/lib/fvgEngine';
 
 export const dynamic = 'force-dynamic';
 
@@ -197,60 +198,6 @@ export async function GET(req: Request) {
       }
     }
 
-    // 6. Unmitigated FVG Scanner (V7.5 Enriched Only)
-    const findUnmitigatedFVGs = (candles: any[]) => {
-      const active_fvgs = [];
-      for (let i = 0; i < candles.length - 2; i++) {
-        const c1 = candles[i];
-        const c3 = candles[i + 2];
-
-        let type = null;
-        let gapTop = null;
-        let gapBottom = null;
-
-        // Bearish FVG (SIBI): c1.l > c3.h
-        if (c1.l > c3.h) {
-          type = "Bearish_SIBI";
-          gapTop = c1.l;
-          gapBottom = c3.h;
-        } 
-        // Bullish FVG (BISI): c1.h < c3.l
-        else if (c1.h < c3.l) {
-          type = "Bullish_BISI";
-          gapTop = c3.l;
-          gapBottom = c1.h;
-        }
-
-        if (type) {
-          let isMitigated = false;
-          // Loop through all subsequent candles that came after c3 up to the live price
-          for (let j = i + 3; j < candles.length; j++) {
-            const futureCandle = candles[j];
-            if (type === "Bearish_SIBI" && futureCandle.h >= gapBottom) {
-              isMitigated = true;
-              break;
-            }
-            if (type === "Bullish_BISI" && futureCandle.l <= gapTop) {
-              isMitigated = true;
-              break;
-            }
-          }
-
-          if (!isMitigated) {
-            active_fvgs.push({
-              type,
-              top: gapTop,
-              bottom: gapBottom,
-              ce_50: Number(((gapTop + gapBottom) / 2).toFixed(2))
-            });
-          }
-        }
-      }
-      return active_fvgs;
-    };
-
-    const active_fvgs = findUnmitigatedFVGs(candles15m);
-
     // 7. Historical Magnets Scanner (HTF — 1w / 1d)
     const livePrice = candles5m[candles5m.length - 1].c;
 
@@ -265,15 +212,15 @@ export async function GET(req: Request) {
 
     // 7b. Daily FVG Scanner — last 30 daily candles (exclude current open)
     const last30Daily = candles1d.slice(-31, -1);
-    const dailyFVGs = findUnmitigatedFVGs(last30Daily);
+    const dailyFVGs = detectActiveFVGs(last30Daily);
 
     // Find nearest unmitigated SIBI above price and BISI below price
     const sibisAbove = dailyFVGs
-      .filter((fvg: any) => fvg.type === 'Bearish_SIBI' && fvg.bottom > livePrice)
-      .sort((a: any, b: any) => a.bottom - b.bottom);
+      .filter((fvg: any) => fvg.type === 'SIBI' && fvg.coordinates.bottom > livePrice)
+      .sort((a: any, b: any) => a.coordinates.bottom - b.coordinates.bottom);
     const bisiBelow = dailyFVGs
-      .filter((fvg: any) => fvg.type === 'Bullish_BISI' && fvg.top < livePrice)
-      .sort((a: any, b: any) => b.top - a.top);
+      .filter((fvg: any) => fvg.type === 'BISI' && fvg.coordinates.top < livePrice)
+      .sort((a: any, b: any) => b.coordinates.top - a.coordinates.top);
 
     const historical_magnets = {
       nearest_weekly_high,
@@ -441,7 +388,8 @@ export async function GET(req: Request) {
     };
 
     const active_arrays = {
-      fvgs: active_fvgs,
+      "15m_fvgs": detectActiveFVGs(candles15m),
+      "5m_fvgs": detectActiveFVGs(candles5m),
       liquidity_pools: {
         asian: asianLiquidity,
         london: londonLiquidity
