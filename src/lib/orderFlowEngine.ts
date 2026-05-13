@@ -1,4 +1,4 @@
-export async function fetchRestingLiquidity(symbol: string = 'ETHUSDT') {
+export async function fetchRestingLiquidity(symbol: string = 'ETHUSDC') {
   try {
     const response = await fetch(`https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}&limit=1000`);
     if (!response.ok) {

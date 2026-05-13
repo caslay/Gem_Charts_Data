@@ -5,9 +5,14 @@ import { fetchSmartMoneySentiment } from '@/lib/smartMoneyEngine';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const symbol = 'ETHUSDC';
+    const url = new URL(req.url);
+    const symbol = url.searchParams.get('symbol') || 'ETHUSDC';
+    const limit5m = parseInt(url.searchParams.get('limit5m') || '100', 10);
+    const limit15m = parseInt(url.searchParams.get('limit15m') || '100', 10);
+    const limit1h = parseInt(url.searchParams.get('limit1h') || '50', 10);
+    const limit4h = parseInt(url.searchParams.get('limit4h') || '50', 10);
     const limit = 350;
 
     const urls = {
@@ -65,14 +70,21 @@ export async function GET() {
 
     const utcPlus3OffsetMs = 3 * 60 * 60 * 1000;
     const formatCandles = (data: any[]) => {
-      return data.map((c) => ({
-        t: c[0] + utcPlus3OffsetMs,
-        o: parseFloat(c[1]),
-        h: parseFloat(c[2]),
-        l: parseFloat(c[3]),
-        c: parseFloat(c[4]),
-        v: parseFloat(c[5]),
-      }));
+      return data.map((c) => {
+        const v = parseFloat(c[5]);
+        const taker_buy_vol = parseFloat(c[9]);
+        const taker_sell_vol = v - taker_buy_vol;
+        return {
+          t: c[0] + utcPlus3OffsetMs,
+          o: parseFloat(c[1]),
+          h: parseFloat(c[2]),
+          l: parseFloat(c[3]),
+          c: parseFloat(c[4]),
+          v: v,
+          taker_buy_vol,
+          taker_sell_vol,
+        };
+      });
     };
 
     const candles4h  = formatCandles(data4h);
@@ -450,10 +462,10 @@ export async function GET() {
       open_interest: parseFloat(dataOi.openInterest),
       // V6 Naked payload — OHLCV only, no HTF arrays, no calculations
       data_payload: {
-        candles_4h: candles4h,
-        candles_1h: candles1h,
-        candles_15m: candles15m,
-        candles_5m: candles5m,
+        candles_4h: limit4h > 0 ? candles4h.slice(-limit4h) : [],
+        candles_1h: limit1h > 0 ? candles1h.slice(-limit1h) : [],
+        candles_15m: limit15m > 0 ? candles15m.slice(-limit15m) : [],
+        candles_5m: limit5m > 0 ? candles5m.slice(-limit5m) : [],
       },
     };
 
