@@ -4,9 +4,7 @@ import { useState } from 'react';
 import { useMarketData } from '@/hooks/useMarketData';
 import Chart from '@/components/Chart';
 import Sidebar from '@/components/Sidebar';
-import { Loader2, Menu, X } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { Loader2, Menu } from 'lucide-react';
 
 type Timeframe = '5m' | '15m' | '1h';
 
@@ -16,34 +14,7 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
 
-  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const handleAIAnalysis = async () => {
-    if (!data) return;
-    setIsAnalyzing(true);
-    setAiAnalysis(null);
-
-    try {
-      const response = await fetch('/api/quant-analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-
-      const result = await response.json();
-      if (response.ok) {
-        setAiAnalysis(result.analysis);
-      } else {
-        setAiAnalysis(`**Error:** ${result.error || 'Failed to fetch analysis.'}`);
-      }
-    } catch (err) {
-      console.error(err);
-      setAiAnalysis('**Error:** Connection failed. Please try again.');
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
 
   const getChartData = () => {
     if (!data) return [];
@@ -107,39 +78,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── AI Analysis Panel ───────────────────────────────────────────── */}
-        <div className="px-4 lg:px-8 pt-4 lg:pt-6 z-10 relative flex flex-col gap-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={handleAIAnalysis}
-              disabled={isAnalyzing || !data || isLoading}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-700 hover:from-cyan-500 hover:to-blue-600 text-white font-bold tracking-wide shadow-[0_0_20px_rgba(34,211,238,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              🧠 Run Quant AI Analysis
-            </button>
-            {isAnalyzing && (
-              <div className="flex items-center gap-2 text-cyan-400 animate-pulse font-medium">
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Synthesizing Order Flow...</span>
-              </div>
-            )}
-          </div>
 
-          {aiAnalysis && (
-            <div className="relative p-6 rounded-2xl bg-[#0a0a0a]/90 backdrop-blur-xl border border-cyan-500/30 shadow-[0_0_30px_rgba(34,211,238,0.15)] max-h-[40vh] overflow-y-auto">
-              <div className="text-gray-300 text-sm leading-relaxed space-y-4 [&>h1]:text-xl [&>h1]:font-bold [&>h1]:text-white [&>h2]:text-lg [&>h2]:font-bold [&>h2]:text-cyan-400 [&>h3]:text-base [&>h3]:font-bold [&>h3]:text-cyan-300 [&>p]:mb-4 [&>ul]:list-disc [&>ul]:ml-5 [&>li]:mb-1 [&>strong]:text-white">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiAnalysis}</ReactMarkdown>
-              </div>
-              <button
-                onClick={() => setAiAnalysis(null)}
-                className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/10 transition-colors"
-                title="Dismiss Analysis"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          )}
-        </div>
 
         {/* ── Chart Area ─────────────────────────────────────────────────── */}
         <div className="flex-1 relative p-3 lg:p-6 z-10 flex flex-col min-h-0">
