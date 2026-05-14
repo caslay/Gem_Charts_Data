@@ -16,7 +16,7 @@ export async function POST(req: Request) {
     const payload = await req.json();
 
     // 3. Select gemini-2.5-flash for handling large JSON contexts
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
 
     // 4. Construct the final prompt by concatenating instructions and the raw data
     const prompt = `${QUANT_SYSTEM_PROMPT}\n\n=== MARKET DATA PAYLOAD ===\n${JSON.stringify(payload, null, 2)}`;
