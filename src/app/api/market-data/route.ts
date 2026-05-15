@@ -10,10 +10,10 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const symbol = url.searchParams.get('symbol') || 'ETHUSDC';
-    const limit5m = parseInt(url.searchParams.get('limit5m') || '100', 10);
-    const limit15m = parseInt(url.searchParams.get('limit15m') || '100', 10);
-    const limit1h = parseInt(url.searchParams.get('limit1h') || '50', 10);
-    const limit4h = parseInt(url.searchParams.get('limit4h') || '50', 10);
+    const limit5m = parseInt(url.searchParams.get('limit5m') || '300', 10);
+    const limit15m = parseInt(url.searchParams.get('limit15m') || '200', 10);
+    const limit1h = parseInt(url.searchParams.get('limit1h') || '100', 10);
+    const limit4h = parseInt(url.searchParams.get('limit4h') || '100', 10);
     const limit = 350;
 
     const urls = {
