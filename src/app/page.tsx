@@ -4,12 +4,13 @@ import { useState } from 'react';
 import { useMarketData } from '@/hooks/useMarketData';
 import Chart from '@/components/Chart';
 import Sidebar from '@/components/Sidebar';
+import SmartAlertsToast from '@/components/SmartAlertsToast';
 import { Loader2, Menu } from 'lucide-react';
 
 type Timeframe = '5m' | '15m' | '1h';
 
 export default function Home() {
-  const { data, isLoading, error, downloadV6, downloadV7Sliced } = useMarketData();
+  const { data, isLoading, error, downloadV6, downloadV7Sliced, activeAlerts, dismissAlert } = useMarketData();
   const [timeframe, setTimeframe] = useState<Timeframe>('5m');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
@@ -27,9 +28,12 @@ export default function Home() {
   const currentPrice = data?.data_payload?.candles_5m?.slice(-1)[0]?.c ?? null;
 
   return (
-    <main className="flex h-screen w-full bg-black overflow-hidden selection:bg-cyan-500/30 font-sans">
+    <main className="flex h-[calc(100vh-64px)] w-full bg-black overflow-hidden selection:bg-cyan-500/30 font-sans">
       {/* ── Left / Main column ─────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col relative min-w-0">
+        {/* Alerts UI Floating overlay */}
+        <SmartAlertsToast activeAlerts={activeAlerts || []} dismissAlert={dismissAlert} />
+
         {/* Background glow effects */}
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-900/20 blur-[120px] pointer-events-none" />
         <div className="absolute bottom-[-10%] right-[10%] w-[40%] h-[40%] rounded-full bg-purple-900/20 blur-[120px] pointer-events-none" />
