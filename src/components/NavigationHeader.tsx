@@ -78,8 +78,8 @@ export function NavigationHeader() {
                     key={link.href}
                     href={link.href}
                     className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${isActive
-                        ? "bg-gray-800 text-white"
-                        : "text-gray-400 hover:bg-gray-800/50 hover:text-gray-200"
+                      ? "bg-gray-800 text-white"
+                      : "text-gray-400 hover:bg-gray-800/50 hover:text-gray-200"
                       }`}
                   >
                     {link.icon}
@@ -97,6 +97,7 @@ export function NavigationHeader() {
                 <span>Synthesizing Order Flow...</span>
               </div>
             )}
+            {/*
             <button
               onClick={handleAIAnalysis}
               disabled={isAnalyzing}
@@ -104,6 +105,14 @@ export function NavigationHeader() {
             >
               🧠 Run AI Analysis
             </button>
+            */}
+            <button
+              onClick={handleAIAnalysis}
+              disabled={isAnalyzing}
+              className="text-zinc-700 cursor-pointer hover:text-cyan-400 backdrop-blur-lg bg-gradient-to-tr from-transparent via-[rgba(121,121,121,0.16)] to-transparent rounded-md py-2 px-6 shadow hover:shadow-cyan-600 duration-700">
+              Run AI Analysis
+            </button>
+
 
             {aiAnalysis && (
               <div className="absolute top-full right-0 mt-4 w-[800px] max-w-[90vw] p-6 rounded-2xl bg-[#0a0a0a]/95 backdrop-blur-xl border border-cyan-500/30 shadow-[0_0_30px_rgba(34,211,238,0.2)] max-h-[80vh] overflow-y-auto z-50">

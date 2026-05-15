@@ -56,7 +56,7 @@ export function useMarketData() {
   }, [fetchData]);
 
   // Hook into live alerts: Triggers Binance WS, performs diffs, fires audio/push alerts
-  useLiveAlerts(data, fetchData);
+  const { activeAlerts, clearAlerts, dismissAlert } = useLiveAlerts(data, fetchData);
 
   // ── V6 Naked — always full, unsliced ─────────────────────────────────────
   const downloadV6 = useCallback(() => {
@@ -105,7 +105,7 @@ export function useMarketData() {
     [data]
   );
 
-  return { data, isLoading, error, refetch: fetchData, downloadV6, downloadV7Sliced };
+  return { data, isLoading, error, refetch: fetchData, downloadV6, downloadV7Sliced, activeAlerts, clearAlerts, dismissAlert };
 }
 
 // ── Shared file-download helper ───────────────────────────────────────────────
