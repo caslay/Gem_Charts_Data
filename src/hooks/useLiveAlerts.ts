@@ -9,7 +9,7 @@ export interface SmartAlert {
 }
 
 export function useLiveAlerts(
-  data: any, 
+  data: any,
   refetch?: () => Promise<void>
 ) {
   const [activeAlerts, setActiveAlerts] = useState<SmartAlert[]>([]);
@@ -79,13 +79,14 @@ export function useLiveAlerts(
 
     // --- V8.0 STATE-TRANSITION PROTOCOLS ---
     const ipda = newData.ipda_metrics || {};
-    
+
     // 1. Pricing Context Alert
     const currentPricing = ipda.current_pricing;
     if (currentPricing && prevPricingRef.current && currentPricing !== prevPricingRef.current) {
       triggerAlert(
         'PRICING_SHIFT',
-        `⚖️ PRICING SHIFT: Market moved to ${currentPricing}`
+        `⚖️ PRICING SHIFT: Market moved to ${currentPricing}`,
+        "/audio/pricing_shift.mp3"
       );
     }
     if (currentPricing) prevPricingRef.current = currentPricing;
@@ -95,7 +96,8 @@ export function useLiveAlerts(
     if (targetStatus && prevTargetStatusRef.current && targetStatus !== prevTargetStatusRef.current) {
       triggerAlert(
         'OBJECTIVE_UPDATE',
-        `🎯 OBJECTIVE UPDATE: Primary Target is now ${targetStatus}`
+        `🎯 OBJECTIVE UPDATE: Primary Target is now ${targetStatus}`,
+        "/audio/objective_update.mp3"
       );
     }
     if (targetStatus) prevTargetStatusRef.current = targetStatus;
@@ -105,7 +107,8 @@ export function useLiveAlerts(
     if (sponsorshipStatus && prevSponsorshipRef.current && sponsorshipStatus !== prevSponsorshipRef.current) {
       triggerAlert(
         'FLOW_STATE',
-        `🌊 FLOW STATE: Institutional Sponsorship is now ${sponsorshipStatus}`
+        `🌊 FLOW STATE: Institutional Sponsorship is now ${sponsorshipStatus}`,
+        "/audio/flow_state.mp3"
       );
     }
     if (sponsorshipStatus) prevSponsorshipRef.current = sponsorshipStatus;
@@ -115,7 +118,8 @@ export function useLiveAlerts(
     if (timeWindow && prevTimeWindowRef.current && timeWindow !== prevTimeWindowRef.current) {
       triggerAlert(
         'SESSION_TRANSITION',
-        `🕒 SESSION TRANSITION: Entering ${timeWindow}`
+        `🕒 SESSION TRANSITION: Entering ${timeWindow}`,
+        "/audio/session_transition.mp3"
       );
     }
     if (timeWindow) prevTimeWindowRef.current = timeWindow;
@@ -126,14 +130,15 @@ export function useLiveAlerts(
     const nyDate = new Date(nyTimeStr);
     const hours = nyDate.getHours();
     const mins = nyDate.getMinutes();
-    
+
     const isDeadZone = hours === 12 || (hours === 13 && mins <= 30);
 
     if (isDeadZone) {
       if (checkCooldown('DEAD_ZONE', 90 * 60 * 1000)) { // 90-minute cooldown
         triggerAlert(
-          'DEAD_ZONE', 
-          "🔕 Market entering DEAD_ZONE. All structural alerts muted to prevent FOMO."
+          'DEAD_ZONE',
+          "🔕 Market entering DEAD_ZONE. All structural alerts muted to prevent FOMO.",
+          "/audio/dead_zone.mp3"
         );
       }
       prevDataRef.current = newData;
@@ -148,7 +153,7 @@ export function useLiveAlerts(
     const sslMagnets: number[] = liquidity.SSL_Magnets || [];
     const liquidations = orderFlow.liquidation_events || {};
     const lastHourPurged = liquidations.last_hour_purged || 0;
-    
+
     const smartMoney = orderFlow.smart_money_sentiment || {};
     const isSmtDivergence = smartMoney.smart_money_divergence === true;
 
@@ -167,7 +172,7 @@ export function useLiveAlerts(
     if ((hitBsl || hitSsl) && massivePurge) {
       if (checkCooldown('PURGE', 10 * 60 * 1000)) { // 10m cooldown
         triggerAlert(
-          'PURGE', 
+          'PURGE',
           "🚨 TARGET EXHAUSTED: Liquidity Purged - Await Smart Money Reversal",
           "/audio/sweep_alert.mp3"
         );
@@ -176,15 +181,15 @@ export function useLiveAlerts(
 
     // --- 3. Dual-Pricing & Risk Override Alert ---
     // Detect new Bullish FVG
-    const hasNewBullishFvg = newFvgs.length > oldFvgs.length && newFvgs.some((fvg: any) => 
-      (fvg.type === 'BULLISH' || fvg.type === 'BUY') && 
+    const hasNewBullishFvg = newFvgs.length > oldFvgs.length && newFvgs.some((fvg: any) =>
+      (fvg.type === 'BULLISH' || fvg.type === 'BUY') &&
       !oldFvgs.some((oldFvg: any) => oldFvg.price === fvg.price || oldFvg.id === fvg.id)
     );
 
     if (hasNewBullishFvg && trueDayOpen > 0 && currentPrice > trueDayOpen) {
       if (checkCooldown('RISK_OVERRIDE', 5 * 60 * 1000)) { // 5m cooldown
         triggerAlert(
-          'RISK_OVERRIDE', 
+          'RISK_OVERRIDE',
           "⚠️ Valid FVG formed, but Macro Bias is Premium. Half-Risk Continuation Mode Recommended.",
           "/audio/fvg_alert.mp3"
         );
@@ -194,12 +199,13 @@ export function useLiveAlerts(
     // --- 4. Smart Money Divergence Alert (SMT Trap) ---
     // Detect local higher high (inferred from price jump or explicit flag)
     const localHigherHigh = newData.market_structure?.local_higher_high || (oldData && currentPrice > (oldData.current_price || oldData.price || 0));
-    
+
     if (localHigherHigh && isSmtDivergence) {
       if (checkCooldown('SMT_TRAP', 5 * 60 * 1000)) { // 5m cooldown
         triggerAlert(
-          'SMT_TRAP', 
-          "📉 SMT Trap Detected: Price rising without Open Interest backing."
+          'SMT_TRAP',
+          "📉 SMT Trap Detected: Price rising without Open Interest backing.",
+          "/audio/smt_trap.mp3"
         );
       }
     }
@@ -215,10 +221,10 @@ export function useLiveAlerts(
 
     const scheduleNextFetch = () => {
       if (!refetchRef.current) return;
-      
+
       const now = Date.now();
       const msIn5Mins = 5 * 60 * 1000;
-      
+
       // Calculate exact milliseconds remaining until the next 5-minute boundary
       const msUntilNextBoundary = msIn5Mins - (now % msIn5Mins);
       const delay = msUntilNextBoundary + 2000; // 2000ms buffer
