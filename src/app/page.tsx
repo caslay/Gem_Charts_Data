@@ -4,15 +4,18 @@ import { useState } from 'react';
 import { useMarketData } from '@/hooks/useMarketData';
 import Chart from '@/components/Chart';
 import Sidebar from '@/components/Sidebar';
+import SmartAlertsToast from '@/components/SmartAlertsToast';
 import { Loader2, Menu } from 'lucide-react';
 
 type Timeframe = '5m' | '15m' | '1h';
 
 export default function Home() {
-  const { data, isLoading, error, downloadV6, downloadV7Sliced } = useMarketData();
+  const { data, isLoading, error, downloadV6, downloadV7Sliced, activeAlerts, dismissAlert } = useMarketData();
   const [timeframe, setTimeframe] = useState<Timeframe>('5m');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
+
+
 
   const getChartData = () => {
     if (!data) return [];
@@ -25,9 +28,12 @@ export default function Home() {
   const currentPrice = data?.data_payload?.candles_5m?.slice(-1)[0]?.c ?? null;
 
   return (
-    <main className="flex h-screen w-full bg-black overflow-hidden selection:bg-cyan-500/30 font-sans">
+    <main className="flex h-[calc(100vh-64px)] w-full bg-black overflow-hidden selection:bg-cyan-500/30 font-sans">
       {/* ── Left / Main column ─────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col relative min-w-0">
+        {/* Alerts UI Floating overlay */}
+        <SmartAlertsToast activeAlerts={activeAlerts || []} dismissAlert={dismissAlert} />
+
         {/* Background glow effects */}
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-cyan-900/20 blur-[120px] pointer-events-none" />
         <div className="absolute bottom-[-10%] right-[10%] w-[40%] h-[40%] rounded-full bg-purple-900/20 blur-[120px] pointer-events-none" />
@@ -42,7 +48,7 @@ export default function Home() {
               Flow-State Quant Engine
             </h1>
             <span className="px-2 py-1 rounded bg-white/10 text-[10px] lg:text-xs font-bold text-cyan-400 border border-white/5 ml-1 shadow-[0_0_10px_rgba(34,211,238,0.2)] shrink-0">
-              V7.9
+              V8.0
             </span>
           </div>
 
@@ -55,8 +61,8 @@ export default function Home() {
                   id={`tf-${tf}`}
                   onClick={() => setTimeframe(tf)}
                   className={`px-3 lg:px-6 py-1.5 lg:py-2 rounded-lg text-xs lg:text-sm font-bold transition-all duration-300 ${timeframe === tf
-                      ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.15)] border border-cyan-500/30'
-                      : 'text-gray-500 hover:text-white hover:bg-white/5 border border-transparent'
+                    ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.15)] border border-cyan-500/30'
+                    : 'text-gray-500 hover:text-white hover:bg-white/5 border border-transparent'
                     }`}
                 >
                   {tf.toUpperCase()}
@@ -75,6 +81,8 @@ export default function Home() {
             </button>
           </div>
         </div>
+
+
 
         {/* ── Chart Area ─────────────────────────────────────────────────── */}
         <div className="flex-1 relative p-3 lg:p-6 z-10 flex flex-col min-h-0">

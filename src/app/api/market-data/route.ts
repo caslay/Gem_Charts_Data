@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server';
-import { fetchRestingLiquidity } from '@/lib/orderFlowEngine';
-import { fetchOIMetrics } from '@/lib/oiLiquidationEngine';
-import { fetchSmartMoneySentiment } from '@/lib/smartMoneyEngine';
-import { detectActiveFVGs } from '@/lib/fvgEngine';
+import { fetchRestingLiquidity, fetchOIMetricsAndLiquidations, fetchSmartMoneySentiment } from '@/lib/orderFlowEngine';
+import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
 import { verifyDisplacement } from '@/lib/displacementEngine';
-import { calculateDynamicRisk } from '@/lib/riskEngine';
+import { calculateDynamicRisk, generateTradeExecutionParameters } from '@/lib/riskEngine';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,25 +10,24 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const symbol = url.searchParams.get('symbol') || 'ETHUSDC';
-    const limit5m = parseInt(url.searchParams.get('limit5m') || '100', 10);
-    const limit15m = parseInt(url.searchParams.get('limit15m') || '100', 10);
-    const limit1h = parseInt(url.searchParams.get('limit1h') || '50', 10);
-    const limit4h = parseInt(url.searchParams.get('limit4h') || '50', 10);
+    const limit5m = parseInt(url.searchParams.get('limit5m') || '300', 10);
+    const limit15m = parseInt(url.searchParams.get('limit15m') || '200', 10);
+    const limit1h = parseInt(url.searchParams.get('limit1h') || '100', 10);
+    const limit4h = parseInt(url.searchParams.get('limit4h') || '100', 10);
     const limit = 350;
 
     const urls = {
-      '5m':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=${limit}`,
+      '5m': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=${limit}`,
       '15m': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=15m&limit=${limit}`,
-      '1h':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=${limit}`,
-      '4h':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=4h&limit=${limit}`,
+      '1h': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=${limit}`,
+      '4h': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=4h&limit=${limit}`,
       // HTF — fetched for background calculations only, NEVER exposed in data_payload
-      '1d':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=100`,
-      '1w':  `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1w&limit=100`,
+      '1d': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=100`,
+      '1w': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1w&limit=100`,
       'openInterest': `https://fapi.binance.com/fapi/v1/openInterest?symbol=${symbol}`,
     };
 
     const restingLiquidityPromise = fetchRestingLiquidity(symbol);
-    const oiMetricsPromise = fetchOIMetrics(symbol);
     const smartMoneyPromise = fetchSmartMoneySentiment(symbol);
 
     const [res5m, res15m, res1h, res4h, res1d, res1w, resOi] = await Promise.all([
@@ -58,7 +55,7 @@ export async function GET(req: Request) {
       throw new Error('Failed to fetch from Binance API');
     }
 
-    const [data5m, data15m, data1h, data4h, data1d, data1w, dataOi, resting_liquidity_pools, oi_metrics, smart_money_sentiment] = await Promise.all([
+    const [data5m, data15m, data1h, data4h, data1d, data1w, dataOi, resting_liquidity_pools, smart_money_sentiment] = await Promise.all([
       res5m.json(),
       res15m.json(),
       res1h.json(),
@@ -67,7 +64,6 @@ export async function GET(req: Request) {
       res1w.json(),
       resOi.json(),
       restingLiquidityPromise,
-      oiMetricsPromise,
       smartMoneyPromise,
     ]);
 
@@ -90,13 +86,16 @@ export async function GET(req: Request) {
       });
     };
 
-    const candles4h  = formatCandles(data4h);
-    const candles1h  = formatCandles(data1h);
+    const candles4h = formatCandles(data4h);
+    const candles1h = formatCandles(data1h);
     const candles15m = formatCandles(data15m);
-    const candles5m  = formatCandles(data5m);
+    const candles5m = formatCandles(data5m);
     // HTF — kept in local scope only; NEVER added to data_payload
-    const candles1d  = formatCandles(data1d);
-    const candles1w  = formatCandles(data1w);
+    const candles1d = formatCandles(data1d);
+    const candles1w = formatCandles(data1w);
+
+    const isPriceRising = candles15m.length > 1 && candles15m[candles15m.length - 1].c > candles15m[candles15m.length - 2].c;
+    const { open_interest_trend, liquidation_events } = await fetchOIMetricsAndLiquidations(symbol, isPriceRising);
 
     // 1. Macro Context
     const lastCandle = candles1h[candles1h.length - 1];
@@ -233,29 +232,29 @@ export async function GET(req: Request) {
 
     // 8. Price Discovery & Standard Deviations (Asian Range Projections)
     const asianHigh = asianLiquidity.high;
-    const asianLow  = asianLiquidity.low;
+    const asianLow = asianLiquidity.low;
 
     let projected_targets: Record<string, number | null>;
     if (!asianHigh || !asianLow || asianHigh === 0 || asianLow === 0) {
       projected_targets = {
-        asian_range_size:  null,
-        upward_dev_1_5:    null,
-        upward_dev_2_0:    null,
-        upward_dev_2_5:    null,
-        downward_dev_1_5:  null,
-        downward_dev_2_0:  null,
-        downward_dev_2_5:  null,
+        asian_range_size: null,
+        upward_dev_1_5: null,
+        upward_dev_2_0: null,
+        upward_dev_2_5: null,
+        downward_dev_1_5: null,
+        downward_dev_2_0: null,
+        downward_dev_2_5: null,
       };
     } else {
       const range = asianHigh - asianLow;
       projected_targets = {
-        asian_range_size:  parseFloat(range.toFixed(4)),
-        upward_dev_1_5:    parseFloat((asianHigh + range * 1.5).toFixed(2)),
-        upward_dev_2_0:    parseFloat((asianHigh + range * 2.0).toFixed(2)),
-        upward_dev_2_5:    parseFloat((asianHigh + range * 2.5).toFixed(2)),
-        downward_dev_1_5:  parseFloat((asianLow  - range * 1.5).toFixed(2)),
-        downward_dev_2_0:  parseFloat((asianLow  - range * 2.0).toFixed(2)),
-        downward_dev_2_5:  parseFloat((asianLow  - range * 2.5).toFixed(2)),
+        asian_range_size: parseFloat(range.toFixed(4)),
+        upward_dev_1_5: parseFloat((asianHigh + range * 1.5).toFixed(2)),
+        upward_dev_2_0: parseFloat((asianHigh + range * 2.0).toFixed(2)),
+        upward_dev_2_5: parseFloat((asianHigh + range * 2.5).toFixed(2)),
+        downward_dev_1_5: parseFloat((asianLow - range * 1.5).toFixed(2)),
+        downward_dev_2_0: parseFloat((asianLow - range * 2.0).toFixed(2)),
+        downward_dev_2_5: parseFloat((asianLow - range * 2.5).toFixed(2)),
       };
     }
 
@@ -264,7 +263,7 @@ export async function GET(req: Request) {
       const now = new Date();
       const shiftedTime = new Date(now.getTime() + (3 * 60 * 60 * 1000));
       const hour = shiftedTime.getUTCHours();
-      
+
       if (hour >= 3 && hour <= 6) return "ASIAN_RANGE";
       if (hour >= 9 && hour <= 11) return "LONDON_AM_KILLZONE";
       if (hour >= 15 && hour <= 17) return "NY_AM_KILLZONE";
@@ -272,7 +271,7 @@ export async function GET(req: Request) {
       return "DEAD_ZONE";
     };
 
-    // 11. Local Dealing Range & Dual-Pricing Context (V7.9)
+    // 11. Local Dealing Range & Dual-Pricing Context (V8.0)
     //     c.t already has +3h baked in, so getUTCHours() reads Cairo local time.
     const todayCairo = new Date(lastCandle.t); // reference from last 1h candle
     const todayDayStr = `${todayCairo.getUTCFullYear()}-${todayCairo.getUTCMonth()}-${todayCairo.getUTCDate()}`;
@@ -282,7 +281,7 @@ export async function GET(req: Request) {
       const d = new Date(c.t);
       const candleDayStr = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
       const candleHour = d.getUTCHours();
-      const candleMin  = d.getUTCMinutes();
+      const candleMin = d.getUTCMinutes();
       return candleDayStr === todayDayStr && (candleHour > 7 || (candleHour === 7 && candleMin === 0));
     });
 
@@ -300,8 +299,8 @@ export async function GET(req: Request) {
 
     if (intradayCandles.length > 0) {
       const intradayHigh = parseFloat(Math.max(...intradayCandles.map(c => c.h)).toFixed(2));
-      const intradayLow  = parseFloat(Math.min(...intradayCandles.map(c => c.l)).toFixed(2));
-      const equilibrium  = parseFloat(((intradayHigh + intradayLow) / 2).toFixed(2));
+      const intradayLow = parseFloat(Math.min(...intradayCandles.map(c => c.l)).toFixed(2));
+      const equilibrium = parseFloat(((intradayHigh + intradayLow) / 2).toFixed(2));
 
       pricing_context = {
         vs_daily_open: (true_day_open_0700 !== null)
@@ -309,7 +308,7 @@ export async function GET(req: Request) {
           : "UNKNOWN",
         local_dealing_range: {
           high: intradayHigh,
-          low:  intradayLow,
+          low: intradayLow,
           equilibrium,
           current_status: currentLivePrice > equilibrium ? "PREMIUM" : "DISCOUNT",
         },
@@ -323,8 +322,8 @@ export async function GET(req: Request) {
       });
 
       if (anchorCandle) {
-        const seedHigh  = parseFloat(anchorCandle.h.toFixed(2));
-        const seedLow   = parseFloat(anchorCandle.l.toFixed(2));
+        const seedHigh = parseFloat(anchorCandle.h.toFixed(2));
+        const seedLow = parseFloat(anchorCandle.l.toFixed(2));
         const seedEquil = parseFloat(((seedHigh + seedLow) / 2).toFixed(2));
         pricing_context = {
           vs_daily_open: (true_day_open_0700 !== null)
@@ -332,7 +331,7 @@ export async function GET(req: Request) {
             : "UNKNOWN",
           local_dealing_range: {
             high: seedHigh,
-            low:  seedLow,
+            low: seedLow,
             equilibrium: seedEquil,
             current_status: currentLivePrice > seedEquil ? "PREMIUM" : "DISCOUNT",
           },
@@ -343,7 +342,7 @@ export async function GET(req: Request) {
           vs_daily_open: "UNKNOWN",
           local_dealing_range: {
             high: currentLivePrice,
-            low:  currentLivePrice,
+            low: currentLivePrice,
             equilibrium: currentLivePrice,
             current_status: "FAIR_VALUE",
           },
@@ -351,10 +350,23 @@ export async function GET(req: Request) {
       }
     }
 
+    const active_fvgs = mapAndConsolidateFVGs(detectActiveFVGs(candles15m), detectActiveFVGs(candles5m));
+    const institutional_sponsorship = verifyDisplacement(candles15m);
+    const current_time_window = getCurrentKillzone();
+
+    const trade_execution_parameters = generateTradeExecutionParameters(
+      target_status,
+      current_time_window,
+      institutional_sponsorship.status,
+      currentLivePrice,
+      active_fvgs,
+      resting_liquidity_pools
+    );
+
     const ipda_metrics = {
       true_day_open: true_day_open_0700,
-      current_time_window: getCurrentKillzone(),
-      institutional_sponsorship: verifyDisplacement(candles15m),
+      current_time_window,
+      institutional_sponsorship,
       current_pricing,
       target_status,
       macro_levels: { pdh, pdl },
@@ -362,23 +374,25 @@ export async function GET(req: Request) {
       projected_targets,
       smt_traps,
       pricing_context,
+      order_flow_engine: {
+        open_interest_trend,
+        displacement_sponsorship: institutional_sponsorship.status !== "INACTIVE" ? "ACTIVE" : "INACTIVE",
+        resting_liquidity_pools,
+        liquidation_events,
+        smart_money_sentiment,
+      },
+      active_fvgs,
+      trade_execution_parameters
     };
 
-    const active_arrays = {
-      "15m_fvgs": detectActiveFVGs(candles15m),
-      "5m_fvgs": detectActiveFVGs(candles5m),
-      liquidity_pools: {
-        asian: asianLiquidity,
-        london: londonLiquidity
-      }
-    };
+
 
     const risk_management = calculateDynamicRisk(
       currentLivePrice,
       target_status,
       pdh,
       pdl,
-      oi_metrics.liquidation_events.status
+      liquidation_events.status
     );
 
     const payload = {
@@ -387,12 +401,6 @@ export async function GET(req: Request) {
       timezone: "UTC+3",
       ipda_metrics,
       risk_management,
-      active_arrays,
-      order_flow_engine: {
-        resting_liquidity_pools,
-        ...oi_metrics,
-        ...smart_money_sentiment,
-      },
       open_interest: parseFloat(dataOi.openInterest),
       // V6 Naked payload — OHLCV only, no HTF arrays, no calculations
       data_payload: {
