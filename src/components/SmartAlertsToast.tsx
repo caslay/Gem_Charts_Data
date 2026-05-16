@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { X, AlertTriangle, BellOff, Activity, ShieldAlert } from 'lucide-react';
+import { X, AlertTriangle, BellOff, Activity, ShieldAlert, Scale, Target, Waves, Clock } from 'lucide-react';
 import type { SmartAlert } from '@/hooks/useLiveAlerts';
 
 interface SmartAlertsToastProps {
@@ -50,6 +50,32 @@ function ToastItem({ alert, dismissAlert }: { alert: SmartAlert, dismissAlert: (
       icon = alert.type === 'SMT_TRAP' 
         ? <AlertTriangle className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" /> 
         : <ShieldAlert className="w-5 h-5 text-amber-500 mt-0.5 shrink-0" />;
+      break;
+    case 'PRICING_SHIFT':
+      // ⚖️ Cyan/Purple shift
+      const isPremium = alert.message.includes('PREMIUM');
+      baseStyle += isPremium 
+        ? " bg-[#0f051a]/80 border-purple-500/30 text-purple-100 shadow-[0_0_20px_rgba(168,85,247,0.15)]"
+        : " bg-[#05151a]/80 border-cyan-500/30 text-cyan-100 shadow-[0_0_20px_rgba(34,211,238,0.15)]";
+      icon = <Scale className={`w-5 h-5 mt-0.5 shrink-0 ${isPremium ? 'text-purple-500' : 'text-cyan-500'}`} />;
+      break;
+    case 'OBJECTIVE_UPDATE':
+      // 🎯 Red if EXHAUSTED
+      const isExhausted = alert.message.includes('EXHAUSTED');
+      baseStyle += isExhausted
+        ? " bg-[#1a0505]/80 border-red-500/30 text-red-100 shadow-[0_0_20px_rgba(220,38,38,0.15)]"
+        : " bg-[#0a1a05]/80 border-emerald-500/30 text-emerald-100 shadow-[0_0_20px_rgba(16,185,129,0.15)]";
+      icon = <Target className={`w-5 h-5 mt-0.5 shrink-0 ${isExhausted ? 'text-red-500' : 'text-emerald-500'}`} />;
+      break;
+    case 'FLOW_STATE':
+      // 🌊 Green if Active
+      baseStyle += " bg-[#051a0a]/80 border-green-500/30 text-green-100 shadow-[0_0_20px_rgba(34,197,94,0.15)]";
+      icon = <Waves className="w-5 h-5 text-green-500 mt-0.5 shrink-0" />;
+      break;
+    case 'SESSION_TRANSITION':
+      // 🕒 Neutral Zinc
+      baseStyle += " bg-[#0a0a0a]/80 border-zinc-700/50 text-zinc-300 shadow-[0_0_15px_rgba(39,39,42,0.5)]";
+      icon = <Clock className="w-5 h-5 text-zinc-400 mt-0.5 shrink-0" />;
       break;
   }
 

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 // Define the alert structure for the frontend UI
 export interface SmartAlert {
   id: string;
-  type: 'PURGE' | 'DEAD_ZONE' | 'RISK_OVERRIDE' | 'SMT_TRAP';
+  type: 'PURGE' | 'DEAD_ZONE' | 'RISK_OVERRIDE' | 'SMT_TRAP' | 'PRICING_SHIFT' | 'OBJECTIVE_UPDATE' | 'FLOW_STATE' | 'SESSION_TRANSITION';
   message: string;
   timestamp: number;
 }
@@ -16,6 +16,12 @@ export function useLiveAlerts(
   const prevDataRef = useRef<any>(null);
   const cooldownsRef = useRef<Record<string, number>>({});
   const refetchRef = useRef(refetch);
+
+  // Transition Tracking Refs (V8.0 Protocol)
+  const prevPricingRef = useRef<string | null>(null);
+  const prevTargetStatusRef = useRef<string | null>(null);
+  const prevSponsorshipRef = useRef<string | null>(null);
+  const prevTimeWindowRef = useRef<string | null>(null);
 
   // Keep refetch ref updated
   useEffect(() => {
@@ -70,6 +76,49 @@ export function useLiveAlerts(
 
     const oldData = prevDataRef.current;
     const newData = data;
+
+    // --- V8.0 STATE-TRANSITION PROTOCOLS ---
+    const ipda = newData.ipda_metrics || {};
+    
+    // 1. Pricing Context Alert
+    const currentPricing = ipda.current_pricing;
+    if (currentPricing && prevPricingRef.current && currentPricing !== prevPricingRef.current) {
+      triggerAlert(
+        'PRICING_SHIFT',
+        `⚖️ PRICING SHIFT: Market moved to ${currentPricing}`
+      );
+    }
+    if (currentPricing) prevPricingRef.current = currentPricing;
+
+    // 2. Target Status Alert
+    const targetStatus = ipda.target_status;
+    if (targetStatus && prevTargetStatusRef.current && targetStatus !== prevTargetStatusRef.current) {
+      triggerAlert(
+        'OBJECTIVE_UPDATE',
+        `🎯 OBJECTIVE UPDATE: Primary Target is now ${targetStatus}`
+      );
+    }
+    if (targetStatus) prevTargetStatusRef.current = targetStatus;
+
+    // 3. Institutional Sponsorship Alert
+    const sponsorshipStatus = ipda.institutional_sponsorship?.status;
+    if (sponsorshipStatus && prevSponsorshipRef.current && sponsorshipStatus !== prevSponsorshipRef.current) {
+      triggerAlert(
+        'FLOW_STATE',
+        `🌊 FLOW STATE: Institutional Sponsorship is now ${sponsorshipStatus}`
+      );
+    }
+    if (sponsorshipStatus) prevSponsorshipRef.current = sponsorshipStatus;
+
+    // 4. Time Window Alert
+    const timeWindow = ipda.current_time_window;
+    if (timeWindow && prevTimeWindowRef.current && timeWindow !== prevTimeWindowRef.current) {
+      triggerAlert(
+        'SESSION_TRANSITION',
+        `🕒 SESSION TRANSITION: Entering ${timeWindow}`
+      );
+    }
+    if (timeWindow) prevTimeWindowRef.current = timeWindow;
 
     // --- 2. The DEAD_ZONE Mute ---
     // Check if we are in the NY Lunch/Mid-day pause (12:00 PM - 1:30 PM NY Time)
