@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Activity, History, TrendingUp, LayoutGrid } from "lucide-react";
 import MatrixConfigDrawer from "./MatrixConfigDrawer";
 import { useMarketData } from "@/hooks/useMarketData";
+import { LiveTicker } from "./LiveTicker";
 
 export function NavigationHeader() {
   const pathname = usePathname();
@@ -28,9 +29,12 @@ export function NavigationHeader() {
               </div>
               FLOW-STATE V8.0
             </div>
+            {/* Asset label */}
             <div className="px-2 py-0.5 bg-[#0e0e0f] border border-[#4a4457]/50 rounded font-mono text-[10px] text-[#e5e2e3]">
               ETHUSDC.p
             </div>
+            {/* Live price ticker — isolated leaf, zero re-renders to this parent */}
+            <LiveTicker />
           </div>
 
           {/* CENTER SECTION (Tactical Icon Switcher) */}
@@ -72,10 +76,12 @@ export function NavigationHeader() {
 
           {/* RIGHT SECTION (Awareness & Global Triggers) */}
           <div className="flex items-center gap-3">
-            {/* Time & Live Sync */}
+            {/* Time & Live Sync — static clock display */}
             <div className="hidden sm:flex items-center gap-2 px-2 py-1 bg-[#0e0e0f] border border-[#4a4457]/50 rounded">
-              <span className="w-1.5 h-1.5 bg-[#50ffaf] rounded-full animate-pulse" />
-              <span className="font-mono text-[10px] text-[#958da3]">11:20 UTC+3</span>
+              <span className="w-1.5 h-1.5 bg-[#958da3] rounded-full" />
+              <span className="font-mono text-[10px] text-[#958da3]">
+                {new Date().toLocaleTimeString('en-EG', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', hour12: false })} UTC+3
+              </span>
             </div>
 
             {/* Badges */}

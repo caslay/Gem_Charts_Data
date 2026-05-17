@@ -109,6 +109,7 @@ export default function Home() {
                 data={getChartData()} 
                 activeFvgs={data?.ipda_metrics?.active_fvgs || []}
                 localDealingRange={data?.ipda_metrics?.pricing_context?.local_dealing_range}
+                interval={timeframe}
               />
             </div>
           )}
