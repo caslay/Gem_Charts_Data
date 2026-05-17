@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Institutional Quant Trading Terminal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0e0e0f;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #353436;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #4a4457;
+        }
+        
+        /* Neon Glow Utilities */
+        .glow-tab-active {
+            box-shadow: inset 0 -2px 10px -2px rgba(209, 188, 255, 0.4);
+            text-shadow: 0 0 8px rgba(209, 188, 255, 0.5);
+        }
+        .glow-button {
+            box-shadow: 0 0 15px rgba(209, 188, 255, 0.15), inset 0 0 10px rgba(209, 188, 255, 0.1);
+            text-shadow: 0 0 8px rgba(209, 188, 255, 0.5);
+        }
+        .glow-button:hover {
+            box-shadow: 0 0 25px rgba(209, 188, 255, 0.3), inset 0 0 15px rgba(209, 188, 255, 0.2);
+        }
+        .glow-badge-tertiary {
+            box-shadow: 0 0 10px rgba(255, 178, 187, 0.2);
+            text-shadow: 0 0 6px rgba(255, 178, 187, 0.6);
+        }
+        .glow-badge-error {
+            box-shadow: 0 0 10px rgba(255, 180, 171, 0.2);
+            text-shadow: 0 0 6px rgba(255, 180, 171, 0.6);
+        }
+    </style>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        "colors": {
+                "inverse-on-surface": "#313031",
+                "surface-container-low": "#1c1b1c",
+                "background": "#131314",
+                "on-secondary-fixed-variant": "#005232",
+                "outline": "#958da3",
+                "tertiary-fixed-dim": "#ffb2bb",
+                "surface-container": "#201f20",
+                "outline-variant": "#4a4457",
+                "inverse-surface": "#e5e2e3",
+                "on-secondary": "#003921",
+                "on-background": "#e5e2e3",
+                "on-tertiary-fixed-variant": "#910032",
+                "on-error": "#690005",
+                "error-container": "#93000a",
+                "on-primary-container": "#ddcdff",
+                "on-tertiary-container": "#ffc7cc",
+                "surface-container-high": "#2a2a2b",
+                "tertiary-fixed": "#ffd9dc",
+                "error": "#ffb4ab",
+                "surface-bright": "#3a393a",
+                "on-primary-fixed-variant": "#5700c9",
+                "on-error-container": "#ffdad6",
+                "inverse-primary": "#7212ff",
+                "on-secondary-container": "#006b43",
+                "on-primary": "#3c0090",
+                "surface-variant": "#353436",
+                "surface-dim": "#131314",
+                "primary-container": "#7000ff",
+                "on-tertiary": "#670021",
+                "tertiary-container": "#b90042",
+                "on-tertiary-fixed": "#400011",
+                "primary": "#d1bcff",
+                "on-primary-fixed": "#23005b",
+                "secondary-fixed-dim": "#00e293",
+                "on-surface": "#e5e2e3",
+                "surface": "#131314",
+                "primary-fixed": "#e9ddff",
+                "surface-container-highest": "#353436",
+                "surface-container-lowest": "#0e0e0f",
+                "secondary-fixed": "#50ffaf",
+                "secondary-container": "#01f5a0",
+                "surface-tint": "#d1bcff",
+                "on-secondary-fixed": "#002111",
+                "secondary": "#ceffdf",
+                "on-surface-variant": "#ccc3da",
+                "tertiary": "#ffb2bb",
+                "primary-fixed-dim": "#d1bcff"
+        },
+        "borderRadius": {
+                "DEFAULT": "0.125rem",
+                "lg": "0.25rem",
+                "xl": "0.5rem",
+                "full": "0.75rem"
+        },
+        "spacing": {
+                "margin-page": "24px",
+                "density": "compact",
+                "container-padding": "16px",
+                "gutter": "12px",
+                "unit": "4px"
+        },
+        "fontFamily": {
+                "data-sm": [
+                        "JetBrains Mono"
+                ],
+                "body-md": [
+                        "Geist"
+                ],
+                "display-lg": [
+                        "Geist"
+                ],
+                "data-lg": [
+                        "JetBrains Mono"
+                ],
+                "label-caps": [
+                        "Geist"
+                ],
+                "headline-md": [
+                        "Geist"
+                ]
+        },
+        "fontSize": {
+                "data-sm": [
+                        "12px",
+                        {
+                                "lineHeight": "1.0",
+                                "fontWeight": "400"
+                        }
+                ],
+                "body-md": [
+                        "14px",
+                        {
+                                "lineHeight": "1.5",
+                                "fontWeight": "400"
+                        }
+                ],
+                "display-lg": [
+                        "40px",
+                        {
+                                "lineHeight": "1.1",
+                                "letterSpacing": "-0.02em",
+                                "fontWeight": "600"
+                        }
+                ],
+                "data-lg": [
+                        "18px",
+                        {
+                                "lineHeight": "1.2",
+                                "letterSpacing": "-0.01em",
+                                "fontWeight": "500"
+                        }
+                ],
+                "label-caps": [
+                        "11px",
+                        {
+                                "lineHeight": "1.0",
+                                "letterSpacing": "0.08em",
+                                "fontWeight": "700"
+                        }
+                ],
+                "headline-md": [
+                        "24px",
+                        {
+                                "lineHeight": "1.2",
+                                "fontWeight": "500"
+                        }
+                ],
+                "headline-sm": [
+                        "18px",
+                        {
+                                "lineHeight": "1.2",
+                                "fontWeight": "600"
+                        }
+                ],
+                "data-md": [
+                        "14px",
+                        {
+                                "lineHeight": "1",
+                                "fontWeight": "500"
+                        }
+                ]
+        }
+},
+    },
+  }
+</script>
+</head>
+<body class="bg-surface-container-lowest text-on-surface h-screen flex flex-col overflow-hidden rounded-none font-body-md antialiased selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar (Shared Component) -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-margin-page h-14 bg-surface-container-lowest/90 backdrop-blur-md border-b border-outline-variant/30">
+<!-- Left: Branding -->
+<div class="flex items-center gap-container-padding">
+<div class="font-headline-sm text-headline-sm font-bold tracking-tighter text-primary uppercase drop-shadow-[0_0_10px_rgba(209,188,255,0.3)]">
+                FLOW_STATE_V8.0
+            </div>
+<!-- Asset Selector (Custom) -->
+<div class="border border-outline-variant/50 bg-surface-container/50 rounded px-gutter py-1.5 flex items-center gap-unit font-data-md text-data-md text-primary transition-colors hover:border-primary/50 cursor-pointer">
+                ETHUSDC.p
+                <span class="material-symbols-outlined text-[16px] text-on-surface-variant">arrow_drop_down</span>
+</div>
+</div>
+<!-- Center: Navigation Links -->
+<nav class="hidden md:flex items-center h-full gap-4">
+<a aria-label="Live HUD" class="h-full flex items-center justify-center px-6 border-b-2 border-secondary bg-secondary/10 text-secondary transition-all duration-300 shadow-[inset_0_-2px_10px_-2px_rgba(80,255,175,0.4)]" href="#">
+<svg class="lucide lucide-activity drop-shadow-[0_0_8px_rgba(80,255,175,0.8)]" fill="none" height="20" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="20"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"></path></svg>
+</a>
+<a aria-label="Backtest Replay" class="h-full flex items-center justify-center px-6 border-b-2 border-transparent text-on-surface-variant hover:bg-surface-container-highest/50 hover:text-primary transition-all duration-300 cursor-crosshair" href="#">
+<svg class="lucide lucide-history" fill="none" height="20" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="20"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M12 7v5l4 2"></path></svg>
+</a>
+<a aria-label="Compound Plan" class="h-full flex items-center justify-center px-6 border-b-2 border-transparent text-on-surface-variant hover:bg-surface-container-highest/50 hover:text-primary transition-all duration-300 cursor-crosshair" href="#">
+<svg class="lucide lucide-layers" fill="none" height="20" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="20"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"></path><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"></path><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"></path></svg>
+</a>
+</nav>
+<!-- Right: Actions & Status -->
+<div class="flex items-center gap-container-padding">
+<button class="flex items-center gap-2 px-3 py-1.5 border border-[#00ffff] bg-[#00ffff]/10 text-[#00ffff] font-data-md text-data-md uppercase drop-shadow-[0_0_8px_rgba(0,255,255,0.3)] hover:bg-[#00ffff]/20 transition-colors cursor-crosshair">
+<svg class="lucide lucide-database" fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewbox="0 0 24 24" width="16"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M3 5V19A9 3 0 0 0 21 19V5"></path><path d="M3 12A9 3 0 0 0 21 12"></path></svg>
+                MATRIX METRICS
+            </button>
+<div class="font-data-md text-data-md text-on-surface-variant hidden md:block">
+                11:20 UTC+3
+            </div>
+<div class="flex items-center gap-2 px-3 py-1.5 border border-outline-variant/40 rounded-none bg-surface-container-low font-data-sm text-data-sm text-secondary uppercase drop-shadow-[0_0_8px_rgba(206,255,223,0.1)]">
+<div class="w-2 h-2 rounded-full bg-secondary shadow-[0_0_8px_rgba(206,255,223,0.8)] animate-pulse"></div>
+                LIVE SYNC
+            </div>
+<div class="flex items-center gap-gutter text-on-surface-variant ml-2">
+<button aria-label="schedule" class="hover:text-primary transition-colors cursor-crosshair">
+<span class="material-symbols-outlined">schedule</span>
+</button>
+<button aria-label="settings" class="hover:text-primary transition-colors cursor-crosshair">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<button aria-label="notifications" class="hover:text-primary transition-colors cursor-crosshair">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button aria-label="Matrix Data" class="hover:text-primary transition-colors cursor-crosshair border-l border-outline-variant/30 pl-gutter ml-unit">
+<span class="material-symbols-outlined">dataset</span>
+</button>
+</div>
+</div>
+</header>
+<!-- MAIN ARENA -->
+<main class="flex-1 flex flex-row mt-14 overflow-hidden bg-surface-container-lowest">
+<!-- LEFT COLUMN (Charts & Ticker) -->
+<section class="w-full md:w-3/4 flex flex-col border-r border-outline-variant/20 h-full relative">
+<!-- Canvas Area -->
+<div class="flex-1 relative overflow-hidden group cursor-crosshair flex items-center justify-center bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-surface-container-low to-surface-container-lowest">
+<!-- Grid Background pattern -->
+<div class="absolute inset-0 z-0 opacity-10 pointer-events-none" style="background-image: linear-gradient(#4a4457 1px, transparent 1px), linear-gradient(90deg, #4a4457 1px, transparent 1px); background-size: 40px 40px;"></div>
+<div class="font-data-lg text-data-lg text-on-surface-variant opacity-40 z-10 select-none tracking-widest">
+                    &lt; LIGHTWEIGHT-CHARTS CANVAS &gt;
+                </div>
+<!-- Mock Price Axis -->
+<div class="absolute right-0 top-0 bottom-0 w-16 border-l border-outline-variant/20 bg-surface-container-lowest/80 backdrop-blur-sm z-10 flex flex-col justify-between py-margin-page text-right pr-2 font-data-sm text-data-sm text-on-surface-variant">
+<div>2500.00</div>
+<div>2450.00</div>
+<div>2400.00</div>
+<div class="text-error bg-error/10 border border-error/30 w-full px-1 py-0.5 shadow-[0_0_10px_rgba(255,180,171,0.2)]">-2336.01-</div>
+<div>2300.00</div>
+<div>2250.00</div>
+</div>
+</div>
+<!-- IPDA MATRIX MODAL -->
+<div class="absolute inset-y-10 right-20 w-96 border border-outline-variant/50 bg-surface-container-lowest/95 backdrop-blur-xl z-20 flex flex-col shadow-[0_0_30px_rgba(0,0,0,0.8)] rounded-none">
+<div class="flex justify-between items-center p-3 border-b border-outline-variant/50 bg-surface-container-low">
+<h3 class="font-label-caps text-label-caps text-primary tracking-widest uppercase m-0 drop-shadow-[0_0_8px_rgba(209,188,255,0.3)]">IPDA MATRIX BASIN DEFINITIONS (V8.0)</h3>
+<button class="text-on-surface-variant hover:text-error transition-colors cursor-crosshair"><span class="material-symbols-outlined text-[18px]">close</span></button>
+</div>
+<div class="p-4 flex flex-col gap-6 overflow-y-auto font-data-sm text-data-sm">
+<!-- Section 1 -->
+<div class="flex flex-col gap-2">
+<h4 class="text-on-surface-variant uppercase border-b border-outline-variant/30 pb-1 mb-1 font-bold tracking-widest">Dealing Range</h4>
+<div class="flex justify-between items-center"><span class="text-on-surface-variant">True Day Open:</span><span class="text-primary font-bold">2272.27</span></div>
+<div class="flex justify-between items-center"><span class="text-on-surface-variant">Range High:</span><span class="text-secondary bg-secondary/10 px-1 border border-secondary/30">[PREMIUM] 2480.00</span></div>
+<div class="flex justify-between items-center"><span class="text-on-surface-variant">Range EQ:</span><span class="text-on-surface">2305.00</span></div>
+<div class="flex justify-between items-center"><span class="text-on-surface-variant">Range Low:</span><span class="text-error bg-error/10 px-1 border border-error/30">[DISCOUNT] 2130.00</span></div>
+</div>
+<!-- Section 2 -->
+<div class="flex flex-col gap-2">
+<h4 class="text-on-surface-variant uppercase border-b border-outline-variant/30 pb-1 mb-1 font-bold tracking-widest">Magnets Matrix</h4>
+<table class="w-full text-left font-data-sm text-data-sm border-collapse">
+<thead>
+<tr class="text-on-surface-variant border-b border-outline-variant/20">
+<th class="py-1 font-normal">Level</th>
+<th class="py-1 font-normal">Price</th>
+<th class="py-1 text-right font-normal">Status</th>
+</tr>
+</thead>
+<tbody>
+<tr class="border-b border-outline-variant/10 hover:bg-surface-container/50 transition-colors">
+<td class="py-1 text-on-surface">W1_HIGH</td>
+<td class="py-1 text-secondary">2450.50</td>
+<td class="py-1 text-right text-on-surface-variant">UNTESTED</td>
+</tr>
+<tr class="border-b border-outline-variant/10 hover:bg-surface-container/50 transition-colors">
+<td class="py-1 text-on-surface">D1_SIBI</td>
+<td class="py-1 text-error">2380.00</td>
+<td class="py-1 text-right text-secondary animate-pulse shadow-[0_0_8px_rgba(80,255,175,0.4)]">ACTIVE</td>
+</tr>
+<tr class="hover:bg-surface-container/50 transition-colors">
+<td class="py-1 text-on-surface">W1_LOW</td>
+<td class="py-1 text-tertiary">2150.00</td>
+<td class="py-1 text-right text-outline">MITIGATED</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Section 3 -->
+<div class="flex flex-col gap-2">
+<h4 class="text-on-surface-variant uppercase border-b border-outline-variant/30 pb-1 mb-1 font-bold tracking-widest">Projected Targets (AR SD)</h4>
+<div class="grid grid-cols-2 gap-2">
+<div class="flex justify-between p-1 bg-surface-container-low border border-outline-variant/20 hover:border-primary/50 transition-colors"><span class="text-on-surface-variant">SD 1.0</span><span class="text-on-surface">2350.25</span></div>
+<div class="flex justify-between p-1 bg-surface-container-low border border-outline-variant/20 hover:border-primary/50 transition-colors"><span class="text-on-surface-variant">SD 1.5</span><span class="text-secondary">2380.00</span></div>
+<div class="flex justify-between p-1 bg-surface-container-low border border-outline-variant/20 hover:border-primary/50 transition-colors"><span class="text-on-surface-variant">SD 2.0</span><span class="text-on-surface">2410.75</span></div>
+<div class="flex justify-between p-1 bg-surface-container-low border border-outline-variant/20 hover:border-primary/50 transition-colors"><span class="text-on-surface-variant">SD 2.5</span><span class="text-secondary font-bold">2441.50</span></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Ticker Tape -->
+<div class="h-10 min-h-[40px] bg-surface-container-lowest border-t border-outline-variant/20 flex items-center overflow-hidden px-margin-page relative">
+<div class="absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-surface-container-lowest to-transparent z-10"></div>
+<div class="whitespace-nowrap font-data-md text-data-md text-error shadow-[0_0_10px_rgba(255,180,171,0.4)] animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite]">
+                    🚨 LIQUIDATION PURGE: 15M_USD SHORTS SHATTERED AT 2336.01
+                </div>
+<div class="absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface-container-lowest to-transparent z-10"></div>
+</div>
+</section>
+<!-- RIGHT COLUMN (Context Cards) -->
+<aside class="hidden md:flex w-1/4 bg-surface-container-lowest p-container-padding flex-col gap-container-padding overflow-y-auto">
+<!-- CARD 1: TACTICAL CONTEXT -->
+<div class="border border-outline-variant/30 bg-surface-container/30 backdrop-blur-md rounded-none overflow-hidden shadow-lg">
+<div class="border-b border-outline-variant/30 px-container-padding py-2 flex justify-between items-center bg-surface-container-low/50">
+<h2 class="font-label-caps text-label-caps text-on-surface uppercase tracking-wider">TACTICAL CONTEXT</h2>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">my_location</span>
+</div>
+<div class="p-container-padding font-data-md text-data-md flex flex-col gap-2">
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant">Open:</span>
+<span class="text-on-surface font-medium">2272.27</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant">Window:</span>
+<span class="text-on-surface font-medium">NY_AM_KILLZONE</span>
+</div>
+<div class="flex justify-between items-center pt-2 border-t border-outline-variant/20 mt-1">
+<span class="text-on-surface-variant">Pricing:</span>
+<span class="text-tertiary bg-tertiary/10 border border-tertiary/30 px-2 py-0.5 rounded-none glow-badge-tertiary text-xs">[ PREMIUM ]</span>
+</div>
+</div>
+</div>
+<!-- CARD 2: LIQUIDITY -->
+<div class="border border-outline-variant/30 bg-surface-container/30 backdrop-blur-md rounded-none overflow-hidden shadow-lg">
+<div class="border-b border-outline-variant/30 px-container-padding py-2 flex justify-between items-center bg-surface-container-low/50">
+<h2 class="font-label-caps text-label-caps text-on-surface uppercase tracking-wider">LIQUIDITY</h2>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">water_drop</span>
+</div>
+<div class="p-container-padding font-data-md text-data-md flex flex-col gap-2">
+<div class="flex justify-between items-center hover:bg-surface-container-high/30 px-1.5 -mx-1.5 rounded-none transition-colors">
+<span class="text-on-surface-variant">PDH:</span>
+<span class="text-on-surface font-medium">2423.25</span>
+</div>
+<div class="flex justify-between items-center hover:bg-surface-container-high/30 px-1.5 -mx-1.5 rounded-none transition-colors">
+<span class="text-on-surface-variant">PDL:</span>
+<span class="text-on-surface font-medium">2336.01</span>
+</div>
+<div class="flex justify-between items-center pt-2 border-t border-outline-variant/20 mt-1">
+<span class="text-on-surface-variant">Target:</span>
+<span class="text-error bg-error/10 border border-error/30 px-2 py-0.5 rounded-none glow-badge-error text-xs">[ EXHAUSTED ]</span>
+</div>
+</div>
+</div>
+<!-- CARD 3: ORDER FLOW -->
+<div class="border border-outline-variant/30 bg-surface-container/30 backdrop-blur-md rounded-none overflow-hidden shadow-lg">
+<div class="border-b border-outline-variant/30 px-container-padding py-2 flex justify-between items-center bg-surface-container-low/50">
+<h2 class="font-label-caps text-label-caps text-on-surface uppercase tracking-wider">ORDER FLOW</h2>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">swap_vert</span>
+</div>
+<div class="p-container-padding font-data-md text-data-md flex flex-col gap-2">
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant">Sponsorship:</span>
+<span class="text-secondary bg-secondary/10 border border-secondary/30 px-2 py-0.5 rounded-none text-xs shadow-[0_0_10px_rgba(206,255,223,0.15)] text-shadow-[0_0_6px_rgba(206,255,223,0.5)]">ACTIVE_BULLISH</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-on-surface-variant">Vol Delta:</span>
+<span class="text-secondary font-medium">+4606.93</span>
+</div>
+<div class="flex justify-between items-center pt-2 border-t border-outline-variant/20 mt-1">
+<span class="text-on-surface-variant">SMT Trap:</span>
+<span class="text-on-surface font-medium">FALSE</span>
+</div>
+</div>
+</div>
+<!-- CARD 4: MAGNETS -->
+<div class="border border-outline-variant/30 bg-surface-container/30 backdrop-blur-md rounded-none overflow-hidden shadow-lg">
+<div class="border-b border-outline-variant/30 px-container-padding py-2 flex justify-between items-center bg-surface-container-low/50">
+<h2 class="font-label-caps text-label-caps text-on-surface uppercase tracking-wider">MAGNETS</h2>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">attractions</span>
+</div>
+<div class="p-container-padding font-data-sm text-data-sm flex gap-gutter">
+<div class="flex-1 flex flex-col gap-1 border-r border-outline-variant/20 pr-container-padding">
+<div class="text-on-surface-variant border-b border-outline-variant/20 pb-1 mb-1 font-semibold">BSL</div>
+<div class="text-secondary hover:bg-surface-container-high/30 px-1 -mx-1 rounded-none transition-colors font-medium">2465.28</div>
+<div class="text-secondary hover:bg-surface-container-high/30 px-1 -mx-1 rounded-none transition-colors font-medium">2450.00</div>
+</div>
+<div class="flex-1 flex flex-col gap-1 pl-1">
+<div class="text-on-surface-variant border-b border-outline-variant/20 pb-1 mb-1 font-semibold">SSL</div>
+<div class="text-error hover:bg-surface-container-high/30 px-1 -mx-1 rounded-none transition-colors font-medium">2236.91</div>
+<div class="text-error hover:bg-surface-container-high/30 px-1 -mx-1 rounded-none transition-colors font-medium">2174.51</div>
+</div>
+</div>
+</div>
+<!-- CARD 5: AI CONSOLE -->
+<div class="border border-outline-variant/30 bg-surface-container/30 backdrop-blur-md rounded-none flex-1 flex flex-col min-h-[160px] shadow-lg overflow-hidden">
+<div class="border-b border-outline-variant/30 px-container-padding py-2 flex justify-between items-center bg-surface-container-low/50">
+<h2 class="font-label-caps text-label-caps text-primary uppercase tracking-wider drop-shadow-[0_0_8px_rgba(209,188,255,0.3)]">AI CONSOLE</h2>
+<span class="material-symbols-outlined text-[16px] text-primary">smart_toy</span>
+</div>
+<div class="p-container-padding font-data-sm text-data-sm text-on-surface-variant flex-1 bg-surface-container-low/20 border-b border-outline-variant/20 font-mono leading-relaxed">
+                    &gt; AI: Target exhausted.<br/>
+                    &gt; Smart money reversal detected.<br/>
+                    &gt; Buys locked.
+                    <span class="inline-block w-2 h-3 bg-primary animate-pulse ml-1 align-middle shadow-[0_0_8px_rgba(209,188,255,0.8)]"></span>
+</div>
+<div class="p-3 bg-surface-container-low/30">
+<button class="w-full py-2.5 bg-primary/10 border border-primary/50 text-primary font-label-caps text-label-caps uppercase rounded-none transition-all duration-300 cursor-crosshair glow-button tracking-widest font-bold">
+                        SYNTHESIZE LIVE DATA
+                    </button>
+</div>
+</div>
+</aside>
+</main>
+</body></html>

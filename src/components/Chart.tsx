@@ -7,6 +7,8 @@ import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
 
 interface ChartProps {
   data: Candle[];
+  activeFvgs?: any[];
+  localDealingRange?: any;
   colors?: {
     backgroundColor?: string;
     textColor?: string;
@@ -15,7 +17,7 @@ interface ChartProps {
   };
 }
 
-export default function Chart({ data, colors }: ChartProps) {
+export default function Chart({ data, activeFvgs, localDealingRange, colors }: ChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -26,10 +28,10 @@ export default function Chart({ data, colors }: ChartProps) {
     if (!chartContainerRef.current) return;
 
     const {
-      backgroundColor = '#000000', // Deep black for premium look
-      textColor = '#9CA3AF',
-      upColor = '#22d3ee', // Cyan accent
-      downColor = '#c084fc', // Purple accent
+      backgroundColor = '#0e0e0f', // Deep black for premium look
+      textColor = '#958da3',
+      upColor = '#50ffaf', // Cyan accent
+      downColor = '#ffb4ab', // Purple accent
     } = colors || {};
 
     const chart = createChart(chartContainerRef.current, {
@@ -48,15 +50,15 @@ export default function Chart({ data, colors }: ChartProps) {
         },
       },
       grid: {
-        vertLines: { color: 'rgba(255, 255, 255, 0.05)' },
-        horzLines: { color: 'rgba(255, 255, 255, 0.05)' },
+        vertLines: { color: 'rgba(74, 68, 87, 0.5)' },
+        horzLines: { color: 'rgba(74, 68, 87, 0.5)' },
       },
       width: chartContainerRef.current.clientWidth,
       height: chartContainerRef.current.clientHeight,
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: 'rgba(74, 68, 87, 0.5)',
         tickMarkFormatter: (time: number) => {
           return new Date(time * 1000).toLocaleTimeString('en-EG', {
             timeZone: 'UTC',
@@ -67,16 +69,16 @@ export default function Chart({ data, colors }: ChartProps) {
         },
       },
       rightPriceScale: {
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderColor: 'rgba(74, 68, 87, 0.5)',
       },
       crosshair: {
         vertLine: {
-          color: 'rgba(255, 255, 255, 0.2)',
+          color: 'rgba(74, 68, 87, 0.5)',
           width: 1,
           style: 3,
         },
         horzLine: {
-          color: 'rgba(255, 255, 255, 0.2)',
+          color: 'rgba(74, 68, 87, 0.5)',
           width: 1,
           style: 3,
         },
