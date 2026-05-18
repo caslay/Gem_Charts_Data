@@ -13,6 +13,7 @@ export const metadata: Metadata = {
 };
 import { NavigationHeader } from "@/components/NavigationHeader";
 import { Analytics } from "@vercel/analytics/next"
+import { AuthProvider } from "@/components/AuthProvider";
 
 export default function RootLayout({
   children,
@@ -24,9 +25,11 @@ export default function RootLayout({
       <body
         className={`${inter.variable} font-sans antialiased bg-black text-white`}
       >
-        <NavigationHeader />
-        <main>{children}</main>
-        <Analytics />
+        <AuthProvider>
+          <NavigationHeader />
+          <main>{children}</main>
+          <Analytics />
+        </AuthProvider>
       </body>
     </html>
   );
