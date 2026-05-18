@@ -1,12 +1,18 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { QUANT_SYSTEM_PROMPT } from '@/lib/aiSystemPrompt';
+import { sql } from '@vercel/postgres';
 
 export async function POST(req: Request) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const { rows } = await sql`SELECT key_value FROM system_settings WHERE key_name = 'GEMINI_LIVE_KEY' LIMIT 1`;
+    const apiKey = rows[0]?.key_value;
+
     if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is not configured in the environment variables.');
+      return NextResponse.json(
+        { error: 'System Vault Locked: Missing API Key' },
+        { status: 500 }
+      );
     }
 
     // 1. Initialize the Google Generative AI client
