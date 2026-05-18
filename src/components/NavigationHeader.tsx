@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Activity, History, TrendingUp, LayoutGrid } from "lucide-react";
+import { Activity, History, TrendingUp, LayoutGrid, Settings } from "lucide-react";
 import MatrixConfigDrawer from "./MatrixConfigDrawer";
 import { useMarketData } from "@/hooks/useMarketData";
 import { LiveTicker } from "./LiveTicker";
@@ -71,6 +71,18 @@ export function NavigationHeader() {
               title="Compound Plan"
             >
               <TrendingUp className="w-4 h-4" />
+            </Link>
+            <div className="w-px h-4 bg-[#4a4457]/50 mx-0.5" />
+            <Link 
+              href="/settings" 
+              className={`p-1.5 transition-all flex items-center justify-center ${
+                pathname === '/settings' 
+                ? 'text-[#d1bcff] border-b-2 border-[#d1bcff] bg-[#d1bcff]/10' 
+                : 'text-[#958da3] hover:text-[#d1bcff] border-b-2 border-transparent hover:bg-zinc-800/50'
+              }`} 
+              title="Command Center"
+            >
+              <Settings className="w-4 h-4" />
             </Link>
           </div>
 
