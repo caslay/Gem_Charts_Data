@@ -4,11 +4,15 @@ import { useEffect, useRef } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, SeriesMarker, createSeriesMarkers, ISeriesMarkersPluginApi } from 'lightweight-charts';
 import { Candle } from '@/hooks/useMarketData';
 import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
+import { useBinanceWS } from '@/hooks/useBinanceWS';
+import type { LiveCandle } from '@/hooks/useBinanceWS';
 
 interface ChartProps {
   data: Candle[];
   activeFvgs?: any[];
   localDealingRange?: any;
+  /** Binance kline interval — must match the selected timeframe in the parent */
+  interval?: '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '4h';
   colors?: {
     backgroundColor?: string;
     textColor?: string;
@@ -17,12 +21,17 @@ interface ChartProps {
   };
 }
 
-export default function Chart({ data, activeFvgs, localDealingRange, colors }: ChartProps) {
+export default function Chart({ data, activeFvgs, localDealingRange, interval = '5m', colors }: ChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<any> | null>(null);
   const isInitialLoad = useRef(true);
+
+  // ── Phase 2: Live Tick Hook ──────────────────────────────────────────────
+  // GUARDRAIL: `liveCandle` is consumed ONLY by the .update() effect below.
+  // It is NEVER pushed into the `data` array or any state that feeds the AI JSON.
+  const { liveCandle } = useBinanceWS({ symbol: 'ethusdc', interval });
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -144,6 +153,22 @@ export default function Chart({ data, activeFvgs, localDealingRange, colors }: C
       }
     }
   }, [data]);
+
+  // ── Phase 2: Live Candle Injection ──────────────────────────────────────
+  // Isolated effect — ONLY calls .update() on the series ref.
+  // Does NOT append to `data`, does NOT setState, does NOT touch the AI payload.
+  // Time alignment: liveCandle.time carries UTC+3 offset (added in useBinanceWS)
+  // to match the historical series where t = binance_ms + 10_800_000 ms ÷ 1000.
+  useEffect(() => {
+    if (seriesRef.current && liveCandle) {
+      try {
+        console.log('[Chart] Live Candle Time:', liveCandle.time, '| Close:', liveCandle.close);
+        seriesRef.current.update(liveCandle as any);
+      } catch (error) {
+        console.error('[Chart] Lightweight Charts Update Error:', error);
+      }
+    }
+  }, [liveCandle]); // ← ONLY liveCandle; no other deps so historical state is never touched
 
   return <div ref={chartContainerRef} className="w-full h-full" />;
 }
