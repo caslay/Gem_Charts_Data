@@ -2,19 +2,47 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
-import { Activity, History, TrendingUp, LayoutGrid, Settings } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Activity, History, TrendingUp, LayoutGrid, Settings, RotateCcw, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import MatrixConfigDrawer from "./MatrixConfigDrawer";
 import { useMarketData } from "@/hooks/useMarketData";
 import { LiveTicker } from "./LiveTicker";
+
+type ResetStatus = 'idle' | 'loading' | 'success' | 'error';
 
 export function NavigationHeader() {
   const pathname = usePathname();
   const { data } = useMarketData();
   const [isMatrixOpen, setIsMatrixOpen] = useState(false);
+  const [resetStatus, setResetStatus] = useState<ResetStatus>('idle');
 
   const pricing = data?.ipda_metrics?.current_pricing || 'SCANNING';
   const session = data?.ipda_metrics?.current_time_window || 'WAITING';
+
+  // ── Phase 4: Force Reset State Handler ────────────────────────────────
+  const handleForceReset = useCallback(async () => {
+    if (resetStatus === 'loading') return;
+    setResetStatus('loading');
+
+    try {
+      const res = await fetch('/api/reset-state', { method: 'POST' });
+      const result = await res.json();
+
+      if (res.ok && result.success) {
+        setResetStatus('success');
+        console.log('[NAV] AI State reset successfully.');
+      } else {
+        setResetStatus('error');
+        console.error('[NAV] Reset failed:', result.error);
+      }
+    } catch (err) {
+      setResetStatus('error');
+      console.error('[NAV] Reset request failed:', err);
+    }
+
+    // Auto-revert to idle after 2.5 seconds
+    setTimeout(() => setResetStatus('idle'), 2500);
+  }, [resetStatus]);
 
   return (
     <>
@@ -88,6 +116,40 @@ export function NavigationHeader() {
 
           {/* RIGHT SECTION (Awareness & Global Triggers) */}
           <div className="flex items-center gap-3">
+
+            {/* Phase 4: Force Reset State Button */}
+            <button
+              id="force-reset-state-btn"
+              onClick={handleForceReset}
+              disabled={resetStatus === 'loading'}
+              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 border rounded text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
+                resetStatus === 'success'
+                  ? 'bg-[#50ffaf]/10 border-[#50ffaf]/50 text-[#50ffaf]'
+                  : resetStatus === 'error'
+                  ? 'bg-[#ffb4ab]/10 border-[#ffb4ab]/50 text-[#ffb4ab]'
+                  : resetStatus === 'loading'
+                  ? 'bg-[#d1bcff]/5 border-[#d1bcff]/30 text-[#d1bcff]/50 cursor-wait'
+                  : 'bg-[#0e0e0f] border-[#4a4457]/50 text-[#958da3] hover:text-[#ffb4ab] hover:border-[#ffb4ab]/30 hover:bg-[#ffb4ab]/5'
+              }`}
+              title="Force reset AI memory state to SEARCHING"
+            >
+              {resetStatus === 'loading' ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : resetStatus === 'success' ? (
+                <CheckCircle2 className="w-3 h-3" />
+              ) : resetStatus === 'error' ? (
+                <AlertCircle className="w-3 h-3" />
+              ) : (
+                <RotateCcw className="w-3 h-3" />
+              )}
+              <span>
+                {resetStatus === 'loading' ? 'Resetting...'
+                  : resetStatus === 'success' ? 'Reset ✓'
+                  : resetStatus === 'error' ? 'Failed'
+                  : 'Reset'}
+              </span>
+            </button>
+
             {/* Time & Live Sync — static clock display */}
             <div className="hidden sm:flex items-center gap-2 px-2 py-1 bg-[#0e0e0f] border border-[#4a4457]/50 rounded">
               <span className="w-1.5 h-1.5 bg-[#958da3] rounded-full" />

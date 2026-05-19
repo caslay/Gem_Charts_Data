@@ -2,8 +2,6 @@
 
 import { useState } from 'react';
 import { DownloadCloud, TrendingUp, Activity, X, Brain, Zap, Target, Magnet, BarChart3, Terminal, Loader2, Copy, Download } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
 
 // ─── Slicing Helper ──────────────────────────────────────────────────────────
@@ -62,8 +60,20 @@ export default function Sidebar({
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+  const [activeTab, setActiveTab] = useState<'HUD' | 'JSON'>('HUD');
 
   const metrics = data?.ipda_metrics;
+
+  let parsedAiResponse: any = null;
+  if (aiAnalysis) {
+    try {
+      const candidate = aiAnalysis.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)?.[1] || aiAnalysis;
+      parsedAiResponse = JSON.parse(candidate.trim());
+    } catch (e) {
+      // Failed to parse, it will be treated as raw
+    }
+  }
+
   const orderFlow = metrics?.order_flow_engine;
   const pricing = metrics?.current_pricing;
 
@@ -258,20 +268,116 @@ export default function Sidebar({
             </div>
 
             {/* Card 5: AI Synthesis Console */}
-            <div className="bg-[#1c1b1c] border border-[#4a4457]/50 rounded-none flex flex-col h-80">
-              <div className="p-3 border-b border-[#4a4457]/50 bg-[#1c1b1c] flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Terminal size={12} className="text-[#d1bcff]" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-[#958da3]">Synthesis Console</span>
+            <div className="bg-[#1c1b1c] border border-[#4a4457]/50 rounded-none flex flex-col h-[400px]">
+              <div className="p-3 border-b border-[#4a4457]/50 bg-[#1c1b1c] flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Terminal size={12} className="text-[#d1bcff]" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-[#958da3]">Synthesis Console</span>
+                  </div>
+                  {isAnalyzing && <Loader2 size={12} className="text-[#d1bcff] animate-spin" />}
                 </div>
-                {isAnalyzing && <Loader2 size={12} className="text-[#d1bcff] animate-spin" />}
+                
+                {/* Tabs */}
+                {aiAnalysis && parsedAiResponse && (
+                  <div className="flex bg-[#0e0e0f] border border-[#4a4457]/50 p-0.5">
+                    <button
+                      onClick={() => setActiveTab('HUD')}
+                      className={`flex-1 py-1.5 text-[9px] font-black uppercase tracking-widest transition-colors ${
+                        activeTab === 'HUD' ? 'bg-[#d1bcff] text-black shadow-[0_0_10px_rgba(209,188,255,0.2)]' : 'text-[#958da3] hover:text-[#e5e2e3]'
+                      }`}
+                    >
+                      HUD
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('JSON')}
+                      className={`flex-1 py-1.5 text-[9px] font-black uppercase tracking-widest transition-colors ${
+                        activeTab === 'JSON' ? 'bg-[#d1bcff] text-black shadow-[0_0_10px_rgba(209,188,255,0.2)]' : 'text-[#958da3] hover:text-[#e5e2e3]'
+                      }`}
+                    >
+                      JSON
+                    </button>
+                  </div>
+                )}
               </div>
               
               <div className="flex-1 p-3 overflow-y-auto bg-[#0e0e0f] font-mono scrollbar-thin scrollbar-thumb-[#4a4457]/50">
                 {aiAnalysis ? (
-                  <div className="text-[11px] text-[#e5e2e3] leading-relaxed prose prose-invert prose-xs max-w-none">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiAnalysis}</ReactMarkdown>
-                  </div>
+                  activeTab === 'HUD' && parsedAiResponse?.hud_display ? (
+                    <div className="space-y-4">
+                      {/* HUD Table */}
+                      <div className="border border-[#4a4457]/50 rounded-none overflow-hidden">
+                        <table className="w-full text-left border-collapse">
+                          <tbody>
+                            {Object.entries(parsedAiResponse.hud_display).map(([key, value]) => {
+                               if (key.toLowerCase().includes('note')) return null;
+                               
+                               let colorClass = 'text-[#e5e2e3]';
+                               const vStr = String(value).toUpperCase();
+                               if (vStr.includes('BUY') || vStr.includes('LONG') || vStr.includes('BULLISH') || vStr.includes('STRONG')) colorClass = 'text-[#50ffaf]';
+                               else if (vStr.includes('SELL') || vStr.includes('SHORT') || vStr.includes('BEARISH') || vStr.includes('WEAK')) colorClass = 'text-[#ffb4ab]';
+                               else if (vStr.includes('STAND DOWN') || vStr.includes('NEUTRAL') || vStr.includes('NONE')) colorClass = 'text-[#958da3]';
+                               
+                               const displayKey = key.replace(/_/g, ' ').toUpperCase();
+                               return (
+                                 <tr key={key} className="border-b border-[#4a4457]/50 last:border-0 bg-[#0e0e0f]">
+                                   <td className="p-2 text-[9px] font-black uppercase tracking-widest text-[#958da3] border-r border-[#4a4457]/50 w-1/3">
+                                     {displayKey}
+                                   </td>
+                                   <td className={`p-2 text-[10px] font-bold ${colorClass}`}>
+                                     {String(value)}
+                                   </td>
+                                 </tr>
+                               );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      {/* AI Note */}
+                      {Object.keys(parsedAiResponse.hud_display).find(k => k.toLowerCase().includes('note')) && (
+                        <div className="bg-[#1c1b1c] p-2 border border-[#4a4457]/50">
+                          <span className="text-[9px] font-black text-[#d1bcff] uppercase tracking-widest block mb-1">
+                            {Object.keys(parsedAiResponse.hud_display).find(k => k.toLowerCase().includes('note'))}
+                          </span>
+                          <p className="text-[10px] text-[#e5e2e3] italic leading-relaxed">
+                            {parsedAiResponse.hud_display[Object.keys(parsedAiResponse.hud_display).find(k => k.toLowerCase().includes('note')) as string] as string}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* TradingView Alerts */}
+                      {Array.isArray(parsedAiResponse.tradingview_alerts) && parsedAiResponse.tradingview_alerts.length > 0 && (
+                        <div className="space-y-1">
+                          <span className="text-[9px] font-black text-[#958da3] uppercase tracking-widest block mb-2">
+                            TradingView Alerts
+                          </span>
+                          <div className="flex flex-col gap-1.5">
+                            {parsedAiResponse.tradingview_alerts.map((alert: any, i: number) => {
+                              const displayAlert = typeof alert === 'object' && alert !== null && alert.price && alert.reason
+                                ? `${alert.price} - ${alert.reason}`
+                                : typeof alert === 'string'
+                                ? alert
+                                : JSON.stringify(alert);
+
+                              return (
+                                <div key={i} className="bg-[#1c1b1c] p-2 border border-[#4a4457]/50 flex items-start gap-2">
+                                  <Zap size={10} className="text-[#50ffaf] mt-0.5 shrink-0" />
+                                  <span className="text-[9px] text-[#e5e2e3] uppercase tracking-wide">
+                                    {displayAlert}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <pre className="text-[10px] text-[#50ffaf] leading-relaxed whitespace-pre-wrap bg-[#1c1b1c] p-3 rounded-none border border-[#4a4457]/50 overflow-x-auto">
+                      <code>{aiAnalysis}</code>
+                    </pre>
+                  )
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-center p-4">
                     <Brain size={24} className="text-zinc-800 mb-2" />
