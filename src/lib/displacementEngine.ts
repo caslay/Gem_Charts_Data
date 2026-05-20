@@ -27,7 +27,7 @@ export function verifyDisplacementOffline(recentCandles: Candle[]): Institutiona
 
   // Binance's last candle is open, so the last closed candle is length - 2
   const latestClosed = recentCandles[recentCandles.length - 2];
-  
+
   // 14 candles prior to the latest closed candle
   const prior14 = recentCandles.slice(recentCandles.length - 16, recentCandles.length - 2);
 
@@ -76,8 +76,12 @@ export async function verifyDisplacement(recentCandles: Candle[]): Promise<Insti
   try {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), 1200); // 1.2s rapid response threshold
-    
-    const response = await fetch('http://127.0.0.1:8000/calculate-displacement', {
+
+    const baseUrl = process.env.NODE_ENV === 'development'
+      ? 'http://127.0.0.1:8000'
+      : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://127.0.0.1:4000');
+
+    const response = await fetch(`${baseUrl}/api/py/calculate-displacement`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -94,7 +98,7 @@ export async function verifyDisplacement(recentCandles: Candle[]): Promise<Insti
       }))),
       signal: controller.signal
     });
-    
+
     clearTimeout(id);
     if (response.ok) {
       const data = await response.json();
@@ -103,6 +107,6 @@ export async function verifyDisplacement(recentCandles: Candle[]): Promise<Insti
   } catch (error) {
     // Silent fail back to local offline analytical engine
   }
-  
+
   return localResult;
 }
