@@ -81,11 +81,18 @@ export async function verifyDisplacement(recentCandles: Candle[]): Promise<Insti
       ? 'http://127.0.0.1:8000'
       : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://127.0.0.1:4000');
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    // Bypass Vercel Authentication on Preview Deployments for server-to-server fetches
+    if (process.env.VERCEL_AUTOMATION_BYPASS_SECRET) {
+      headers['x-vercel-protection-bypass'] = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+    }
+
     const response = await fetch(`${baseUrl}/api/py/calculate-displacement`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(recentCandles.map(c => ({
         t: c.t,
         o: c.o,
