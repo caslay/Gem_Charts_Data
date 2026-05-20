@@ -53,6 +53,7 @@ class DisplacementResponse(BaseModel):
 
 
 @app.post("/api/py/calculate-displacement", response_model=DisplacementResponse)
+@app.post("/api/index", response_model=DisplacementResponse)
 async def calculate_displacement(candles: List[CandleInput]):
     """
     POST endpoint to ingest formatted market candles, perform statsmodels OLS regression,
