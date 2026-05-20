@@ -103,8 +103,11 @@ export async function verifyDisplacement(recentCandles: Candle[]): Promise<Insti
     if (response.ok) {
       const data = await response.json();
       return data as InstitutionalSponsorship;
+    } else {
+      console.error('[verifyDisplacement] HTTP Error:', response.status, await response.text());
     }
   } catch (error) {
+    console.error('[verifyDisplacement] Fetch Error:', error);
     // Silent fail back to local offline analytical engine
   }
 
