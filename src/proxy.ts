@@ -24,14 +24,15 @@ export default auth((req) => {
 
   // Define public routes that don't require authentication
   const isAuthRoute = nextUrl.pathname.startsWith("/api/auth");
+  const isPyBackend = nextUrl.pathname.startsWith("/api/py");
   const isLoginPage = nextUrl.pathname === "/login";
   const isPublicAsset =
     nextUrl.pathname.startsWith("/_next") ||
     nextUrl.pathname.startsWith("/favicon.ico") ||
     nextUrl.pathname.startsWith("/audio");
 
-  // Skip proxy for auth API routes and static assets
-  if (isAuthRoute || isPublicAsset) {
+  // Skip proxy for auth API routes, python backend, and static assets
+  if (isAuthRoute || isPyBackend || isPublicAsset) {
     return NextResponse.next();
   }
 
