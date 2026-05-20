@@ -26,6 +26,7 @@ type SaveStatus = "idle" | "saving" | "success" | "error";
 
 // ─── Available Models ─────────────────────────────────────────────────────────
 const AVAILABLE_MODELS = [
+  { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
   { value: "gemini-3-flash-preview", label: "Gemini 3 Flash (Preview)" },
   { value: "gemini-2.5-flash-preview-05-20", label: "Gemini 2.5 Flash (Preview)" },
   { value: "gemini-2.5-pro-preview-05-06", label: "Gemini 2.5 Pro (Preview)" },
@@ -39,7 +40,7 @@ export default function SettingsPage() {
   const router = useRouter();
 
   const [settings, setSettings] = useState<SettingsState>({
-    ACTIVE_MODEL: "gemini-3-flash-preview",
+    ACTIVE_MODEL: "gemini-3.5-flash",
     SYSTEM_PROMPT: "",
     GEMINI_LIVE_KEY: "",
   });
@@ -65,7 +66,7 @@ export default function SettingsPage() {
       const s = data.settings || {};
 
       setSettings({
-        ACTIVE_MODEL: s.ACTIVE_MODEL || "gemini-3-flash-preview",
+        ACTIVE_MODEL: s.ACTIVE_MODEL || "gemini-3.5-flash",
         SYSTEM_PROMPT: s.SYSTEM_PROMPT || "",
         GEMINI_LIVE_KEY: s.GEMINI_LIVE_KEY || "",
       });
@@ -277,14 +278,13 @@ export default function SettingsPage() {
               onClick={handleSave}
               disabled={saveStatus === "saving"}
               className={`flex items-center gap-2.5 px-6 py-3 rounded-xl font-semibold text-sm transition-all duration-200 cursor-pointer
-                ${
-                  saveStatus === "saving"
-                    ? "bg-[#d1bcff]/20 text-[#d1bcff]/50 cursor-wait"
-                    : saveStatus === "success"
+                ${saveStatus === "saving"
+                  ? "bg-[#d1bcff]/20 text-[#d1bcff]/50 cursor-wait"
+                  : saveStatus === "success"
                     ? "bg-[#50ffaf]/20 text-[#50ffaf] border border-[#50ffaf]/30"
                     : saveStatus === "error"
-                    ? "bg-[#ffb4ab]/20 text-[#ffb4ab] border border-[#ffb4ab]/30"
-                    : "bg-[#d1bcff]/15 text-[#d1bcff] border border-[#d1bcff]/30 hover:bg-[#d1bcff]/25 hover:border-[#d1bcff]/50 active:scale-[0.98]"
+                      ? "bg-[#ffb4ab]/20 text-[#ffb4ab] border border-[#ffb4ab]/30"
+                      : "bg-[#d1bcff]/15 text-[#d1bcff] border border-[#d1bcff]/30 hover:bg-[#d1bcff]/25 hover:border-[#d1bcff]/50 active:scale-[0.98]"
                 }`}
             >
               {saveStatus === "saving" ? (

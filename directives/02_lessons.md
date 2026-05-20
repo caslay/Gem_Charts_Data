@@ -20,5 +20,10 @@ Before modifying the Quant Logic, Order Flow Engine, or Prompt Builder, review t
 - **The Bug:** The algorithm was taking trades during the NY Lunch/Mid-day pause when volume flatlined, falling for fake structural shifts.
 - **The Fix:** We introduced the `displacement_active` flag based on Open Interest (OI) momentum and Volume. If displacement is inactive, the Agent must output `[⚪ NEUTRAL / 🚫 ABORT]`. Do not bypass this safety net.
 
+### 5. Server-Side Fetch Port Mismatches & Silent Failures (Vercel/Python Bridge)
+- **The Bug:** During local development, the Next.js API route (`/api/market-data`) would silently fail when trying to fetch the Python backend. This caused the UI to receive the "offline" fallback values (`t-STAT: 0.0000`, `p-VALUE: 1.0000`, `OLS VALIDATION: REJECTED`) instead of the actual data.
+- **The Cause:** Server-side fetches in Next.js require absolute URLs. We mistakenly hardcoded `127.0.0.1:3000` as the fallback, but the developer's Next.js project was actually running on `localhost:4000`. The fetch failed and the `catch` block silently swallowed it.
+- **The Fix:** We directly bypass the Next.js dev server for internal fetches. In development, the Next.js server route now directly pings `http://127.0.0.1:8000` (the uvicorn Python engine), while in production, it routes to `https://${process.env.VERCEL_URL}` where the Python endpoint is deployed as a Vercel serverless function (`/api/index.py`).
+
 ## 🛠️ Note to AI Agent:
 If you encounter a new bug and successfully fix it, YOU MUST prompt the user to update this `02_lessons.md` file with the new Post-Mortem.

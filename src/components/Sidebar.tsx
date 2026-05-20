@@ -241,13 +241,13 @@ export default function Sidebar({
                     <div className="flex justify-between text-[8px] items-center">
                       <span className="text-[#958da3]">t-STAT</span>
                       <span className="font-mono text-[#e5e2e3]">
-                        {metrics.institutional_sponsorship.statistical_validation.t_statistic.toFixed(4)}
+                        {metrics.institutional_sponsorship.statistical_validation.t_statistic?.toFixed(4) ?? '0.0000'}
                       </span>
                     </div>
                     <div className="flex justify-between text-[8px] items-center">
                       <span className="text-[#958da3]">p-VALUE</span>
                       <span className="font-mono text-[#e5e2e3]">
-                        {metrics.institutional_sponsorship.statistical_validation.p_value.toFixed(4)}
+                        {metrics.institutional_sponsorship.statistical_validation.p_value?.toFixed(4) ?? '0.0000'}
                       </span>
                     </div>
                     <div className="flex justify-between text-[8px] items-center">
