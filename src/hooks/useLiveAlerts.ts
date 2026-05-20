@@ -86,7 +86,7 @@ export function useLiveAlerts(
       triggerAlert(
         'PRICING_SHIFT',
         `⚖️ PRICING SHIFT: Market moved to ${currentPricing}`,
-        "/audio/pricing_shift.mp3"
+        "/audio/pricing_shift.wav"
       );
     }
     if (currentPricing) prevPricingRef.current = currentPricing;
@@ -97,7 +97,7 @@ export function useLiveAlerts(
       triggerAlert(
         'OBJECTIVE_UPDATE',
         `🎯 OBJECTIVE UPDATE: Primary Target is now ${targetStatus}`,
-        "/audio/objective_update.mp3"
+        "/audio/objective_update.wav"
       );
     }
     if (targetStatus) prevTargetStatusRef.current = targetStatus;
@@ -108,7 +108,7 @@ export function useLiveAlerts(
       triggerAlert(
         'FLOW_STATE',
         `🌊 FLOW STATE: Institutional Sponsorship is now ${sponsorshipStatus}`,
-        "/audio/flow_state.mp3"
+        "/audio/flow_state.wav"
       );
     }
     if (sponsorshipStatus) prevSponsorshipRef.current = sponsorshipStatus;
@@ -119,7 +119,7 @@ export function useLiveAlerts(
       triggerAlert(
         'SESSION_TRANSITION',
         `🕒 SESSION TRANSITION: Entering ${timeWindow}`,
-        "/audio/session_transition.mp3"
+        "/audio/session_transition.wav"
       );
     }
     if (timeWindow) prevTimeWindowRef.current = timeWindow;
@@ -205,7 +205,7 @@ export function useLiveAlerts(
         triggerAlert(
           'SMT_TRAP',
           "📉 SMT Trap Detected: Price rising without Open Interest backing.",
-          "/audio/smt_trap.mp3"
+          "/audio/smt_trap.wav"
         );
       }
     }
