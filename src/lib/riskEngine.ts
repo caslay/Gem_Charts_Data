@@ -30,6 +30,7 @@ export function calculateDynamicRisk(
 
 import { MappedFVG } from './fvgEngine';
 import { RestingLiquidityPools } from './orderFlowEngine';
+import { InstitutionalSponsorship } from './displacementEngine';
 
 export interface HardInvalidationLevels {
   bearish_invalidation: number | null;
@@ -45,17 +46,25 @@ export interface TradeExecutionParameters {
 export function generateTradeExecutionParameters(
   target_status: string,
   current_time_window: string,
-  institutional_sponsorship_status: string,
+  institutional_sponsorship: InstitutionalSponsorship,
   currentPrice: number,
   active_fvgs: MappedFVG[],
   resting_liquidity_pools: RestingLiquidityPools
 ): TradeExecutionParameters {
   let risk_mode: "HALF_RISK_OR_STAND_DOWN" | "FULL_MACRO_RISK" | "STANDARD_RISK" = "STANDARD_RISK";
 
+  const isSponsorshipActive = institutional_sponsorship.status.includes("ACTIVE");
+  const isConfidenceValidated = institutional_sponsorship.statistical_validation.confidence_interval_95;
+
   if (target_status === "EXHAUSTED" || current_time_window === "DEAD_ZONE") {
     risk_mode = "HALF_RISK_OR_STAND_DOWN";
-  } else if (target_status === "PENDING" && institutional_sponsorship_status.includes("ACTIVE")) {
-    risk_mode = "FULL_MACRO_RISK";
+  } else if (target_status === "PENDING" && isSponsorshipActive) {
+    if (isConfidenceValidated) {
+      risk_mode = "FULL_MACRO_RISK";
+    } else {
+      // Sponsorship is active but fails OLS statistical validation -> downgrade risk
+      risk_mode = "HALF_RISK_OR_STAND_DOWN";
+    }
   }
 
   let closest_active_fvg_ce: number | null = null;

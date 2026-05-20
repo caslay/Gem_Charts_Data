@@ -103,7 +103,7 @@ export default function Sidebar({
     }
   };
 
-  const formatPrice = (price: number | null | undefined) => 
+  const formatPrice = (price: number | null | undefined) =>
     price != null ? price.toFixed(2) : '---';
 
   const handleCopyJson = async () => {
@@ -147,7 +147,7 @@ export default function Sidebar({
         `}
       >
         <div className="flex flex-col h-full overflow-hidden">
-          
+
           {/* Header */}
           <div className="p-5 border-b border-[#4a4457]/50 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-2">
@@ -161,7 +161,7 @@ export default function Sidebar({
 
           {/* Scrollable Cards Area */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-[#4a4457]/50 scrollbar-track-transparent">
-            
+
             {/* Card 1: Context */}
             <div className="bg-[#1c1b1c] border border-[#4a4457]/50 rounded-none p-4 space-y-3">
               <div className="flex items-center gap-2 text-[#958da3] uppercase font-bold text-[10px] tracking-widest">
@@ -179,11 +179,10 @@ export default function Sidebar({
                 </div>
                 <div className="flex justify-between items-center pt-1">
                   <span className="text-[10px] text-[#958da3] uppercase font-black tracking-tighter">Status</span>
-                  <span className={`px-2 py-0.5 text-[10px] font-black rounded-none border ${
-                    pricing === 'PREMIUM' ? 'bg-[#ffb4ab]/10 text-[#ffb4ab] border-[#ffb4ab]/30' : 
-                    pricing === 'DISCOUNT' ? 'bg-[#50ffaf]/10 text-[#50ffaf] border-[#50ffaf]/30' : 
-                    'bg-zinc-800/10 text-[#958da3] border-[#4a4457]/50'
-                  }`}>
+                  <span className={`px-2 py-0.5 text-[10px] font-black rounded-none border ${pricing === 'PREMIUM' ? 'bg-[#ffb4ab]/10 text-[#ffb4ab] border-[#ffb4ab]/30' :
+                      pricing === 'DISCOUNT' ? 'bg-[#50ffaf]/10 text-[#50ffaf] border-[#50ffaf]/30' :
+                        'bg-zinc-800/10 text-[#958da3] border-[#4a4457]/50'
+                    }`}>
                     {pricing || 'SCANNING'}
                   </span>
                 </div>
@@ -223,19 +222,43 @@ export default function Sidebar({
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] text-[#958da3]">OI Trend</span>
-                  <span className={`text-[10px] font-bold ${
-                    orderFlow?.open_interest_trend === 'BULLISH' ? 'text-[#50ffaf]' : 
-                    orderFlow?.open_interest_trend === 'BEARISH' ? 'text-[#ffb4ab]' : 'text-[#958da3]'
-                  }`}>
+                  <span className={`text-[10px] font-bold ${orderFlow?.open_interest_trend === 'BULLISH' ? 'text-[#50ffaf]' :
+                      orderFlow?.open_interest_trend === 'BEARISH' ? 'text-[#ffb4ab]' : 'text-[#958da3]'
+                    }`}>
                     {orderFlow?.open_interest_trend || 'NEUTRAL'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] text-[#958da3]">Displacement</span>
-                  <span className={`text-[10px] font-bold ${metrics?.institutional_sponsorship?.status === 'ACTIVE' ? 'text-[#ffb2bb]' : 'text-[#958da3]'}`}>
+                  <span className={`text-[10px] font-bold ${metrics?.institutional_sponsorship?.status?.includes('BULLISH') ? 'text-[#50ffaf]' :
+                      metrics?.institutional_sponsorship?.status?.includes('BEARISH') ? 'text-[#ffb4ab]' : 'text-[#958da3]'
+                    }`}>
                     {metrics?.institutional_sponsorship?.status || 'INACTIVE'}
                   </span>
                 </div>
+                {metrics?.institutional_sponsorship?.statistical_validation && (
+                  <div className="bg-[#0e0e0f] p-2 border border-[#4a4457]/50 mt-1 space-y-1">
+                    <div className="flex justify-between text-[8px] items-center">
+                      <span className="text-[#958da3]">t-STAT</span>
+                      <span className="font-mono text-[#e5e2e3]">
+                        {metrics.institutional_sponsorship.statistical_validation.t_statistic.toFixed(4)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[8px] items-center">
+                      <span className="text-[#958da3]">p-VALUE</span>
+                      <span className="font-mono text-[#e5e2e3]">
+                        {metrics.institutional_sponsorship.statistical_validation.p_value.toFixed(4)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[8px] items-center">
+                      <span className="text-[#958da3]">OLS VALIDATION</span>
+                      <span className={`font-bold uppercase ${metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 ? 'text-[#50ffaf]' : 'text-[#ffb4ab]'
+                        }`}>
+                        {metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 ? 'CONFIRMED' : 'REJECTED'}
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <div className="bg-[#0e0e0f] p-2 border border-[#4a4457]/50 mt-2">
                   <span className="text-[8px] text-[#958da3] block mb-1 uppercase tracking-tight">Smart Money Div</span>
                   <p className="text-[9px] text-[#958da3] italic">
@@ -277,30 +300,28 @@ export default function Sidebar({
                   </div>
                   {isAnalyzing && <Loader2 size={12} className="text-[#d1bcff] animate-spin" />}
                 </div>
-                
+
                 {/* Tabs */}
                 {aiAnalysis && parsedAiResponse && (
                   <div className="flex bg-[#0e0e0f] border border-[#4a4457]/50 p-0.5">
                     <button
                       onClick={() => setActiveTab('HUD')}
-                      className={`flex-1 py-1.5 text-[9px] font-black uppercase tracking-widest transition-colors ${
-                        activeTab === 'HUD' ? 'bg-[#d1bcff] text-black shadow-[0_0_10px_rgba(209,188,255,0.2)]' : 'text-[#958da3] hover:text-[#e5e2e3]'
-                      }`}
+                      className={`flex-1 py-1.5 text-[9px] font-black uppercase tracking-widest transition-colors ${activeTab === 'HUD' ? 'bg-[#d1bcff] text-black shadow-[0_0_10px_rgba(209,188,255,0.2)]' : 'text-[#958da3] hover:text-[#e5e2e3]'
+                        }`}
                     >
                       HUD
                     </button>
                     <button
                       onClick={() => setActiveTab('JSON')}
-                      className={`flex-1 py-1.5 text-[9px] font-black uppercase tracking-widest transition-colors ${
-                        activeTab === 'JSON' ? 'bg-[#d1bcff] text-black shadow-[0_0_10px_rgba(209,188,255,0.2)]' : 'text-[#958da3] hover:text-[#e5e2e3]'
-                      }`}
+                      className={`flex-1 py-1.5 text-[9px] font-black uppercase tracking-widest transition-colors ${activeTab === 'JSON' ? 'bg-[#d1bcff] text-black shadow-[0_0_10px_rgba(209,188,255,0.2)]' : 'text-[#958da3] hover:text-[#e5e2e3]'
+                        }`}
                     >
                       JSON
                     </button>
                   </div>
                 )}
               </div>
-              
+
               <div className="flex-1 p-3 overflow-y-auto bg-[#0e0e0f] font-mono scrollbar-thin scrollbar-thumb-[#4a4457]/50">
                 {aiAnalysis ? (
                   activeTab === 'HUD' && parsedAiResponse?.hud_display ? (
@@ -310,30 +331,30 @@ export default function Sidebar({
                         <table className="w-full text-left border-collapse">
                           <tbody>
                             {Object.entries(parsedAiResponse.hud_display).map(([key, value]) => {
-                               if (key.toLowerCase().includes('note')) return null;
-                               
-                               let colorClass = 'text-[#e5e2e3]';
-                               const vStr = String(value).toUpperCase();
-                               if (vStr.includes('BUY') || vStr.includes('LONG') || vStr.includes('BULLISH') || vStr.includes('STRONG')) colorClass = 'text-[#50ffaf]';
-                               else if (vStr.includes('SELL') || vStr.includes('SHORT') || vStr.includes('BEARISH') || vStr.includes('WEAK')) colorClass = 'text-[#ffb4ab]';
-                               else if (vStr.includes('STAND DOWN') || vStr.includes('NEUTRAL') || vStr.includes('NONE')) colorClass = 'text-[#958da3]';
-                               
-                               const displayKey = key.replace(/_/g, ' ').toUpperCase();
-                               return (
-                                 <tr key={key} className="border-b border-[#4a4457]/50 last:border-0 bg-[#0e0e0f]">
-                                   <td className="p-2 text-[9px] font-black uppercase tracking-widest text-[#958da3] border-r border-[#4a4457]/50 w-1/3">
-                                     {displayKey}
-                                   </td>
-                                   <td className={`p-2 text-[10px] font-bold ${colorClass}`}>
-                                     {String(value)}
-                                   </td>
-                                 </tr>
-                               );
+                              if (key.toLowerCase().includes('note')) return null;
+
+                              let colorClass = 'text-[#e5e2e3]';
+                              const vStr = String(value).toUpperCase();
+                              if (vStr.includes('BUY') || vStr.includes('LONG') || vStr.includes('BULLISH') || vStr.includes('STRONG')) colorClass = 'text-[#50ffaf]';
+                              else if (vStr.includes('SELL') || vStr.includes('SHORT') || vStr.includes('BEARISH') || vStr.includes('WEAK')) colorClass = 'text-[#ffb4ab]';
+                              else if (vStr.includes('STAND DOWN') || vStr.includes('NEUTRAL') || vStr.includes('NONE')) colorClass = 'text-[#958da3]';
+
+                              const displayKey = key.replace(/_/g, ' ').toUpperCase();
+                              return (
+                                <tr key={key} className="border-b border-[#4a4457]/50 last:border-0 bg-[#0e0e0f]">
+                                  <td className="p-2 text-[9px] font-black uppercase tracking-widest text-[#958da3] border-r border-[#4a4457]/50 w-1/3">
+                                    {displayKey}
+                                  </td>
+                                  <td className={`p-2 text-[10px] font-bold ${colorClass}`}>
+                                    {String(value)}
+                                  </td>
+                                </tr>
+                              );
                             })}
                           </tbody>
                         </table>
                       </div>
-                      
+
                       {/* AI Note */}
                       {Object.keys(parsedAiResponse.hud_display).find(k => k.toLowerCase().includes('note')) && (
                         <div className="bg-[#1c1b1c] p-2 border border-[#4a4457]/50">
@@ -357,8 +378,8 @@ export default function Sidebar({
                               const displayAlert = typeof alert === 'object' && alert !== null && alert.price && alert.reason
                                 ? `${alert.price} - ${alert.reason}`
                                 : typeof alert === 'string'
-                                ? alert
-                                : JSON.stringify(alert);
+                                  ? alert
+                                  : JSON.stringify(alert);
 
                               return (
                                 <div key={i} className="bg-[#1c1b1c] p-2 border border-[#4a4457]/50 flex items-start gap-2">
@@ -417,7 +438,7 @@ export default function Sidebar({
             >
               {isExportOpen ? '[-] SYSTEM DATA EXPORT' : '[+] SYSTEM DATA EXPORT'}
             </button>
-            
+
             {isExportOpen && (
               <div className="bg-[#1c1b1c] p-3 border-t border-[#4a4457]/50 space-y-3 animate-in slide-in-from-bottom-2 duration-200">
                 <div className="grid grid-cols-2 gap-2">
@@ -439,11 +460,10 @@ export default function Sidebar({
                   <button
                     onClick={handleCopyJson}
                     disabled={!data}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 border transition-all ${
-                      copyState === 'copied' 
-                      ? 'bg-[#50ffaf]/10 border-[#50ffaf]/50 text-[#50ffaf]' 
-                      : 'bg-[#0e0e0f] border-[#4a4457]/50 text-[#958da3] hover:text-[#d1bcff] hover:border-[#d1bcff]/30'
-                    }`}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 border transition-all ${copyState === 'copied'
+                        ? 'bg-[#50ffaf]/10 border-[#50ffaf]/50 text-[#50ffaf]'
+                        : 'bg-[#0e0e0f] border-[#4a4457]/50 text-[#958da3] hover:text-[#d1bcff] hover:border-[#d1bcff]/30'
+                      }`}
                     title="Copy Context to Clipboard"
                   >
                     <Copy size={12} />

@@ -351,13 +351,13 @@ export async function GET(req: Request) {
     }
 
     const active_fvgs = mapAndConsolidateFVGs(detectActiveFVGs(candles15m), detectActiveFVGs(candles5m));
-    const institutional_sponsorship = verifyDisplacement(candles15m);
+    const institutional_sponsorship = await verifyDisplacement(candles15m);
     const current_time_window = getCurrentKillzone();
 
     const trade_execution_parameters = generateTradeExecutionParameters(
       target_status,
       current_time_window,
-      institutional_sponsorship.status,
+      institutional_sponsorship,
       currentLivePrice,
       active_fvgs,
       resting_liquidity_pools
