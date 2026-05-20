@@ -1,11 +1,27 @@
 import { Candle } from './fvgEngine';
 
-export function verifyDisplacement(recentCandles: Candle[]) {
+export interface InstitutionalSponsorship {
+  status: 'ACTIVE_BULLISH' | 'ACTIVE_BEARISH' | 'INACTIVE';
+  anomaly_multiplier: number;
+  volume_delta: number;
+  statistical_validation: {
+    t_statistic: number;
+    p_value: number;
+    confidence_interval_95: boolean; // Must be TRUE to execute
+  };
+}
+
+export function verifyDisplacementOffline(recentCandles: Candle[]): InstitutionalSponsorship {
   if (recentCandles.length < 16) {
     return {
       status: 'INACTIVE',
       anomaly_multiplier: 0,
-      volume_delta: 0
+      volume_delta: 0,
+      statistical_validation: {
+        t_statistic: 0,
+        p_value: 1,
+        confidence_interval_95: false
+      }
     };
   }
 
@@ -46,6 +62,47 @@ export function verifyDisplacement(recentCandles: Candle[]) {
   return {
     status,
     anomaly_multiplier,
-    volume_delta
+    volume_delta,
+    statistical_validation: {
+      t_statistic: 0,
+      p_value: 1,
+      confidence_interval_95: false
+    }
   };
+}
+
+export async function verifyDisplacement(recentCandles: Candle[]): Promise<InstitutionalSponsorship> {
+  const localResult = verifyDisplacementOffline(recentCandles);
+  try {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 1200); // 1.2s rapid response threshold
+    
+    const response = await fetch('http://127.0.0.1:8000/calculate-displacement', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(recentCandles.map(c => ({
+        t: c.t,
+        o: c.o,
+        h: c.h,
+        l: c.l,
+        c: c.c,
+        v: c.v || ((c.taker_buy_vol || 0) + (c.taker_sell_vol || 0)),
+        taker_buy_vol: c.taker_buy_vol || 0,
+        taker_sell_vol: c.taker_sell_vol || 0,
+      }))),
+      signal: controller.signal
+    });
+    
+    clearTimeout(id);
+    if (response.ok) {
+      const data = await response.json();
+      return data as InstitutionalSponsorship;
+    }
+  } catch (error) {
+    // Silent fail back to local offline analytical engine
+  }
+  
+  return localResult;
 }
