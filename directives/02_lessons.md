@@ -27,8 +27,10 @@ Before modifying the Quant Logic, Order Flow Engine, or Prompt Builder, review t
 
 ### 6. FastAPI POST returning HTTP 405 in Vercel Production
 - **The Bug:** `verifyDisplacement` returned `HTTP Error: 405` in production when calling `/api/py/calculate-displacement`.
-- **The Cause:** In `next.config.ts`, the rewrite for `/api/py/:path*` was pointed to `/api/index`. Vercel's Edge routing can mishandle Next.js rewrites to `/api/index` (due to clean URLs creating a 308 redirect, or Next.js App Router intercepting the POST request and returning 405 because pages only accept GET).
-- **The Fix:** The Next.js rewrite destination for Vercel Python serverless functions MUST be `/api/` (the base directory mapped by `api/index.py`), not `/api/index`. This allows Vercel's ASGI wrapper to correctly pass the original `PATH_INFO` to FastAPI without triggering Next.js catch-all or Clean URL redirects.
+- **The Cause:** 
+  1. In `next.config.ts`, the rewrite for `/api/py/:path*` was pointed to `/api/index` which triggered Vercel Clean URL 308 redirects.
+  2. The `proxy.ts` (NextAuth middleware) was intercepting the server-to-server fetch. Because the `fetch` from the backend lacked user session cookies, the middleware treated it as unauthenticated and redirected it to `/login?callbackUrl=/api/py/calculate-displacement`. The `fetch` followed the redirect with a `POST` method, hitting `/login` which only accepts `GET`, resulting in `405 Method Not Allowed`.
+- **The Fix:** We added `isPyBackend` to the bypass list in `src/proxy.ts` to allow internal server-to-server fetches to `/api/py` to proceed without authentication. Additionally, we corrected the `next.config.ts` rewrite destination to `/api/` to avoid clean-URL redirect issues.
 
 ## 🛠️ Note to AI Agent:
 If you encounter a new bug and successfully fix it, YOU MUST prompt the user to update this `02_lessons.md` file with the new Post-Mortem.
