@@ -100,6 +100,7 @@ async def calculate_displacement(candles: List[CandleInput]):
     t_statistic = 0.0
     p_value = 1.0
     confidence_interval_95 = False
+    confidence_level = "LOW"
 
     if len(reg_df) >= 10:
         try:
@@ -113,8 +114,15 @@ async def calculate_displacement(candles: List[CandleInput]):
             t_statistic = float(results.tvalues.get('anomaly_multiplier', 0.0))
             p_value = float(results.pvalues.get('anomaly_multiplier', 1.0))
             
-            # 95% Confidence Interval validation: p-value < 0.05 and t_statistic > 1.96 (for positive displacement significance)
-            confidence_interval_95 = bool(p_value < 0.05 and t_statistic > 1.96)
+            if p_value < 0.05:
+                confidence_level = "HIGH"
+            elif p_value < 0.15:
+                confidence_level = "MEDIUM"
+            else:
+                confidence_level = "LOW"
+                
+            # Backward compatibility: Confidence Interval validation: p-value < 0.15 and t_statistic > 1.96
+            confidence_interval_95 = bool(p_value < 0.15 and t_statistic > 1.96)
         except Exception as e:
             # Handle collinearity/singular matrix errors gracefully in low-volatility situations
             pass
@@ -148,6 +156,7 @@ async def calculate_displacement(candles: List[CandleInput]):
         t_statistic = 0.0
     if np.isnan(p_value) or np.isinf(p_value):
         p_value = 1.0
+        confidence_level = "LOW"
 
     return DisplacementResponse(
         status=status,
@@ -156,6 +165,7 @@ async def calculate_displacement(candles: List[CandleInput]):
         statistical_validation={
             "t_statistic": float(round(t_statistic, 4)),
             "p_value": float(round(p_value, 4)),
+            "confidence_level": confidence_level,
             "confidence_interval_95": confidence_interval_95
         }
     )

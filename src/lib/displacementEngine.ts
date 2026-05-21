@@ -7,6 +7,7 @@ export interface InstitutionalSponsorship {
   statistical_validation: {
     t_statistic: number;
     p_value: number;
+    confidence_level: 'HIGH' | 'MEDIUM' | 'LOW';
     confidence_interval_95: boolean; // Must be TRUE to execute
   };
 }
@@ -20,6 +21,7 @@ export function verifyDisplacementOffline(recentCandles: Candle[]): Institutiona
       statistical_validation: {
         t_statistic: 0,
         p_value: 1,
+        confidence_level: 'LOW',
         confidence_interval_95: false
       }
     };
@@ -66,6 +68,7 @@ export function verifyDisplacementOffline(recentCandles: Candle[]): Institutiona
     statistical_validation: {
       t_statistic: 0,
       p_value: 1,
+      confidence_level: 'LOW',
       confidence_interval_95: false
     }
   };
