@@ -34,3 +34,8 @@ Before modifying the Quant Logic, Order Flow Engine, or Prompt Builder, review t
 
 ## 🛠️ Note to AI Agent:
 If you encounter a new bug and successfully fix it, YOU MUST prompt the user to update this `02_lessons.md` file with the new Post-Mortem.
+
+### 7. The Double-Alert & Double-Polling Hook Trap
+- **The Bug:** Notifications and audio alerts for market events (e.g., Session Transitions, Purges) were firing twice simultaneously. The frontend was also duplicating its API calls to the backend.
+- **The Cause:** The `useMarketData()` hook (which initializes `useLiveAlerts()`) was imported and called directly in both `page.tsx` and `NavigationHeader.tsx`. React created two independent hook instances, resulting in parallel API polling and duplicated alert triggers.
+- **The Fix:** We hoisted the market data state into a global React Context (`MarketDataContext`). `layout.tsx` now wraps the app in the provider (calling the hook exactly once), and child components safely consume the singleton data via `useMarketDataContext()`.

@@ -5,14 +5,14 @@ import { usePathname } from "next/navigation";
 import { useState, useCallback } from "react";
 import { Activity, History, TrendingUp, LayoutGrid, Settings, RotateCcw, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import MatrixConfigDrawer from "./MatrixConfigDrawer";
-import { useMarketData } from "@/hooks/useMarketData";
+import { useMarketDataContext } from "@/context/MarketDataContext";
 import { LiveTicker } from "./LiveTicker";
 
 type ResetStatus = 'idle' | 'loading' | 'success' | 'error';
 
 export function NavigationHeader() {
   const pathname = usePathname();
-  const { data } = useMarketData();
+  const { data } = useMarketDataContext();
   const [isMatrixOpen, setIsMatrixOpen] = useState(false);
   const [resetStatus, setResetStatus] = useState<ResetStatus>('idle');
 

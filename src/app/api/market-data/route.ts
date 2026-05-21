@@ -144,20 +144,51 @@ export async function GET(req: Request) {
     const asianLiquidity = getSessionLiquidityUTC(candles15m, 0, 7);
     const londonLiquidity = getSessionLiquidityUTC(candles15m, 7, 12);
 
-    // 2. Target Exhaustion
+    // 2. Target Exhaustion (Persistent Daily Sweeps)
     let target_status = "PENDING";
-    const last3_15m = candles15m.slice(-3);
-    for (const c of last3_15m) {
+    const currentDayStrForSweep = `${currentYear}-${currentMonth}-${currentDate}`;
+    
+    const todayCandles = candles15m.filter(c => {
+      const dUtc = getUtcDate(c.t);
+      return `${dUtc.getUTCFullYear()}-${dUtc.getUTCMonth()}-${dUtc.getUTCDate()}` === currentDayStrForSweep;
+    });
+
+    const sweeps: string[] = [];
+
+    // Check PDH/PDL Exhaustion across all today's candles
+    for (const c of todayCandles) {
       if (c.h >= pdh || c.l <= pdl) {
-        target_status = "EXHAUSTED";
-        break;
-      } else if (asianLiquidity.high && asianLiquidity.low) {
-        if (c.h >= asianLiquidity.high && c.h < pdh) {
-          target_status = "ASIAN_HIGH_SWEPT / PDH_PENDING";
-        } else if (c.l <= asianLiquidity.low && c.l > pdl) {
-          target_status = "ASIAN_LOW_SWEPT / PDL_PENDING";
-        }
+        sweeps.push("EXHAUSTED");
       }
+    }
+
+    // Check Asian sweeps (only candles at or after 07:00 UTC)
+    const afterAsianCandles = todayCandles.filter(c => getUtcDate(c.t).getUTCHours() >= 7);
+    for (const c of afterAsianCandles) {
+      if (asianLiquidity.high && c.h >= asianLiquidity.high && c.h < pdh) {
+        sweeps.push("ASIAN_HIGH_SWEPT");
+      }
+      if (asianLiquidity.low && c.l <= asianLiquidity.low && c.l > pdl) {
+        sweeps.push("ASIAN_LOW_SWEPT");
+      }
+    }
+
+    // Check London sweeps (only candles at or after 12:00 UTC)
+    const afterLondonCandles = todayCandles.filter(c => getUtcDate(c.t).getUTCHours() >= 12);
+    for (const c of afterLondonCandles) {
+      if (londonLiquidity.high && c.h >= londonLiquidity.high && c.h < pdh) {
+        sweeps.push("LONDON_HIGH_SWEPT");
+      }
+      if (londonLiquidity.low && c.l <= londonLiquidity.low && c.l > pdl) {
+        sweeps.push("LONDON_LOW_SWEPT");
+      }
+    }
+
+    if (sweeps.includes("EXHAUSTED")) {
+      target_status = "EXHAUSTED";
+    } else if (sweeps.length > 0) {
+      const uniqueSweeps = Array.from(new Set(sweeps));
+      target_status = uniqueSweeps.join(" | ") + " / PDH_PDL_PENDING";
     }
 
     // 5. True Day Open (07:00 Anchor)
