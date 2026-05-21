@@ -8,8 +8,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Flow-State Quant Engine V8.0",
-  description: "Flow-State Quant Engine V8.0",
+  title: "Flow-State Quant Engine V8.2",
+  description: "Flow-State Quant Engine V8.2",
 };
 import { NavigationHeader } from "@/components/NavigationHeader";
 import { Analytics } from "@vercel/analytics/next"

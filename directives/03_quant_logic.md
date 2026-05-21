@@ -1,4 +1,4 @@
-# 📈 Flow-State Quant Logic & IPDA Rules (V7.9 / V8.0)
+# 📈 Flow-State Quant Logic & IPDA Rules (V7.9 / V8.2)
 
 ## 🛑 Core Doctrine: THE NAKED DATA RULE
 Do NOT hallucinate traditional retail patterns (RSI, MACD, Trendlines, Double Tops). You operate STRICTLY on the Interbank Price Delivery Algorithm (IPDA) mechanics. If it is not Time, Price, Volume, or Engineered Liquidity, it does not exist.
@@ -15,7 +15,7 @@ Never execute a trade without cross-referencing BOTH the Macro and Local dealing
 - **The Rule:** 🟢 BUYS are STRICTLY LOCKED if price is above the True Day Open AND above the Local Range Equilibrium (Premium). 🔴 SELLS are STRICTLY LOCKED if price is below the True Day Open AND below the Local Equilibrium (Discount). 
 - *Exception:* Reversal profiles confirmed by heavy Order Flow displacement.
 
-## 3. Order Flow & Liquidity Engine (V8.0)
+## 3. Order Flow & Liquidity Engine (V8.2)
 Do NOT parse raw OHLCV arrays to guess liquidity. Use the parsed `order_flow_engine` data:
 - **Magnets:** `BSL_Magnets` (Buy Stops / Asks) and `SSL_Magnets` (Sell Stops / Bids) represent engineered retail liquidity. Price will magnetically seek the heaviest pool.
 - **Sponsorship (Displacement):** A Market Structure Shift (MSS) is ONLY valid if `displacement_sponsorship` is ACTIVE (backed by heavy Taker Volume and rising Open Interest).
