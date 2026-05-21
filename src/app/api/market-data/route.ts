@@ -97,28 +97,52 @@ export async function GET(req: Request) {
     const isPriceRising = candles15m.length > 1 && candles15m[candles15m.length - 1].c > candles15m[candles15m.length - 2].c;
     const { open_interest_trend, liquidation_events } = await fetchOIMetricsAndLiquidations(symbol, isPriceRising);
 
+    // Helper to get true UTC date from modified timestamp
+    const getUtcDate = (t: number) => new Date(t - utcPlus3OffsetMs);
+
     // 1. Macro Context
     const lastCandle = candles1h[candles1h.length - 1];
-    const lastDate = new Date(lastCandle.t);
-    const currentYear = lastDate.getUTCFullYear();
-    const currentMonth = lastDate.getUTCMonth();
-    const currentDate = lastDate.getUTCDate();
+    const lastDateUtc = getUtcDate(lastCandle.t);
+    const currentYear = lastDateUtc.getUTCFullYear();
+    const currentMonth = lastDateUtc.getUTCMonth();
+    const currentDate = lastDateUtc.getUTCDate();
 
-    const previousDayDate = new Date(Date.UTC(currentYear, currentMonth, currentDate - 1));
-    const prevYear = previousDayDate.getUTCFullYear();
-    const prevMonth = previousDayDate.getUTCMonth();
-    const prevDate = previousDayDate.getUTCDate();
+    const previousDayDateUtc = new Date(Date.UTC(currentYear, currentMonth, currentDate - 1));
+    const prevYear = previousDayDateUtc.getUTCFullYear();
+    const prevMonth = previousDayDateUtc.getUTCMonth();
+    const prevDate = previousDayDateUtc.getUTCDate();
 
     let pdh = 0;
     let pdl = Infinity;
     candles1h.forEach(c => {
-      const d = new Date(c.t);
-      if (d.getUTCFullYear() === prevYear && d.getUTCMonth() === prevMonth && d.getUTCDate() === prevDate) {
+      const dUtc = getUtcDate(c.t);
+      if (dUtc.getUTCFullYear() === prevYear && dUtc.getUTCMonth() === prevMonth && dUtc.getUTCDate() === prevDate) {
         if (c.h > pdh) pdh = c.h;
         if (c.l < pdl) pdl = c.l;
       }
     });
     if (pdl === Infinity) pdl = 0;
+
+    // 3. Killzone Stepped Liquidity (UTC based)
+    const getSessionLiquidityUTC = (candles: any[], startHourUTC: number, endHourUTC: number) => {
+      const currentDayStr = `${currentYear}-${currentMonth}-${currentDate}`;
+      const sessionCandles = candles.filter(c => {
+        const dUtc = getUtcDate(c.t);
+        const candleDayStr = `${dUtc.getUTCFullYear()}-${dUtc.getUTCMonth()}-${dUtc.getUTCDate()}`;
+        const hUtc = dUtc.getUTCHours();
+        return candleDayStr === currentDayStr && hUtc >= startHourUTC && hUtc < endHourUTC;
+      });
+
+      if (sessionCandles.length === 0) return { high: null, low: null };
+
+      return {
+        high: parseFloat(Math.max(...sessionCandles.map(c => c.h)).toFixed(2)),
+        low: parseFloat(Math.min(...sessionCandles.map(c => c.l)).toFixed(2))
+      };
+    };
+
+    const asianLiquidity = getSessionLiquidityUTC(candles15m, 0, 7);
+    const londonLiquidity = getSessionLiquidityUTC(candles15m, 7, 12);
 
     // 2. Target Exhaustion
     let target_status = "PENDING";
@@ -127,29 +151,14 @@ export async function GET(req: Request) {
       if (c.h >= pdh || c.l <= pdl) {
         target_status = "EXHAUSTED";
         break;
+      } else if (asianLiquidity.high && asianLiquidity.low) {
+        if (c.h >= asianLiquidity.high && c.h < pdh) {
+          target_status = "ASIAN_HIGH_SWEPT / PDH_PENDING";
+        } else if (c.l <= asianLiquidity.low && c.l > pdl) {
+          target_status = "ASIAN_LOW_SWEPT / PDL_PENDING";
+        }
       }
     }
-
-    // 3. Killzone Stepped Liquidity (UTC+3)
-    const getSessionLiquidity = (candles: any[], startHour: number, endHour: number) => {
-      const sessionCandles = candles.filter(c => {
-        const h = new Date(c.t).getUTCHours();
-        return h >= startHour && h < endHour;
-      });
-
-      if (sessionCandles.length === 0) return { high: null, low: null };
-
-      const latestSessionDate = new Date(sessionCandles[sessionCandles.length - 1].t).toDateString();
-      const latestSessionCandles = sessionCandles.filter(c => new Date(c.t).toDateString() === latestSessionDate);
-
-      return {
-        high: Math.max(...latestSessionCandles.map(c => c.h)),
-        low: Math.min(...latestSessionCandles.map(c => c.l))
-      };
-    };
-
-    const asianLiquidity = getSessionLiquidity(candles15m, 3, 7);
-    const londonLiquidity = getSessionLiquidity(candles15m, 9, 12);
 
     // 5. True Day Open (07:00 Anchor)
     let true_day_open_0700: number | null = null;
@@ -369,7 +378,17 @@ export async function GET(req: Request) {
       institutional_sponsorship,
       current_pricing,
       target_status,
-      macro_levels: { pdh, pdl },
+      macro_levels: { 
+        pdh, 
+        pdl,
+        asian_high: asianLiquidity.high,
+        asian_low: asianLiquidity.low,
+        true_day_open: true_day_open_0700
+      },
+      session_ranges: {
+        asian_range: asianLiquidity,
+        london_range: londonLiquidity
+      },
       historical_magnets,
       projected_targets,
       smt_traps,
