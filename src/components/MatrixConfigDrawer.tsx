@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Activity, ChevronRight, Magnet, Target, Clock, History } from 'lucide-react';
+import { useBinanceWS } from '@/hooks/useBinanceWS';
 
 export interface MatrixDataPayload {
   ipda_metrics?: {
@@ -59,6 +60,8 @@ interface MatrixConfigDrawerProps {
  * Wired to the V8.0 Ultimate Matrix List payload.
  */
 const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose, data }) => {
+  const { livePrice } = useBinanceWS();
+
   if (!isOpen) return null;
 
   const metrics = data?.ipda_metrics;
@@ -298,12 +301,18 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
                 </div>
                 <div className="grid grid-cols-2 gap-1.5">
                   {(liquidity?.BSL_Magnets || []).length > 0 ? (
-                    liquidity?.BSL_Magnets?.map((price, idx) => (
-                      <div key={`bsl-${idx}`} className="flex items-center justify-between bg-[#1c1b1c] border border-[#4a4457]/50 px-2.5 py-2 hover:border-[#50ffaf]/30 transition-colors cursor-pointer group">
-                        <ChevronRight size={10} className="text-[#958da3] group-hover:text-[#50ffaf] transition-colors" />
-                        <span className="text-xs font-mono text-[#e5e2e3] group-hover:text-[#e5e2e3]">{price.toFixed(2)}</span>
-                      </div>
-                    ))
+                    liquidity?.BSL_Magnets?.map((price, idx) => {
+                      const isPurged = livePrice !== null && livePrice >= price;
+                      return (
+                        <div key={`bsl-${idx}`} className={`flex items-center justify-between bg-[#1c1b1c] border ${isPurged ? 'border-dashed border-[#50ffaf]/30 opacity-60 col-span-2' : 'border-[#4a4457]/50 hover:border-[#50ffaf]/30'} px-2.5 py-2 transition-colors cursor-pointer group`}>
+                          <div className="flex items-center gap-1.5">
+                            <ChevronRight size={10} className={`transition-colors ${isPurged ? 'text-[#50ffaf]' : 'text-[#958da3] group-hover:text-[#50ffaf]'}`} />
+                            <span className={`text-xs font-mono ${isPurged ? 'text-[#50ffaf] line-through' : 'text-[#e5e2e3] group-hover:text-[#e5e2e3]'}`}>{price.toFixed(2)}</span>
+                          </div>
+                          {isPurged && <span className="text-[8px] text-[#50ffaf] font-black uppercase tracking-widest">[ PURGED 🧹 ]</span>}
+                        </div>
+                      );
+                    })
                   ) : (
                     <span className="text-[10px] text-[#958da3] italic font-mono col-span-2">Scanning for BSL...</span>
                   )}
@@ -320,12 +329,18 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
                 </div>
                 <div className="grid grid-cols-2 gap-1.5">
                   {(liquidity?.SSL_Magnets || []).length > 0 ? (
-                    liquidity?.SSL_Magnets?.map((price, idx) => (
-                      <div key={`ssl-${idx}`} className="flex items-center justify-between bg-[#1c1b1c] border border-[#4a4457]/50 px-2.5 py-2 hover:border-[#ffb4ab]/30 transition-colors cursor-pointer group">
-                        <ChevronRight size={10} className="text-[#958da3] group-hover:text-[#ffb4ab] transition-colors" />
-                        <span className="text-xs font-mono text-[#e5e2e3] group-hover:text-[#e5e2e3]">{price.toFixed(2)}</span>
-                      </div>
-                    ))
+                    liquidity?.SSL_Magnets?.map((price, idx) => {
+                      const isPurged = livePrice !== null && livePrice <= price;
+                      return (
+                        <div key={`ssl-${idx}`} className={`flex items-center justify-between bg-[#1c1b1c] border ${isPurged ? 'border-dashed border-[#ffb4ab]/30 opacity-60 col-span-2' : 'border-[#4a4457]/50 hover:border-[#ffb4ab]/30'} px-2.5 py-2 transition-colors cursor-pointer group`}>
+                          <div className="flex items-center gap-1.5">
+                            <ChevronRight size={10} className={`transition-colors ${isPurged ? 'text-[#ffb4ab]' : 'text-[#958da3] group-hover:text-[#ffb4ab]'}`} />
+                            <span className={`text-xs font-mono ${isPurged ? 'text-[#ffb4ab] line-through' : 'text-[#e5e2e3] group-hover:text-[#e5e2e3]'}`}>{price.toFixed(2)}</span>
+                          </div>
+                          {isPurged && <span className="text-[8px] text-[#ffb4ab] font-black uppercase tracking-widest">[ PURGED 🧹 ]</span>}
+                        </div>
+                      );
+                    })
                   ) : (
                     <span className="text-[10px] text-[#958da3] italic font-mono col-span-2">Scanning for SSL...</span>
                   )}

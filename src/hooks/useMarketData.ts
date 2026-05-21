@@ -31,28 +31,42 @@ export function useMarketData() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (isPolling = false) => {
     try {
-      setIsLoading(true);
+      if (!isPolling) {
+        setIsLoading(true);
+      }
       setError(null);
       const res = await fetch('/api/market-data');
       if (!res.ok) {
         throw new Error('Failed to fetch market data');
       }
       const jsonData: MarketDataPayload = await res.json();
-      const newData = { ...jsonData };
-      setData(newData);
-      console.log('State Updated with new data', newData);
+      
+      setData((prev) => {
+        if (!prev) return jsonData;
+        // Preserve data_payload reference during polling to prevent Chart remounting/flashing
+        return {
+          ...jsonData,
+          data_payload: isPolling ? prev.data_payload : jsonData.data_payload
+        };
+      });
     } catch (err: any) {
       setError(err.message || 'An error occurred');
     } finally {
-      setIsLoading(false);
+      if (!isPolling) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     fetchData();
-    // Intentionally only fetching once on mount as per V6 requirements.
+    // Added 5000ms polling to keep resting_liquidity_pools (BSL/SSL) fresh
+    const interval = setInterval(() => {
+      fetchData(true);
+    }, 5000);
+    return () => clearInterval(interval);
   }, [fetchData]);
 
   // Hook into live alerts: Triggers Binance WS, performs diffs, fires audio/push alerts
