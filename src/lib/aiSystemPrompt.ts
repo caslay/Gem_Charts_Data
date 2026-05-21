@@ -47,6 +47,12 @@ Your output MUST exactly match this schema:
     "invalidation_sl": "Exact price for Stop Loss",
     "take_profit_targets": ["TP1 price", "TP2 price"]
   },
+  "next_database_state": {
+    "status": "SEARCHING | PENDING_ALERT | ACTIVE_TRADE",
+    "trade_direction": "LONG | SHORT | null",
+    "invalidation_level": 1234.56,
+    "waiting_for_condition": "Note on what must happen next, or null"
+  },
   "narrative": "A brief 2-3 sentence explanation of the algorithmic logic behind your decision, referencing the OLS t-statistic and Order Flow. In your narrative, you MUST justify the logic by referencing the backend formulas: Explain the 'anomaly_multiplier' relative to the 2.5x threshold, mention if price is within the '$10 Danger Zone' of PDH/PDL, and clarify if the 'confidence_level' (High/Medium/Low) aligns with the statistical p-value tiers."
 }
 `;
