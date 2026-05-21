@@ -6,7 +6,8 @@
     "dev": "next dev -p 4000 --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "dev:api": "uvicorn api.index:app --reload --port 8000"
   },
   "dependencies": {
     "@auth/core": "^0.41.2",

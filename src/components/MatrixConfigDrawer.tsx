@@ -1,9 +1,24 @@
 import React from 'react';
 import { X, Activity, ChevronRight, Magnet, Target, Clock, History } from 'lucide-react';
+import { useBinanceWS } from '@/hooks/useBinanceWS';
 
 export interface MatrixDataPayload {
   ipda_metrics?: {
     true_day_open?: number | null;
+    target_status?: string;
+    session_ranges?: {
+      asian_range?: { high: number | null; low: number | null };
+      london_range?: { high: number | null; low: number | null };
+    };
+    macro_levels?: {
+      pdh?: number | null;
+      pdl?: number | null;
+      asian_high?: number | null;
+      asian_low?: number | null;
+      london_high?: number | null;
+      london_low?: number | null;
+      true_day_open?: number | null;
+    };
     historical_magnets?: {
       nearest_weekly_high?: number | null;
       nearest_weekly_low?: number | null;
@@ -45,6 +60,8 @@ interface MatrixConfigDrawerProps {
  * Wired to the V8.0 Ultimate Matrix List payload.
  */
 const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose, data }) => {
+  const { livePrice } = useBinanceWS();
+
   if (!isOpen) return null;
 
   const metrics = data?.ipda_metrics;
@@ -52,6 +69,20 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
   const targets = metrics?.projected_targets;
   const range = metrics?.pricing_context?.local_dealing_range;
   const liquidity = metrics?.order_flow_engine?.resting_liquidity_pools;
+
+  const targetStatus = metrics?.target_status || "";
+  const sessionRanges = metrics?.session_ranges;
+  const macroLevels = metrics?.macro_levels;
+
+  const isAsianHighSwept = targetStatus.includes("ASIAN_HIGH_SWEPT");
+  const isAsianLowSwept = targetStatus.includes("ASIAN_LOW_SWEPT");
+  const isLondonHighSwept = targetStatus.includes("LONDON_HIGH_SWEPT");
+  const isLondonLowSwept = targetStatus.includes("LONDON_LOW_SWEPT");
+
+  const asianHigh = sessionRanges?.asian_range?.high ?? macroLevels?.asian_high;
+  const asianLow = sessionRanges?.asian_range?.low ?? macroLevels?.asian_low;
+  const londonHigh = sessionRanges?.london_range?.high ?? macroLevels?.london_high;
+  const londonLow = sessionRanges?.london_range?.low ?? macroLevels?.london_low;
 
   const formatPrice = (price: number | null | undefined) => 
     price != null ? price.toFixed(2) : 'N/A';
@@ -115,6 +146,53 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
                   <div className="bg-[#1c1b1c] border border-[#4a4457]/50 p-2.5">
                     <span className="block text-[8px] text-[#958da3] mb-1 font-bold">LOW</span>
                     <span className="text-xs font-mono text-[#e5e2e3]">{formatPrice(range?.low)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Section 1.5: Session Liquidity Status */}
+          <section className="p-5 border-b border-[#4a4457]/50 bg-[#1c1b1c]/10">
+            <div className="flex items-center gap-2 mb-4">
+              <Activity size={14} className="text-[#958da3]" />
+              <h3 className="text-[11px] text-[#958da3] font-bold uppercase tracking-[0.1em]">Session Liquidity</h3>
+            </div>
+            <div className="space-y-4">
+              {/* Asian Session */}
+              <div className="space-y-2">
+                <span className="text-[10px] text-[#958da3] font-bold uppercase tracking-tight border-l-2 border-[#4a4457]/50 pl-2">Asian Range</span>
+                <div className="grid grid-cols-1 gap-1">
+                  <div className="flex justify-between py-1 border-b border-white/5 items-center">
+                    <span className="text-[11px] font-mono text-[#958da3]">High:</span>
+                    <span className={`text-[11px] font-mono ${isAsianHighSwept ? "text-[#ffb4ab] font-bold" : "text-[#958da3]"}`}>
+                      {formatPrice(asianHigh)} {isAsianHighSwept && "[ PURGED 🧹 ]"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/5 items-center">
+                    <span className="text-[11px] font-mono text-[#958da3]">Low:</span>
+                    <span className={`text-[11px] font-mono ${isAsianLowSwept ? "text-[#50ffaf] font-bold" : "text-[#958da3]"}`}>
+                      {formatPrice(asianLow)} {isAsianLowSwept && "[ PURGED 🧹 ]"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* London Session */}
+              <div className="space-y-2">
+                <span className="text-[10px] text-[#958da3] font-bold uppercase tracking-tight border-l-2 border-[#4a4457]/50 pl-2">London Range</span>
+                <div className="grid grid-cols-1 gap-1">
+                  <div className="flex justify-between py-1 border-b border-white/5 items-center">
+                    <span className="text-[11px] font-mono text-[#958da3]">High:</span>
+                    <span className={`text-[11px] font-mono ${isLondonHighSwept ? "text-[#ffb4ab] font-bold" : "text-[#958da3]"}`}>
+                      {formatPrice(londonHigh)} {isLondonHighSwept && "[ PURGED 🧹 ]"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/5 items-center">
+                    <span className="text-[11px] font-mono text-[#958da3]">Low:</span>
+                    <span className={`text-[11px] font-mono ${isLondonLowSwept ? "text-[#50ffaf] font-bold" : "text-[#958da3]"}`}>
+                      {formatPrice(londonLow)} {isLondonLowSwept && "[ PURGED 🧹 ]"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -223,12 +301,18 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
                 </div>
                 <div className="grid grid-cols-2 gap-1.5">
                   {(liquidity?.BSL_Magnets || []).length > 0 ? (
-                    liquidity?.BSL_Magnets?.map((price, idx) => (
-                      <div key={`bsl-${idx}`} className="flex items-center justify-between bg-[#1c1b1c] border border-[#4a4457]/50 px-2.5 py-2 hover:border-[#50ffaf]/30 transition-colors cursor-pointer group">
-                        <ChevronRight size={10} className="text-[#958da3] group-hover:text-[#50ffaf] transition-colors" />
-                        <span className="text-xs font-mono text-[#e5e2e3] group-hover:text-[#e5e2e3]">{price.toFixed(2)}</span>
-                      </div>
-                    ))
+                    liquidity?.BSL_Magnets?.map((price, idx) => {
+                      const isPurged = livePrice !== null && livePrice >= price;
+                      return (
+                        <div key={`bsl-${idx}`} className={`flex items-center justify-between bg-[#1c1b1c] border ${isPurged ? 'border-dashed border-[#50ffaf]/30 opacity-60 col-span-2' : 'border-[#4a4457]/50 hover:border-[#50ffaf]/30'} px-2.5 py-2 transition-colors cursor-pointer group`}>
+                          <div className="flex items-center gap-1.5">
+                            <ChevronRight size={10} className={`transition-colors ${isPurged ? 'text-[#50ffaf]' : 'text-[#958da3] group-hover:text-[#50ffaf]'}`} />
+                            <span className={`text-xs font-mono ${isPurged ? 'text-[#50ffaf] line-through' : 'text-[#e5e2e3] group-hover:text-[#e5e2e3]'}`}>{price.toFixed(2)}</span>
+                          </div>
+                          {isPurged && <span className="text-[8px] text-[#50ffaf] font-black uppercase tracking-widest">[ PURGED 🧹 ]</span>}
+                        </div>
+                      );
+                    })
                   ) : (
                     <span className="text-[10px] text-[#958da3] italic font-mono col-span-2">Scanning for BSL...</span>
                   )}
@@ -245,12 +329,18 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
                 </div>
                 <div className="grid grid-cols-2 gap-1.5">
                   {(liquidity?.SSL_Magnets || []).length > 0 ? (
-                    liquidity?.SSL_Magnets?.map((price, idx) => (
-                      <div key={`ssl-${idx}`} className="flex items-center justify-between bg-[#1c1b1c] border border-[#4a4457]/50 px-2.5 py-2 hover:border-[#ffb4ab]/30 transition-colors cursor-pointer group">
-                        <ChevronRight size={10} className="text-[#958da3] group-hover:text-[#ffb4ab] transition-colors" />
-                        <span className="text-xs font-mono text-[#e5e2e3] group-hover:text-[#e5e2e3]">{price.toFixed(2)}</span>
-                      </div>
-                    ))
+                    liquidity?.SSL_Magnets?.map((price, idx) => {
+                      const isPurged = livePrice !== null && livePrice <= price;
+                      return (
+                        <div key={`ssl-${idx}`} className={`flex items-center justify-between bg-[#1c1b1c] border ${isPurged ? 'border-dashed border-[#ffb4ab]/30 opacity-60 col-span-2' : 'border-[#4a4457]/50 hover:border-[#ffb4ab]/30'} px-2.5 py-2 transition-colors cursor-pointer group`}>
+                          <div className="flex items-center gap-1.5">
+                            <ChevronRight size={10} className={`transition-colors ${isPurged ? 'text-[#ffb4ab]' : 'text-[#958da3] group-hover:text-[#ffb4ab]'}`} />
+                            <span className={`text-xs font-mono ${isPurged ? 'text-[#ffb4ab] line-through' : 'text-[#e5e2e3] group-hover:text-[#e5e2e3]'}`}>{price.toFixed(2)}</span>
+                          </div>
+                          {isPurged && <span className="text-[8px] text-[#ffb4ab] font-black uppercase tracking-widest">[ PURGED 🧹 ]</span>}
+                        </div>
+                      );
+                    })
                   ) : (
                     <span className="text-[10px] text-[#958da3] italic font-mono col-span-2">Scanning for SSL...</span>
                   )}

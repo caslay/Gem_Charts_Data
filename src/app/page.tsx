@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMarketData } from '@/hooks/useMarketData';
+import { useMarketDataContext } from '@/context/MarketDataContext';
 import Chart from '@/components/Chart';
 import Sidebar from '@/components/Sidebar';
 import SmartAlertsToast from '@/components/SmartAlertsToast';
@@ -10,7 +10,7 @@ import { Loader2, Menu } from 'lucide-react';
 type Timeframe = '5m' | '15m' | '1h';
 
 export default function Home() {
-  const { data, isLoading, error, downloadV6, downloadV7Sliced, activeAlerts, dismissAlert } = useMarketData();
+  const { data, isLoading, error, downloadV6, downloadV7Sliced, activeAlerts, dismissAlert } = useMarketDataContext();
   const [timeframe, setTimeframe] = useState<Timeframe>('5m');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });

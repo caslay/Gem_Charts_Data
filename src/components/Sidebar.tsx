@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { DownloadCloud, TrendingUp, Activity, X, Brain, Zap, Target, Magnet, BarChart3, Terminal, Loader2, Copy, Download } from 'lucide-react';
+import { useBinanceWS } from '@/hooks/useBinanceWS';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
 
 // ─── Slicing Helper ──────────────────────────────────────────────────────────
@@ -56,6 +57,7 @@ export default function Sidebar({
   isOpen,
   onClose,
 }: SidebarProps) {
+  const { livePrice } = useBinanceWS();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [isExportOpen, setIsExportOpen] = useState(false);
@@ -277,15 +279,31 @@ export default function Sidebar({
               <div className="space-y-4">
                 <div className="space-y-1.5">
                   <span className="text-[9px] font-black text-[#50ffaf] uppercase tracking-tighter">BSL Targets</span>
-                  <p className="text-xs font-mono text-[#e5e2e3] break-words leading-relaxed text-wrap">
-                    {orderFlow?.resting_liquidity_pools?.BSL_Magnets?.map((p: number) => p.toFixed(2)).join(', ') || 'N/A'}
-                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {orderFlow?.resting_liquidity_pools?.BSL_Magnets?.length ? orderFlow.resting_liquidity_pools.BSL_Magnets.map((p: number, idx: number) => {
+                      const isPurged = livePrice !== null && livePrice >= p;
+                      return (
+                        <span key={idx} className={`text-xs font-mono ${isPurged ? 'text-[#50ffaf] line-through opacity-60' : 'text-[#e5e2e3]'}`}>
+                          {p.toFixed(2)} {isPurged && <span className="text-[8px] text-[#50ffaf] no-underline font-black tracking-widest">[ PURGED 🧹 ]</span>}
+                          {idx < orderFlow.resting_liquidity_pools.BSL_Magnets.length - 1 && <span className="text-[#958da3] no-underline ml-1">,</span>}
+                        </span>
+                      );
+                    }) : <span className="text-xs font-mono text-[#958da3]">N/A</span>}
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <span className="text-[9px] font-black text-[#ffb4ab] uppercase tracking-tighter">SSL Targets</span>
-                  <p className="text-xs font-mono text-[#e5e2e3] break-words leading-relaxed text-wrap">
-                    {orderFlow?.resting_liquidity_pools?.SSL_Magnets?.map((p: number) => p.toFixed(2)).join(', ') || 'N/A'}
-                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {orderFlow?.resting_liquidity_pools?.SSL_Magnets?.length ? orderFlow.resting_liquidity_pools.SSL_Magnets.map((p: number, idx: number) => {
+                      const isPurged = livePrice !== null && livePrice <= p;
+                      return (
+                        <span key={idx} className={`text-xs font-mono ${isPurged ? 'text-[#ffb4ab] line-through opacity-60' : 'text-[#e5e2e3]'}`}>
+                          {p.toFixed(2)} {isPurged && <span className="text-[8px] text-[#ffb4ab] no-underline font-black tracking-widest">[ PURGED 🧹 ]</span>}
+                          {idx < orderFlow.resting_liquidity_pools.SSL_Magnets.length - 1 && <span className="text-[#958da3] no-underline ml-1">,</span>}
+                        </span>
+                      );
+                    }) : <span className="text-xs font-mono text-[#958da3]">N/A</span>}
+                  </div>
                 </div>
               </div>
             </div>

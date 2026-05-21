@@ -58,7 +58,7 @@ export function generateTradeExecutionParameters(
 
   if (target_status === "EXHAUSTED" || current_time_window === "DEAD_ZONE") {
     risk_mode = "HALF_RISK_OR_STAND_DOWN";
-  } else if (target_status === "PENDING" && isSponsorshipActive) {
+  } else if (target_status.includes("PENDING") && isSponsorshipActive) {
     if (isConfidenceValidated) {
       risk_mode = "FULL_MACRO_RISK";
     } else {
