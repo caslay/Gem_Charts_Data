@@ -57,7 +57,7 @@ interface MatrixConfigDrawerProps {
 
 /**
  * MatrixConfigDrawer - Phase 3 (Live Data Binding)
- * Wired to the V8.0 Ultimate Matrix List payload.
+ * Wired to the V8.2 Ultimate Matrix List payload.
  */
 const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose, data }) => {
   const { livePrice } = useBinanceWS();
@@ -84,30 +84,30 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
   const londonHigh = sessionRanges?.london_range?.high ?? macroLevels?.london_high;
   const londonLow = sessionRanges?.london_range?.low ?? macroLevels?.london_low;
 
-  const formatPrice = (price: number | null | undefined) => 
+  const formatPrice = (price: number | null | undefined) =>
     price != null ? price.toFixed(2) : 'N/A';
 
   return (
     <>
       {/* Backdrop Overlay */}
-      <div 
+      <div
         className="fixed inset-0 bg-[#0e0e0f]/60 backdrop-blur-sm z-[100] transition-opacity duration-300 ease-in-out"
         onClick={onClose}
       />
-      
+
       {/* Drawer Container */}
       <div className="fixed top-0 right-0 h-screen w-96 z-[101] bg-[#0e0e0f] border-l border-[#4a4457]/50 shadow-2xl flex flex-col font-sans overflow-hidden animate-in slide-in-from-right duration-300">
-        
+
         {/* Drawer Header */}
         <div className="flex items-center justify-between p-4 border-b border-[#4a4457]/50 bg-[#1c1b1c]">
           <div className="flex items-center gap-2">
-            <h2 className="text-[#e5e2e3] text-xs font-bold tracking-[0.15em] uppercase">IPDA MATRIX BASIN (V8.0)</h2>
+            <h2 className="text-[#e5e2e3] text-xs font-bold tracking-[0.15em] uppercase">IPDA MATRIX BASIN (V8.2)</h2>
             <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#50ffaf]/20 border border-[#50ffaf]/30">
               <span className="w-1.5 h-1.5 bg-[#50ffaf] animate-pulse rounded-full" />
               <span className="text-[9px] text-[#50ffaf] font-mono font-bold tracking-tight">LIVE SYNC</span>
             </div>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="text-[#958da3] hover:text-[#e5e2e3] transition-colors p-1 group"
             aria-label="Close drawer"
@@ -118,7 +118,7 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
 
         {/* Scrollable Content Area */}
         <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[#4a4457]/50 scrollbar-track-transparent">
-          
+
           {/* Section 1: Temporal Context */}
           <section className="p-5 border-b border-[#4a4457]/50">
             <div className="flex items-center gap-2 mb-4">
@@ -177,7 +177,7 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
                   </div>
                 </div>
               </div>
-              
+
               {/* London Session */}
               <div className="space-y-2">
                 <span className="text-[10px] text-[#958da3] font-bold uppercase tracking-tight border-l-2 border-[#4a4457]/50 pl-2">London Range</span>
@@ -354,7 +354,7 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
         {/* Footer Stats Bar */}
         <div className="p-3 bg-[#1c1b1c] border-t border-[#4a4457]/50 flex justify-between items-center px-5">
           <div className="flex items-center gap-3">
-            <span className="text-[9px] text-[#958da3] font-mono uppercase tracking-widest">V8.0 ENGINE</span>
+            <span className="text-[9px] text-[#958da3] font-mono uppercase tracking-widest">V8.2 ENGINE</span>
             <span className="w-1 h-1 bg-zinc-800 rounded-full" />
             <span className="text-[9px] text-[#958da3] font-mono">STATUS: {data ? 'CONNECTED' : 'STANDBY'}</span>
           </div>

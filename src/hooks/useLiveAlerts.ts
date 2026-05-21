@@ -17,7 +17,7 @@ export function useLiveAlerts(
   const cooldownsRef = useRef<Record<string, number>>({});
   const refetchRef = useRef(refetch);
 
-  // Transition Tracking Refs (V8.0 Protocol)
+  // Transition Tracking Refs (V8.2 Protocol)
   const prevPricingRef = useRef<string | null>(null);
   const prevTargetStatusRef = useRef<string | null>(null);
   const prevSponsorshipRef = useRef<string | null>(null);
@@ -77,7 +77,7 @@ export function useLiveAlerts(
     const oldData = prevDataRef.current;
     const newData = data;
 
-    // --- V8.0 STATE-TRANSITION PROTOCOLS ---
+    // --- V8.2 STATE-TRANSITION PROTOCOLS ---
     const ipda = newData.ipda_metrics || {};
 
     // 1. Pricing Context Alert

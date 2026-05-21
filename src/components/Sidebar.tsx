@@ -33,7 +33,7 @@ export function slicePayloadByLookback(
 
 // ─── AI Prompt Prefix ────────────────────────────────────────────────────────
 const AI_PROMPT_PREFIX =
-  'Act as the Institutional Flow Synthesizer V8.0. Analyze the following quantitative data and provide a mechanical bias report: \n\n';
+  'Act as the Institutional Flow Synthesizer V8.2. Analyze the following quantitative data and provide a mechanical bias report: \n\n';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
@@ -67,12 +67,49 @@ export default function Sidebar({
   const metrics = data?.ipda_metrics;
 
   let parsedAiResponse: any = null;
+  let hudData: any = null;
+  let aiNote: { title: string, text: string } | null = null;
+  let tvAlerts: any[] = [];
+
   if (aiAnalysis) {
     try {
-      const candidate = aiAnalysis.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)?.[1] || aiAnalysis;
+      // Robust JSON extraction
+      let candidate = aiAnalysis.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)?.[1];
+      if (!candidate) {
+        const start = aiAnalysis.indexOf('{');
+        const end = aiAnalysis.lastIndexOf('}');
+        if (start !== -1 && end !== -1 && end > start) {
+          candidate = aiAnalysis.slice(start, end + 1);
+        } else {
+          candidate = aiAnalysis;
+        }
+      }
       parsedAiResponse = JSON.parse(candidate.trim());
+
+      // Support BOTH old hud_display format and new V8.2 diagnostics/execution format
+      if (parsedAiResponse?.hud_display) {
+        hudData = { ...parsedAiResponse.hud_display };
+        const noteKey = Object.keys(hudData).find(k => k.toLowerCase().includes('note'));
+        if (noteKey) {
+          aiNote = { title: noteKey, text: hudData[noteKey] as string };
+          delete hudData[noteKey]; // Remove note from table
+        }
+      } else if (parsedAiResponse?.diagnostics || parsedAiResponse?.execution) {
+        hudData = {
+          ...(parsedAiResponse.diagnostics || {}),
+          ...(parsedAiResponse.execution || {})
+        };
+        if (parsedAiResponse.narrative) {
+          aiNote = { title: '💡 AI Quant Note', text: parsedAiResponse.narrative };
+        }
+      }
+
+      if (Array.isArray(parsedAiResponse?.tradingview_alerts)) {
+        tvAlerts = parsedAiResponse.tradingview_alerts;
+      }
     } catch (e) {
       // Failed to parse, it will be treated as raw
+      console.error('[HUD] Failed to parse AI Analysis JSON:', e);
     }
   }
 
@@ -182,8 +219,8 @@ export default function Sidebar({
                 <div className="flex justify-between items-center pt-1">
                   <span className="text-[10px] text-[#958da3] uppercase font-black tracking-tighter">Status</span>
                   <span className={`px-2 py-0.5 text-[10px] font-black rounded-none border ${pricing === 'PREMIUM' ? 'bg-[#ffb4ab]/10 text-[#ffb4ab] border-[#ffb4ab]/30' :
-                      pricing === 'DISCOUNT' ? 'bg-[#50ffaf]/10 text-[#50ffaf] border-[#50ffaf]/30' :
-                        'bg-zinc-800/10 text-[#958da3] border-[#4a4457]/50'
+                    pricing === 'DISCOUNT' ? 'bg-[#50ffaf]/10 text-[#50ffaf] border-[#50ffaf]/30' :
+                      'bg-zinc-800/10 text-[#958da3] border-[#4a4457]/50'
                     }`}>
                     {pricing || 'SCANNING'}
                   </span>
@@ -225,7 +262,7 @@ export default function Sidebar({
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] text-[#958da3]">OI Trend</span>
                   <span className={`text-[10px] font-bold ${orderFlow?.open_interest_trend === 'BULLISH' ? 'text-[#50ffaf]' :
-                      orderFlow?.open_interest_trend === 'BEARISH' ? 'text-[#ffb4ab]' : 'text-[#958da3]'
+                    orderFlow?.open_interest_trend === 'BEARISH' ? 'text-[#ffb4ab]' : 'text-[#958da3]'
                     }`}>
                     {orderFlow?.open_interest_trend || 'NEUTRAL'}
                   </span>
@@ -233,7 +270,7 @@ export default function Sidebar({
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] text-[#958da3]">Displacement</span>
                   <span className={`text-[10px] font-bold ${metrics?.institutional_sponsorship?.status?.includes('BULLISH') ? 'text-[#50ffaf]' :
-                      metrics?.institutional_sponsorship?.status?.includes('BEARISH') ? 'text-[#ffb4ab]' : 'text-[#958da3]'
+                    metrics?.institutional_sponsorship?.status?.includes('BEARISH') ? 'text-[#ffb4ab]' : 'text-[#958da3]'
                     }`}>
                     {metrics?.institutional_sponsorship?.status || 'INACTIVE'}
                   </span>
@@ -342,20 +379,19 @@ export default function Sidebar({
 
               <div className="flex-1 p-3 overflow-y-auto bg-[#0e0e0f] font-mono scrollbar-thin scrollbar-thumb-[#4a4457]/50">
                 {aiAnalysis ? (
-                  activeTab === 'HUD' && parsedAiResponse?.hud_display ? (
+                  activeTab === 'HUD' && hudData ? (
                     <div className="space-y-4">
                       {/* HUD Table */}
                       <div className="border border-[#4a4457]/50 rounded-none overflow-hidden">
                         <table className="w-full text-left border-collapse">
                           <tbody>
-                            {Object.entries(parsedAiResponse.hud_display).map(([key, value]) => {
-                              if (key.toLowerCase().includes('note')) return null;
-
+                            {Object.entries(hudData).map(([key, value]) => {
                               let colorClass = 'text-[#e5e2e3]';
-                              const vStr = String(value).toUpperCase();
-                              if (vStr.includes('BUY') || vStr.includes('LONG') || vStr.includes('BULLISH') || vStr.includes('STRONG')) colorClass = 'text-[#50ffaf]';
-                              else if (vStr.includes('SELL') || vStr.includes('SHORT') || vStr.includes('BEARISH') || vStr.includes('WEAK')) colorClass = 'text-[#ffb4ab]';
-                              else if (vStr.includes('STAND DOWN') || vStr.includes('NEUTRAL') || vStr.includes('NONE')) colorClass = 'text-[#958da3]';
+                              const vStr = Array.isArray(value) ? value.join(', ') : String(value).toUpperCase();
+
+                              if (vStr.includes('BUY') || vStr.includes('LONG') || vStr.includes('BULLISH') || vStr.includes('STRONG') || vStr.includes('FULL_RISK')) colorClass = 'text-[#50ffaf]';
+                              else if (vStr.includes('SELL') || vStr.includes('SHORT') || vStr.includes('BEARISH') || vStr.includes('WEAK') || vStr.includes('ABORT')) colorClass = 'text-[#ffb4ab]';
+                              else if (vStr.includes('STAND DOWN') || vStr.includes('NEUTRAL') || vStr.includes('NONE') || vStr.includes('WAIT')) colorClass = 'text-[#958da3]';
 
                               const displayKey = key.replace(/_/g, ' ').toUpperCase();
                               return (
@@ -364,7 +400,7 @@ export default function Sidebar({
                                     {displayKey}
                                   </td>
                                   <td className={`p-2 text-[10px] font-bold ${colorClass}`}>
-                                    {String(value)}
+                                    {Array.isArray(value) ? value.join(', ') : String(value)}
                                   </td>
                                 </tr>
                               );
@@ -374,25 +410,25 @@ export default function Sidebar({
                       </div>
 
                       {/* AI Note */}
-                      {Object.keys(parsedAiResponse.hud_display).find(k => k.toLowerCase().includes('note')) && (
+                      {aiNote && (
                         <div className="bg-[#1c1b1c] p-2 border border-[#4a4457]/50">
                           <span className="text-[9px] font-black text-[#d1bcff] uppercase tracking-widest block mb-1">
-                            {Object.keys(parsedAiResponse.hud_display).find(k => k.toLowerCase().includes('note'))}
+                            {aiNote.title}
                           </span>
                           <p className="text-[10px] text-[#e5e2e3] italic leading-relaxed">
-                            {parsedAiResponse.hud_display[Object.keys(parsedAiResponse.hud_display).find(k => k.toLowerCase().includes('note')) as string] as string}
+                            {aiNote.text}
                           </p>
                         </div>
                       )}
 
                       {/* TradingView Alerts */}
-                      {Array.isArray(parsedAiResponse.tradingview_alerts) && parsedAiResponse.tradingview_alerts.length > 0 && (
+                      {tvAlerts.length > 0 && (
                         <div className="space-y-1">
                           <span className="text-[9px] font-black text-[#958da3] uppercase tracking-widest block mb-2">
                             TradingView Alerts
                           </span>
                           <div className="flex flex-col gap-1.5">
-                            {parsedAiResponse.tradingview_alerts.map((alert: any, i: number) => {
+                            {tvAlerts.map((alert: any, i: number) => {
                               const displayAlert = typeof alert === 'object' && alert !== null && alert.price && alert.reason
                                 ? `${alert.price} - ${alert.reason}`
                                 : typeof alert === 'string'
@@ -479,8 +515,8 @@ export default function Sidebar({
                     onClick={handleCopyJson}
                     disabled={!data}
                     className={`flex-1 flex items-center justify-center gap-2 py-2 border transition-all ${copyState === 'copied'
-                        ? 'bg-[#50ffaf]/10 border-[#50ffaf]/50 text-[#50ffaf]'
-                        : 'bg-[#0e0e0f] border-[#4a4457]/50 text-[#958da3] hover:text-[#d1bcff] hover:border-[#d1bcff]/30'
+                      ? 'bg-[#50ffaf]/10 border-[#50ffaf]/50 text-[#50ffaf]'
+                      : 'bg-[#0e0e0f] border-[#4a4457]/50 text-[#958da3] hover:text-[#d1bcff] hover:border-[#d1bcff]/30'
                       }`}
                     title="Copy Context to Clipboard"
                   >
@@ -493,10 +529,10 @@ export default function Sidebar({
                     onClick={() => onDownloadV7Sliced(counts)}
                     disabled={!data}
                     className="flex-1 flex items-center justify-center gap-2 py-2 bg-[#0e0e0f] border border-[#4a4457]/50 text-[#958da3] hover:text-[#d1bcff] hover:border-[#d1bcff]/30 transition-all"
-                    title="Download Sliced V8.0 JSON"
+                    title="Download Sliced V8.2 JSON"
                   >
                     <Download size={12} />
-                    <span className="text-[9px] font-black uppercase tracking-widest">DL V8.0</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">DL V8.2</span>
                   </button>
                 </div>
               </div>

@@ -53,7 +53,7 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 <span className="text-[9px] font-bold text-[#958da3] uppercase tracking-widest">Institutional Flow</span>
                 <span className="px-1.5 py-0.5 bg-[#d1bcff]/10 text-[8px] font-black text-[#d1bcff] border border-[#d1bcff]/20 leading-none">
-                  V8.0
+                  V8.2
                 </span>
               </div>
             </div>
@@ -112,8 +112,8 @@ export default function Home() {
             <div className="w-full h-full rounded-2xl overflow-hidden border border-[#4a4457]/50 bg-[#1c1b1c]/80 backdrop-blur-xl shadow-2xl relative group">
               {/* Subtle inner glow for chart container */}
               <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(255,255,255,0.02)] pointer-events-none z-10" />
-              <Chart 
-                data={getChartData()} 
+              <Chart
+                data={getChartData()}
                 activeFvgs={data?.ipda_metrics?.active_fvgs || []}
                 localDealingRange={data?.ipda_metrics?.pricing_context?.local_dealing_range}
                 interval={timeframe}

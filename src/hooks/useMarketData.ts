@@ -42,7 +42,7 @@ export function useMarketData() {
         throw new Error('Failed to fetch market data');
       }
       const jsonData: MarketDataPayload = await res.json();
-      
+
       setData((prev) => {
         if (!prev) return jsonData;
         // Preserve data_payload reference during polling to prevent Chart remounting/flashing
@@ -86,7 +86,7 @@ export function useMarketData() {
     triggerDownload(v6Data, `V6_Naked_Data_${data.ticker}.json`);
   }, [data]);
 
-  // ── V8.0 Enriched — sliced by candle counts ───────────────────────────────
+  // ── V8.2 Enriched — sliced by candle counts ───────────────────────────────
   const downloadV7Sliced = useCallback(
     (counts: { '5m': number, '15m': number, '1h': number, '4h': number }) => {
       if (!data) return;
@@ -114,7 +114,7 @@ export function useMarketData() {
       const minutesStr = minutes < 10 ? '0' + minutes : minutes.toString();
       const timeString = `${hoursStr}-${minutesStr}-${ampm}`;
 
-      triggerDownload(v7Data, `V8.0_Enriched_Data_${data.ticker}_${timeString}.json`);
+      triggerDownload(v7Data, `V8.2_Enriched_Data_${data.ticker}_${timeString}.json`);
     },
     [data]
   );

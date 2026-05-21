@@ -147,7 +147,7 @@ export async function GET(req: Request) {
     // 2. Target Exhaustion (Persistent Daily Sweeps)
     let target_status = "PENDING";
     const currentDayStrForSweep = `${currentYear}-${currentMonth}-${currentDate}`;
-    
+
     const todayCandles = candles15m.filter(c => {
       const dUtc = getUtcDate(c.t);
       return `${dUtc.getUTCFullYear()}-${dUtc.getUTCMonth()}-${dUtc.getUTCDate()}` === currentDayStrForSweep;
@@ -311,7 +311,7 @@ export async function GET(req: Request) {
       return "DEAD_ZONE";
     };
 
-    // 11. Local Dealing Range & Dual-Pricing Context (V8.0)
+    // 11. Local Dealing Range & Dual-Pricing Context (V8.2)
     //     c.t already has +3h baked in, so getUTCHours() reads Cairo local time.
     const todayCairo = new Date(lastCandle.t); // reference from last 1h candle
     const todayDayStr = `${todayCairo.getUTCFullYear()}-${todayCairo.getUTCMonth()}-${todayCairo.getUTCDate()}`;
@@ -409,8 +409,8 @@ export async function GET(req: Request) {
       institutional_sponsorship,
       current_pricing,
       target_status,
-      macro_levels: { 
-        pdh, 
+      macro_levels: {
+        pdh,
         pdl,
         asian_high: asianLiquidity.high,
         asian_low: asianLiquidity.low,

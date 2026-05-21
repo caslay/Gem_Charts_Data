@@ -22,7 +22,7 @@ if hasattr(sys.stdout, 'reconfigure'):
 def generate_synthetic_ipda_data(n_samples=500):
     """
     Generates synthetic historical order flow and price data mimicking the 
-    structure returned by the Next.js 'GET Market Data API Handler' (V8.0 payload).
+    structure returned by the Next.js 'GET Market Data API Handler' (V8.2 payload).
     Used to demonstrate the statsmodels capabilities on our IPDA parameters.
     """
     np.random.seed(42)
