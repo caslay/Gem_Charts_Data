@@ -30,6 +30,7 @@ export interface LiveCandle {
   low: number;
   close: number;
   volume: number;
+  isClosed?: boolean;
 }
 
 export type WSStatus = 'CONNECTING' | 'OPEN' | 'CLOSED' | 'ERROR';
@@ -133,6 +134,7 @@ export function useBinanceWS({
           l: string;
           c: string;
           v: string;
+          x: boolean; // Candle is closed flag
         };
       };
 
@@ -150,6 +152,7 @@ export function useBinanceWS({
         low: parseFloat(k.l),
         close: parseFloat(k.c),
         volume: parseFloat(k.v),
+        isClosed: k.x,
       };
     } catch {
       return null;
