@@ -43,7 +43,6 @@ next-env.d.ts
 # graphify
 graphify
 graphify-out
-plans
 graphify_temp_ast.py
 graphify_temp_build.py
 graphify_temp_cache.py

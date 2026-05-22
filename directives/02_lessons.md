@@ -49,3 +49,15 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
   1. Removed `updateAlertPositions` from the historical data sync effect dependencies in `Chart.tsx`, keeping only `[data]` to prevent `setData()` triggers during alert edits.
   2. Hoisted AI states (`aiAnalysis`, `isAnalyzing`) and implemented a unified `triggerAiAnalysisScan(alertMetadata?)` action inside the `useMarketData` hook, allowing the Chart and Sidebar to synchronize their triggers and rendering states seamlessly.
 
+### 9. Timeframe & Navigation Chart Gaps (Resolved in V8.2)
+- **The Bug:** Switching timeframe scales (e.g., 5m to 15m) or switching tabs to Settings and back broke the chart, rendering massive gaps or missing candles.
+- **The Cause:** 
+  1. `useBinanceWS` held a stale `liveCandle` from the previous timeframe and immediately updated the new series with out-of-order timestamps.
+  2. The timescale fitting sequence did not re-trigger because `isInitialLoad` remained `false`.
+  3. Polling in `useMarketData` ignored updates to historical candles (`data_payload`) to prevent UI flashes. This left a gap of minutes/hours between the cached context data and the new WebSocket feed when returning to the dashboard.
+- **The Fix:** 
+  1. Clear the WebSocket's `liveCandle` state on connection hot-swaps.
+  2. Reset chart initial loading state and monitor refs when the interval changes to force timescale coordinate refitting.
+  3. Proactively call context `refetch()` on timeframe switches or mount transitions to retrieve absolute-fresh historical candles.
+
+

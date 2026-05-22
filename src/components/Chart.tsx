@@ -549,6 +549,13 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   const prevPriceRef = useRef<number | null>(null);
   const lastProcessedClosedTimeRef = useRef<number | null>(null);
 
+  // Reset chart scaling and tracking refs when timeframe interval changes
+  useEffect(() => {
+    isInitialLoad.current = true;
+    prevPriceRef.current = null;
+    lastProcessedClosedTimeRef.current = null;
+  }, [interval]);
+
   // Monitor tick-by-tick and bar-by-bar
   useEffect(() => {
     if (livePrice === null) return;

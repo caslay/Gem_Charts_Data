@@ -268,6 +268,9 @@ export function useBinanceWS({
 
     isDestroyedRef.current = false;
 
+    // Reset live candle state on connection change / dependency update to prevent stale rendering
+    setLiveCandle(null);
+
     // ── Strict Mode Race Condition Fix ──────────────────────────────────────
     // In React 19 dev mode, effects fire twice (mount → unmount → mount).
     // Calling connect() synchronously means the cleanup from the *first* cycle

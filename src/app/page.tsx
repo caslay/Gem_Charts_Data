@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMarketDataContext } from '@/context/MarketDataContext';
 import Chart from '@/components/Chart';
 import Sidebar from '@/components/Sidebar';
@@ -10,12 +10,15 @@ import { Loader2, Menu } from 'lucide-react';
 type Timeframe = '5m' | '15m' | '1h';
 
 export default function Home() {
-  const { data, isLoading, error, downloadV6, downloadV7Sliced, activeAlerts, dismissAlert } = useMarketDataContext();
+  const { data, isLoading, error, refetch, downloadV6, downloadV7Sliced, activeAlerts, dismissAlert } = useMarketDataContext();
   const [timeframe, setTimeframe] = useState<Timeframe>('5m');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
 
-
+  // Fetch fresh historical candles when timeframe changes or Home mounts
+  useEffect(() => {
+    refetch();
+  }, [timeframe, refetch]);
 
   const getChartData = () => {
     if (!data) return [];
