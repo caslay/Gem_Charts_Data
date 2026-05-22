@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { DownloadCloud, TrendingUp, Activity, X, Brain, Zap, Target, Magnet, BarChart3, Terminal, Loader2, Copy, Download } from 'lucide-react';
 import { useBinanceWS } from '@/hooks/useBinanceWS';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
+import { useMarketDataContext } from '@/context/MarketDataContext';
 
 // ─── Slicing Helper ──────────────────────────────────────────────────────────
 export function slicePayloadByLookback(
@@ -58,8 +59,7 @@ export default function Sidebar({
   onClose,
 }: SidebarProps) {
   const { livePrice } = useBinanceWS();
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const { isAnalyzing, aiAnalysis, triggerAiAnalysisScan } = useMarketDataContext();
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   const [activeTab, setActiveTab] = useState<'HUD' | 'JSON'>('HUD');
@@ -116,30 +116,8 @@ export default function Sidebar({
   const orderFlow = metrics?.order_flow_engine;
   const pricing = metrics?.current_pricing;
 
-  const handleLiveSynthesis = async () => {
-    if (!data) return;
-    setIsAnalyzing(true);
-    setAiAnalysis(null);
-
-    try {
-      const response = await fetch('/api/quant-analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-
-      const result = await response.json();
-      if (response.ok) {
-        setAiAnalysis(result.analysis);
-      } else {
-        setAiAnalysis(`**Error:** ${result.error || 'Synthesis failed.'}`);
-      }
-    } catch (err) {
-      console.error(err);
-      setAiAnalysis('**Error:** Connection lost during synthesis.');
-    } finally {
-      setIsAnalyzing(false);
-    }
+  const handleLiveSynthesis = () => {
+    triggerAiAnalysisScan();
   };
 
   const formatPrice = (price: number | null | undefined) =>

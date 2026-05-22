@@ -54,7 +54,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   const [hudPulse, setHudPulse] = useState<'BULLISH' | 'BEARISH' | null>(null);
 
   const { playSound } = useAlertSounds();
-  const { data: marketContextData } = useMarketDataContext();
+  const { data: marketContextData, triggerAiAnalysisScan } = useMarketDataContext();
   
   // Load alerts from localStorage on initial client mount
   useEffect(() => {
@@ -422,7 +422,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       // Update coordinates
       updateAlertPositions();
     }
-  }, [data, updateAlertPositions]);
+  }, [data]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // ── Sync Active Alerts with Price Lines ───────────────────────────────────
   useEffect(() => {
@@ -530,23 +530,12 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
     // 4. AI Narrative Scan if enabled
     if (alert.actionChain?.triggerAiAnalysis) {
       console.log(`[AI SCAN] Dispatching synthetic narrative scan for alert: ${alert.id} (${alert.label})`);
-      fetch('/api/quant-analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...marketContextData,
-          alert_metadata: {
-            id: alert.id,
-            label: alert.label || 'Unnamed Alert',
-            price: alert.price,
-            triggerCondition: alert.triggerCondition
-          }
-        })
-      })
-      .then((res) => {
-        if (!res.ok) console.warn('[AI SCAN] Synthetic scan route returned error status:', res.status);
-      })
-      .catch((err) => console.error('[AI SCAN] Failed to trigger AI scan:', err));
+      triggerAiAnalysisScan({
+        id: alert.id,
+        label: alert.label || 'Unnamed Alert',
+        price: alert.price,
+        triggerCondition: alert.triggerCondition
+      });
     }
 
     // 5. Trigger HUD Pulse for 1000ms visual institutional feedback
