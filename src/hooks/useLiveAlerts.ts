@@ -214,43 +214,7 @@ export function useLiveAlerts(
 
   }, [data, triggerAlert, checkCooldown]);
 
-  // --- Time-Synced Polling Trigger (Legacy System Support) ---
-  useEffect(() => {
-    let timeoutId: NodeJS.Timeout;
-    let intervalId: NodeJS.Timeout;
 
-    const scheduleNextFetch = () => {
-      if (!refetchRef.current) return;
-
-      const now = Date.now();
-      const msIn5Mins = 5 * 60 * 1000;
-
-      // Calculate exact milliseconds remaining until the next 5-minute boundary
-      const msUntilNextBoundary = msIn5Mins - (now % msIn5Mins);
-      const delay = msUntilNextBoundary + 2000; // 2000ms buffer
-
-      timeoutId = setTimeout(() => {
-        if (refetchRef.current) {
-          refetchRef.current();
-        }
-
-        // Start interval exactly every 5 minutes after the first synced execution
-        intervalId = setInterval(() => {
-          if (refetchRef.current) {
-            refetchRef.current();
-          }
-        }, msIn5Mins);
-
-      }, delay);
-    };
-
-    scheduleNextFetch();
-
-    return () => {
-      if (timeoutId) clearTimeout(timeoutId);
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, []);
 
   const clearAlerts = useCallback(() => setActiveAlerts([]), []);
   const dismissAlert = useCallback((id: string) => {
