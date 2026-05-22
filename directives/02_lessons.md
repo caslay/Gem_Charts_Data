@@ -39,3 +39,13 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
 - **The Bug:** Notifications and audio alerts for market events (e.g., Session Transitions, Purges) were firing twice simultaneously. The frontend was also duplicating its API calls to the backend.
 - **The Cause:** The `useMarketData()` hook (which initializes `useLiveAlerts()`) was imported and called directly in both `page.tsx` and `NavigationHeader.tsx`. React created two independent hook instances, resulting in parallel API polling and duplicated alert triggers.
 - **The Fix:** We hoisted the market data state into a global React Context (`MarketDataContext`). `layout.tsx` now wraps the app in the provider (calling the hook exactly once), and child components safely consume the singleton data via `useMarketDataContext()`.
+
+### 8. Chart Candle Gaps & Execution Voids with Alert Lines
+- **The Bug:** Placing or updating an alert line on the chart caused candles to break/show visual gaps. In addition, when alerts triggered with "Trigger AI Analysis" active, the visual console did not display the synthesis state or the narrative outcome.
+- **The Cause:** 
+  1. The chart synchronization effect for historical data included `updateAlertPositions` in its dependencies, which changed whenever alerts changed. This caused `setData()` to be called, discarding live accumulated ticks from the WebSocket connection and leaving a time gap before the next tick.
+  2. The AI synthesis states (`aiAnalysis` and `isAnalyzing`) were local to `Sidebar.tsx`, so backend scans executed by the chart's alerts could not be communicated to the UI.
+- **The Fix:** 
+  1. Removed `updateAlertPositions` from the historical data sync effect dependencies in `Chart.tsx`, keeping only `[data]` to prevent `setData()` triggers during alert edits.
+  2. Hoisted AI states (`aiAnalysis`, `isAnalyzing`) and implemented a unified `triggerAiAnalysisScan(alertMetadata?)` action inside the `useMarketData` hook, allowing the Chart and Sidebar to synchronize their triggers and rendering states seamlessly.
+

@@ -119,7 +119,53 @@ export function useMarketData() {
     [data]
   );
 
-  return { data, isLoading, error, refetch: fetchData, downloadV6, downloadV7Sliced, activeAlerts, clearAlerts, dismissAlert };
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const triggerAiAnalysisScan = useCallback(async (alertMetadata?: any) => {
+    if (!data) return;
+    setIsAnalyzing(true);
+    setAiAnalysis(null);
+
+    try {
+      const response = await fetch('/api/quant-analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...data,
+          ...(alertMetadata ? { alert_metadata: alertMetadata } : {})
+        })
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        setAiAnalysis(result.analysis);
+      } else {
+        setAiAnalysis(`**Error:** ${result.error || 'Synthesis failed.'}`);
+      }
+    } catch (err) {
+      console.error(err);
+      setAiAnalysis('**Error:** Connection lost during synthesis.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }, [data]);
+
+  return {
+    data,
+    isLoading,
+    error,
+    refetch: fetchData,
+    downloadV6,
+    downloadV7Sliced,
+    activeAlerts,
+    clearAlerts,
+    dismissAlert,
+    aiAnalysis,
+    isAnalyzing,
+    setAiAnalysis,
+    triggerAiAnalysisScan
+  };
 }
 
 // ── Shared file-download helper ───────────────────────────────────────────────
