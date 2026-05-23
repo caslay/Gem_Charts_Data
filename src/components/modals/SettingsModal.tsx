@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Volume2, Play, Trash2, Bell, Cpu, Sparkles, AlertCircle } from 'lucide-react';
+import { X, Volume2, Play, Trash2, Bell, Sparkles, AlertCircle } from 'lucide-react';
 import { useAlertSounds, AVAILABLE_ALERT_FILES, AlertSound } from '@/hooks/useAlertSounds';
 import { useMarketDataContext } from '@/context/MarketDataContext';
 
