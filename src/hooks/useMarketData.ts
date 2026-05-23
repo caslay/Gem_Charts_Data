@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { slicePayloadByLookback } from '@/components/Sidebar';
 import { useLiveAlerts } from './useLiveAlerts';
 
@@ -101,6 +101,89 @@ export function useMarketData() {
     }
   });
 
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('idle');
+
+  // Keep refs of latest values to avoid closure/dependency loop issues in the debounced sync call
+  const signalAlertsRef = useRef(signalAlerts);
+  const signalAlertsEnabledRef = useRef(signalAlertsEnabled);
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    signalAlertsRef.current = signalAlerts;
+  }, [signalAlerts]);
+
+  useEffect(() => {
+    signalAlertsEnabledRef.current = signalAlertsEnabled;
+  }, [signalAlertsEnabled]);
+
+  // Clean up any pending sync timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Background SWR Rehydration: fetch settings from Neon on mount to overwrite localStorage
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const res = await fetch('/api/settings');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.terminalSettings) {
+            const { signalSounds, enabledSignals } = data.terminalSettings;
+            if (signalSounds) {
+              setSignalAlerts(signalSounds);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('gem_signal_sounds', JSON.stringify(signalSounds));
+              }
+            }
+            if (enabledSignals) {
+              setSignalAlertsEnabled(enabledSignals);
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('gem_signal_enabled', JSON.stringify(enabledSignals));
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[MarketData] Failed to fetch server settings:', err);
+      }
+    };
+    loadSettings();
+  }, []);
+
+  // Debounced Neon PostgreSQL sync
+  const queueSettingsSync = useCallback(() => {
+    setSyncStatus('syncing');
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+    syncTimeoutRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            terminalSettings: {
+              signalSounds: signalAlertsRef.current,
+              enabledSignals: signalAlertsEnabledRef.current,
+            },
+          }),
+        });
+        if (!res.ok) throw new Error('Failed to save settings');
+        setSyncStatus('saved');
+        // Reset saved indicator to idle after 2 seconds
+        setTimeout(() => setSyncStatus('idle'), 2000);
+      } catch (err) {
+        console.error('[MarketData] Sync error:', err);
+        setSyncStatus('error');
+      }
+    }, 1000); // 1-second debounce
+  }, []);
+
   const updateSignalAlert = useCallback((event: keyof SignalAlerts, fileName: string) => {
     setSignalAlerts((prev) => {
       const updated = { ...prev, [event]: fileName };
@@ -111,9 +194,11 @@ export function useMarketData() {
           console.error('[MarketData] Failed to save signal alerts to localStorage:', e);
         }
       }
+      signalAlertsRef.current = updated;
+      queueSettingsSync();
       return updated;
     });
-  }, []);
+  }, [queueSettingsSync]);
 
   const toggleSignalAlertEnabled = useCallback((event: keyof SignalAlertsEnabled) => {
     setSignalAlertsEnabled((prev) => {
@@ -125,9 +210,11 @@ export function useMarketData() {
           console.error('[MarketData] Failed to save signal alerts enabled to localStorage:', e);
         }
       }
+      signalAlertsEnabledRef.current = updated;
+      queueSettingsSync();
       return updated;
     });
-  }, []);
+  }, [queueSettingsSync]);
 
   const fetchData = useCallback(async (isPolling = false) => {
     try {
@@ -282,7 +369,8 @@ export function useMarketData() {
     signalAlerts,
     updateSignalAlert,
     signalAlertsEnabled,
-    toggleSignalAlertEnabled
+    toggleSignalAlertEnabled,
+    syncStatus
   };
 }
 

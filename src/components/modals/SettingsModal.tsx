@@ -37,7 +37,47 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   initialTab = 'price',
 }) => {
   const { playFile, playSound } = useAlertSounds();
-  const { signalAlerts, updateSignalAlert, signalAlertsEnabled, toggleSignalAlertEnabled } = useMarketDataContext();
+  const { 
+    signalAlerts, 
+    updateSignalAlert, 
+    signalAlertsEnabled, 
+    toggleSignalAlertEnabled,
+    syncStatus 
+  } = useMarketDataContext();
+
+  const renderSyncIndicator = () => {
+    switch (syncStatus) {
+      case 'syncing':
+        return (
+          <div className="flex items-center gap-1.5 text-[9px] text-[#d1bcff] font-bold tracking-widest">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#d1bcff] animate-ping" />
+            <span>SYNCING TO CLOUD...</span>
+          </div>
+        );
+      case 'saved':
+        return (
+          <div className="flex items-center gap-1.5 text-[9px] text-[#50ffaf] font-bold tracking-widest">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#50ffaf]" />
+            <span>CLOUD SYNCED</span>
+          </div>
+        );
+      case 'error':
+        return (
+          <div className="flex items-center gap-1.5 text-[9px] text-red-400 font-bold tracking-widest">
+            <AlertCircle size={10} className="text-red-500 animate-pulse" />
+            <span>SYNC ERROR</span>
+          </div>
+        );
+      case 'idle':
+      default:
+        return (
+          <div className="flex items-center gap-1.5 text-[9px] text-[#958da3]">
+            <span className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
+            <span>CLOUD AUTOSAVE ACTIVE</span>
+          </div>
+        );
+    }
+  };
 
   // Tabs state
   const [activeTab, setActiveTab] = useState<'price' | 'signal'>(initialTab);
@@ -373,10 +413,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               <span>Delete</span>
             </button>
           ) : (
-            <div className="flex items-center gap-1 text-[9px] text-[#958da3]">
-              <AlertCircle size={12} />
-              <span>Signal Alerts Auto-Save</span>
-            </div>
+            renderSyncIndicator()
           )}
 
           {/* Right Button group */}

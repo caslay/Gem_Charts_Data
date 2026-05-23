@@ -5,12 +5,25 @@ import { sql } from "@vercel/postgres";
 /**
  * Settings API — Command Center Backend
  *
- * GET  /api/settings  → Returns all system_settings rows as { key: value } map.
- * POST /api/settings  → Upserts one or more key-value pairs into system_settings.
+ * GET  /api/settings  → Returns all system_settings rows as { key: value } map AND terminal_settings.
+ * POST /api/settings  → Upserts key-value pairs into system_settings OR terminal_settings.
  *
  * Both endpoints are protected by NextAuth session validation.
  * Fail-closed: if session is missing, returns 401 immediately.
  */
+
+// Helper to ensure database table is created dynamically (self-healing architecture)
+async function initTables() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS terminal_settings (
+      id SERIAL PRIMARY KEY,
+      user_id VARCHAR(255) UNIQUE NOT NULL,
+      signal_sounds JSONB NOT NULL,
+      enabled_signals JSONB NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+}
 
 // ─── GET: Fetch all settings ──────────────────────────────────────────────────
 export async function GET() {
@@ -23,6 +36,10 @@ export async function GET() {
       );
     }
 
+    // Ensure the terminal settings schema is loaded
+    await initTables();
+
+    // 1. Fetch system settings
     const { rows } = await sql`
       SELECT key_name, key_value FROM system_settings
     `;
@@ -33,7 +50,20 @@ export async function GET() {
       settings[row.key_name] = row.key_value;
     }
 
-    return NextResponse.json({ settings });
+    // 2. Fetch specific user's terminal settings
+    const userEmail = session.user.email;
+    const { rows: termRows } = await sql`
+      SELECT signal_sounds, enabled_signals FROM terminal_settings
+      WHERE user_id = ${userEmail}
+      LIMIT 1
+    `;
+
+    const terminalSettings = termRows.length > 0 ? {
+      signalSounds: termRows[0].signal_sounds,
+      enabledSignals: termRows[0].enabled_signals,
+    } : null;
+
+    return NextResponse.json({ settings, terminalSettings });
   } catch (error: unknown) {
     console.error("[SETTINGS API] GET Error:", error);
     return NextResponse.json(
@@ -55,6 +85,40 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
+    
+    // Ensure the terminal settings schema is loaded
+    await initTables();
+
+    // 1. Handle terminalSettings payload if provided
+    if (body.terminalSettings) {
+      const { signalSounds, enabledSignals } = body.terminalSettings as {
+        signalSounds: Record<string, string>;
+        enabledSignals: Record<string, boolean>;
+      };
+
+      if (!signalSounds || !enabledSignals) {
+        return NextResponse.json(
+          { error: "Invalid payload: 'terminalSettings' with 'signalSounds' and 'enabledSignals' required." },
+          { status: 400 }
+        );
+      }
+
+      const userEmail = session.user.email;
+
+      await sql`
+        INSERT INTO terminal_settings (user_id, signal_sounds, enabled_signals, updated_at)
+        VALUES (${userEmail}, ${JSON.stringify(signalSounds)}, ${JSON.stringify(enabledSignals)}, NOW())
+        ON CONFLICT (user_id)
+        DO UPDATE SET 
+          signal_sounds = EXCLUDED.signal_sounds,
+          enabled_signals = EXCLUDED.enabled_signals,
+          updated_at = NOW()
+      `;
+
+      return NextResponse.json({ success: true, message: "Terminal settings saved." });
+    }
+
+    // 2. Otherwise, handle legacy system settings payload
     const { settings } = body as { settings: Record<string, string> };
 
     if (!settings || typeof settings !== "object") {
