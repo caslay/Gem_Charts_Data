@@ -1,0 +1,187 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { sql } from "@vercel/postgres";
+
+/**
+ * Custom Strategies API — Strategy Architect Backend
+ *
+ * GET    /api/strategies  → Returns all strategies for the authenticated user.
+ * POST   /api/strategies  → Upserts a strategy (create if no id, update if id provided).
+ * DELETE  /api/strategies  → Deletes a strategy by id.
+ *
+ * Auth-protected via NextAuth session validation (fail-closed).
+ */
+
+// Self-healing table creation (mirrors pattern from /api/settings)
+async function ensureTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS custom_strategies (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR(255) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      logic_json JSONB NOT NULL,
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+}
+
+// ─── GET: Fetch all strategies for the current user ───────────────────────────
+export async function GET() {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: "Unauthorized: No active session." },
+        { status: 401 }
+      );
+    }
+
+    await ensureTable();
+
+    const userEmail = session.user.email;
+    const { rows } = await sql`
+      SELECT id, name, logic_json, is_active, created_at, updated_at
+      FROM custom_strategies
+      WHERE user_id = ${userEmail}
+      ORDER BY created_at DESC
+    `;
+
+    // Transform rows to frontend-friendly shape
+    const strategies = rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      conditions: row.logic_json,
+      is_active: row.is_active,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    }));
+
+    return NextResponse.json({ strategies });
+  } catch (error: unknown) {
+    console.error("[STRATEGIES API] GET Error:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch strategies." },
+      { status: 500 }
+    );
+  }
+}
+
+// ─── POST: Create or Update a strategy ────────────────────────────────────────
+export async function POST(req: Request) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: "Unauthorized: No active session." },
+        { status: 401 }
+      );
+    }
+
+    const body = await req.json();
+    const { id, name, conditions, is_active } = body as {
+      id?: string;
+      name: string;
+      conditions: unknown[];
+      is_active?: boolean;
+    };
+
+    if (!name || !Array.isArray(conditions)) {
+      return NextResponse.json(
+        { error: "Invalid payload: 'name' (string) and 'conditions' (array) are required." },
+        { status: 400 }
+      );
+    }
+
+    await ensureTable();
+    const userEmail = session.user.email;
+    const active = is_active !== undefined ? is_active : true;
+
+    if (id) {
+      // UPDATE existing strategy (verify ownership)
+      const { rowCount } = await sql`
+        UPDATE custom_strategies
+        SET name = ${name},
+            logic_json = ${JSON.stringify(conditions)},
+            is_active = ${active},
+            updated_at = NOW()
+        WHERE id = ${id}::uuid AND user_id = ${userEmail}
+      `;
+
+      if (rowCount === 0) {
+        return NextResponse.json(
+          { error: "Strategy not found or access denied." },
+          { status: 404 }
+        );
+      }
+
+      return NextResponse.json({ success: true, id, message: "Strategy updated." });
+    } else {
+      // CREATE new strategy
+      const { rows } = await sql`
+        INSERT INTO custom_strategies (user_id, name, logic_json, is_active)
+        VALUES (${userEmail}, ${name}, ${JSON.stringify(conditions)}, ${active})
+        RETURNING id
+      `;
+
+      return NextResponse.json({
+        success: true,
+        id: rows[0].id,
+        message: "Strategy created.",
+      });
+    }
+  } catch (error: unknown) {
+    console.error("[STRATEGIES API] POST Error:", error);
+    return NextResponse.json(
+      { error: "Failed to save strategy." },
+      { status: 500 }
+    );
+  }
+}
+
+// ─── DELETE: Remove a strategy by ID ──────────────────────────────────────────
+export async function DELETE(req: Request) {
+  try {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json(
+        { error: "Unauthorized: No active session." },
+        { status: 401 }
+      );
+    }
+
+    const body = await req.json();
+    const { id } = body as { id: string };
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "Invalid payload: 'id' (UUID) is required." },
+        { status: 400 }
+      );
+    }
+
+    await ensureTable();
+    const userEmail = session.user.email;
+
+    const { rowCount } = await sql`
+      DELETE FROM custom_strategies
+      WHERE id = ${id}::uuid AND user_id = ${userEmail}
+    `;
+
+    if (rowCount === 0) {
+      return NextResponse.json(
+        { error: "Strategy not found or access denied." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true, message: "Strategy deleted." });
+  } catch (error: unknown) {
+    console.error("[STRATEGIES API] DELETE Error:", error);
+    return NextResponse.json(
+      { error: "Failed to delete strategy." },
+      { status: 500 }
+    );
+  }
+}

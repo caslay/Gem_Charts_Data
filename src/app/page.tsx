@@ -6,7 +6,8 @@ import Chart from '@/components/Chart';
 import Sidebar from '@/components/Sidebar';
 import SmartAlertsToast from '@/components/SmartAlertsToast';
 import SettingsModal from '@/components/modals/SettingsModal';
-import { Loader2, Menu, Volume2 } from 'lucide-react';
+import { Loader2, Menu, Settings } from 'lucide-react';
+import { useStrategyEvaluator } from '@/hooks/useStrategyEvaluator';
 
 type Timeframe = '5m' | '15m' | '1h';
 
@@ -15,7 +16,11 @@ export default function Home() {
   const [timeframe, setTimeframe] = useState<Timeframe>('5m');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSoundSettingsOpen, setIsSoundSettingsOpen] = useState(false);
+  const [commandCenterTab, setCommandCenterTab] = useState<'ai_config' | 'strategy' | 'audio'>('strategy');
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
+
+  // Strategy Execution Engine — runs silently in the background
+  useStrategyEvaluator();
 
   // Fetch fresh historical candles when timeframe changes or Home mounts
   useEffect(() => {
@@ -68,12 +73,15 @@ export default function Home() {
           <div className="flex items-center gap-3 shrink-0">
             {/* Alert Sounds Config Button */}
             <button
-              onClick={() => setIsSoundSettingsOpen(true)}
+              onClick={() => {
+                setCommandCenterTab('strategy');
+                setIsSoundSettingsOpen(true);
+              }}
               className="bg-[#1c1b1c] border border-[#4a4457] hover:border-[#50ffaf] text-[#958da3] hover:text-[#50ffaf] px-3 py-1.5 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-none cursor-pointer flex items-center gap-1.5 shadow-md"
-              title="Configure Engine Alert Sounds"
+              title="Open Command Center"
             >
-              <Volume2 size={12} />
-              <span className="hidden sm:inline">[ ALERT SOUNDS ]</span>
+              <Settings size={12} />
+              <span className="hidden sm:inline">[ COMMAND CENTER ]</span>
             </button>
 
             <div className="flex items-center p-0.5 bg-[#1c1b1c] border border-[#4a4457]/50">
@@ -153,11 +161,11 @@ export default function Home() {
         onClose={() => setSidebarOpen(false)}
       />
 
-      {/* Global Signal Alert Sounds Config Modal */}
+      {/* Global Command Center Modal */}
       <SettingsModal
         isOpen={isSoundSettingsOpen}
         alert={null}
-        initialTab="signal"
+        initialTab={commandCenterTab}
         onClose={() => setIsSoundSettingsOpen(false)}
         onSave={() => {}}
         onDelete={() => {}}
