@@ -34,4 +34,4 @@ Do NOT guess the project architecture or past logic. To save the context window,
 Before writing any code or answering, output an internal thought process indicating WHICH directive file you need to read to complete the task accurately.
 
 ## 📜 Master Blueprint Maintenance Rule
-After completing any update or task, you MUST update the master blueprint file at `plans/master_blueprint.md` to ensure all system documentation, database schemas, and API handlers remain fully synchronized and up to date. Do not end a task without ensuring the blueprint is updated.
+After completing any update or task, you MUST update the master blueprint file at `directives/master_blueprint.md` to ensure all system documentation, database schemas, and API handlers remain fully synchronized and up to date. Do not end a task without ensuring the blueprint is updated.
