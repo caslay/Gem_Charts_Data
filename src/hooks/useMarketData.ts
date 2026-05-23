@@ -14,6 +14,18 @@ export interface SignalAlerts {
   DEAD_ZONE_ENTER: string;
 }
 
+export interface SignalAlertsEnabled {
+  FVG_DETECTION: boolean;
+  DISPLACEMENT_CONFIRMED: boolean;
+  SMT_TRAP_ACTIVE: boolean;
+  DOL_EXHAUSTED: boolean;
+  SESSION_TRANSITION: boolean;
+  PRICING_SHIFT: boolean;
+  SWEEP_ALERT: boolean;
+  FLOW_STATE_CHANGE: boolean;
+  DEAD_ZONE_ENTER: boolean;
+}
+
 const DEFAULT_SIGNAL_ALERTS: SignalAlerts = {
   FVG_DETECTION: "fvg_alert.mp3",
   DISPLACEMENT_CONFIRMED: "flow_state.wav",
@@ -24,6 +36,18 @@ const DEFAULT_SIGNAL_ALERTS: SignalAlerts = {
   SWEEP_ALERT: "sweep_alert.mp3",
   FLOW_STATE_CHANGE: "flow_state.wav",
   DEAD_ZONE_ENTER: "dead_zone.mp3",
+};
+
+const DEFAULT_SIGNAL_ALERTS_ENABLED: SignalAlertsEnabled = {
+  FVG_DETECTION: true,
+  DISPLACEMENT_CONFIRMED: true,
+  SMT_TRAP_ACTIVE: true,
+  DOL_EXHAUSTED: true,
+  SESSION_TRANSITION: true,
+  PRICING_SHIFT: true,
+  SWEEP_ALERT: true,
+  FLOW_STATE_CHANGE: true,
+  DEAD_ZONE_ENTER: true,
 };
 
 export interface Candle {
@@ -67,6 +91,16 @@ export function useMarketData() {
     }
   });
 
+  const [signalAlertsEnabled, setSignalAlertsEnabled] = useState<SignalAlertsEnabled>(() => {
+    if (typeof window === 'undefined') return DEFAULT_SIGNAL_ALERTS_ENABLED;
+    try {
+      const stored = localStorage.getItem('gem_signal_enabled');
+      return stored ? JSON.parse(stored) : DEFAULT_SIGNAL_ALERTS_ENABLED;
+    } catch {
+      return DEFAULT_SIGNAL_ALERTS_ENABLED;
+    }
+  });
+
   const updateSignalAlert = useCallback((event: keyof SignalAlerts, fileName: string) => {
     setSignalAlerts((prev) => {
       const updated = { ...prev, [event]: fileName };
@@ -75,6 +109,20 @@ export function useMarketData() {
           localStorage.setItem('gem_signal_sounds', JSON.stringify(updated));
         } catch (e) {
           console.error('[MarketData] Failed to save signal alerts to localStorage:', e);
+        }
+      }
+      return updated;
+    });
+  }, []);
+
+  const toggleSignalAlertEnabled = useCallback((event: keyof SignalAlertsEnabled) => {
+    setSignalAlertsEnabled((prev) => {
+      const updated = { ...prev, [event]: !prev[event] };
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('gem_signal_enabled', JSON.stringify(updated));
+        } catch (e) {
+          console.error('[MarketData] Failed to save signal alerts enabled to localStorage:', e);
         }
       }
       return updated;
@@ -232,7 +280,9 @@ export function useMarketData() {
     setAiAnalysis,
     triggerAiAnalysisScan,
     signalAlerts,
-    updateSignalAlert
+    updateSignalAlert,
+    signalAlertsEnabled,
+    toggleSignalAlertEnabled
   };
 }
 

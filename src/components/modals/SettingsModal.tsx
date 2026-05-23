@@ -37,7 +37,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   initialTab = 'price',
 }) => {
   const { playFile, playSound } = useAlertSounds();
-  const { signalAlerts, updateSignalAlert } = useMarketDataContext();
+  const { signalAlerts, updateSignalAlert, signalAlertsEnabled, toggleSignalAlertEnabled } = useMarketDataContext();
 
   // Tabs state
   const [activeTab, setActiveTab] = useState<'price' | 'signal'>(initialTab);
@@ -302,25 +302,35 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 { key: 'DEAD_ZONE_ENTER', label: 'Dead Zone Crossing', desc: 'Fires when entering the temporal dead zone' },
               ].map((ev) => {
                 const currentVal = signalAlerts ? (signalAlerts as any)[ev.key] : '';
+                const isEnabled = signalAlertsEnabled ? (signalAlertsEnabled as any)[ev.key] !== false : true;
 
                 return (
                   <div key={ev.key} className="space-y-1.5 border-b border-[#4a4457]/30 pb-3 last:border-0 last:pb-0">
                     <div className="flex justify-between items-baseline">
-                      <label className="block text-[10px] font-black uppercase text-white tracking-widest">
-                        {ev.label}
+                      <label className="flex items-center gap-2 cursor-pointer group">
+                        <input 
+                          type="checkbox" 
+                          checked={isEnabled}
+                          onChange={() => toggleSignalAlertEnabled && toggleSignalAlertEnabled(ev.key as any)}
+                          className="rounded-none bg-[#141416] border border-[#4a4457] text-[#50ffaf] focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5 cursor-pointer accent-[#50ffaf]"
+                        />
+                        <span className="text-[10px] font-black uppercase text-white tracking-widest group-hover:text-[#50ffaf] transition-colors">
+                          {ev.label}
+                        </span>
                       </label>
                       <span className="text-[8px] text-[#958da3] font-bold uppercase">
                         {ev.key}
                       </span>
                     </div>
-                    <span className="block text-[9px] text-[#958da3] italic -mt-1 mb-1 leading-none">
+                    <span className="block text-[9px] text-[#958da3] italic -mt-1 mb-1 leading-none pl-5">
                       {ev.desc}
                     </span>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 pl-5">
                       <select
                         value={currentVal}
+                        disabled={!isEnabled}
                         onChange={(e) => updateSignalAlert(ev.key as any, e.target.value)}
-                        className="flex-1 bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-2.5 py-2 text-xs font-mono text-white rounded-none transition-colors cursor-pointer"
+                        className="flex-1 bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-2.5 py-2 text-xs font-mono text-white rounded-none transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                       >
                         {AVAILABLE_ALERT_FILES.map((file) => (
                           <option key={file} value={file}>
@@ -332,8 +342,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handlePlaySignalSound(currentVal)}
-                        disabled={!currentVal}
-                        className="flex items-center justify-center gap-1 px-3 py-2 bg-[#141416] border border-[#4a4457] hover:bg-zinc-800 transition-all text-[10px] font-bold uppercase text-[#958da3] hover:text-[#e5e2e3] rounded-none cursor-pointer"
+                        disabled={!currentVal || !isEnabled}
+                        className="flex items-center justify-center gap-1 px-3 py-2 bg-[#141416] border border-[#4a4457] hover:bg-zinc-800 transition-all text-[10px] font-bold uppercase text-[#958da3] hover:text-[#e5e2e3] rounded-none cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                         title="Preview audio output"
                       >
                         <Play size={10} fill="currentColor" />

@@ -56,7 +56,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   const [settingsModalTab, setSettingsModalTab] = useState<'price' | 'signal'>('price');
 
   const { playSound, playFile } = useAlertSounds();
-  const { data: marketContextData, triggerAiAnalysisScan, signalAlerts, triggerSmartAlert } = useMarketDataContext();
+  const { data: marketContextData, triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert } = useMarketDataContext();
   
   // Load alerts from localStorage on initial client mount
   useEffect(() => {
@@ -89,7 +89,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
     if (!marketContextData || !signalAlerts) return;
 
     // Helper: generate FVG unique hash key
-    const makeFvgKey = (fvg: any) => `${fvg.timeframe}_${fvg.type}_${fvg.top}_${fvg.bottom}`;
+    const makeFvgKey = (fvg: any) => `${fvg.timeframe}_${fvg.type}_${fvg.top}_${fvg.bottom}_${fvg.origin_time}`;
     // Helper: generate SMT unique hash key
     const makeSmtKey = (smt: any) => `${smt.time1}_${smt.time2}_${smt.price}`;
 
@@ -115,7 +115,9 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
         return !prevFvgKeys.has(key);
       });
 
-      if (hasNewFvg) {
+      const isFvgEnabled = signalAlertsEnabled ? signalAlertsEnabled.FVG_DETECTION !== false : true;
+
+      if (hasNewFvg && isFvgEnabled) {
         console.log('[DiffEngine] New FVG formation detected. Triggering FVG_DETECTION sound.');
         if (signalAlerts.FVG_DETECTION) {
           playFile(signalAlerts.FVG_DETECTION);
@@ -136,7 +138,9 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       const prevDisp = prevMetrics.order_flow_engine?.displacement_sponsorship === 'ACTIVE';
       const currDisp = currMetrics.order_flow_engine?.displacement_sponsorship === 'ACTIVE';
 
-      if (!prevDisp && currDisp) {
+      const isDispEnabled = signalAlertsEnabled ? signalAlertsEnabled.DISPLACEMENT_CONFIRMED !== false : true;
+
+      if (!prevDisp && currDisp && isDispEnabled) {
         console.log('[DiffEngine] Displacement confirmed. Triggering DISPLACEMENT_CONFIRMED sound.');
         if (signalAlerts.DISPLACEMENT_CONFIRMED) {
           playFile(signalAlerts.DISPLACEMENT_CONFIRMED);
@@ -160,7 +164,9 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
         return !prevSmtKeys.has(key);
       });
 
-      if (hasNewSmt) {
+      const isSmtEnabled = signalAlertsEnabled ? signalAlertsEnabled.SMT_TRAP_ACTIVE !== false : true;
+
+      if (hasNewSmt && isSmtEnabled) {
         console.log('[DiffEngine] New SMT trap active. Triggering SMT_TRAP_ACTIVE sound.');
         if (signalAlerts.SMT_TRAP_ACTIVE) {
           playFile(signalAlerts.SMT_TRAP_ACTIVE);
@@ -181,7 +187,9 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       const prevExhausted = prevStatus.includes('EXHAUSTED');
       const currExhausted = currStatus.includes('EXHAUSTED');
 
-      if (!prevExhausted && currExhausted) {
+      const isDolEnabled = signalAlertsEnabled ? signalAlertsEnabled.DOL_EXHAUSTED !== false : true;
+
+      if (!prevExhausted && currExhausted && isDolEnabled) {
         console.log('[DiffEngine] DOL Exhausted / Target reached. Triggering DOL_EXHAUSTED sound.');
         if (signalAlerts.DOL_EXHAUSTED) {
           playFile(signalAlerts.DOL_EXHAUSTED);
@@ -195,7 +203,8 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       }
 
       // 5. Session Transition Watcher
-      if (prevTimeWindow && currTimeWindow && prevTimeWindow !== currTimeWindow) {
+      const isSessionEnabled = signalAlertsEnabled ? signalAlertsEnabled.SESSION_TRANSITION !== false : true;
+      if (prevTimeWindow && currTimeWindow && prevTimeWindow !== currTimeWindow && isSessionEnabled) {
         console.log(`[DiffEngine] Session shifted from ${prevTimeWindow} to ${currTimeWindow}. Triggering SESSION_TRANSITION sound.`);
         if (signalAlerts.SESSION_TRANSITION) {
           playFile(signalAlerts.SESSION_TRANSITION);
@@ -211,7 +220,8 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       // 6. Pricing Shift Watcher
       const prevPricing = prevMetrics.current_pricing;
       const currPricing = currMetrics.current_pricing;
-      if (prevPricing && currPricing && prevPricing !== currPricing) {
+      const isPricingEnabled = signalAlertsEnabled ? signalAlertsEnabled.PRICING_SHIFT !== false : true;
+      if (prevPricing && currPricing && prevPricing !== currPricing && isPricingEnabled) {
         console.log(`[DiffEngine] Pricing context shifted from ${prevPricing} to ${currPricing}. Triggering PRICING_SHIFT sound.`);
         if (signalAlerts.PRICING_SHIFT) {
           playFile(signalAlerts.PRICING_SHIFT);
@@ -229,7 +239,8 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       const newSweeps = sweepKeywords.filter(keyword => 
         currStatus.includes(keyword) && !prevStatus.includes(keyword)
       );
-      if (newSweeps.length > 0) {
+      const isSweepEnabled = signalAlertsEnabled ? signalAlertsEnabled.SWEEP_ALERT !== false : true;
+      if (newSweeps.length > 0 && isSweepEnabled) {
         console.log(`[DiffEngine] Liquidity swept: ${newSweeps.join(', ')}. Triggering SWEEP_ALERT sound.`);
         if (signalAlerts.SWEEP_ALERT) {
           playFile(signalAlerts.SWEEP_ALERT);
@@ -245,7 +256,8 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       // 9. Flow State Trend Shift Watcher (OI momentum shift)
       const prevTrend = prevMetrics.order_flow_engine?.open_interest_trend;
       const currTrend = currMetrics.order_flow_engine?.open_interest_trend;
-      if (prevTrend && currTrend && prevTrend !== currTrend) {
+      const isFlowEnabled = signalAlertsEnabled ? signalAlertsEnabled.FLOW_STATE_CHANGE !== false : true;
+      if (prevTrend && currTrend && prevTrend !== currTrend && isFlowEnabled) {
         console.log(`[DiffEngine] Flow State trend shifted from ${prevTrend} to ${currTrend}. Triggering FLOW_STATE_CHANGE sound.`);
         if (signalAlerts.FLOW_STATE_CHANGE) {
           playFile(signalAlerts.FLOW_STATE_CHANGE);
@@ -259,7 +271,8 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       }
 
       // 10. Dead Zone Restriction Watcher
-      if (currTimeWindow === 'DEAD_ZONE' && prevTimeWindow !== 'DEAD_ZONE') {
+      const isDeadZoneEnabled = signalAlertsEnabled ? signalAlertsEnabled.DEAD_ZONE_ENTER !== false : true;
+      if (currTimeWindow === 'DEAD_ZONE' && prevTimeWindow !== 'DEAD_ZONE' && isDeadZoneEnabled) {
         console.log('[DiffEngine] Temporal DEAD_ZONE restrictions activated. Triggering DEAD_ZONE_ENTER sound.');
         if (signalAlerts.DEAD_ZONE_ENTER) {
           playFile(signalAlerts.DEAD_ZONE_ENTER);
@@ -275,7 +288,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
 
     // Always update prevDataRef
     prevDataRef.current = marketContextData;
-  }, [marketContextData, signalAlerts, playFile, triggerSmartAlert]);
+  }, [marketContextData, signalAlerts, signalAlertsEnabled, playFile, triggerSmartAlert]);
 
   // Placement Mode states
   const [isHoveringPriceScale, setIsHoveringPriceScale] = useState(false);
@@ -1079,19 +1092,6 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
         </div>
       )}
 
-      {/* Top Right Floating Sound Config Button */}
-      <button
-        onClick={() => {
-          setSelectedAlertId(null);
-          setSettingsModalTab('signal');
-          setIsSettingsModalOpen(true);
-        }}
-        className="absolute top-4 right-4 bg-[#0e0e0f]/80 backdrop-blur-md border border-[#4a4457] hover:border-[#50ffaf] text-[#958da3] hover:text-[#50ffaf] px-3 py-1 font-mono text-[10px] font-black uppercase tracking-widest shadow-xl z-10 transition-all rounded-none cursor-pointer flex items-center gap-1.5 animate-in fade-in duration-300"
-        title="Configure Engine Alert Sounds"
-      >
-        <Volume2 size={12} />
-        <span>[ ALERT SOUNDS ]</span>
-      </button>
 
       {/* Unified Settings Modal Overlay */}
       <SettingsModal
