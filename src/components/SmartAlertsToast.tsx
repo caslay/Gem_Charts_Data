@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { X, AlertTriangle, BellOff, Activity, ShieldAlert, Scale, Target, Waves, Clock } from 'lucide-react';
+import { X, AlertTriangle, BellOff, Activity, ShieldAlert, Scale, Target, Waves, Clock, Crosshair } from 'lucide-react';
 import type { SmartAlert } from '@/hooks/useLiveAlerts';
 
 interface SmartAlertsToastProps {
@@ -76,6 +76,11 @@ function ToastItem({ alert, dismissAlert }: { alert: SmartAlert, dismissAlert: (
       // 🕒 Neutral Zinc
       baseStyle += " bg-[#0a0a0a]/80 border-zinc-700/50 text-zinc-300 shadow-[0_0_15px_rgba(39,39,42,0.5)]";
       icon = <Clock className="w-5 h-5 text-zinc-400 mt-0.5 shrink-0" />;
+      break;
+    case 'STRATEGY_MATCHED':
+      // 🎯 High-contrast brutalist: white on black with thick left border
+      baseStyle += " bg-[#000000]/95 border-white/80 text-white shadow-[0_0_30px_rgba(255,255,255,0.15)] border-l-4 border-l-[#50ffaf]";
+      icon = <Crosshair className="w-5 h-5 text-[#50ffaf] mt-0.5 shrink-0 animate-pulse" />;
       break;
   }
 

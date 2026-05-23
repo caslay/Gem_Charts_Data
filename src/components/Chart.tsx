@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, SeriesMarker, createSeriesMarkers, ISeriesMarkersPluginApi, LineStyle } from 'lightweight-charts';
 import { Candle } from '@/hooks/useMarketData';
 import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
-import { useBinanceWS } from '@/hooks/useBinanceWS';
 import type { LiveCandle } from '@/hooks/useBinanceWS';
 import SettingsModal, { Alert } from './modals/SettingsModal';
 import { AlertSound, useAlertSounds } from '@/hooks/useAlertSounds';
@@ -56,7 +55,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   const [settingsModalTab, setSettingsModalTab] = useState<'price' | 'signal'>('price');
 
   const { playSound, playFile } = useAlertSounds();
-  const { data: marketContextData, triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert } = useMarketDataContext();
+  const { data: marketContextData, triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert, liveCandle, livePrice, setWsInterval } = useMarketDataContext();
   
   // Load alerts from localStorage on initial client mount
   useEffect(() => {
@@ -303,7 +302,11 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   // ── Phase 2: Live Tick Hook ──────────────────────────────────────────────
   // GUARDRAIL: `liveCandle` is consumed ONLY by the .update() effect below.
   // It is NEVER pushed into the `data` array or any state that feeds the AI JSON.
-  const { liveCandle, livePrice } = useBinanceWS({ symbol: 'ethusdc', interval });
+  // WebSocket data is now consumed from the global MarketDataContext (hoisted).
+  // Sync the chart's interval prop into the global WS interval.
+  useEffect(() => {
+    setWsInterval(interval as any);
+  }, [interval, setWsInterval]);
 
   const {
     upColor = '#50ffaf', // Cyan accent

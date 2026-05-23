@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 // Define the alert structure for the frontend UI
 export interface SmartAlert {
   id: string;
-  type: 'PURGE' | 'DEAD_ZONE' | 'RISK_OVERRIDE' | 'SMT_TRAP' | 'PRICING_SHIFT' | 'OBJECTIVE_UPDATE' | 'FLOW_STATE' | 'SESSION_TRANSITION';
+  type: 'PURGE' | 'DEAD_ZONE' | 'RISK_OVERRIDE' | 'SMT_TRAP' | 'PRICING_SHIFT' | 'OBJECTIVE_UPDATE' | 'FLOW_STATE' | 'SESSION_TRANSITION' | 'STRATEGY_MATCHED';
   message: string;
   timestamp: number;
 }

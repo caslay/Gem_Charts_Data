@@ -23,6 +23,17 @@ async function initTables() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS custom_strategies (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR(255) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      logic_json JSONB NOT NULL,
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
 }
 
 // ─── GET: Fetch all settings ──────────────────────────────────────────────────
