@@ -46,12 +46,25 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<any> | null>(null);
   const isInitialLoad = useRef(true);
+  const dataRef = useRef(data);
+
+  // Sync data to ref to avoid stale closures in crosshair listeners
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
 
   // ── Phase 1: Alerts State & Interaction Refs ──────────────────────────────
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
   const [alertLabelPositions, setAlertLabelPositions] = useState<{ id: string; y: number; price: number; color: string; status: 'active' | 'triggered' }[]>([]);
   const [hudPulse, setHudPulse] = useState<'BULLISH' | 'BEARISH' | null>(null);
+  const [hoveredCandle, setHoveredCandle] = useState<{
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+  } | null>(null);
 
   const { playSound } = useAlertSounds();
   const { data: marketContextData, triggerAiAnalysisScan } = useMarketDataContext();
@@ -359,12 +372,55 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
     seriesRef.current = candlestickSeries;
     seriesMarkersRef.current = createSeriesMarkers(candlestickSeries);
 
+    // Keep track of the last hovered candle values to avoid duplicate state updates
+    let prevHovered: { open: number; high: number; low: number; close: number; volume: number } | null = null;
+
     // Crosshair movement listener
     const handleCrosshairMove = (param: any) => {
       if (param && param.time) {
         cursorTimeRef.current = Number(param.time);
-      } else {
-        cursorTimeRef.current = null;
+        const seriesData = param.seriesData.get(candlestickSeries);
+        if (seriesData) {
+          const open = seriesData.open !== undefined ? seriesData.open : seriesData.close;
+          const high = seriesData.high !== undefined ? seriesData.high : seriesData.close;
+          const low = seriesData.low !== undefined ? seriesData.low : seriesData.close;
+          const close = seriesData.close;
+
+          // Look up volume from liveCandle or historical data
+          let volume = 0;
+          const hoverTime = Number(param.time);
+
+          if (liveCandle && Number(liveCandle.time) === hoverTime) {
+            volume = liveCandle.volume;
+          } else {
+            const histCandle = dataRef.current?.find(
+              (d) => Math.floor(d.t / 1000) === hoverTime
+            );
+            if (histCandle) {
+              volume = histCandle.v;
+            }
+          }
+
+          if (
+            !prevHovered ||
+            prevHovered.open !== open ||
+            prevHovered.high !== high ||
+            prevHovered.low !== low ||
+            prevHovered.close !== close ||
+            prevHovered.volume !== volume
+          ) {
+            const nextCandle = { open, high, low, close, volume };
+            prevHovered = nextCandle;
+            setHoveredCandle(nextCandle);
+          }
+          return;
+        }
+      }
+
+      cursorTimeRef.current = null;
+      if (prevHovered !== null) {
+        prevHovered = null;
+        setHoveredCandle(null);
       }
     };
     chart.subscribeCrosshairMove(handleCrosshairMove);
@@ -554,6 +610,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
     isInitialLoad.current = true;
     prevPriceRef.current = null;
     lastProcessedClosedTimeRef.current = null;
+    setHoveredCandle(null);
   }, [interval]);
 
   // Monitor tick-by-tick and bar-by-bar
@@ -627,6 +684,36 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
     prevPriceRef.current = livePrice;
 
   }, [livePrice, liveCandle, alerts, executeAlert]);
+
+  // Resolve the candle to show in the HUD (top left)
+  // 1. If user is hovering a candle, show the hovered candle
+  // 2. Otherwise, if there is a liveCandle, show the live candle
+  // 3. Otherwise, if there is historical data, show the last candle
+  const hudCandle = (() => {
+    if (hoveredCandle) {
+      return hoveredCandle;
+    }
+    if (liveCandle) {
+      return {
+        open: liveCandle.open,
+        high: liveCandle.high,
+        low: liveCandle.low,
+        close: liveCandle.close,
+        volume: liveCandle.volume,
+      };
+    }
+    if (data && data.length > 0) {
+      const last = data[data.length - 1];
+      return {
+        open: last.o,
+        high: last.h,
+        low: last.l,
+        close: last.c,
+        volume: last.v,
+      };
+    }
+    return null;
+  })();
 
   return (
     <div className="w-full h-full relative group">
@@ -718,9 +805,46 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
         ))}
       </div>
  
+      {/* Top Left HUD - Candle Info */}
+      {hudCandle && (
+        <div className="absolute top-4 left-4 bg-[#0e0e0f]/80 backdrop-blur-md border border-[#4a4457]/30 px-3 py-1 rounded-none shadow-xl pointer-events-none z-10 flex flex-wrap items-center gap-x-4 gap-y-1 select-none font-mono text-[11px]">
+          <div className="flex items-center gap-1">
+            <span className="text-white/40">O</span>
+            <span className="text-[#e5e2e3] font-medium">{hudCandle.open.toFixed(2)}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-white/40">H</span>
+            <span className="text-[#50ffaf] font-medium">{hudCandle.high.toFixed(2)}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-white/40">L</span>
+            <span className="text-[#ffb4ab] font-medium">{hudCandle.low.toFixed(2)}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-white/40">C</span>
+            <span className={hudCandle.close >= hudCandle.open ? 'text-[#50ffaf] font-medium' : 'text-[#ffb4ab] font-medium'}>
+              {hudCandle.close.toFixed(2)}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-white/40">V</span>
+            <span className="text-[#e5e2e3] font-medium">
+              {hudCandle.volume.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            </span>
+          </div>
+          {hudCandle.open > 0 && (
+            <div className="flex items-center gap-1 pl-2 border-l border-[#4a4457]/30">
+              <span className={`font-semibold ${hudCandle.close >= hudCandle.open ? 'text-[#50ffaf]' : 'text-[#ffb4ab]'}`}>
+                {hudCandle.close >= hudCandle.open ? '+' : ''}{(((hudCandle.close - hudCandle.open) / hudCandle.open) * 100).toFixed(2)}%
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Institutional alert placement HUD */}
       {(isHoveringPriceScale || isHotkeyAlertModeActive) && (
-        <div className="absolute top-4 left-4 bg-[#0e0e0f]/95 border border-[#4a4457]/50 px-2.5 py-1.5 rounded-none shadow-xl pointer-events-none z-10 flex items-center gap-2 select-none animate-[pulse_1.5s_infinite]">
+        <div className="absolute top-[48px] left-4 bg-[#0e0e0f]/95 border border-[#4a4457]/50 px-2.5 py-1.5 rounded-none shadow-xl pointer-events-none z-10 flex items-center gap-2 select-none animate-[pulse_1.5s_infinite]">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
           <span className="text-[10px] font-mono font-bold tracking-wider text-amber-400">
             STATUS: ALERT_PLACEMENT_ACTIVE
