@@ -15,10 +15,19 @@
 4. [Layer 2: The Volumetric Layer (Displacement & OLS)](#4-layer-2-the-volumetric-layer-displacement--ols)
 5. [Layer 3: The Order Flow Layer (Binance Level 2)](#5-layer-3-the-order-flow-layer-binance-level-2)
 6. [Layer 4: The Execution Layer (Safety Gates)](#6-layer-4-the-execution-layer-safety-gates)
-7. [Layer 5: The Stateful API Layer (Memory Protocol)](#7-layer-5-the-stateful-api-layer-memory-protocol)
+   - [6.6 Automated Paper Trading Execution Engine (`/api/trades`)](#66-automated-paper-trading-execution-engine-apitrades)
+   - [6.7 Strategic Equation Builder Runtime & Temporal Engine](#67-strategic-equation-builder-runtime--temporal-engine)
+7. [Layer 5: The Stateful API Layer (Memory & Database)](#7-layer-5-the-stateful-api-layer-memory--database)
 8. [The Matrix Cheat-Sheet (Variable Reference)](#8-the-matrix-cheat-sheet)
 9. [Logic Flowchart: Liquidity Sweep → Order Execution](#9-logic-flowchart)
 10. [API Documentation](#10-api-documentation)
+    - [GET /api/trades](#get-apitrades)
+    - [POST /api/trades](#post-apitrades)
+    - [PATCH /api/trades](#patch-apitrades)
+    - [DELETE /api/trades](#delete-apitrades)
+    - [GET /api/strategies](#get-apistrategies)
+    - [POST /api/strategies](#post-apistrategies)
+    - [DELETE /api/strategies](#delete-apistrategies)
 11. [Edge Case Audit & ABORT Conditions](#11-edge-case-audit)
 12. [Logic Debt Register](#12-logic-debt-register)
 
@@ -41,13 +50,13 @@ The Flow-State Quant Engine is **NOT** a prediction engine. It is a **reaction e
 
 | Layer | Technology | Role |
 |---|---|---|
-| **Frontend** | Next.js 16 (App Router) + React 19 + Tailwind v4 | Dashboard, Chart, Alerts |
+| **Frontend** | Next.js 16 (App Router) + React 19 + Tailwind v4 | Dashboard, Chart, Alerts, Dedicated Journal `/journal` |
 | **Charting** | `lightweight-charts` v5.2 | OHLCV candlestick rendering |
-| **Real-time** | Binance Futures WebSocket (`/market/ws`) | Live tick feed (5m klines) |
-| **API Layer** | Next.js Route Handlers (`/api/market-data`, `/api/quant-analyze`) | Data orchestration |
+| **Real-time** | Binance Futures WebSocket (`/market/ws`) | Live tick feed (5m klines) hoisted to global MarketDataProvider context |
+| **API Layer** | Next.js Route Handlers (`/api/market-data`, `/api/quant-analyze`, `/api/trades`, `/api/strategies`) | Data orchestration, CRUD, automated execution engine |
 | **Statistical Engine** | Python FastAPI + `statsmodels` OLS | Displacement validation |
 | **AI Synthesis** | Google Gemini API (`@google/generative-ai`) | Trade signal generation |
-| **State Persistence** | Vercel Postgres (`@vercel/postgres`) | AI memory, settings vault |
+| **State Persistence** | Vercel Postgres (`@vercel/postgres`) | AI memory, terminal settings, custom strategies, paper trades |
 | **Auth** | NextAuth v5 (beta) + proxy.ts | Session-gated access |
 
 ### Data Flow Summary
@@ -55,31 +64,32 @@ The Flow-State Quant Engine is **NOT** a prediction engine. It is a **reaction e
 ```
 Binance REST API (7 endpoints)
         ↓
-/api/market-data (GET) — "The God Node"
-        ↓ Parallel orchestration
-   ┌────┼────┬────────┬──────────┬──────────┐
-   │    │    │        │          │          │
- OHLCV FVGs IPDA  Displacement OrderFlow  Risk
- Format Detect Matrix  Engine    Engine   Engine
-   │    │    │        │          │          │
-   └────┼────┴────────┼──────────┴──────────┘
-        ↓             ↓
-   Enriched JSON   Python OLS
-    (to Client)    (via /api/py)
+/api/market-data (GET) — "The God Node" (Enriched JSON Payload)
         ↓
-  ┌─────┼──────┐
-  │     │      │
-Chart Sidebar  NavigationHeader
-  │     │      │
-  │   AI Btn   Matrix Drawer
-  │     ↓
-  │  /api/quant-analyze (POST)
-  │     ↓
-  │  Gemini API ←→ Vercel Postgres (State)
-  │     ↓
-  │  Synthesis Console (HUD/JSON tabs)
-  │
-  └── Binance WS (Live Tick) ─→ Chart.update()
+        ├──────────────────────────┐
+        ▼                          ▼
+   Client HUD State           useStrategyEvaluator (evaluates user formulas)
+ (useMarketDataContext)            │
+        │                          ├─► Matches? ──► Toast HUD & Audio Alarm
+        ▼                          ▼
+   ┌────┴──────────────┐      /api/strategies (GET/POST/DELETE)
+   ▼                   ▼
+ Chart.tsx         Sidebar.tsx (Institutional Risk parameters)
+   ▲                   │
+   │               [AUTO EXECUTE] ──► /api/trades (POST)
+   │                   │                 │ (1:2 RR Validation Gate)
+   │                   │                 ▼
+   │                   │             paper_trades table (PostgreSQL)
+   │                   │
+   │               [AI ANALYZE] ──► /api/quant-analyze (POST)
+   │                                     │
+   │                                     ▼
+   │                              Gemini AI Synthesis
+   │                                     │
+   │                                     ▼
+   │                             ai_trade_state (Memory)
+   │
+   └─ Binance WS (Live Tick Hoisted Context) ──► Chart.update() & livePrice
 ```
 
 ---
@@ -98,6 +108,8 @@ graph TD
         QA["/api/quant-analyze<br/>(POST)"]
         RS["/api/reset-state<br/>(POST)"]
         ST["/api/settings<br/>(GET/POST)"]
+        TR["/api/trades<br/>(GET • POST • PATCH • DELETE)"]
+        SROUTE["/api/strategies<br/>(GET • POST • DELETE)"]
     end
 
     subgraph "Python Microservice"
@@ -113,19 +125,21 @@ graph TD
     end
 
     subgraph "Frontend — React 19"
-        CTX["MarketDataContext<br/>(Singleton Provider)"]
+        CTX["MarketDataContext<br/>(Global hoisted WS singleton)"]
         HOOK["useMarketData()"]
         ALERTS["useLiveAlerts()"]
-        WS_HOOK["useBinanceWS()"]
+        EVAL["useStrategyEvaluator()"]
         PAGE["page.tsx<br/>(Dashboard)"]
         CHART["Chart.tsx<br/>(lightweight-charts)"]
         SIDE["Sidebar.tsx<br/>(Execution Panel)"]
         NAV["NavigationHeader.tsx"]
         TOAST["SmartAlertsToast.tsx"]
+        JRNL["page.tsx<br/>(/journal Dashboard)"]
+        JTBL["JournalTable.tsx"]
     end
 
     subgraph "Persistence"
-        DB["Vercel Postgres<br/>system_settings<br/>ai_trade_state"]
+        DB["Vercel Postgres<br/>system_settings<br/>ai_trade_state<br/>custom_strategies<br/>paper_trades"]
         GEMINI["Google Gemini API"]
     end
 
@@ -144,14 +158,23 @@ graph TD
     PAGE --> CHART
     PAGE --> SIDE
     PAGE --> TOAST
+    PAGE --> EVAL
+    EVAL -->|"fetches every 30s"| SROUTE
+    EVAL -->|"fires toast"| TOAST
     SIDE -->|"triggerAiAnalysisScan()"| QA
+    SIDE -->|"POST trade log"| TR
     QA --> DB
     QA --> GEMINI
     QA -->|"AI response"| SIDE
     NAV -->|"handleForceReset()"| RS
+    NAV -->|"Link to /journal"| JRNL
     RS --> DB
-    BIN_WS -->|"kline stream"| WS_HOOK
-    WS_HOOK -->|"liveCandle"| CHART
+    SROUTE --> DB
+    TR --> DB
+    JRNL --> JTBL
+    JTBL -->|"GET/PATCH/DELETE"| TR
+    BIN_WS -->|"kline stream"| CTX
+    CTX -->|"liveCandle, livePrice, wsStatus"| CHART
     HOOK --> ALERTS
     ALERTS --> TOAST
 ```
@@ -588,6 +611,64 @@ This means for **long entries**, price must have swept below the 07:00 open befo
 
 ---
 
+### 6.6 Automated Paper Trading Execution Engine (`/api/trades`)
+
+To bridge AI analysis and programmatic verification, V8.2 implements an automated execution and trade journaling engine at `/api/trades`. This serves as a strict mathematical safety gate enforcing risk-reward thresholds on trade logs.
+
+#### 1. POST Execution Flow
+
+1. **Authentication Gate:** The endpoint uses NextAuth `auth()` to validate user sessions (`401 Unauthorized` if missing) to restrict database mutations.
+2. **Self-Healing Initialization:** On the first execution request, it dynamically validates the existence of the `paper_trades` table, running a `CREATE TABLE IF NOT EXISTS` if not found.
+3. **Entry Price Fallback Chain:**
+   - Explicit `entry_price` passed in body.
+   - If missing, fallbacks to `closest_active_fvg_ce` (if unmitigated and active).
+   - If missing, fallbacks to current market price (from `pricing_context` or the latest 5m candle close).
+4. **Strict Stop Loss (SL) Offset:**
+   - **LONG direction:** `bullish_invalidation - 0.05` (1 tick below bullish invalidation).
+   - **SHORT direction:** `bearish_invalidation + 0.05` (1 tick above bearish invalidation).
+   - Prevents floating-point discrepancies via specific mapping to `.toFixed(4)`.
+5. **Take Profit (TP) Magnet Matching:**
+   - Queries `BSL_Magnets` (for LONG) or `SSL_Magnets` (for SHORT).
+   - Sequentially filters out resting liquidity price levels that fail to provide at least a **1:2 Risk-to-Reward (RR)** ratio from the Entry/Stop Loss dealing range.
+   - Selects the nearest eligible magnet satisfying the condition.
+6. **Programmatic Validation Gate:**
+   - Verifies directional alignment: `Stop Loss < Entry < Take Profit` for Longs and `Stop Loss > Entry > Take Profit` for Shorts.
+   - Enforces a strict `RR >= 2.0` threshold.
+   - Rejects failing logs immediately with `400 Bad Request` and error payload `"Inefficient Algorithm: RR < 2.0"`.
+7. **neon PostgreSQL Storage:** Inserts validated parameters with `status = 'OPEN'`.
+
+---
+
+### 6.7 Strategic Equation Builder Runtime & Temporal Engine
+
+V8.2 integrates a **Strategy Architect** enabling users to compile row-based condition equations evaluated live.
+
+#### 1. Runtime Metric Resolution Map
+The execution hook `useStrategyEvaluator.ts` runs silently in the dashboard background and maps custom variables against live market payloads:
+
+| Logic Metric | Evaluated Code Formula / Source | Return Type |
+|---|---|---|
+| `FVG` | `ipda_metrics.active_fvgs.length > 0` | boolean |
+| `DISPLACEMENT` | `institutional_sponsorship.status === 'ACTIVE_BULLISH' || status === 'ACTIVE_BEARISH'` | boolean |
+| `OI_TREND` | `order_flow_engine.open_interest_trend` (`RISING`/`FALLING`/`FLAT`) | string (enum) |
+| `MSS` | `market_structure_shift` flag | boolean |
+| `SMT` | `smart_money_sentiment.smart_money_divergence` | boolean |
+| `PRICE_VS_OPEN` | `livePrice > true_day_open_0700` (`ABOVE`/`BELOW`) | string (enum) |
+
+#### 2. Temporal Gating Logic
+Each condition features a temporal toggle:
+- **⚡ TICK (Instant Mode):** Evaluated instantly on every incoming price tick.
+- **🔒 CLOSE (Candle Close Mode):** The entire strategy is gated behind `liveCandle.isClosed === true`. If even one condition in the equation uses `CLOSE` mode, the engine blocks execution until the 5-minute candle fully prints.
+
+#### 3. Debounce Lock (Preventing Alert Loops)
+To comply with Lesson #10, the evaluator tracks `lastFiredCandleTime` per strategy. When an equation evaluates to `true`, the system locks execution and permits only **one trigger event per candle**, preventing audio notification loops and API abuse.
+
+#### 4. High-Contrast HUD Toast Integration
+Matches are piped as `STRATEGY_MATCHED` alert types to `SmartAlertsToast.tsx`, rendering with a pulsing crosshair icon, high-contrast black glassmorphism, and a vibrant `#50ffaf` green left accent border:
+`[SYSTEM: STRATEGY_MATCHED → {STRATEGY_NAME}]`
+
+---
+
 ## 7. Layer 5: The Stateful API Layer (Memory Protocol)
 
 ### 7.1 Database Schema
@@ -598,6 +679,38 @@ This means for **long entries**, price must have swept below the 07:00 open befo
 |---|---|---|
 | `system_settings` | `key_name` (UNIQUE) | Stores `GEMINI_LIVE_KEY`, `ACTIVE_MODEL`, `SYSTEM_PROMPT` |
 | `ai_trade_state` | `id = 1` (singleton) | Stores the AI's `state_json` and `updated_at` |
+| `custom_strategies` | `id` (UUID PRIMARY KEY) | Stores user custom strategy equations and logic rules |
+| `paper_trades` | `id` (UUID PRIMARY KEY) | Stores active and completed paper trade execution logs |
+
+#### Table: `custom_strategies`
+```sql
+CREATE TABLE IF NOT EXISTS custom_strategies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id VARCHAR(255) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  logic_json JSONB NOT NULL,       -- Array of StrategyCondition objects
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### Table: `paper_trades`
+```sql
+CREATE TABLE IF NOT EXISTS paper_trades (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  symbol VARCHAR(50) NOT NULL,
+  direction VARCHAR(10) NOT NULL,
+  entry_price DECIMAL(18, 4) NOT NULL,
+  stop_loss DECIMAL(18, 4) NOT NULL,
+  take_profit DECIMAL(18, 4) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'OPEN', -- 'OPEN', 'CLOSED', 'PAUSED'
+  strategy_name VARCHAR(255) NOT NULL,
+  ai_narrative_summary TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
 
 ### 7.2 State Machine Transitions
 
@@ -933,6 +1046,213 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 
 ---
 
+### `POST /api/trades`
+
+**Purpose:** Logs a new trade after executing calculations for entry price fallbacks, stopping logic (1 tick offset), and 1:2 Risk-to-Reward magnet filtration.
+
+**Auth:** Requires valid NextAuth session.
+
+**Request Body:**
+```json
+{
+  "symbol": "ETHUSDC",
+  "direction": "LONG",
+  "strategy_name": "Displacement Breakout",
+  "ai_narrative_summary": "Displacement is active with p-value < 0.05. Target SSL magnet.",
+  "ipda_metrics": { ... }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "trade_id": "8f89bc44-59e8-469b-98f9-46706e23297a",
+  "timestamp": "2026-05-23T22:45:00.000Z",
+  "execution_parameters": {
+    "symbol": "ETHUSDC",
+    "direction": "LONG",
+    "entry_price": 2510,
+    "stop_loss": 2499.95,
+    "take_profit": 2560,
+    "status": "OPEN",
+    "risk_reward_ratio": 4.9751,
+    "risk_amount": 10.05,
+    "reward_amount": 50,
+    "strategy_name": "Displacement Breakout",
+    "ai_narrative_summary": "..."
+  }
+}
+```
+
+**Error Responses:**
+- `401` — Unauthorized (no active session)
+- `400` — `Inefficient Algorithm: RR < 2.0` (Risk to Reward fails 1:2 gate)
+- `400` — Missing required parameters or directional invalidation mismatch
+
+---
+
+### `GET /api/trades`
+
+**Purpose:** Retrieves all trade rows from `paper_trades` ordered by `created_at` DESC.
+
+**Auth:** Requires valid NextAuth session.
+
+**Response:**
+```json
+{
+  "success": true,
+  "trades": [
+    {
+      "id": "8f89bc44-59e8-469b-98f9-46706e23297a",
+      "timestamp": "2026-05-23T22:45:00.000Z",
+      "symbol": "ETHUSDC",
+      "direction": "LONG",
+      "entry_price": "2510.0000",
+      "stop_loss": "2499.9500",
+      "take_profit": "2560.0000",
+      "status": "OPEN",
+      "strategy_name": "Displacement Breakout",
+      "ai_narrative_summary": "...",
+      "created_at": "2026-05-23T22:45:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+### `PATCH /api/trades`
+
+**Purpose:** Updates the tracking status of a specific trade log (OPEN, CLOSED, PAUSED).
+
+**Auth:** Requires valid NextAuth session.
+
+**Request Body:**
+```json
+{
+  "trade_id": "8f89bc44-59e8-469b-98f9-46706e23297a",
+  "status": "PAUSED"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Trade status updated to PAUSED.",
+  "trade": {
+    "id": "8f89bc44-59e8-469b-98f9-46706e23297a",
+    "status": "PAUSED"
+  }
+}
+```
+
+---
+
+### `DELETE /api/trades`
+
+**Purpose:** Surgically deletes a trade log from the database.
+
+**Auth:** Requires valid NextAuth session.
+
+**Query Parameter or Body:**
+```json
+{
+  "trade_id": "8f89bc44-59e8-469b-98f9-46706e23297a"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Trade successfully purged from the database.",
+  "deleted_id": "8f89bc44-59e8-469b-98f9-46706e23297a"
+}
+```
+
+---
+
+### `GET /api/strategies`
+
+**Purpose:** Retrieves all strategy equations defined by the authenticated user, sorted by creation date.
+
+**Auth:** Requires valid NextAuth session.
+
+**Response:**
+```json
+{
+  "strategies": [
+    {
+      "id": "a90df1a5-8c0c-4ff6-8367-e95b0fb2d8d8",
+      "name": "Displacement with FVG Close",
+      "conditions": [
+        { "metric": "DISPLACEMENT", "operator": "==", "value": "ACTIVE_BULLISH", "temporal": "TICK" },
+        { "metric": "FVG", "operator": "==", "value": "true", "temporal": "CLOSE" }
+      ],
+      "is_active": true,
+      "created_at": "2026-05-23T21:30:00.000Z",
+      "updated_at": "2026-05-23T21:30:00.000Z"
+    }
+  ]
+}
+```
+
+---
+
+### `POST /api/strategies`
+
+**Purpose:** Upserts a custom strategy (creates new if `id` is omitted, updates if `id` matches an existing user-owned strategy).
+
+**Auth:** Requires valid NextAuth session.
+
+**Request Body:**
+```json
+{
+  "id": "a90df1a5-8c0c-4ff6-8367-e95b0fb2d8d8",
+  "name": "Displacement with FVG Close",
+  "conditions": [
+    { "metric": "DISPLACEMENT", "operator": "==", "value": "ACTIVE_BULLISH", "temporal": "TICK" }
+  ],
+  "is_active": true
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "id": "a90df1a5-8c0c-4ff6-8367-e95b0fb2d8d8",
+  "message": "Strategy updated."
+}
+```
+
+---
+
+### `DELETE /api/strategies`
+
+**Purpose:** Deletes a custom strategy by UUID, scoped by user ownership.
+
+**Auth:** Requires valid NextAuth session.
+
+**Request Body:**
+```json
+{
+  "id": "a90df1a5-8c0c-4ff6-8367-e95b0fb2d8d8"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Strategy deleted."
+}
+```
+
+---
+
 ## 11. Edge Case Audit
 
 ### Hard [🚫 ABORT] Conditions
@@ -985,13 +1305,15 @@ The `useLiveAlerts` hook **suppresses ALL non-DEAD_ZONE alerts** when the DEAD_Z
 | **LD-2** | SMT Trap Detector | The SMT/Equal Highs detector in `route.ts` uses pure 3-bar price-action fractal detection (`curr.h > prev.h && curr.h > next.h`) without the **"Strict Directional Lock" color validation** mandated by `02_lessons.md` Lesson #1 and `03_quant_logic.md` Section 1. This could produce false pivots from "Outside Bars." | 🔴 High |
 | **LD-3** | Confidence Interval Naming | `confidence_interval_95` is TRUE when `p < 0.15 AND t > 1.96`. A true 95% CI requires `p < 0.05`. The name is misleading. Comment in code says "backward compatibility." | 🟡 Medium |
 | **LD-4** | Dead Zone Time Mismatch | **Python OLS:** `is_dead_zone` flags hours `{12, 13, 14}` on Cairo-offset timestamps. **Frontend alerts:** checks NY Time `{12:00, 13:00-13:30}`. **Backend Killzone:** no explicit dead zone hours listed (any non-killzone hour). These are three different dead zone definitions across three different timezones. | 🔴 High |
-| **LD-5** | 1:2 RR Rule | The documentation and AI prompt reference a minimum 1:2 Risk-Reward ratio, but no code enforces this constraint. A post-processing validator could reject signals where `|TP1 - entry| / |entry - SL| < 2.0`. | 🟡 Medium |
+| **LD-5** | 1:2 RR Rule | **Resolved in V8.2:** The `/api/trades` route now implements a strict programmatic validation gate validating that risk/reward ratio is strictly `>= 2.0` before any trade is permitted to log. Any failing payload is aborted with `400 Inefficient Algorithm`. *(Note: The AI synthesis endpoint `/api/quant-analyze` still relies on prompt adherence, but the actual execution journal acts as a bulletproof gate).* | 🟢 Resolved |
 | **LD-6** | `true_day_open` Duplication | `ipda_metrics.true_day_open` and `ipda_metrics.macro_levels.true_day_open` contain the same value. One should be removed to reduce payload size and avoid confusion. | 🟢 Low |
 | **LD-7** | Candle Interface Duplication | `Candle` is defined in both [fvgEngine.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/lib/fvgEngine.ts#L1-L11) and [useMarketData.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/hooks/useMarketData.ts#L5-L12). The hook version omits `taker_buy_vol` and `taker_sell_vol`. Should be consolidated into a single shared type. | 🟢 Low |
 | **LD-8** | No-Direction Invalidation Guard | When `parsedState.trade_direction` is null/undefined, the invalidation guard in `quant-analyze/route.ts` sets `breached = true` unconditionally ([line 98](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/app/api/quant-analyze/route.ts#L95-L99)), meaning ANY state with an `invalidation_level` but no `trade_direction` will always reset to SEARCHING. | 🟡 Medium |
 | **LD-9** | Python File Duplication | [quant_engine_api.py](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/quant_engine_api.py) (root, local dev) and [api/index.py](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/api/index.py) (Vercel deploy) contain identical logic but different route decorators. The root file has `/calculate-displacement` while `index.py` has `/api/py/calculate-displacement` + `/api/index`. Changes to one must be manually synced. | 🟡 Medium |
 | **LD-10** | WebSocket vs API Time Sync | The WS hook bakes in `UTC_PLUS_3_OFFSET_S` (10,800s) to match the backend's `utcPlus3OffsetMs`. If either offset changes independently, the chart will show a 3-hour gap or overlap between historical bars and live ticks. No runtime validation ensures they match. | 🟡 Medium |
+| **LD-11** | Server-Side Implicit Any Gating | **Resolved in V8.2:** The `/journal` page query had an implicit `any[]` declaration for `initialTrades` that caused Vercel deployment builds to fail under strict TypeScript compiling. Resolved by explicitly importing and applying the `TradeRecord[]` interface. | 🟢 Resolved |
 
 ---
+
 
 > **End of Master Blueprint.** This document should be treated as the canonical reference for all future modifications to the Flow-State Quant Engine. When in doubt, trace back to the source files linked throughout this document.

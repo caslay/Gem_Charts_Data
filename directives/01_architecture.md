@@ -1,5 +1,8 @@
 # 🏗️ Flow-State Architecture & Graphify Directives
 
+> [!IMPORTANT]
+> **📜 Master Blueprint Maintenance Rule:** After completing any update or task, you MUST update the master blueprint file at `directives/master_blueprint.md` to ensure all system documentation, database schemas, and API handlers remain fully synchronized and up to date.
+
 ## 🌐 Macro Structure
 The `Gem_Charts_Data` project is structurally divided into 13 interconnected communities based on the latest Graphify Report. You must observe strict boundary rules when modifying cross-community bridges to prevent cascading failures.
 
