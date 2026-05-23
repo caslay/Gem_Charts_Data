@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useCallback, useEffect } from "react";
-import { Activity, History, TrendingUp, LayoutGrid, Settings, RotateCcw, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Activity, History, TrendingUp, LayoutGrid, Settings, RotateCcw, Loader2, CheckCircle2, AlertCircle, BookOpen } from "lucide-react";
 import MatrixConfigDrawer from "./MatrixConfigDrawer";
 import { useMarketDataContext } from "@/context/MarketDataContext";
 import { LiveTicker } from "./LiveTicker";
@@ -114,6 +114,16 @@ export function NavigationHeader() {
               title="Compound Plan"
             >
               <TrendingUp className="w-4 h-4" />
+            </Link>
+            <Link
+              href="/journal"
+              className={`p-1.5 transition-all flex items-center justify-center ${pathname === '/journal'
+                  ? 'text-[#50ffaf] border-b-2 border-[#50ffaf] bg-[#50ffaf]/10'
+                  : 'text-[#958da3] hover:text-[#e5e2e3] border-b-2 border-transparent hover:bg-zinc-800/50'
+                }`}
+              title="Trading Journal"
+            >
+              <BookOpen className="w-4 h-4" />
             </Link>
             <div className="w-px h-4 bg-[#4a4457]/50 mx-0.5" />
             <Link
