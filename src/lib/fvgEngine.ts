@@ -7,10 +7,11 @@ export interface Candle {
   v?: number;
   taker_buy_vol?: number;
   taker_sell_vol?: number;
+  isClosed?: boolean;
   [key: string]: any;
 }
 
-export function detectActiveFVGs(candles: Candle[]) {
+export function detectActiveFVGs(candles: Candle[], onlyClosed: boolean = true) {
   const active_fvgs = [];
   
   for (let i = 0; i < candles.length - 2; i++) {
@@ -50,16 +51,33 @@ export function detectActiveFVGs(candles: Candle[]) {
       }
 
       if (!isMitigated) {
-        active_fvgs.push({
-          type,
-          status: 'ACTIVE_UNMITIGATED',
-          coordinates: {
-            top,
-            ce_50_percent: (top + bottom) / 2,
-            bottom
-          },
-          origin_time: c1.t
-        });
+        const isClosed = c3.isClosed === undefined ? true : c3.isClosed;
+
+        if (onlyClosed) {
+          if (isClosed) {
+            active_fvgs.push({
+              type,
+              status: 'ACTIVE_UNMITIGATED',
+              coordinates: {
+                top,
+                ce_50_percent: (top + bottom) / 2,
+                bottom
+              },
+              origin_time: c1.t
+            });
+          }
+        } else {
+          active_fvgs.push({
+            type,
+            status: isClosed ? 'ACTIVE_UNMITIGATED' : 'PENDING_FVG',
+            coordinates: {
+              top,
+              ce_50_percent: (top + bottom) / 2,
+              bottom
+            },
+            origin_time: c1.t
+          });
+        }
       }
     }
   }
@@ -73,7 +91,8 @@ export interface MappedFVG {
   top: number;
   bottom: number;
   ce: number;
-  status: 'UNMITIGATED' | 'MITIGATED';
+  status: 'UNMITIGATED' | 'MITIGATED' | 'PENDING';
+  origin_time: number;
 }
 
 export function mapAndConsolidateFVGs(fvgs15m: any[], fvgs5m: any[]): MappedFVG[] {
@@ -83,7 +102,8 @@ export function mapAndConsolidateFVGs(fvgs15m: any[], fvgs5m: any[]): MappedFVG[
     top: fvg.coordinates.top,
     bottom: fvg.coordinates.bottom,
     ce: fvg.coordinates.ce_50_percent,
-    status: fvg.status === 'ACTIVE_UNMITIGATED' ? 'UNMITIGATED' : 'MITIGATED'
+    status: fvg.status === 'ACTIVE_UNMITIGATED' ? 'UNMITIGATED' : (fvg.status === 'PENDING_FVG' ? 'PENDING' : 'MITIGATED'),
+    origin_time: fvg.origin_time
   });
 
   return [
@@ -91,3 +111,4 @@ export function mapAndConsolidateFVGs(fvgs15m: any[], fvgs5m: any[]): MappedFVG[
     ...fvgs5m.map(f => mapFVG(f, '5m'))
   ];
 }
+

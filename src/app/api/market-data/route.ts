@@ -69,6 +69,7 @@ export async function GET(req: Request) {
 
     const utcPlus3OffsetMs = 3 * 60 * 60 * 1000;
     const formatCandles = (data: any[]) => {
+      const now = Date.now();
       return data.map((c) => {
         const v = parseFloat(c[5]);
         const taker_buy_vol = parseFloat(c[9]);
@@ -82,6 +83,7 @@ export async function GET(req: Request) {
           v: v,
           taker_buy_vol,
           taker_sell_vol,
+          isClosed: now >= c[6]
         };
       });
     };
@@ -390,8 +392,13 @@ export async function GET(req: Request) {
       }
     }
 
-    const active_fvgs = mapAndConsolidateFVGs(detectActiveFVGs(candles15m), detectActiveFVGs(candles5m));
-    const institutional_sponsorship = await verifyDisplacement(candles15m);
+    const active_fvgs = mapAndConsolidateFVGs(detectActiveFVGs(candles15m, true), detectActiveFVGs(candles5m, true));
+    const all_fvgs = mapAndConsolidateFVGs(detectActiveFVGs(candles15m, false), detectActiveFVGs(candles5m, false));
+    const pending_fvgs = all_fvgs.filter(fvg => fvg.status === 'PENDING');
+    
+    // Explicitly define stat_payload with at least 200 candles to ensure OLS significance
+    const stat_payload = candles15m.slice(-200);
+    const institutional_sponsorship = await verifyDisplacement(stat_payload, symbol);
     const current_time_window = getCurrentKillzone();
 
     const trade_execution_parameters = generateTradeExecutionParameters(
@@ -432,6 +439,7 @@ export async function GET(req: Request) {
         smart_money_sentiment,
       },
       active_fvgs,
+      pending_fvgs,
       trade_execution_parameters
     };
 

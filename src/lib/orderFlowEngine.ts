@@ -46,10 +46,17 @@ export async function fetchRestingLiquidity(symbol: string = 'ETHUSDC'): Promise
   }
 }
 
+function calculateSMA(data: number[], period: number): number {
+  if (data.length === 0) return 0;
+  if (data.length < period) return data.reduce((a, b) => a + b, 0) / data.length;
+  const slice = data.slice(-period);
+  return slice.reduce((a, b) => a + b, 0) / period;
+}
+
 export async function fetchOIMetricsAndLiquidations(symbol: string = 'ETHUSDC', isPriceRising: boolean = true): Promise<{ open_interest_trend: string, liquidation_events: LiquidationEvents }> {
   try {
     const [oiResult, liqResult] = await Promise.allSettled([
-      fetch(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=5m&limit=2`, { signal: AbortSignal.timeout(5000) }),
+      fetch(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=5m&limit=50`, { signal: AbortSignal.timeout(5000) }),
       fetch(`https://fapi.binance.com/fapi/v1/allForceOrders?symbol=${symbol}&limit=100`, { signal: AbortSignal.timeout(5000) })
     ]);
 
@@ -60,13 +67,49 @@ export async function fetchOIMetricsAndLiquidations(symbol: string = 'ETHUSDC', 
     if (oiResult.status === 'fulfilled' && oiResult.value.ok) {
       try {
         const oiData = await oiResult.value.json();
-        if (Array.isArray(oiData) && oiData.length === 2) {
-          const prevOI = parseFloat(oiData[0].sumOpenInterestValue || oiData[0].sumOpenInterest);
-          const currOI = parseFloat(oiData[1].sumOpenInterestValue || oiData[1].sumOpenInterest);
-
+        if (Array.isArray(oiData) && oiData.length >= 14) {
+          // sumOpenInterest is base asset quantity (ETH for ETHUSDC)
+          const oiValues = oiData.map((d: { sumOpenInterest?: string | number, sumOpenInterestValue?: string | number }) => parseFloat(String(d.sumOpenInterest || d.sumOpenInterestValue))).filter(v => !isNaN(v));
+          
+          if (oiValues.length >= 14) {
+            let currentTrend = 'NEUTRAL';
+            const threshold = symbol.toUpperCase().includes('ETH') ? 500 : 50; // Calibrated 500 ETH hysteresis delta threshold
+            
+            for (let i = 14; i < oiValues.length; i++) {
+              const sma = calculateSMA(oiValues.slice(0, i + 1), 14);
+              const val = oiValues[i];
+              
+              if (currentTrend === 'RISING') {
+                if (val < sma - threshold) {
+                  currentTrend = 'FALLING';
+                }
+              } else if (currentTrend === 'FALLING') {
+                if (val > sma + threshold) {
+                  currentTrend = 'RISING';
+                }
+              } else {
+                if (val > sma + threshold) {
+                  currentTrend = 'RISING';
+                } else if (val < sma - threshold) {
+                  currentTrend = 'FALLING';
+                }
+              }
+            }
+            
+            if ((currentTrend === 'RISING' && isPriceRising) || (currentTrend === 'FALLING' && !isPriceRising)) {
+              open_interest_trend = `${currentTrend}_WITH_PRICE`;
+            } else if (currentTrend !== 'NEUTRAL') {
+              open_interest_trend = `${currentTrend}_AGAINST_PRICE`;
+            } else {
+              open_interest_trend = 'NEUTRAL';
+            }
+          }
+        } else if (Array.isArray(oiData) && oiData.length >= 2) {
+          // Fallback if data length is between 2 and 13
+          const prevOI = parseFloat(oiData[oiData.length - 2].sumOpenInterest || oiData[oiData.length - 2].sumOpenInterestValue);
+          const currOI = parseFloat(oiData[oiData.length - 1].sumOpenInterest || oiData[oiData.length - 1].sumOpenInterestValue);
           if (!isNaN(prevOI) && !isNaN(currOI)) {
             const trend = currOI > prevOI ? 'RISING' : 'FALLING';
-            // Align with price direction for status
             if ((trend === 'RISING' && isPriceRising) || (trend === 'FALLING' && !isPriceRising)) {
               open_interest_trend = `${trend}_WITH_PRICE`;
             } else {
@@ -74,7 +117,7 @@ export async function fetchOIMetricsAndLiquidations(symbol: string = 'ETHUSDC', 
             }
           }
         }
-      } catch (err) {}
+      } catch {}
     }
 
     // Process Liquidations
@@ -83,7 +126,7 @@ export async function fetchOIMetricsAndLiquidations(symbol: string = 'ETHUSDC', 
         const data = await liqResult.value.json();
         if (Array.isArray(data)) {
           const oneHourAgo = Date.now() - 60 * 60 * 1000;
-          const recentLiqs = data.filter((order: any) => order.time > oneHourAgo);
+          const recentLiqs = data.filter((order: { time: number; executedQty: string; averagePrice: string; side: string }) => order.time > oneHourAgo);
 
           let totalLongsUsd = 0;
           let totalShortsUsd = 0;
@@ -97,8 +140,8 @@ export async function fetchOIMetricsAndLiquidations(symbol: string = 'ETHUSDC', 
           }
 
           const totalPurged = totalLongsUsd + totalShortsUsd;
-          let dominantSide = totalLongsUsd >= totalShortsUsd ? 'LONGS' : 'SHORTS';
-          let dominantVolume = Math.max(totalLongsUsd, totalShortsUsd);
+          const dominantSide = totalLongsUsd >= totalShortsUsd ? 'LONGS' : 'SHORTS';
+          const dominantVolume = Math.max(totalLongsUsd, totalShortsUsd);
 
           let last_hour_purged = 'NO_MAJOR_PURGE';
           if (dominantVolume > 0) {
@@ -116,7 +159,7 @@ export async function fetchOIMetricsAndLiquidations(symbol: string = 'ETHUSDC', 
             status: totalPurged > 1_000_000 ? 'LIQUIDITY_SWEPT' : 'NORMAL'
           };
         }
-      } catch (err) {}
+      } catch {}
     }
 
     return { open_interest_trend, liquidation_events };
@@ -150,7 +193,7 @@ export async function fetchSmartMoneySentiment(symbol: string = 'ETHUSDC'): Prom
             funding_rate_status = 'NEGATIVE_RETAIL_SHORT';
           }
         }
-      } catch (err) {}
+      } catch {}
     }
 
     if (ratioResult.status === 'fulfilled' && ratioResult.value.ok) {
@@ -167,7 +210,7 @@ export async function fetchSmartMoneySentiment(symbol: string = 'ETHUSDC'): Prom
             }
           }
         }
-      } catch (err) {}
+      } catch {}
     }
 
     return { funding_rate_status, smart_money_divergence };

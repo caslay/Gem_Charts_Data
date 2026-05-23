@@ -6,25 +6,10 @@ import { Candle } from '@/hooks/useMarketData';
 import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
 import { useBinanceWS } from '@/hooks/useBinanceWS';
 import type { LiveCandle } from '@/hooks/useBinanceWS';
-import AlertSettingsModal from './modals/AlertSettingsModal';
+import SettingsModal, { Alert } from './modals/SettingsModal';
 import { AlertSound, useAlertSounds } from '@/hooks/useAlertSounds';
 import { useMarketDataContext } from '@/context/MarketDataContext';
-
-export interface Alert {
-  id: string;
-  price: number;
-  status: 'active' | 'triggered';
-  color: string;
-  label?: string;
-  triggerCondition?: 'TOUCH' | 'CLOSE_ABOVE' | 'CLOSE_BELOW' | 'WICK_PURGE_REJECT';
-  timeframe?: '1m' | '5m' | '15m' | '1h' | '4h' | '1D';
-  actionChain?: {
-    browserNotification: boolean;
-    triggerAiAnalysis: boolean;
-    soundAlert: boolean;
-  };
-  soundSelection?: AlertSound;
-}
+import { Volume2 } from 'lucide-react';
 
 interface ChartProps {
   data: Candle[];
@@ -66,8 +51,12 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
     volume: number;
   } | null>(null);
 
-  const { playSound } = useAlertSounds();
-  const { data: marketContextData, triggerAiAnalysisScan } = useMarketDataContext();
+  // Unified modal overlay triggers
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [settingsModalTab, setSettingsModalTab] = useState<'price' | 'signal'>('price');
+
+  const { playSound, playFile } = useAlertSounds();
+  const { data: marketContextData, triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert } = useMarketDataContext();
   
   // Load alerts from localStorage on initial client mount
   useEffect(() => {
@@ -92,6 +81,214 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       console.error('[Chart] Failed to save alerts to localStorage:', e);
     }
   }, [alerts]);
+
+  // ── Difference Engine (Diff Engine) for Algorithmic Events ──────────────
+  const prevDataRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!marketContextData || !signalAlerts) return;
+
+    // Helper: generate FVG unique hash key
+    const makeFvgKey = (fvg: any) => `${fvg.timeframe}_${fvg.type}_${fvg.top}_${fvg.bottom}_${fvg.origin_time}`;
+    // Helper: generate SMT unique hash key
+    const makeSmtKey = (smt: any) => `${smt.time1}_${smt.time2}_${smt.price}`;
+
+    const prevData = prevDataRef.current;
+
+    if (prevData) {
+      const prevMetrics = prevData.ipda_metrics || {};
+      const currMetrics = marketContextData.ipda_metrics || {};
+
+      const prevTimeWindow = prevMetrics.current_time_window;
+      const currTimeWindow = currMetrics.current_time_window;
+      const prevStatus = prevMetrics.target_status || '';
+      const currStatus = currMetrics.target_status || '';
+
+      // 1. FVG Watcher
+      const prevFvgs = prevMetrics.active_fvgs || [];
+      const currFvgs = currMetrics.active_fvgs || [];
+      
+      const prevFvgKeys = new Set(prevFvgs.map(makeFvgKey));
+      
+      const hasNewFvg = currFvgs.some((fvg: any) => {
+        const key = makeFvgKey(fvg);
+        return !prevFvgKeys.has(key);
+      });
+
+      const isFvgEnabled = signalAlertsEnabled ? signalAlertsEnabled.FVG_DETECTION !== false : true;
+
+      if (hasNewFvg && isFvgEnabled) {
+        console.log('[DiffEngine] New FVG formation detected. Triggering FVG_DETECTION sound.');
+        if (signalAlerts.FVG_DETECTION) {
+          playFile(signalAlerts.FVG_DETECTION);
+        }
+        if (triggerSmartAlert) {
+          const newFvgObj = currFvgs.find((fvg: any) => !prevFvgKeys.has(makeFvgKey(fvg)));
+          const detail = newFvgObj 
+            ? `${newFvgObj.type} FVG on ${newFvgObj.timeframe} [${newFvgObj.bottom.toFixed(2)} - ${newFvgObj.top.toFixed(2)}]`
+            : 'New Fair Value Gap formed';
+          triggerSmartAlert(
+            'FLOW_STATE',
+            `🚨 FVG DETECTION: ${detail}`
+          );
+        }
+      }
+
+      // 2. Displacement Watcher
+      const prevDisp = prevMetrics.order_flow_engine?.displacement_sponsorship === 'ACTIVE';
+      const currDisp = currMetrics.order_flow_engine?.displacement_sponsorship === 'ACTIVE';
+
+      const isDispEnabled = signalAlertsEnabled ? signalAlertsEnabled.DISPLACEMENT_CONFIRMED !== false : true;
+
+      if (!prevDisp && currDisp && isDispEnabled) {
+        console.log('[DiffEngine] Displacement confirmed. Triggering DISPLACEMENT_CONFIRMED sound.');
+        if (signalAlerts.DISPLACEMENT_CONFIRMED) {
+          playFile(signalAlerts.DISPLACEMENT_CONFIRMED);
+        }
+        if (triggerSmartAlert) {
+          triggerSmartAlert(
+            'FLOW_STATE',
+            `🌊 FLOW STATE: Displacement Confirmed (Institutional Sponsorship Active)`
+          );
+        }
+      }
+
+      // 3. SMT Watcher
+      const prevSmts = prevMetrics.smt_traps || [];
+      const currSmts = currMetrics.smt_traps || [];
+
+      const prevSmtKeys = new Set(prevSmts.map(makeSmtKey));
+      
+      const hasNewSmt = currSmts.some((smt: any) => {
+        const key = makeSmtKey(smt);
+        return !prevSmtKeys.has(key);
+      });
+
+      const isSmtEnabled = signalAlertsEnabled ? signalAlertsEnabled.SMT_TRAP_ACTIVE !== false : true;
+
+      if (hasNewSmt && isSmtEnabled) {
+        console.log('[DiffEngine] New SMT trap active. Triggering SMT_TRAP_ACTIVE sound.');
+        if (signalAlerts.SMT_TRAP_ACTIVE) {
+          playFile(signalAlerts.SMT_TRAP_ACTIVE);
+        }
+        if (triggerSmartAlert) {
+          const newSmtObj = currSmts.find((smt: any) => !prevSmtKeys.has(makeSmtKey(smt)));
+          const detail = newSmtObj
+            ? `Equal Highs/Lows engineered near ${newSmtObj.price.toFixed(2)}`
+            : 'Equal Highs/Lows engineered';
+          triggerSmartAlert(
+            'SMT_TRAP',
+            `📉 SMT TRAP ACTIVE: ${detail}`
+          );
+        }
+      }
+
+      // 4. Target/DOL Exhaustion Watcher
+      const prevExhausted = prevStatus.includes('EXHAUSTED');
+      const currExhausted = currStatus.includes('EXHAUSTED');
+
+      const isDolEnabled = signalAlertsEnabled ? signalAlertsEnabled.DOL_EXHAUSTED !== false : true;
+
+      if (!prevExhausted && currExhausted && isDolEnabled) {
+        console.log('[DiffEngine] DOL Exhausted / Target reached. Triggering DOL_EXHAUSTED sound.');
+        if (signalAlerts.DOL_EXHAUSTED) {
+          playFile(signalAlerts.DOL_EXHAUSTED);
+        }
+        if (triggerSmartAlert) {
+          triggerSmartAlert(
+            'OBJECTIVE_UPDATE',
+            `🎯 OBJECTIVE UPDATE: Daily Objective targets reached (Liquidity Swept)!`
+          );
+        }
+      }
+
+      // 5. Session Transition Watcher
+      const isSessionEnabled = signalAlertsEnabled ? signalAlertsEnabled.SESSION_TRANSITION !== false : true;
+      if (prevTimeWindow && currTimeWindow && prevTimeWindow !== currTimeWindow && isSessionEnabled) {
+        console.log(`[DiffEngine] Session shifted from ${prevTimeWindow} to ${currTimeWindow}. Triggering SESSION_TRANSITION sound.`);
+        if (signalAlerts.SESSION_TRANSITION) {
+          playFile(signalAlerts.SESSION_TRANSITION);
+        }
+        if (triggerSmartAlert) {
+          triggerSmartAlert(
+            'SESSION_TRANSITION',
+            `🕒 SESSION TRANSITION: Entering ${currTimeWindow}`
+          );
+        }
+      }
+
+      // 6. Pricing Shift Watcher
+      const prevPricing = prevMetrics.current_pricing;
+      const currPricing = currMetrics.current_pricing;
+      const isPricingEnabled = signalAlertsEnabled ? signalAlertsEnabled.PRICING_SHIFT !== false : true;
+      if (prevPricing && currPricing && prevPricing !== currPricing && isPricingEnabled) {
+        console.log(`[DiffEngine] Pricing context shifted from ${prevPricing} to ${currPricing}. Triggering PRICING_SHIFT sound.`);
+        if (signalAlerts.PRICING_SHIFT) {
+          playFile(signalAlerts.PRICING_SHIFT);
+        }
+        if (triggerSmartAlert) {
+          triggerSmartAlert(
+            'PRICING_SHIFT',
+            `⚖️ PRICING CROSSOVER: Market shifted to ${currPricing}`
+          );
+        }
+      }
+
+      // 7. Liquidity Sweep Watcher
+      const sweepKeywords = ['ASIAN_HIGH_SWEPT', 'ASIAN_LOW_SWEPT', 'LONDON_HIGH_SWEPT', 'LONDON_LOW_SWEPT'];
+      const newSweeps = sweepKeywords.filter(keyword => 
+        currStatus.includes(keyword) && !prevStatus.includes(keyword)
+      );
+      const isSweepEnabled = signalAlertsEnabled ? signalAlertsEnabled.SWEEP_ALERT !== false : true;
+      if (newSweeps.length > 0 && isSweepEnabled) {
+        console.log(`[DiffEngine] Liquidity swept: ${newSweeps.join(', ')}. Triggering SWEEP_ALERT sound.`);
+        if (signalAlerts.SWEEP_ALERT) {
+          playFile(signalAlerts.SWEEP_ALERT);
+        }
+        if (triggerSmartAlert) {
+          triggerSmartAlert(
+            'PURGE',
+            `🧹 SWEEP ALERT: Intraday range swept - ${newSweeps.join(', ')}`
+          );
+        }
+      }
+
+      // 9. Flow State Trend Shift Watcher (OI momentum shift)
+      const prevTrend = prevMetrics.order_flow_engine?.open_interest_trend;
+      const currTrend = currMetrics.order_flow_engine?.open_interest_trend;
+      const isFlowEnabled = signalAlertsEnabled ? signalAlertsEnabled.FLOW_STATE_CHANGE !== false : true;
+      if (prevTrend && currTrend && prevTrend !== currTrend && isFlowEnabled) {
+        console.log(`[DiffEngine] Flow State trend shifted from ${prevTrend} to ${currTrend}. Triggering FLOW_STATE_CHANGE sound.`);
+        if (signalAlerts.FLOW_STATE_CHANGE) {
+          playFile(signalAlerts.FLOW_STATE_CHANGE);
+        }
+        if (triggerSmartAlert) {
+          triggerSmartAlert(
+            'FLOW_STATE',
+            `🌊 FLOW STATE TREND: Open Interest momentum is now ${currTrend}`
+          );
+        }
+      }
+
+      // 10. Dead Zone Restriction Watcher
+      const isDeadZoneEnabled = signalAlertsEnabled ? signalAlertsEnabled.DEAD_ZONE_ENTER !== false : true;
+      if (currTimeWindow === 'DEAD_ZONE' && prevTimeWindow !== 'DEAD_ZONE' && isDeadZoneEnabled) {
+        console.log('[DiffEngine] Temporal DEAD_ZONE restrictions activated. Triggering DEAD_ZONE_ENTER sound.');
+        if (signalAlerts.DEAD_ZONE_ENTER) {
+          playFile(signalAlerts.DEAD_ZONE_ENTER);
+        }
+        if (triggerSmartAlert) {
+          triggerSmartAlert(
+            'DEAD_ZONE',
+            `🔕 DEAD ZONE: Entering NY mid-day pause. Structural alerts muted.`
+          );
+        }
+      }
+    }
+
+    // Always update prevDataRef
+    prevDataRef.current = marketContextData;
+  }, [marketContextData, signalAlerts, signalAlertsEnabled, playFile, triggerSmartAlert]);
 
   // Placement Mode states
   const [isHoveringPriceScale, setIsHoveringPriceScale] = useState(false);
@@ -564,6 +761,8 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
 
   // ── Phase 3: The Execution Loop & Tick Crossovers ─────────────────────────
   const executeAlert = useCallback((alert: Alert) => {
+    console.log('[Chart Component] executeAlert entered for alert:', { id: alert.id, price: alert.price, label: alert.label });
+    
     // 1. Instantly flip status in state to prevent double execution
     setAlerts((prevAlerts) =>
       prevAlerts.map((a) => (a.id === alert.id ? { ...a, status: 'triggered' as const } : a))
@@ -571,11 +770,19 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
 
     // 2. Play Audio if enabled
     if (alert.actionChain?.soundAlert && alert.soundSelection) {
+      console.log('[Chart Component] Playing audio asset:', alert.soundSelection);
       playSound(alert.soundSelection);
     }
 
-    // 3. Browser Notification if enabled and granted
-    if (alert.actionChain?.browserNotification && typeof window !== 'undefined' && 'Notification' in window) {
+    // 3. Global Toast Console & Browser Notification Routing
+    console.log('[Chart Component] triggerSmartAlert status:', !!triggerSmartAlert);
+    if (triggerSmartAlert) {
+      const alertLabel = alert.label || `Level @ ${alert.price.toFixed(2)}`;
+      triggerSmartAlert(
+        'PURGE', // Crimson red styling matching sweeps/purges
+        `🚨 PRICE ALERT CROSSOVER: "${alertLabel}" struck at ${alert.price.toFixed(2)} USDC`
+      );
+    } else if (alert.actionChain?.browserNotification && typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission === 'granted') {
         new Notification(`[FLOW-STATE ALERT] ${alert.label || 'Level Struck'}`, {
           body: `${alert.label || 'Price Alert'} struck at ${alert.price.toFixed(2)}`,
@@ -600,7 +807,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
     setTimeout(() => {
       setHudPulse(null);
     }, 1000);
-  }, [playSound, upColor, marketContextData]);
+  }, [playSound, upColor, marketContextData, triggerSmartAlert, triggerAiAnalysisScan]);
 
   const prevPriceRef = useRef<number | null>(null);
   const lastProcessedClosedTimeRef = useRef<number | null>(null);
@@ -615,35 +822,63 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
 
   // Monitor tick-by-tick and bar-by-bar
   useEffect(() => {
-    if (livePrice === null) return;
+    // 1. Resolve current active price (with WebSocket-to-REST fallback)
+    const currentPriceForAlerts = livePrice !== null 
+      ? livePrice 
+      : (data && data.length > 0 ? data[data.length - 1].c : null);
+
+    if (currentPriceForAlerts === null) return;
     
     const activeAlerts = alerts.filter((a) => a.status === 'active');
     if (activeAlerts.length === 0) {
-      prevPriceRef.current = livePrice;
+      prevPriceRef.current = currentPriceForAlerts;
       return;
     }
 
     const prevPrice = prevPriceRef.current;
+    
+    console.log('[Chart Component] Tick crossover check:', {
+      livePrice,
+      fallbackPrice: data && data.length > 0 ? data[data.length - 1].c : null,
+      currentPriceForAlerts,
+      prevPrice,
+      activeAlertsCount: activeAlerts.length
+    });
 
     // A. TOUCH Check (Tick-by-Tick)
-    if (prevPrice !== null && prevPrice !== livePrice) {
+    if (prevPrice !== null && prevPrice !== currentPriceForAlerts) {
       const activeTouchAlerts = activeAlerts.filter((a) => a.triggerCondition === 'TOUCH');
       
       activeTouchAlerts.forEach((alert) => {
-        const crossedUp = prevPrice < alert.price && livePrice >= alert.price;
-        const crossedDown = prevPrice > alert.price && livePrice <= alert.price;
-        const exactHit = livePrice === alert.price;
+        const crossedUp = prevPrice < alert.price && currentPriceForAlerts >= alert.price;
+        const crossedDown = prevPrice > alert.price && currentPriceForAlerts <= alert.price;
+        const exactHit = currentPriceForAlerts === alert.price;
 
         if (crossedUp || crossedDown || exactHit) {
-          console.log(`[ALERT] TOUCH condition satisfied for alert ${alert.id} (${alert.label}) at tick: ${livePrice}`);
+          console.log(`[ALERT] TOUCH condition satisfied for alert ${alert.id} (${alert.label}) at price: ${currentPriceForAlerts}`);
           executeAlert(alert);
         }
       });
     }
 
     // B. Candle Close Check (CLOSE_ABOVE, CLOSE_BELOW, WICK_PURGE_REJECT)
-    if (liveCandle && liveCandle.isClosed && Number(liveCandle.time) !== lastProcessedClosedTimeRef.current) {
-      lastProcessedClosedTimeRef.current = Number(liveCandle.time);
+    // Resolve candle to evaluate: either live kline, or the last historical candle when it is closed
+    const activeCandle = liveCandle 
+      ? liveCandle 
+      : (data && data.length > 0 
+          ? {
+              time: Math.floor(data[data.length - 1].t / 1000),
+              open: data[data.length - 1].o,
+              high: data[data.length - 1].h,
+              low: data[data.length - 1].l,
+              close: data[data.length - 1].c,
+              volume: data[data.length - 1].v,
+              isClosed: true // REST polled candles are by definition completed
+            }
+          : null);
+
+    if (activeCandle && activeCandle.isClosed && Number(activeCandle.time) !== lastProcessedClosedTimeRef.current) {
+      lastProcessedClosedTimeRef.current = Number(activeCandle.time);
 
       const activeCloseAlerts = activeAlerts.filter((a) => a.triggerCondition !== 'TOUCH');
 
@@ -651,39 +886,39 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
         let isSatisfied = false;
 
         if (alert.triggerCondition === 'CLOSE_ABOVE') {
-          if (liveCandle.close > alert.price) {
+          if (activeCandle.close > alert.price) {
             isSatisfied = true;
           }
         } else if (alert.triggerCondition === 'CLOSE_BELOW') {
-          if (liveCandle.close < alert.price) {
+          if (activeCandle.close < alert.price) {
             isSatisfied = true;
           }
         } else if (alert.triggerCondition === 'WICK_PURGE_REJECT') {
           // If alert was placed above candle open (resistance line)
-          if (alert.price > liveCandle.open) {
-            if (liveCandle.high >= alert.price && liveCandle.close < alert.price) {
+          if (alert.price > activeCandle.open) {
+            if (activeCandle.high >= alert.price && activeCandle.close < alert.price) {
               isSatisfied = true;
             }
           }
           // If alert was placed below candle open (support line)
-          else if (alert.price < liveCandle.open) {
-            if (liveCandle.low <= alert.price && liveCandle.close > alert.price) {
+          else if (alert.price < activeCandle.open) {
+            if (activeCandle.low <= alert.price && activeCandle.close > alert.price) {
               isSatisfied = true;
             }
           }
         }
 
         if (isSatisfied) {
-          console.log(`[ALERT] ${alert.triggerCondition} condition satisfied for alert ${alert.id} (${alert.label}) at close: ${liveCandle.close}`);
+          console.log(`[ALERT] ${alert.triggerCondition} condition satisfied for alert ${alert.id} (${alert.label}) at close: ${activeCandle.close}`);
           executeAlert(alert);
         }
       });
     }
 
     // Always keep prevPriceRef synced with current live price tick
-    prevPriceRef.current = livePrice;
+    prevPriceRef.current = currentPriceForAlerts;
 
-  }, [livePrice, liveCandle, alerts, executeAlert]);
+  }, [livePrice, liveCandle, data, alerts, executeAlert]);
 
   // Resolve the candle to show in the HUD (top left)
   // 1. If user is hovering a candle, show the hovered candle
@@ -757,6 +992,8 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
               onClick={(e) => {
                 e.stopPropagation(); // Avoid triggering map drop placement
                 setSelectedAlertId(pos.id);
+                setSettingsModalTab('price');
+                setIsSettingsModalOpen(true);
               }}
               className="p-0.5 text-white/50 hover:text-white transition-colors cursor-pointer rounded-sm hover:bg-white/10"
               title="Alert Settings"
@@ -855,18 +1092,20 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
         </div>
       )}
 
-      {/* Alert Settings Modal Overlay */}
-      <AlertSettingsModal
-        isOpen={selectedAlertId !== null}
-        alert={alerts.find((a) => a.id === selectedAlertId) || null}
-        onClose={() => setSelectedAlertId(null)}
+
+      {/* Unified Settings Modal Overlay */}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        alert={selectedAlertId !== null ? alerts.find((a) => a.id === selectedAlertId) || null : null}
+        initialTab={settingsModalTab}
+        onClose={() => setIsSettingsModalOpen(false)}
         onSave={(updatedAlert) => {
           setAlerts((prev) => prev.map((a) => (a.id === updatedAlert.id ? updatedAlert : a)));
-          setSelectedAlertId(null);
+          setIsSettingsModalOpen(false);
         }}
         onDelete={(alertId) => {
           setAlerts((prev) => prev.filter((a) => a.id !== alertId));
-          setSelectedAlertId(null);
+          setIsSettingsModalOpen(false);
         }}
       />
 
