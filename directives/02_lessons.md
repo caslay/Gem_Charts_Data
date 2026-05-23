@@ -65,4 +65,7 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
 - **The Cause:** The resting liquidity pool arrays (`BSL_Magnets` and `SSL_Magnets`) are loaded from Binance Futures depth data. Because limit orders are constantly added and canceled, the values fluctuate by tiny decimal amounts (e.g., 0.05 USDC) on every single poll, rendering the array value comparison always true.
 - **The Fix:** We implemented a noise-filtering rounding helper `Math.round(val / 5) * 5` inside the Difference Engine watcher. This rounds the levels to the nearest 5 USDC (about 0.15% on ETH), ignoring micro-cancellations in the book while safely capturing major, structural wholesale liquidity shifts.
 
-
+### 11. Server-Side Implicit Any Type Gating (Resolved in V8.2)
+- **The Bug:** The Vercel build failed during production compilation on `src/app/journal/page.tsx:37:7` with: `Variable 'initialTrades' implicitly has type 'any[]' in some locations where its type cannot be determined.`
+- **The Cause:** Declaring a variable without explicit type annotations (e.g. `let initialTrades = [];`) and subsequently assigning dynamic query outputs (`initialTrades = rows;`) inside a `try-catch` block triggered TypeScript's `noImplicitAny` safety protocol, blocking production compilation.
+- **The Fix:** We imported the robust interface `TradeRecord` from `@/components/JournalTable` and explicitly typed the declaration: `let initialTrades: TradeRecord[] = [];`, casting the database row output using `rows as unknown as TradeRecord[];` to guarantee type safety throughout the Server Component render cycle.

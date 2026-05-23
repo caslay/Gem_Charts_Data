@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { sql } from "@vercel/postgres";
-import { JournalTable } from "@/components/JournalTable";
+import { JournalTable, type TradeRecord } from "@/components/JournalTable";
 import Link from "next/link";
 import { Lock } from "lucide-react";
 
@@ -34,14 +34,14 @@ export default async function JournalPage() {
   }
 
   // Fetch logged trades server-side (initial data seed)
-  let initialTrades = [];
+  let initialTrades: TradeRecord[] = [];
   try {
     // Self-healing query check
     const { rows } = await sql`
       SELECT * FROM paper_trades
       ORDER BY created_at DESC
     `;
-    initialTrades = rows;
+    initialTrades = rows as unknown as TradeRecord[];
   } catch (err) {
     console.warn("[JOURNAL PAGE] Initial DB fetch failed (table might not exist yet):", err);
     // Dynamic table initialization will happen on the first active trade POST, or we can let it fail gracefully here
