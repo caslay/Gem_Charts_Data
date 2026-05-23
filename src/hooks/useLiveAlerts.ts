@@ -48,13 +48,15 @@ export function useLiveAlerts(
   }, []);
 
   const triggerAlert = useCallback((type: SmartAlert['type'], message: string, soundPath?: string) => {
+    console.log('[LiveAlerts Hook] triggerAlert called!', { type, message, soundPath });
     setActiveAlerts((prev) => {
       const newAlert: SmartAlert = {
-        id: `${type}-${Date.now()}`,
+        id: `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         type,
         message,
         timestamp: Date.now(),
       };
+      console.log('[LiveAlerts Hook] Appending new alert to activeAlerts list:', newAlert);
       // Keep only the most recent 10 alerts
       return [newAlert, ...prev].slice(0, 10);
     });
@@ -221,5 +223,5 @@ export function useLiveAlerts(
     setActiveAlerts((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
-  return { activeAlerts, clearAlerts, dismissAlert };
+  return { activeAlerts, clearAlerts, dismissAlert, triggerAlert };
 }

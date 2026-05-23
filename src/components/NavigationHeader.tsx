@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Activity, History, TrendingUp, LayoutGrid, Settings, RotateCcw, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import MatrixConfigDrawer from "./MatrixConfigDrawer";
 import { useMarketDataContext } from "@/context/MarketDataContext";
@@ -15,6 +15,24 @@ export function NavigationHeader() {
   const { data } = useMarketDataContext();
   const [isMatrixOpen, setIsMatrixOpen] = useState(false);
   const [resetStatus, setResetStatus] = useState<ResetStatus>('idle');
+  const [cairoTime, setCairoTime] = useState<string | null>(null);
+
+  // Hydration-safe live ticking clock in Cairo timezone (UTC+3)
+  useEffect(() => {
+    const updateTime = () => {
+      setCairoTime(
+        new Date().toLocaleTimeString('en-EG', {
+          timeZone: 'Africa/Cairo',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        })
+      );
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const pricing = data?.ipda_metrics?.current_pricing || 'SCANNING';
   const session = data?.ipda_metrics?.current_time_window || 'WAITING';
@@ -147,9 +165,9 @@ export function NavigationHeader() {
 
             {/* Time & Live Sync — static clock display */}
             <div className="hidden sm:flex items-center gap-2 px-2 py-1 bg-[#0e0e0f] border border-[#4a4457]/50 rounded">
-              <span className="w-1.5 h-1.5 bg-[#958da3] rounded-full" />
+              <span className="w-1.5 h-1.5 bg-[#50ffaf] rounded-full animate-pulse" />
               <span className="font-mono text-[10px] text-[#958da3]">
-                {new Date().toLocaleTimeString('en-EG', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', hour12: false })} UTC+3
+                {cairoTime ? `${cairoTime} UTC+3` : '--:-- UTC+3'}
               </span>
             </div>
 

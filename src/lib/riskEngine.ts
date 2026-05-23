@@ -54,7 +54,7 @@ export function generateTradeExecutionParameters(
   let risk_mode: "HALF_RISK_OR_STAND_DOWN" | "FULL_MACRO_RISK" | "STANDARD_RISK" = "STANDARD_RISK";
 
   const isSponsorshipActive = institutional_sponsorship.status.includes("ACTIVE");
-  const isConfidenceValidated = institutional_sponsorship.statistical_validation.confidence_interval_95;
+  const isConfidenceValidated = institutional_sponsorship.statistical_validation.confidence_interval_95 === true;
 
   if (target_status === "EXHAUSTED" || current_time_window === "DEAD_ZONE") {
     risk_mode = "HALF_RISK_OR_STAND_DOWN";

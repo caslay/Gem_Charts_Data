@@ -2,6 +2,17 @@ import { useCallback } from 'react';
 
 export type AlertSound = 'Institutional Pulse' | 'Mechanical Click' | 'Target Chime';
 
+export const AVAILABLE_ALERT_FILES = [
+  'dead_zone.mp3',
+  'flow_state.wav',
+  'fvg_alert.mp3',
+  'objective_update.wav',
+  'pricing_shift.wav',
+  'session_transition.wav',
+  'smt_trap.wav',
+  'sweep_alert.mp3'
+] as const;
+
 export function useAlertSounds() {
   const playSound = useCallback((soundName: AlertSound) => {
     if (typeof window === 'undefined') return;
@@ -137,5 +148,17 @@ export function useAlertSounds() {
     }
   }, []);
 
-  return { playSound };
+  const playFile = useCallback((fileName: string) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const audio = new Audio(`/audio/${fileName}`);
+      audio.play().catch((err) => {
+        console.warn(`[SoundEngine] Playback failed or was blocked for ${fileName}:`, err);
+      });
+    } catch (e) {
+      console.warn(`[SoundEngine] playFile execution failed for ${fileName}:`, e);
+    }
+  }, []);
+
+  return { playSound, playFile };
 }

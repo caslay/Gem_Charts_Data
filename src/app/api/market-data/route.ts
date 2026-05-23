@@ -391,7 +391,10 @@ export async function GET(req: Request) {
     }
 
     const active_fvgs = mapAndConsolidateFVGs(detectActiveFVGs(candles15m), detectActiveFVGs(candles5m));
-    const institutional_sponsorship = await verifyDisplacement(candles15m);
+    
+    // Explicitly define stat_payload with at least 200 candles to ensure OLS significance
+    const stat_payload = candles15m.slice(-200);
+    const institutional_sponsorship = await verifyDisplacement(stat_payload, symbol);
     const current_time_window = getCurrentKillzone();
 
     const trade_execution_parameters = generateTradeExecutionParameters(

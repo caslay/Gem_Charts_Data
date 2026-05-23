@@ -60,4 +60,9 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
   2. Reset chart initial loading state and monitor refs when the interval changes to force timescale coordinate refitting.
   3. Proactively call context `refetch()` on timeframe switches or mount transitions to retrieve absolute-fresh historical candles.
 
+### 10. The Order Book Depth Tick-Noise Alert Loop (Resolved in V8.2)
+- **The Bug:** The frontend was triggering the `OBJECTIVE_UPDATE` audio alert continuously (every 5 seconds) inside the `Chart` difference engine.
+- **The Cause:** The resting liquidity pool arrays (`BSL_Magnets` and `SSL_Magnets`) are loaded from Binance Futures depth data. Because limit orders are constantly added and canceled, the values fluctuate by tiny decimal amounts (e.g., 0.05 USDC) on every single poll, rendering the array value comparison always true.
+- **The Fix:** We implemented a noise-filtering rounding helper `Math.round(val / 5) * 5` inside the Difference Engine watcher. This rounds the levels to the nearest 5 USDC (about 0.15% on ETH), ignoring micro-cancellations in the book while safely capturing major, structural wholesale liquidity shifts.
+
 

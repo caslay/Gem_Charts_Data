@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { DownloadCloud, TrendingUp, Activity, X, Brain, Zap, Target, Magnet, BarChart3, Terminal, Loader2, Copy, Download } from 'lucide-react';
+import { DownloadCloud, TrendingUp, Activity, X, Brain, Zap, Target, Magnet, BarChart3, Terminal, Loader2, Copy, Download, Search } from 'lucide-react';
 import { useBinanceWS } from '@/hooks/useBinanceWS';
+import HudModal from './modals/HudModal';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
 import { useMarketDataContext } from '@/context/MarketDataContext';
 
@@ -61,6 +62,7 @@ export default function Sidebar({
   const { livePrice } = useBinanceWS();
   const { isAnalyzing, aiAnalysis, triggerAiAnalysisScan } = useMarketDataContext();
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isHudModalOpen, setIsHudModalOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   const [activeTab, setActiveTab] = useState<'HUD' | 'JSON'>('HUD');
 
@@ -248,7 +250,8 @@ export default function Sidebar({
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] text-[#958da3]">Displacement</span>
                   <span className={`text-[10px] font-bold ${metrics?.institutional_sponsorship?.status?.includes('BULLISH') ? 'text-[#50ffaf]' :
-                    metrics?.institutional_sponsorship?.status?.includes('BEARISH') ? 'text-[#ffb4ab]' : 'text-[#958da3]'
+                    metrics?.institutional_sponsorship?.status?.includes('BEARISH') ? 'text-[#ffb4ab]' :
+                    metrics?.institutional_sponsorship?.status === 'CONSOLIDATION' ? 'text-[#d1bcff]' : 'text-[#958da3]'
                     }`}>
                     {metrics?.institutional_sponsorship?.status || 'INACTIVE'}
                   </span>
@@ -269,9 +272,12 @@ export default function Sidebar({
                     </div>
                     <div className="flex justify-between text-[8px] items-center">
                       <span className="text-[#958da3]">OLS VALIDATION</span>
-                      <span className={`font-bold uppercase ${metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 ? 'text-[#50ffaf]' : 'text-[#ffb4ab]'
-                        }`}>
-                        {metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 ? 'CONFIRMED' : 'REJECTED'}
+                      <span className={`font-bold uppercase ${
+                        metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'text-[#50ffaf]' :
+                        metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === 'CONSOLIDATION' ? 'text-[#d1bcff]' : 'text-[#ffb4ab]'
+                      }`}>
+                        {metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'CONFIRMED' :
+                         metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === 'CONSOLIDATION' ? 'CONSOLIDATION' : 'REJECTED'}
                       </span>
                     </div>
                   </div>
@@ -331,7 +337,16 @@ export default function Sidebar({
                     <Terminal size={12} className="text-[#d1bcff]" />
                     <span className="text-[10px] font-black uppercase tracking-widest text-[#958da3]">Synthesis Console</span>
                   </div>
-                  {isAnalyzing && <Loader2 size={12} className="text-[#d1bcff] animate-spin" />}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setIsHudModalOpen(true)}
+                      className="text-[#958da3] hover:text-[#d1bcff] transition-colors p-1 rounded-none hover:bg-zinc-800/40"
+                      title="Expand Synthesis HUD Console"
+                    >
+                      <Search size={12} />
+                    </button>
+                    {isAnalyzing && <Loader2 size={12} className="text-[#d1bcff] animate-spin" />}
+                  </div>
                 </div>
 
                 {/* Tabs */}
@@ -406,9 +421,9 @@ export default function Sidebar({
                             TradingView Alerts
                           </span>
                           <div className="flex flex-col gap-1.5">
-                            {tvAlerts.map((alert: any, i: number) => {
-                              const displayAlert = typeof alert === 'object' && alert !== null && alert.price && alert.reason
-                                ? `${alert.price} - ${alert.reason}`
+                            {tvAlerts.map((alert: unknown, i: number) => {
+                              const displayAlert = typeof alert === 'object' && alert !== null && 'price' in alert && 'reason' in alert
+                                ? `${(alert as Record<string, unknown>).price} - ${(alert as Record<string, unknown>).reason}`
                                 : typeof alert === 'string'
                                   ? alert
                                   : JSON.stringify(alert);
@@ -519,6 +534,18 @@ export default function Sidebar({
 
         </div>
       </aside>
+
+      <HudModal
+        isOpen={isHudModalOpen}
+        onClose={() => setIsHudModalOpen(false)}
+        hudData={hudData}
+        aiNote={aiNote}
+        tvAlerts={tvAlerts}
+        aiAnalysis={aiAnalysis}
+        isAnalyzing={isAnalyzing}
+        onSynthesize={handleLiveSynthesis}
+        copyText={data ? AI_PROMPT_PREFIX + JSON.stringify(slicePayloadByLookback(data, counts), null, 2) : ''}
+      />
     </>
   );
 }
