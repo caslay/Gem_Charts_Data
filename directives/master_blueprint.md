@@ -50,7 +50,7 @@ The Flow-State Quant Engine is **NOT** a prediction engine. It is a **reaction e
 
 | Layer | Technology | Role |
 |---|---|---|
-| **Frontend** | Next.js 16 (App Router) + React 19 + Tailwind v4 | Dashboard, Chart, Alerts, Dedicated Journal `/journal` |
+| **Frontend** | Next.js 16 (App Router) + React 19 + Tailwind v4 | Dashboard, Chart, Alerts, Dedicated Journal `/journal` with V8.3 Live P&L, ROI%, GPU-accelerated tick flashes, and Zero-Lag split-row memoization |
 | **Charting** | `lightweight-charts` v5.2 | OHLCV candlestick rendering |
 | **Real-time** | Binance Futures WebSocket (`/market/ws`) | Live tick feed (5m klines) hoisted to global MarketDataProvider context |
 | **API Layer** | Next.js Route Handlers (`/api/market-data`, `/api/quant-analyze`, `/api/trades`, `/api/strategies`) | Data orchestration, CRUD, automated execution engine |
@@ -639,6 +639,28 @@ To bridge AI analysis and programmatic verification, V8.2 implements an automate
    - **Dynamic Target Stretching:** Enforces a strict `RR >= 2.0` capital-preservation threshold. If the calculated Take Profit level is too close to the entry (e.g. a session sweep target or resting depth wall that does not satisfy the 1:2 ratio), the system **automatically self-heals the trade setup** by stretching the Take Profit outward to achieve exactly `RR = 2.0` (2x the calculated stop loss risk). This prevents trade execution failures while preserving the strict capital preservation gate.
 7. **neon PostgreSQL Storage:** Inserts validated, self-healed parameters with `status = 'OPEN'`.
 
+#### 2. V8.3 Real-Time P&L & Simulated Exit Dashboard Integration
+
+V8.3 introduces live Profit and Loss (P&L) and Return on Investment (ROI%) computation inside `JournalTable.tsx`, dynamically linked to the global WebSocket context price stream.
+
+##### Performance Optimization (Zero-Lag Split-Row Architecture)
+High-frequency WebSocket tick updates can cause dashboard render lag. To prevent this:
+1. **Decoupled Subscription**: The parent table component (`JournalTable`) does NOT subscribe to the live price feed.
+2. **Static Memoized Rows**: Closed positions are rendered via `<ClosedTradeRow>` (a 100% static React component) which is completely immune to price ticks.
+3. **Active Scoped Rows**: Only open positions are rendered via `<ActiveTradeRow>`, subscribing to `useMarketDataContext()` to evaluate calculations and triggers locally.
+
+##### Mathematical Formulations
+- **Contracts Resolution**: If `position_size` is missing, it defaults to a standard `1.0` multiplier (e.g., for ETH).
+- **Unrealized P&L**:
+  - `LONG`: `(livePrice - entryPrice) * positionSize`
+  - `SHORT`: `(entryPrice - livePrice) * positionSize`
+- **ROI Percentage**: `(unrealizedPnL / (entryPrice * positionSize)) * 100` (Formatted to 2 decimal places).
+
+##### GPU-Accelerated Micro-Animations & Glow Effects
+- **Visual Color Indicators**: Positive unrealized P&L renders in vibrant neon green (`#50ffaf`) with a `drop-shadow` outer glow, while negative P&L renders in institutional red (`#ff5f5f`).
+- **Tick-Flashes**: The P&L cell uses a React-triggered CSS `@keyframes tick-flash` (green for price up, red for price down) on every incoming tick to provide instant feedback.
+- **Simulated Exit Highlight**: If `livePrice` touches or breaches the defined `take_profit` or `stop_loss` targets, the row is dynamically styled with a breathing glowing pulse (`animate-exit-glow-green` or `animate-exit-glow-red`) and displays a live exit alert badge (`[ TP TARGET HIT ]` or `[ STOPPED OUT ]`).
+
 ---
 
 ### 6.7 Strategic Equation Builder Runtime & Temporal Engine
@@ -727,6 +749,7 @@ CREATE TABLE IF NOT EXISTS paper_trades (
   status VARCHAR(20) NOT NULL DEFAULT 'OPEN', -- 'OPEN', 'CLOSED', 'PAUSED'
   strategy_name VARCHAR(255) NOT NULL,
   ai_narrative_summary TEXT,
+  position_size DECIMAL(18, 4) DEFAULT 1.0000, -- Optional size column (Added in V8.3)
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -1099,7 +1122,8 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
     "risk_amount": 10.05,
     "reward_amount": 50,
     "strategy_name": "Displacement Breakout",
-    "ai_narrative_summary": "..."
+    "ai_narrative_summary": "...",
+    "position_size": 1.0
   }
 }
 ```

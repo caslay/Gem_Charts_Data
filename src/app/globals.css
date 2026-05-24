@@ -75,3 +75,61 @@ input[type='range']::-moz-range-track {
   border-radius: 9999px;
   background: rgba(255,255,255,0.1);
 }
+
+/* ── Real-Time P&L & Simulated Exit Animations (V8.3) ─────────────────────── */
+@keyframes tick-flash-green {
+  0% {
+    background-color: rgba(80, 255, 175, 0.18);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes tick-flash-red {
+  0% {
+    background-color: rgba(255, 95, 95, 0.18);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes simulated-exit-pulse-green {
+  0%, 100% {
+    background-color: rgba(80, 255, 175, 0.02);
+  }
+  50% {
+    background-color: rgba(80, 255, 175, 0.07);
+  }
+}
+
+@keyframes simulated-exit-pulse-red {
+  0%, 100% {
+    background-color: rgba(255, 95, 95, 0.02);
+  }
+  50% {
+    background-color: rgba(255, 95, 95, 0.07);
+  }
+}
+
+.animate-tick-green {
+  animation: tick-flash-green 0.35s ease-out;
+}
+
+.animate-tick-red {
+  animation: tick-flash-red 0.35s ease-out;
+}
+
+.animate-exit-glow-green {
+  animation: simulated-exit-pulse-green 2s infinite ease-in-out;
+  border-top-color: rgba(80, 255, 175, 0.3) !important;
+  border-bottom-color: rgba(80, 255, 175, 0.3) !important;
+}
+
+.animate-exit-glow-red {
+  animation: simulated-exit-pulse-red 2s infinite ease-in-out;
+  border-top-color: rgba(255, 95, 95, 0.3) !important;
+  border-bottom-color: rgba(255, 95, 95, 0.3) !important;
+}
+
