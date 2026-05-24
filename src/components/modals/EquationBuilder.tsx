@@ -450,6 +450,11 @@ export default function EquationBuilder() {
 
             {/* Conditions */}
             <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[#4a4457] scrollbar-track-transparent px-4 py-3 space-y-2">
+              <div className="bg-[#1c1b1c] border border-[#4a4457]/45 p-2.5 text-[9px] font-mono text-[#958da3] leading-relaxed mb-3 rounded-none">
+                <span className="text-[#50ffaf] font-black uppercase tracking-wider block mb-1">⚡ Sniper Mitigation Protocol:</span>
+                Use FVG [CLOSE] to confirm structure. Use PRICE_IN_FVG [TICK] for zero-latency mitigation entries.
+              </div>
+
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[8px] text-[#958da3] uppercase font-bold tracking-widest">
                   Logic Rows
