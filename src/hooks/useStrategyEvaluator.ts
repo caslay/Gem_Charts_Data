@@ -163,18 +163,25 @@ function evaluateStrategy(
   livePrice: number | null,
   liveCandle: LiveCandle | null
 ): boolean {
-  const conditions = strategy.conditions;
+  const conditions = Array.isArray(strategy.conditions)
+    ? strategy.conditions
+    : (strategy.conditions?.conditions || []);
+
   if (!Array.isArray(conditions) || conditions.length === 0) return false;
 
-  const hasOnCloseCondition = conditions.some((c) => c.temporal === 'ON_CLOSE');
+  const hasOnCloseCondition = conditions.some((c: any) => c.temporal === 'ON_CLOSE');
+  
+  // Strategy settings level check
+  const isObj = !Array.isArray(strategy.conditions);
+  const temporalMode = isObj ? (strategy.conditions.temporal_mode || 'INSTANT') : 'INSTANT';
 
-  // If any condition requires ON_CLOSE, the entire strategy is gated behind candle close
-  if (hasOnCloseCondition) {
+  // If either the strategy settings has temporal === 'ON_CLOSE' or any condition is CLOSE
+  if (temporalMode === 'ON_CLOSE' || hasOnCloseCondition) {
     if (!liveCandle || !liveCandle.isClosed) return false;
   }
 
   // All conditions must pass
-  return conditions.every((c) => evaluateCondition(strategy.id, c, data, livePrice));
+  return conditions.every((c: any) => evaluateCondition(strategy.id, c, data, livePrice));
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -229,9 +236,18 @@ export function useStrategyEvaluator() {
 
       if (!isMatch) continue;
 
-      // ── Debounce Lock: one fire per candle (for close-gated strategies) ──────
-      // or one fire per second (for pure instant strategies to prevent duplicate re-fires)
-      const hasOnClose = strategy.conditions.some((c) => c.temporal === 'ON_CLOSE');
+      const conditions = Array.isArray(strategy.conditions)
+        ? strategy.conditions
+        : (strategy.conditions?.conditions || []);
+
+      const settings = Array.isArray(strategy.conditions)
+        ? {}
+        : strategy.conditions;
+
+      const temporalMode = settings.temporal_mode || 'INSTANT';
+
+      // Determine debounce lock key based on close-gated logic
+      const hasOnClose = temporalMode === 'ON_CLOSE' || conditions.some((c: any) => c.temporal === 'ON_CLOSE');
       const candleKey = hasOnClose
         ? (liveCandle ? Number(liveCandle.time) : Math.floor(Date.now() / 5000))
         : Math.floor(Date.now() / 1000);
@@ -251,7 +267,7 @@ export function useStrategyEvaluator() {
       setLastMatch(match);
 
       console.log(`[StrategyEvaluator] ✅ STRATEGY MATCHED: "${strategy.name}"`, {
-        conditions: strategy.conditions,
+        conditions,
         candleKey,
       });
 
@@ -262,6 +278,50 @@ export function useStrategyEvaluator() {
           `[SYSTEM: STRATEGY_MATCHED → ${strategy.name}]`
         );
       }
+
+      // ── LINKAGE: Automatically execute a paper trade ──────────────
+      const sl_logic = settings.sl_logic || 'Structural Swing';
+      const tp_logic = settings.tp_logic || 'Nearest Order Book Magnet';
+      const direction = settings.direction || 'LONG';
+
+      fetch('/api/trades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: data.ticker || 'ETHUSDC',
+          direction: direction,
+          strategy_name: strategy.name,
+          ai_narrative_summary: `[AUTO EXECUTE] Triggered by Strategy: ${strategy.name}`,
+          ipda_metrics: data.ipda_metrics || data,
+          sl_logic,
+          tp_logic,
+          current_price: livePrice
+        })
+      }).then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) {
+          console.warn(`[StrategyEvaluator] Trade execution declined:`, json.error || json);
+          if (triggerSmartAlert) {
+            triggerSmartAlert(
+              'RISK_OVERRIDE' as any,
+              `[SYSTEM: TRADE_FAILED → ${strategy.name}: ${json.error || 'Inefficient RR < 2.0'}]`,
+              '/audio/fvg_alert.mp3'
+            );
+          }
+        } else {
+          console.log(`[StrategyEvaluator] Trade opened successfully:`, json);
+          // Secondary success notification (Flow state chimes)
+          if (triggerSmartAlert) {
+            triggerSmartAlert(
+              'FLOW_STATE' as any,
+              `[SYSTEM: JOURNAL_LOGGED → ${strategy.name} trade successfully posted to Journal @ $${json.execution_parameters?.entry_price || livePrice}]`,
+              '/audio/flow_state.wav'
+            );
+          }
+        }
+      }).catch((err) => {
+        console.error(`[StrategyEvaluator] Trade execution connection error:`, err);
+      });
     }
   }, [data, liveCandle, livePrice, strategies, triggerSmartAlert]);
 

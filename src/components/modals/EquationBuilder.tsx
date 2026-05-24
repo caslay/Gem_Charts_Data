@@ -31,7 +31,7 @@ export interface StrategyCondition {
 export interface CustomStrategy {
   id: string;
   name: string;
-  conditions: StrategyCondition[];
+  conditions: any;
   is_active: boolean;
 }
 
@@ -102,6 +102,10 @@ export default function EquationBuilder() {
   const [editName, setEditName] = useState('');
   const [editConditions, setEditConditions] = useState<StrategyCondition[]>([]);
   const [editActive, setEditActive] = useState(true);
+  const [editTemporalMode, setEditTemporalMode] = useState<'INSTANT' | 'ON_CLOSE'>('INSTANT');
+  const [editSlLogic, setEditSlLogic] = useState('Structural Swing');
+  const [editTpLogic, setEditTpLogic] = useState('Nearest Order Book Magnet');
+  const [editDirection, setEditDirection] = useState<'LONG' | 'SHORT'>('LONG');
 
   // ── Fetch strategies from API on mount ────────────────────────────────────
   const fetchStrategies = useCallback(async () => {
@@ -129,12 +133,23 @@ export default function EquationBuilder() {
       const strategy = strategies.find((s) => s.id === selectedId);
       if (strategy) {
         setEditName(strategy.name);
+        
+        // Extract conditions with backward compatibility support
+        const parsedConditions = Array.isArray(strategy.conditions)
+          ? strategy.conditions
+          : (strategy.conditions?.conditions || []);
+
         setEditConditions(
-          Array.isArray(strategy.conditions)
-            ? strategy.conditions.map((c: any) => ({ ...c, id: c.id || generateId() }))
-            : [createEmptyCondition()]
+          parsedConditions.map((c: any) => ({ ...c, id: c.id || generateId() }))
         );
         setEditActive(strategy.is_active);
+
+        // Load strategy-level settings
+        const isObj = !Array.isArray(strategy.conditions);
+        setEditTemporalMode(isObj ? (strategy.conditions.temporal_mode || 'INSTANT') : 'INSTANT');
+        setEditSlLogic(isObj ? (strategy.conditions.sl_logic || 'Structural Swing') : 'Structural Swing');
+        setEditTpLogic(isObj ? (strategy.conditions.tp_logic || 'Nearest Order Book Magnet') : 'Nearest Order Book Magnet');
+        setEditDirection(isObj ? (strategy.conditions.direction || 'LONG') : 'LONG');
         return;
       }
     }
@@ -142,6 +157,10 @@ export default function EquationBuilder() {
     setEditName('');
     setEditConditions([]);
     setEditActive(true);
+    setEditTemporalMode('INSTANT');
+    setEditSlLogic('Structural Swing');
+    setEditTpLogic('Nearest Order Book Magnet');
+    setEditDirection('LONG');
   }, [selectedId, strategies]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -153,7 +172,12 @@ export default function EquationBuilder() {
       name: 'New Strategy',
       conditions: [createEmptyCondition()],
       is_active: true,
-    };
+      // Default settings
+      temporal_mode: 'INSTANT',
+      sl_logic: 'Structural Swing',
+      tp_logic: 'Nearest Order Book Magnet',
+      direction: 'LONG',
+    } as any;
     setStrategies((prev) => [newStrategy, ...prev]);
     setSelectedId(newId);
   };
@@ -164,10 +188,20 @@ export default function EquationBuilder() {
     setIsSaving(true);
     try {
       const isNew = selectedId.startsWith('new-');
+      
+      // Save settings and conditions inside the custom strategies payload
+      const conditionsPayload = {
+        conditions: editConditions.map(({ id, ...rest }) => rest),
+        temporal_mode: editTemporalMode,
+        sl_logic: editSlLogic,
+        tp_logic: editTpLogic,
+        direction: editDirection,
+      };
+
       const payload = {
         ...(isNew ? {} : { id: selectedId }),
         name: editName.trim(),
-        conditions: editConditions.map(({ id, ...rest }) => rest),
+        conditions: conditionsPayload,
         is_active: editActive,
       };
 
@@ -179,15 +213,22 @@ export default function EquationBuilder() {
 
       if (res.ok) {
         const data = await res.json();
+        
+        const savedStrategy: CustomStrategy = {
+          id: isNew && data.id ? data.id : selectedId,
+          name: editName.trim(),
+          conditions: conditionsPayload,
+          is_active: editActive,
+        };
+
         if (isNew && data.id) {
-          // Replace temporary ID with server-generated UUID
           setStrategies((prev) =>
-            prev.map((s) => (s.id === selectedId ? { ...s, id: data.id, name: editName.trim(), conditions: editConditions, is_active: editActive } : s))
+            prev.map((s) => (s.id === selectedId ? savedStrategy : s))
           );
           setSelectedId(data.id);
         } else {
           setStrategies((prev) =>
-            prev.map((s) => (s.id === selectedId ? { ...s, name: editName.trim(), conditions: editConditions, is_active: editActive } : s))
+            prev.map((s) => (s.id === selectedId ? savedStrategy : s))
           );
         }
       }
@@ -355,7 +396,7 @@ export default function EquationBuilder() {
                   {s.name}
                 </span>
                 <span className="block text-[8px] text-[#958da3] font-mono">
-                  {Array.isArray(s.conditions) ? s.conditions.length : 0} condition{Array.isArray(s.conditions) && s.conditions.length !== 1 ? 's' : ''}
+                  {(Array.isArray(s.conditions) ? s.conditions : (s.conditions?.conditions || [])).length} condition{(Array.isArray(s.conditions) ? s.conditions : (s.conditions?.conditions || [])).length !== 1 ? 's' : ''}
                 </span>
               </div>
               {selectedId === s.id && (
@@ -509,11 +550,82 @@ export default function EquationBuilder() {
               {/* Add Condition button */}
               <button
                 onClick={addCondition}
-                className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-[#4a4457]/50 hover:border-[#50ffaf]/30 text-[#958da3] hover:text-[#50ffaf] text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer"
+                className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-[#4a4457]/50 hover:border-[#50ffaf]/30 text-[#958da3] hover:text-[#50ffaf] text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer mb-4"
               >
                 <Plus size={10} />
                 Add Condition
               </button>
+
+              {/* Strategy Settings Section */}
+              <div className="border-t border-[#4a4457]/30 pt-4 mt-2">
+                <span className="text-[9px] font-black uppercase tracking-[0.15em] text-[#958da3] block mb-3">
+                  Strategy Settings & Trade Execution Parameters
+                </span>
+
+                <div className="grid grid-cols-2 gap-4 bg-[#1c1b1c] border border-[#4a4457]/50 p-4 shadow-xl">
+                  {/* Trade Direction */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+                      Trade Direction
+                    </label>
+                    <select
+                      value={editDirection}
+                      onChange={(e) => setEditDirection(e.target.value as 'LONG' | 'SHORT')}
+                      className="bg-[#0e0e0f] border border-[#4a4457]/60 hover:border-[#d1bcff]/40 focus:border-[#50ffaf] focus:outline-none px-3 py-2 text-[10px] font-mono text-white rounded-none cursor-pointer w-full transition-colors"
+                    >
+                      <option value="LONG">LONG (Buy Setup)</option>
+                      <option value="SHORT">SHORT (Sell Setup)</option>
+                    </select>
+                  </div>
+
+                  {/* Temporal Mode */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+                      Temporal Mode
+                    </label>
+                    <select
+                      value={editTemporalMode}
+                      onChange={(e) => setEditTemporalMode(e.target.value as 'INSTANT' | 'ON_CLOSE')}
+                      className="bg-[#0e0e0f] border border-[#4a4457]/60 hover:border-[#d1bcff]/40 focus:border-[#50ffaf] focus:outline-none px-3 py-2 text-[10px] font-mono text-white rounded-none cursor-pointer w-full transition-colors"
+                    >
+                      <option value="INSTANT">⚡ INSTANT (Mid-candle)</option>
+                      <option value="ON_CLOSE">⏳ ON_CLOSE (Candle Confirmation)</option>
+                    </select>
+                  </div>
+
+                  {/* Stop Loss Logic */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+                      Stop Loss Logic
+                    </label>
+                    <select
+                      value={editSlLogic}
+                      onChange={(e) => setEditSlLogic(e.target.value)}
+                      className="bg-[#0e0e0f] border border-[#4a4457]/60 hover:border-[#d1bcff]/40 focus:border-[#50ffaf] focus:outline-none px-3 py-2 text-[10px] font-mono text-white rounded-none cursor-pointer w-full transition-colors"
+                    >
+                      <option value="Structural Swing">Structural Swing (Hard Invalidation)</option>
+                      <option value="Last Candle High/Low">Last Candle High/Low</option>
+                      <option value="Manual Pips">Manual Pips ($10.00 Offset)</option>
+                    </select>
+                  </div>
+
+                  {/* Take Profit Logic */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+                      Take Profit Logic
+                    </label>
+                    <select
+                      value={editTpLogic}
+                      onChange={(e) => setEditTpLogic(e.target.value)}
+                      className="bg-[#0e0e0f] border border-[#4a4457]/60 hover:border-[#d1bcff]/40 focus:border-[#50ffaf] focus:outline-none px-3 py-2 text-[10px] font-mono text-white rounded-none cursor-pointer w-full transition-colors"
+                    >
+                      <option value="Nearest Order Book Magnet">Nearest Order Book Magnet</option>
+                      <option value="PDH/PDL Target">PDH/PDL Target</option>
+                      <option value="Manual Pips">Manual Pips (2x Risk RR)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Footer Actions */}

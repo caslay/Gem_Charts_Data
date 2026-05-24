@@ -623,19 +623,21 @@ To bridge AI analysis and programmatic verification, V8.2 implements an automate
    - Explicit `entry_price` passed in body.
    - If missing, fallbacks to `closest_active_fvg_ce` (if unmitigated and active).
    - If missing, fallbacks to current market price (from `pricing_context` or the latest 5m candle close).
-4. **Strict Stop Loss (SL) Offset:**
-   - **LONG direction:** `bullish_invalidation - 0.05` (1 tick below bullish invalidation).
-   - **SHORT direction:** `bearish_invalidation + 0.05` (1 tick above bearish invalidation).
-   - Prevents floating-point discrepancies via specific mapping to `.toFixed(4)`.
-5. **Take Profit (TP) Magnet Matching:**
-   - Queries `BSL_Magnets` (for LONG) or `SSL_Magnets` (for SHORT).
-   - Sequentially filters out resting liquidity price levels that fail to provide at least a **1:2 Risk-to-Reward (RR)** ratio from the Entry/Stop Loss dealing range.
-   - Selects the nearest eligible magnet satisfying the condition.
-6. **Programmatic Validation Gate:**
+4. **Dynamic Stop Loss (SL) Logic Solver:**
+   - Evaluates `sl_logic` passed in body (defaulting to `Structural Swing`):
+     - `Manual Pips`: fixed $10.00 dollar range offset (`entry_price - 10` for LONG, `entry_price + 10` for SHORT).
+     - `Last Candle High/Low`: uses the previous completed 5m candle high/low boundary offset by a 0.05 tick margin.
+     - `Structural Swing`: standard hard institutional invalidation levels (`bullish_invalidation - 0.05` for LONG, `bearish_invalidation + 0.05` for SHORT).
+5. **Dynamic Take Profit (TP) Logic Solver:**
+   - Evaluates `tp_logic` passed in body (defaulting to `Nearest Order Book Magnet`):
+     - `Manual Pips`: exactly 2x the stop loss risk (`entry_price + 2 * risk` for LONG, `entry_price - 2 * risk` for SHORT).
+     - `PDH/PDL Target`: Previous Day High (`pdh` for LONG) or Previous Day Low (`pdl` for SHORT).
+     - `Nearest Order Book Magnet`: queries BSL/SSL Magnets and selects the nearest one meeting the minimum 1:2 RR constraint.
+   - **Self-Healing TP Target Solver:** If the selected logic returns `null` or is unavailable (such as having no resting liquidity magnets), the system automatically defaults the Take Profit to a safe 1:2 Risk-Reward ratio (`Manual Pips` mode) rather than failing.
+6. **Programmatic Validation & Self-Healing Gate:**
    - Verifies directional alignment: `Stop Loss < Entry < Take Profit` for Longs and `Stop Loss > Entry > Take Profit` for Shorts.
-   - Enforces a strict `RR >= 2.0` threshold.
-   - Rejects failing logs immediately with `400 Bad Request` and error payload `"Inefficient Algorithm: RR < 2.0"`.
-7. **neon PostgreSQL Storage:** Inserts validated parameters with `status = 'OPEN'`.
+   - **Dynamic Target Stretching:** Enforces a strict `RR >= 2.0` capital-preservation threshold. If the calculated Take Profit level is too close to the entry (e.g. a session sweep target or resting depth wall that does not satisfy the 1:2 ratio), the system **automatically self-heals the trade setup** by stretching the Take Profit outward to achieve exactly `RR = 2.0` (2x the calculated stop loss risk). This prevents trade execution failures while preserving the strict capital preservation gate.
+7. **neon PostgreSQL Storage:** Inserts validated, self-healed parameters with `status = 'OPEN'`.
 
 ---
 
@@ -671,8 +673,18 @@ To comply with Lesson #10, the evaluator tracks `lastFiredCandleTime` (mapped vi
 - **INSTANT strategies:** Gated per-second (`Math.floor(Date.now() / 1000)`), allowing sub-second micro-ticks but debouncing multiple fires on the same second.
 
 #### 4. High-Contrast HUD Toast Integration
-Matches are piped as `STRATEGY_MATCHED` alert types to `SmartAlertsToast.tsx`, rendering with a pulsing crosshair icon, high-contrast black glassmorphism, and a vibrant `#50ffaf` green left accent border:
-`[SYSTEM: STRATEGY_MATCHED → {STRATEGY_NAME}]`
+- **Primary Setup Match:** Logic matches are piped as a high-priority `STRATEGY_MATCHED` alert to `SmartAlertsToast.tsx`. The toast renders in a black glassmorphism layout, complete with a pulsing target reticle, a vibrant `#50ffaf` green left border accent, and monospaced text:
+  `[SYSTEM: STRATEGY_MATCHED → {STRATEGY_NAME}]`
+- **Secondary Execution Success:** When the execution engine successfully logs the trade into the paper trading journal, a secondary success notification is dispatched under the `FLOW_STATE` alert protocol. It triggers a premium system audio chime (`/audio/flow_state.wav`) and displays a vibrant green border notification:
+  `[SYSTEM: JOURNAL_LOGGED → {STRATEGY_NAME} trade successfully posted to Journal @ ${ENTRY_PRICE}]`
+- **Execution Failure Guard:** If the calculation validation fails (such as an invalid Risk-Reward setup), the system overrides the signal and prints a warning alert under the `RISK_OVERRIDE` protocol, generating a warning audio chime (`/audio/fvg_alert.mp3`):
+  `[SYSTEM: TRADE_FAILED → {STRATEGY_NAME}: {REASON}]`
+
+#### 5. Dark Brutalist Strategy Settings UI
+The EquationBuilder component integrates an advanced execution parameters layout styled in strict accordance with Flow-State Dark Brutalist guidelines:
+- **Card Background:** Employs high-contrast slate panels (`bg-[#1c1b1c]`) bounded by thick steel borders (`border-[#4a4457]/50`) and severe shadows (`shadow-xl`) with zero rounded corners (`rounded-none`).
+- **Typography:** Labels use a heavy black institutional weight with expanded monospaced tracking (`text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]`).
+- **Form Controls:** Dropdown fields use clean dark boxes (`bg-[#0e0e0f]`) with sharp borders, custom hover outlines (`hover:border-[#d1bcff]/40`), and vibrant green focus borders (`focus:border-[#50ffaf]`) with smooth CSS transitions.
 
 ---
 
@@ -1210,17 +1222,35 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 
 ### `POST /api/strategies`
 
-**Purpose:** Upserts a custom strategy (creates new if `id` is omitted, updates if `id` matches an existing user-owned strategy).
+**Purpose:** Upserts a custom strategy (creates new if `id` is omitted, updates if `id` matches an existing user-owned strategy). Accepts either a legacy array of condition objects or a structured settings object wrapper containing strategy execution parameters.
 
 **Auth:** Requires valid NextAuth session.
 
-**Request Body:**
+**Request Body (New Settings Format):**
+```json
+{
+  "id": "a90df1a5-8c0c-4ff6-8367-e95b0fb2d8d8",
+  "name": "Displacement with FVG Close",
+  "conditions": {
+    "conditions": [
+      { "metric": "DISPLACEMENT", "operator": "IS_TRUE", "temporal": "TICK" }
+    ],
+    "temporal_mode": "INSTANT",
+    "sl_logic": "Structural Swing",
+    "tp_logic": "Nearest Order Book Magnet",
+    "direction": "LONG"
+  },
+  "is_active": true
+}
+```
+
+**Request Body (Legacy Array Format):**
 ```json
 {
   "id": "a90df1a5-8c0c-4ff6-8367-e95b0fb2d8d8",
   "name": "Displacement with FVG Close",
   "conditions": [
-    { "metric": "DISPLACEMENT", "operator": "==", "value": "ACTIVE_BULLISH", "temporal": "TICK" }
+    { "metric": "DISPLACEMENT", "operator": "IS_TRUE", "temporal": "TICK" }
   ],
   "is_active": true
 }
