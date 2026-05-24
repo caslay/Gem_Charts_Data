@@ -375,7 +375,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         onClick={onClose}
       />
 
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[201] w-full max-w-4xl bg-[#0e0e0f]/90 border border-[#4a4457] shadow-[0_0_80px_rgba(0,0,0,0.95)] font-mono text-xs text-[#e5e2e3] select-none rounded-none animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[201] w-full max-w-5xl bg-[#0e0e0f]/90 border border-[#4a4457] shadow-[0_0_80px_rgba(0,0,0,0.95)] font-mono text-xs text-[#e5e2e3] select-none rounded-none animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
 
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[#4a4457] bg-[#141416]/95 shrink-0">

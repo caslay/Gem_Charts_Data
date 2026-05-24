@@ -68,6 +68,7 @@ export interface MarketDataPayload {
   ipda_metrics: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   active_arrays: any;
+  correlation_data?: any; // V8.7 Correlation Data
   data_payload: {
     candles_4h?: Candle[];
     candles_1h?: Candle[];
