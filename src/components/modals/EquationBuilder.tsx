@@ -5,8 +5,19 @@ import { Plus, Trash2, Zap, Lock, Save, Power, PowerOff, Loader2, ChevronRight }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type MetricKey = 'FVG' | 'DISPLACEMENT' | 'OI_TREND' | 'MSS' | 'SMT' | 'PRICE_VS_OPEN';
-export type OperatorKey = 'IS_TRUE' | 'IS_FALSE' | 'EQUALS' | 'NOT_EQUALS';
+export type MetricKey =
+  | 'FVG'
+  | 'PRICE_IN_FVG'
+  | 'DISPLACEMENT'
+  | 'DISPLACEMENT_VALUE'
+  | 'OI_TREND'
+  | 'MSS'
+  | 'SMT'
+  | 'PRICE_VS_OPEN'
+  | 'EQUILIBRIUM_STATUS'
+  | 'TARGET_EXHAUSTION'
+  | 'NEARBY_MAGNET';
+export type OperatorKey = 'IS_TRUE' | 'IS_FALSE' | 'EQUALS' | 'NOT_EQUALS' | 'GREATER_THAN' | 'LESS_THAN';
 export type TemporalMode = 'INSTANT' | 'ON_CLOSE';
 
 export interface StrategyCondition {
@@ -26,13 +37,18 @@ export interface CustomStrategy {
 
 // ─── Metric Definitions ──────────────────────────────────────────────────────
 
-const METRICS: { key: MetricKey; label: string; type: 'boolean' | 'enum'; options?: string[] }[] = [
+const METRICS: { key: MetricKey; label: string; type: 'boolean' | 'enum' | 'number'; options?: string[] }[] = [
   { key: 'FVG', label: 'Fair Value Gap', type: 'boolean' },
+  { key: 'PRICE_IN_FVG', label: 'Price in FVG', type: 'boolean' },
   { key: 'DISPLACEMENT', label: 'Displacement', type: 'boolean' },
+  { key: 'DISPLACEMENT_VALUE', label: 'Displacement Value', type: 'number' },
   { key: 'OI_TREND', label: 'OI Trend', type: 'enum', options: ['RISING', 'FALLING', 'FLAT'] },
   { key: 'MSS', label: 'Market Structure Shift', type: 'boolean' },
   { key: 'SMT', label: 'Smart Money Trap', type: 'boolean' },
   { key: 'PRICE_VS_OPEN', label: 'Price vs Open', type: 'enum', options: ['ABOVE', 'BELOW'] },
+  { key: 'EQUILIBRIUM_STATUS', label: 'Equilibrium Status', type: 'enum', options: ['PREMIUM', 'DISCOUNT'] },
+  { key: 'TARGET_EXHAUSTION', label: 'Target Exhaustion', type: 'enum', options: ['PENDING', 'EXHAUSTED', 'ASIAN_HIGH_SWEPT', 'ASIAN_LOW_SWEPT', 'LONDON_HIGH_SWEPT', 'LONDON_LOW_SWEPT'] },
+  { key: 'NEARBY_MAGNET', label: 'Nearby Magnet', type: 'boolean' },
 ];
 
 function getMetricDef(key: MetricKey) {
@@ -45,6 +61,14 @@ function getOperatorsForMetric(key: MetricKey): { value: OperatorKey; label: str
     return [
       { value: 'IS_TRUE', label: 'IS TRUE' },
       { value: 'IS_FALSE', label: 'IS FALSE' },
+    ];
+  }
+  if (def.type === 'number') {
+    return [
+      { value: 'GREATER_THAN', label: '>' },
+      { value: 'LESS_THAN', label: '<' },
+      { value: 'EQUALS', label: '==' },
+      { value: 'NOT_EQUALS', label: '!=' },
     ];
   }
   return [
@@ -241,6 +265,9 @@ export default function EquationBuilder() {
           if (def.type === 'boolean') {
             updated.operator = 'IS_TRUE';
             delete updated.value;
+          } else if (def.type === 'number') {
+            updated.operator = 'GREATER_THAN';
+            updated.value = '0.0';
           } else {
             updated.operator = 'EQUALS';
             updated.value = def.options?.[0] || '';
@@ -432,6 +459,17 @@ export default function EquationBuilder() {
                           </option>
                         ))}
                       </select>
+                    )}
+
+                    {/* Value (only for number metrics) */}
+                    {metricDef.type === 'number' && (
+                      <input
+                        type="text"
+                        value={cond.value || ''}
+                        onChange={(e) => updateCondition(cond.id, 'value', e.target.value)}
+                        placeholder="0.0"
+                        className="bg-[#0e0e0f] border border-[#4a4457] focus:border-[#d1bcff] focus:outline-none px-2 py-1 text-[10px] font-mono text-white rounded-none w-[76px] shrink-0"
+                      />
                     )}
 
                     {/* Temporal Toggle */}

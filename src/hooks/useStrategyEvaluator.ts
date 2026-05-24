@@ -19,11 +19,11 @@ function resolveMetric(
   metric: MetricKey,
   data: MarketDataPayload | null,
   livePrice: number | null
-): boolean | string {
+): boolean | string | number {
   if (!data) return false;
 
   const ipda = data.ipda_metrics || {};
-  const orderFlow = ipda.order_flow_engine || {};
+  const orderFlow = ipda.order_flow_engine || (data as any).order_flow_engine || {};
 
   switch (metric) {
     case 'FVG': {
@@ -31,10 +31,26 @@ function resolveMetric(
       return Array.isArray(fvgs) && fvgs.length > 0;
     }
 
+    case 'PRICE_IN_FVG': {
+      const fvgs = ipda.active_fvgs || [];
+      const price = livePrice || 0;
+      if (price === 0 || !Array.isArray(fvgs) || fvgs.length === 0) return false;
+      return fvgs.some((fvg: any) => {
+        const minVal = Math.min(fvg.top, fvg.bottom);
+        const maxVal = Math.max(fvg.top, fvg.bottom);
+        return price >= minVal && price <= maxVal;
+      });
+    }
+
     case 'DISPLACEMENT': {
       const sponsorship = ipda.institutional_sponsorship?.status
         || orderFlow.displacement_sponsorship;
-      return sponsorship === 'ACTIVE';
+      return sponsorship === 'ACTIVE' || sponsorship === 'ACTIVE_BULLISH' || sponsorship === 'ACTIVE_BEARISH';
+    }
+
+    case 'DISPLACEMENT_VALUE': {
+      const sponsorship = ipda.institutional_sponsorship || {};
+      return typeof sponsorship.anomaly_multiplier === 'number' ? sponsorship.anomaly_multiplier : 0;
     }
 
     case 'OI_TREND': {
@@ -46,7 +62,6 @@ function resolveMetric(
     }
 
     case 'MSS': {
-      // Market Structure Shift detection — look for explicit flag or structural shift indicator
       const mss = ipda.market_structure_shift
         || orderFlow.market_structure_shift;
       return mss === true || mss === 'ACTIVE' || mss === 'CONFIRMED';
@@ -66,6 +81,26 @@ function resolveMetric(
       return price > trueDayOpen ? 'ABOVE' : 'BELOW';
     }
 
+    case 'EQUILIBRIUM_STATUS': {
+      const pricing = ipda.pricing_context || {};
+      const range = pricing.local_dealing_range || {};
+      return range.current_status || 'UNKNOWN';
+    }
+
+    case 'TARGET_EXHAUSTION': {
+      return ipda.target_status || 'PENDING';
+    }
+
+    case 'NEARBY_MAGNET': {
+      const liquidity = orderFlow.resting_liquidity_pools || {};
+      const bsl = liquidity.BSL_Magnets || [];
+      const ssl = liquidity.SSL_Magnets || [];
+      const allMagnets = [...bsl, ...ssl];
+      const price = livePrice || 0;
+      if (price === 0 || allMagnets.length === 0) return false;
+      return allMagnets.some((magnetPrice: number) => Math.abs(price - magnetPrice) <= 2.00);
+    }
+
     default:
       return false;
   }
@@ -75,16 +110,34 @@ function resolveMetric(
  * Evaluates a single condition against the current data snapshot.
  */
 function evaluateCondition(
+  strategyId: string,
   condition: StrategyCondition,
   data: MarketDataPayload | null,
   livePrice: number | null
 ): boolean {
   const resolved = resolveMetric(condition.metric, data, livePrice);
 
+  const expected = (condition.operator === 'IS_TRUE')
+    ? 'true'
+    : (condition.operator === 'IS_FALSE')
+      ? 'false'
+      : `${condition.operator} ${condition.value}`;
+
+  console.log(`[EVALUATOR] Strategy ${strategyId} - Checking ${condition.metric}: ${resolved} vs ${expected}`);
+
   if (typeof resolved === 'boolean') {
     // Boolean-type metrics
     if (condition.operator === 'IS_TRUE') return resolved === true;
     if (condition.operator === 'IS_FALSE') return resolved === false;
+    return false;
+  }
+
+  if (typeof resolved === 'number') {
+    const condVal = parseFloat(condition.value || '0');
+    if (condition.operator === 'GREATER_THAN') return resolved > condVal;
+    if (condition.operator === 'LESS_THAN') return resolved < condVal;
+    if (condition.operator === 'EQUALS') return resolved === condVal;
+    if (condition.operator === 'NOT_EQUALS') return resolved !== condVal;
     return false;
   }
 
@@ -121,7 +174,7 @@ function evaluateStrategy(
   }
 
   // All conditions must pass
-  return conditions.every((c) => evaluateCondition(c, data, livePrice));
+  return conditions.every((c) => evaluateCondition(strategy.id, c, data, livePrice));
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -176,15 +229,15 @@ export function useStrategyEvaluator() {
 
       if (!isMatch) continue;
 
-      // ── Debounce Lock: one fire per candle ──────────────────────────
-      // Derive the "candle key" from liveCandle time. If no liveCandle,
-      // use a timestamp floor (5-second buckets to prevent rapid re-fires).
-      const candleKey = liveCandle
-        ? Number(liveCandle.time)
-        : Math.floor(Date.now() / 5000);
+      // ── Debounce Lock: one fire per candle (for close-gated strategies) ──────
+      // or one fire per second (for pure instant strategies to prevent duplicate re-fires)
+      const hasOnClose = strategy.conditions.some((c) => c.temporal === 'ON_CLOSE');
+      const candleKey = hasOnClose
+        ? (liveCandle ? Number(liveCandle.time) : Math.floor(Date.now() / 5000))
+        : Math.floor(Date.now() / 1000);
 
       const lastFiredTime = firedLockRef.current.get(strategy.id);
-      if (lastFiredTime === candleKey) continue; // Already fired for this candle
+      if (lastFiredTime === candleKey) continue; // Already fired for this state/second
 
       // ── FIRE! ──────────────────────────────────────────────────────
       firedLockRef.current.set(strategy.id, candleKey);

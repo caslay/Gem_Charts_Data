@@ -649,19 +649,26 @@ The execution hook `useStrategyEvaluator.ts` runs silently in the dashboard back
 | Logic Metric | Evaluated Code Formula / Source | Return Type |
 |---|---|---|
 | `FVG` | `ipda_metrics.active_fvgs.length > 0` | boolean |
-| `DISPLACEMENT` | `institutional_sponsorship.status === 'ACTIVE_BULLISH' || status === 'ACTIVE_BEARISH'` | boolean |
+| `PRICE_IN_FVG` | `livePrice` is between the `top` and `bottom` coordinates of any FVG in `active_fvgs` | boolean |
+| `DISPLACEMENT` | `institutional_sponsorship.status === 'ACTIVE_BULLISH' || status === 'ACTIVE_BEARISH' || status === 'ACTIVE'` | boolean |
+| `DISPLACEMENT_VALUE` | `institutional_sponsorship.anomaly_multiplier` | number |
 | `OI_TREND` | `order_flow_engine.open_interest_trend` (`RISING`/`FALLING`/`FLAT`) | string (enum) |
 | `MSS` | `market_structure_shift` flag | boolean |
 | `SMT` | `smart_money_sentiment.smart_money_divergence` | boolean |
 | `PRICE_VS_OPEN` | `livePrice > true_day_open_0700` (`ABOVE`/`BELOW`) | string (enum) |
+| `EQUILIBRIUM_STATUS` | `pricing_context.local_dealing_range.current_status` (`PREMIUM`/`DISCOUNT`) | string (enum) |
+| `TARGET_EXHAUSTION` | `target_status` | string (enum) |
+| `NEARBY_MAGNET` | `livePrice` within $\pm\$2.00$ of any resting bid/ask limit wall in `resting_liquidity_pools` | boolean |
 
 #### 2. Temporal Gating Logic
 Each condition features a temporal toggle:
-- **⚡ TICK (Instant Mode):** Evaluated instantly on every incoming price tick.
-- **🔒 CLOSE (Candle Close Mode):** The entire strategy is gated behind `liveCandle.isClosed === true`. If even one condition in the equation uses `CLOSE` mode, the engine blocks execution until the 5-minute candle fully prints.
+- **⚡ TICK (Instant Mode):** Evaluated instantly on every incoming price tick. Bypasses `liveCandle.isClosed` gating completely.
+- **🔒 CLOSE (Candle Close Mode):** The entire strategy is gated behind `liveCandle.isClosed === true`. If even one condition in the equation uses `CLOSE` mode, the engine blocks execution until the candle fully prints.
 
 #### 3. Debounce Lock (Preventing Alert Loops)
-To comply with Lesson #10, the evaluator tracks `lastFiredCandleTime` per strategy. When an equation evaluates to `true`, the system locks execution and permits only **one trigger event per candle**, preventing audio notification loops and API abuse.
+To comply with Lesson #10, the evaluator tracks `lastFiredCandleTime` (mapped via `candleKey` per strategy) to prevent notification loops:
+- **ON_CLOSE strategies:** Gated per-candle (`Number(liveCandle.time)`), allowing only one trigger event per candle.
+- **INSTANT strategies:** Gated per-second (`Math.floor(Date.now() / 1000)`), allowing sub-second micro-ticks but debouncing multiple fires on the same second.
 
 #### 4. High-Contrast HUD Toast Integration
 Matches are piped as `STRATEGY_MATCHED` alert types to `SmartAlertsToast.tsx`, rendering with a pulsing crosshair icon, high-contrast black glassmorphism, and a vibrant `#50ffaf` green left accent border:
