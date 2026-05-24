@@ -1,0 +1,60 @@
+# Walkthrough - Sniper Mitigation Execution Logic
+
+This document summarizes the changes, integrations, and verifications completed for the **Sniper Mitigation Execution Logic (PRICE_IN_FVG)**.
+
+## Changes Made
+
+### 1. ⚙️ Mixed Temporal Engine Optimization
+In [useStrategyEvaluator.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/hooks/useStrategyEvaluator.ts):
+- Added a check `isPureOnClose` inside `evaluateStrategy()` to separate pure candle-close strategies from mixed or pure instant strategies.
+- Bypassed the `liveCandle.isClosed` block for **mixed** strategies (e.g. `FVG IS_TRUE [CLOSE] + PRICE_IN_FVG IS_TRUE [TICK]`).
+- The engine now holds structural elements (like `FVG` formation validated on the last closed candle) unlocked, while actively polling live tick price metrics like `PRICE_IN_FVG` in real-time.
+- Mapped the debounce lock of mixed strategies to the candle start timestamp (`liveCandle.time`) to ensure a single, precise sniper entry is executed per candle.
+
+### 2. ⚡ Execution Payload Linkage
+In [useStrategyEvaluator.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/hooks/useStrategyEvaluator.ts):
+- Analyzed strategy conditions inside the trade execution log section.
+- If a `'PRICE_IN_FVG'` condition is present, the evaluator now explicitly overrides the default server consequent encroachment resolution by passing:
+  `entry_price: livePrice`
+- This ensures the logged paper trade in `/api/trades` executes at the exact millisecond boundary breach price.
+
+### 3. 🎨 Dark Brutalist Strategy Architect Widget
+In [EquationBuilder.tsx](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/components/modals/EquationBuilder.tsx):
+- Integrated a premium dark brutalist tip widget directly above the Logic Rows to assist architects:
+  > **⚡ Sniper Mitigation Protocol:** Use FVG [CLOSE] to confirm structure. Use PRICE_IN_FVG [TICK] for zero-latency mitigation entries.
+
+### 📜 Master Blueprint Maintenance
+In [master_blueprint.md](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/directives/master_blueprint.md):
+- Registered **V8.8 Changelog** to document the Sniper FVG Mitigation Engine, Mixed Temporal logic, and Payload price linkage.
+
+---
+
+## Verification Results
+
+### 1. Strategy Evaluation Flow
+```mermaid
+graph TD
+    A[Incoming Live Price Tick] --> B{Strategy Gating Rules}
+    B -->|Pure ON_CLOSE| C{Is Candle Closed?}
+    C -->|Yes| D[Evaluate Conditions]
+    C -->|No| E[Abort / Standby]
+    B -->|Pure INSTANT| D
+    B -->|Mixed ON_CLOSE + INSTANT| D
+    D --> F{All Rules Match?}
+    F -->|Yes| G[Sniper Trade Triggered]
+    F -->|No| H[No Action]
+```
+
+### 2. Execution Price Resolution
+When a mixed strategy executes, it sends:
+```json
+{
+  "symbol": "ETHUSDC",
+  "direction": "LONG",
+  "strategy_name": "Sniper_FVG_Mitigation",
+  "current_price": 3120.25,
+  "entry_price": 3120.25,
+  "ipda_metrics": { ... }
+}
+```
+The trades API handler (/api/trades) accepts `entry_price` directly, logging the trade at exactly `$3,120.25` rather than waiting for the candle close or calculating the midpoint consequent encroachment.

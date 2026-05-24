@@ -216,13 +216,20 @@ function evaluateStrategy(
   if (!Array.isArray(conditions) || conditions.length === 0) return false;
 
   const hasOnCloseCondition = conditions.some((c: any) => c.temporal === 'ON_CLOSE');
+  const hasInstantCondition = conditions.some((c: any) => c.temporal === 'INSTANT');
   
   // Strategy settings level check
   const isObj = !Array.isArray(strategy.conditions);
   const temporalMode = isObj ? (strategy.conditions.temporal_mode || 'INSTANT') : 'INSTANT';
 
-  // If either the strategy settings has temporal === 'ON_CLOSE' or any condition is CLOSE
-  if (temporalMode === 'ON_CLOSE' || hasOnCloseCondition) {
+  // Decide if we need to gate this evaluation behind the candle close event:
+  // - Gated ONLY if it is a pure ON_CLOSE strategy (i.e. has ON_CLOSE conditions but NO INSTANT conditions).
+  // - If it is a mixed strategy (has both ON_CLOSE and INSTANT conditions), we do NOT gate it on close,
+  //   allowing the INSTANT conditions to trigger mid-candle.
+  // - If it is a pure INSTANT strategy, we do NOT gate it.
+  const isPureOnClose = (temporalMode === 'ON_CLOSE' && !hasInstantCondition) || (hasOnCloseCondition && !hasInstantCondition);
+
+  if (isPureOnClose) {
     if (!liveCandle || !liveCandle.isClosed) return false;
   }
 
@@ -363,6 +370,10 @@ export function useStrategyEvaluator() {
         continue;
       }
 
+      // V8.8 — Sniper FVG Mitigation: pass exact livePrice as entry_price if PRICE_IN_FVG is evaluated
+      const hasPriceInFvg = conditions.some((c: any) => c.metric === 'PRICE_IN_FVG');
+      const entry_price = (hasPriceInFvg && typeof livePrice === 'number' && livePrice > 0) ? livePrice : undefined;
+
       fetch('/api/trades', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -375,6 +386,7 @@ export function useStrategyEvaluator() {
           sl_logic,
           tp_logic,
           current_price: livePrice,
+          entry_price,
           risk_percent
         })
       }).then(async (res) => {

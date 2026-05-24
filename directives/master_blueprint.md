@@ -1,10 +1,26 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V8.7
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V8.8
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-24  
-> **Last Updated:** 2026-05-24 (V8.7 Multi-Timeframe BTC SMT Integration)  
+> **Last Updated:** 2026-05-24 (V8.8 Sniper FVG Mitigation Engine)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 30+ across TypeScript (Next.js 16), Python (FastAPI), and Markdown directives.
+
+---
+
+## 🆕 V8.8 Changelog — Sniper FVG Mitigation Execution Engine
+
+### 1. Mixed Temporal Engine Optimization (`useStrategyEvaluator.ts`)
+- **Dynamic Gating:** Rewrote `evaluateStrategy` to differentiate between **Pure ON_CLOSE**, **Pure INSTANT**, and **Mixed** strategies.
+- **Bypass Rule:** If a strategy has a mix of `ON_CLOSE` and `INSTANT` temporal conditions, the engine bypasses the `liveCandle.isClosed` gate. It keeps the closed-candle structure checks unlocked while evaluating instant tick metrics like `PRICE_IN_FVG` in real-time.
+- **Debounce Lock:** Debounces mixed strategies using the candle time timestamp key, preventing duplicate triggers on subsequent ticks of the same candle.
+
+### 2. Execution Price Sniper Payload Linkage (`useStrategyEvaluator.ts` & `/api/trades`)
+- **Direct Linkage:** When the strategy contains a `PRICE_IN_FVG` condition, the client explicitly passes `entry_price: livePrice` in the trade creation body.
+- **Zero-Latency Fills:** Eliminates the backend's default fallback to consequent encroachment (50% CE level) and logs the trade at the precise live tick price that breached the FVG boundary.
+
+### 3. Dark Brutalist Strategy Architect Widget (`EquationBuilder.tsx`)
+- **Brutalist Info Card:** Added a sharp institutional-slate helper tip above the Strategy Architect's rows to clarify sniper combinations: *"💡 Use FVG [CLOSE] to confirm structure. Use PRICE_IN_FVG [TICK] for zero-latency mitigation entries."*
 
 ---
 
