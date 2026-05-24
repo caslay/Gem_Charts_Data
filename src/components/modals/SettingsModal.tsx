@@ -50,12 +50,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   initialTab = 'ai_config',
 }) => {
   const { playFile, playSound } = useAlertSounds();
-  const { 
-    signalAlerts, 
-    updateSignalAlert, 
-    signalAlertsEnabled, 
+  const {
+    signalAlerts,
+    updateSignalAlert,
+    signalAlertsEnabled,
     toggleSignalAlertEnabled,
-    syncStatus 
+    syncStatus
   } = useMarketDataContext();
 
   // ── Tabs State ────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   // ── Tab resolution from initialTab prop ───────────────────────────────────
   useEffect(() => {
     if (!isOpen) return;
-    
+
     if (alert) {
       // Price alert editing — show the price overlay
       setShowPriceOverlay(true);
@@ -227,161 +227,164 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     { id: 'audio', icon: <Music size={14} />, label: 'AUDIO' },
   ];
 
-  return (
-    <>
-      {/* Backdrop */}
-      <div 
-        className="fixed inset-0 bg-[#0e0e0f]/80 backdrop-blur-md z-[200] transition-opacity duration-200"
-        onClick={onClose}
-      />
+  // If a price alert is active for configuration, render ONLY the Price Alert Config Modal
+  if (alert) {
+    return (
+      <>
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 bg-[#0e0e0f]/80 backdrop-blur-md z-[200] transition-opacity duration-200"
+          onClick={onClose}
+        />
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[204] w-full max-w-sm bg-[#0e0e0f]/95 border border-[#4a4457] shadow-[0_0_80px_rgba(0,0,0,0.95)] font-mono text-xs text-[#e5e2e3] select-none rounded-none animate-in fade-in zoom-in-95 duration-150">
+          {/* Price Overlay Header */}
+          <div className="flex items-center justify-between p-4 border-b border-[#4a4457] bg-[#141416]/95">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-amber-400 rounded-none animate-pulse" />
+              <h3 className="text-xs font-bold tracking-[0.15em] uppercase text-white">PRICE ALERT CONFIG</h3>
+            </div>
+            <button onClick={onClose} className="text-[#958da3] hover:text-white transition-colors p-1 cursor-pointer">
+              <X size={14} />
+            </button>
+          </div>
 
-      {/* ── Price Alert Overlay (conditional, floating above the command center) ── */}
-      {showPriceOverlay && alert && (
-        <>
-          <div 
-            className="fixed inset-0 z-[203]"
-            onClick={() => setShowPriceOverlay(false)}
-          />
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[204] w-full max-w-sm bg-[#0e0e0f]/95 border border-[#4a4457] shadow-[0_0_80px_rgba(0,0,0,0.95)] font-mono text-xs text-[#e5e2e3] select-none rounded-none animate-in fade-in zoom-in-95 duration-150">
-            {/* Price Overlay Header */}
-            <div className="flex items-center justify-between p-4 border-b border-[#4a4457] bg-[#141416]/95">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-amber-400 rounded-none animate-pulse" />
-                <h3 className="text-xs font-bold tracking-[0.15em] uppercase text-white">PRICE ALERT CONFIG</h3>
-              </div>
-              <button onClick={() => setShowPriceOverlay(false)} className="text-[#958da3] hover:text-white transition-colors p-1 cursor-pointer">
-                <X size={14} />
-              </button>
+          {/* Price Alert Form */}
+          <div className="p-5 space-y-4 max-h-[50vh] overflow-y-auto scrollbar-thin scrollbar-thumb-[#4a4457] scrollbar-track-transparent">
+            {/* Static Price read-out */}
+            <div className="flex justify-between items-center bg-[#141416] border border-[#4a4457] px-3.5 py-2.5">
+              <span className="text-[10px] text-[#958da3] uppercase font-bold tracking-wider">Level Target</span>
+              <span className="text-sm font-bold tracking-tight text-[#50ffaf]">
+                {alert.price.toFixed(2)} USDC
+              </span>
             </div>
 
-            {/* Price Alert Form */}
-            <div className="p-5 space-y-4 max-h-[50vh] overflow-y-auto scrollbar-thin scrollbar-thumb-[#4a4457] scrollbar-track-transparent">
-              {/* Static Price read-out */}
-              <div className="flex justify-between items-center bg-[#141416] border border-[#4a4457] px-3.5 py-2.5">
-                <span className="text-[10px] text-[#958da3] uppercase font-bold tracking-wider">Level Target</span>
-                <span className="text-sm font-bold tracking-tight text-[#50ffaf]">
-                  {alert.price.toFixed(2)} USDC
-                </span>
-              </div>
+            {/* Label Input */}
+            <div className="space-y-1.5">
+              <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Alert Descriptor</label>
+              <input
+                type="text"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                className="w-full bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-3 py-2 text-xs font-mono text-white rounded-none transition-colors"
+                placeholder="e.g. PDH Sweep Trap"
+              />
+            </div>
 
-              {/* Label Input */}
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Alert Descriptor</label>
-                <input 
-                  type="text" 
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  className="w-full bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-3 py-2 text-xs font-mono text-white rounded-none transition-colors"
-                  placeholder="e.g. PDH Sweep Trap"
-                />
+                <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Condition</label>
+                <select
+                  value={triggerCondition}
+                  onChange={(e: any) => setTriggerCondition(e.target.value)}
+                  className="w-full bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-2.5 py-2 text-xs font-mono text-white rounded-none transition-colors cursor-pointer"
+                >
+                  <option value="TOUCH">TOUCH</option>
+                  <option value="CLOSE_ABOVE">CLOSE_ABOVE</option>
+                  <option value="CLOSE_BELOW">CLOSE_BELOW</option>
+                  <option value="WICK_PURGE_REJECT">WICK_PURGE_REJECT</option>
+                </select>
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Condition</label>
-                  <select 
-                    value={triggerCondition}
-                    onChange={(e: any) => setTriggerCondition(e.target.value)}
-                    className="w-full bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-2.5 py-2 text-xs font-mono text-white rounded-none transition-colors cursor-pointer"
-                  >
-                    <option value="TOUCH">TOUCH</option>
-                    <option value="CLOSE_ABOVE">CLOSE_ABOVE</option>
-                    <option value="CLOSE_BELOW">CLOSE_BELOW</option>
-                    <option value="WICK_PURGE_REJECT">WICK_PURGE_REJECT</option>
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Timeframe</label>
-                  <select 
-                    value={timeframe}
-                    onChange={(e: any) => setTimeframe(e.target.value)}
-                    className="w-full bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-2.5 py-2 text-xs font-mono text-white rounded-none transition-colors cursor-pointer"
-                  >
-                    <option value="1m">1m</option>
-                    <option value="5m">5m</option>
-                    <option value="15m">15m</option>
-                    <option value="1h">1h</option>
-                    <option value="4h">4h</option>
-                    <option value="1D">1D</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Action Chain */}
-              <div className="space-y-2">
-                <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Action Chain</label>
-                <div className="space-y-2 bg-[#141416]/50 border border-[#4a4457] p-3">
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input type="checkbox" checked={browserNotification} onChange={(e) => setBrowserNotification(e.target.checked)} className="rounded-none bg-[#141416] border border-[#4a4457] w-3.5 h-3.5 cursor-pointer accent-[#50ffaf]" />
-                    <div className="flex items-center gap-1.5">
-                      <Bell size={11} className="text-[#958da3] group-hover:text-white transition-colors" />
-                      <span className="text-[10px] text-[#958da3] group-hover:text-white transition-colors">Browser Notification</span>
-                    </div>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input type="checkbox" checked={triggerAiAnalysis} onChange={(e) => setTriggerAiAnalysis(e.target.checked)} className="rounded-none bg-[#141416] border border-[#4a4457] w-3.5 h-3.5 cursor-pointer accent-[#50ffaf]" />
-                    <div className="flex items-center gap-1.5">
-                      <Sparkles size={11} className="text-[#958da3] group-hover:text-white transition-colors" />
-                      <span className="text-[10px] text-[#958da3] group-hover:text-white transition-colors">Trigger AI Analysis</span>
-                    </div>
-                  </label>
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input type="checkbox" checked={soundAlert} onChange={(e) => setSoundAlert(e.target.checked)} className="rounded-none bg-[#141416] border border-[#4a4457] w-3.5 h-3.5 cursor-pointer accent-[#50ffaf]" />
-                    <div className="flex items-center gap-1.5">
-                      <Volume2 size={11} className="text-[#958da3] group-hover:text-white transition-colors" />
-                      <span className="text-[10px] text-[#958da3] group-hover:text-white transition-colors">Sound Alert</span>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* Sound */}
               <div className="space-y-1.5">
-                <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Audio Profile</label>
-                <div className="flex gap-2">
-                  <select value={soundSelection} disabled={!soundAlert} onChange={(e: any) => setSoundSelection(e.target.value)} className="flex-1 bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-2.5 py-2 text-xs font-mono text-white rounded-none transition-colors disabled:opacity-40 cursor-pointer">
-                    <option value="Institutional Pulse">Institutional Pulse (Sine)</option>
-                    <option value="Mechanical Click">Mechanical Click (Tri/Noise)</option>
-                    <option value="Target Chime">Target Chime (Harmonic)</option>
-                  </select>
-                  <button type="button" disabled={!soundAlert} onClick={handleTestAudio} className="flex items-center gap-1 px-3 py-2 bg-[#141416] border border-[#4a4457] hover:bg-zinc-800 disabled:opacity-40 transition-all text-[10px] font-bold uppercase text-[#958da3] rounded-none cursor-pointer">
-                    <Play size={10} fill="currentColor" />
-                    <span>Test</span>
-                  </button>
-                </div>
+                <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Timeframe</label>
+                <select
+                  value={timeframe}
+                  onChange={(e: any) => setTimeframe(e.target.value)}
+                  className="w-full bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-2.5 py-2 text-xs font-mono text-white rounded-none transition-colors cursor-pointer"
+                >
+                  <option value="1m">1m</option>
+                  <option value="5m">5m</option>
+                  <option value="15m">15m</option>
+                  <option value="1h">1h</option>
+                  <option value="4h">4h</option>
+                  <option value="1D">1D</option>
+                </select>
               </div>
             </div>
 
-            {/* Price Overlay Footer */}
-            <div className="flex justify-between items-center p-4 border-t border-[#4a4457] bg-[#141416]/95">
-              <button type="button" onClick={() => onDelete(alert.id)} className="flex items-center gap-1 px-2.5 py-1.5 border border-red-500/30 hover:border-red-500 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-bold transition-all uppercase text-[10px] rounded-none cursor-pointer">
-                <Trash2 size={12} />
-                <span>Delete</span>
-              </button>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => setShowPriceOverlay(false)} className="px-3 py-1.5 border border-[#4a4457] hover:bg-white/5 text-[#958da3] hover:text-white font-bold transition-all uppercase text-[10px] rounded-none cursor-pointer">
-                  Cancel
-                </button>
-                <button type="button" onClick={() => { handleSavePriceAlert(); setShowPriceOverlay(false); }} className="px-4 py-1.5 bg-[#50ffaf] border border-[#50ffaf] hover:bg-[#40dd96] text-black font-bold transition-all uppercase text-[10px] rounded-none cursor-pointer">
-                  Save Config
+            {/* Action Chain */}
+            <div className="space-y-2">
+              <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Action Chain</label>
+              <div className="space-y-2 bg-[#141416]/50 border border-[#4a4457] p-3">
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <input type="checkbox" checked={browserNotification} onChange={(e) => setBrowserNotification(e.target.checked)} className="rounded-none bg-[#141416] border border-[#4a4457] w-3.5 h-3.5 cursor-pointer accent-[#50ffaf]" />
+                  <div className="flex items-center gap-1.5">
+                    <Bell size={11} className="text-[#958da3] group-hover:text-white transition-colors" />
+                    <span className="text-[10px] text-[#958da3] group-hover:text-white transition-colors">Browser Notification</span>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <input type="checkbox" checked={triggerAiAnalysis} onChange={(e) => setTriggerAiAnalysis(e.target.checked)} className="rounded-none bg-[#141416] border border-[#4a4457] w-3.5 h-3.5 cursor-pointer accent-[#50ffaf]" />
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles size={11} className="text-[#958da3] group-hover:text-white transition-colors" />
+                    <span className="text-[10px] text-[#958da3] group-hover:text-white transition-colors">Trigger AI Analysis</span>
+                  </div>
+                </label>
+                <label className="flex items-center gap-3 cursor-pointer group">
+                  <input type="checkbox" checked={soundAlert} onChange={(e) => setSoundAlert(e.target.checked)} className="rounded-none bg-[#141416] border border-[#4a4457] w-3.5 h-3.5 cursor-pointer accent-[#50ffaf]" />
+                  <div className="flex items-center gap-1.5">
+                    <Volume2 size={11} className="text-[#958da3] group-hover:text-white transition-colors" />
+                    <span className="text-[10px] text-[#958da3] group-hover:text-white transition-colors">Sound Alert</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Sound */}
+            <div className="space-y-1.5">
+              <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Audio Profile</label>
+              <div className="flex gap-2">
+                <select value={soundSelection} disabled={!soundAlert} onChange={(e: any) => setSoundSelection(e.target.value)} className="flex-1 bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-2.5 py-2 text-xs font-mono text-white rounded-none transition-colors disabled:opacity-40 cursor-pointer">
+                  <option value="Institutional Pulse">Institutional Pulse (Sine)</option>
+                  <option value="Mechanical Click">Mechanical Click (Tri/Noise)</option>
+                  <option value="Target Chime">Target Chime (Harmonic)</option>
+                </select>
+                <button type="button" disabled={!soundAlert} onClick={handleTestAudio} className="flex items-center gap-1 px-3 py-2 bg-[#141416] border border-[#4a4457] hover:bg-zinc-800 disabled:opacity-40 transition-all text-[10px] font-bold uppercase text-[#958da3] rounded-none cursor-pointer">
+                  <Play size={10} fill="currentColor" />
+                  <span>Test</span>
                 </button>
               </div>
             </div>
           </div>
-        </>
-      )}
 
-      {/* ── Command Center Modal (3-Tab Vertical Layout) ──────────────── */}
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[201] w-full max-w-3xl bg-[#0e0e0f]/90 border border-[#4a4457] shadow-[0_0_80px_rgba(0,0,0,0.95)] font-mono text-xs text-[#e5e2e3] select-none rounded-none animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
-        
+          {/* Price Overlay Footer */}
+          <div className="flex justify-between items-center p-4 border-t border-[#4a4457] bg-[#141416]/95">
+            <button type="button" onClick={() => onDelete(alert.id)} className="flex items-center gap-1 px-2.5 py-1.5 border border-red-500/30 hover:border-red-500 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-bold transition-all uppercase text-[10px] rounded-none cursor-pointer">
+              <Trash2 size={12} />
+              <span>Delete</span>
+            </button>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={onClose} className="px-3 py-1.5 border border-[#4a4457] hover:bg-white/5 text-[#958da3] hover:text-white font-bold transition-all uppercase text-[10px] rounded-none cursor-pointer">
+                Cancel
+              </button>
+              <button type="button" onClick={handleSavePriceAlert} className="px-4 py-1.5 bg-[#50ffaf] border border-[#50ffaf] hover:bg-[#40dd96] text-black font-bold transition-all uppercase text-[10px] rounded-none cursor-pointer">
+                Save Config
+              </button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // If no price alert is selected, render the standard global Command Center Modal
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-[#0e0e0f]/80 backdrop-blur-md z-[200] transition-opacity duration-200"
+        onClick={onClose}
+      />
+
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[201] w-full max-w-4xl bg-[#0e0e0f]/90 border border-[#4a4457] shadow-[0_0_80px_rgba(0,0,0,0.95)] font-mono text-xs text-[#e5e2e3] select-none rounded-none animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
+
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[#4a4457] bg-[#141416]/95 shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 bg-[#50ffaf] rounded-none animate-pulse" />
             <h3 className="text-xs font-bold tracking-[0.15em] uppercase text-white">COMMAND CENTER</h3>
           </div>
-          <button 
-            onClick={onClose} 
+          <button
+            onClick={onClose}
             className="text-[#958da3] hover:text-white transition-colors p-1 cursor-pointer"
           >
             <X size={16} />
@@ -396,11 +399,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2.5 px-4 py-3 text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer border-l-2 ${
-                  activeTab === tab.id
-                    ? 'bg-[#50ffaf]/10 text-[#50ffaf] border-l-[#50ffaf]'
-                    : 'text-[#958da3] hover:text-white hover:bg-white/3 border-l-transparent'
-                }`}
+                className={`flex items-center gap-2.5 px-4 py-3 text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer border-l-2 ${activeTab === tab.id
+                  ? 'bg-[#50ffaf]/10 text-[#50ffaf] border-l-[#50ffaf]'
+                  : 'text-[#958da3] hover:text-white hover:bg-white/3 border-l-transparent'
+                  }`}
               >
                 {tab.icon}
                 <span>{tab.label}</span>
@@ -410,7 +412,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* ── Tab Content Panel ──────────────────────────────────────── */}
           <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin scrollbar-thumb-[#4a4457] scrollbar-track-transparent">
-            
+
             {/* TAB 1: AI CONFIG ────────────────────────────────────────── */}
             {activeTab === 'ai_config' && (
               <div className="p-5 space-y-5">
@@ -482,15 +484,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       onClick={handleSaveAiConfig}
                       disabled={aiSaveStatus === 'saving'}
-                      className={`flex items-center gap-2 px-4 py-2.5 font-bold text-[10px] uppercase tracking-widest transition-all cursor-pointer rounded-none ${
-                        aiSaveStatus === 'saving'
-                          ? 'bg-[#d1bcff]/10 text-[#d1bcff]/50 cursor-wait border border-[#d1bcff]/20'
-                          : aiSaveStatus === 'success'
-                            ? 'bg-[#50ffaf]/15 text-[#50ffaf] border border-[#50ffaf]/30'
-                            : aiSaveStatus === 'error'
-                              ? 'bg-red-500/15 text-red-400 border border-red-500/30'
-                              : 'bg-[#d1bcff]/10 text-[#d1bcff] border border-[#d1bcff]/30 hover:bg-[#d1bcff]/20'
-                      }`}
+                      className={`flex items-center gap-2 px-4 py-2.5 font-bold text-[10px] uppercase tracking-widest transition-all cursor-pointer rounded-none ${aiSaveStatus === 'saving'
+                        ? 'bg-[#d1bcff]/10 text-[#d1bcff]/50 cursor-wait border border-[#d1bcff]/20'
+                        : aiSaveStatus === 'success'
+                          ? 'bg-[#50ffaf]/15 text-[#50ffaf] border border-[#50ffaf]/30'
+                          : aiSaveStatus === 'error'
+                            ? 'bg-red-500/15 text-red-400 border border-red-500/30'
+                            : 'bg-[#d1bcff]/10 text-[#d1bcff] border border-[#d1bcff]/30 hover:bg-[#d1bcff]/20'
+                        }`}
                     >
                       {aiSaveStatus === 'saving' ? (
                         <><Loader2 size={12} className="animate-spin" /> COMMITTING...</>
@@ -537,8 +538,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div key={ev.key} className="space-y-1.5 border-b border-[#4a4457]/30 pb-3 last:border-0 last:pb-0">
                       <div className="flex justify-between items-baseline">
                         <label className="flex items-center gap-2 cursor-pointer group">
-                          <input 
-                            type="checkbox" 
+                          <input
+                            type="checkbox"
                             checked={isEnabled}
                             onChange={() => toggleSignalAlertEnabled && toggleSignalAlertEnabled(ev.key as any)}
                             className="rounded-none bg-[#141416] border border-[#4a4457] text-[#50ffaf] focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5 cursor-pointer accent-[#50ffaf]"

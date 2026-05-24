@@ -26,6 +26,8 @@ export interface StrategyCondition {
   operator: OperatorKey;
   value?: string;
   temporal: TemporalMode;
+  timeframe?: 'ANY' | '5m' | '15m';
+  direction?: 'ANY' | 'BULLISH' | 'BEARISH';
 }
 
 export interface CustomStrategy {
@@ -87,6 +89,8 @@ function createEmptyCondition(): StrategyCondition {
     metric: 'FVG',
     operator: 'IS_TRUE',
     temporal: 'INSTANT',
+    timeframe: 'ANY',
+    direction: 'ANY',
   };
 }
 
@@ -492,6 +496,32 @@ export default function EquationBuilder() {
                         </option>
                       ))}
                     </select>
+
+                    {/* Timeframe selector (FVG / PRICE_IN_FVG only) */}
+                    {(cond.metric === 'FVG' || cond.metric === 'PRICE_IN_FVG') && (
+                      <select
+                        value={cond.timeframe || 'ANY'}
+                        onChange={(e) => updateCondition(cond.id, 'timeframe', e.target.value)}
+                        className="bg-[#0e0e0f] border border-[#4a4457] focus:border-[#d1bcff] focus:outline-none px-2 py-1 text-[10px] font-mono text-white rounded-none cursor-pointer w-[70px] shrink-0"
+                      >
+                        <option value="ANY">ANY TF</option>
+                        <option value="5m">5m</option>
+                        <option value="15m">15m</option>
+                      </select>
+                    )}
+
+                    {/* Direction selector (FVG / PRICE_IN_FVG only) */}
+                    {(cond.metric === 'FVG' || cond.metric === 'PRICE_IN_FVG') && (
+                      <select
+                        value={cond.direction || 'ANY'}
+                        onChange={(e) => updateCondition(cond.id, 'direction', e.target.value)}
+                        className="bg-[#0e0e0f] border border-[#4a4457] focus:border-[#d1bcff] focus:outline-none px-2 py-1 text-[10px] font-mono text-white rounded-none cursor-pointer w-[86px] shrink-0"
+                      >
+                        <option value="ANY">ANY DIR</option>
+                        <option value="BULLISH">BULLISH</option>
+                        <option value="BEARISH">BEARISH</option>
+                      </select>
+                    )}
 
                     {/* Value (only for enum metrics) */}
                     {metricDef.type === 'enum' && metricDef.options && (

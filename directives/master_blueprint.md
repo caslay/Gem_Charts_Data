@@ -17,6 +17,7 @@
 6. [Layer 4: The Execution Layer (Safety Gates)](#6-layer-4-the-execution-layer-safety-gates)
    - [6.6 Automated Paper Trading Execution Engine (`/api/trades`)](#66-automated-paper-trading-execution-engine-apitrades)
    - [6.7 Strategic Equation Builder Runtime & Temporal Engine](#67-strategic-equation-builder-runtime--temporal-engine)
+   - [6.8 SettingsModal UI Overlay & Isolation Strategy](#68-settingsmodal-ui-overlay--isolation-strategy)
 7. [Layer 5: The Stateful API Layer (Memory & Database)](#7-layer-5-the-stateful-api-layer-memory--database)
 8. [The Matrix Cheat-Sheet (Variable Reference)](#8-the-matrix-cheat-sheet)
 9. [Logic Flowchart: Liquidity Sweep → Order Execution](#9-logic-flowchart)
@@ -674,8 +675,8 @@ The execution hook `useStrategyEvaluator.ts` runs silently in the dashboard back
 
 | Logic Metric | Evaluated Code Formula / Source | Return Type |
 |---|---|---|
-| `FVG` | `ipda_metrics.active_fvgs.length > 0` | boolean |
-| `PRICE_IN_FVG` | `livePrice` is between the `top` and `bottom` coordinates of any FVG in `active_fvgs` | boolean |
+| `FVG` | `ipda_metrics.active_fvgs.length > 0` (Supports condition-level `timeframe` ['ANY', '5m', '15m'] and `direction` ['ANY', 'BULLISH', 'BEARISH'] sub-filters) | boolean |
+| `PRICE_IN_FVG` | `livePrice` is between the `top` and `bottom` coordinates of any matching FVG in `active_fvgs` (Supports condition-level `timeframe` ['ANY', '5m', '15m'] and `direction` ['ANY', 'BULLISH', 'BEARISH'] sub-filters) | boolean |
 | `DISPLACEMENT` | `institutional_sponsorship.status === 'ACTIVE_BULLISH' || status === 'ACTIVE_BEARISH' || status === 'ACTIVE'` | boolean |
 | `DISPLACEMENT_VALUE` | `institutional_sponsorship.anomaly_multiplier` | number |
 | `OI_TREND` | `order_flow_engine.open_interest_trend` (`RISING`/`FALLING`/`FLAT`) | string (enum) |
@@ -704,11 +705,19 @@ To comply with Lesson #10, the evaluator tracks `lastFiredCandleTime` (mapped vi
 - **Execution Failure Guard:** If the calculation validation fails (such as an invalid Risk-Reward setup), the system overrides the signal and prints a warning alert under the `RISK_OVERRIDE` protocol, generating a warning audio chime (`/audio/fvg_alert.mp3`):
   `[SYSTEM: TRADE_FAILED → {STRATEGY_NAME}: {REASON}]`
 
-#### 5. Dark Brutalist Strategy Settings UI
+
+#### 6. Dark Brutalist Strategy Settings UI
 The EquationBuilder component integrates an advanced execution parameters layout styled in strict accordance with Flow-State Dark Brutalist guidelines:
 - **Card Background:** Employs high-contrast slate panels (`bg-[#1c1b1c]`) bounded by thick steel borders (`border-[#4a4457]/50`) and severe shadows (`shadow-xl`) with zero rounded corners (`rounded-none`).
 - **Typography:** Labels use a heavy black institutional weight with expanded monospaced tracking (`text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]`).
 - **Form Controls:** Dropdown fields use clean dark boxes (`bg-[#0e0e0f]`) with sharp borders, custom hover outlines (`hover:border-[#d1bcff]/40`), and vibrant green focus borders (`focus:border-[#50ffaf]`) with smooth CSS transitions.
+
+### 6.8 SettingsModal UI Overlay & Isolation Strategy
+The SettingsModal component serves as a unified configuration entry point for two major system features: Price Alert Configurations (individual chart levels) and the Global Command Center (system-wide OLS AI parameters, Strategy Architect, and Audio Vault mappings).
+
+To maintain Flow-State visual aesthetics and avoid nested UI clutter, the component implements a **strict mutual exclusion gate** based on the presence of the active `alert` prop:
+1. **Isolated Alert Settings View (Alert is active):** When modifying a placed chart level, the component renders ONLY the `Price Alert Config` container. It suppresses the `Command Center` modal container from the DOM entirely to prevent confusing overlapping layouts. Backdrop click handlers, Cancel triggers, and Header close actions invoke the parent-hoisted `onClose()` hook directly, restoring primary dashboard focus immediately.
+2. **Global Command Center View (Alert is null):** When accessed from the header navigation, the modal displays the full 3-tab Command Center dashboard (AI Configuration, Strategy Architect, Audio Vault) centered on the canvas.
 
 ---
 
