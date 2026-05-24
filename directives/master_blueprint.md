@@ -50,7 +50,7 @@ The Flow-State Quant Engine is **NOT** a prediction engine. It is a **reaction e
 
 | Layer | Technology | Role |
 |---|---|---|
-| **Frontend** | Next.js 16 (App Router) + React 19 + Tailwind v4 | Dashboard, Chart, Alerts, Dedicated Journal `/journal` |
+| **Frontend** | Next.js 16 (App Router) + React 19 + Tailwind v4 | Dashboard, Chart, Alerts, Dedicated Journal `/journal` with V8.3 Live P&L, ROI%, GPU-accelerated tick flashes, and Zero-Lag split-row memoization |
 | **Charting** | `lightweight-charts` v5.2 | OHLCV candlestick rendering |
 | **Real-time** | Binance Futures WebSocket (`/market/ws`) | Live tick feed (5m klines) hoisted to global MarketDataProvider context |
 | **API Layer** | Next.js Route Handlers (`/api/market-data`, `/api/quant-analyze`, `/api/trades`, `/api/strategies`) | Data orchestration, CRUD, automated execution engine |
@@ -623,19 +623,43 @@ To bridge AI analysis and programmatic verification, V8.2 implements an automate
    - Explicit `entry_price` passed in body.
    - If missing, fallbacks to `closest_active_fvg_ce` (if unmitigated and active).
    - If missing, fallbacks to current market price (from `pricing_context` or the latest 5m candle close).
-4. **Strict Stop Loss (SL) Offset:**
-   - **LONG direction:** `bullish_invalidation - 0.05` (1 tick below bullish invalidation).
-   - **SHORT direction:** `bearish_invalidation + 0.05` (1 tick above bearish invalidation).
-   - Prevents floating-point discrepancies via specific mapping to `.toFixed(4)`.
-5. **Take Profit (TP) Magnet Matching:**
-   - Queries `BSL_Magnets` (for LONG) or `SSL_Magnets` (for SHORT).
-   - Sequentially filters out resting liquidity price levels that fail to provide at least a **1:2 Risk-to-Reward (RR)** ratio from the Entry/Stop Loss dealing range.
-   - Selects the nearest eligible magnet satisfying the condition.
-6. **Programmatic Validation Gate:**
+4. **Dynamic Stop Loss (SL) Logic Solver:**
+   - Evaluates `sl_logic` passed in body (defaulting to `Structural Swing`):
+     - `Manual Pips`: fixed $10.00 dollar range offset (`entry_price - 10` for LONG, `entry_price + 10` for SHORT).
+     - `Last Candle High/Low`: uses the previous completed 5m candle high/low boundary offset by a 0.05 tick margin.
+     - `Structural Swing`: standard hard institutional invalidation levels (`bullish_invalidation - 0.05` for LONG, `bearish_invalidation + 0.05` for SHORT).
+5. **Dynamic Take Profit (TP) Logic Solver:**
+   - Evaluates `tp_logic` passed in body (defaulting to `Nearest Order Book Magnet`):
+     - `Manual Pips`: exactly 2x the stop loss risk (`entry_price + 2 * risk` for LONG, `entry_price - 2 * risk` for SHORT).
+     - `PDH/PDL Target`: Previous Day High (`pdh` for LONG) or Previous Day Low (`pdl` for SHORT).
+     - `Nearest Order Book Magnet`: queries BSL/SSL Magnets and selects the nearest one meeting the minimum 1:2 RR constraint.
+   - **Self-Healing TP Target Solver:** If the selected logic returns `null` or is unavailable (such as having no resting liquidity magnets), the system automatically defaults the Take Profit to a safe 1:2 Risk-Reward ratio (`Manual Pips` mode) rather than failing.
+6. **Programmatic Validation & Self-Healing Gate:**
    - Verifies directional alignment: `Stop Loss < Entry < Take Profit` for Longs and `Stop Loss > Entry > Take Profit` for Shorts.
-   - Enforces a strict `RR >= 2.0` threshold.
-   - Rejects failing logs immediately with `400 Bad Request` and error payload `"Inefficient Algorithm: RR < 2.0"`.
-7. **neon PostgreSQL Storage:** Inserts validated parameters with `status = 'OPEN'`.
+   - **Dynamic Target Stretching:** Enforces a strict `RR >= 2.0` capital-preservation threshold. If the calculated Take Profit level is too close to the entry (e.g. a session sweep target or resting depth wall that does not satisfy the 1:2 ratio), the system **automatically self-heals the trade setup** by stretching the Take Profit outward to achieve exactly `RR = 2.0` (2x the calculated stop loss risk). This prevents trade execution failures while preserving the strict capital preservation gate.
+7. **neon PostgreSQL Storage:** Inserts validated, self-healed parameters with `status = 'OPEN'`.
+
+#### 2. V8.3 Real-Time P&L & Simulated Exit Dashboard Integration
+
+V8.3 introduces live Profit and Loss (P&L) and Return on Investment (ROI%) computation inside `JournalTable.tsx`, dynamically linked to the global WebSocket context price stream.
+
+##### Performance Optimization (Zero-Lag Split-Row Architecture)
+High-frequency WebSocket tick updates can cause dashboard render lag. To prevent this:
+1. **Decoupled Subscription**: The parent table component (`JournalTable`) does NOT subscribe to the live price feed.
+2. **Static Memoized Rows**: Closed positions are rendered via `<ClosedTradeRow>` (a 100% static React component) which is completely immune to price ticks.
+3. **Active Scoped Rows**: Only open positions are rendered via `<ActiveTradeRow>`, subscribing to `useMarketDataContext()` to evaluate calculations and triggers locally.
+
+##### Mathematical Formulations
+- **Contracts Resolution**: If `position_size` is missing, it defaults to a standard `1.0` multiplier (e.g., for ETH).
+- **Unrealized P&L**:
+  - `LONG`: `(livePrice - entryPrice) * positionSize`
+  - `SHORT`: `(entryPrice - livePrice) * positionSize`
+- **ROI Percentage**: `(unrealizedPnL / (entryPrice * positionSize)) * 100` (Formatted to 2 decimal places).
+
+##### GPU-Accelerated Micro-Animations & Glow Effects
+- **Visual Color Indicators**: Positive unrealized P&L renders in vibrant neon green (`#50ffaf`) with a `drop-shadow` outer glow, while negative P&L renders in institutional red (`#ff5f5f`).
+- **Tick-Flashes**: The P&L cell uses a React-triggered CSS `@keyframes tick-flash` (green for price up, red for price down) on every incoming tick to provide instant feedback.
+- **Simulated Exit Highlight**: If `livePrice` touches or breaches the defined `take_profit` or `stop_loss` targets, the row is dynamically styled with a breathing glowing pulse (`animate-exit-glow-green` or `animate-exit-glow-red`) and displays a live exit alert badge (`[ TP TARGET HIT ]` or `[ STOPPED OUT ]`).
 
 ---
 
@@ -649,23 +673,40 @@ The execution hook `useStrategyEvaluator.ts` runs silently in the dashboard back
 | Logic Metric | Evaluated Code Formula / Source | Return Type |
 |---|---|---|
 | `FVG` | `ipda_metrics.active_fvgs.length > 0` | boolean |
-| `DISPLACEMENT` | `institutional_sponsorship.status === 'ACTIVE_BULLISH' || status === 'ACTIVE_BEARISH'` | boolean |
+| `PRICE_IN_FVG` | `livePrice` is between the `top` and `bottom` coordinates of any FVG in `active_fvgs` | boolean |
+| `DISPLACEMENT` | `institutional_sponsorship.status === 'ACTIVE_BULLISH' || status === 'ACTIVE_BEARISH' || status === 'ACTIVE'` | boolean |
+| `DISPLACEMENT_VALUE` | `institutional_sponsorship.anomaly_multiplier` | number |
 | `OI_TREND` | `order_flow_engine.open_interest_trend` (`RISING`/`FALLING`/`FLAT`) | string (enum) |
 | `MSS` | `market_structure_shift` flag | boolean |
 | `SMT` | `smart_money_sentiment.smart_money_divergence` | boolean |
 | `PRICE_VS_OPEN` | `livePrice > true_day_open_0700` (`ABOVE`/`BELOW`) | string (enum) |
+| `EQUILIBRIUM_STATUS` | `pricing_context.local_dealing_range.current_status` (`PREMIUM`/`DISCOUNT`) | string (enum) |
+| `TARGET_EXHAUSTION` | `target_status` | string (enum) |
+| `NEARBY_MAGNET` | `livePrice` within $\pm\$2.00$ of any resting bid/ask limit wall in `resting_liquidity_pools` | boolean |
 
 #### 2. Temporal Gating Logic
 Each condition features a temporal toggle:
-- **⚡ TICK (Instant Mode):** Evaluated instantly on every incoming price tick.
-- **🔒 CLOSE (Candle Close Mode):** The entire strategy is gated behind `liveCandle.isClosed === true`. If even one condition in the equation uses `CLOSE` mode, the engine blocks execution until the 5-minute candle fully prints.
+- **⚡ TICK (Instant Mode):** Evaluated instantly on every incoming price tick. Bypasses `liveCandle.isClosed` gating completely.
+- **🔒 CLOSE (Candle Close Mode):** The entire strategy is gated behind `liveCandle.isClosed === true`. If even one condition in the equation uses `CLOSE` mode, the engine blocks execution until the candle fully prints.
 
 #### 3. Debounce Lock (Preventing Alert Loops)
-To comply with Lesson #10, the evaluator tracks `lastFiredCandleTime` per strategy. When an equation evaluates to `true`, the system locks execution and permits only **one trigger event per candle**, preventing audio notification loops and API abuse.
+To comply with Lesson #10, the evaluator tracks `lastFiredCandleTime` (mapped via `candleKey` per strategy) to prevent notification loops:
+- **ON_CLOSE strategies:** Gated per-candle (`Number(liveCandle.time)`), allowing only one trigger event per candle.
+- **INSTANT strategies:** Gated per-second (`Math.floor(Date.now() / 1000)`), allowing sub-second micro-ticks but debouncing multiple fires on the same second.
 
 #### 4. High-Contrast HUD Toast Integration
-Matches are piped as `STRATEGY_MATCHED` alert types to `SmartAlertsToast.tsx`, rendering with a pulsing crosshair icon, high-contrast black glassmorphism, and a vibrant `#50ffaf` green left accent border:
-`[SYSTEM: STRATEGY_MATCHED → {STRATEGY_NAME}]`
+- **Primary Setup Match:** Logic matches are piped as a high-priority `STRATEGY_MATCHED` alert to `SmartAlertsToast.tsx`. The toast renders in a black glassmorphism layout, complete with a pulsing target reticle, a vibrant `#50ffaf` green left border accent, and monospaced text:
+  `[SYSTEM: STRATEGY_MATCHED → {STRATEGY_NAME}]`
+- **Secondary Execution Success:** When the execution engine successfully logs the trade into the paper trading journal, a secondary success notification is dispatched under the `FLOW_STATE` alert protocol. It triggers a premium system audio chime (`/audio/flow_state.wav`) and displays a vibrant green border notification:
+  `[SYSTEM: JOURNAL_LOGGED → {STRATEGY_NAME} trade successfully posted to Journal @ ${ENTRY_PRICE}]`
+- **Execution Failure Guard:** If the calculation validation fails (such as an invalid Risk-Reward setup), the system overrides the signal and prints a warning alert under the `RISK_OVERRIDE` protocol, generating a warning audio chime (`/audio/fvg_alert.mp3`):
+  `[SYSTEM: TRADE_FAILED → {STRATEGY_NAME}: {REASON}]`
+
+#### 5. Dark Brutalist Strategy Settings UI
+The EquationBuilder component integrates an advanced execution parameters layout styled in strict accordance with Flow-State Dark Brutalist guidelines:
+- **Card Background:** Employs high-contrast slate panels (`bg-[#1c1b1c]`) bounded by thick steel borders (`border-[#4a4457]/50`) and severe shadows (`shadow-xl`) with zero rounded corners (`rounded-none`).
+- **Typography:** Labels use a heavy black institutional weight with expanded monospaced tracking (`text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]`).
+- **Form Controls:** Dropdown fields use clean dark boxes (`bg-[#0e0e0f]`) with sharp borders, custom hover outlines (`hover:border-[#d1bcff]/40`), and vibrant green focus borders (`focus:border-[#50ffaf]`) with smooth CSS transitions.
 
 ---
 
@@ -708,6 +749,7 @@ CREATE TABLE IF NOT EXISTS paper_trades (
   status VARCHAR(20) NOT NULL DEFAULT 'OPEN', -- 'OPEN', 'CLOSED', 'PAUSED'
   strategy_name VARCHAR(255) NOT NULL,
   ai_narrative_summary TEXT,
+  position_size DECIMAL(18, 4) DEFAULT 1.0000, -- Optional size column (Added in V8.3)
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -1080,7 +1122,8 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
     "risk_amount": 10.05,
     "reward_amount": 50,
     "strategy_name": "Displacement Breakout",
-    "ai_narrative_summary": "..."
+    "ai_narrative_summary": "...",
+    "position_size": 1.0
   }
 }
 ```
@@ -1203,17 +1246,35 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 
 ### `POST /api/strategies`
 
-**Purpose:** Upserts a custom strategy (creates new if `id` is omitted, updates if `id` matches an existing user-owned strategy).
+**Purpose:** Upserts a custom strategy (creates new if `id` is omitted, updates if `id` matches an existing user-owned strategy). Accepts either a legacy array of condition objects or a structured settings object wrapper containing strategy execution parameters.
 
 **Auth:** Requires valid NextAuth session.
 
-**Request Body:**
+**Request Body (New Settings Format):**
+```json
+{
+  "id": "a90df1a5-8c0c-4ff6-8367-e95b0fb2d8d8",
+  "name": "Displacement with FVG Close",
+  "conditions": {
+    "conditions": [
+      { "metric": "DISPLACEMENT", "operator": "IS_TRUE", "temporal": "TICK" }
+    ],
+    "temporal_mode": "INSTANT",
+    "sl_logic": "Structural Swing",
+    "tp_logic": "Nearest Order Book Magnet",
+    "direction": "LONG"
+  },
+  "is_active": true
+}
+```
+
+**Request Body (Legacy Array Format):**
 ```json
 {
   "id": "a90df1a5-8c0c-4ff6-8367-e95b0fb2d8d8",
   "name": "Displacement with FVG Close",
   "conditions": [
-    { "metric": "DISPLACEMENT", "operator": "==", "value": "ACTIVE_BULLISH", "temporal": "TICK" }
+    { "metric": "DISPLACEMENT", "operator": "IS_TRUE", "temporal": "TICK" }
   ],
   "is_active": true
 }

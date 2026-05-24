@@ -83,13 +83,16 @@ export async function POST(req: Request) {
     const { id, name, conditions, is_active } = body as {
       id?: string;
       name: string;
-      conditions: unknown[];
+      conditions: any;
       is_active?: boolean;
     };
 
-    if (!name || !Array.isArray(conditions)) {
+    const isLegacyArray = Array.isArray(conditions);
+    const isNewObject = typeof conditions === "object" && conditions !== null && !Array.isArray(conditions) && Array.isArray(conditions.conditions);
+
+    if (!name || (!isLegacyArray && !isNewObject)) {
       return NextResponse.json(
-        { error: "Invalid payload: 'name' (string) and 'conditions' (array) are required." },
+        { error: "Invalid payload: 'name' (string) and 'conditions' (array or structured settings object) are required." },
         { status: 400 }
       );
     }
