@@ -67,6 +67,11 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   const { playSound, playFile } = useAlertSounds();
   const { data: marketContextData, triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert, liveCandle, livePrice, setWsInterval } = useMarketDataContext();
 
+  const smtContext = marketContextData?.ipda_metrics?.smt_context;
+  const hasMicroDivergence = 
+    (smtContext?.m5_divergence && smtContext.m5_divergence !== 'NONE') ||
+    (smtContext?.m15_divergence && smtContext.m15_divergence !== 'NONE');
+
   // Load alerts from localStorage on initial client mount
   useEffect(() => {
     try {
@@ -1159,6 +1164,29 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
               <span className={`font-semibold ${hudCandle.close >= hudCandle.open ? 'text-[#50ffaf]' : 'text-[#ffb4ab]'}`}>
                 {hudCandle.close >= hudCandle.open ? '+' : ''}{(((hudCandle.close - hudCandle.open) / hudCandle.open) * 100).toFixed(2)}%
               </span>
+            </div>
+          )}
+
+          {/* V8.7: BTC Live Price Indicator */}
+          {marketContextData?.correlation_data?.btc_live_price && (
+            <div className="flex items-center gap-1 pl-2 border-l border-[#4a4457]/30">
+              <span className="text-white/40">BTC</span>
+              <span className="text-[#e5e2e3] font-semibold">
+                ${marketContextData.correlation_data.btc_live_price.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+              </span>
+            </div>
+          )}
+
+          {/* V8.7: Correlation Pulse Indicator */}
+          {smtContext && (
+            <div className="flex items-center gap-1.5 pl-2 border-l border-[#4a4457]/30">
+              <span className="text-white/40">PULSE</span>
+              <div className="flex items-center gap-1">
+                <span className={`w-1.5 h-1.5 rounded-full ${hasMicroDivergence ? 'bg-amber-500 animate-pulse shadow-[0_0_8px_#f59e0b]' : 'bg-[#50ffaf] shadow-[0_0_6px_#50ffaf]'}`}></span>
+                <span className={`font-mono text-[9px] uppercase tracking-wider ${hasMicroDivergence ? 'text-amber-400 font-bold' : 'text-[#50ffaf]/80'}`}>
+                  {hasMicroDivergence ? 'SMT_DIV' : 'SYNCED'}
+                </span>
+              </div>
             </div>
           )}
         </div>

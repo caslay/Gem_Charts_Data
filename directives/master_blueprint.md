@@ -1,10 +1,34 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V8.6
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V8.7
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-24  
-> **Last Updated:** 2026-05-24 (V8.6 FVG Overlay Refinement)  
+> **Last Updated:** 2026-05-24 (V8.7 Multi-Timeframe BTC SMT Integration)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 30+ across TypeScript (Next.js 16), Python (FastAPI), and Markdown directives.
+
+---
+
+## 🆕 V8.7 Changelog — Multi-Timeframe BTC-Correlation & SMT Integration
+
+### 1. `smtEngine.ts` — Brand New SMT Trap & Divergence Engine [NEW]
+- Added high-performance quantitative utility file `src/lib/smtEngine.ts` to compare node structures of ETHUSDC and BTCUSDT klines.
+- **`evaluateMicroSmt()`**: Solves 5m/15m divergences by comparing the latest candle's boundary against the highest high/lowest low of the preceding 19 candles. Flags `BULLISH_CONFIRMED` or `BEARISH_CONFIRMED`.
+- **`evaluateMacroSmt()`**: Checks for sweeps of daily PDH/PDL targets. If ETH swept PDH but BTC failed, flags a Bearish Macro SMT divergence.
+- **`calculateRelativeStrength()`**: Evaluates relative strength based on distance from True Day Open (07:00 Cairo) for leader/laggard classification.
+- **`getSmtContext()`**: Consolidates all micro/macro metrics into a unified `smt_context` payload.
+
+### 2. `route.ts` — Parallel BTC Data Fetching & Enrichment
+- Integrates parallel calls fetching `BTCUSDT` 5m, 15m, and 1h intervals.
+- Solves BTC specific daily `pdh` and `pdl` levels, and BTC True Day Open.
+- Solves SMT divergences utilizing the new `smtEngine` and injects `smt_context` inside `ipda_metrics` and `correlation_data` inside the root response payload.
+
+### 3. Strategy Evaluator & Equation Builder
+- **`EquationBuilder.tsx`**: Exposes `'SMT_DIVERGENCE'` in Strategy Builder logic as a Boolean type metric. Integrated timeframe sub-selectors and direction sub-selectors support for enhanced flexibility.
+- **`useStrategyEvaluator.ts`**: Resolves `'SMT_DIVERGENCE'` in real-time, matching timeframe (5m, 15m, ANY) and direction filters against the live JSON API payload.
+
+### 4. `Chart.tsx` — Real-Time Visual Correlation Pulse HUD
+- Implements `BTC Live Price` and `Correlation Pulse` render widgets next to candle info.
+- Visual pulse dynamically animates with a glowing orange/red signal when Micro SMT divergence becomes active, providing instant institutional visual feedback.
 
 ---
 

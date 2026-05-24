@@ -96,6 +96,30 @@ function resolveMetric(
       return smartMoney.smart_money_divergence === true;
     }
 
+    case 'SMT_DIVERGENCE': {
+      const smt = ipda.smt_context || {};
+      const tf = condition.timeframe || 'ANY';
+      const dir = condition.direction || 'ANY';
+
+      const isDivergenceMatch = (divergenceVal: string) => {
+        if (!divergenceVal || divergenceVal === 'NONE') return false;
+        if (dir === 'ANY') return true;
+        if (dir === 'BULLISH' && divergenceVal === 'BULLISH_CONFIRMED') return true;
+        if (dir === 'BEARISH' && divergenceVal === 'BEARISH_CONFIRMED') return true;
+        return false;
+      };
+
+      if (tf === '5m') {
+        return isDivergenceMatch(smt.m5_divergence);
+      }
+      if (tf === '15m') {
+        return isDivergenceMatch(smt.m15_divergence);
+      }
+
+      // ANY timeframe
+      return isDivergenceMatch(smt.m5_divergence) || isDivergenceMatch(smt.m15_divergence);
+    }
+
     case 'PRICE_VS_OPEN': {
       const trueDayOpen = ipda.true_day_open_0700
         || ipda.pricing_context?.true_day_open_0700

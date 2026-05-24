@@ -13,6 +13,7 @@ export type MetricKey =
   | 'OI_TREND'
   | 'MSS'
   | 'SMT'
+  | 'SMT_DIVERGENCE'
   | 'PRICE_VS_OPEN'
   | 'EQUILIBRIUM_STATUS'
   | 'TARGET_EXHAUSTION'
@@ -47,6 +48,7 @@ const METRICS: { key: MetricKey; label: string; type: 'boolean' | 'enum' | 'numb
   { key: 'OI_TREND', label: 'OI Trend', type: 'enum', options: ['RISING', 'FALLING', 'FLAT'] },
   { key: 'MSS', label: 'Market Structure Shift', type: 'boolean' },
   { key: 'SMT', label: 'Smart Money Trap', type: 'boolean' },
+  { key: 'SMT_DIVERGENCE', label: 'SMT Divergence (BTC/ETH)', type: 'boolean' },
   { key: 'PRICE_VS_OPEN', label: 'Price vs Open', type: 'enum', options: ['ABOVE', 'BELOW'] },
   { key: 'EQUILIBRIUM_STATUS', label: 'Equilibrium Status', type: 'enum', options: ['PREMIUM', 'DISCOUNT'] },
   { key: 'TARGET_EXHAUSTION', label: 'Target Exhaustion', type: 'enum', options: ['PENDING', 'EXHAUSTED', 'ASIAN_HIGH_SWEPT', 'ASIAN_LOW_SWEPT', 'LONDON_HIGH_SWEPT', 'LONDON_LOW_SWEPT'] },
@@ -497,8 +499,8 @@ export default function EquationBuilder() {
                       ))}
                     </select>
 
-                    {/* Timeframe selector (FVG / PRICE_IN_FVG only) */}
-                    {(cond.metric === 'FVG' || cond.metric === 'PRICE_IN_FVG') && (
+                    {/* Timeframe selector (FVG / PRICE_IN_FVG / SMT_DIVERGENCE) */}
+                    {(cond.metric === 'FVG' || cond.metric === 'PRICE_IN_FVG' || cond.metric === 'SMT_DIVERGENCE') && (
                       <select
                         value={cond.timeframe || 'ANY'}
                         onChange={(e) => updateCondition(cond.id, 'timeframe', e.target.value)}
@@ -510,8 +512,8 @@ export default function EquationBuilder() {
                       </select>
                     )}
 
-                    {/* Direction selector (FVG / PRICE_IN_FVG only) */}
-                    {(cond.metric === 'FVG' || cond.metric === 'PRICE_IN_FVG') && (
+                    {/* Direction selector (FVG / PRICE_IN_FVG / SMT_DIVERGENCE) */}
+                    {(cond.metric === 'FVG' || cond.metric === 'PRICE_IN_FVG' || cond.metric === 'SMT_DIVERGENCE') && (
                       <select
                         value={cond.direction || 'ANY'}
                         onChange={(e) => updateCondition(cond.id, 'direction', e.target.value)}

@@ -3,6 +3,7 @@ import { fetchRestingLiquidity, fetchOIMetricsAndLiquidations, fetchSmartMoneySe
 import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
 import { verifyDisplacement } from '@/lib/displacementEngine';
 import { calculateDynamicRisk, generateTradeExecutionParameters } from '@/lib/riskEngine';
+import { getSmtContext } from '@/lib/smtEngine';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,12 +26,16 @@ export async function GET(req: Request) {
       '1d': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=100`,
       '1w': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1w&limit=100`,
       'openInterest': `https://fapi.binance.com/fapi/v1/openInterest?symbol=${symbol}`,
+      // Parallel fetches for BTCUSDT
+      'btc_5m': `https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=5m&limit=20`,
+      'btc_15m': `https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=150`, // fetch extra history to resolve true day open
+      'btc_1h': `https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=24`,
     };
 
     const restingLiquidityPromise = fetchRestingLiquidity(symbol);
     const smartMoneyPromise = fetchSmartMoneySentiment(symbol);
 
-    const [res5m, res15m, res1h, res4h, res1d, res1w, resOi] = await Promise.all([
+    const [res5m, res15m, res1h, res4h, res1d, res1w, resOi, resBtc5m, resBtc15m, resBtc1h] = await Promise.all([
       fetch(urls['5m']),
       fetch(urls['15m']),
       fetch(urls['1h']),
@@ -38,9 +43,15 @@ export async function GET(req: Request) {
       fetch(urls['1d']),
       fetch(urls['1w']),
       fetch(urls['openInterest']),
+      fetch(urls['btc_5m']),
+      fetch(urls['btc_15m']),
+      fetch(urls['btc_1h']),
     ]);
 
-    if (!res5m.ok || !res15m.ok || !res1h.ok || !res4h.ok || !res1d.ok || !res1w.ok || !resOi.ok) {
+    if (
+      !res5m.ok || !res15m.ok || !res1h.ok || !res4h.ok || !res1d.ok || !res1w.ok || !resOi.ok ||
+      !resBtc5m.ok || !resBtc15m.ok || !resBtc1h.ok
+    ) {
       const errorText = await res5m.text();
       console.error('Binance API Error:', {
         status5m: res5m.status,
@@ -50,12 +61,19 @@ export async function GET(req: Request) {
         status1d: res1d.status,
         status1w: res1w.status,
         statusOi: resOi.status,
+        statusBtc5m: resBtc5m.status,
+        statusBtc15m: resBtc15m.status,
+        statusBtc1h: resBtc1h.status,
         response: errorText
       });
       throw new Error('Failed to fetch from Binance API');
     }
 
-    const [data5m, data15m, data1h, data4h, data1d, data1w, dataOi, resting_liquidity_pools, smart_money_sentiment] = await Promise.all([
+    const [
+      data5m, data15m, data1h, data4h, data1d, data1w, dataOi,
+      dataBtc5m, dataBtc15m, dataBtc1h,
+      resting_liquidity_pools, smart_money_sentiment
+    ] = await Promise.all([
       res5m.json(),
       res15m.json(),
       res1h.json(),
@@ -63,6 +81,9 @@ export async function GET(req: Request) {
       res1d.json(),
       res1w.json(),
       resOi.json(),
+      resBtc5m.json(),
+      resBtc15m.json(),
+      resBtc1h.json(),
       restingLiquidityPromise,
       smartMoneyPromise,
     ]);
@@ -95,6 +116,30 @@ export async function GET(req: Request) {
     // HTF — kept in local scope only; NEVER added to data_payload
     const candles1d = formatCandles(data1d);
     const candles1w = formatCandles(data1w);
+
+    // Format BTC klines
+    const candlesBtc5m = formatCandles(dataBtc5m);
+    const candlesBtc15m = formatCandles(dataBtc15m);
+    const candlesBtc1h = formatCandles(dataBtc1h);
+
+    // BTC PDH and PDL solvers (based on last 24h of 1h klines)
+    let btcPdh = 0;
+    let btcPdl = Infinity;
+    candlesBtc1h.forEach((c) => {
+      if (c.h > btcPdh) btcPdh = c.h;
+      if (c.l < btcPdl) btcPdl = c.l;
+    });
+    if (btcPdl === Infinity) btcPdl = 0;
+
+    // BTC True Day Open solver (07:00 Cairo Open)
+    let btc_true_day_open_0700: number | null = null;
+    for (let i = candlesBtc15m.length - 1; i >= 0; i--) {
+      const d = new Date(candlesBtc15m[i].t);
+      if (d.getUTCHours() === 7 && d.getUTCMinutes() === 0) {
+        btc_true_day_open_0700 = candlesBtc15m[i].o;
+        break;
+      }
+    }
 
     const isPriceRising = candles15m.length > 1 && candles15m[candles15m.length - 1].c > candles15m[candles15m.length - 2].c;
     const { open_interest_trend, liquidation_events } = await fetchOIMetricsAndLiquidations(symbol, isPriceRising);
@@ -410,6 +455,25 @@ export async function GET(req: Request) {
       resting_liquidity_pools
     );
 
+    // Calculate SMT context using the new SMT Detection Engine
+    const btcPrice = candlesBtc5m.length > 0 ? candlesBtc5m[candlesBtc5m.length - 1].c : 0;
+    const smt_context = getSmtContext({
+      ethCandles5m: candles5m,
+      btcCandles5m: candlesBtc5m,
+      ethCandles15m: candles15m,
+      btcCandles15m: candlesBtc15m,
+      ethPrice: currentLivePrice,
+      ethOpen: true_day_open_0700,
+      ethPdh: pdh,
+      ethPdl: pdl,
+      btcPrice,
+      btcOpen: btc_true_day_open_0700,
+      btcHigh1h: btcPdh,
+      btcLow1h: btcPdl,
+      btcPdh,
+      btcPdl,
+    });
+
     const ipda_metrics = {
       true_day_open: true_day_open_0700,
       current_time_window,
@@ -440,10 +504,9 @@ export async function GET(req: Request) {
       },
       active_fvgs,
       pending_fvgs,
-      trade_execution_parameters
+      trade_execution_parameters,
+      smt_context, // Injected V8.7 SMT Context
     };
-
-
 
     const risk_management = calculateDynamicRisk(
       currentLivePrice,
@@ -460,6 +523,13 @@ export async function GET(req: Request) {
       ipda_metrics,
       risk_management,
       open_interest: parseFloat(dataOi.openInterest),
+      correlation_data: {
+        btc_live_price: btcPrice,
+        btc_pdh: btcPdh,
+        btc_pdl: btcPdl,
+        btc_candles_5m: candlesBtc5m.slice(-20),
+        btc_candles_15m: candlesBtc15m.slice(-20),
+      },
       // V6 Naked payload — OHLCV only, no HTF arrays, no calculations
       data_payload: {
         candles_4h: limit4h > 0 ? candles4h.slice(-limit4h) : [],
