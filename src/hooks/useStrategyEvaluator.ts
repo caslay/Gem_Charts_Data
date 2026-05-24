@@ -283,6 +283,7 @@ export function useStrategyEvaluator() {
       const sl_logic = settings.sl_logic || 'Structural Swing';
       const tp_logic = settings.tp_logic || 'Nearest Order Book Magnet';
       const direction = settings.direction || 'LONG';
+      const risk_percent = settings.risk_percent ?? 1.0;
 
       fetch('/api/trades', {
         method: 'POST',
@@ -295,7 +296,8 @@ export function useStrategyEvaluator() {
           ipda_metrics: data.ipda_metrics || data,
           sl_logic,
           tp_logic,
-          current_price: livePrice
+          current_price: livePrice,
+          risk_percent
         })
       }).then(async (res) => {
         const json = await res.json();

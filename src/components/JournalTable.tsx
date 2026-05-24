@@ -3,6 +3,7 @@
 import React, { useState, useCallback, memo, useRef, useEffect } from "react";
 import { Play, Pause, XCircle, Trash2, Loader2, RefreshCw, AlertTriangle } from "lucide-react";
 import { useMarketDataContext } from "@/context/MarketDataContext";
+import { SettingsPanel } from "./SettingsPanel";
 
 export interface TradeRecord {
   id: string;
@@ -21,6 +22,11 @@ export interface TradeRecord {
 
 interface JournalTableProps {
   initialTrades: TradeRecord[];
+  initialAccount?: {
+    current_balance: string | number;
+    initial_capital: string | number;
+    max_risk_limit_pct: string | number;
+  };
 }
 
 // ── ACTIONS CELL SUB-COMPONENT (Memoized Shared UI) ──────────────────────
@@ -144,6 +150,33 @@ const ClosedTradeRow = memo(function ClosedTradeRow({
   handleDeleteTrade: (id: string) => void;
   formatDate: (date: string) => string;
 }) {
+  const realizedPnL = (trade as any).realized_pnl !== undefined && (trade as any).realized_pnl !== null
+    ? parseFloat(String((trade as any).realized_pnl))
+    : null;
+
+  const roi = (trade as any).roi !== undefined && (trade as any).roi !== null
+    ? parseFloat(String((trade as any).roi))
+    : null;
+
+  const pnlSign = realizedPnL !== null && realizedPnL > 0 ? "+" : "";
+  const roiSign = roi !== null && roi > 0 ? "+" : "";
+
+  const pnlColorClass = realizedPnL !== null
+    ? realizedPnL > 0
+      ? "text-[#50ffaf]/80 font-bold"
+      : realizedPnL < 0
+      ? "text-[#ff5f5f]/80 font-bold"
+      : "text-[#958da3]"
+    : "text-[#958da3]";
+
+  const roiColorClass = roi !== null
+    ? roi > 0
+      ? "text-[#50ffaf]/80 font-bold"
+      : roi < 0
+      ? "text-[#ff5f5f]/80 font-bold"
+      : "text-[#958da3]"
+    : "text-[#958da3]";
+
   return (
     <tr className="border-b border-[#4a4457]/30 hover:bg-white/2 transition-colors">
       <td className="py-4 px-4 md:px-6 font-mono text-[11px] text-[#958da3]">
@@ -178,11 +211,15 @@ const ClosedTradeRow = memo(function ClosedTradeRow({
         {parseFloat(String(trade.take_profit)).toFixed(2)}
       </td>
 
-      {/* Unrealized P&L Column */}
-      <td className="py-4 px-4 text-right font-mono text-[#958da3]">-</td>
+      {/* Realized P&L Column */}
+      <td className={`py-4 px-4 text-right font-mono ${pnlColorClass}`}>
+        {realizedPnL !== null ? `${pnlSign}${realizedPnL.toFixed(2)}` : "-"}
+      </td>
 
       {/* ROI % Column */}
-      <td className="py-4 px-4 text-right font-mono text-[#958da3]">-</td>
+      <td className={`py-4 px-4 text-right font-mono ${roiColorClass}`}>
+        {roi !== null ? `${roiSign}${roi.toFixed(2)}%` : "-"}
+      </td>
 
       <td className="py-4 px-4 font-mono text-[11px] text-[#958da3] max-w-[150px] truncate">
         {trade.strategy_name}
@@ -450,11 +487,59 @@ const JournalTableRow = memo(function JournalTableRow({
   );
 });
 
-export function JournalTable({ initialTrades }: JournalTableProps) {
+export function JournalTable({ initialTrades, initialAccount }: JournalTableProps) {
+  const { livePrice } = useMarketDataContext();
   const [trades, setTrades] = useState<TradeRecord[]>(initialTrades);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Stateful account tracker to display real persistent balance
+  const [account, setAccount] = useState(() => {
+    return initialAccount || {
+      current_balance: "10000.0000",
+      initial_capital: "10000.0000",
+      max_risk_limit_pct: "3.00"
+    };
+  });
+
+  // ── P&L HUD Sizing Calculations (V8.4) ──────────────────────────────────
+  const closedTrades = trades.filter(t => t.status === "CLOSED");
+  const totalRealizedPnL = closedTrades.reduce((sum, t) => {
+    const pnl = (t as any).realized_pnl !== undefined && (t as any).realized_pnl !== null
+      ? parseFloat(String((t as any).realized_pnl))
+      : 0;
+    return sum + pnl;
+  }, 0);
+
+  const winningTrades = closedTrades.filter(t => {
+    const pnl = (t as any).realized_pnl !== undefined && (t as any).realized_pnl !== null
+      ? parseFloat(String((t as any).realized_pnl))
+      : 0;
+    return pnl > 0;
+  });
+
+  const winRate = closedTrades.length > 0
+    ? (winningTrades.length / closedTrades.length) * 100
+    : 0;
+
+  // Global Risk Exposure calculations for the Brutalist progress bar
+  const openTrades = trades.filter(t => t.status === "OPEN");
+  const totalOpenRiskUsd = openTrades.reduce((sum, t) => {
+    const entry = parseFloat(String(t.entry_price));
+    const sl = parseFloat(String(t.stop_loss));
+    const size = parseFloat(String(t.position_size ?? 1.0));
+    return sum + Math.abs(entry - sl) * size;
+  }, 0);
+
+  const currentBalance = parseFloat(String(account.current_balance));
+  const maxRiskPct = parseFloat(String(account.max_risk_limit_pct));
+  const maxRiskUsd = currentBalance * (maxRiskPct / 100);
+
+  // Exact current open risk as a percentage of the total account balance
+  const currentOpenRiskPct = currentBalance > 0 ? (totalOpenRiskUsd / currentBalance) * 100 : 0;
+  // Progress occupancy of the allowed 3.00% limit (e.g. 50% used if open risk is 1.50% and limit is 3.00%)
+  const riskLimitOccupancyPct = maxRiskUsd > 0 ? Math.min((totalOpenRiskUsd / maxRiskUsd) * 100, 100) : 0;
 
   // ── 1. GET: Fetch latest trade list (refresh) ──────────────────────────
   const refreshTrades = useCallback(async () => {
@@ -464,6 +549,9 @@ export function JournalTable({ initialTrades }: JournalTableProps) {
       if (res.ok) {
         const json = await res.json();
         setTrades(json.trades || []);
+        if (json.account) {
+          setAccount(json.account);
+        }
       } else {
         console.error("[JOURNAL] Failed to fetch latest trades:", res.statusText);
       }
@@ -492,6 +580,9 @@ export function JournalTable({ initialTrades }: JournalTableProps) {
         setTrades(prev =>
           prev.map(t => (t.id === trade.id ? { ...t, status: json.trade.status } : t))
         );
+        if (json.account) {
+          setAccount(json.account);
+        }
       } else {
         const json = await res.json();
         alert(`Failed to toggle position: ${json.error}`);
@@ -511,15 +602,22 @@ export function JournalTable({ initialTrades }: JournalTableProps) {
       const res = await fetch("/api/trades", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trade_id: tradeId, status: "CLOSED" })
+        body: JSON.stringify({ 
+          trade_id: tradeId, 
+          status: "CLOSED",
+          exit_price: livePrice
+        })
       });
 
       if (res.ok) {
         const json = await res.json();
         // Optimistically update the status locally for fluid UI interaction
         setTrades(prev =>
-          prev.map(t => (t.id === tradeId ? { ...t, status: json.trade.status } : t))
+          prev.map(t => (t.id === tradeId ? { ...t, ...json.trade } : t))
         );
+        if (json.account) {
+          setAccount(json.account);
+        }
       } else {
         const json = await res.json();
         alert(`Failed to close position: ${json.error}`);
@@ -529,7 +627,7 @@ export function JournalTable({ initialTrades }: JournalTableProps) {
     } finally {
       setActionLoadingId(null);
     }
-  }, []);
+  }, [livePrice]);
 
   // ── 4. DELETE: Surgical hard row deletion ──────────────────────────────
   const handleDeleteTrade = useCallback(async (tradeId: string) => {
@@ -576,6 +674,116 @@ export function JournalTable({ initialTrades }: JournalTableProps) {
 
   return (
     <div className="w-full flex flex-col gap-4">
+      {/* ── Risk Engine Settings Panel (V8.4) ─────────────────────────── */}
+      <SettingsPanel account={account} onSave={setAccount} />
+
+      {/* ── Risk Summary HUD (V8.4) ────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-2">
+        {/* Account Capital persistence Card */}
+        <div className="bg-[#1c1b1c]/80 border-2 border-[#4a4457] p-4 flex flex-col gap-1.5 shadow-2xl relative overflow-hidden group hover:border-[#50ffaf]/30 transition-all duration-300">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-white/1 rounded-full blur-2xl pointer-events-none" />
+          <span className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+            Persistent Capital Balance
+          </span>
+          <span className="text-xl font-mono font-black tracking-tight text-[#e5e2e3] drop-shadow-[0_0_8px_rgba(229,226,227,0.15)]">
+            ${currentBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+          </span>
+          <div className="flex items-center gap-1.5 text-[9px] font-mono mt-1">
+            <span className="text-zinc-500">Initial:</span>
+            <span className="text-zinc-400 font-bold">${parseFloat(String(account.initial_capital)).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+            <span className={`px-1 py-0.5 rounded-sm font-black text-[8px] uppercase tracking-wide ${
+              currentBalance >= parseFloat(String(account.initial_capital))
+                ? "bg-[#50ffaf]/10 text-[#50ffaf] border border-[#50ffaf]/30"
+                : "bg-red-500/10 text-[#ff5f5f] border border-red-500/30"
+            }`}>
+              {currentBalance >= parseFloat(String(account.initial_capital)) ? "In profit" : "In drawdown"}
+            </span>
+          </div>
+        </div>
+
+        {/* Total Realized P&L Card */}
+        <div className="bg-[#1c1b1c]/80 border-2 border-[#4a4457] p-4 flex flex-col gap-1.5 shadow-2xl relative overflow-hidden group hover:border-[#50ffaf]/30 transition-all duration-300">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-white/1 rounded-full blur-2xl pointer-events-none" />
+          <span className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+            Total Realized P&L
+          </span>
+          <span className={`text-xl font-mono font-black tracking-tight ${
+            totalRealizedPnL > 0
+              ? "text-[#50ffaf] drop-shadow-[0_0_10px_rgba(80,255,175,0.25)]"
+              : totalRealizedPnL < 0
+              ? "text-[#ff5f5f]"
+              : "text-[#e5e2e3]"
+          }`}>
+            {totalRealizedPnL > 0 ? "+" : ""}{totalRealizedPnL.toFixed(2)} USD
+          </span>
+          <div className="text-[9.5px] font-mono text-zinc-500 mt-1">
+            Realized return across audited deals
+          </div>
+        </div>
+
+        {/* Risk Exposure (V8.4 Brutalist Design) */}
+        <div className="bg-[#1c1b1c]/80 border-2 border-[#4a4457] p-4 flex flex-col gap-2 shadow-2xl relative overflow-hidden group hover:border-[#ff5f5f]/50 transition-all duration-300">
+          <div className="flex items-center justify-between">
+            <span className="text-[8px] font-black uppercase tracking-[0.15em] text-[#ff5f5f]">
+              Global Risk Exposure
+            </span>
+            <span className={`text-[9px] font-mono font-black px-1.5 py-0.5 rounded-sm uppercase tracking-wide ${
+              riskLimitOccupancyPct >= 80 
+                ? "bg-[#ff5f5f]/20 border border-[#ff5f5f] text-[#ff5f5f] animate-pulse" 
+                : riskLimitOccupancyPct > 0 
+                ? "bg-[#d1bcff]/10 border border-[#d1bcff]/30 text-[#d1bcff]" 
+                : "bg-zinc-800 border border-zinc-700 text-zinc-500"
+            }`}>
+              {riskLimitOccupancyPct >= 80 ? "⚠️ CAP AT RISK" : riskLimitOccupancyPct > 0 ? "Active" : "Stable"}
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-1 mt-0.5">
+            <div className="flex justify-between items-baseline font-mono">
+              <span className="text-lg font-black tracking-tight text-[#e5e2e3]">
+                {currentOpenRiskPct.toFixed(2)}%
+              </span>
+              <span className="text-[9px] text-[#958da3]">
+                / {maxRiskPct.toFixed(2)}% Limit
+              </span>
+            </div>
+            <div className="text-[9.5px] font-mono text-zinc-500">
+              ${totalOpenRiskUsd.toFixed(2)} / ${maxRiskUsd.toFixed(2)} USD allocation
+            </div>
+          </div>
+
+          {/* Highly Visible Neo-Brutalist Progress Bar */}
+          <div className="w-full bg-zinc-950 border border-zinc-800 h-3 rounded-none overflow-hidden relative p-[1px] mt-1">
+            <div
+              className={`h-full transition-all duration-500 ease-out border-r border-black/30 ${
+                riskLimitOccupancyPct >= 80
+                  ? "bg-gradient-to-r from-red-600 to-rose-500 shadow-[0_0_12px_#ff5f5f]"
+                  : riskLimitOccupancyPct >= 50
+                  ? "bg-gradient-to-r from-amber-500 to-amber-400 shadow-[0_0_12px_#ff9800]"
+                  : "bg-gradient-to-r from-[#d1bcff] to-[#a380f9] shadow-[0_0_12px_#d1bcff]"
+              }`}
+              style={{ width: `${riskLimitOccupancyPct}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Performance Matrix Card */}
+        <div className="bg-[#1c1b1c]/80 border-2 border-[#4a4457] p-4 flex flex-col gap-1.5 shadow-2xl relative overflow-hidden group hover:border-[#d1bcff]/30 transition-all duration-300">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-white/1 rounded-full blur-2xl pointer-events-none" />
+          <span className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+            Performance Matrix
+          </span>
+          <span className="text-xl font-mono font-black tracking-tight text-[#e5e2e3]">
+            {winRate.toFixed(1)}% <span className="text-[9px] font-normal text-[#958da3] uppercase">Win Rate</span>
+          </span>
+          <div className="flex items-center gap-1.5 text-[9px] font-mono mt-1 text-zinc-500">
+            <span>Deals:</span>
+            <span className="text-zinc-400 font-bold">{closedTrades.length} closed</span>
+            <span>({winningTrades.length} W / {closedTrades.length - winningTrades.length} L)</span>
+          </div>
+        </div>
+      </div>
+
       {/* Table Subheader Control Actions */}
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-bold text-[#958da3] uppercase tracking-wider">

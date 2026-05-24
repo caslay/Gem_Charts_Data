@@ -67,7 +67,13 @@ export function useLiveAlerts(
       }
       if (soundPath) {
         const audio = new Audio(soundPath);
-        audio.play().catch(e => console.error('Audio play error:', e));
+        audio.play().catch(e => {
+          if (e.name === 'NotAllowedError') {
+            console.log('[Audio] Playback blocked by browser autoplay policy until user interacts.');
+          } else {
+            console.error('Audio play error:', e);
+          }
+        });
       }
     }
   }, []);
