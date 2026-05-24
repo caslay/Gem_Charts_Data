@@ -321,6 +321,20 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
     }
   }, [livePrice]);
 
+  // V8.5 — Automated exit trigger: hard-wire TP/SL breach → handleClosePosition
+  // The hasAutoClosedRef prevents double-firing after the state update re-render.
+  const hasAutoClosedRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoClosedRef.current) return;
+    if (trade.status !== "OPEN") return;
+    if (!livePrice) return;
+
+    if (isTpHit || isSlHit) {
+      hasAutoClosedRef.current = true;
+      handleClosePosition(trade.id);
+    }
+  }, [isTpHit, isSlHit, livePrice, trade.id, trade.status, handleClosePosition]);
+
   const pnlSign = unrealizedPnL > 0 ? "+" : "";
   const roiSign = roiPercentage > 0 ? "+" : "";
 
@@ -639,9 +653,14 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
       });
 
       if (res.ok) {
+        const json = await res.json();
         // Optimistically delete from the local trade array
         setTrades(prev => prev.filter(t => t.id !== tradeId));
         setDeleteConfirmId(null);
+        // V8.5 — Refresh balance after delete to reflect recalculation
+        if (json.account) {
+          setAccount(json.account);
+        }
       } else {
         const json = await res.json();
         alert(`Failed to delete trade record: ${json.error}`);

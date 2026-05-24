@@ -1,9 +1,67 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V8.4
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V8.6
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-24  
+> **Last Updated:** 2026-05-24 (V8.6 FVG Overlay Refinement)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 30+ across TypeScript (Next.js 16), Python (FastAPI), and Markdown directives.
+
+---
+
+## 🆕 V8.6 Changelog — FVG Overlay Refinement
+
+### 1. `Chart.tsx` — Finite and Anchored FVG Overlay Rendering
+- **Before:** FVG rectangles spanned the entire chart width (`left: 0`, `right: '56px'`).
+- **After:** FVG rectangles are anchored to their Candle 1 origin timestamp (`origin_time`) and span exactly 5 candles in width.
+- **Anchor Point (Starting X):** Dynamically calculated using `chart.timeScale().timeToCoordinate()` on the candle timestamp.
+- **Horizontal Duration (Width):** Determined by the chart's current `barSpacing` (fetched via `chart.timeScale().options().barSpacing` or `chart.options().layout`) to span exactly `5 * barSpacing` pixels.
+- **Dynamic Re-calculation:** Coordinates (`left`, `top`, `height`, `width`) dynamically and reactively update during user zooming or scrolling (via `onVisibleLogicalRangeChange`).
+- **Visual Stacking & Styling:**
+  - `z-index` set to `z-[1]` to draw behind price candles and other HUD elements (`z-10`, `z-20`).
+  - Styled with direct `opacity: 0.2` and a subtle `0.3px` border with direction-based colors (`#50ffaf` for Bullish / `#ffb4ab` for Bearish).
+
+---
+
+## 🆕 V8.5 Changelog — Institutional Rules Refactor
+
+### 1. `fvgEngine.ts` — Strict ICT Wick-Scanning Mitigation
+- **Before:** BISI mitigated only if `future.l <= bottom` (outer edge touch)
+- **After:** BISI mitigated if `future.l <= top` (any wick entering the zone)
+- **Before:** SIBI mitigated only if `future.h >= top`
+- **After:** SIBI mitigated if `future.h >= bottom` (any wick entering the zone)
+- **Rule:** ICT 2022 — any price discovery *inside* the imbalance zone = consumed.
+
+### 2. `Chart.tsx` — FVG Zone HTML Overlay Rendering (Legacy V8.5)
+- Added `fvgOverlayBoxes` state to track pixel-mapped FVG rectangles.
+- Added `computeFvgOverlay` callback using `series.priceToCoordinate()` to map `fvg.top` / `fvg.bottom` prices to pixel Y positions.
+- Overlays recompute on zoom/scroll via `subscribeVisibleLogicalRangeChange`.
+- Only `status === 'UNMITIGATED'` zones are rendered.
+
+### 3. `JournalTable.tsx` — Auto-Close on TP/SL Breach
+- **ActiveTradeRow** now has a `hasAutoClosedRef` guard + `useEffect` that watches `isTpHit` and `isSlHit`.
+- When either flag is `true` and `trade.status === 'OPEN'`, automatically calls `handleClosePosition(trade.id)` exactly once.
+- `handleDeleteTrade` now reads the server `json.account` from the DELETE response and calls `setAccount(json.account)` to immediately sync the balance HUD.
+
+### 4. `useStrategyEvaluator.ts` — One-Trade Entry Guard
+- Added `activeTradeNamesRef: Set<string>` that caches strategy names of currently OPEN/PAUSED trades.
+- Added `refreshActiveTradeNames()` which fetches `GET /api/trades` and populates the cache.
+- Both `fetchStrategies()` and `refreshActiveTradeNames()` are called on mount and every 30s.
+- Before every `POST /api/trades`, checks `activeTradeNamesRef.current.has(strategy.name)`. If true → fires `RISK_OVERRIDE` alert and `continue`s the loop.
+- On successful trade POST, immediately adds `strategy.name` to the local cache for zero-latency blocking.
+- **Removed:** All `console.log` debug statements from `evaluateCondition` and the FIRE section.
+
+### 5. `/api/trades/route.ts` — Portfolio Accounting + Server-Side Guards
+- **PATCH CLOSED — Deterministic Balance Formula:**
+  - Old: `current_balance += realized_pnl` (delta drift)
+  - New: Trade is written to CLOSED first, then `current_balance = initial_capital + SUM(paper_trades WHERE status='CLOSED')`
+  - Eliminates ghost profits from concurrent race conditions or partial failures.
+- **DELETE — Balance Recalculation:**
+  - After deleting a trade, recalculates `current_balance = initial_capital + SUM(CLOSED realized_pnl)` from scratch.
+  - Returns `{ account: updatedAccount }` in the response body for immediate frontend sync.
+- **POST — Server-Side One-Trade Rule (409 Conflict):**
+  - Added pre-insert guard: `SELECT id FROM paper_trades WHERE strategy_name = $1 AND status IN ('OPEN', 'PAUSED') LIMIT 1`
+  - Returns `{ error: "[ENTRY_BLOCKED: ONE_TRADE_RULE]..." }` with HTTP 409 if an active position exists.
+- **Removed:** All `console.log` debug statements (console.warn/error telemetry preserved).
 
 ---
 
