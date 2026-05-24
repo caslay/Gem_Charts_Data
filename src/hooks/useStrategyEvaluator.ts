@@ -16,7 +16,7 @@ import type { MetricKey, OperatorKey, TemporalMode, CustomStrategy, StrategyCond
  * (for enum-type metrics like OI_TREND, PRICE_VS_OPEN).
  */
 function resolveMetric(
-  metric: MetricKey,
+  condition: StrategyCondition,
   data: MarketDataPayload | null,
   livePrice: number | null
 ): boolean | string | number {
@@ -24,17 +24,41 @@ function resolveMetric(
 
   const ipda = data.ipda_metrics || {};
   const orderFlow = ipda.order_flow_engine || (data as any).order_flow_engine || {};
+  const metric = condition.metric;
 
   switch (metric) {
     case 'FVG': {
-      const fvgs = ipda.active_fvgs || [];
-      return Array.isArray(fvgs) && fvgs.length > 0;
+      let fvgs = ipda.active_fvgs || [];
+      if (!Array.isArray(fvgs)) return false;
+
+      // Dynamically filter by timeframe sub-dropdown selection
+      if (condition.timeframe && condition.timeframe !== 'ANY') {
+        fvgs = fvgs.filter((f: any) => f.timeframe === condition.timeframe);
+      }
+
+      // Dynamically filter by direction sub-dropdown selection
+      if (condition.direction && condition.direction !== 'ANY') {
+        fvgs = fvgs.filter((f: any) => f.type === condition.direction);
+      }
+
+      return fvgs.length > 0;
     }
 
     case 'PRICE_IN_FVG': {
-      const fvgs = ipda.active_fvgs || [];
+      let fvgs = ipda.active_fvgs || [];
       const price = livePrice || 0;
       if (price === 0 || !Array.isArray(fvgs) || fvgs.length === 0) return false;
+
+      // Dynamically filter by timeframe sub-dropdown selection
+      if (condition.timeframe && condition.timeframe !== 'ANY') {
+        fvgs = fvgs.filter((f: any) => f.timeframe === condition.timeframe);
+      }
+
+      // Dynamically filter by direction sub-dropdown selection
+      if (condition.direction && condition.direction !== 'ANY') {
+        fvgs = fvgs.filter((f: any) => f.type === condition.direction);
+      }
+
       return fvgs.some((fvg: any) => {
         const minVal = Math.min(fvg.top, fvg.bottom);
         const maxVal = Math.max(fvg.top, fvg.bottom);
@@ -115,7 +139,7 @@ function evaluateCondition(
   data: MarketDataPayload | null,
   livePrice: number | null
 ): boolean {
-  const resolved = resolveMetric(condition.metric, data, livePrice);
+  const resolved = resolveMetric(condition, data, livePrice);
 
   const expected = (condition.operator === 'IS_TRUE')
     ? 'true'
