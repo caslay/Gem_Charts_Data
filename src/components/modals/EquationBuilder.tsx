@@ -106,6 +106,7 @@ export default function EquationBuilder() {
   const [editSlLogic, setEditSlLogic] = useState('Structural Swing');
   const [editTpLogic, setEditTpLogic] = useState('Nearest Order Book Magnet');
   const [editDirection, setEditDirection] = useState<'LONG' | 'SHORT'>('LONG');
+  const [editRiskPercent, setEditRiskPercent] = useState('1.0');
 
   // ── Fetch strategies from API on mount ────────────────────────────────────
   const fetchStrategies = useCallback(async () => {
@@ -150,6 +151,7 @@ export default function EquationBuilder() {
         setEditSlLogic(isObj ? (strategy.conditions.sl_logic || 'Structural Swing') : 'Structural Swing');
         setEditTpLogic(isObj ? (strategy.conditions.tp_logic || 'Nearest Order Book Magnet') : 'Nearest Order Book Magnet');
         setEditDirection(isObj ? (strategy.conditions.direction || 'LONG') : 'LONG');
+        setEditRiskPercent(isObj ? String(strategy.conditions.risk_percent ?? '1.0') : '1.0');
         return;
       }
     }
@@ -161,6 +163,7 @@ export default function EquationBuilder() {
     setEditSlLogic('Structural Swing');
     setEditTpLogic('Nearest Order Book Magnet');
     setEditDirection('LONG');
+    setEditRiskPercent('1.0');
   }, [selectedId, strategies]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -170,14 +173,16 @@ export default function EquationBuilder() {
     const newStrategy: CustomStrategy = {
       id: newId,
       name: 'New Strategy',
-      conditions: [createEmptyCondition()],
+      conditions: {
+        conditions: [createEmptyCondition()],
+        temporal_mode: 'INSTANT',
+        sl_logic: 'Structural Swing',
+        tp_logic: 'Nearest Order Book Magnet',
+        direction: 'LONG',
+        risk_percent: 1.0,
+      },
       is_active: true,
-      // Default settings
-      temporal_mode: 'INSTANT',
-      sl_logic: 'Structural Swing',
-      tp_logic: 'Nearest Order Book Magnet',
-      direction: 'LONG',
-    } as any;
+    };
     setStrategies((prev) => [newStrategy, ...prev]);
     setSelectedId(newId);
   };
@@ -196,6 +201,7 @@ export default function EquationBuilder() {
         sl_logic: editSlLogic,
         tp_logic: editTpLogic,
         direction: editDirection,
+        risk_percent: parseFloat(editRiskPercent) || 1.0,
       };
 
       const payload = {
@@ -623,6 +629,23 @@ export default function EquationBuilder() {
                       <option value="PDH/PDL Target">PDH/PDL Target</option>
                       <option value="Manual Pips">Manual Pips (2x Risk RR)</option>
                     </select>
+                  </div>
+
+                  {/* Risk per Trade (%) */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+                      Risk per Trade (%)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0.1"
+                      max="100.0"
+                      value={editRiskPercent}
+                      onChange={(e) => setEditRiskPercent(e.target.value)}
+                      className="bg-[#0e0e0f] border border-[#4a4457]/60 hover:border-[#d1bcff]/40 focus:border-[#50ffaf] focus:outline-none px-3 py-2 text-[10px] font-mono text-white rounded-none w-full transition-colors"
+                      placeholder="1.0"
+                    />
                   </div>
                 </div>
               </div>

@@ -25,7 +25,7 @@ export function useAlertSounds() {
       
       // Safety gate: resume context if suspended (browser security autoplay policies)
       if (ctx.state === 'suspended') {
-        ctx.resume();
+        ctx.resume().catch(() => {});
       }
 
       if (soundName === 'Institutional Pulse') {
@@ -153,7 +153,11 @@ export function useAlertSounds() {
     try {
       const audio = new Audio(`/audio/${fileName}`);
       audio.play().catch((err) => {
-        console.warn(`[SoundEngine] Playback failed or was blocked for ${fileName}:`, err);
+        if (err.name === 'NotAllowedError') {
+          console.log(`[SoundEngine] Playback blocked by browser autoplay policy for ${fileName} until user interacts.`);
+        } else {
+          console.warn(`[SoundEngine] Playback failed for ${fileName}:`, err);
+        }
       });
     } catch (e) {
       console.warn(`[SoundEngine] playFile execution failed for ${fileName}:`, e);

@@ -19,9 +19,50 @@ import { sql } from "@vercel/postgres";
  * 5. Persists the trade execution into the Neon SQL PostgreSQL database.
  */
 
+// Self-healing trading_account database schema generator
+async function initAccountTable() {
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS trading_account (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR(255) NOT NULL UNIQUE,
+        current_balance DECIMAL(18, 4) NOT NULL,
+        initial_capital DECIMAL(18, 4) NOT NULL,
+        max_risk_limit_pct DECIMAL(5, 2) NOT NULL DEFAULT 3.00,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+    console.log("[PAPER TRADES API] Database table 'trading_account' initialized / verified.");
+  } catch (error) {
+    console.error("[PAPER TRADES API] Database table 'trading_account' initialization failed:", error);
+    throw error;
+  }
+}
+
+// Helper to fetch or seed accounts with $10,000 for a user
+async function getOrCreateAccount(userEmail: string) {
+  await initAccountTable();
+  let accountRes = await sql`
+    SELECT * FROM trading_account WHERE user_id = ${userEmail} LIMIT 1
+  `;
+  if (accountRes.rows.length === 0) {
+    accountRes = await sql`
+      INSERT INTO trading_account (user_id, current_balance, initial_capital, max_risk_limit_pct)
+      VALUES (${userEmail}, 10000.0000, 10000.0000, 3.00)
+      RETURNING *
+    `;
+    console.log(`[PAPER TRADES API] Seeded new trading account for user: ${userEmail} with $10,000.`);
+  }
+  return accountRes.rows[0];
+}
+
 // Self-healing database schema generator
 async function initTradesTable() {
   try {
+    // Ensure account table is initialized
+    await initAccountTable();
+
     await sql`
       CREATE TABLE IF NOT EXISTS paper_trades (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -37,6 +78,13 @@ async function initTradesTable() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
+    
+    // Self-healing table alterations for V8.3 P&L and sizing metrics
+    await sql`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS position_size DECIMAL(18, 4) DEFAULT 1.0000;`;
+    await sql`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS exit_price DECIMAL(18, 4);`;
+    await sql`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS realized_pnl DECIMAL(18, 4);`;
+    await sql`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS roi DECIMAL(18, 4);`;
+
     console.log("[PAPER TRADES API] Database table 'paper_trades' initialized / verified.");
   } catch (error) {
     console.error("[PAPER TRADES API] Self-healing table initialization failed:", error);
@@ -335,7 +383,69 @@ export async function POST(req: Request) {
       console.log(`[PAPER TRADES API] Enforced strict capital preservation gate. Adjusted Take Profit to $${take_profit} to hit 1:2 RR.`);
     }
 
-    // ── 9. Persist Trade Execution ──────────────────────────────────────────
+    // ── 9. Portfolio-Aware Position Sizing Math (V8.4) ──────────────────────
+    // Retrieve strategy-specific risk percent (fallbacks: body parameter → database lookup → default 1.0)
+    let risk_percent = 1.0;
+    if (body.risk_percent !== undefined && body.risk_percent !== null) {
+      risk_percent = parseFloat(body.risk_percent);
+    } else if (strategy_name) {
+      try {
+        const stratResult = await sql`
+          SELECT logic_json FROM custom_strategies 
+          WHERE name = ${strategy_name} 
+          LIMIT 1
+        `;
+        if (stratResult.rows.length > 0) {
+          const logic = stratResult.rows[0].logic_json;
+          if (logic && typeof logic === 'object' && !Array.isArray(logic)) {
+            risk_percent = parseFloat((logic as any).risk_percent ?? 1.0);
+          }
+        }
+      } catch (err) {
+        console.error("[PAPER TRADES API] Failed to fetch strategy risk_percent from DB:", err);
+      }
+    }
+
+    // Retrieve persistent account status for dynamic sizing and risk exposure calculations
+    const userEmail = session.user.email || "default_user";
+    const account = await getOrCreateAccount(userEmail);
+    const current_balance = parseFloat(account.current_balance);
+    const max_risk_limit_pct = parseFloat(account.max_risk_limit_pct);
+
+    // Dynamic position sizing based on real balance from database
+    const risk_amount_usd = current_balance * (risk_percent / 100);
+    const risk_per_unit = Math.abs(entry_price - stop_loss);
+    const position_size = risk_per_unit > 0 ? parseFloat((risk_amount_usd / risk_per_unit).toFixed(4)) : 1.0;
+
+    // ── 9b. Global Portfolio Risk Guard Veto Gate (V8.4) ────────────────────
+    const newTradeRiskUsd = risk_per_unit * position_size;
+
+    // Calculate sum of Risk Amount for all currently OPEN trades
+    const openTradesRes = await sql`
+      SELECT entry_price, stop_loss, position_size FROM paper_trades
+      WHERE status = 'OPEN'
+    `;
+    let currentOpenRiskUsd = 0;
+    for (const row of openTradesRes.rows) {
+      const entry = parseFloat(row.entry_price);
+      const sl = parseFloat(row.stop_loss);
+      const size = parseFloat(row.position_size || 1.0);
+      currentOpenRiskUsd += Math.abs(entry - sl) * size;
+    }
+
+    // Reject trade if (Current Open Risk + New Trade Risk) > max_risk_limit_pct of portfolio
+    const proposedTotalRiskUsd = currentOpenRiskUsd + newTradeRiskUsd;
+    const maxAllowedRiskUsd = current_balance * (max_risk_limit_pct / 100);
+
+    if (proposedTotalRiskUsd > maxAllowedRiskUsd) {
+      console.warn(`[RISK_VETO: PORTFOLIO_AT_CAPACITY] Rejecting trade opening. Proposed: $${proposedTotalRiskUsd.toFixed(2)}, Allowed: $${maxAllowedRiskUsd.toFixed(2)} (Current Open Risk: $${currentOpenRiskUsd.toFixed(2)}, New Risk: $${newTradeRiskUsd.toFixed(2)}).`);
+      return NextResponse.json(
+        { error: "[RISK_VETO: PORTFOLIO_AT_CAPACITY]" },
+        { status: 403 }
+      );
+    }
+
+    // ── 10. Persist Trade Execution ──────────────────────────────────────────
     const status = "OPEN";
     const dbResult = await sql`
       INSERT INTO paper_trades (
@@ -346,7 +456,8 @@ export async function POST(req: Request) {
         take_profit,
         status,
         strategy_name,
-        ai_narrative_summary
+        ai_narrative_summary,
+        position_size
       ) VALUES (
         ${symbol},
         ${direction},
@@ -355,13 +466,14 @@ export async function POST(req: Request) {
         ${take_profit},
         ${status},
         ${strategy_name},
-        ${ai_narrative_summary || null}
+        ${ai_narrative_summary || null},
+        ${position_size}
       ) RETURNING id, timestamp;
     `;
 
     const savedTrade = dbResult.rows[0];
 
-    // ── 10. Construct and Return Success Response ───────────────────────────
+    // ── 11. Construct and Return Success Response ───────────────────────────
     const execution_parameters = {
       symbol,
       direction,
@@ -373,7 +485,9 @@ export async function POST(req: Request) {
       risk_amount: risk,
       reward_amount: reward,
       strategy_name,
-      ai_narrative_summary: ai_narrative_summary || null
+      ai_narrative_summary: ai_narrative_summary || null,
+      position_size,
+      risk_percent
     };
 
     return NextResponse.json({
@@ -407,12 +521,15 @@ export async function GET() {
     // Ensure database table is verified
     await initTradesTable();
 
+    const userEmail = session.user.email || "default_user";
+    const account = await getOrCreateAccount(userEmail);
+
     const { rows } = await sql`
       SELECT * FROM paper_trades
       ORDER BY created_at DESC
     `;
 
-    return NextResponse.json({ success: true, trades: rows });
+    return NextResponse.json({ success: true, trades: rows, account });
   } catch (error: unknown) {
     console.error("[PAPER TRADES API] GET Error:", error);
     const message = error instanceof Error ? error.message : "Failed to fetch paper trades.";
@@ -453,13 +570,119 @@ export async function PATCH(req: Request) {
     }
 
     await initTradesTable();
+    const userEmail = session.user.email || "default_user";
 
-    const updateResult = await sql`
-      UPDATE paper_trades
-      SET status = ${uppercaseStatus}
-      WHERE id = ${trade_id}
-      RETURNING id, status;
-    `;
+    let updateResult;
+
+    if (uppercaseStatus === "CLOSED") {
+      // Execute all operations inside an atomic transaction to prevent data race conditions
+      await sql`BEGIN`;
+      try {
+        // 1. Fetch trade parameters to calculate realized P&L
+        const tradeResult = await sql`
+          SELECT entry_price, direction, position_size, status FROM paper_trades
+          WHERE id = ${trade_id}
+          LIMIT 1
+        `;
+        if (tradeResult.rows.length === 0) {
+          await sql`ROLLBACK`;
+          return NextResponse.json(
+            { error: `Trade with ID ${trade_id} not found.` },
+            { status: 404 }
+          );
+        }
+        
+        const trade = tradeResult.rows[0];
+
+        if (trade.status === "CLOSED") {
+          await sql`ROLLBACK`;
+          return NextResponse.json(
+            { error: `Trade with ID ${trade_id} is already CLOSED.` },
+            { status: 400 }
+          );
+        }
+
+        // 2. Resolve exit price (passed from body or fallback to entry_price)
+        let exit_price = body.exit_price !== undefined && body.exit_price !== null 
+          ? parseFloat(body.exit_price) 
+          : null;
+
+        if (exit_price === null || isNaN(exit_price)) {
+          exit_price = parseFloat(trade.entry_price);
+        }
+
+        const entryPrice = parseFloat(trade.entry_price);
+        const positionSize = parseFloat(trade.position_size ?? 1.0);
+        const direction = trade.direction;
+
+        // 3. Calculate Realized P&L
+        let realized_pnl = direction === "LONG"
+          ? (exit_price - entryPrice) * positionSize
+          : (entryPrice - exit_price) * positionSize;
+
+        // 4. Calculate ROI Percentage
+        let roi = (entryPrice > 0 && positionSize > 0)
+          ? (realized_pnl / (entryPrice * positionSize)) * 100
+          : 0;
+
+        exit_price = parseFloat(exit_price.toFixed(4));
+        realized_pnl = parseFloat(realized_pnl.toFixed(4));
+        roi = parseFloat(roi.toFixed(4));
+
+        // 5. Fetch and Lock the user's trading_account to prevent concurrent race conditions
+        const accountResult = await sql`
+          SELECT current_balance FROM trading_account
+          WHERE user_id = ${userEmail}
+          FOR UPDATE
+        `;
+
+        if (accountResult.rows.length === 0) {
+          // If for some reason the account doesn't exist yet, seed it first
+          await getOrCreateAccount(userEmail);
+        }
+
+        // Lock it again or retrieve
+        const lockedAccountRes = await sql`
+          SELECT current_balance FROM trading_account
+          WHERE user_id = ${userEmail}
+          FOR UPDATE
+        `;
+        const currentBalance = parseFloat(lockedAccountRes.rows[0].current_balance);
+        const newBalance = parseFloat((currentBalance + realized_pnl).toFixed(4));
+
+        // 6. Update current_balance in the trading_account
+        await sql`
+          UPDATE trading_account
+          SET current_balance = ${newBalance},
+              updated_at = CURRENT_TIMESTAMP
+          WHERE user_id = ${userEmail}
+        `;
+
+        // 7. Update trade record with closed parameters
+        updateResult = await sql`
+          UPDATE paper_trades
+          SET status = ${uppercaseStatus},
+              exit_price = ${exit_price},
+              realized_pnl = ${realized_pnl},
+              roi = ${roi}
+          WHERE id = ${trade_id}
+          RETURNING *;
+        `;
+
+        await sql`COMMIT`;
+      } catch (txErr) {
+        await sql`ROLLBACK`;
+        throw txErr;
+      }
+    } else {
+      // Status change to other values (OPEN / PAUSED)
+      updateResult = await sql`
+        UPDATE paper_trades
+        SET status = ${uppercaseStatus}
+        WHERE id = ${trade_id}
+        RETURNING *;
+      `;
+    }
 
     if (updateResult.rows.length === 0) {
       return NextResponse.json(
@@ -468,10 +691,13 @@ export async function PATCH(req: Request) {
       );
     }
 
+    const updatedAccount = await getOrCreateAccount(userEmail);
+
     return NextResponse.json({
       success: true,
       message: `Trade status updated to ${uppercaseStatus}.`,
-      trade: updateResult.rows[0]
+      trade: updateResult.rows[0],
+      account: updatedAccount
     });
   } catch (error: unknown) {
     console.error("[PAPER TRADES API] PATCH Error:", error);

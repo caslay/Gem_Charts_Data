@@ -33,18 +33,56 @@ export default async function JournalPage() {
     );
   }
 
-  // Fetch logged trades server-side (initial data seed)
+  // Fetch logged trades & account details server-side (initial data seed)
   let initialTrades: TradeRecord[] = [];
+  let initialAccount = {
+    current_balance: "10000.0000",
+    initial_capital: "10000.0000",
+    max_risk_limit_pct: "3.00"
+  };
+
+  const userEmail = session.user.email || "default_user";
+
   try {
-    // Self-healing query check
+    // Ensure tables are verified/created and retrieve account
+    await sql`
+      CREATE TABLE IF NOT EXISTS trading_account (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR(255) NOT NULL UNIQUE,
+        current_balance DECIMAL(18, 4) NOT NULL,
+        initial_capital DECIMAL(18, 4) NOT NULL,
+        max_risk_limit_pct DECIMAL(5, 2) NOT NULL DEFAULT 3.00,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    let accountRes = await sql`
+      SELECT * FROM trading_account WHERE user_id = ${userEmail} LIMIT 1
+    `;
+    if (accountRes.rows.length === 0) {
+      accountRes = await sql`
+        INSERT INTO trading_account (user_id, current_balance, initial_capital, max_risk_limit_pct)
+        VALUES (${userEmail}, 10000.0000, 10000.0000, 3.00)
+        RETURNING *
+      `;
+      console.log(`[JOURNAL PAGE] Seeded new trading account for user: ${userEmail} with $10,000.`);
+    }
+
+    initialAccount = {
+      current_balance: accountRes.rows[0].current_balance.toString(),
+      initial_capital: accountRes.rows[0].initial_capital.toString(),
+      max_risk_limit_pct: accountRes.rows[0].max_risk_limit_pct.toString(),
+    };
+
+    // Fetch logged trades
     const { rows } = await sql`
       SELECT * FROM paper_trades
       ORDER BY created_at DESC
     `;
     initialTrades = rows as unknown as TradeRecord[];
   } catch (err) {
-    console.warn("[JOURNAL PAGE] Initial DB fetch failed (table might not exist yet):", err);
-    // Dynamic table initialization will happen on the first active trade POST, or we can let it fail gracefully here
+    console.warn("[JOURNAL PAGE] Initial DB fetch failed:", err);
   }
 
   return (
@@ -66,16 +104,16 @@ export default async function JournalPage() {
           </div>
           <div className="flex items-center gap-2">
             <Link
-              href="/"
-              className="bg-[#1c1b1c] border border-[#4a4457] hover:border-[#50ffaf] text-[#958da3] hover:text-[#50ffaf] px-4 py-2 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-none shadow-md"
+               href="/"
+               className="bg-[#1c1b1c] border border-[#4a4457] hover:border-[#50ffaf] text-[#958da3] hover:text-[#50ffaf] px-4 py-2 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-none shadow-md"
             >
               [ Return to Terminal ]
             </Link>
           </div>
         </div>
-
+ 
         {/* Dynamic Interactive CRUD Table Component */}
-        <JournalTable initialTrades={initialTrades} />
+        <JournalTable initialTrades={initialTrades} initialAccount={initialAccount} />
       </div>
     </main>
   );

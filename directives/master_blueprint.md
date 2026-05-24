@@ -1,7 +1,7 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V8.2
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V8.4
 
 > **Classification:** Institutional Architecture Document  
-> **Generated:** 2026-05-22  
+> **Generated:** 2026-05-24  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 30+ across TypeScript (Next.js 16), Python (FastAPI), and Markdown directives.
 
@@ -28,6 +28,8 @@
     - [GET /api/strategies](#get-apistrategies)
     - [POST /api/strategies](#post-apistrategies)
     - [DELETE /api/strategies](#delete-apistrategies)
+    - [GET /api/account](#get-apiaccount)
+    - [POST /api/account](#post-apiaccount)
 11. [Edge Case Audit & ABORT Conditions](#11-edge-case-audit)
 12. [Logic Debt Register](#12-logic-debt-register)
 
@@ -722,6 +724,20 @@ The EquationBuilder component integrates an advanced execution parameters layout
 | `ai_trade_state` | `id = 1` (singleton) | Stores the AI's `state_json` and `updated_at` |
 | `custom_strategies` | `id` (UUID PRIMARY KEY) | Stores user custom strategy equations and logic rules |
 | `paper_trades` | `id` (UUID PRIMARY KEY) | Stores active and completed paper trade execution logs |
+| `trading_account` | `id` (UUID PRIMARY KEY) | Stores persistent user capital balance, initial capital, and risk limit (V8.4) |
+
+#### Table: `trading_account`
+```sql
+CREATE TABLE IF NOT EXISTS trading_account (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id VARCHAR(255) NOT NULL UNIQUE,
+  current_balance DECIMAL(18, 4) NOT NULL,
+  initial_capital DECIMAL(18, 4) NOT NULL,
+  max_risk_limit_pct DECIMAL(5, 2) NOT NULL DEFAULT 3.00,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
 
 #### Table: `custom_strategies`
 ```sql
@@ -749,7 +765,10 @@ CREATE TABLE IF NOT EXISTS paper_trades (
   status VARCHAR(20) NOT NULL DEFAULT 'OPEN', -- 'OPEN', 'CLOSED', 'PAUSED'
   strategy_name VARCHAR(255) NOT NULL,
   ai_narrative_summary TEXT,
-  position_size DECIMAL(18, 4) DEFAULT 1.0000, -- Optional size column (Added in V8.3)
+  position_size DECIMAL(18, 4) DEFAULT 1.0000, -- Portfolio-aware size sizing (V8.3)
+  exit_price DECIMAL(18, 4),                     -- Final exit execution price (V8.3)
+  realized_pnl DECIMAL(18, 4),                   -- Final realized profit/loss (V8.3)
+  roi DECIMAL(18, 4),                            -- Realized ROI percentage (V8.3)
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 ```
@@ -1088,11 +1107,61 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 
 ---
 
+### `GET /api/account` + `POST /api/account`
+
+**Purpose:** Retrieves and updates the trading account capital, risk limit configurations, and dynamic balance (V8.4).
+
+**Auth:** Both require valid NextAuth session.
+
+**GET Response:**
+```json
+{
+  "success": true,
+  "account": {
+    "id": "7a35de5b-6f8c-4db2-9445-5609e25d2b1f",
+    "user_id": "user@email.com",
+    "current_balance": "10000.0000",
+    "initial_capital": "10000.0000",
+    "max_risk_limit_pct": "3.00",
+    "created_at": "2026-05-24T16:20:00.000Z",
+    "updated_at": "2026-05-24T16:20:00.000Z"
+  }
+}
+```
+
+**POST Body:**
+```json
+{
+  "initial_capital": 20000.00,
+  "max_risk_limit_pct": 5.00
+}
+```
+
+**POST Response:** Returns the updated account details, including the dynamically recalculated `current_balance` (new initial capital + sum of realized P&Ls of closed trades) fitting with row locking and ACID transaction safety:
+```json
+{
+  "success": true,
+  "account": {
+    "id": "7a35de5b-6f8c-4db2-9445-5609e25d2b1f",
+    "user_id": "user@email.com",
+    "current_balance": "20050.0000",
+    "initial_capital": "20000.0000",
+    "max_risk_limit_pct": "5.00",
+    "created_at": "2026-05-24T16:20:00.000Z",
+    "updated_at": "2026-05-24T16:34:00.000Z"
+  }
+}
+```
+
+---
+
 ### `POST /api/trades`
 
-**Purpose:** Logs a new trade after executing calculations for entry price fallbacks, stopping logic (1 tick offset), and 1:2 Risk-to-Reward magnet filtration.
+**Purpose:** Logs a new trade after executing calculations for entry price fallbacks, stopping logic (1 tick offset), and 1:2 Risk-to-Reward magnet filtration. Position sizing scales dynamically based on the persistent `current_balance` of the user's `trading_account` in the database.
 
 **Auth:** Requires valid NextAuth session.
+
+**Portfolio Risk Veto Gate (V8.4):** Calculates the risk of the proposed setup (`New Risk = ABS(entry_price - stop_loss) * position_size`) and queries currently `OPEN` trades to sum their total Risk Amount. If `(Current Open Risk + New Trade Risk) > max_risk_limit_pct` (default 3%) of the portfolio's `current_balance`, the trade is vetoed.
 
 **Request Body:**
 ```json
@@ -1130,6 +1199,7 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 
 **Error Responses:**
 - `401` — Unauthorized (no active session)
+- `403` — `[RISK_VETO: PORTFOLIO_AT_CAPACITY]` (Total portfolio risk exposure exceeds allowed limit)
 - `400` — `Inefficient Algorithm: RR < 2.0` (Risk to Reward fails 1:2 gate)
 - `400` — Missing required parameters or directional invalidation mismatch
 
@@ -1137,7 +1207,7 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 
 ### `GET /api/trades`
 
-**Purpose:** Retrieves all trade rows from `paper_trades` ordered by `created_at` DESC.
+**Purpose:** Retrieves all trade rows from `paper_trades` ordered by `created_at` DESC, alongside user account status.
 
 **Auth:** Requires valid NextAuth session.
 
@@ -1159,7 +1229,16 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
       "ai_narrative_summary": "...",
       "created_at": "2026-05-23T22:45:00.000Z"
     }
-  ]
+  ],
+  "account": {
+    "id": "7a35de5b-6f8c-4db2-9445-5609e25d2b1f",
+    "user_id": "user@email.com",
+    "current_balance": "10000.0000",
+    "initial_capital": "10000.0000",
+    "max_risk_limit_pct": "3.00",
+    "created_at": "2026-05-24T16:20:00.000Z",
+    "updated_at": "2026-05-24T16:20:00.000Z"
+  }
 }
 ```
 
@@ -1167,7 +1246,7 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 
 ### `PATCH /api/trades`
 
-**Purpose:** Updates the tracking status of a specific trade log (OPEN, CLOSED, PAUSED).
+**Purpose:** Updates the tracking status of a specific trade log (OPEN, CLOSED, PAUSED). When transition status is `CLOSED`, it calculates realized P&L and ROI%, and executes database updates inside an ACID PostgreSQL transaction block (`BEGIN`, `COMMIT`, `ROLLBACK`) locking the user's `trading_account` row (`SELECT ... FOR UPDATE`) to prevent data race conditions.
 
 **Auth:** Requires valid NextAuth session.
 
@@ -1175,7 +1254,8 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 ```json
 {
   "trade_id": "8f89bc44-59e8-469b-98f9-46706e23297a",
-  "status": "PAUSED"
+  "status": "CLOSED",
+  "exit_price": 2560
 }
 ```
 
@@ -1183,10 +1263,22 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 ```json
 {
   "success": true,
-  "message": "Trade status updated to PAUSED.",
+  "message": "Trade status updated to CLOSED.",
   "trade": {
     "id": "8f89bc44-59e8-469b-98f9-46706e23297a",
-    "status": "PAUSED"
+    "status": "CLOSED",
+    "exit_price": 2560,
+    "realized_pnl": 50,
+    "roi": 1.992
+  },
+  "account": {
+    "id": "7a35de5b-6f8c-4db2-9445-5609e25d2b1f",
+    "user_id": "user@email.com",
+    "current_balance": "10050.0000",
+    "initial_capital": "10000.0000",
+    "max_risk_limit_pct": "3.00",
+    "created_at": "2026-05-24T16:20:00.000Z",
+    "updated_at": "2026-05-24T16:21:40.000Z"
   }
 }
 ```
