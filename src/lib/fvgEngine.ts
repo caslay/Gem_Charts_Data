@@ -37,14 +37,17 @@ export function detectActiveFVGs(candles: Candle[], onlyClosed: boolean = true) 
 
     if (type) {
       let isMitigated = false;
-      // Loop through all subsequent candles that came after c3
+      // V8.5 — Strict Wick-Scanning: any subsequent candle whose wick enters
+      // the imbalance zone (between bottom and top) marks the FVG as consumed.
+      // BISI: mitigated if future wick dips INTO the gap (future.l <= top)
+      // SIBI: mitigated if future wick pokes INTO the gap (future.h >= bottom)
       for (let j = i + 3; j < candles.length; j++) {
         const future = candles[j];
-        if (type === 'BISI' && future.l <= bottom) {
+        if (type === 'BISI' && future.l <= top) {
           isMitigated = true;
           break;
         }
-        if (type === 'SIBI' && future.h >= top) {
+        if (type === 'SIBI' && future.h >= bottom) {
           isMitigated = true;
           break;
         }

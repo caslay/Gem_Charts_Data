@@ -33,7 +33,6 @@ async function initAccountTable() {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
-    console.log("[PAPER TRADES API] Database table 'trading_account' initialized / verified.");
   } catch (error) {
     console.error("[PAPER TRADES API] Database table 'trading_account' initialization failed:", error);
     throw error;
@@ -52,7 +51,6 @@ async function getOrCreateAccount(userEmail: string) {
       VALUES (${userEmail}, 10000.0000, 10000.0000, 3.00)
       RETURNING *
     `;
-    console.log(`[PAPER TRADES API] Seeded new trading account for user: ${userEmail} with $10,000.`);
   }
   return accountRes.rows[0];
 }
@@ -84,8 +82,6 @@ async function initTradesTable() {
     await sql`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS exit_price DECIMAL(18, 4);`;
     await sql`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS realized_pnl DECIMAL(18, 4);`;
     await sql`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS roi DECIMAL(18, 4);`;
-
-    console.log("[PAPER TRADES API] Database table 'paper_trades' initialized / verified.");
   } catch (error) {
     console.error("[PAPER TRADES API] Self-healing table initialization failed:", error);
     throw error;
@@ -231,7 +227,6 @@ export async function POST(req: Request) {
         }
       } else {
         // Fallback to structural swing if candles not available
-        console.log("[PAPER TRADES API] Fallback to Structural Swing SL due to missing candle history");
         const hardInvalidation = ipda_metrics.trade_execution_parameters?.hard_invalidation_levels;
         if (direction === 'LONG') {
           const bullish_invalidation = hardInvalidation?.bullish_invalidation;
@@ -314,16 +309,15 @@ export async function POST(req: Request) {
       }
     }
 
-    // Self-healing take profit resolution
-    if (take_profit === undefined || take_profit === null || isNaN(take_profit)) {
-      const risk = Math.abs(entry_price - stop_loss);
-      if (direction === 'LONG') {
-        take_profit = parseFloat((entry_price + 2.0 * risk).toFixed(4));
-      } else {
-        take_profit = parseFloat((entry_price - 2.0 * risk).toFixed(4));
+      // Self-healing take profit resolution
+      if (take_profit === undefined || take_profit === null || isNaN(take_profit)) {
+        const risk = Math.abs(entry_price - stop_loss);
+        if (direction === 'LONG') {
+          take_profit = parseFloat((entry_price + 2.0 * risk).toFixed(4));
+        } else {
+          take_profit = parseFloat((entry_price - 2.0 * risk).toFixed(4));
+        }
       }
-      console.log("[PAPER TRADES API] Self-healing TP to exactly 1:2 Risk-Reward ratio since selected TP logic was null or unavailable.");
-    }
 
     take_profit = parseFloat(take_profit.toFixed(4));
 
@@ -380,7 +374,6 @@ export async function POST(req: Request) {
       }
       reward = Math.abs(take_profit - entry_price);
       rrRatio = parseFloat((reward / risk).toFixed(4));
-      console.log(`[PAPER TRADES API] Enforced strict capital preservation gate. Adjusted Take Profit to $${take_profit} to hit 1:2 RR.`);
     }
 
     // ── 9. Portfolio-Aware Position Sizing Math (V8.4) ──────────────────────
@@ -438,10 +431,25 @@ export async function POST(req: Request) {
     const maxAllowedRiskUsd = current_balance * (max_risk_limit_pct / 100);
 
     if (proposedTotalRiskUsd > maxAllowedRiskUsd) {
-      console.warn(`[RISK_VETO: PORTFOLIO_AT_CAPACITY] Rejecting trade opening. Proposed: $${proposedTotalRiskUsd.toFixed(2)}, Allowed: $${maxAllowedRiskUsd.toFixed(2)} (Current Open Risk: $${currentOpenRiskUsd.toFixed(2)}, New Risk: $${newTradeRiskUsd.toFixed(2)}).`);
+      console.warn(`[RISK_VETO: PORTFOLIO_AT_CAPACITY] Rejecting trade. Proposed: $${proposedTotalRiskUsd.toFixed(2)}, Allowed: $${maxAllowedRiskUsd.toFixed(2)}.`);
       return NextResponse.json(
         { error: "[RISK_VETO: PORTFOLIO_AT_CAPACITY]" },
         { status: 403 }
+      );
+    }
+
+    // ── 9c. One-Trade Rule (Server-Side Guard, V8.5) ─────────────────────────
+    // Reject if a trade with the same strategy_name is already OPEN or PAUSED.
+    const existingActiveTradeRes = await sql`
+      SELECT id FROM paper_trades
+      WHERE strategy_name = ${strategy_name}
+        AND status IN ('OPEN', 'PAUSED')
+      LIMIT 1
+    `;
+    if (existingActiveTradeRes.rows.length > 0) {
+      return NextResponse.json(
+        { error: "[ENTRY_BLOCKED: ONE_TRADE_RULE] This strategy already has an active open position. Close it before opening a new one." },
+        { status: 409 }
       );
     }
 
@@ -629,36 +637,7 @@ export async function PATCH(req: Request) {
         realized_pnl = parseFloat(realized_pnl.toFixed(4));
         roi = parseFloat(roi.toFixed(4));
 
-        // 5. Fetch and Lock the user's trading_account to prevent concurrent race conditions
-        const accountResult = await sql`
-          SELECT current_balance FROM trading_account
-          WHERE user_id = ${userEmail}
-          FOR UPDATE
-        `;
-
-        if (accountResult.rows.length === 0) {
-          // If for some reason the account doesn't exist yet, seed it first
-          await getOrCreateAccount(userEmail);
-        }
-
-        // Lock it again or retrieve
-        const lockedAccountRes = await sql`
-          SELECT current_balance FROM trading_account
-          WHERE user_id = ${userEmail}
-          FOR UPDATE
-        `;
-        const currentBalance = parseFloat(lockedAccountRes.rows[0].current_balance);
-        const newBalance = parseFloat((currentBalance + realized_pnl).toFixed(4));
-
-        // 6. Update current_balance in the trading_account
-        await sql`
-          UPDATE trading_account
-          SET current_balance = ${newBalance},
-              updated_at = CURRENT_TIMESTAMP
-          WHERE user_id = ${userEmail}
-        `;
-
-        // 7. Update trade record with closed parameters
+        // 6. Update trade record with closed parameters FIRST (so it's included in the P&L SUM)
         updateResult = await sql`
           UPDATE paper_trades
           SET status = ${uppercaseStatus},
@@ -668,6 +647,31 @@ export async function PATCH(req: Request) {
           WHERE id = ${trade_id}
           RETURNING *;
         `;
+
+        // 7. Recalculate balance from scratch: initial_capital + SUM(all CLOSED realized_pnl)
+        // V8.5 — Deterministic formula prevents ghost profits from delta drift.
+        const accountForCapital = await sql`
+          SELECT initial_capital FROM trading_account
+          WHERE user_id = ${userEmail}
+        `;
+        const initialCapital = parseFloat(String(accountForCapital.rows[0]?.initial_capital ?? 10000));
+
+        const pnlSumRes = await sql`
+          SELECT COALESCE(SUM(realized_pnl), 0) AS total_realized_pnl
+          FROM paper_trades
+          WHERE status = 'CLOSED'
+        `;
+        const totalRealizedPnl = parseFloat(String(pnlSumRes.rows[0].total_realized_pnl));
+        const newBalance = parseFloat((initialCapital + totalRealizedPnl).toFixed(4));
+
+        // 8. Update current_balance in the trading_account
+        await sql`
+          UPDATE trading_account
+          SET current_balance = ${newBalance},
+              updated_at = CURRENT_TIMESTAMP
+          WHERE user_id = ${userEmail}
+        `;
+
 
         await sql`COMMIT`;
       } catch (txErr) {
@@ -741,6 +745,8 @@ export async function DELETE(req: Request) {
       );
     }
 
+    // V8.5 — Recalculate full balance after DELETE to remove any ghost profits
+    const userEmail = session.user.email || "default_user";
     await initTradesTable();
 
     const deleteResult = await sql`
@@ -756,10 +762,33 @@ export async function DELETE(req: Request) {
       );
     }
 
+    // Recalculate account balance from scratch after row removal
+    const accountCapRes = await sql`
+      SELECT initial_capital FROM trading_account WHERE user_id = ${userEmail}
+    `;
+    if (accountCapRes.rows.length > 0) {
+      const initialCapital = parseFloat(String(accountCapRes.rows[0].initial_capital));
+      const pnlSumRes = await sql`
+        SELECT COALESCE(SUM(realized_pnl), 0) AS total_realized_pnl
+        FROM paper_trades
+        WHERE status = 'CLOSED'
+      `;
+      const totalRealizedPnl = parseFloat(String(pnlSumRes.rows[0].total_realized_pnl));
+      const newBalance = parseFloat((initialCapital + totalRealizedPnl).toFixed(4));
+      await sql`
+        UPDATE trading_account
+        SET current_balance = ${newBalance}, updated_at = CURRENT_TIMESTAMP
+        WHERE user_id = ${userEmail}
+      `;
+    }
+
+    const updatedAccount = await getOrCreateAccount(userEmail);
+
     return NextResponse.json({
       success: true,
       message: "Trade successfully purged from the database.",
-      deleted_id: trade_id
+      deleted_id: trade_id,
+      account: updatedAccount
     });
   } catch (error: unknown) {
     console.error("[PAPER TRADES API] DELETE Error:", error);

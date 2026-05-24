@@ -147,8 +147,6 @@ function evaluateCondition(
       ? 'false'
       : `${condition.operator} ${condition.value}`;
 
-  console.log(`[EVALUATOR] Strategy ${strategyId} - Checking ${condition.metric}: ${resolved} vs ${expected}`);
-
   if (typeof resolved === 'boolean') {
     // Boolean-type metrics
     if (condition.operator === 'IS_TRUE') return resolved === true;
@@ -241,15 +239,40 @@ export function useStrategyEvaluator() {
     }
   }, []);
 
-  // Fetch on mount + periodically refresh every 30s to pick up new strategies
+  // V8.5 — One-Trade Rule: cache of strategy names that already have OPEN/PAUSED positions
+  const activeTradeNamesRef = useRef<Set<string>>(new Set());
+
+  const refreshActiveTradeNames = useCallback(async () => {
+    try {
+      const res = await fetch('/api/trades');
+      if (res.ok) {
+        const json = await res.json();
+        const trades: { strategy_name: string; status: string }[] = json.trades || [];
+        const activeNames = new Set(
+          trades
+            .filter(t => t.status === 'OPEN' || t.status === 'PAUSED')
+            .map(t => t.strategy_name)
+        );
+        activeTradeNamesRef.current = activeNames;
+      }
+    } catch (err) {
+      console.error('[StrategyEvaluator] Failed to refresh active trade names:', err);
+    }
+  }, []);
+
+  // Fetch on mount + periodically refresh every 30s
   useEffect(() => {
     if (!hasFetchedRef.current) {
       fetchStrategies();
+      refreshActiveTradeNames();
       hasFetchedRef.current = true;
     }
-    const interval = setInterval(fetchStrategies, 30_000);
+    const interval = setInterval(() => {
+      fetchStrategies();
+      refreshActiveTradeNames();
+    }, 30_000);
     return () => clearInterval(interval);
-  }, [fetchStrategies]);
+  }, [fetchStrategies, refreshActiveTradeNames]);
 
   // ── Main Evaluation Loop ────────────────────────────────────────────────
   useEffect(() => {
@@ -290,11 +313,6 @@ export function useStrategyEvaluator() {
 
       setLastMatch(match);
 
-      console.log(`[StrategyEvaluator] ✅ STRATEGY MATCHED: "${strategy.name}"`, {
-        conditions,
-        candleKey,
-      });
-
       // Fire global toast notification (zero latency — direct call)
       if (triggerSmartAlert) {
         triggerSmartAlert(
@@ -308,6 +326,18 @@ export function useStrategyEvaluator() {
       const tp_logic = settings.tp_logic || 'Nearest Order Book Magnet';
       const direction = settings.direction || 'LONG';
       const risk_percent = settings.risk_percent ?? 1.0;
+
+      // V8.5 — One-Trade Rule: abort if this strategy already has an OPEN/PAUSED position
+      if (activeTradeNamesRef.current.has(strategy.name)) {
+        if (triggerSmartAlert) {
+          triggerSmartAlert(
+            'RISK_OVERRIDE' as any,
+            `[SYSTEM: ENTRY_BLOCKED → ${strategy.name}: One-Trade Rule. Close the active position first.]`,
+            '/audio/fvg_alert.mp3'
+          );
+        }
+        continue;
+      }
 
       fetch('/api/trades', {
         method: 'POST',
@@ -335,8 +365,8 @@ export function useStrategyEvaluator() {
             );
           }
         } else {
-          console.log(`[StrategyEvaluator] Trade opened successfully:`, json);
-          // Secondary success notification (Flow state chimes)
+          // Mark strategy as having an active trade in the local cache immediately
+          activeTradeNamesRef.current.add(strategy.name);
           if (triggerSmartAlert) {
             triggerSmartAlert(
               'FLOW_STATE' as any,

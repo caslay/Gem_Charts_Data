@@ -42,6 +42,16 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
   const [alertLabelPositions, setAlertLabelPositions] = useState<{ id: string; y: number; price: number; color: string; status: 'active' | 'triggered' }[]>([]);
   const [hudPulse, setHudPulse] = useState<'BULLISH' | 'BEARISH' | null>(null);
+
+  // V8.6 — FVG Overlay: pixel-mapped anchored rectangles for unmitigated FVG zones
+  const [fvgOverlayBoxes, setFvgOverlayBoxes] = useState<{
+    key: string;
+    top: number;
+    height: number;
+    left: number;
+    width: number;
+    isBullish: boolean;
+  }[]>([]);
   const [hoveredCandle, setHoveredCandle] = useState<{
     open: number;
     high: number;
@@ -56,7 +66,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
 
   const { playSound, playFile } = useAlertSounds();
   const { data: marketContextData, triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert, liveCandle, livePrice, setWsInterval } = useMarketDataContext();
-  
+
   // Load alerts from localStorage on initial client mount
   useEffect(() => {
     try {
@@ -106,9 +116,9 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       // 1. FVG Watcher
       const prevFvgs = prevMetrics.active_fvgs || [];
       const currFvgs = currMetrics.active_fvgs || [];
-      
+
       const prevFvgKeys = new Set(prevFvgs.map(makeFvgKey));
-      
+
       const hasNewFvg = currFvgs.some((fvg: any) => {
         const key = makeFvgKey(fvg);
         return !prevFvgKeys.has(key);
@@ -123,7 +133,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
         }
         if (triggerSmartAlert) {
           const newFvgObj = currFvgs.find((fvg: any) => !prevFvgKeys.has(makeFvgKey(fvg)));
-          const detail = newFvgObj 
+          const detail = newFvgObj
             ? `${newFvgObj.type} FVG on ${newFvgObj.timeframe} [${newFvgObj.bottom.toFixed(2)} - ${newFvgObj.top.toFixed(2)}]`
             : 'New Fair Value Gap formed';
           triggerSmartAlert(
@@ -157,7 +167,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       const currSmts = currMetrics.smt_traps || [];
 
       const prevSmtKeys = new Set(prevSmts.map(makeSmtKey));
-      
+
       const hasNewSmt = currSmts.some((smt: any) => {
         const key = makeSmtKey(smt);
         return !prevSmtKeys.has(key);
@@ -235,7 +245,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
 
       // 7. Liquidity Sweep Watcher
       const sweepKeywords = ['ASIAN_HIGH_SWEPT', 'ASIAN_LOW_SWEPT', 'LONDON_HIGH_SWEPT', 'LONDON_LOW_SWEPT'];
-      const newSweeps = sweepKeywords.filter(keyword => 
+      const newSweeps = sweepKeywords.filter(keyword =>
         currStatus.includes(keyword) && !prevStatus.includes(keyword)
       );
       const isSweepEnabled = signalAlertsEnabled ? signalAlertsEnabled.SWEEP_ALERT !== false : true;
@@ -324,7 +334,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       if (hoverCandle) {
         const referenceVal = livePrice || hoverCandle.c;
         const snapThreshold = referenceVal * 0.0015; // 0.15% threshold for snapping to H/L
-        
+
         if (Math.abs(rawPrice - hoverCandle.h) <= snapThreshold) {
           snapped = hoverCandle.h;
         } else if (Math.abs(rawPrice - hoverCandle.l) <= snapThreshold) {
@@ -674,7 +684,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
         chartRef.current?.timeScale().fitContent();
         isInitialLoad.current = false;
       }
-      
+
       // Update coordinates
       updateAlertPositions();
     }
@@ -728,10 +738,11 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
 
     const handleChartUpdate = () => {
       updateAlertPositions();
+      computeFvgOverlay();
     };
 
     chart.timeScale().subscribeVisibleLogicalRangeChange(handleChartUpdate);
-    
+
     const priceScaleApi = chart.priceScale('right') as any;
     if (priceScaleApi && priceScaleApi.subscribeVisiblePriceRangeChange) {
       priceScaleApi.subscribeVisiblePriceRangeChange(handleChartUpdate);
@@ -745,15 +756,70 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
         priceScaleApi.unsubscribeVisiblePriceRangeChange(handleChartUpdate);
       }
     };
-  }, [alerts, updateAlertPositions]);
+  }, [alerts, updateAlertPositions]); // eslint-disable-next-line react-hooks/exhaustive-deps
+
+  // ── V8.6: FVG Overlay Pixel Calculator (Finite & Anchored) ───────────────
+  const computeFvgOverlay = useCallback(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series || !activeFvgs || activeFvgs.length === 0) {
+      setFvgOverlayBoxes([]);
+      return;
+    }
+
+    const layoutOptions = chart.options()?.layout as any;
+    const timeScaleOptions = chart.timeScale().options() as any;
+    const barSpacing = layoutOptions?.barSpacing ?? timeScaleOptions?.barSpacing ?? 6;
+    const width = 9 * barSpacing;
+
+    const boxes: { key: string; top: number; height: number; left: number; width: number; isBullish: boolean }[] = [];
+
+    for (const fvg of activeFvgs) {
+      // Only render strictly UNMITIGATED zones
+      if (fvg.status !== 'UNMITIGATED') continue;
+
+      const topY = series.priceToCoordinate(fvg.top) as number | null;
+      const bottomY = series.priceToCoordinate(fvg.bottom) as number | null;
+
+      if (topY === null || bottomY === null) continue;
+
+      // Starting X position: anchored to the origin candle timestamp (Candle 1)
+      const timeSec = Math.floor(fvg.origin_time / 1000);
+      const left = chart.timeScale().timeToCoordinate(timeSec as any);
+
+      if (left === null) continue;
+
+      const pixelTop = Math.min(topY, bottomY);
+      const pixelBottom = Math.max(topY, bottomY);
+      const height = pixelBottom - pixelTop;
+
+      if (height <= 0) continue;
+
+      boxes.push({
+        key: `${fvg.timeframe}_${fvg.type}_${fvg.top}_${fvg.bottom}_${fvg.origin_time}`,
+        top: pixelTop,
+        height,
+        left,
+        width,
+        isBullish: fvg.type === 'BULLISH',
+      });
+    }
+
+    setFvgOverlayBoxes(boxes);
+  }, [activeFvgs]);
+
+  // Recompute FVG overlay whenever activeFvgs or historical data updates
+  useEffect(() => {
+    computeFvgOverlay();
+  }, [activeFvgs, data, computeFvgOverlay]);
 
   // ── Phase 2: Live Candle Injection & Snapping Update ─────────────────────
   useEffect(() => {
     if (seriesRef.current && liveCandle) {
       try {
-        console.log('[Chart] Live Candle Time:', liveCandle.time, '| Close:', liveCandle.close);
+        //console.log('[Chart] Live Candle Time:', liveCandle.time, '| Close:', liveCandle.close);
         seriesRef.current.update(liveCandle as any);
-        
+
         // Live price can resize or rescale the chart, sync badges immediately
         updateAlertPositions();
       } catch (error) {
@@ -765,7 +831,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   // ── Phase 3: The Execution Loop & Tick Crossovers ─────────────────────────
   const executeAlert = useCallback((alert: Alert) => {
     console.log('[Chart Component] executeAlert entered for alert:', { id: alert.id, price: alert.price, label: alert.label });
-    
+
     // 1. Instantly flip status in state to prevent double execution
     setAlerts((prevAlerts) =>
       prevAlerts.map((a) => (a.id === alert.id ? { ...a, status: 'triggered' as const } : a))
@@ -826,12 +892,12 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   // Monitor tick-by-tick and bar-by-bar
   useEffect(() => {
     // 1. Resolve current active price (with WebSocket-to-REST fallback)
-    const currentPriceForAlerts = livePrice !== null 
-      ? livePrice 
+    const currentPriceForAlerts = livePrice !== null
+      ? livePrice
       : (data && data.length > 0 ? data[data.length - 1].c : null);
 
     if (currentPriceForAlerts === null) return;
-    
+
     const activeAlerts = alerts.filter((a) => a.status === 'active');
     if (activeAlerts.length === 0) {
       prevPriceRef.current = currentPriceForAlerts;
@@ -839,7 +905,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
     }
 
     const prevPrice = prevPriceRef.current;
-    
+
     console.log('[Chart Component] Tick crossover check:', {
       livePrice,
       fallbackPrice: data && data.length > 0 ? data[data.length - 1].c : null,
@@ -851,7 +917,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
     // A. TOUCH Check (Tick-by-Tick)
     if (prevPrice !== null && prevPrice !== currentPriceForAlerts) {
       const activeTouchAlerts = activeAlerts.filter((a) => a.triggerCondition === 'TOUCH');
-      
+
       activeTouchAlerts.forEach((alert) => {
         const crossedUp = prevPrice < alert.price && currentPriceForAlerts >= alert.price;
         const crossedDown = prevPrice > alert.price && currentPriceForAlerts <= alert.price;
@@ -866,19 +932,19 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
 
     // B. Candle Close Check (CLOSE_ABOVE, CLOSE_BELOW, WICK_PURGE_REJECT)
     // Resolve candle to evaluate: either live kline, or the last historical candle when it is closed
-    const activeCandle = liveCandle 
-      ? liveCandle 
-      : (data && data.length > 0 
-          ? {
-              time: Math.floor(data[data.length - 1].t / 1000),
-              open: data[data.length - 1].o,
-              high: data[data.length - 1].h,
-              low: data[data.length - 1].l,
-              close: data[data.length - 1].c,
-              volume: data[data.length - 1].v,
-              isClosed: true // REST polled candles are by definition completed
-            }
-          : null);
+    const activeCandle = liveCandle
+      ? liveCandle
+      : (data && data.length > 0
+        ? {
+          time: Math.floor(data[data.length - 1].t / 1000),
+          open: data[data.length - 1].o,
+          high: data[data.length - 1].h,
+          low: data[data.length - 1].l,
+          close: data[data.length - 1].c,
+          volume: data[data.length - 1].v,
+          isClosed: true // REST polled candles are by definition completed
+        }
+        : null);
 
     if (activeCandle && activeCandle.isClosed && Number(activeCandle.time) !== lastProcessedClosedTimeRef.current) {
       lastProcessedClosedTimeRef.current = Number(activeCandle.time);
@@ -956,35 +1022,51 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   return (
     <div className="w-full h-full relative group">
       {/* The Chart Canvas container */}
-      <div 
-        ref={chartContainerRef} 
+      <div
+        ref={chartContainerRef}
         className="w-full h-full absolute inset-0 cursor-crosshair"
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         onClick={handleChartClick}
       />
 
+      {/* V8.6 — FVG Zone Overlays (Unmitigated only, finite and anchored) */}
+      {fvgOverlayBoxes.map((box) => (
+        <div
+          key={box.key}
+          className="absolute pointer-events-none z-[1]"
+          style={{
+            top: `${box.top}px`,
+            height: `${box.height}px`,
+            left: `${box.left}px`,
+            width: `${box.width}px`,
+            backgroundColor: box.isBullish ? '#50ffaf' : '#ffb4ab',
+            opacity: 0.2,
+            border: `0.3px solid ${box.isBullish ? '#50ffaf' : '#ffb4ab'}`,
+          }}
+        />
+      ))}
+
       {/* HTML Overlays for Placed Alerts */}
       <div className="absolute right-0 top-0 bottom-0 w-28 pointer-events-none z-10 overflow-hidden">
         {alertLabelPositions.map((pos) => (
           <div
             key={pos.id}
-            className={`absolute right-[56px] pointer-events-auto flex items-center gap-1.5 bg-[#141416]/95 border px-1.5 py-0.5 rounded-sm shadow-xl transition-all duration-150 ${
-              pos.status === 'triggered' ? 'opacity-65 hover:bg-[#141416]/90' : 'hover:bg-[#1c1c1f]'
-            }`}
+            className={`absolute right-[56px] pointer-events-auto flex items-center gap-1.5 bg-[#141416]/95 border px-1.5 py-0.5 rounded-sm shadow-xl transition-all duration-150 ${pos.status === 'triggered' ? 'opacity-65 hover:bg-[#141416]/90' : 'hover:bg-[#1c1c1f]'
+              }`}
             style={{
               top: `${pos.y - 11}px`, // Vertically centered on the price line
               borderColor: pos.color,
             }}
           >
             {/* Color-coded alert moniker */}
-            <span 
+            <span
               className="text-[9px] font-mono font-bold tracking-wider"
               style={{ color: pos.color }}
             >
               {pos.status === 'triggered' ? 'SPENT' : 'ALERT'}
             </span>
-            
+
             {/* High precision monospace price value */}
             <span className="text-[9px] font-mono text-white/80 font-semibold select-none">
               {pos.price.toFixed(2)}
@@ -1001,21 +1083,21 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
               className="p-0.5 text-white/50 hover:text-white transition-colors cursor-pointer rounded-sm hover:bg-white/10"
               title="Alert Settings"
             >
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="2.5" 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
                 className="w-2.5 h-2.5"
               >
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
               </svg>
             </button>
- 
+
             {/* Hover-to-Delete icon */}
             <button
               onClick={(e) => {
@@ -1025,14 +1107,14 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
               className="p-0.5 text-red-400/50 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer rounded-sm"
               title="Delete Alert"
             >
-              <svg 
-                xmlns="http://www.w3.org/2000/svg" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="currentColor" 
-                strokeWidth="2.5" 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
                 className="w-2.5 h-2.5"
               >
                 <polyline points="3 6 5 6 21 6"></polyline>
@@ -1044,7 +1126,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
           </div>
         ))}
       </div>
- 
+
       {/* Top Left HUD - Candle Info */}
       {hudCandle && (
         <div className="absolute top-4 left-4 bg-[#0e0e0f]/80 backdrop-blur-md border border-[#4a4457]/30 px-3 py-1 rounded-none shadow-xl pointer-events-none z-10 flex flex-wrap items-center gap-x-4 gap-y-1 select-none font-mono text-[11px]">
@@ -1114,12 +1196,11 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
 
       {/* HUD Pulse Visual Overlay */}
       {hudPulse && (
-        <div 
-          className={`absolute inset-0 pointer-events-none z-20 border-2 transition-all duration-300 ${
-            hudPulse === 'BULLISH' 
-              ? 'border-[#50ffaf]/60 shadow-[inset_0_0_100px_rgba(80,255,175,0.25)] bg-[#50ffaf]/5' 
-              : 'border-[#ffb4ab]/60 shadow-[inset_0_0_100px_rgba(255,180,171,0.25)] bg-[#ffb4ab]/5'
-          }`}
+        <div
+          className={`absolute inset-0 pointer-events-none z-20 border-2 transition-all duration-300 ${hudPulse === 'BULLISH'
+            ? 'border-[#50ffaf]/60 shadow-[inset_0_0_100px_rgba(80,255,175,0.25)] bg-[#50ffaf]/5'
+            : 'border-[#ffb4ab]/60 shadow-[inset_0_0_100px_rgba(255,180,171,0.25)] bg-[#ffb4ab]/5'
+            }`}
         />
       )}
     </div>
