@@ -158,6 +158,10 @@ const ClosedTradeRow = memo(function ClosedTradeRow({
     ? parseFloat(String((trade as any).roi))
     : null;
 
+  const positionSize = trade.position_size !== undefined && trade.position_size !== null
+    ? parseFloat(String(trade.position_size))
+    : 1.0;
+
   const pnlSign = realizedPnL !== null && realizedPnL > 0 ? "+" : "";
   const roiSign = roi !== null && roi > 0 ? "+" : "";
 
@@ -184,7 +188,10 @@ const ClosedTradeRow = memo(function ClosedTradeRow({
       </td>
 
       <td className="py-4 px-4 font-mono font-bold text-[#e5e2e3]">
-        {trade.symbol}
+        <div>{trade.symbol}</div>
+        <div className="text-[9px] text-[#958da3] font-normal tracking-tight">
+          Size: {positionSize.toFixed(4)} {trade.symbol.replace('.p', '').split('USD')[0] || 'Units'}
+        </div>
       </td>
 
       <td className="py-4 px-4">
@@ -204,7 +211,10 @@ const ClosedTradeRow = memo(function ClosedTradeRow({
       </td>
 
       <td className="py-4 px-4 text-right font-mono text-red-400">
-        {parseFloat(String(trade.stop_loss)).toFixed(2)}
+        <div>{parseFloat(String(trade.stop_loss)).toFixed(2)}</div>
+        <div className="text-[9px] text-[#ff5f5f]/70 font-normal">
+          Risk: ${(trade as any).risk_amount_usd ? parseFloat(String((trade as any).risk_amount_usd)).toFixed(2) : (Math.abs(parseFloat(String(trade.entry_price)) - parseFloat(String(trade.stop_loss))) * positionSize).toFixed(2)}
+        </div>
       </td>
 
       <td className="py-4 px-4 text-right font-mono text-emerald-400">
@@ -303,7 +313,9 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
       ? (livePrice - entryPrice) * positionSize
       : (entryPrice - livePrice) * positionSize;
 
-    roiPercentage = (unrealizedPnL / (entryPrice * positionSize)) * 100;
+    const rawRiskAmountUsd = (trade as any).risk_amount_usd !== undefined && (trade as any).risk_amount_usd !== null ? parseFloat(String((trade as any).risk_amount_usd)) : 0;
+    const riskAmountUsd = rawRiskAmountUsd > 0 ? rawRiskAmountUsd : Math.abs(entryPrice - stopLoss) * positionSize;
+    roiPercentage = riskAmountUsd > 0 ? (unrealizedPnL / riskAmountUsd) * 100 : 0;
   }
 
   // Handle active price updates and pulse animation
@@ -364,7 +376,10 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
       </td>
 
       <td className="py-4 px-4 font-mono font-bold text-[#e5e2e3]">
-        {trade.symbol}
+        <div>{trade.symbol}</div>
+        <div className="text-[9px] text-[#958da3] font-normal tracking-tight">
+          Size: {positionSize.toFixed(4)} {trade.symbol.replace('.p', '').split('USD')[0] || 'Units'}
+        </div>
       </td>
 
       <td className="py-4 px-4">
@@ -384,7 +399,10 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
       </td>
 
       <td className="py-4 px-4 text-right font-mono text-red-400">
-        {parseFloat(String(trade.stop_loss)).toFixed(2)}
+        <div>{parseFloat(String(trade.stop_loss)).toFixed(2)}</div>
+        <div className="text-[9px] text-[#ff5f5f]/70 font-normal">
+          Risk: ${(trade as any).risk_amount_usd ? parseFloat(String((trade as any).risk_amount_usd)).toFixed(2) : (Math.abs(entryPrice - stopLoss) * positionSize).toFixed(2)}
+        </div>
       </td>
 
       <td className="py-4 px-4 text-right font-mono text-emerald-400">
