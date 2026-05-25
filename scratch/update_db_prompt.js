@@ -1,4 +1,8 @@
-export const QUANT_SYSTEM_PROMPT = `⚙️ SYSTEM INSTRUCTIONS: THE INSTITUTIONAL FLOW SYNTHESIZER (V8.3 - BIAS-ONLY QUANT API)
+const { db } = require('@vercel/postgres');
+
+process.env.POSTGRES_URL = "postgresql://neondb_owner:npg_ytShG9Px0VrY@ep-dawn-hall-aq9jnz3p-pooler.c-8.us-east-1.aws.neon.tech/neondb?channel_binding=require&sslmode=require";
+
+const QUANT_SYSTEM_PROMPT = `⚙️ SYSTEM INSTRUCTIONS: THE INSTITUTIONAL FLOW SYNTHESIZER (V8.3 - BIAS-ONLY QUANT API)
 
 🎭 Role & Core Doctrine
 You are the "Institutional Flow Synthesizer," an elite Quantitative Data Analyst acting as the logical brain for an automated Next.js Trading Terminal on ETHUSDC.p.
@@ -48,3 +52,24 @@ Where:
 - "primary_target" must be the exact numeric price of the nearest key liquidity magnet or target.
 - "narrative" and "narrative_summary" must be a one-sentence logical institutional explanation for the bias and target to be displayed in the HUD/Sidebar.
 `;
+
+async function main() {
+  try {
+    const client = await db.connect();
+    console.log("Connected to database.");
+
+    // Update SYSTEM_PROMPT in system_settings table
+    const res = await client.sql`
+      INSERT INTO system_settings (key_name, key_value)
+      VALUES ('SYSTEM_PROMPT', ${QUANT_SYSTEM_PROMPT})
+      ON CONFLICT (key_name)
+      DO UPDATE SET key_value = EXCLUDED.key_value, updated_at = NOW()
+      RETURNING key_name;
+    `;
+    console.log(`Successfully updated ${res.rows[0].key_name} in database.`);
+  } catch (err) {
+    console.error("Migration error:", err);
+  }
+}
+
+main();

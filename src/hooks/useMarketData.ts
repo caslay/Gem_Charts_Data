@@ -458,12 +458,14 @@ export function useMarketData(selectedInterval: string = '5m') {
   );
 
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [aiBias, setAiBias] = useState<number | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const triggerAiAnalysisScan = useCallback(async (alertMetadata?: unknown) => {
     if (!data) return;
     setIsAnalyzing(true);
     setAiAnalysis(null);
+    setAiBias(null);
  
     // Create the pruned AI payload to prevent "Lost in the Middle" syndrome
     const ai_payload = {
@@ -487,6 +489,25 @@ export function useMarketData(selectedInterval: string = '5m') {
       const result = await response.json();
       if (response.ok) {
         setAiAnalysis(result.analysis);
+        try {
+          // Robust extraction of bias_signal
+          let candidate = result.analysis.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)?.[1];
+          if (!candidate) {
+            const start = result.analysis.indexOf('{');
+            const end = result.analysis.lastIndexOf('}');
+            if (start !== -1 && end !== -1 && end > start) {
+              candidate = result.analysis.slice(start, end + 1);
+            } else {
+              candidate = result.analysis;
+            }
+          }
+          const parsed = JSON.parse(candidate.trim());
+          if (parsed && parsed.bias_signal !== undefined) {
+            setAiBias(Number(parsed.bias_signal));
+          }
+        } catch (e) {
+          console.error('[MarketData] Failed to parse bias_signal from AI response:', e);
+        }
       } else {
         setAiAnalysis(`**Error:** ${result.error || 'Synthesis failed.'}`);
       }
@@ -510,6 +531,7 @@ export function useMarketData(selectedInterval: string = '5m') {
     dismissAlert,
     triggerSmartAlert: triggerAlert,
     aiAnalysis,
+    aiBias,
     isAnalyzing,
     setAiAnalysis,
     triggerAiAnalysisScan,

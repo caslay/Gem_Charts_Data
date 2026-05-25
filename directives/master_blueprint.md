@@ -106,6 +106,33 @@
 
 ---
 
+## 🆕 V10.4 Changelog — AI Output Schema Redefinition & Custom Strategy Integration (Completed)
+
+### 1. Bias-Only AI Analyst Microservice
+- **Restructured Prompting System:** Redefined the quantitative prompt (`src/lib/aiSystemPrompt.ts`) to restrict the generative AI analyst's response output strictly to a lean, bias-only JSON schema containing `"bias_signal"` (`1`, `-1`, or `0`), `"bias_label"` (`"BULLISH"`, `"BEARISH"`, or `"NEUTRAL"`), `"primary_target"`, `"narrative"`, and `"narrative_summary"`.
+- **Database Vault Synchronization:** Built and successfully executed a PostgreSQL migration script (`scratch/update_db_prompt.js`) that updated and synchronized the `SYSTEM_PROMPT` key inside the Neon database `system_settings` table. This allows the live Next.js API scanner to immediately pick up the prompt updates and return correct JSON structures.
+
+### 2. Global Context Integration
+- **Hook State Tracking:** Integrated an `aiBias` state (`number | null`) in `useMarketData.ts` and set it dynamically inside the live analysis parser.
+- ** Hoisted Context Sharing:** Exposed `aiBias` globally in `MarketDataContext.tsx` as a member of `MarketDataContextValue` inherited automatically via `ReturnType<typeof useMarketData>`, allowing any frontend child component or quantitative hook to consume it.
+
+### 3. Custom Strategy Builder Integration
+- **Logical Builder Variables:** Registered `"AI_DAILY_BIAS"` inside `EquationBuilder.tsx` as a premium enum-type custom strategy builder metric.
+- **Custom Operator Restrictions:** Configured `getOperatorsForMetric` to restrict the allowable logical operator to `EQUALS` (`==`) only, mapping the options strictly to `["BULLISH", "BEARISH", "NEUTRAL"]`.
+
+### 4. Custom Strategy Evaluator Linkage
+- **Real-Time Context Binding:** Updated the `useStrategyEvaluator.ts` hook to retrieve the global `aiBias` state from the global context provider.
+- **Evaluation Engine Resolution:** Injected `aiBias` into `evaluateStrategy`, `evaluateCondition`, and `resolveMetric` parameters, and implemented a custom case block for `AI_DAILY_BIAS` resolving the matching condition state (`BULLISH` when `aiBias === 1`, `BEARISH` when `aiBias === -1`, and `NEUTRAL` when `aiBias === 0`).
+
+### 5. High-Contrast HUD Console Rendering
+- **Dual Schema Support:** Refactored the parsing block in `Sidebar.tsx` to handle the new V8.3 Bias-only JSON schema gracefully while maintaining backwards compatibility with legacy diagnostic/execution structures.
+- **Console Dispatch Mapping:** Successfully mapped `bias_signal`, `bias_label`, and `primary_target` into `hudData`, and mapped the one-sentence `narrative_summary` into the `aiNote` visual display on both the Sidebar and the dispatch HUD modal.
+
+### 6. Production Compilation Soundness
+- **TypeScript & Bundler Verification:** Successfully executed a full production build (`npm run build`) resulting in successful static page generation, complete TypeScript compiler type checks in `3.5s`, and Turbopack builds with zero compiler warnings or bundle errors.
+
+---
+
 ## 🆕 V9.9 Changelog — Unified Visual Overhaul for Settings, Backtest, and Compounding (Completed)
 
 ### 1. Standalone Settings Page Overhaul (`/settings/page.tsx`)

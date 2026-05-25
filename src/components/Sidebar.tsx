@@ -122,6 +122,17 @@ export default function Sidebar({
         if (parsedAiResponse.narrative) {
           aiNote = { title: '💡 AI Quant Note', text: parsedAiResponse.narrative };
         }
+      } else if (parsedAiResponse && (parsedAiResponse.bias_signal !== undefined || parsedAiResponse.bias_label !== undefined)) {
+        // Support new "Bias-only" output schema
+        hudData = {
+          BIAS_SIGNAL: parsedAiResponse.bias_signal,
+          BIAS_LABEL: parsedAiResponse.bias_label,
+          PRIMARY_TARGET: parsedAiResponse.primary_target
+        };
+        const narrativeText = parsedAiResponse.narrative_summary || parsedAiResponse.narrative || '';
+        if (narrativeText) {
+          aiNote = { title: '💡 AI Quant Bias Narrative', text: narrativeText };
+        }
       }
 
       if (Array.isArray(parsedAiResponse?.tradingview_alerts)) {
