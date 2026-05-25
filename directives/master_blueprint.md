@@ -6,6 +6,13 @@
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 52+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
 
+## 🆕 V10.2 Changelog — Workspace Secret Sanitation & Push Protection (Completed)
+
+### 1. Repository Secrets Sanitation & Clean Git Push
+- **Walkthrough Cleanup:** Safely removed an accidental Figma Personal Access Token leak from the bottom of `plans/walkthrough.md`.
+- **Git History Amending:** Amended the latest commit (`74e8667`) in the local `dev` branch to rewrite the commit tree with the sanitized walkthrough file, preventing secret scanning blocks.
+- **Successful Branch Sync:** Successfully pushed the clean `dev` branch to `origin dev:dev`, bypassing the GitHub Push Protection gate.
+
 ---
 
 ## 🆕 V10.1 Changelog — Phase 4 Visual Overhauls: Price Alerts & System Command Center (Completed)
