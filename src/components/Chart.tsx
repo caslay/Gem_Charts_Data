@@ -9,6 +9,7 @@ import SettingsModal, { Alert } from './modals/SettingsModal';
 import { AlertSound, useAlertSounds } from '@/hooks/useAlertSounds';
 import { useMarketDataContext } from '@/context/MarketDataContext';
 import { Volume2 } from 'lucide-react';
+import { useTheme } from 'next-themes';
 
 interface ChartProps {
   data: Candle[];
@@ -25,6 +26,7 @@ interface ChartProps {
 }
 
 export default function Chart({ data, activeFvgs, localDealingRange, interval = '5m', colors }: ChartProps) {
+  const { theme } = useTheme();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -65,7 +67,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   const [settingsModalTab, setSettingsModalTab] = useState<'price' | 'signal'>('price');
 
   const { playSound, playFile } = useAlertSounds();
-  const { data: marketContextData, triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert, liveCandle, livePrice, setWsInterval } = useMarketDataContext();
+  const { data: marketContextData, triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert, liveCandle, livePrice, setWsInterval, themeSettings } = useMarketDataContext();
 
   const smtContext = marketContextData?.ipda_metrics?.smt_context;
   const hasMicroDivergence = 
@@ -323,9 +325,10 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
     setWsInterval(interval as any);
   }, [interval, setWsInterval]);
 
+  const isDark = theme === 'dark';
   const {
-    upColor = '#50ffaf', // Cyan accent
-    downColor = '#ffb4ab', // Purple accent
+    upColor = isDark ? (themeSettings?.dark_up_candle || '#50ffaf') : (themeSettings?.light_up_candle || '#059669'),
+    downColor = isDark ? (themeSettings?.dark_down_candle || '#ffb4ab') : (themeSettings?.light_down_candle || '#e11d48'),
   } = colors || {};
 
   // ── Snapping & Color Logic ────────────────────────────────────────────────
@@ -668,6 +671,66 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
     };
   }, [colors, upColor, downColor]);
 
+  // ── Sync Chart Colors with Theme and Custom ThemeSettings ────────────────
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const isDark = theme === 'dark';
+    const bg = isDark 
+      ? (themeSettings?.dark_bg || '#020617') 
+      : (themeSettings?.light_bg || '#fafafa');
+    const text = isDark ? '#94a3b8' : '#475569';
+    const grid = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
+    
+    // Crosshair matches dynamic accent color
+    const crosshairColor = isDark
+      ? (themeSettings?.dark_accent || '#a855f7')
+      : (themeSettings?.light_accent || '#4f46e5');
+
+    const upCandleColor = isDark 
+      ? (themeSettings?.dark_up_candle || '#50ffaf') 
+      : (themeSettings?.light_up_candle || '#059669');
+      
+    const downCandleColor = isDark 
+      ? (themeSettings?.dark_down_candle || '#ffb4ab') 
+      : (themeSettings?.light_down_candle || '#e11d48');
+
+    chart.applyOptions({
+      layout: {
+        background: { type: ColorType.Solid, color: bg },
+        textColor: text,
+      },
+      grid: {
+        vertLines: { color: grid },
+        horzLines: { color: grid },
+      },
+      timeScale: {
+        borderColor: grid,
+      },
+      rightPriceScale: {
+        borderColor: grid,
+      },
+      crosshair: {
+        vertLine: {
+          color: crosshairColor,
+        },
+        horzLine: {
+          color: crosshairColor,
+        },
+      },
+    });
+
+    if (seriesRef.current) {
+      seriesRef.current.applyOptions({
+        upColor: upCandleColor,
+        downColor: downCandleColor,
+        wickUpColor: upCandleColor,
+        wickDownColor: downCandleColor,
+      });
+    }
+  }, [theme, themeSettings]);
+
   // ── Sync Historical Data & Markers ───────────────────────────────────────
   useEffect(() => {
     if (seriesRef.current && data && data.length > 0) {
@@ -683,7 +746,8 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       seriesRef.current.setData(formattedData);
 
       const sortedDataForMarkers = [...data].sort((a, b) => a.t - b.t);
-      const markers = generateVolumetricMarkers(sortedDataForMarkers);
+      const isDark = theme === 'dark';
+      const markers = generateVolumetricMarkers(sortedDataForMarkers, isDark);
       seriesMarkersRef.current?.setMarkers(markers);
 
       if (isInitialLoad.current) {
@@ -694,7 +758,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       // Update coordinates
       updateAlertPositions();
     }
-  }, [data]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, theme]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // ── Sync Active Alerts with Price Lines ───────────────────────────────────
   useEffect(() => {

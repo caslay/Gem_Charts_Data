@@ -1,20 +1,27 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-inter",
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
-  title: "Flow-State Quant Engine V8.2",
-  description: "Flow-State Quant Engine V8.2",
+  title: "Flow-State Quant Engine V9.0",
+  description: "Flow-State Quant Engine V9.0",
 };
 import { NavigationHeader } from "@/components/NavigationHeader";
 import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/components/AuthProvider";
 import { MarketDataProvider } from "@/context/MarketDataContext";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import ThemeSync from "@/components/ThemeSync";
 
 export default function RootLayout({
   children,
@@ -22,17 +29,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.variable} font-sans antialiased bg-black text-white`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground transition-colors duration-300`}
       >
-        <AuthProvider>
-          <MarketDataProvider>
-            <NavigationHeader />
-            <main>{children}</main>
-            <Analytics />
-          </MarketDataProvider>
-        </AuthProvider>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+          <AuthProvider>
+            <MarketDataProvider>
+              <ThemeSync />
+              <NavigationHeader />
+              <main>{children}</main>
+              <Analytics />
+            </MarketDataProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

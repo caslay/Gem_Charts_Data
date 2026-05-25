@@ -18,3 +18,4 @@ I have successfully corrected the workspace mix-up by separating the projects in
 > You now have a clean slate in `crypto-dashboard` to add your intended code and commit it with your new GitHub account!
 
 Your V6 Market Visualizer project is now correctly isolated inside `Gem_Charts_Data`.
+

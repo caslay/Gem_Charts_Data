@@ -9,7 +9,7 @@ export interface MarkerCandle {
   v: number;
 }
 
-export function generateVolumetricMarkers(candles: MarkerCandle[]) {
+export function generateVolumetricMarkers(candles: MarkerCandle[], isDark: boolean = true) {
   const markers: SeriesMarker<any>[] = [];
 
   // Iterate through candles (need at least 3 to check a swing)
@@ -49,20 +49,20 @@ export function generateVolumetricMarkers(candles: MarkerCandle[]) {
     const markerTime = mid.t.toString().length > 10 ? Math.floor(mid.t / 1000) : mid.t;
 
     if (isDirVolIncrease) {
-      // SPECIAL SIGNAL (White) - Institutional Sponsorship
+      // SPECIAL SIGNAL (White in Dark, Black in Light) - Institutional Sponsorship
       markers.push({
         time: markerTime as any,
         position: isValidBullishShift ? 'belowBar' : 'aboveBar',
-        color: '#ffffff', // White
+        color: isDark ? '#ffffff' : '#000000',
         shape: isValidBullishShift ? 'arrowUp' : 'arrowDown',
         text: '', // 'Special',
       });
     } else if (isRawVolIncrease) {
-      // NORMAL SIGNAL - SMT Trap / Sweep
+      // NORMAL SIGNAL - SMT Trap / Sweep (Neon Cyan/Orange in Dark, Indigo in Light)
       markers.push({
         time: markerTime as any,
         position: isValidBullishShift ? 'belowBar' : 'aboveBar',
-        color: isValidBullishShift ? '#00bcd4' : '#ff9800', // Cyan for Lows, Orange for Highs
+        color: isDark ? (isValidBullishShift ? '#00bcd4' : '#ff9800') : '#4f46e5',
         shape: 'circle',
         text: '', //'Vol',
       });

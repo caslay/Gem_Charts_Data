@@ -15,6 +15,14 @@ import { sql } from "@vercel/postgres";
 // Helper to ensure database table is created dynamically (self-healing architecture)
 async function initTables() {
   await sql`
+    CREATE TABLE IF NOT EXISTS system_settings (
+      id SERIAL PRIMARY KEY,
+      key_name VARCHAR(255) UNIQUE NOT NULL,
+      key_value TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `;
+  await sql`
     CREATE TABLE IF NOT EXISTS terminal_settings (
       id SERIAL PRIMARY KEY,
       user_id VARCHAR(255) UNIQUE NOT NULL,

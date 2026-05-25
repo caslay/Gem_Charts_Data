@@ -1,31 +1,137 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Light Mode (Zinc-50, Slate-950 text, Indigo accents) */
+  --background: #fafafa;
+  --foreground: #020617;
+  --card: rgba(255, 255, 255, 0.75);
+  --accent: #4f46e5;
+  --card-border: color-mix(in srgb, var(--accent) 8%, transparent);
+  --accent-foreground: #ffffff;
+  --muted: #475569;
+  --muted-foreground: #94a3b8;
+  
+  --chart-bg: #fafafa;
+  --chart-grid: rgba(15, 23, 42, 0.04);
+  --chart-text: #475569;
+  
+  --up-candle: #059669;
+  --down-candle: #e11d48;
+  
+  --font-geist-sans: var(--font-geist-sans);
+}
+
+.dark {
+  /* Dark Mode (Deep Obsidian #020617, Slate-900 cards, Purple/Green accents) */
+  --background: #020617;
+  --foreground: #f8fafc;
+  --card: #0f172a;
+  --accent: #a855f7; /* Neon Purple */
+  --card-border: color-mix(in srgb, var(--accent) 15%, transparent);
+  --accent-foreground: #ffffff;
+  --muted: #94a3b8;
+  --muted-foreground: #475569;
+  
+  --chart-bg: #020617;
+  --chart-grid: rgba(255, 255, 255, 0.05);
+  --chart-text: #94a3b8;
+  
+  --up-candle: #50ffaf;
+  --down-candle: #ffb4ab;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-border: var(--card-border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-up-candle: var(--up-candle);
+  --color-down-candle: var(--down-candle);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  
+  /* Phase 2 Dynamic Customizer Colors */
+  --color-btn-default: var(--btn-default);
+  --color-btn-active: var(--btn-active);
+  --color-btn-hover: var(--btn-hover);
+  --color-text-title: var(--text-title);
+  --color-text-label: var(--text-label);
+  --color-text-value: var(--text-value);
+  --color-highlight-up: var(--highlight-up);
+  --color-highlight-down: var(--highlight-down);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* ── Custom range slider (AI Context Window) ─────────────────────────────── */
+/* Glassmorphism & Visual overhaul components */
+.glass-panel {
+  background: var(--card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--card-border);
+  border-radius: 1rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Custom premium glow shadow inside dark mode */
+.dark .glass-panel {
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4), 
+              0 0 15px rgba(168, 85, 247, 0.03);
+}
+
+.dark .glass-panel:hover {
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5), 
+              0 0 25px rgba(168, 85, 247, 0.06);
+  border-color: rgba(168, 85, 247, 0.25);
+}
+
+/* Light mode card shadow */
+.glass-panel {
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.02),
+              0 1px 3px rgba(15, 23, 42, 0.03);
+}
+
+.glass-panel:hover {
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04),
+              0 1px 5px rgba(15, 23, 42, 0.04);
+  border-color: rgba(79, 70, 229, 0.2);
+}
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* Custom range slider (AI Context Window) */
 input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
@@ -40,9 +146,9 @@ input[type='range']::-webkit-slider-thumb {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #22d3ee, #3b82f6);
+  background: linear-gradient(135deg, var(--accent), #6366f1);
   border: 2px solid rgba(255,255,255,0.2);
-  box-shadow: 0 0 10px rgba(34,211,238,0.5);
+  box-shadow: 0 0 10px rgba(79, 70, 229, 0.4);
   cursor: pointer;
   transition: box-shadow 0.2s, transform 0.2s;
   position: relative;
@@ -50,7 +156,7 @@ input[type='range']::-webkit-slider-thumb {
 }
 
 input[type='range']::-webkit-slider-thumb:hover {
-  box-shadow: 0 0 18px rgba(34,211,238,0.8);
+  box-shadow: 0 0 18px rgba(79, 70, 229, 0.7);
   transform: scale(1.15);
 }
 
@@ -58,9 +164,9 @@ input[type='range']::-moz-range-thumb {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #22d3ee, #3b82f6);
+  background: linear-gradient(135deg, var(--accent), #6366f1);
   border: 2px solid rgba(255,255,255,0.2);
-  box-shadow: 0 0 10px rgba(34,211,238,0.5);
+  box-shadow: 0 0 10px rgba(79, 70, 229, 0.4);
   cursor: pointer;
   transition: box-shadow 0.2s, transform 0.2s;
 }
@@ -68,18 +174,19 @@ input[type='range']::-moz-range-thumb {
 input[type='range']::-webkit-slider-runnable-track {
   height: 8px;
   border-radius: 9999px;
+  background: var(--card-border);
 }
 
 input[type='range']::-moz-range-track {
   height: 8px;
   border-radius: 9999px;
-  background: rgba(255,255,255,0.1);
+  background: var(--card-border);
 }
 
-/* ── Real-Time P&L & Simulated Exit Animations (V8.3) ─────────────────────── */
+/* Animations for ticks & flashes */
 @keyframes tick-flash-green {
   0% {
-    background-color: rgba(80, 255, 175, 0.18);
+    background-color: rgba(80, 255, 175, 0.25);
   }
   100% {
     background-color: transparent;
@@ -88,7 +195,7 @@ input[type='range']::-moz-range-track {
 
 @keyframes tick-flash-red {
   0% {
-    background-color: rgba(255, 95, 95, 0.18);
+    background-color: rgba(255, 95, 95, 0.25);
   }
   100% {
     background-color: transparent;
@@ -100,7 +207,7 @@ input[type='range']::-moz-range-track {
     background-color: rgba(80, 255, 175, 0.02);
   }
   50% {
-    background-color: rgba(80, 255, 175, 0.07);
+    background-color: rgba(80, 255, 175, 0.08);
   }
 }
 
@@ -109,7 +216,7 @@ input[type='range']::-moz-range-track {
     background-color: rgba(255, 95, 95, 0.02);
   }
   50% {
-    background-color: rgba(255, 95, 95, 0.07);
+    background-color: rgba(255, 95, 95, 0.08);
   }
 }
 
@@ -131,5 +238,199 @@ input[type='range']::-moz-range-track {
   animation: simulated-exit-pulse-red 2s infinite ease-in-out;
   border-top-color: rgba(255, 95, 95, 0.3) !important;
   border-bottom-color: rgba(255, 95, 95, 0.3) !important;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   DYNAMIC PRESETS GLOBAL CASCADE OVERRIDES (PHASE 2)
+   Split into explicit LIGHT and DARK theme blocks so each theme resolves its
+   own CSS variables (set by ThemeSync into :root and .dark respectively).
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* ═══════════════════════════════════════════════════════════
+   LIGHT THEME OVERRIDES  (applies when .dark is NOT on <html>)
+   ═══════════════════════════════════════════════════════════ */
+
+/* Typography & Headings — Light */
+:root h1, :root h2, :root h3, :root h4, :root h5, :root h6,
+html:not(.dark) h1, html:not(.dark) h2, html:not(.dark) h3,
+html:not(.dark) h4, html:not(.dark) h5, html:not(.dark) h6,
+html:not(.dark) .text-title,
+html:not(.dark) .text-zinc-100,
+html:not(.dark) .text-slate-900,
+html:not(.dark) .text-slate-100 {
+  color: var(--text-title) !important;
+}
+
+/* Labels & Low-Contrast Text — Light */
+html:not(.dark) .text-muted,
+html:not(.dark) .text-slate-500,
+html:not(.dark) .text-zinc-500,
+html:not(.dark) .text-slate-600,
+html:not(.dark) .text-zinc-400 {
+  color: var(--text-label) !important;
+}
+
+/* Value Metrics & Normal Text — Light */
+html:not(.dark) .text-foreground,
+html:not(.dark) .text-slate-200 {
+  color: var(--text-value) !important;
+}
+
+/* Bullish (Green) Highlights — Light */
+html:not(.dark) .text-emerald-500,
+html:not(.dark) .text-emerald-400,
+html:not(.dark) .text-emerald-600,
+html:not(.dark) .text-\[\#50ffaf\],
+html:not(.dark) .text-green-500 {
+  color: var(--highlight-up) !important;
+}
+html:not(.dark) .bg-emerald-500\/10,
+html:not(.dark) .bg-\[\#50ffaf\]\/10,
+html:not(.dark) .bg-emerald-500\/5 {
+  background-color: color-mix(in srgb, var(--highlight-up) 10%, transparent) !important;
+  border-color:     color-mix(in srgb, var(--highlight-up) 20%, transparent) !important;
+}
+
+/* Bearish (Red) Highlights — Light */
+html:not(.dark) .text-rose-500,
+html:not(.dark) .text-rose-400,
+html:not(.dark) .text-rose-600,
+html:not(.dark) .text-\[\#ffb4ab\],
+html:not(.dark) .text-red-500 {
+  color: var(--highlight-down) !important;
+}
+html:not(.dark) .bg-rose-500\/10,
+html:not(.dark) .bg-\[\#ffb4ab\]\/10,
+html:not(.dark) .bg-rose-500\/5 {
+  background-color: color-mix(in srgb, var(--highlight-down) 10%, transparent) !important;
+  border-color:     color-mix(in srgb, var(--highlight-down) 20%, transparent) !important;
+}
+
+/* Default Interactive (links, buttons, icons) — Light */
+html:not(.dark) a:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500),
+html:not(.dark) button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(.bg-background),
+html:not(.dark) .text-muted-link,
+html:not(.dark) .lucide:not(.text-accent) {
+  color: var(--btn-default) !important;
+}
+
+/* Hover State — Light */
+html:not(.dark) a:hover,
+html:not(.dark) button:hover:not(:disabled),
+html:not(.dark) .hover\:text-foreground:hover,
+html:not(.dark) .hover\:text-white:hover {
+  color: var(--btn-hover) !important;
+}
+
+/* Active / Accent State — Light */
+html:not(.dark) .bg-accent,
+html:not(.dark) .accent-accent {
+  background-color: var(--btn-active) !important;
+  border-color:     var(--btn-active) !important;
+}
+html:not(.dark) .text-accent,
+html:not(.dark) .hover\:text-accent:hover,
+html:not(.dark) .group-hover\:text-\[\#50ffaf\]:hover {
+  color: var(--btn-active) !important;
+}
+html:not(.dark) .border-accent,
+html:not(.dark) .border-card-border:hover,
+html:not(.dark) .focus\:border-accent:focus,
+html:not(.dark) .border-l-accent {
+  border-color: var(--btn-active) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DARK THEME OVERRIDES  (applies when .dark IS on <html>)
+   ═══════════════════════════════════════════════════════════ */
+
+/* Typography & Headings — Dark */
+.dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6,
+.dark .text-title,
+.dark .text-white,
+.dark .text-zinc-100,
+.dark .text-slate-900,
+.dark .text-slate-100 {
+  color: var(--text-title) !important;
+}
+
+/* Labels & Low-Contrast Text — Dark */
+.dark .text-muted,
+.dark .text-slate-500,
+.dark .text-zinc-500,
+.dark .text-slate-600,
+.dark .text-zinc-400 {
+  color: var(--text-label) !important;
+}
+
+/* Value Metrics & Normal Text — Dark */
+.dark .text-foreground,
+.dark .text-zinc-100,
+.dark .text-slate-200 {
+  color: var(--text-value) !important;
+}
+
+/* Bullish (Green) Highlights — Dark */
+.dark .text-emerald-500,
+.dark .text-emerald-400,
+.dark .text-emerald-600,
+.dark .text-\[\#50ffaf\],
+.dark .text-green-500 {
+  color: var(--highlight-up) !important;
+}
+.dark .bg-emerald-500\/10,
+.dark .bg-\[\#50ffaf\]\/10,
+.dark .bg-emerald-500\/5 {
+  background-color: color-mix(in srgb, var(--highlight-up) 10%, transparent) !important;
+  border-color:     color-mix(in srgb, var(--highlight-up) 20%, transparent) !important;
+}
+
+/* Bearish (Red) Highlights — Dark */
+.dark .text-rose-500,
+.dark .text-rose-400,
+.dark .text-rose-600,
+.dark .text-\[\#ffb4ab\],
+.dark .text-red-500 {
+  color: var(--highlight-down) !important;
+}
+.dark .bg-rose-500\/10,
+.dark .bg-\[\#ffb4ab\]\/10,
+.dark .bg-rose-500\/5 {
+  background-color: color-mix(in srgb, var(--highlight-down) 10%, transparent) !important;
+  border-color:     color-mix(in srgb, var(--highlight-down) 20%, transparent) !important;
+}
+
+/* Default Interactive (links, buttons, icons) — Dark */
+.dark a:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500),
+.dark button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(.bg-background),
+.dark .text-muted-link,
+.dark .lucide:not(.text-accent) {
+  color: var(--btn-default) !important;
+}
+
+/* Hover State — Dark */
+.dark a:hover,
+.dark button:hover:not(:disabled),
+.dark .hover\:text-foreground:hover,
+.dark .hover\:text-white:hover {
+  color: var(--btn-hover) !important;
+}
+
+/* Active / Accent State — Dark */
+.dark .bg-accent,
+.dark .accent-accent {
+  background-color: var(--btn-active) !important;
+  border-color:     var(--btn-active) !important;
+}
+.dark .text-accent,
+.dark .hover\:text-accent:hover,
+.dark .group-hover\:text-\[\#50ffaf\]:hover {
+  color: var(--btn-active) !important;
+}
+.dark .border-accent,
+.dark .border-card-border:hover,
+.dark .focus\:border-accent:focus,
+.dark .border-l-accent {
+  border-color: var(--btn-active) !important;
 }
 

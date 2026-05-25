@@ -9,9 +9,23 @@ import SettingsModal from '@/components/modals/SettingsModal';
 import { Loader2, Menu, Settings } from 'lucide-react';
 import { useStrategyEvaluator } from '@/hooks/useStrategyEvaluator';
 import TimeframeSwitcher, { Timeframe } from '@/components/TimeframeSwitcher';
+import { LiveTicker } from '@/components/LiveTicker';
 
 export default function Home() {
-  const { data, isLoading, error, refetch, downloadV6, downloadV7Sliced, activeAlerts, dismissAlert, setWsInterval } = useMarketDataContext();
+  const {
+    data,
+    isLoading,
+    error,
+    refetch,
+    downloadV6,
+    downloadV7Sliced,
+    activeAlerts,
+    dismissAlert,
+    setWsInterval,
+    livePrice,
+    aiAnalysis
+  } = useMarketDataContext();
+
   const [selectedInterval, setSelectedInterval] = useState<Timeframe>('5m');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSoundSettingsOpen, setIsSoundSettingsOpen] = useState(false);
@@ -39,36 +53,51 @@ export default function Home() {
 
   const currentPrice = data?.data_payload?.candles_5m?.slice(-1)[0]?.c ?? null;
 
+  // ── Parse AI analysis response for the HUD Bar ──────────────────────────────
+  let parsedAiResponse: any = null;
+  let masterBias = 'NEUTRAL';
+  if (aiAnalysis) {
+    try {
+      let candidate = aiAnalysis.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)?.[1];
+      if (!candidate) {
+        const start = aiAnalysis.indexOf('{');
+        const end = aiAnalysis.lastIndexOf('}');
+        if (start !== -1 && end !== -1 && end > start) {
+          candidate = aiAnalysis.slice(start, end + 1);
+        } else {
+          candidate = aiAnalysis;
+        }
+      }
+      parsedAiResponse = JSON.parse(candidate.trim());
+      masterBias = parsedAiResponse?.diagnostics?.master_bias || 'NEUTRAL';
+    } catch (e) {
+      console.error('[Home] Failed to parse AI Analysis JSON for Master Bias:', e);
+    }
+  }
+
+  const pricing = data?.ipda_metrics?.current_pricing || 'SCANNING';
+  const targetStatus = data?.ipda_metrics?.target_status || 'PENDING';
+
   return (
-    <main className="flex h-[calc(100vh-64px)] w-full bg-[#0e0e0f] overflow-hidden selection:bg-[#d1bcff]/30 font-sans">
+    <main className="flex h-[calc(100vh-56px)] w-full bg-background overflow-hidden selection:bg-accent/30 font-sans transition-colors duration-300">
       {/* ── Left / Main column ─────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col relative min-w-0">
         {/* Alerts UI Floating overlay */}
         <SmartAlertsToast activeAlerts={activeAlerts || []} dismissAlert={dismissAlert} />
 
         {/* Background glow effects */}
-        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#d1bcff]/20 blur-[120px] pointer-events-none" />
-        <div className="absolute bottom-[-10%] right-[10%] w-[40%] h-[40%] rounded-full bg-purple-900/20 blur-[120px] pointer-events-none" />
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-accent/10 blur-[120px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] right-[10%] w-[40%] h-[40%] rounded-full bg-purple-900/10 blur-[120px] pointer-events-none" />
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
-        <div className="h-14 lg:h-16 border-b border-[#4a4457]/50 flex items-center justify-between px-4 lg:px-6 relative z-12 bg-[#0e0e0f]/60 backdrop-blur-xl gap-4">
+        <div className="py-3.5 md:py-4 mb-3 border-b border-card-border flex items-center justify-between px-4 lg:px-6 relative z-12 bg-card/45 backdrop-blur-xl gap-4 transition-colors">
 
-          {/* Brand / Context Title */}
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 bg-[#50ffaf] flex items-center justify-center shrink-0">
-              <span className="text-black text-[10px] font-black tracking-tighter">FS</span>
-            </div>
-            <div className="flex flex-col -space-y-0.5 truncate">
-              <h1 className="text-[10px] lg:text-xs font-black text-[#e5e2e3] uppercase tracking-[0.2em] truncate">
-                Quant Engine Dashboard
-              </h1>
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] font-bold text-[#958da3] uppercase tracking-widest">Institutional Flow</span>
-                <span className="px-1.5 py-0.5 bg-[#d1bcff]/10 text-[8px] font-black text-[#d1bcff] border border-[#d1bcff]/20 leading-none">
-                  V8.8
-                </span>
-              </div>
-            </div>
+          {/* Focal Price & Asset Display */}
+          <div className="flex items-baseline gap-3.5 select-none">
+            <span className="font-mono text-1xl md:text-1xl font-black text-foreground tracking-wider uppercase">
+              ETHUSDC.P
+            </span>
+            <LiveTicker variant="large" />
           </div>
 
           {/* Timeframe selector + hamburger */}
@@ -79,7 +108,7 @@ export default function Home() {
                 setCommandCenterTab('strategy');
                 setIsSoundSettingsOpen(true);
               }}
-              className="bg-[#1c1b1c] border border-[#4a4457] hover:border-[#50ffaf] text-[#958da3] hover:text-[#50ffaf] px-3 py-1.5 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-none cursor-pointer flex items-center gap-1.5 shadow-md"
+              className="bg-card border border-card-border hover:border-accent text-muted hover:text-foreground px-3 py-1.5 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm"
               title="Open Command Center"
             >
               <Settings size={12} />
@@ -92,7 +121,7 @@ export default function Home() {
             <button
               id="btn-open-sidebar"
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 bg-[#1c1b1c] border border-[#4a4457]/50 text-[#958da3] hover:text-[#50ffaf] hover:border-[#50ffaf]/50 transition-all"
+              className="lg:hidden p-2 bg-card border border-card-border text-muted hover:text-foreground hover:border-accent transition-all rounded-full"
               aria-label="Open sidebar"
             >
               <Menu className="w-4 h-4" />
@@ -100,10 +129,62 @@ export default function Home() {
           </div>
         </div>
 
+        {/* ── 3 Large Visual HUD Cards ─────────────────────────────────────── */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-4 lg:px-6 py-4 shrink-0 relative z-10">
 
+          {/* Card 1: Master Bias */}
+          <div className={`glass-panel p-4 lg:p-5 min-h-[105px] flex flex-col justify-between relative overflow-hidden group select-none transition-all duration-300 ${masterBias === 'BULLISH' ? 'shadow-[inset_0_0_20px_rgba(16,185,129,0.04)] border-emerald-500/20' :
+            masterBias === 'BEARISH' ? 'shadow-[inset_0_0_20px_rgba(244,63,94,0.04)] border-rose-500/20' :
+              'border-card-border'
+            }`}>
+            <div className={`absolute -right-4 -bottom-4 w-24 h-24 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-all duration-300 ${masterBias === 'BULLISH' ? 'bg-emerald-500/10 dark:bg-emerald-500/20' :
+              masterBias === 'BEARISH' ? 'bg-rose-500/10 dark:bg-rose-500/20' :
+                'bg-accent/5'
+              }`} />
+            <span className="text-[10px] lg:text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-zinc-400">Master Bias</span>
+            <span className={`text-2xl lg:text-3xl font-black mt-2 leading-none transition-colors duration-300 ${masterBias === 'BULLISH' ? 'text-emerald-500 dark:text-emerald-400' :
+              masterBias === 'BEARISH' ? 'text-rose-500 dark:text-rose-400' :
+                'text-foreground'
+              }`}>
+              {masterBias}
+            </span>
+          </div>
+
+          {/* Card 2: Range Context */}
+          <div className={`glass-panel p-4 lg:p-5 min-h-[105px] flex flex-col justify-between relative overflow-hidden group select-none transition-all duration-300 ${pricing === 'DISCOUNT' ? 'shadow-[inset_0_0_20px_rgba(16,185,129,0.04)] border-emerald-500/20' :
+            pricing === 'PREMIUM' ? 'shadow-[inset_0_0_20px_rgba(244,63,94,0.04)] border-rose-500/20' :
+              'border-card-border'
+            }`}>
+            <div className={`absolute -right-4 -bottom-4 w-24 h-24 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-all duration-300 ${pricing === 'DISCOUNT' ? 'bg-emerald-500/10 dark:bg-emerald-500/20' :
+              pricing === 'PREMIUM' ? 'bg-rose-500/10 dark:bg-rose-500/20' :
+                'bg-accent/5'
+              }`} />
+            <span className="text-[10px] lg:text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-zinc-400">Range Context</span>
+            <span className={`text-2xl lg:text-3xl font-black mt-2 leading-none transition-colors duration-300 ${pricing === 'DISCOUNT' ? 'text-emerald-500 dark:text-emerald-400' :
+              pricing === 'PREMIUM' ? 'text-rose-500 dark:text-rose-400' :
+                'text-foreground'
+              }`}>
+              {pricing}
+            </span>
+          </div>
+
+          {/* Card 3: Daily Objective Level */}
+          <div className={`glass-panel p-4 lg:p-5 min-h-[105px] flex flex-col justify-between relative overflow-hidden group select-none transition-all duration-300 ${targetStatus === 'EXHAUSTED' ? 'shadow-[inset_0_0_20px_rgba(16,185,129,0.04)] border-emerald-500/20' :
+            'border-card-border'
+            }`}>
+            <div className={`absolute -right-4 -bottom-4 w-24 h-24 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-all duration-300 ${targetStatus === 'EXHAUSTED' ? 'bg-emerald-500/10 dark:bg-emerald-500/20' :
+              'bg-accent/5'
+              }`} />
+            <span className="text-[10px] lg:text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-zinc-400">Target Status (DOL)</span>
+            <span className={`text-lg lg:text-xl font-black mt-2 leading-none transition-colors duration-300 ${targetStatus === 'EXHAUSTED' ? 'text-emerald-500 dark:text-emerald-400' : 'text-accent'
+              }`}>
+              {targetStatus}
+            </span>
+          </div>
+        </div>
 
         {/* ── Chart Area ─────────────────────────────────────────────────── */}
-        <div className="flex-1 relative p-3 lg:p-6 z-10 flex flex-col min-h-0">
+        <div className="flex-1 relative px-4 lg:px-6 pb-4 z-10 flex flex-col min-h-0">
           {error ? (
             <div className="w-full h-full flex items-center justify-center">
               <div className="bg-[#ffb4ab]/10 text-[#ffb4ab] px-6 py-4 rounded-2xl border border-[#ffb4ab]/20 shadow-lg shadow-[#ffb4ab]/10 flex items-center gap-3">
@@ -113,16 +194,16 @@ export default function Home() {
           ) : !data && isLoading ? (
             <div className="w-full h-full flex items-center justify-center">
               <div className="flex flex-col items-center gap-4">
-                <Loader2 className="w-10 h-10 text-[#d1bcff] animate-spin" />
-                <span className="text-sm font-medium text-[#958da3] animate-pulse text-center px-4">
+                <Loader2 className="w-10 h-10 text-accent animate-spin" />
+                <span className="text-sm font-medium text-muted-foreground animate-pulse text-center px-4">
                   Establishing direct link to Binance Futures...
                 </span>
               </div>
             </div>
           ) : (
-            <div className="w-full h-full rounded-2xl overflow-hidden border border-[#4a4457]/50 bg-[#1c1b1c]/80 backdrop-blur-xl shadow-2xl relative group">
+            <div className="w-full h-full rounded-2xl overflow-hidden border border-card-border bg-card/20 backdrop-blur-md shadow-2xl relative group">
               {/* Subtle inner glow for chart container */}
-              <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(255,255,255,0.02)] pointer-events-none z-10" />
+              <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(255,255,255,0.01)] pointer-events-none z-10" />
               <Chart
                 data={getChartData()}
                 activeFvgs={data?.ipda_metrics?.active_fvgs || []}
@@ -131,9 +212,9 @@ export default function Home() {
               />
               {/* Premium overlay for timeframe transition load states */}
               {isLoading && (
-                <div className="absolute inset-0 bg-[#0e0e0f]/60 backdrop-blur-sm z-20 flex flex-col items-center justify-center gap-3 transition-opacity duration-300">
-                  <Loader2 className="w-8 h-8 text-[#a855f7] animate-spin" />
-                  <span className="text-[10px] font-mono tracking-widest uppercase text-[#958da3] animate-pulse">
+                <div className="absolute inset-0 bg-background/60 backdrop-blur-sm z-20 flex flex-col items-center justify-center gap-3 transition-opacity duration-300">
+                  <Loader2 className="w-8 h-8 text-accent animate-spin" />
+                  <span className="text-[10px] font-mono tracking-widest uppercase text-muted-foreground animate-pulse">
                     Pivoting Timeframe Scale...
                   </span>
                 </div>
@@ -170,3 +251,4 @@ export default function Home() {
     </main>
   );
 }
+

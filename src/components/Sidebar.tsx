@@ -1,7 +1,25 @@
 'use client';
 
 import { useState } from 'react';
-import { DownloadCloud, TrendingUp, Activity, X, Brain, Zap, Target, Magnet, BarChart3, Terminal, Loader2, Copy, Download, Search } from 'lucide-react';
+import { 
+  DownloadCloud, 
+  TrendingUp, 
+  Activity, 
+  X, 
+  Brain, 
+  Zap, 
+  Target, 
+  Magnet, 
+  BarChart3, 
+  Terminal, 
+  Loader2, 
+  Copy, 
+  Download, 
+  Search, 
+  Database,
+  Clock,
+  ArrowRight
+} from 'lucide-react';
 import { useBinanceWS } from '@/hooks/useBinanceWS';
 import HudModal from './modals/HudModal';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
@@ -61,12 +79,12 @@ export default function Sidebar({
 }: SidebarProps) {
   const { livePrice } = useBinanceWS();
   const { isAnalyzing, aiAnalysis, triggerAiAnalysisScan } = useMarketDataContext();
-  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isJsonDrawerOpen, setIsJsonDrawerOpen] = useState(false);
   const [isHudModalOpen, setIsHudModalOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
-  const [activeTab, setActiveTab] = useState<'HUD' | 'JSON'>('HUD');
 
   const metrics = data?.ipda_metrics;
+  const targetStatus = metrics?.target_status || '';
 
   let parsedAiResponse: any = null;
   let hudData: any = null;
@@ -147,134 +165,194 @@ export default function Sidebar({
     }
   };
 
+  // Sweeps verification logic
+  const isAsianHighSwept = targetStatus.includes("ASIAN_HIGH_SWEPT");
+  const isAsianLowSwept = targetStatus.includes("ASIAN_LOW_SWEPT");
+  const isLondonHighSwept = targetStatus.includes("LONDON_HIGH_SWEPT");
+  const isLondonLowSwept = targetStatus.includes("LONDON_LOW_SWEPT");
+
+  const asianHigh = metrics?.macro_levels?.asian_high;
+  const asianLow = metrics?.macro_levels?.asian_low;
+
   return (
     <>
       {/* Mobile overlay backdrop */}
       <div
         onClick={onClose}
-        className={`fixed inset-0 z-30 bg-[#0e0e0f]/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        className={`fixed inset-0 z-30 bg-background/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
       />
 
       {/* Sidebar panel */}
       <aside
         className={`
           fixed top-0 right-0 z-40 h-full w-80 max-w-[90vw]
-          bg-[#0e0e0f] border-l border-[#4a4457]/50 flex flex-col lg:relative shadow-2xl
+          bg-card/90 border-l border-card-border flex flex-col lg:relative shadow-2xl backdrop-blur-md
           transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : 'translate-x-full'}
           lg:static lg:translate-x-0 lg:flex lg:w-80 lg:shrink-0 lg:z-10
         `}
       >
-        <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex flex-col h-full overflow-hidden relative">
 
           {/* Header */}
-          <div className="p-5 border-b border-[#4a4457]/50 flex items-center justify-between shrink-0">
+          <div className="p-4 border-b border-card-border flex items-center justify-between shrink-0 bg-card/45">
             <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-[#50ffaf]" />
-              <h2 className="text-xs font-black uppercase tracking-[0.2em] text-[#e5e2e3]">Execution Sidebar</h2>
+              <Activity className="w-4 h-4 text-accent" />
+              <h2 className="text-xs font-black uppercase tracking-[0.2em] text-foreground">Flow Execution</h2>
             </div>
-            <button onClick={onClose} className="lg:hidden p-1 text-[#958da3] hover:text-[#e5e2e3]">
-              <X size={18} />
-            </button>
+            
+            <div className="flex items-center gap-1.5">
+              {/* Database Drawer Trigger Icon */}
+              <button 
+                onClick={() => setIsJsonDrawerOpen(!isJsonDrawerOpen)}
+                className={`p-1.5 rounded-full transition-colors flex items-center justify-center shrink-0 cursor-pointer ${
+                  isJsonDrawerOpen ? 'bg-accent/15 text-accent border border-accent/35' : 'text-muted hover:text-foreground hover:bg-card border border-transparent'
+                }`}
+                title="Toggle JSON Data Drawer"
+              >
+                <Database size={14} />
+              </button>
+
+              <button onClick={onClose} className="lg:hidden p-1.5 text-muted hover:text-foreground rounded-full hover:bg-card">
+                <X size={16} />
+              </button>
+            </div>
           </div>
 
           {/* Scrollable Cards Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-[#4a4457]/50 scrollbar-track-transparent">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-card-border scrollbar-track-transparent">
 
-            {/* Card 1: Context */}
-            <div className="bg-[#1c1b1c] border border-[#4a4457]/50 rounded-none p-4 space-y-3">
-              <div className="flex items-center gap-2 text-[#958da3] uppercase font-bold text-[10px] tracking-widest">
-                <Target size={12} />
-                <span>Temporal Context</span>
+            {/* Time Card: Killzone Context */}
+            <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
+              <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
+                <Clock size={12} className="text-accent animate-pulse" />
+                <span>Time Killzones</span>
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="text-[10px] text-[#958da3]">Day Open</span>
-                  <span className="text-xs font-mono text-[#e5e2e3]">{formatPrice(metrics?.true_day_open)}</span>
+                  <span className="text-[11px] lg:text-xs text-muted uppercase font-bold">Active Window</span>
+                  <span className="text-sm font-black text-accent uppercase">{metrics?.current_time_window || 'WAITING'}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-[10px] text-[#958da3]">Time Window</span>
-                  <span className="text-xs font-mono text-[#d1bcff] uppercase">{metrics?.current_time_window || '---'}</span>
+                  <span className="text-[11px] lg:text-xs text-muted uppercase font-bold">NY Day Open</span>
+                  <span className="text-sm font-mono font-bold text-foreground">{formatPrice(metrics?.true_day_open)}</span>
                 </div>
-                <div className="flex justify-between items-center pt-1">
-                  <span className="text-[10px] text-[#958da3] uppercase font-black tracking-tighter">Status</span>
-                  <span className={`px-2 py-0.5 text-[10px] font-black rounded-none border ${pricing === 'PREMIUM' ? 'bg-[#ffb4ab]/10 text-[#ffb4ab] border-[#ffb4ab]/30' :
-                    pricing === 'DISCOUNT' ? 'bg-[#50ffaf]/10 text-[#50ffaf] border-[#50ffaf]/30' :
-                      'bg-zinc-800/10 text-[#958da3] border-[#4a4457]/50'
-                    }`}>
-                    {pricing || 'SCANNING'}
-                  </span>
+                
+                {/* Killzone Timings Reference */}
+                <div className="bg-background/40 border border-card-border p-2 mt-2 space-y-1.5 rounded-lg select-none">
+                  <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
+                    <span className="text-muted font-bold uppercase tracking-wider">ASIAN RANGE</span>
+                    <span className="text-foreground font-mono font-bold">00:00 - 07:00 UTC</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
+                    <span className="text-muted font-bold uppercase tracking-wider">LONDON OPEN</span>
+                    <span className="text-foreground font-mono font-bold">07:00 - 10:00 UTC</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
+                    <span className="text-muted font-bold uppercase tracking-wider">NY OPEN</span>
+                    <span className="text-foreground font-mono font-bold">12:00 - 15:00 UTC</span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Card 2: Liquidity */}
-            <div className="bg-[#1c1b1c] border border-[#4a4457]/50 rounded-none p-4 space-y-3">
-              <div className="flex items-center gap-2 text-[#958da3] uppercase font-bold text-[10px] tracking-widest">
-                <Magnet size={12} />
-                <span>Macro Liquidity</span>
+            {/* Liquidity Card: Macro Ranges */}
+            <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
+              <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
+                <Magnet size={12} className="text-accent" />
+                <span>Liquidity Pool context</span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-[#0e0e0f] p-2 border border-[#4a4457]/50">
-                  <span className="text-[8px] text-[#958da3] block mb-1">PDH</span>
-                  <span className="text-xs font-mono text-[#e5e2e3]">{formatPrice(metrics?.macro_levels?.pdh)}</span>
+              
+              <div className="space-y-2.5">
+                {/* PDH / PDL */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg relative">
+                    <span className="text-[10px] text-muted block mb-0.5 uppercase font-bold tracking-wider">Prev Day High (PDH)</span>
+                    <span className="text-sm font-mono font-bold text-foreground">{formatPrice(metrics?.macro_levels?.pdh)}</span>
+                  </div>
+                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg relative">
+                    <span className="text-[10px] text-muted block mb-0.5 uppercase font-bold tracking-wider">Prev Day Low (PDL)</span>
+                    <span className="text-sm font-mono font-bold text-foreground">{formatPrice(metrics?.macro_levels?.pdl)}</span>
+                  </div>
                 </div>
-                <div className="bg-[#0e0e0f] p-2 border border-[#4a4457]/50">
-                  <span className="text-[8px] text-[#958da3] block mb-1">PDL</span>
-                  <span className="text-xs font-mono text-[#e5e2e3]">{formatPrice(metrics?.macro_levels?.pdl)}</span>
-                </div>
-              </div>
-              <div className="flex justify-between items-center pt-1 border-t border-[#4a4457]/50 mt-1">
-                <span className="text-[10px] text-[#958da3]">Target State</span>
-                <span className={`text-[10px] font-bold ${metrics?.target_status === 'EXHAUSTED' ? 'text-[#958da3]' : 'text-[#50ffaf]'}`}>
-                  {metrics?.target_status || 'PENDING'}
-                </span>
+
+                {/* Asian Range High / Low Sweeps */}
+                {asianHigh && (
+                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5">
+                    <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
+                      <span className="text-muted uppercase font-bold tracking-wider">Asian High</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`font-mono text-xs lg:text-sm font-bold ${isAsianHighSwept ? 'text-rose-500 line-through opacity-60' : 'text-foreground'}`}>
+                          {formatPrice(asianHigh)}
+                        </span>
+                        {isAsianHighSwept && (
+                          <span className="px-1 py-0.5 bg-rose-500/10 text-rose-500 text-[8px] font-black rounded-sm border border-rose-500/20">
+                            SWEPT 🧹
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
+                      <span className="text-muted uppercase font-bold tracking-wider">Asian Low</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`font-mono text-xs lg:text-sm font-bold ${isAsianLowSwept ? 'text-emerald-500 line-through opacity-60' : 'text-foreground'}`}>
+                          {formatPrice(asianLow)}
+                        </span>
+                        {isAsianLowSwept && (
+                          <span className="px-1 py-0.5 bg-emerald-500/10 text-emerald-500 text-[8px] font-black rounded-sm border border-emerald-500/20">
+                            SWEPT 🧹
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Card 3: Order Flow */}
-            <div className="bg-[#1c1b1c] border border-[#4a4457]/50 rounded-none p-4 space-y-3">
-              <div className="flex items-center gap-2 text-[#958da3] uppercase font-bold text-[10px] tracking-widest">
-                <BarChart3 size={12} />
+            {/* Card 3: Order Flow Pulse */}
+            <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
+              <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
+                <BarChart3 size={12} className="text-accent" />
                 <span>Order Flow Pulse</span>
               </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-[10px] text-[#958da3]">OI Trend</span>
-                  <span className={`text-[10px] font-bold ${orderFlow?.open_interest_trend === 'BULLISH' ? 'text-[#50ffaf]' :
-                    orderFlow?.open_interest_trend === 'BEARISH' ? 'text-[#ffb4ab]' : 'text-[#958da3]'
+                  <span className="text-[11px] lg:text-xs text-muted font-bold">OI Trend</span>
+                  <span className={`text-[11px] lg:text-xs font-black uppercase tracking-wider ${orderFlow?.open_interest_trend === 'BULLISH' ? 'text-emerald-500' :
+                    orderFlow?.open_interest_trend === 'BEARISH' ? 'text-rose-500' : 'text-muted'
                     }`}>
                     {orderFlow?.open_interest_trend || 'NEUTRAL'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-[10px] text-[#958da3]">Displacement</span>
-                  <span className={`text-[10px] font-bold ${metrics?.institutional_sponsorship?.status?.includes('BULLISH') ? 'text-[#50ffaf]' :
-                    metrics?.institutional_sponsorship?.status?.includes('BEARISH') ? 'text-[#ffb4ab]' :
-                    metrics?.institutional_sponsorship?.status === 'CONSOLIDATION' ? 'text-[#d1bcff]' : 'text-[#958da3]'
+                  <span className="text-[11px] lg:text-xs text-muted font-bold">Displacement</span>
+                  <span className={`text-[11px] lg:text-xs font-black uppercase tracking-wider ${metrics?.institutional_sponsorship?.status?.includes('BULLISH') ? 'text-emerald-500' :
+                    metrics?.institutional_sponsorship?.status?.includes('BEARISH') ? 'text-rose-500' :
+                    metrics?.institutional_sponsorship?.status === 'CONSOLIDATION' ? 'text-accent' : 'text-muted'
                     }`}>
                     {metrics?.institutional_sponsorship?.status || 'INACTIVE'}
                   </span>
                 </div>
                 {metrics?.institutional_sponsorship?.statistical_validation && (
-                  <div className="bg-[#0e0e0f] p-2 border border-[#4a4457]/50 mt-1 space-y-1">
-                    <div className="flex justify-between text-[8px] items-center">
-                      <span className="text-[#958da3]">t-STAT</span>
-                      <span className="font-mono text-[#e5e2e3]">
+                  <div className="bg-background/40 p-2 border border-card-border rounded-lg space-y-1">
+                    <div className="flex justify-between text-[10px] items-center">
+                      <span className="text-muted">t-STAT</span>
+                      <span className="font-mono font-bold text-foreground">
                         {metrics.institutional_sponsorship.statistical_validation.t_statistic?.toFixed(4) ?? '0.0000'}
                       </span>
                     </div>
-                    <div className="flex justify-between text-[8px] items-center">
-                      <span className="text-[#958da3]">p-VALUE</span>
-                      <span className="font-mono text-[#e5e2e3]">
+                    <div className="flex justify-between text-[10px] items-center">
+                      <span className="text-muted">p-VALUE</span>
+                      <span className="font-mono font-bold text-foreground">
                         {metrics.institutional_sponsorship.statistical_validation.p_value?.toFixed(4) ?? '0.0000'}
                       </span>
                     </div>
-                    <div className="flex justify-between text-[8px] items-center">
-                      <span className="text-[#958da3]">OLS VALIDATION</span>
-                      <span className={`font-bold uppercase ${
-                        metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'text-[#50ffaf]' :
-                        metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === 'CONSOLIDATION' ? 'text-[#d1bcff]' : 'text-[#ffb4ab]'
+                    <div className="flex justify-between text-[10px] items-center">
+                      <span className="text-muted">OLS VALIDATION</span>
+                      <span className={`font-black uppercase text-[9px] tracking-wider ${
+                        metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'text-emerald-500' :
+                        metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === 'CONSOLIDATION' ? 'text-accent' : 'text-rose-500'
                       }`}>
                         {metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'CONFIRMED' :
                          metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === 'CONSOLIDATION' ? 'CONSOLIDATION' : 'REJECTED'}
@@ -282,9 +360,9 @@ export default function Sidebar({
                     </div>
                   </div>
                 )}
-                <div className="bg-[#0e0e0f] p-2 border border-[#4a4457]/50 mt-2">
-                  <span className="text-[8px] text-[#958da3] block mb-1 uppercase tracking-tight">Smart Money Div</span>
-                  <p className="text-[9px] text-[#958da3] italic">
+                <div className="bg-background/40 p-2.5 border border-card-border rounded-lg">
+                  <span className="text-[10px] text-muted block mb-1 uppercase tracking-wider font-bold">Smart Money Divergence</span>
+                  <p className="text-[10px] text-muted italic leading-normal select-text">
                     {orderFlow?.smart_money_sentiment?.smart_money_divergence || 'No divergence detected in HTF/LTF pairing.'}
                   </p>
                 </div>
@@ -292,107 +370,91 @@ export default function Sidebar({
             </div>
 
             {/* Card 4: Resting Magnets */}
-            <div className="bg-[#1c1b1c] border border-[#4a4457]/50 rounded-none p-4 space-y-3">
-              <div className="flex items-center gap-2 text-[#958da3] uppercase font-bold text-[10px] tracking-widest">
-                <Activity size={12} />
+            <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
+              <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
+                <Activity size={12} className="text-accent" />
                 <span>Resting Magnets</span>
               </div>
-              <div className="space-y-4">
+              <div className="space-y-3.5">
                 <div className="space-y-1.5">
-                  <span className="text-[9px] font-black text-[#50ffaf] uppercase tracking-tighter">BSL Targets</span>
-                  <div className="flex flex-wrap gap-2">
+                  <span className="text-[10px] font-black text-emerald-500 dark:text-emerald-400 uppercase tracking-wider">BSL Targets</span>
+                  <div className="flex flex-col gap-1">
                     {orderFlow?.resting_liquidity_pools?.BSL_Magnets?.length ? orderFlow.resting_liquidity_pools.BSL_Magnets.map((p: number, idx: number) => {
                       const isPurged = livePrice !== null && livePrice >= p;
                       return (
-                        <span key={idx} className={`text-xs font-mono ${isPurged ? 'text-[#50ffaf] line-through opacity-60' : 'text-[#e5e2e3]'}`}>
-                          {p.toFixed(2)} {isPurged && <span className="text-[8px] text-[#50ffaf] no-underline font-black tracking-widest">[ PURGED 🧹 ]</span>}
-                          {idx < orderFlow.resting_liquidity_pools.BSL_Magnets.length - 1 && <span className="text-[#958da3] no-underline ml-1">,</span>}
-                        </span>
+                        <div key={idx} className="flex justify-between items-center text-[13px] font-mono">
+                          <span className={`${isPurged ? 'text-emerald-500 line-through opacity-60' : 'text-foreground font-bold'}`}>
+                            {p.toFixed(2)}
+                          </span>
+                          {isPurged && <span className="text-[8px] text-emerald-500 font-black tracking-wider bg-emerald-500/10 px-1 py-0.5 rounded-sm border border-emerald-500/20">PURGED 🧹</span>}
+                        </div>
                       );
-                    }) : <span className="text-xs font-mono text-[#958da3]">N/A</span>}
+                    }) : <span className="text-[13px] font-mono text-muted">N/A</span>}
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <span className="text-[9px] font-black text-[#ffb4ab] uppercase tracking-tighter">SSL Targets</span>
-                  <div className="flex flex-wrap gap-2">
+                  <span className="text-[10px] font-black text-rose-500 dark:text-rose-400 uppercase tracking-wider">SSL Targets</span>
+                  <div className="flex flex-col gap-1">
                     {orderFlow?.resting_liquidity_pools?.SSL_Magnets?.length ? orderFlow.resting_liquidity_pools.SSL_Magnets.map((p: number, idx: number) => {
                       const isPurged = livePrice !== null && livePrice <= p;
                       return (
-                        <span key={idx} className={`text-xs font-mono ${isPurged ? 'text-[#ffb4ab] line-through opacity-60' : 'text-[#e5e2e3]'}`}>
-                          {p.toFixed(2)} {isPurged && <span className="text-[8px] text-[#ffb4ab] no-underline font-black tracking-widest">[ PURGED 🧹 ]</span>}
-                          {idx < orderFlow.resting_liquidity_pools.SSL_Magnets.length - 1 && <span className="text-[#958da3] no-underline ml-1">,</span>}
-                        </span>
+                        <div key={idx} className="flex justify-between items-center text-[13px] font-mono">
+                          <span className={`${isPurged ? 'text-rose-500 line-through opacity-60' : 'text-foreground font-bold'}`}>
+                            {p.toFixed(2)}
+                          </span>
+                          {isPurged && <span className="text-[8px] text-rose-500 font-black tracking-wider bg-rose-500/10 px-1 py-0.5 rounded-sm border border-rose-500/20">PURGED 🧹</span>}
+                        </div>
                       );
-                    }) : <span className="text-xs font-mono text-[#958da3]">N/A</span>}
+                    }) : <span className="text-[13px] font-mono text-muted">N/A</span>}
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Card 5: AI Synthesis Console */}
-            <div className="bg-[#1c1b1c] border border-[#4a4457]/50 rounded-none flex flex-col h-[400px]">
-              <div className="p-3 border-b border-[#4a4457]/50 bg-[#1c1b1c] flex flex-col gap-3">
+            <div className="glass-panel flex flex-col h-[380px] overflow-hidden">
+              <div className="p-3 border-b border-card-border bg-card/45 flex flex-col gap-2 shrink-0">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Terminal size={12} className="text-[#d1bcff]" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-[#958da3]">Synthesis Console</span>
+                    <Terminal size={12} className="text-accent" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Synthesis Console</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setIsHudModalOpen(true)}
-                      className="text-[#958da3] hover:text-[#d1bcff] transition-colors p-1 rounded-none hover:bg-zinc-800/40"
+                      className="text-muted hover:text-foreground transition-colors p-1 rounded-full hover:bg-card cursor-pointer"
                       title="Expand Synthesis HUD Console"
                     >
                       <Search size={12} />
                     </button>
-                    {isAnalyzing && <Loader2 size={12} className="text-[#d1bcff] animate-spin" />}
+                    {isAnalyzing && <Loader2 size={12} className="text-accent animate-spin" />}
                   </div>
                 </div>
-
-                {/* Tabs */}
-                {aiAnalysis && parsedAiResponse && (
-                  <div className="flex bg-[#0e0e0f] border border-[#4a4457]/50 p-0.5">
-                    <button
-                      onClick={() => setActiveTab('HUD')}
-                      className={`flex-1 py-1.5 text-[9px] font-black uppercase tracking-widest transition-colors ${activeTab === 'HUD' ? 'bg-[#d1bcff] text-black shadow-[0_0_10px_rgba(209,188,255,0.2)]' : 'text-[#958da3] hover:text-[#e5e2e3]'
-                        }`}
-                    >
-                      HUD
-                    </button>
-                    <button
-                      onClick={() => setActiveTab('JSON')}
-                      className={`flex-1 py-1.5 text-[9px] font-black uppercase tracking-widest transition-colors ${activeTab === 'JSON' ? 'bg-[#d1bcff] text-black shadow-[0_0_10px_rgba(209,188,255,0.2)]' : 'text-[#958da3] hover:text-[#e5e2e3]'
-                        }`}
-                    >
-                      JSON
-                    </button>
-                  </div>
-                )}
               </div>
 
-              <div className="flex-1 p-3 overflow-y-auto bg-[#0e0e0f] font-mono scrollbar-thin scrollbar-thumb-[#4a4457]/50">
+              <div className="flex-1 p-3 overflow-y-auto bg-background/25 font-mono scrollbar-thin scrollbar-thumb-card-border">
                 {aiAnalysis ? (
-                  activeTab === 'HUD' && hudData ? (
+                  hudData ? (
                     <div className="space-y-4">
                       {/* HUD Table */}
-                      <div className="border border-[#4a4457]/50 rounded-none overflow-hidden">
+                      <div className="border border-card-border rounded-lg overflow-hidden">
                         <table className="w-full text-left border-collapse">
                           <tbody>
                             {Object.entries(hudData).map(([key, value]) => {
-                              let colorClass = 'text-[#e5e2e3]';
+                              let colorClass = 'text-foreground font-semibold';
                               const vStr = Array.isArray(value) ? value.join(', ') : String(value).toUpperCase();
 
-                              if (vStr.includes('BUY') || vStr.includes('LONG') || vStr.includes('BULLISH') || vStr.includes('STRONG') || vStr.includes('FULL_RISK')) colorClass = 'text-[#50ffaf]';
-                              else if (vStr.includes('SELL') || vStr.includes('SHORT') || vStr.includes('BEARISH') || vStr.includes('WEAK') || vStr.includes('ABORT')) colorClass = 'text-[#ffb4ab]';
-                              else if (vStr.includes('STAND DOWN') || vStr.includes('NEUTRAL') || vStr.includes('NONE') || vStr.includes('WAIT')) colorClass = 'text-[#958da3]';
+                              if (vStr.includes('BUY') || vStr.includes('LONG') || vStr.includes('BULLISH') || vStr.includes('STRONG') || vStr.includes('FULL_RISK')) colorClass = 'text-emerald-600 dark:text-emerald-400 font-bold';
+                              else if (vStr.includes('SELL') || vStr.includes('SHORT') || vStr.includes('BEARISH') || vStr.includes('WEAK') || vStr.includes('ABORT')) colorClass = 'text-rose-600 dark:text-rose-400 font-bold';
+                              else if (vStr.includes('STAND DOWN') || vStr.includes('NEUTRAL') || vStr.includes('NONE') || vStr.includes('WAIT')) colorClass = 'text-muted font-semibold';
 
                               const displayKey = key.replace(/_/g, ' ').toUpperCase();
                               return (
-                                <tr key={key} className="border-b border-[#4a4457]/50 last:border-0 bg-[#0e0e0f]">
-                                  <td className="p-2 text-[9px] font-black uppercase tracking-widest text-[#958da3] border-r border-[#4a4457]/50 w-1/3">
+                                <tr key={key} className="border-b border-card-border last:border-0 bg-background/25">
+                                  <td className="p-2 text-[10.5px] font-black uppercase tracking-wider text-muted border-r border-card-border w-1/3">
                                     {displayKey}
                                   </td>
-                                  <td className={`p-2 text-[10px] font-bold ${colorClass}`}>
+                                  <td className={`p-2 text-xs font-mono font-medium ${colorClass}`}>
                                     {Array.isArray(value) ? value.join(', ') : String(value)}
                                   </td>
                                 </tr>
@@ -404,11 +466,11 @@ export default function Sidebar({
 
                       {/* AI Note */}
                       {aiNote && (
-                        <div className="bg-[#1c1b1c] p-2 border border-[#4a4457]/50">
-                          <span className="text-[9px] font-black text-[#d1bcff] uppercase tracking-widest block mb-1">
+                        <div className="bg-card p-3.5 border border-card-border rounded-lg shadow-sm">
+                          <span className="text-[10px] font-black text-accent uppercase tracking-widest block mb-1">
                             {aiNote.title}
                           </span>
-                          <p className="text-[10px] text-[#e5e2e3] italic leading-relaxed">
+                          <p className="text-[11.5px] text-foreground italic leading-relaxed font-sans select-text">
                             {aiNote.text}
                           </p>
                         </div>
@@ -416,8 +478,8 @@ export default function Sidebar({
 
                       {/* TradingView Alerts */}
                       {tvAlerts.length > 0 && (
-                        <div className="space-y-1">
-                          <span className="text-[9px] font-black text-[#958da3] uppercase tracking-widest block mb-2">
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">
                             TradingView Alerts
                           </span>
                           <div className="flex flex-col gap-1.5">
@@ -429,9 +491,9 @@ export default function Sidebar({
                                   : JSON.stringify(alert);
 
                               return (
-                                <div key={i} className="bg-[#1c1b1c] p-2 border border-[#4a4457]/50 flex items-start gap-2">
-                                  <Zap size={10} className="text-[#50ffaf] mt-0.5 shrink-0" />
-                                  <span className="text-[9px] text-[#e5e2e3] uppercase tracking-wide">
+                                <div key={i} className="bg-card p-2 border border-card-border flex items-start gap-2 rounded-lg">
+                                  <Zap size={10} className="text-accent mt-0.5 shrink-0" />
+                                  <span className="text-[9px] text-foreground font-sans font-medium uppercase tracking-wide">
                                     {displayAlert}
                                   </span>
                                 </div>
@@ -442,23 +504,23 @@ export default function Sidebar({
                       )}
                     </div>
                   ) : (
-                    <pre className="text-[10px] text-[#50ffaf] leading-relaxed whitespace-pre-wrap bg-[#1c1b1c] p-3 rounded-none border border-[#4a4457]/50 overflow-x-auto">
+                    <pre className="text-[10px] text-emerald-500 leading-relaxed whitespace-pre-wrap bg-card p-3 rounded-lg border border-card-border overflow-x-auto select-text">
                       <code>{aiAnalysis}</code>
                     </pre>
                   )
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center text-center p-4">
-                    <Brain size={24} className="text-zinc-800 mb-2" />
-                    <p className="text-[10px] text-[#958da3] uppercase tracking-tighter">System Ready. Awaiting Live Payload Injection.</p>
+                    <Brain size={24} className="text-card-border mb-2 animate-pulse" />
+                    <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">System Ready. Awaiting Live Payload Injection.</p>
                   </div>
                 )}
               </div>
 
-              <div className="p-3 bg-[#1c1b1c] border-t border-[#4a4457]/50">
+              <div className="p-3 bg-card/45 border-t border-card-border shrink-0">
                 <button
                   onClick={handleLiveSynthesis}
                   disabled={isAnalyzing || !data}
-                  className="w-full py-2 bg-[#d1bcff] hover:bg-[#d1bcff] disabled:opacity-50 disabled:bg-zinc-800 text-black text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2"
+                  className="w-full py-2 bg-accent hover:bg-accent disabled:opacity-50 disabled:bg-card-border text-accent-foreground text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm rounded-full"
                 >
                   {isAnalyzing ? (
                     <>
@@ -477,59 +539,95 @@ export default function Sidebar({
 
           </div>
 
-          {/* Collapsible Data Export Panel */}
-          <div className="mt-auto shrink-0 flex flex-col">
-            <button
-              onClick={() => setIsExportOpen(!isExportOpen)}
-              className="h-8 w-full flex items-center justify-center bg-[#1c1b1c] border-t border-[#4a4457]/50 text-[10px] font-black uppercase tracking-[0.2em] text-[#958da3] hover:text-[#e5e2e3] transition-colors"
-            >
-              {isExportOpen ? '[-] SYSTEM DATA EXPORT' : '[+] SYSTEM DATA EXPORT'}
-            </button>
+          {/* Collapsible Data Export Panel — RELOCATED TO DRAWER */}
+          <div className="p-3 border-t border-card-border bg-card/45 shrink-0 select-none text-center">
+            <span className="text-[8px] font-black text-muted-foreground tracking-widest uppercase">
+              Flow-State Quant Dashboard V9.0
+            </span>
+          </div>
 
-            {isExportOpen && (
-              <div className="bg-[#1c1b1c] p-3 border-t border-[#4a4457]/50 space-y-3 animate-in slide-in-from-bottom-2 duration-200">
+          {/* ── JSON LOGS SLIDE-OUT DRAWER ─────────────────────────────────── */}
+          <div
+            className={`
+              absolute top-0 bottom-0 z-50 w-80 bg-card border-r border-card-border shadow-2xl flex flex-col
+              transition-all duration-300 ease-in-out select-none
+              ${isJsonDrawerOpen ? 'right-0 pointer-events-auto' : 'translate-x-full right-0 pointer-events-none opacity-0'}
+            `}
+          >
+            {/* Drawer Header */}
+            <div className="p-4 border-b border-card-border flex items-center justify-between shrink-0 bg-card/45">
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-accent animate-pulse" />
+                <h3 className="text-xs font-black uppercase tracking-[0.15em] text-foreground">JSON Data Stream</h3>
+              </div>
+              <button 
+                onClick={() => setIsJsonDrawerOpen(false)}
+                className="p-1 text-muted hover:text-foreground rounded-full hover:bg-background/80 cursor-pointer"
+                title="Close Data Drawer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Drawer Content */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              
+              {/* Lookback filters */}
+              <div className="bg-background/40 rounded-xl p-4 border border-card-border backdrop-blur-md">
+                <span className="text-[9px] font-black text-accent uppercase tracking-widest block mb-2">Lookback Configurations</span>
                 <div className="grid grid-cols-2 gap-2">
                   {(['5m', '15m', '1h', '4h'] as const).map((tf) => (
-                    <div key={tf} className="flex flex-col bg-[#0e0e0f]/40 border border-[#4a4457]/50 p-1.5">
-                      <label className="text-[8px] text-[#958da3] uppercase font-black text-center mb-1">{tf} Lim</label>
+                    <div key={tf} className="flex flex-col bg-background/50 border border-card-border p-2 rounded-lg">
+                      <label className="text-[8px] text-muted-foreground uppercase font-black text-center mb-1">{tf} candles</label>
                       <input
                         type="number"
                         min="0"
                         value={counts[tf]}
                         onChange={(e) => onCountChange(tf, e.target.value)}
-                        className="w-full bg-transparent text-[#d1bcff] text-[10px] font-mono font-bold text-center outline-none border-b border-[#4a4457]/50 focus:border-[#d1bcff]/50 transition-colors"
+                        className="w-full bg-transparent text-accent text-center text-xs font-mono font-bold outline-none border-b border-card-border focus:border-accent transition-colors"
                       />
                     </div>
                   ))}
                 </div>
+              </div>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleCopyJson}
-                    disabled={!data}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2 border transition-all ${copyState === 'copied'
-                      ? 'bg-[#50ffaf]/10 border-[#50ffaf]/50 text-[#50ffaf]'
-                      : 'bg-[#0e0e0f] border-[#4a4457]/50 text-[#958da3] hover:text-[#d1bcff] hover:border-[#d1bcff]/30'
-                      }`}
-                    title="Copy Context to Clipboard"
-                  >
-                    <Copy size={12} />
-                    <span className="text-[9px] font-black uppercase tracking-widest">
-                      {copyState === 'copied' ? 'COPIED' : 'COPY'}
-                    </span>
-                  </button>
-                  <button
-                    onClick={() => onDownloadV7Sliced(counts)}
-                    disabled={!data}
-                    className="flex-1 flex items-center justify-center gap-2 py-2 bg-[#0e0e0f] border border-[#4a4457]/50 text-[#958da3] hover:text-[#d1bcff] hover:border-[#d1bcff]/30 transition-all"
-                    title="Download Sliced V8.2 JSON"
-                  >
-                    <Download size={12} />
-                    <span className="text-[9px] font-black uppercase tracking-widest">DL V8.2</span>
-                  </button>
+              {/* Action Buttons */}
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCopyJson}
+                  disabled={!data}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 border rounded-full transition-all duration-300 cursor-pointer ${copyState === 'copied'
+                    ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-500'
+                    : 'bg-background hover:bg-card border-card-border text-muted hover:text-foreground'
+                    }`}
+                  title="Copy Context to Clipboard"
+                >
+                  <Copy size={12} />
+                  <span className="text-[9px] font-black uppercase tracking-wider">
+                    {copyState === 'copied' ? 'COPIED' : 'COPY PAYLOAD'}
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => onDownloadV7Sliced(counts)}
+                  disabled={!data}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-background hover:bg-card border border-card-border text-muted hover:text-foreground rounded-full transition-all duration-300 cursor-pointer"
+                  title="Download Sliced V8.2 JSON"
+                >
+                  <Download size={12} />
+                  <span className="text-[9px] font-black uppercase tracking-wider">DL V8.2 JSON</span>
+                </button>
+              </div>
+
+              {/* Raw JSON Pre-synthesis log */}
+              <div className="flex flex-col bg-background/40 border border-card-border p-3 rounded-xl space-y-2">
+                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">Active Data Frame</span>
+                <div className="bg-card p-3 rounded-lg border border-card-border h-[220px] overflow-y-auto font-mono text-[9px] text-muted-foreground select-text whitespace-pre-wrap">
+                  {data ? JSON.stringify(slicePayloadByLookback(data, counts), null, 2) : 'No payload loaded.'}
                 </div>
               </div>
-            )}
+
+            </div>
           </div>
 
         </div>

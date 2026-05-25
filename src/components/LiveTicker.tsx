@@ -54,7 +54,7 @@ function StatusDot({ status }: { status: ReturnType<typeof useBinanceWS>['status
 
 // ─── LiveTicker ───────────────────────────────────────────────────────────────
 
-export function LiveTicker() {
+export function LiveTicker({ variant = 'default' }: { variant?: 'default' | 'large' }) {
   const { livePrice, status } = useBinanceWS({ symbol: 'ethusdc', interval: '1m' });
 
   // Track previous price to determine tick direction
@@ -93,19 +93,29 @@ export function LiveTicker() {
     ? `$${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     : '—';
 
-  // ── Tick colour class ────────────────────────────────────────────────────
+  // ── Tick colour class (theme-aware colors for high contrast) ──────────────
   const priceColorClass =
-    direction === 'up' ? 'text-[#50ffaf]' :
-      direction === 'down' ? 'text-[#ffb4ab]' :
-        'text-[#e5e2e3]';
+    direction === 'up' ? 'text-emerald-600 dark:text-[#50ffaf]' :
+      direction === 'down' ? 'text-rose-600 dark:text-[#ffb4ab]' :
+        'text-foreground';
+
+  if (variant === 'large') {
+    return (
+      <span
+        className={`font-mono text-1xl md:text-1xl font-black tabular-nums tracking-tight transition-colors duration-300 ${priceColorClass}`}
+      >
+        {formatted}
+      </span>
+    );
+  }
 
   return (
-    <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-[#0e0e0f] border border-[#4a4457]/50 rounded select-none">
+    <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-card/40 border border-card-border rounded select-none">
       {/* Status dot */}
       <StatusDot status={status} />
 
       {/* Asset label */}
-      <span className="font-mono text-[10px] text-[#4a4457] uppercase tracking-wider">
+      <span className="font-mono text-[10px] text-slate-600 dark:text-zinc-400 uppercase tracking-wider">
         ETH
       </span>
 

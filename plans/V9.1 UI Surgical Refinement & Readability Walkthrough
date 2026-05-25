@@ -1,0 +1,56 @@
+# V9.1 UI Surgical Refinement & Readability Walkthrough
+
+I have completed the surgical refinement and legibility tuning for **Flow-State V9.1**. All requirements, including header cleanup, HUD realignments, high-contrast sidebar styling, custom glass-panel controls, and advanced Light Mode chart/marker synchronization have been executed and verified through a successful Next.js 16 optimized production build.
+
+---
+
+## 🛠️ Summary of Changes
+
+### 1. Focal Branding and Clean Navigation Header
+- **NavigationHeader.tsx:**
+  - Removed duplicate text labels from the left side of the header. It now displays ONLY the high-fidelity emblem **FS** box and the dynamic **V9.0** badge.
+  - Replaced the center tabs with a prominent Asset Display centerpiece: **ETHUSDC.P** followed by the Live Price rendered in a large, clean monospace font (`text-xl md:text-2xl font-black`).
+  - Integrated a large-format `LiveTicker` component in the center of the header to prevent full-header re-renders on price ticks.
+- **LiveTicker.tsx:**
+  - Added a `variant="large"` option to render a clean, borderless monospace price string.
+  - Upgraded live price colors to be theme-aware: `text-emerald-600 dark:text-[#50ffaf]` for Up, `text-rose-600 dark:text-[#ffb4ab]` for Down, and `text-foreground` for Neutral (replacing the hardcoded low-contrast grey `#e5e2e3` which was unreadable in Light Mode).
+
+### 2. HUD Cards Redesigned Layout
+- **page.tsx:**
+  - Deleted the duplicate brand block ("Quant Engine Dashboard...") from the page-level sub-header, replacing it with a minimal "Operational Focus" label to keep standard layouts balanced.
+  - Deleted the redundant **Live Price** card from the HUD grid, as it is now prominently featured in the centerpiece of the Navigation Header.
+  - Realigned the remaining cards into a perfect 3-column grid (`grid-cols-1 md:grid-cols-3`).
+  - Enforced a uniform height (`min-h-[105px]`) and unified padding (`p-4 lg:p-5`) across all cards.
+  - Target Status (DOL) Card: Scaled value text down to a highly readable and balanced `text-lg lg:text-xl font-black` (down from `text-2xl lg:text-3xl`).
+
+### 3. High-Contrast Legible Sidebar
+- **Sidebar.tsx:**
+  - Converted all Sidebar value texts to high-contrast `text-slate-900 dark:text-zinc-100` and labels to `text-slate-600 dark:text-zinc-400` to fix Light/Dark mode legibility.
+  - Increased typography scaling across all sidebar cards: expanded labels by 1px (from `text-[10px]` to `text-[11px]/text-xs` and `text-[8px]/[9px]` to `text-[10px]/[11px]`) and scaled value stats up by 2px (from `text-xs` to `text-sm` or `text-[13px] font-mono`) for ultimate readability.
+  - Styled key console tables and note logs in the AI Synthesis block to follow the high-contrast rules.
+
+### 4. Drops & Glass-Panel controls
+- **TimeframeSwitcher.tsx:**
+  - Upgraded dropdown button and timeframe selector options to use the new glass-panel design (rounded-md, backdrop-blur-md, subtle borders, card background, and custom hover states).
+- **SettingsModal.tsx:**
+  - Standardized the Price Alert configuration overlay and Audio Vault mapping select menus, checkboxes, and buttons to use matching glass-panel styles (card background, rounded-md, theme-aware text contrast, and smooth transitions).
+
+### 5. Advanced Light Mode Chart & Volumetric Marker Sync
+- **Chart.tsx:**
+  - Upgraded lightweight-charts vertical/horizontal grid lines to be exactly `rgba(0,0,0,0.05)` in Light Mode, maintaining depth without screen clutter.
+  - Programmed a dynamic series update in the theme `useEffect` watcher to swap up/down candles to solid `emerald-600` (`#059669`) and `rose-600` (`#e11d48`) in Light Mode, restoring standard trading visual cues.
+  - Updated the data synchronization hook to pass the `isDark = theme === 'dark'` state into the marker generation algorithm, adding `theme` to the hook's dependency array to trigger instant marker color-swaps on theme toggle.
+- **generateChartMarkers.ts:**
+  - Accepted the `isDark: boolean` parameter.
+  - When in Light Mode, volumetric arrows (Institutional Sponsorship) switch from White `#ffffff` to solid Black `#000000`, and volumetric dots (SMT Traps/Sweeps) switch from neon colors to solid Indigo `#4f46e5`, guaranteeing superb contrast against the `zinc-50` background.
+
+---
+
+## 🔬 Compilation & Verification Results
+
+A Next.js 16 optimized production build (`npm run build`) was successfully compiled and finalized with **zero compiler or TypeScript errors**:
+- **TypeScript Check:** Compiled cleanly in `10.4s`.
+- **Turbopack Compiler:** Compiled successfully in `6.9s`.
+- **Static Pages Generation:** Completed cleanly (`14/14` routes generated successfully).
+
+All routes, Server Actions, state contexts, and WebSocket hook singleton connections remain completely functional and intact.

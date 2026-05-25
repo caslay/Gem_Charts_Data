@@ -346,9 +346,9 @@ export default function EquationBuilder() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-5 h-5 text-[#d1bcff] animate-spin" />
-        <span className="ml-2 text-[10px] text-[#958da3] font-mono uppercase tracking-widest">
+      <div className="flex items-center justify-center h-64 font-sans">
+        <Loader2 className="w-5 h-5 text-accent animate-spin" />
+        <span className="ml-2.5 text-[10px] text-muted font-bold uppercase tracking-widest">
           Loading Strategies...
         </span>
       </div>
@@ -356,22 +356,22 @@ export default function EquationBuilder() {
   }
 
   return (
-    <div className="flex gap-0 h-full min-h-[420px]">
+    <div className="flex gap-0 h-full min-h-[420px] font-sans">
       {/* ── Left: Strategy List ─────────────────────────────────────────── */}
-      <div className="w-[180px] shrink-0 border-r border-[#4a4457]/50 flex flex-col">
-        <div className="p-2 border-b border-[#4a4457]/30">
+      <div className="w-[180px] shrink-0 border-r border-card-border flex flex-col bg-card/30">
+        <div className="p-2 border-b border-card-border/50">
           <button
             onClick={handleCreateNew}
-            className="w-full flex items-center justify-center gap-1.5 py-2 bg-[#50ffaf]/10 border border-[#50ffaf]/30 hover:bg-[#50ffaf]/20 text-[#50ffaf] text-[9px] font-black uppercase tracking-widest transition-all cursor-pointer"
+            className="w-full flex items-center justify-center gap-1.5 py-2 bg-accent/10 border border-accent/30 hover:bg-accent/20 text-accent text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer rounded-lg"
           >
             <Plus size={10} />
             New Strategy
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[#4a4457] scrollbar-track-transparent">
+        <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-card-border scrollbar-track-transparent">
           {strategies.length === 0 && (
-            <div className="p-3 text-[9px] text-[#958da3] text-center font-mono uppercase">
+            <div className="p-3 text-[9px] text-muted text-center font-mono uppercase">
               No strategies configured
             </div>
           )}
@@ -379,10 +379,10 @@ export default function EquationBuilder() {
             <div
               key={s.id}
               onClick={() => setSelectedId(s.id)}
-              className={`flex items-center gap-2 px-3 py-2.5 cursor-pointer transition-all border-b border-[#4a4457]/20 group ${
+              className={`flex items-center gap-2 px-3 py-2.5 cursor-pointer transition-all border-b border-card-border/30 group ${
                 selectedId === s.id
-                  ? 'bg-[#50ffaf]/10 border-l-2 border-l-[#50ffaf]'
-                  : 'hover:bg-white/3 border-l-2 border-l-transparent'
+                  ? 'bg-accent/10 border-l-2 border-l-accent'
+                  : 'hover:bg-card-hover/10 border-l-2 border-l-transparent'
               }`}
             >
               <button
@@ -394,25 +394,25 @@ export default function EquationBuilder() {
                 title={s.is_active ? 'Deactivate' : 'Activate'}
               >
                 {s.is_active ? (
-                  <Power size={10} className="text-[#50ffaf]" />
+                  <Power size={10} className="text-emerald-500" />
                 ) : (
-                  <PowerOff size={10} className="text-[#958da3]" />
+                  <PowerOff size={10} className="text-muted" />
                 )}
               </button>
               <div className="flex-1 min-w-0">
                 <span
                   className={`block text-[10px] font-bold truncate ${
-                    s.is_active ? 'text-[#e5e2e3]' : 'text-[#958da3]'
+                    s.is_active ? 'text-title font-semibold' : 'text-muted'
                   }`}
                 >
                   {s.name}
                 </span>
-                <span className="block text-[8px] text-[#958da3] font-mono">
+                <span className="block text-[8px] text-muted font-mono mt-0.5">
                   {(Array.isArray(s.conditions) ? s.conditions : (s.conditions?.conditions || [])).length} condition{(Array.isArray(s.conditions) ? s.conditions : (s.conditions?.conditions || [])).length !== 1 ? 's' : ''}
                 </span>
               </div>
               {selectedId === s.id && (
-                <ChevronRight size={10} className="text-[#50ffaf] shrink-0" />
+                <ChevronRight size={10} className="text-accent shrink-0" />
               )}
             </div>
           ))}
@@ -420,14 +420,14 @@ export default function EquationBuilder() {
       </div>
 
       {/* ── Right: Editor Panel ─────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 bg-background/20">
         {!selectedId ? (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <div className="text-[#958da3] text-[10px] font-mono uppercase tracking-widest mb-2">
+            <div className="text-center font-sans">
+              <div className="text-muted text-[10px] font-bold uppercase tracking-widest mb-1.5">
                 Select or create a strategy
               </div>
-              <div className="text-[#4a4457] text-[9px] font-mono">
+              <div className="text-muted/60 text-[9px] uppercase tracking-wide">
                 Build conditional equations with temporal logic
               </div>
             </div>
@@ -435,31 +435,31 @@ export default function EquationBuilder() {
         ) : (
           <div className="flex flex-col h-full">
             {/* Strategy Name */}
-            <div className="px-4 pt-3 pb-2 border-b border-[#4a4457]/30">
-              <label className="block text-[8px] text-[#958da3] uppercase font-bold tracking-widest mb-1">
+            <div className="px-4 pt-3.5 pb-2.5 border-b border-card-border/50">
+              <label className="block text-[8px] text-muted uppercase font-bold tracking-widest mb-1">
                 Strategy Name
               </label>
               <input
                 type="text"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
-                className="w-full bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-3 py-1.5 text-xs font-mono text-white rounded-none transition-colors"
+                className="w-full bg-background/50 border border-card-border focus:border-accent focus:outline-none px-3.5 py-2.5 text-xs font-sans text-title rounded-lg transition-all shadow-sm"
                 placeholder="e.g. OI Reversal + FVG Confirm"
               />
             </div>
 
             {/* Conditions */}
-            <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-[#4a4457] scrollbar-track-transparent px-4 py-3 space-y-2">
-              <div className="bg-[#1c1b1c] border border-[#4a4457]/45 p-2.5 text-[9px] font-mono text-[#958da3] leading-relaxed mb-3 rounded-none">
-                <span className="text-[#50ffaf] font-black uppercase tracking-wider block mb-1">⚡ Sniper Mitigation Protocol:</span>
-                Use FVG [CLOSE] to confirm structure. Use PRICE_IN_FVG [TICK] for zero-latency mitigation entries.
+            <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-card-border scrollbar-track-transparent px-4 py-3.5 space-y-2">
+              <div className="glass-panel bg-accent/5 border border-accent/20 p-3 text-[10px] font-sans text-muted leading-relaxed mb-3 rounded-xl">
+                <span className="text-accent font-bold uppercase tracking-wider block mb-1">⚡ Sniper Mitigation Protocol:</span>
+                Use FVG <span className="font-mono text-[9px] bg-background/40 px-1 py-0.5 rounded border border-card-border/50 font-bold">[CLOSE]</span> to confirm structure. Use <span className="font-mono text-[9px] bg-background/40 px-1 py-0.5 rounded border border-card-border/50 font-bold">PRICE_IN_FVG [TICK]</span> for zero-latency mitigation entries.
               </div>
 
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[8px] text-[#958da3] uppercase font-bold tracking-widest">
+                <span className="text-[8px] text-muted uppercase font-bold tracking-widest">
                   Logic Rows
                 </span>
-                <span className="text-[8px] text-[#4a4457] font-mono">
+                <span className="text-[8px] text-muted/60 font-mono">
                   ALL conditions must be TRUE
                 </span>
               </div>
@@ -471,10 +471,10 @@ export default function EquationBuilder() {
                 return (
                   <div
                     key={cond.id}
-                    className="flex items-center gap-1.5 bg-[#141416]/80 border border-[#4a4457]/50 p-2 rounded-none group"
+                    className="flex items-center gap-2 glass-panel bg-card/45 border border-card-border/80 p-2.5 rounded-xl group transition-all"
                   >
                     {/* Row number */}
-                    <span className="text-[8px] text-[#4a4457] font-mono w-4 shrink-0 text-center">
+                    <span className="text-[8px] text-muted/60 font-mono w-4 shrink-0 text-center">
                       {idx + 1}
                     </span>
 
@@ -482,7 +482,7 @@ export default function EquationBuilder() {
                     <select
                       value={cond.metric}
                       onChange={(e) => updateCondition(cond.id, 'metric', e.target.value)}
-                      className="bg-[#0e0e0f] border border-[#4a4457] focus:border-[#d1bcff] focus:outline-none px-2 py-1 text-[10px] font-mono text-white rounded-none cursor-pointer flex-1 min-w-0"
+                      className="bg-background/60 border border-card-border/60 focus:border-accent focus:outline-none px-3 py-2 text-xs font-sans text-foreground rounded-lg cursor-pointer flex-1 min-w-0 transition-all shadow-sm"
                     >
                       {METRICS.map((m) => (
                         <option key={m.key} value={m.key}>
@@ -495,7 +495,7 @@ export default function EquationBuilder() {
                     <select
                       value={cond.operator}
                       onChange={(e) => updateCondition(cond.id, 'operator', e.target.value)}
-                      className="bg-[#0e0e0f] border border-[#4a4457] focus:border-[#d1bcff] focus:outline-none px-2 py-1 text-[10px] font-mono text-white rounded-none cursor-pointer w-[72px] shrink-0"
+                      className="bg-background/60 border border-card-border/60 focus:border-accent focus:outline-none px-2 py-2 text-xs font-mono text-foreground rounded-lg cursor-pointer w-[86px] shrink-0 transition-all shadow-sm"
                     >
                       {operators.map((op) => (
                         <option key={op.value} value={op.value}>
@@ -509,7 +509,7 @@ export default function EquationBuilder() {
                       <select
                         value={cond.timeframe || 'ANY'}
                         onChange={(e) => updateCondition(cond.id, 'timeframe', e.target.value)}
-                        className="bg-[#0e0e0f] border border-[#4a4457] focus:border-[#d1bcff] focus:outline-none px-2 py-1 text-[10px] font-mono text-white rounded-none cursor-pointer w-[70px] shrink-0"
+                        className="bg-background/60 border border-card-border/60 focus:border-accent focus:outline-none px-2 py-2 text-xs font-sans text-foreground rounded-lg cursor-pointer w-[78px] shrink-0 transition-all shadow-sm"
                       >
                         <option value="ANY">ANY TF</option>
                         <option value="5m">5m</option>
@@ -522,7 +522,7 @@ export default function EquationBuilder() {
                       <select
                         value={cond.direction || 'ANY'}
                         onChange={(e) => updateCondition(cond.id, 'direction', e.target.value)}
-                        className="bg-[#0e0e0f] border border-[#4a4457] focus:border-[#d1bcff] focus:outline-none px-2 py-1 text-[10px] font-mono text-white rounded-none cursor-pointer w-[86px] shrink-0"
+                        className="bg-background/60 border border-card-border/60 focus:border-accent focus:outline-none px-2 py-2 text-xs font-sans text-foreground rounded-lg cursor-pointer w-[96px] shrink-0 transition-all shadow-sm"
                       >
                         <option value="ANY">ANY DIR</option>
                         <option value="BULLISH">BULLISH</option>
@@ -535,7 +535,7 @@ export default function EquationBuilder() {
                       <select
                         value={cond.value || metricDef.options[0]}
                         onChange={(e) => updateCondition(cond.id, 'value', e.target.value)}
-                        className="bg-[#0e0e0f] border border-[#4a4457] focus:border-[#d1bcff] focus:outline-none px-2 py-1 text-[10px] font-mono text-white rounded-none cursor-pointer w-[76px] shrink-0"
+                        className="bg-background/60 border border-card-border/60 focus:border-accent focus:outline-none px-2 py-2 text-xs font-sans text-foreground rounded-lg cursor-pointer w-[86px] shrink-0 transition-all shadow-sm"
                       >
                         {metricDef.options.map((opt) => (
                           <option key={opt} value={opt}>
@@ -558,7 +558,7 @@ export default function EquationBuilder() {
                         value={cond.value || ''}
                         onChange={(e) => updateCondition(cond.id, 'value', e.target.value)}
                         placeholder="0.0"
-                        className="bg-[#0e0e0f] border border-[#4a4457] focus:border-[#d1bcff] focus:outline-none px-2 py-1 text-[10px] font-mono text-white rounded-none w-[76px] shrink-0"
+                        className="bg-background/60 border border-card-border/60 focus:border-accent focus:outline-none px-2.5 py-2 text-xs font-mono text-foreground rounded-lg w-[86px] shrink-0 transition-all shadow-sm"
                       />
                     )}
 
@@ -566,10 +566,10 @@ export default function EquationBuilder() {
                     <button
                       onClick={() => toggleTemporal(cond.id)}
                       title={cond.temporal === 'INSTANT' ? 'Evaluates on every tick' : 'Evaluates only on candle close'}
-                      className={`shrink-0 flex items-center gap-1 px-2 py-1 text-[9px] font-black uppercase tracking-wider border rounded-none transition-all cursor-pointer ${
+                      className={`shrink-0 flex items-center gap-1.5 px-3 py-2 text-[10px] font-bold uppercase tracking-wider border rounded-lg transition-all cursor-pointer shadow-sm ${
                         cond.temporal === 'INSTANT'
-                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
-                          : 'bg-[#d1bcff]/10 border-[#d1bcff]/30 text-[#d1bcff] hover:bg-[#d1bcff]/20'
+                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-500 dark:text-amber-400 hover:bg-amber-500/20'
+                          : 'bg-accent/10 border-accent/30 text-accent hover:bg-accent/20'
                       }`}
                     >
                       {cond.temporal === 'INSTANT' ? (
@@ -588,7 +588,7 @@ export default function EquationBuilder() {
                     {/* Delete row */}
                     <button
                       onClick={() => removeCondition(cond.id)}
-                      className="shrink-0 p-1 text-[#958da3] hover:text-red-400 hover:bg-red-500/10 transition-all cursor-pointer rounded-none opacity-0 group-hover:opacity-100"
+                      className="shrink-0 p-1.5 text-muted hover:text-rose-500 hover:bg-rose-500/10 transition-all cursor-pointer rounded-lg opacity-0 group-hover:opacity-100"
                     >
                       <Trash2 size={10} />
                     </button>
@@ -599,28 +599,28 @@ export default function EquationBuilder() {
               {/* Add Condition button */}
               <button
                 onClick={addCondition}
-                className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-[#4a4457]/50 hover:border-[#50ffaf]/30 text-[#958da3] hover:text-[#50ffaf] text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer mb-4"
+                className="w-full flex items-center justify-center gap-1.5 py-2.5 border border-dashed border-card-border hover:border-accent text-muted hover:text-accent text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer mb-4 rounded-xl bg-card/20 hover:bg-accent/5"
               >
                 <Plus size={10} />
                 Add Condition
               </button>
 
               {/* Strategy Settings Section */}
-              <div className="border-t border-[#4a4457]/30 pt-4 mt-2">
-                <span className="text-[9px] font-black uppercase tracking-[0.15em] text-[#958da3] block mb-3">
+              <div className="border-t border-card-border/50 pt-4 mt-2">
+                <span className="text-[9px] font-black uppercase tracking-[0.15em] text-muted block mb-3 font-sans">
                   Strategy Settings & Trade Execution Parameters
                 </span>
 
-                <div className="grid grid-cols-2 gap-4 bg-[#1c1b1c] border border-[#4a4457]/50 p-4 shadow-xl">
+                <div className="grid grid-cols-2 gap-4 glass-panel bg-card/40 border border-card-border/80 p-4.5 rounded-2xl shadow-lg">
                   {/* Trade Direction */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+                    <label className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted">
                       Trade Direction
                     </label>
                     <select
                       value={editDirection}
                       onChange={(e) => setEditDirection(e.target.value as 'LONG' | 'SHORT')}
-                      className="bg-[#0e0e0f] border border-[#4a4457]/60 hover:border-[#d1bcff]/40 focus:border-[#50ffaf] focus:outline-none px-3 py-2 text-[10px] font-mono text-white rounded-none cursor-pointer w-full transition-colors"
+                      className="bg-background/60 border border-card-border/80 hover:border-accent/40 focus:border-accent focus:outline-none px-3.5 py-2.5 text-xs font-sans text-foreground rounded-lg cursor-pointer w-full transition-all shadow-sm"
                     >
                       <option value="LONG">LONG (Buy Setup)</option>
                       <option value="SHORT">SHORT (Sell Setup)</option>
@@ -629,13 +629,13 @@ export default function EquationBuilder() {
 
                   {/* Temporal Mode */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+                    <label className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted">
                       Temporal Mode
                     </label>
                     <select
                       value={editTemporalMode}
                       onChange={(e) => setEditTemporalMode(e.target.value as 'INSTANT' | 'ON_CLOSE')}
-                      className="bg-[#0e0e0f] border border-[#4a4457]/60 hover:border-[#d1bcff]/40 focus:border-[#50ffaf] focus:outline-none px-3 py-2 text-[10px] font-mono text-white rounded-none cursor-pointer w-full transition-colors"
+                      className="bg-background/60 border border-card-border/80 hover:border-accent/40 focus:border-accent focus:outline-none px-3.5 py-2.5 text-xs font-sans text-foreground rounded-lg cursor-pointer w-full transition-all shadow-sm"
                     >
                       <option value="INSTANT">⚡ INSTANT (Mid-candle)</option>
                       <option value="ON_CLOSE">⏳ ON_CLOSE (Candle Confirmation)</option>
@@ -644,13 +644,13 @@ export default function EquationBuilder() {
 
                   {/* Stop Loss Logic */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+                    <label className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted">
                       Stop Loss Logic
                     </label>
                     <select
                       value={editSlLogic}
                       onChange={(e) => setEditSlLogic(e.target.value)}
-                      className="bg-[#0e0e0f] border border-[#4a4457]/60 hover:border-[#d1bcff]/40 focus:border-[#50ffaf] focus:outline-none px-3 py-2 text-[10px] font-mono text-white rounded-none cursor-pointer w-full transition-colors"
+                      className="bg-background/60 border border-card-border/80 hover:border-accent/40 focus:border-accent focus:outline-none px-3.5 py-2.5 text-xs font-sans text-foreground rounded-lg cursor-pointer w-full transition-all shadow-sm"
                     >
                       <option value="Structural Swing">Structural Swing (Hard Invalidation)</option>
                       <option value="Last Candle High/Low">Last Candle High/Low</option>
@@ -660,13 +660,13 @@ export default function EquationBuilder() {
 
                   {/* Take Profit Logic */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+                    <label className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted">
                       Take Profit Logic
                     </label>
                     <select
                       value={editTpLogic}
                       onChange={(e) => setEditTpLogic(e.target.value)}
-                      className="bg-[#0e0e0f] border border-[#4a4457]/60 hover:border-[#d1bcff]/40 focus:border-[#50ffaf] focus:outline-none px-3 py-2 text-[10px] font-mono text-white rounded-none cursor-pointer w-full transition-colors"
+                      className="bg-background/60 border border-card-border/80 hover:border-accent/40 focus:border-accent focus:outline-none px-3.5 py-2.5 text-xs font-sans text-foreground rounded-lg cursor-pointer w-full transition-all shadow-sm"
                     >
                       <option value="Nearest Order Book Magnet">Nearest Order Book Magnet</option>
                       <option value="PDH/PDL Target">PDH/PDL Target</option>
@@ -676,7 +676,7 @@ export default function EquationBuilder() {
 
                   {/* Risk per Trade (%) */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+                    <label className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted">
                       Risk per Trade (%)
                     </label>
                     <input
@@ -686,7 +686,7 @@ export default function EquationBuilder() {
                       max="100.0"
                       value={editRiskPercent}
                       onChange={(e) => setEditRiskPercent(e.target.value)}
-                      className="bg-[#0e0e0f] border border-[#4a4457]/60 hover:border-[#d1bcff]/40 focus:border-[#50ffaf] focus:outline-none px-3 py-2 text-[10px] font-mono text-white rounded-none w-full transition-colors"
+                      className="bg-background/60 border border-card-border/80 hover:border-accent/40 focus:border-accent focus:outline-none px-3.5 py-2.5 text-xs font-mono text-foreground rounded-lg w-full transition-all shadow-sm"
                       placeholder="1.0"
                     />
                   </div>
@@ -695,10 +695,10 @@ export default function EquationBuilder() {
             </div>
 
             {/* Footer Actions */}
-            <div className="px-4 py-3 border-t border-[#4a4457]/30 flex items-center justify-between">
+            <div className="px-4 py-3.5 border-t border-card-border/50 flex items-center justify-between">
               <button
                 onClick={handleDelete}
-                className="flex items-center gap-1 px-2.5 py-1.5 border border-red-500/30 hover:border-red-500 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-bold transition-all uppercase text-[9px] rounded-none cursor-pointer"
+                className="flex items-center gap-1.5 px-3.5 py-2 border border-rose-500/30 hover:border-rose-500 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 hover:text-rose-400 font-bold transition-all uppercase text-[10px] rounded-lg cursor-pointer shadow-sm shadow-black/5"
               >
                 <Trash2 size={10} />
                 Delete
@@ -707,7 +707,7 @@ export default function EquationBuilder() {
               <button
                 onClick={handleSave}
                 disabled={isSaving || !editName.trim() || editConditions.length === 0}
-                className="flex items-center gap-1.5 px-4 py-1.5 bg-[#50ffaf] border border-[#50ffaf] hover:bg-[#40dd96] text-black font-bold transition-all uppercase text-[9px] rounded-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-4.5 py-2.5 bg-accent border border-accent hover:opacity-90 text-black font-black transition-all uppercase text-[10px] rounded-lg cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-accent/10"
               >
                 {isSaving ? (
                   <Loader2 size={10} className="animate-spin" />

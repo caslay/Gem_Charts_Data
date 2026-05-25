@@ -35,7 +35,7 @@ export default function TimeframeSwitcher({ selectedInterval, onChange }: Timefr
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className="bg-zinc-900/80 backdrop-blur-md border border-[#4a4457] hover:border-[#a855f7]/60 text-[#e5e2e3] px-4 py-2 font-mono text-[11px] font-black uppercase tracking-widest transition-all duration-200 cursor-pointer flex items-center gap-2 shadow-lg shadow-black/30"
+          className="bg-card/75 backdrop-blur-md border border-card-border hover:border-accent/60 text-foreground px-4 py-2 font-mono text-[11px] font-black uppercase tracking-widest transition-all duration-200 cursor-pointer flex items-center gap-2 shadow-lg rounded-md"
           id="timeframe-menu-button"
           aria-expanded={isOpen}
           aria-haspopup="true"
@@ -43,14 +43,14 @@ export default function TimeframeSwitcher({ selectedInterval, onChange }: Timefr
           <span>Timeframe: {selectedInterval.toUpperCase()}</span>
           <ChevronDown
             size={12}
-            className={`text-[#958da3] transition-transform duration-250 ${isOpen ? 'rotate-180 text-[#a855f7]' : ''}`}
+            className={`text-slate-500 dark:text-zinc-400 transition-transform duration-250 ${isOpen ? 'rotate-180 text-accent' : ''}`}
           />
         </button>
       </div>
 
       {isOpen && (
         <div
-          className="absolute right-0 z-50 mt-1.5 w-32 origin-top-right rounded-none bg-zinc-950/90 backdrop-blur-xl border border-[#a855f7]/40 shadow-2xl focus:outline-none animate-in fade-in slide-in-from-top-1 duration-150"
+          className="absolute right-0 z-50 mt-1.5 w-32 origin-top-right rounded-md bg-card/95 backdrop-blur-xl border border-card-border shadow-2xl focus:outline-none animate-in fade-in slide-in-from-top-1 duration-150"
           role="menu"
           aria-orientation="vertical"
           aria-labelledby="timeframe-menu-button"
@@ -65,9 +65,9 @@ export default function TimeframeSwitcher({ selectedInterval, onChange }: Timefr
                     onChange(tf);
                     setIsOpen(false);
                   }}
-                  className={`w-full text-left px-4 py-2.5 font-mono text-[10px] font-black tracking-widest uppercase cursor-pointer transition-all duration-150 ${isActive
-                    ? 'bg-[#a855f7]/10 text-[#d1bcff] border-l-2 border-[#a855f7]'
-                    : 'text-[#958da3] hover:text-[#e5e2e3] hover:bg-white/5 border-l-2 border-transparent'
+                  className={`w-full text-left px-4 py-2.5 font-mono text-[10px] font-black tracking-widest uppercase cursor-pointer transition-all duration-150 first:rounded-t-md last:rounded-b-md ${isActive
+                    ? 'bg-accent/10 text-accent border-l-2 border-accent'
+                    : 'text-slate-600 dark:text-zinc-400 hover:text-foreground hover:bg-accent/5 border-l-2 border-transparent'
                     }`}
                   role="menuitem"
                 >

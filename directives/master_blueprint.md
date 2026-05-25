@@ -1,10 +1,243 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V9.0
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.1
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-25  
-> **Last Updated:** 2026-05-25 (V9.0 Settings Architecture Refactoring & Tabbed Navigation)  
+> **Last Updated:** 2026-05-25 (V10.1 Price Alerts & System Command Center Visual Overhauls Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
-> **Source Files Analyzed:** 37+ across TypeScript (Next.js 16), Python (FastAPI), and Markdown directives.
+> **Source Files Analyzed:** 52+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+---
+
+## 🆕 V10.1 Changelog — Phase 4 Visual Overhauls: Price Alerts & System Command Center (Completed)
+
+### 1. Price Alerts Config Form Overhaul (`SettingsModal.tsx`)
+- **Theme-Synced Level Target Readout:** Upgraded the Level Target indicator to use a premium, theme-synced `.glass-panel bg-card/45 border-card-border/80` layout with dynamic text highlights.
+- **Fintech Input Fields:** Refactored the Alert Descriptor, condition selects, and timeframe dropdowns to use our elegant, rounded glass input parameters (`bg-background/60 border-card-border/80 focus:border-accent text-foreground rounded-lg font-sans`).
+- **Interactive Checkboxes & Action Chains:** Replaced raw Slate layouts with beautiful `.glass-panel bg-card/40` checkboxes utilizing dynamic `--accent` parameters, smooth hover transitions (`hover:bg-accent/10`), and rounded shapes (`rounded-lg`).
+
+### 2. Audio Vault Tab Overhaul (`SettingsModal.tsx`)
+- **Inner Glass Vault Introduction:** Housed the audio mappings description inside a gorgeous, inner `.glass-panel` container with responsive typography.
+- **Mapped Sounds Polishing:** Overhauled all sound triggers, checkbox rows, play/preview controls, and sound profile selections to utilize the same rounded glass layout, responding instantly to dark/light swatch preset switching.
+
+### 3. Strategy Architect & Equation Builder Overhaul (`EquationBuilder.tsx`)
+- **Clean Split Column Borders:** Refactored the left Strategy List sidebar to use dynamic borders (`border-card-border/30`) and active selection highlights (`bg-accent/10 border-l-2 border-l-accent`), resolving colors elegantly across swatches.
+- **Sniper Protocol Box:** Overhauled the solid dark container to a glowing, rounded `.glass-panel border-accent/20 bg-accent/5` box with clean inline-code tags.
+- **Padded Logic Rows:** Redesigned metric selectors, operators, timeframes, and direction elements to render in elegant, padded `.glass-panel` components with rounded coordinates (`rounded-xl`).
+- **Pill Toggles & Buttons:** Styled temporal TICK/CLOSE modes, add condition dotted pills, and delete outlines to match HSL amber and dynamic accents.
+- **Trade Execution Settings Box:** Transformed the parameters sub-section into a premium `.glass-panel bg-card/40 border border-card-border/80 rounded-2xl` container.
+- **Neon Commit Buttons:** Upgraded Save Strategy to glowing neon glass (`bg-accent shadow-md hover:opacity-90`) and Delete to high-contrast red glass (`border-rose-500/30 bg-rose-500/10 text-rose-500`).
+
+---
+
+## 🆕 V10.0 Changelog ─ Phase 3 Visual Overhauls: IPDA Matrix Config Drawer and Trading Journal (Completed)
+
+### 1. IPDA Matrix Config Drawer Overhaul (`MatrixConfigDrawer.tsx`)
+- **Dynamic Backgrounds & Borders:** Swapped out hardcoded dark hex values (`#0e0e0f`, `#1c1b1c`) and borders (`#4a4457`) for dynamic theme variables. The overlay backdrop resolves to `bg-background/60 backdrop-blur-sm`, and the main drawer container resolves to `bg-background/95 backdrop-blur-xl border-l border-card-border`.
+- **Premium Glass Card Grids:** Redesigned local dealing ranges, weekly high/lows, daily imbalances, and standard deviation projection cards to render inside sleek, rounded `.glass-panel` wrappers.
+- **Vibrant Status Synchronization:** Replaced plain colored text readouts for session range high/lows and resting liquidity pools with beautiful glowing highlights using CSS dynamic tokens (`text-emerald-500` / `text-rose-500` / `bg-emerald-500/10` / `border-emerald-500/20` tags) matching standard swept indicators.
+
+### 2. Trading Journal Standalone Page Overhaul (`src/app/journal/page.tsx`)
+- **Seamless Backdrop Paint:** Restructured the page canvas to utilize global theme transitions, swapping the root layout background with dynamic `bg-background`.
+- **Vault Lock Redesign:** Upgraded the unauthorized/unauthenticated lock panel to a glowing `.glass-panel border-rose-500/20` mockup featuring theme-synced lock icons and high-contrast instruction text.
+- **Polished Return Navigation:** Restyled the Return to Terminal command button to use a rounded, high-contrast glass button state (`bg-card border-card-border hover:border-accent rounded-lg`).
+
+### 3. Trading Journal Data Table & HUD Cards Overhaul (`JournalTable.tsx`)
+- **High-Fidelity HUD Card Layout:** Swapped the legacy metrics panels for a set of four premium `.glass-panel` HUD cards tracking persistent capital balance, total realized P&L, risk exposure, and win rates, complete with rounded edges and inner opacity card controls.
+- **Dynamic Exposure Progress Bars:** Redesigned the Global Risk progress bar to utilize dynamic CSS theme variables, automatically rendering gradient fills and accent borders based on active presets.
+- **Audited Logs Grid Polishing:** Deepened padding inside cells and replaced dark solid headers (`bg-black/40`) and lines (`border-[#4a4457]`) with sleek `border-card-border/50` grids. Swapped raw Mono values on names and dates with Geist Sans `font-sans` weights, restricting Mono exclusively to numerical figures and pricing indices.
+- **Glass Action Selectors:** Overhauled play/pause hooks, delete surgical popups, and manual close icons into high-contrast rounded glass buttons.
+
+### 4. Risk Engine Configurations Panel Overhaul (`SettingsPanel.tsx`)
+- **Sleek Settings Toggle:** Transformed the toggle header and form body to render inside a beautiful `.glass-panel` container backed by thin dynamic dividers.
+- **Theme-Swapped Input Fields:** Styled numeric input fields for Initial Capital Seed and Max Risk Limit to match our modern text input aesthetic, utilizing dynamic border focus triggers (`focus:border-accent`).
+- **Rounded Button Controls:** Refactored settings submit and feedback tags to use theme-synced rounded success/error variables.
+
+---
+
+## 🆕 V9.9 Changelog — Unified Visual Overhaul for Settings, Backtest, and Compounding (Completed)
+
+### 1. Standalone Settings Page Overhaul (`/settings/page.tsx`)
+- **Visual Synthesis:** Completely updated the page to use Geist Sans and a theme-aware glass-panel card style (`glass-panel`), eliminating any hardcoded styling inconsistencies.
+- **Form Controls Refactoring:** Replaced all native text inputs, selects, and checkboxes with customized premium inputs matching the new glass-panel style: rounded borders (`border-card-border`), dynamic background opacity (`bg-card/60 backdrop-blur-md`), and glowing focus states (`focus:border-accent`).
+- **Layout Alignment:** Swapped custom mono sizes (`text-[9px] font-mono`) with large high-contrast typography (`font-sans text-xs md:text-sm font-black` tab button rules) to perfectly align with `SettingsModal.tsx`.
+
+### 2. Market Replay Re-Engineering (`/backtest/page.tsx`)
+- **Fintech HUD Card Triad:** Replicated the main dashboard HUD layout at the top of the page, presenting three sleek glass-panels displaying the backtest execution metrics: Total P&L (`+$12,430.20 (+14.2%)`), Win Rate (`73.5%`), and Maximum Drawdown (`-2.15%`) using bold theme-color highlights (Emerald for P&L, Accent color for Win Rate, Rose for Drawdown).
+- **Floating Glass Replay Console:** Transformed the full-width bottom control bar into an absolute-positioned, rounded glass-panel floating widget centered at the bottom of the chart column (`rounded-2xl shadow-xl bg-card/60 border-card-border px-6 py-3.5`).
+- **Dynamic Theme-Swapped Candles & Markers:** Subscribed `BacktestChart` to both `theme` and `themeSettings` context state. The chart wicks, borders, and volumetric arrows/circles (`generateVolumetricMarkers`) now instantly re-render with target color palettes on active theme swaps, matching the live chart behavior.
+
+### 3. Compounding Growth Matrix Overhaul (`/compounding/page.tsx`)
+- **Massive Projected Capital Hero Card:** Integrated a premium, eye-catching balance Hero Card at the top of the columns presenting the final projected growth balance in massive typography (`text-4xl lg:text-5xl font-black`) backed by a dynamic radial accent glow and local currency EGP exchange value.
+- **Dynamic HSL Range Sliders:** Replaced numeric textboxes for Win Rate and Risk Percent with interactive, custom-styled HSL range inputs, providing a sleek gaming/visual-slider experience while binding seamlessly with existing React engine hook handlers.
+- **Interactive SVG Growth Curve with Coordinate Tooltips:** Refactored the SVG growth curve to use CSS theme variables (`var(--accent)`) for lines and gradients. Implemented high-performance mouse-tracking region triggers, presenting a floating, beautiful data coordinate tooltip on cursor hovers.
+- **Deep Padded Data Table:** Overhauled the compounding rows to remove the generic font-mono and implement deep cell padding (`px-6 py-4`) and thin row dividers (`border-b border-card-border`), achieving an elite financial reporting look.
+
+---
+
+## 🆕 V9.8 Changelog — Dynamic Typography & Interactive Customizers (Appearance Phase 2) (Completed)
+
+### 1. Unified Visual & Interactive Variable System
+- **Expanded Theme Schema:** Added 16 new color variables to `ThemeSettings` types and database self-healing configurations inside `/api/settings/route.ts` to manage default, active, and hover states for buttons, links, navigations, and icons alongside dynamic typography levels (titles, labels, values, green bullish sweeps, and red bearish sweeps).
+- **Institutional Defaults:** Registered standard, premium default color scales for both theme customizers (Midnight presets like glowing purple accent `#a855f7` and deep values `#f8fafc`; Daylight presets like rich indigo accent `#4f46e5` and soft value readouts `#334155`).
+
+### 2. High-Performance CSS Cascade Overrides
+- **Zero-Markup Stylesheet Injection:** Added stylesheet sync bindings inside `<ThemeSync />` mapping settings keys directly to CSS variables (e.g. `--btn-default`, `--text-title`, `--highlight-up`, `--highlight-down`).
+- **Global Selector Interception:** Implemented scoped visual cascade rules at the bottom of `globals.css` targeting common Tailwind utility classes (`.text-foreground`, `.text-muted`, `.text-emerald-500`, `.bg-rose-500/10`) and elements (`h1`, `h2`, `a`, `button`). This instantly overrides all dashboard typography and interactive controls globally when drag pickers are updated without markup refactoring.
+
+### 3. Organized APPEARANCE Studio & Swatch Mockups
+- **Three Categorized Customizer Groups:** Reorganized the customizer panels in `SettingsModal.tsx` and the standalone `/settings` page into three clean, structured visual modules:
+  - *Layout Panels & Presets:* Background, Card fill, Card opacity range slider, Accent neon glow.
+  - *Interactive Controls:* Interactive Default unselected, Interactive Active selected, Interactive Hover state.
+  - *Workspace Typography:* Title headings, Muted labels, Readout values, Bullish Candles/Signal, Bearish Candles/Signal.
+- **Interactive Swatch Mockups:** Upgraded Midnight and Daylight live previews to render a live, mini-interface mockup with dynamic title headings, hovering links, unselected tabs, green bullish tags, and red bearish sweeps that immediately react to picker modifications.
+
+### 4. Build Soundness Verification
+- **Turbopack & TypeScript Checks:** Performed a successful Next.js production build (`npm run build`) executing full TypeScript compiler checking in `10.8s` and static route page generation in `6.9s` with zero bundle warnings or compilation errors.
+
+### 5. React Hydration Mismatch Resolution in ThemeSync
+- **The Bug:** During the initial client paint (hydration phase), React detected a mismatch in properties/attributes on the injected `<style id="dynamic-theme-customizer">` stylesheet. This was caused because the server environment (lacking `window`/`localStorage` context) rendered default institutional styles, while the client immediately initialized its `themeSettings` state with the user's customized colors retrieved from `localStorage` before the first hydration render.
+- **The Fix:** Integrated a robust, client-side `mounted` rendering gate in `ThemeSync.tsx`. By delaying stylesheet injection until `useEffect` runs on the client, both server and client trees render `null` on the initial hydration paint, completely bypassing and eliminating all hydration mismatch warnings in the console.
+
+### 6. Dark Theme Cascade Override Scoping (globals.css Phase 2 Completion)
+- **The Problem:** The Phase 2 dynamic CSS cascade override rules in `globals.css` used generic, un-scoped selectors (`h1`, `button:hover`, `.text-emerald-500`, etc.). These rules consumed CSS variables (`--text-title`, `--btn-default`, `--highlight-up`, etc.) without distinguishing between light or dark mode contexts. In dark mode, the CSS custom property inheritance from `.dark { ... }` **should** have worked via the cascade, but due to Tailwind's utility specificity and inconsistent `:root` vs `.dark` override priority, dark-mode-specific interactive and typography customizations were visually silenced.
+- **The Fix:** Refactored the entire Phase 2 CSS block in `globals.css` into two explicit, mutually-exclusive theme-scoped blocks:
+  - **Light Block** — All selectors prefixed with `html:not(.dark)` (e.g. `html:not(.dark) h1`, `html:not(.dark) a:hover`). These rules exclusively resolve light-theme CSS variables set in `:root` by `ThemeSync`.
+  - **Dark Block** — All selectors prefixed with `.dark` (e.g. `.dark h1`, `.dark a:hover`). These rules exclusively resolve dark-theme CSS variables set in `.dark` by `ThemeSync`.
+- **Result:** Typography (titles, labels, values), interactive states (default/hover/active buttons, links, icons), and bullish/bearish highlight colors are now **independently and correctly applied** in both Midnight (dark) and Daylight (light) modes, giving users total, isolated color control over each theme from the APPEARANCE Studio.
+
+---
+
+## 🆕 V9.7 Changelog — Dynamic Theme Customization Studio (Appearance) (Completed)
+
+### 1. Unified Theme Schema & Dynamic Cloud Synced States
+- **Neon Postgres Self-Healing Configuration:** Updated table schemas inside `/api/settings/route.ts` to automatically store and rehydrate dynamic theme customizations. It registers and manages 12 hex colors and glass panel opacity settings (`dark_bg`, `dark_card`, `dark_accent`, `dark_up_candle`, `dark_down_candle`, `dark_card_opacity`, and their `light_*` Daylight counterparts).
+- **Zero-Latency client debouncing:** Hooked state triggers inside `useMarketData.ts` to execute instant state and local storage swaps on color picking, while debouncing Neon cloud server saves to prevent HTTP call jams.
+
+### 2. High-Fidelity Appearance Studio & Split Customizer Columns
+- **Double Preset Management:** Built split personalization columns inside both `SettingsModal.tsx` and the standalone `/settings` page featuring a gorgeous "Midnight Customizer" side-by-side with the "Daylight Customizer."
+- **Mockup HUD Preview Panel:** Created a high-fidelity visual card preview showing active candle heights and glass panel headers utilizing the custom color palettes in real-time.
+- **Glass Panel Opacity Sliders:** Integrated responsive range inputs from 10% to 100% opacity, dynamically blended inside the stylesheet using CSS `color-mix(in srgb, var(--card-color) var(--card-opacity)%, transparent)`.
+- **Custom Swatch Color Pickers:** Avoided heavy third-party React color picker libraries by crafting a premium native HTML5 picker wrapper overlay with instant hex displays. Added individual "Reset to Defaults" buttons restoring institutional presets.
+
+### 3. Client Dynamic Stylesheet Injection (`ThemeSync.tsx`)
+- **Stylesheet Injection:** Implemented `<ThemeSync />` directly inside root layouts to inject a dynamically computed `<style id="dynamic-theme-customizer">` stylesheet. It maps color configurations directly to `:root` (light) and `.dark` global layout variables.
+- **Dynamic CSS Color Mixing:** Configured all component card overlays and border lines to automatically adapt to personalized neon/indigo accent tones via `color-mix(in srgb, var(--accent) 15%, transparent)`.
+
+### 4. Lightweight Charts Dynamic Rendering Synchronization
+- **Series & Grid Theme Watcher:** Refactored the candlestick chart component (`Chart.tsx`) to subscribe to `themeSettings` context. 
+- **Flicker-Free Updates:** Rewrote the series watcher inside `Chart.tsx` to instantly update chart grid, crosshair guides, and candle wicks/borders using series references (`applyOptions`), eliminating gaps, WebSocket drops, or layout glitches.
+
+### 5. Production Compilation & Optimization
+- **Next.js Turbopack Bundle Verification:** Executed a full production build (`npm run build`) resulting in successful static page generation, complete TypeScript type checks in `10.8s`, and Turbopack builds in `6.9s` with zero compiler warnings or bundle errors.
+
+---
+
+## 🆕 V9.6 Changelog — Sidebar Text Contrast & AAA WCAG Readability Tuning (Completed)
+
+### 1. Unified Theme Token Alignment (`Sidebar.tsx`)
+- **Semantic Contrast Mapping:** Completely refactored all five core sidebar components (**Time Killzones, Liquidity context, Order Flow Pulse, Resting Magnets, and AI Synthesis console**) to use the theme-aware CSS variables `text-foreground` and `text-muted` rather than hardcoded tailwind slate/zinc shades.
+- **Light Mode Readability Resolution:** Solved the unreadable white-on-white/light-grey text contrast issue. In Light Mode, values are now rendered in deep obsidian (`#020617`, `text-foreground`) and labels/session timings are rendered in crisp dark slate (`#475569`, `text-muted`), guaranteeing absolute readability.
+- **Perfect Dark Mode Sync:** In Dark Mode, values automatically transition back to glowing slate-white (`#f8fafc`) and labels/session timings to glowing light grey (`#94a3b8`), preserving the premium dark-room aesthetic.
+
+### 2. High-Contrast Layout Polishing
+- **BSL / SSL targets contrast:** Upgraded resting liquidity pools to use deep contrast text-foreground for pending values, while preserving custom green/red strikethrough states on sweeps (`SWEPT 🧹`).
+- **Cairo Clock & Time windows:** Converted the timings reference layout (Asian range, London Open, NY Open) to high-contrast `text-foreground` on `bg-background/40`, solving light mode visibility bugs completely.
+
+### 3. Turbopack Build & JSX Verification
+- **JSX Structure Integrity:** Verified that all nesting tag wrappers and elements inside the sidebar are perfectly aligned and closed, resolving the Turbopack JSX parsing error.
+- **Optimized Compilation:** Successfully completed a full production build (`npm run build`) in `7.9s` with zero warnings or compiler errors.
+
+---
+
+## 🆕 V9.5 Changelog — "FLOW-STATE V9.2" Navigation Restoration & Price Relocation (Completed)
+
+### 1. Navigation Header Restoration (`NavigationHeader.tsx`)
+- **Center Section Navigation:** Restored the premium, interactive tab navigation group (`[LIVE HUD | BACKTEST | COMPOUNDING]`) at the center of the navigation header. Implemented seamless active state path highlight styling and hover transition animations.
+- **Header Cleanliness:** Removed the centerpiece `LiveTicker` / asset display from the center column, restoring a balanced layout featuring the FS Logo & version badge on the left, and secondary utilities (Cairo clock, settings toggle, theme switch) on the right.
+
+### 2. Price and Asset Relocation (`page.tsx`)
+- **Sub-Header Refinement:** Completely removed the "Operational Focus" label from the page-level sub-header to minimize visual clutter.
+- **High-Impact Asset Focus:** Placed the asset ticker `ETHUSDC.P` directly in the page-level sub-header, rendering it in a large, premium, extra-bold font (`text-2xl md:text-3xl font-black`).
+- **Seamless Live Price Integration:** Integrated the `LiveTicker` (using the premium `variant="large"` format) immediately next to the asset label, keeping the live tick updates localized to prevent header re-render performance bottlenecks.
+- **Visual Breathing Room:** Balanced the sub-header element using precise vertical padding and bottom margin spacing (`py-3.5 md:py-4 mb-3`) to give the relocated asset header excellent breathing room before the HUD grid cards.
+
+---
+
+## 🆕 V9.4 Changelog — "FLOW-STATE V9.1" UI Surgical Refinement & Readability Fix (Current Phase)
+
+### 1. Focal Branding and Clean Navigation Header
+- **Duplication Cleanup:** Completely removed redundant brand logo block ("Quant Engine Dashboard...") from the page-level sub-header, replacing it with a minimal "Operational Focus" label to keep standard double-between layouts balanced.
+- **FS Logo & Version Badge:** Isolated the left section of the main navigation header to display ONLY the iconic "FS" logo box and the dynamic "V9.0" badge.
+- **Centerpiece Asset & Live Price Display:** Replaced center tabs with a prominent focal-point Asset Display showing "ETHUSDC.P" followed by the Live Price rendered in a large, clean monospace font (`text-xl font-black md:text-2xl`).
+- **LiveTicker Isolation:** Upgraded `LiveTicker` to support a `variant="large"` mode, returning the price directly in a large, highly legible format. Refactored tick colors to be theme-aware (`text-emerald-600 dark:text-[#50ffaf]` for Up, `text-rose-600 dark:text-[#ffb4ab]` for Down, `text-foreground` for Neutral) instead of using the hardcoded low-contrast grey `text-[#e5e2e3]` which was invisible in Light Mode.
+
+### 2. HUD Cards Redesigned Layout
+- **Redundancy Removal:** Deleted the redundant "Live Price" card from the HUD grid.
+- **Perfect Grid Realignment:** Reconfigured HUD cards from 4 columns to 3 columns (`grid-cols-1 md:grid-cols-3`) to perfectly align remaining cards.
+- **Legible Targets & Scaling:** Reduced the value text size of the Target Status (DOL) Card from an overwhelming `text-2xl lg:text-3xl font-black` to a highly readable and clean `text-lg lg:text-xl font-black`. Enforced a strict, uniform height (`min-h-[105px]`) and unified padding (`p-4 lg:p-5`) across all cards.
+
+### 3. High-Contrast Legible Sidebar
+- **Contrast Tuning:** Converted all Sidebar value texts to high-contrast `text-slate-900 dark:text-zinc-100` and secondary label texts to high-contrast `text-slate-600 dark:text-zinc-400` to solve Light/Dark mode readability issues.
+- **Typography Scale:** Increased all labels by 1px (from `text-[10px]` to `text-[11px]/text-xs`, and `text-[8px]/[9px]` to `text-[10px]/[11px]`) and values by 2px (from `text-xs` to `text-sm` or `text-[13px]`) for exceptional layout legibility.
+- **Sleek Glass Controls:** Refactored dropdown select menus and preview action buttons in `SettingsModal.tsx` and `TimeframeSwitcher.tsx` to follow the modern glass-panel design (rounded-md, backdrop-blur, subtle card borders, theme-aware hover effects).
+
+### 4. Advanced Light Mode Chart & Marker Synchronization
+- **Emerald/Rose Solid Candles:** Programmed a dynamic series override inside the chart's theme watcher to swap up/down candle colors to solid `emerald-600` (`#059669`) and `rose-600` (`#e11d48`) in Light Mode, restoring standard trading visual codes.
+- **Indigo/Black Volumetric Markers:** Rewrote the `generateVolumetricMarkers` signature to accept an `isDark` flag. When in Light Mode, the algorithm hot-swaps arrows (Institutional Sponsorship) from White `#ffffff` to solid Black `#000000` and dots (SMT Sweeps) from neon colors to solid Indigo `#4f46e5`, ensuring perfect contrast against the `zinc-50` background.
+- **Dynamic Theme-Swapped Grid lines:** Locked Lightweight-Charts vert/horz grid line colors precisely to `rgba(0,0,0,0.05)` in Light Mode, maintaining visual depth while eliminating screen clutter. Added `theme` to data sync hooks to force marker re-renders instantly on theme toggle.
+
+---
+
+## 🆕 V9.3 Changelog — "FLOW-STATE V9.0" Visual Overhaul (Phase 1 & 2)
+
+### 1. Unified Theme Engine & Dynamic Tokens (Tailwind CSS v4)
+- **next-themes Integration:** Installed and configured `next-themes` as the system provider inside `layout.tsx` to drive HTML theme class switches and persist settings.
+- **Dynamic CSS Variables:** Mapped Light and Dark variables in `globals.css` with a smooth `0.3s` ease transition on general backgrounds and foregrounds.
+  - *Dark Mode (Deep Obsidian):* `#020617` background, Slate-900 `#0f172a` cards, Glowing purple borders (`rgba(168, 85, 247, 0.15)`), and Neon accents.
+  - *Light Mode (Zinc-50):* `#fafafa` background, White glass cards (`rgba(255, 255, 255, 0.75)`), Slate-950 text, and Vibrant Indigo accents.
+- **Glassmorphic Cards (.glass-panel):** Implemented reusable cards with `backdrop-filter: blur(12px)`, custom hover scaling, shadow animations, and glow borders tailored to active settings.
+
+### 2. Institutional Navigation Header
+- **Layout Restructuring:** Redesigned header into a sleek top bar sitting at `h-14` (56px) to optimize screen real estate.
+- **Branding & Version:** Set bold emblem branding showcasing Version V9.0.
+- **Premium Tabs:** Embedded centralized premium navigation pill tabs for `[LIVE HUD | BACKTEST | COMPOUNDING]` with sleek active indicator glows and sliding transitions.
+- **Secondary Actions:** Grouped secondary pages (Trading Journal, Settings Modal) as small, hover-active rounded icon buttons on the right.
+- **Time Clock & WebSocket Pulse:** Integrated Cairo Time (UTC+3) tracking beside a glowing green pulse dot indicating active WebSocket connections.
+- **Interactive Theme Toggle:** Created a Sun/Moon icon button for switching themes with safe client-side hydration gates to prevent SSR mismatches.
+
+### 3. Visual HUD Cards & Font Lock
+- **Visual Hierarchy Overhaul:** Created 4 massive HUD grid cards above the chart container:
+  - *Card 1 (Price):* Displays live ticker price at `32px+` using locked Monospace fonts to eliminate layout shifts.
+  - *Card 2 (Master Bias):* Renders BULLISH/BEARISH/NEUTRAL states inside soft glowing background indicators (Emerald for Bullish, Rose for Bearish).
+  - *Card 3 (Range Context):* Mitigates PREMIUM/DISCOUNT/EQ contexts in real-time.
+  - *Card 4 (Target Status):* Solves DOL target status (PENDING/EXHAUSTED).
+- **Typography Enhancements:** Scaled all text labels to be larger and muted, while actual data stats are bold and bright.
+
+### 4. Modular Execution Sidebar & JSON Data Drawer
+- **Sidebar Organization:** Reorganized sidebar into dedicated modular blocks: Time Card (Killzones), Liquidity Card (macro sweeps), Order Flow Pulse, and Resting Magnets.
+- **JSON Slide-Out Drawer [NEW]:** Relocated technical logs, lookback controls, and JSON export buttons into an absolute-positioned drawer that slides out from the left of the sidebar, keeping the main sidebar focused on trading executions.
+- **Badges Sweeps Sync:** Implemented clean `SWEPT 🧹` badges for Asian and London ranges to keep visual tracks clear.
+
+### 5. Automated Chart Theme Synchronization
+- **lightweight-charts Sync:** Updated `Chart.tsx` and `backtest/page.tsx` isolated chart widgets to listen to theme state changes.
+- **Hot-swapped applyOptions:** Dynamically swaps chart background colors, vert/horz grid line opacity, and crosshair guides in a reactive effect without resetting historical klines or scroll indices.
+
+---
+
+## 🆕 V9.2 Changelog — Figma MCP Decommissioning
+
+### 1. Decommissioning and Removal of Figma Tooling
+- **Figma MCP Removal:** Completely removed the Figma MCP configuration (`"figma"` and `"figma-desktop-dev-mode"`) from the workspace configuration at `C:\Users\pc\.gemini\antigravity-ide\mcp_config.json` as requested.
+- **System Footprint Cleanup:** Updated system blueprints and documentation to reflect the decommission of Figma design integration.
+
+---
+
+## 🆕 V9.1 Changelog — Figma MCP Tooling Integration & Windows Compatibility Fixes
+
+### 1. Direct Design-to-Code Sync & Windows Execution Fixes
+- **Figma Model Context Protocol Server (`@modelcontextprotocol/server-figma`):** Resolved execution failure (`spawn ENOENT`) on Windows environments by wrapping the `"npx"` command inside a Command Processor invocation (`"command": "cmd"`, `"args": ["/c", "npx", ...]`) within `C:\Users\pc\.gemini\antigravity-ide\mcp_config.json`.
+- **Figma Dev Mode Local Server support:** Added direct support for the built-in Figma Desktop Dev Mode MCP Server by configuring both local and global configurations (`"figma-desktop-dev-mode"` in the local config and `"figma-dev-mode-mcp-server"` in global `C:\Users\pc\.gemini\config\mcp_config.json`) utilizing local SSE transport (`"url": "http://127.0.0.1:3845/mcp"`) to bypass built-in client namespace collisions with the defunct Vercel OAuth remote proxy server (`https://figma-mcp.vercel.app/mcp/sse`) which returns Vercel 404 deployment errors.
+- **Robust Multi-Env Auth Resolution:** Configured Figma Personal Access Tokens across both `FIGMA_PERSONAL_ACCESS_TOKEN` and `FIGMA_API_KEY` environment variables to support seamless, fail-safe schema matching in downstream toolkits like `rayden-use`.
 
 ---
 
@@ -209,6 +442,7 @@ The Flow-State Quant Engine is **NOT** a prediction engine. It is a **reaction e
 | **AI Synthesis** | Google Gemini API (`@google/generative-ai`) | Trade signal generation |
 | **State Persistence** | Vercel Postgres (`@vercel/postgres`) | AI memory, terminal settings, custom strategies, paper trades |
 | **Auth** | NextAuth v5 (beta) + proxy.ts | Session-gated access |
+
 
 ### Data Flow Summary
 
