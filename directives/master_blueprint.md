@@ -1,10 +1,27 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V8.9
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V9.0
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-25  
-> **Last Updated:** 2026-05-25 (V8.9 Real-Time Timeframe Switcher & WS Sync)  
+> **Last Updated:** 2026-05-25 (V9.0 Settings Architecture Refactoring & Tabbed Navigation)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
-> **Source Files Analyzed:** 35+ across TypeScript (Next.js 16), Python (FastAPI), and Markdown directives.
+> **Source Files Analyzed:** 37+ across TypeScript (Next.js 16), Python (FastAPI), and Markdown directives.
+
+---
+
+## 🆕 V9.0 Changelog — Settings Architecture Refactoring & Tabbed Navigation
+
+### 1. Dedicated Dynamic Settings Command Center (`/settings` page) [NEW]
+- **State-Driven Tabbed Navigation:** Created a premium, responsive multi-tab layout (`quant_ai`, `account_risk`, `profile`, `terminal`) with glassmorphic slate borders (`border-[#4a4457]/60`) and purple neon active states (`bg-[#a855f7]/10 text-[#d1bcff] border-l-2 border-[#a855f7]`).
+- **Unified DB & API Integration:** 
+  - **QUANT AI tab:** Manages dynamic system configurations (`ACTIVE_MODEL`, `SYSTEM_PROMPT`, `GEMINI_LIVE_KEY`) with password visibility eye icons and masked preview layers, directly updating the `system_settings` database table via `/api/settings` POST.
+  - **ACCOUNT & RISK tab:** Integrates exposure inputs (`initial_capital`, `max_risk_limit_pct`) alongside high-fidelity dynamic calculation visual cards presenting Ledger Balance and single-deal maximum risk allocation caps, updating the `trading_account` database table via `/api/account` POST.
+  - **PROFILE tab:** Renders NextAuth user email and connection metadata details within a premium Brutalist grid panel.
+  - **TERMINAL tab:** Integrates direct checkboxes and file sound mapping dropdowns for the 9 core quantitative alert events, saving sound profiles directly to the `terminal_settings` Postgres table via `/api/settings` POST, alongside client visual preferences (ambient glow, compact layout) written directly to local storage.
+
+### 2. Cleaned Settings Modal & Redundancy Removal (`SettingsModal.tsx`)
+- **Isolation of AI Configurations:** Completely removed duplicate prompt configuration panels, active model selections, and API key states from `SettingsModal.tsx`.
+- **Refinement of HUD Preferences:** Focused the global settings modal strictly on Price Alert Targets config and HUD quick tweaks (`STRATEGY` builder and `AUDIO` event alarms).
+- **Legacy Mappings Resilience:** Rewrote the tab resolution mappers inside the modal effect block to gracefully redirect legacy tab parameters (`ai_config` and `price`) to the Strategy Builder tab (`strategy`), preserving dashboard navigation.
 
 ---
 

@@ -15,7 +15,7 @@ export default function Home() {
   const [selectedInterval, setSelectedInterval] = useState<Timeframe>('5m');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSoundSettingsOpen, setIsSoundSettingsOpen] = useState(false);
-  const [commandCenterTab, setCommandCenterTab] = useState<'ai_config' | 'strategy' | 'audio'>('strategy');
+  const [commandCenterTab, setCommandCenterTab] = useState<'strategy' | 'audio'>('strategy');
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
 
   // Strategy Execution Engine — runs silently in the background

@@ -20,7 +20,7 @@ export interface Alert {
   soundSelection?: AlertSound;
 }
 
-type CommandCenterTab = 'ai_config' | 'strategy' | 'audio';
+type CommandCenterTab = 'strategy' | 'audio';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -30,16 +30,6 @@ interface SettingsModalProps {
   onDelete: (alertId: string) => void;
   initialTab?: 'price' | 'signal' | 'ai_config' | 'strategy' | 'audio';
 }
-
-// ─── Available Models (mirrors /settings page) ─────────────────────────────
-const AVAILABLE_MODELS = [
-  { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
-  { value: "gemini-3-flash-preview", label: "Gemini 3 Flash (Preview)" },
-  { value: "gemini-2.5-flash-preview-05-20", label: "Gemini 2.5 Flash (Preview)" },
-  { value: "gemini-2.5-pro-preview-05-06", label: "Gemini 2.5 Pro (Preview)" },
-  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
-  { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
-] as const;
 
 const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -59,15 +49,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   } = useMarketDataContext();
 
   // ── Tabs State ────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<CommandCenterTab>('ai_config');
+  const [activeTab, setActiveTab] = useState<CommandCenterTab>('strategy');
   const [showPriceOverlay, setShowPriceOverlay] = useState(false);
-
-  // ── AI Config State ───────────────────────────────────────────────────────
-  const [aiModel, setAiModel] = useState("gemini-3.5-flash");
-  const [systemPrompt, setSystemPrompt] = useState("");
-  const [apiKey, setApiKey] = useState("");
-  const [aiSaveStatus, setAiSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
-  const [aiLoading, setAiLoading] = useState(false);
 
   // ── Price alert local form fields ─────────────────────────────────────────
   const [label, setLabel] = useState('');
@@ -97,63 +80,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       // Map legacy tab names
       if (initialTab === 'signal') {
         setActiveTab('audio');
-      } else if (initialTab === 'price') {
-        setActiveTab('ai_config');
+      } else if (initialTab === 'price' || initialTab === 'ai_config') {
+        setActiveTab('strategy');
       } else {
-        setActiveTab(initialTab as CommandCenterTab);
+        setActiveTab((initialTab as CommandCenterTab) || 'strategy');
       }
     }
   }, [alert, isOpen, initialTab]);
-
-  // ── Fetch AI config on mount ──────────────────────────────────────────────
-  const fetchAiConfig = useCallback(async () => {
-    try {
-      setAiLoading(true);
-      const res = await fetch('/api/settings');
-      if (res.ok) {
-        const data = await res.json();
-        const s = data.settings || {};
-        setAiModel(s.ACTIVE_MODEL || "gemini-3.5-flash");
-        setSystemPrompt(s.SYSTEM_PROMPT || "");
-        setApiKey(s.GEMINI_LIVE_KEY || "");
-      }
-    } catch (err) {
-      console.error('[CommandCenter] Failed to fetch AI config:', err);
-    } finally {
-      setAiLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isOpen && activeTab === 'ai_config') {
-      fetchAiConfig();
-    }
-  }, [isOpen, activeTab, fetchAiConfig]);
-
-  // ── Handlers ──────────────────────────────────────────────────────────────
-
-  const handleSaveAiConfig = async () => {
-    try {
-      setAiSaveStatus('saving');
-      const res = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          settings: {
-            ACTIVE_MODEL: aiModel,
-            SYSTEM_PROMPT: systemPrompt,
-            GEMINI_LIVE_KEY: apiKey,
-          },
-        }),
-      });
-      if (!res.ok) throw new Error('Save failed');
-      setAiSaveStatus('success');
-      setTimeout(() => setAiSaveStatus('idle'), 2000);
-    } catch {
-      setAiSaveStatus('error');
-      setTimeout(() => setAiSaveStatus('idle'), 3000);
-    }
-  };
 
   const handleSavePriceAlert = () => {
     if (!alert) return;
@@ -177,11 +110,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handlePlaySignalSound = (fileName: string) => {
     playFile(fileName);
-  };
-
-  const maskKey = (key: string) => {
-    if (!key || key.length < 8) return key;
-    return key.slice(0, 6) + "•".repeat(Math.min(key.length - 10, 30)) + key.slice(-4);
   };
 
   const renderSyncIndicator = () => {
@@ -222,7 +150,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // ── Tab Definitions ───────────────────────────────────────────────────────
   const tabs: { id: CommandCenterTab; icon: React.ReactNode; label: string }[] = [
-    { id: 'ai_config', icon: <Brain size={14} />, label: 'AI CONFIG' },
     { id: 'strategy', icon: <Crosshair size={14} />, label: 'STRATEGY' },
     { id: 'audio', icon: <Music size={14} />, label: 'AUDIO' },
   ];
@@ -413,100 +340,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* ── Tab Content Panel ──────────────────────────────────────── */}
           <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin scrollbar-thumb-[#4a4457] scrollbar-track-transparent">
 
-            {/* TAB 1: AI CONFIG ────────────────────────────────────────── */}
-            {activeTab === 'ai_config' && (
-              <div className="p-5 space-y-5">
-                {aiLoading ? (
-                  <div className="flex items-center justify-center h-40">
-                    <Loader2 className="w-5 h-5 text-[#d1bcff] animate-spin" />
-                    <span className="ml-2 text-[10px] text-[#958da3] font-mono uppercase tracking-widest">Loading Config...</span>
-                  </div>
-                ) : (
-                  <>
-                    {/* Model Selector */}
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Cpu size={12} className="text-cyan-400" />
-                        <label className="text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Active AI Model</label>
-                      </div>
-                      <select
-                        value={aiModel}
-                        onChange={(e) => setAiModel(e.target.value)}
-                        className="w-full bg-[#141416] border border-[#4a4457] focus:border-[#d1bcff] focus:outline-none px-3 py-2.5 text-xs font-mono text-white rounded-none transition-colors cursor-pointer"
-                      >
-                        {AVAILABLE_MODELS.map((model) => (
-                          <option key={model.value} value={model.value}>{model.label}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* System Prompt */}
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <FileText size={12} className="text-amber-400" />
-                        <label className="text-[9px] text-[#958da3] uppercase font-bold tracking-widest">System Prompt</label>
-                      </div>
-                      <textarea
-                        value={systemPrompt}
-                        onChange={(e) => setSystemPrompt(e.target.value)}
-                        rows={10}
-                        placeholder="Enter the institutional system prompt for the Quant AI Engine..."
-                        className="w-full bg-[#141416] border border-[#4a4457] focus:border-[#d1bcff] focus:outline-none px-3 py-2.5 text-xs font-mono text-white rounded-none transition-colors resize-y leading-relaxed placeholder:text-[#4a4457]"
-                      />
-                      <div className="flex items-center justify-between">
-                        <span className="text-[9px] text-[#958da3] font-mono">{systemPrompt.length.toLocaleString()} CHARS</span>
-                        <span className="text-[9px] text-[#4a4457] font-mono">MARKDOWN SUPPORTED</span>
-                      </div>
-                    </div>
-
-                    {/* API Key */}
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <KeyRound size={12} className="text-emerald-400" />
-                        <label className="text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Gemini API Key</label>
-                      </div>
-                      <input
-                        type="password"
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                        placeholder="AIzaSy..."
-                        className="w-full bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-3 py-2.5 text-xs font-mono text-white rounded-none transition-colors placeholder:text-[#4a4457]"
-                      />
-                      {apiKey && (
-                        <div className="flex items-center gap-1.5">
-                          <Shield size={10} className="text-[#50ffaf]" />
-                          <span className="text-[9px] text-[#958da3] font-mono">PREVIEW: {maskKey(apiKey)}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Save Button */}
-                    <button
-                      onClick={handleSaveAiConfig}
-                      disabled={aiSaveStatus === 'saving'}
-                      className={`flex items-center gap-2 px-4 py-2.5 font-bold text-[10px] uppercase tracking-widest transition-all cursor-pointer rounded-none ${aiSaveStatus === 'saving'
-                        ? 'bg-[#d1bcff]/10 text-[#d1bcff]/50 cursor-wait border border-[#d1bcff]/20'
-                        : aiSaveStatus === 'success'
-                          ? 'bg-[#50ffaf]/15 text-[#50ffaf] border border-[#50ffaf]/30'
-                          : aiSaveStatus === 'error'
-                            ? 'bg-red-500/15 text-red-400 border border-red-500/30'
-                            : 'bg-[#d1bcff]/10 text-[#d1bcff] border border-[#d1bcff]/30 hover:bg-[#d1bcff]/20'
-                        }`}
-                    >
-                      {aiSaveStatus === 'saving' ? (
-                        <><Loader2 size={12} className="animate-spin" /> COMMITTING...</>
-                      ) : aiSaveStatus === 'success' ? (
-                        <><CheckCircle2 size={12} /> DEPLOYED</>
-                      ) : aiSaveStatus === 'error' ? (
-                        <><AlertTriangle size={12} /> FAILED</>
-                      ) : (
-                        <><Save size={12} /> DEPLOY CONFIG</>
-                      )}
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
+            {/* TAB CONTENT ────────────────────────────────────────── */}
 
             {/* TAB 2: STRATEGY ARCHITECT ────────────────────────────────── */}
             {activeTab === 'strategy' && (
