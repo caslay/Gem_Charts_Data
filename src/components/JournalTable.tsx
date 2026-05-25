@@ -52,22 +52,22 @@ const ActionsCell = memo(function ActionsCell({
   return (
     <div className="flex items-center justify-center gap-2">
       {isDeletingConfirm ? (
-        <div className="flex items-center gap-2 bg-[#ffb4ab]/10 border border-[#ffb4ab]/30 p-1 rounded-sm animate-fade-in">
-          <span className="text-[9px] font-black uppercase text-[#ffb4ab] flex items-center gap-1 font-mono">
+        <div className="flex items-center gap-2 bg-rose-500/10 border border-rose-500/20 p-1.5 rounded-lg animate-fade-in">
+          <span className="text-[9px] font-bold uppercase text-rose-500 flex items-center gap-1 font-sans">
             <AlertTriangle className="w-3 h-3 shrink-0" />
             Purge Row?
           </span>
           <button
             onClick={() => handleDeleteTrade(trade.id)}
             disabled={isLoading}
-            className="px-2 py-0.5 bg-red-600 hover:bg-red-500 text-white font-mono text-[9px] font-black uppercase tracking-widest cursor-pointer border-none"
+            className="px-2 py-0.5 bg-rose-600 hover:bg-rose-500 text-white font-mono text-[9px] font-bold uppercase tracking-wider cursor-pointer border-none rounded"
           >
             {isLoading && actionLoadingId === `${trade.id}-delete` ? "Purging..." : "Yes"}
           </button>
           <button
             onClick={() => setDeleteConfirmId(null)}
             disabled={isLoading}
-            className="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-[#958da3] font-mono text-[9px] font-black uppercase tracking-widest cursor-pointer border-none"
+            className="px-2 py-0.5 bg-card hover:bg-card-border/50 text-muted border border-card-border font-mono text-[9px] font-bold uppercase tracking-wider cursor-pointer rounded"
           >
             No
           </button>
@@ -78,19 +78,19 @@ const ActionsCell = memo(function ActionsCell({
             <button
               onClick={() => handleToggleStatus(trade)}
               disabled={isLoading}
-              className={`p-1.5 border rounded-sm transition-all cursor-pointer ${
+              className={`p-1.5 border rounded-lg transition-all cursor-pointer ${
                 trade.status === "PAUSED"
-                  ? "bg-[#50ffaf]/5 border-[#4a4457] hover:border-[#50ffaf] text-[#958da3] hover:text-[#50ffaf]"
-                  : "bg-amber-500/5 border-[#4a4457] hover:border-amber-500 text-[#958da3] hover:text-amber-400"
+                  ? "bg-emerald-500/5 border-card-border hover:border-emerald-500 text-muted hover:text-emerald-500"
+                  : "bg-amber-500/5 border-card-border hover:border-amber-500 text-muted hover:text-amber-500"
               }`}
               title={trade.status === "PAUSED" ? "Reactivate Position" : "Pause Tracking"}
             >
               {isLoading && actionLoadingId === `${trade.id}-toggle` ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : trade.status === "PAUSED" ? (
-                <Play className="w-3 h-3" />
+                <Play className="w-3.5 h-3.5" />
               ) : (
-                <Pause className="w-3 h-3" />
+                <Pause className="w-3.5 h-3.5" />
               )}
             </button>
           )}
@@ -99,13 +99,13 @@ const ActionsCell = memo(function ActionsCell({
             <button
               onClick={() => handleClosePosition(trade.id)}
               disabled={isLoading}
-              className="p-1.5 bg-zinc-800/40 border border-[#4a4457] hover:border-[#ffb4ab] text-[#958da3] hover:text-[#ffb4ab] rounded-sm transition-all cursor-pointer"
+              className="p-1.5 bg-card border border-card-border hover:border-rose-500 text-muted hover:text-rose-500 rounded-lg transition-all cursor-pointer"
               title="Manually Close Trade"
             >
               {isLoading && actionLoadingId === `${trade.id}-close` ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
-                <XCircle className="w-3 h-3" />
+                <XCircle className="w-3.5 h-3.5" />
               )}
             </button>
           )}
@@ -113,13 +113,13 @@ const ActionsCell = memo(function ActionsCell({
           <button
             onClick={() => setDeleteConfirmId(trade.id)}
             disabled={isLoading}
-            className="p-1.5 bg-red-500/5 border border-[#4a4457] hover:border-red-500/50 hover:bg-red-500/10 text-[#958da3] hover:text-red-400 rounded-sm transition-all cursor-pointer"
+            className="p-1.5 bg-card border border-card-border hover:border-rose-500/50 hover:bg-rose-500/10 text-muted hover:text-rose-500 rounded-lg transition-all cursor-pointer"
             title="Purge Record"
           >
             {isLoading && actionLoadingId === `${trade.id}-delete` ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
-              <Trash2 className="w-3 h-3" />
+              <Trash2 className="w-3.5 h-3.5" />
             )}
           </button>
         </>
@@ -167,57 +167,57 @@ const ClosedTradeRow = memo(function ClosedTradeRow({
 
   const pnlColorClass = realizedPnL !== null
     ? realizedPnL > 0
-      ? "text-[#50ffaf]/80 font-bold"
+      ? "text-emerald-500 font-bold"
       : realizedPnL < 0
-      ? "text-[#ff5f5f]/80 font-bold"
-      : "text-[#958da3]"
-    : "text-[#958da3]";
+      ? "text-rose-500 font-bold"
+      : "text-muted"
+    : "text-muted";
 
   const roiColorClass = roi !== null
     ? roi > 0
-      ? "text-[#50ffaf]/80 font-bold"
+      ? "text-emerald-500 font-bold"
       : roi < 0
-      ? "text-[#ff5f5f]/80 font-bold"
-      : "text-[#958da3]"
-    : "text-[#958da3]";
+      ? "text-rose-500 font-bold"
+      : "text-muted"
+    : "text-muted";
 
   return (
-    <tr className="border-b border-[#4a4457]/30 hover:bg-white/2 transition-colors">
-      <td className="py-4 px-4 md:px-6 font-mono text-[11px] text-[#958da3]">
+    <tr className="border-b border-card-border/50 hover:bg-card/25 transition-colors">
+      <td className="py-4 px-4 md:px-6 font-mono text-[11px] text-muted">
         {formatDate(trade.created_at || trade.timestamp)}
       </td>
 
-      <td className="py-4 px-4 font-mono font-bold text-[#e5e2e3]">
+      <td className="py-4 px-4 font-sans font-bold text-title">
         <div>{trade.symbol}</div>
-        <div className="text-[9px] text-[#958da3] font-normal tracking-tight">
+        <div className="text-[9px] text-muted font-normal tracking-tight">
           Size: {positionSize.toFixed(4)} {trade.symbol.replace('.p', '').split('USD')[0] || 'Units'}
         </div>
       </td>
 
       <td className="py-4 px-4">
         <span
-          className={`px-2 py-0.5 border font-mono text-[9px] font-black uppercase tracking-widest rounded-sm ${
+          className={`px-2 py-0.5 border font-sans text-[9px] font-bold uppercase tracking-wider rounded-md ${
             trade.direction === "LONG"
-              ? "bg-[#50ffaf]/10 border-[#50ffaf]/30 text-[#50ffaf]"
-              : "bg-[#ffb4ab]/10 border-[#ffb4ab]/30 text-[#ffb4ab]"
+              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+              : "bg-rose-500/10 border-rose-500/20 text-rose-500"
           }`}
         >
           {trade.direction}
         </span>
       </td>
 
-      <td className="py-4 px-4 text-right font-mono font-medium text-[#e5e2e3]">
+      <td className="py-4 px-4 text-right font-mono font-medium text-title">
         {parseFloat(String(trade.entry_price)).toFixed(2)}
       </td>
 
-      <td className="py-4 px-4 text-right font-mono text-red-400">
+      <td className="py-4 px-4 text-right font-mono text-rose-500">
         <div>{parseFloat(String(trade.stop_loss)).toFixed(2)}</div>
-        <div className="text-[9px] text-[#ff5f5f]/70 font-normal">
+        <div className="text-[9px] text-rose-500/70 font-sans font-medium">
           Risk: ${(trade as any).risk_amount_usd ? parseFloat(String((trade as any).risk_amount_usd)).toFixed(2) : (Math.abs(parseFloat(String(trade.entry_price)) - parseFloat(String(trade.stop_loss))) * positionSize).toFixed(2)}
         </div>
       </td>
 
-      <td className="py-4 px-4 text-right font-mono text-emerald-400">
+      <td className="py-4 px-4 text-right font-mono text-emerald-500">
         {parseFloat(String(trade.take_profit)).toFixed(2)}
       </td>
 
@@ -231,12 +231,12 @@ const ClosedTradeRow = memo(function ClosedTradeRow({
         {roi !== null ? `${roiSign}${roi.toFixed(2)}%` : "-"}
       </td>
 
-      <td className="py-4 px-4 font-mono text-[11px] text-[#958da3] max-w-[150px] truncate">
+      <td className="py-4 px-4 font-mono text-[11px] text-muted max-w-[150px] truncate">
         {trade.strategy_name}
       </td>
 
       <td className="py-4 px-4">
-        <span className="px-2 py-0.5 border border-zinc-700/40 bg-zinc-800/40 text-zinc-500 font-mono text-[9px] font-black uppercase tracking-widest rounded-sm leading-none flex items-center gap-1.5 w-fit">
+        <span className="px-2 py-0.5 border border-card-border bg-card text-muted font-sans text-[9px] font-bold uppercase tracking-wider rounded-md leading-none flex items-center gap-1.5 w-fit">
           {trade.status}
         </span>
       </td>
@@ -352,60 +352,60 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
 
   // Dynamic institutional premium styling
   const pnlColorClass = unrealizedPnL > 0
-    ? "text-[#50ffaf] drop-shadow-[0_0_6px_rgba(80,255,175,0.4)]"
+    ? "text-emerald-500 font-bold"
     : unrealizedPnL < 0
-    ? "text-[#ff5f5f]"
-    : "text-[#958da3]";
+    ? "text-rose-500 font-bold"
+    : "text-muted";
 
   const roiColorClass = roiPercentage > 0
-    ? "text-[#50ffaf]"
+    ? "text-emerald-500 font-bold"
     : roiPercentage < 0
-    ? "text-[#ff5f5f]"
-    : "text-[#958da3]";
+    ? "text-rose-500 font-bold"
+    : "text-muted";
 
   const rowHighlightClass = isTpHit
     ? "animate-exit-glow-green"
     : isSlHit
     ? "animate-exit-glow-red"
-    : "hover:bg-white/2";
+    : "hover:bg-card/25";
 
   return (
-    <tr className={`border-b border-[#4a4457]/30 transition-colors ${rowHighlightClass} relative`}>
-      <td className="py-4 px-4 md:px-6 font-mono text-[11px] text-[#958da3]">
+    <tr className={`border-b border-card-border/50 transition-colors ${rowHighlightClass} relative`}>
+      <td className="py-4 px-4 md:px-6 font-mono text-[11px] text-muted">
         {formatDate(trade.created_at || trade.timestamp)}
       </td>
 
-      <td className="py-4 px-4 font-mono font-bold text-[#e5e2e3]">
+      <td className="py-4 px-4 font-sans font-bold text-title">
         <div>{trade.symbol}</div>
-        <div className="text-[9px] text-[#958da3] font-normal tracking-tight">
+        <div className="text-[9px] text-muted font-normal tracking-tight">
           Size: {positionSize.toFixed(4)} {trade.symbol.replace('.p', '').split('USD')[0] || 'Units'}
         </div>
       </td>
 
       <td className="py-4 px-4">
         <span
-          className={`px-2 py-0.5 border font-mono text-[9px] font-black uppercase tracking-widest rounded-sm ${
+          className={`px-2 py-0.5 border font-sans text-[9px] font-bold uppercase tracking-wider rounded-md ${
             trade.direction === "LONG"
-              ? "bg-[#50ffaf]/10 border-[#50ffaf]/30 text-[#50ffaf]"
-              : "bg-[#ffb4ab]/10 border-[#ffb4ab]/30 text-[#ffb4ab]"
+              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+              : "bg-rose-500/10 border-rose-500/20 text-rose-500"
           }`}
         >
           {trade.direction}
         </span>
       </td>
 
-      <td className="py-4 px-4 text-right font-mono font-medium text-[#e5e2e3]">
+      <td className="py-4 px-4 text-right font-mono font-medium text-title">
         {parseFloat(String(trade.entry_price)).toFixed(2)}
       </td>
 
-      <td className="py-4 px-4 text-right font-mono text-red-400">
+      <td className="py-4 px-4 text-right font-mono text-rose-500">
         <div>{parseFloat(String(trade.stop_loss)).toFixed(2)}</div>
-        <div className="text-[9px] text-[#ff5f5f]/70 font-normal">
+        <div className="text-[9px] text-rose-500/70 font-sans font-medium">
           Risk: ${(trade as any).risk_amount_usd ? parseFloat(String((trade as any).risk_amount_usd)).toFixed(2) : (Math.abs(entryPrice - stopLoss) * positionSize).toFixed(2)}
         </div>
       </td>
 
-      <td className="py-4 px-4 text-right font-mono text-emerald-400">
+      <td className="py-4 px-4 text-right font-mono text-emerald-500">
         {parseFloat(String(trade.take_profit)).toFixed(2)}
       </td>
 
@@ -419,31 +419,31 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
         {livePrice ? `${roiSign}${roiPercentage.toFixed(2)}%` : "Loading..."}
       </td>
 
-      <td className="py-4 px-4 font-mono text-[11px] text-[#958da3] max-w-[150px] truncate">
+      <td className="py-4 px-4 font-mono text-[11px] text-muted max-w-[150px] truncate">
         {trade.strategy_name}
       </td>
 
       <td className="py-4 px-4">
         {isTpHit ? (
-          <span className="px-2 py-0.5 border border-[#50ffaf]/40 bg-[#50ffaf]/10 text-[#50ffaf] font-mono text-[9px] font-black uppercase tracking-widest rounded-sm leading-none flex items-center gap-1.5 w-fit shadow-[0_0_10px_rgba(80,255,175,0.15)] animate-pulse">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#50ffaf] animate-ping" />
+          <span className="px-2 py-0.5 border border-emerald-500/30 bg-emerald-500/10 text-emerald-500 font-sans text-[9px] font-bold uppercase tracking-wider rounded-md leading-none flex items-center gap-1.5 w-fit shadow-[0_0_10px_rgba(80,255,175,0.1)] animate-pulse">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
             TP TARGET HIT
           </span>
         ) : isSlHit ? (
-          <span className="px-2 py-0.5 border border-[#ff5f5f]/40 bg-[#ff5f5f]/10 text-[#ff5f5f] font-mono text-[9px] font-black uppercase tracking-widest rounded-sm leading-none flex items-center gap-1.5 w-fit shadow-[0_0_10px_rgba(255,95,95,0.15)] animate-pulse">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#ff5f5f] animate-ping" />
+          <span className="px-2 py-0.5 border border-rose-500/30 bg-rose-500/10 text-rose-500 font-sans text-[9px] font-bold uppercase tracking-wider rounded-md leading-none flex items-center gap-1.5 w-fit shadow-[0_0_10px_rgba(255,95,95,0.1)] animate-pulse">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping" />
             STOPPED OUT
           </span>
         ) : (
           <span
-            className={`px-2 py-0.5 border font-mono text-[9px] font-black uppercase tracking-widest rounded-sm leading-none flex items-center gap-1.5 w-fit ${
+            className={`px-2 py-0.5 border font-sans text-[9px] font-bold uppercase tracking-wider rounded-md leading-none flex items-center gap-1.5 w-fit ${
               trade.status === "OPEN"
-                ? "bg-[#50ffaf]/10 border-[#50ffaf]/40 text-[#50ffaf] shadow-[0_0_10px_rgba(80,255,175,0.15)] animate-pulse"
-                : "bg-amber-500/10 border-amber-500/40 text-amber-400"
+                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500 shadow-[0_0_10px_rgba(80,255,175,0.1)] animate-pulse"
+                : "bg-amber-500/10 border-amber-500/20 text-amber-500"
             }`}
           >
             {trade.status === "OPEN" && (
-              <span className="w-1.5 h-1.5 rounded-full bg-[#50ffaf]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
             )}
             {trade.status}
           </span>
@@ -711,27 +711,27 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
 
   return (
     <div className="w-full flex flex-col gap-4">
-      {/* ── Risk Engine Settings Panel (V8.4) ─────────────────────────── */}
+      {/* ── Risk Engine Settings Panel (V10.0) ─────────────────────────── */}
       <SettingsPanel account={account} onSave={setAccount} />
 
-      {/* ── Risk Summary HUD (V8.4) ────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-2">
+      {/* ── Risk Summary HUD (V10.0) ────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-2 animate-in fade-in duration-300">
         {/* Account Capital persistence Card */}
-        <div className="bg-[#1c1b1c]/80 border-2 border-[#4a4457] p-4 flex flex-col gap-1.5 shadow-2xl relative overflow-hidden group hover:border-[#50ffaf]/30 transition-all duration-300">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-white/1 rounded-full blur-2xl pointer-events-none" />
-          <span className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+        <div className="glass-panel p-4 flex flex-col gap-1.5 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-accent/2 rounded-full blur-2xl pointer-events-none" />
+          <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted">
             Persistent Capital Balance
           </span>
-          <span className="text-xl font-mono font-black tracking-tight text-[#e5e2e3] drop-shadow-[0_0_8px_rgba(229,226,227,0.15)]">
+          <span className="text-xl font-mono font-bold tracking-tight text-title">
             ${currentBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
           </span>
-          <div className="flex items-center gap-1.5 text-[9px] font-mono mt-1">
-            <span className="text-zinc-500">Initial:</span>
-            <span className="text-zinc-400 font-bold">${parseFloat(String(account.initial_capital)).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-            <span className={`px-1 py-0.5 rounded-sm font-black text-[8px] uppercase tracking-wide ${
+          <div className="flex items-center gap-1.5 text-[9.5px] font-mono mt-1">
+            <span className="text-muted font-sans font-medium">Initial:</span>
+            <span className="text-title font-bold">${parseFloat(String(account.initial_capital)).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+            <span className={`px-1 py-0.5 rounded text-[8px] font-sans font-bold uppercase tracking-wide leading-none ${
               currentBalance >= parseFloat(String(account.initial_capital))
-                ? "bg-[#50ffaf]/10 text-[#50ffaf] border border-[#50ffaf]/30"
-                : "bg-red-500/10 text-[#ff5f5f] border border-red-500/30"
+                ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                : "bg-rose-500/10 text-rose-500 border border-rose-500/20"
             }`}>
               {currentBalance >= parseFloat(String(account.initial_capital)) ? "In profit" : "In drawdown"}
             </span>
@@ -739,37 +739,37 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
         </div>
 
         {/* Total Realized P&L Card */}
-        <div className="bg-[#1c1b1c]/80 border-2 border-[#4a4457] p-4 flex flex-col gap-1.5 shadow-2xl relative overflow-hidden group hover:border-[#50ffaf]/30 transition-all duration-300">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-white/1 rounded-full blur-2xl pointer-events-none" />
-          <span className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+        <div className="glass-panel p-4 flex flex-col gap-1.5 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-accent/2 rounded-full blur-2xl pointer-events-none" />
+          <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted">
             Total Realized P&L
           </span>
-          <span className={`text-xl font-mono font-black tracking-tight ${
+          <span className={`text-xl font-mono font-bold tracking-tight ${
             totalRealizedPnL > 0
-              ? "text-[#50ffaf] drop-shadow-[0_0_10px_rgba(80,255,175,0.25)]"
+              ? "text-emerald-500"
               : totalRealizedPnL < 0
-              ? "text-[#ff5f5f]"
-              : "text-[#e5e2e3]"
+              ? "text-rose-500"
+              : "text-title"
           }`}>
             {totalRealizedPnL > 0 ? "+" : ""}{totalRealizedPnL.toFixed(2)} USD
           </span>
-          <div className="text-[9.5px] font-mono text-zinc-500 mt-1">
+          <div className="text-[9.5px] font-sans font-medium text-muted mt-1">
             Realized return across audited deals
           </div>
         </div>
 
-        {/* Risk Exposure (V8.4 Brutalist Design) */}
-        <div className="bg-[#1c1b1c]/80 border-2 border-[#4a4457] p-4 flex flex-col gap-2 shadow-2xl relative overflow-hidden group hover:border-[#ff5f5f]/50 transition-all duration-300">
+        {/* Risk Exposure (V10.0 Style) */}
+        <div className="glass-panel p-4 flex flex-col gap-2 relative overflow-hidden group">
           <div className="flex items-center justify-between">
-            <span className="text-[8px] font-black uppercase tracking-[0.15em] text-[#ff5f5f]">
+            <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-rose-500">
               Global Risk Exposure
             </span>
-            <span className={`text-[9px] font-mono font-black px-1.5 py-0.5 rounded-sm uppercase tracking-wide ${
+            <span className={`text-[9px] font-sans font-bold px-1.5 py-0.5 rounded uppercase tracking-wide leading-none ${
               riskLimitOccupancyPct >= 80 
-                ? "bg-[#ff5f5f]/20 border border-[#ff5f5f] text-[#ff5f5f] animate-pulse" 
+                ? "bg-rose-500/20 border border-rose-500 text-rose-500 animate-pulse" 
                 : riskLimitOccupancyPct > 0 
-                ? "bg-[#d1bcff]/10 border border-[#d1bcff]/30 text-[#d1bcff]" 
-                : "bg-zinc-800 border border-zinc-700 text-zinc-500"
+                ? "bg-accent/10 border border-accent/30 text-accent" 
+                : "bg-card-border/50 border border-card-border text-muted"
             }`}>
               {riskLimitOccupancyPct >= 80 ? "⚠️ CAP AT RISK" : riskLimitOccupancyPct > 0 ? "Active" : "Stable"}
             </span>
@@ -777,27 +777,27 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
 
           <div className="flex flex-col gap-1 mt-0.5">
             <div className="flex justify-between items-baseline font-mono">
-              <span className="text-lg font-black tracking-tight text-[#e5e2e3]">
+              <span className="text-lg font-bold tracking-tight text-title">
                 {currentOpenRiskPct.toFixed(2)}%
               </span>
-              <span className="text-[9px] text-[#958da3]">
+              <span className="text-[9px] text-muted font-sans">
                 / {maxRiskPct.toFixed(2)}% Limit
               </span>
             </div>
-            <div className="text-[9.5px] font-mono text-zinc-500">
+            <div className="text-[9.5px] font-sans font-medium text-muted">
               ${totalOpenRiskUsd.toFixed(2)} / ${maxRiskUsd.toFixed(2)} USD allocation
             </div>
           </div>
 
-          {/* Highly Visible Neo-Brutalist Progress Bar */}
-          <div className="w-full bg-zinc-950 border border-zinc-800 h-3 rounded-none overflow-hidden relative p-[1px] mt-1">
+          {/* Highly Visible Dynamic Accent Progress Bar */}
+          <div className="w-full bg-background border border-card-border h-2 rounded overflow-hidden relative p-[1px] mt-1">
             <div
-              className={`h-full transition-all duration-500 ease-out border-r border-black/30 ${
+              className={`h-full rounded-sm transition-all duration-500 ease-out ${
                 riskLimitOccupancyPct >= 80
-                  ? "bg-gradient-to-r from-red-600 to-rose-500 shadow-[0_0_12px_#ff5f5f]"
+                  ? "bg-rose-500"
                   : riskLimitOccupancyPct >= 50
-                  ? "bg-gradient-to-r from-amber-500 to-amber-400 shadow-[0_0_12px_#ff9800]"
-                  : "bg-gradient-to-r from-[#d1bcff] to-[#a380f9] shadow-[0_0_12px_#d1bcff]"
+                  ? "bg-amber-500"
+                  : "bg-accent"
               }`}
               style={{ width: `${riskLimitOccupancyPct}%` }}
             />
@@ -805,49 +805,47 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
         </div>
 
         {/* Performance Matrix Card */}
-        <div className="bg-[#1c1b1c]/80 border-2 border-[#4a4457] p-4 flex flex-col gap-1.5 shadow-2xl relative overflow-hidden group hover:border-[#d1bcff]/30 transition-all duration-300">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-white/1 rounded-full blur-2xl pointer-events-none" />
-          <span className="text-[8px] font-black uppercase tracking-[0.15em] text-[#958da3]">
+        <div className="glass-panel p-4 flex flex-col gap-1.5 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-accent/2 rounded-full blur-2xl pointer-events-none" />
+          <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted">
             Performance Matrix
           </span>
-          <span className="text-xl font-mono font-black tracking-tight text-[#e5e2e3]">
-            {winRate.toFixed(1)}% <span className="text-[9px] font-normal text-[#958da3] uppercase">Win Rate</span>
+          <span className="text-xl font-mono font-bold tracking-tight text-title">
+            {winRate.toFixed(1)}% <span className="text-[9px] font-sans font-medium text-muted uppercase ml-1">Win Rate</span>
           </span>
-          <div className="flex items-center gap-1.5 text-[9px] font-mono mt-1 text-zinc-500">
+          <div className="flex items-center gap-1.5 text-[9.5px] font-sans mt-1 text-muted">
             <span>Deals:</span>
-            <span className="text-zinc-400 font-bold">{closedTrades.length} closed</span>
-            <span>({winningTrades.length} W / {closedTrades.length - winningTrades.length} L)</span>
+            <span className="text-title font-bold">{closedTrades.length} closed</span>
+            <span className="font-mono">({winningTrades.length} W / {closedTrades.length - winningTrades.length} L)</span>
           </div>
         </div>
       </div>
 
       {/* Table Subheader Control Actions */}
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-bold text-[#958da3] uppercase tracking-wider">
+      <div className="flex items-center justify-between mt-4">
+        <span className="text-[10px] font-bold text-muted uppercase tracking-wider">
           Audited Positions: {trades.length}
         </span>
         <button
           onClick={refreshTrades}
           disabled={isRefreshing}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1c1b1c] border border-[#4a4457] hover:border-[#50ffaf] text-[#958da3] hover:text-[#50ffaf] font-mono text-[9px] font-black uppercase tracking-widest transition-all rounded-none shadow-md cursor-pointer disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-card hover:bg-card/85 border border-card-border hover:border-accent text-muted hover:text-accent font-mono text-[9px] font-bold uppercase tracking-wider transition-all rounded-lg shadow-md cursor-pointer disabled:opacity-50"
         >
           {isRefreshing ? (
-            <Loader2 className="w-3 h-3 animate-spin" />
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
           ) : (
-            <RefreshCw className="w-3 h-3" />
+            <RefreshCw className="w-3.5 h-3.5" />
           )}
           <span>[ Sync Logs ]</span>
         </button>
       </div>
 
       {/* Main Glassmorphism Data Table Wrapper */}
-      <div className="w-full border border-[#4a4457]/50 bg-[#1c1b1c]/80 backdrop-blur-xl rounded-2xl shadow-2xl overflow-hidden relative">
-        <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(255,255,255,0.01)] pointer-events-none z-10" />
-
+      <div className="w-full glass-panel overflow-hidden relative border border-card-border rounded-xl">
         <div className="overflow-x-auto min-w-full">
-          <table className="w-full border-collapse text-left text-xs text-[#e5e2e3]">
+          <table className="w-full border-collapse text-left text-xs text-foreground">
             <thead>
-              <tr className="border-b border-[#4a4457]/50 bg-black/40 text-[9px] font-bold uppercase tracking-widest text-[#958da3]">
+              <tr className="border-b border-card-border bg-card/45 text-[9px] font-bold uppercase tracking-widest text-muted">
                 <th className="py-4 px-4 md:px-6">Timestamp (UTC+3)</th>
                 <th className="py-4 px-4">Asset</th>
                 <th className="py-4 px-4">Direction</th>
@@ -864,7 +862,7 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
             <tbody>
               {trades.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-16 text-center text-[#958da3] font-mono">
+                  <td colSpan={11} className="py-16 text-center text-muted font-mono">
                     No trade records found. Execute trades from the terminal or wait for custom strategies to trigger.
                   </td>
                 </tr>

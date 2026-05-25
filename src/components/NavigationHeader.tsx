@@ -3,7 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useCallback, useEffect } from "react";
-import { Activity, History, TrendingUp, LayoutGrid, Settings, RotateCcw, Loader2, CheckCircle2, AlertCircle, BookOpen } from "lucide-react";
+import { useTheme } from "next-themes";
+import { 
+  RotateCcw, 
+  Loader2, 
+  CheckCircle2, 
+  AlertCircle, 
+  BookOpen, 
+  LayoutGrid, 
+  Settings, 
+  Sun, 
+  Moon 
+} from "lucide-react";
 import MatrixConfigDrawer from "./MatrixConfigDrawer";
 import { useMarketDataContext } from "@/context/MarketDataContext";
 import { LiveTicker } from "./LiveTicker";
@@ -12,10 +23,18 @@ type ResetStatus = 'idle' | 'loading' | 'success' | 'error';
 
 export function NavigationHeader() {
   const pathname = usePathname();
-  const { data } = useMarketDataContext();
+  const { data, wsStatus } = useMarketDataContext();
+  const { theme, setTheme } = useTheme();
+  
   const [isMatrixOpen, setIsMatrixOpen] = useState(false);
   const [resetStatus, setResetStatus] = useState<ResetStatus>('idle');
   const [cairoTime, setCairoTime] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  // Set mounted flag to safely render client-only icons without hydration mismatches
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Hydration-safe live ticking clock in Cairo timezone (UTC+3)
   useEffect(() => {
@@ -34,7 +53,6 @@ export function NavigationHeader() {
     return () => clearInterval(interval);
   }, []);
 
-  const pricing = data?.ipda_metrics?.current_pricing || 'SCANNING';
   const session = data?.ipda_metrics?.current_time_window || 'WAITING';
 
   // ── Phase 4: Force Reset State Handler ────────────────────────────────
@@ -64,143 +82,133 @@ export function NavigationHeader() {
 
   return (
     <>
-      <header className="bg-[#1c1b1c] border-b border-[#4a4457]/50 sticky top-0 z-50 shadow-md">
+      <header className="bg-card/75 border-b border-card-border sticky top-0 z-50 shadow-md backdrop-blur-md transition-colors duration-300">
         <div className="w-full px-4 md:px-8 h-14 flex items-center justify-between">
 
-          {/* LEFT SECTION (Brand & Asset) */}
-          <div className="flex items-center gap-4">
-            <div className="font-bold text-sm tracking-widest text-[#e5e2e3] uppercase flex items-center gap-2">
-              <div className="w-5 h-5 bg-[#50ffaf] rounded flex items-center justify-center">
-                <span className="text-black text-[10px] font-black">FS</span>
-              </div>
-              FLOW-STATE V8.2
+          {/* LEFT SECTION (Logo & Version Badge) */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="w-7 h-7 rounded bg-gradient-to-tr from-purple-600 to-indigo-600 dark:from-purple-500 dark:to-emerald-500 flex items-center justify-center shadow-md">
+              <span className="text-white text-xs font-black tracking-tighter">FS</span>
             </div>
-            {/* Asset label */}
-            <div className="px-2 py-0.5 bg-[#0e0e0f] border border-[#4a4457]/50 rounded font-mono text-[10px] text-[#e5e2e3]">
-              ETHUSDC.p
-            </div>
-            {/* Live price ticker — isolated leaf, zero re-renders to this parent */}
-            <LiveTicker />
+            <span className="px-1.5 py-0.5 bg-accent/10 text-[8px] font-black text-accent border border-accent/20 leading-none rounded-sm">
+              V9.0
+            </span>
           </div>
 
-          {/* CENTER SECTION (Tactical Icon Switcher) */}
-          <div className="absolute left-1/2 -translate-x-1/2 flex items-center bg-[#0e0e0f] border border-[#4a4457]/50 rounded p-1 gap-1">
+          {/* CENTER SECTION (Tactical Link Group Switcher - Premium Tabs) */}
+          <div className="hidden md:flex items-center bg-background/50 border border-card-border rounded-full p-1 gap-0.5">
             <Link
               href="/"
-              className={`p-1.5 transition-all flex items-center justify-center ${pathname === '/'
-                  ? 'text-[#50ffaf] border-b-2 border-[#50ffaf] bg-[#50ffaf]/10'
-                  : 'text-[#958da3] hover:text-[#e5e2e3] border-b-2 border-transparent hover:bg-zinc-800/50'
+              className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-wider uppercase transition-all duration-300 ${pathname === '/'
+                  ? 'bg-accent text-accent-foreground shadow-sm shadow-accent/25'
+                  : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
                 }`}
-              title="Live Dashboard"
             >
-              <Activity className="w-4 h-4" />
+              LIVE HUD
             </Link>
             <Link
               href="/backtest"
-              className={`p-1.5 transition-all flex items-center justify-center ${pathname === '/backtest'
-                  ? 'text-[#50ffaf] border-b-2 border-[#50ffaf] bg-[#50ffaf]/10'
-                  : 'text-[#958da3] hover:text-[#e5e2e3] border-b-2 border-transparent hover:bg-zinc-800/50'
+              className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-wider uppercase transition-all duration-300 ${pathname === '/backtest'
+                  ? 'bg-accent text-accent-foreground shadow-sm shadow-accent/25'
+                  : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
                 }`}
-              title="Backtest Replay"
             >
-              <History className="w-4 h-4" />
+              BACKTEST
             </Link>
             <Link
               href="/compounding"
-              className={`p-1.5 transition-all flex items-center justify-center ${pathname === '/compounding'
-                  ? 'text-[#50ffaf] border-b-2 border-[#50ffaf] bg-[#50ffaf]/10'
-                  : 'text-[#958da3] hover:text-[#e5e2e3] border-b-2 border-transparent hover:bg-zinc-800/50'
+              className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-wider uppercase transition-all duration-300 ${pathname === '/compounding'
+                  ? 'bg-accent text-accent-foreground shadow-sm shadow-accent/25'
+                  : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
                 }`}
-              title="Compound Plan"
             >
-              <TrendingUp className="w-4 h-4" />
-            </Link>
-            <Link
-              href="/journal"
-              className={`p-1.5 transition-all flex items-center justify-center ${pathname === '/journal'
-                  ? 'text-[#50ffaf] border-b-2 border-[#50ffaf] bg-[#50ffaf]/10'
-                  : 'text-[#958da3] hover:text-[#e5e2e3] border-b-2 border-transparent hover:bg-zinc-800/50'
-                }`}
-              title="Trading Journal"
-            >
-              <BookOpen className="w-4 h-4" />
-            </Link>
-            <div className="w-px h-4 bg-[#4a4457]/50 mx-0.5" />
-            <Link
-              href="/settings"
-              className={`p-1.5 transition-all flex items-center justify-center ${pathname === '/settings'
-                  ? 'text-[#d1bcff] border-b-2 border-[#d1bcff] bg-[#d1bcff]/10'
-                  : 'text-[#958da3] hover:text-[#d1bcff] border-b-2 border-transparent hover:bg-zinc-800/50'
-                }`}
-              title="Command Center"
-            >
-              <Settings className="w-4 h-4" />
+              COMPOUNDING
             </Link>
           </div>
 
           {/* RIGHT SECTION (Awareness & Global Triggers) */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
 
-            {/* Phase 4: Force Reset State Button */}
-            <button
-              id="force-reset-state-btn"
-              onClick={handleForceReset}
-              disabled={resetStatus === 'loading'}
-              className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 border rounded text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${resetStatus === 'success'
-                  ? 'bg-[#50ffaf]/10 border-[#50ffaf]/50 text-[#50ffaf]'
-                  : resetStatus === 'error'
-                    ? 'bg-[#ffb4ab]/10 border-[#ffb4ab]/50 text-[#ffb4ab]'
-                    : resetStatus === 'loading'
-                      ? 'bg-[#d1bcff]/5 border-[#d1bcff]/30 text-[#d1bcff]/50 cursor-wait'
-                      : 'bg-[#0e0e0f] border-[#4a4457]/50 text-[#958da3] hover:text-[#ffb4ab] hover:border-[#ffb4ab]/30 hover:bg-[#ffb4ab]/5'
-                }`}
-              title="Force reset AI memory state to SEARCHING"
-            >
-              {resetStatus === 'loading' ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : resetStatus === 'success' ? (
-                <CheckCircle2 className="w-3 h-3" />
-              ) : resetStatus === 'error' ? (
-                <AlertCircle className="w-3 h-3" />
-              ) : (
-                <RotateCcw className="w-3 h-3" />
-              )}
-              <span>
-                {resetStatus === 'loading' ? 'Resetting...'
-                  : resetStatus === 'success' ? 'Reset ✓'
-                    : resetStatus === 'error' ? 'Failed'
-                      : 'Reset'}
-              </span>
-            </button>
+            {/* Session Indicator */}
+            <div className="hidden lg:flex px-2 py-1 bg-background/50 border border-card-border rounded text-[9px] font-mono font-bold text-accent shrink-0 uppercase">
+              [{session}]
+            </div>
 
-            {/* Time & Live Sync — static clock display */}
-            <div className="hidden sm:flex items-center gap-2 px-2 py-1 bg-[#0e0e0f] border border-[#4a4457]/50 rounded">
-              <span className="w-1.5 h-1.5 bg-[#50ffaf] rounded-full animate-pulse" />
-              <span className="font-mono text-[10px] text-[#958da3]">
+            {/* Time & Live Sync — cairo clock and pulse dot */}
+            <div className="flex items-center gap-2 px-2.5 py-1 bg-background/50 border border-card-border rounded-full shrink-0">
+              <span className={`w-1.5 h-1.5 rounded-full ${wsStatus === 'OPEN' ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-500'}`} />
+              <span className="font-mono text-[9px] font-black text-muted uppercase leading-none tracking-wider">
                 {cairoTime ? `${cairoTime} UTC+3` : '--:-- UTC+3'}
               </span>
             </div>
 
-            {/* Badges */}
-            <div className="hidden lg:flex items-center gap-2 font-mono text-[9px] font-black uppercase tracking-tighter">
-              <span className="px-2 py-1 border border-[#4a4457]/50 bg-[#1c1b1c] text-[#d1bcff]">
-                [{session}]
-              </span>
-              <span className={`px-2 py-1 border ${pricing === 'PREMIUM' ? 'bg-[#ffb4ab]/10 text-[#ffb4ab] border-[#ffb4ab]/30' :
-                  pricing === 'DISCOUNT' ? 'bg-[#50ffaf]/10 text-[#50ffaf] border-[#50ffaf]/30' :
-                    'bg-zinc-800/10 text-[#958da3] border-[#4a4457]/50'
-                }`}>
-                [{pricing}]
-              </span>
-            </div>
+            <div className="w-px h-4 bg-card-border" />
+
+            {/* Secondary Pages Icons */}
+            <Link
+              href="/journal"
+              className={`p-1.5 border border-card-border hover:border-accent/40 rounded-full transition-all duration-300 shrink-0 ${pathname === '/journal' ? 'bg-accent/10 text-accent border-accent/30' : 'text-muted hover:text-foreground hover:bg-card'}`}
+              title="Trading Journal"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+            </Link>
+
+            <Link
+              href="/settings"
+              className={`p-1.5 border border-card-border hover:border-accent/40 rounded-full transition-all duration-300 shrink-0 ${pathname === '/settings' ? 'bg-accent/10 text-accent border-accent/30' : 'text-muted hover:text-foreground hover:bg-card'}`}
+              title="Command Center"
+            >
+              <Settings className="w-3.5 h-3.5" />
+            </Link>
+
+            {/* Force Reset State Button */}
+            <button
+              id="force-reset-state-btn"
+              onClick={handleForceReset}
+              disabled={resetStatus === 'loading'}
+              className={`p-1.5 border border-card-border rounded-full transition-all duration-300 cursor-pointer ${resetStatus === 'success'
+                  ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-500'
+                  : resetStatus === 'error'
+                    ? 'bg-rose-500/10 border-rose-500/50 text-rose-500'
+                    : resetStatus === 'loading'
+                      ? 'bg-accent/5 border-accent/30 text-accent/50 cursor-wait'
+                      : 'text-muted hover:text-rose-500 hover:bg-rose-500/5 hover:border-rose-500/30'
+                }`}
+              title="Force reset AI memory state to SEARCHING"
+            >
+              {resetStatus === 'loading' ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : resetStatus === 'success' ? (
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              ) : resetStatus === 'error' ? (
+                <AlertCircle className="w-3.5 h-3.5" />
+              ) : (
+                <RotateCcw className="w-3.5 h-3.5" />
+              )}
+            </button>
+
+            {/* Theme Toggle Button */}
+            <button
+              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              className="p-1.5 text-muted hover:text-foreground bg-background/50 border border-card-border hover:border-accent/40 rounded-full transition-all duration-300 flex items-center justify-center shrink-0 cursor-pointer hover:bg-card"
+              title="Toggle Theme"
+            >
+              {!mounted ? (
+                <Sun className="w-3.5 h-3.5" />
+              ) : theme === 'dark' ? (
+                <Sun className="w-3.5 h-3.5 text-amber-400 animate-in spin-in-12 duration-300" />
+              ) : (
+                <Moon className="w-3.5 h-3.5 text-indigo-600 animate-in spin-in-12 duration-300" />
+              )}
+            </button>
 
             {/* Master Drawer Trigger */}
             <button
               onClick={() => setIsMatrixOpen(true)}
-              className="p-1.5 text-[#958da3] hover:text-[#d1bcff] bg-[#0e0e0f] border border-[#4a4457]/50 hover:border-[#d1bcff]/50 rounded transition-all ml-1 group"
+              className="p-1.5 text-muted hover:text-accent bg-background/50 border border-card-border hover:border-accent/40 rounded-full transition-all duration-300 shrink-0 group hover:bg-card"
               title="Matrix Metrics"
             >
-              <LayoutGrid className="w-4 h-4 group-hover:scale-110 transition-transform" />
+              <LayoutGrid className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
             </button>
           </div>
         </div>

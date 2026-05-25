@@ -50,6 +50,76 @@ const DEFAULT_SIGNAL_ALERTS_ENABLED: SignalAlertsEnabled = {
   DEAD_ZONE_ENTER: true,
 };
 
+export interface ThemeSettings {
+  dark_bg: string;
+  dark_card: string;
+  dark_accent: string;
+  dark_up_candle: string;
+  dark_down_candle: string;
+  dark_card_opacity: number;
+  
+  // Phase 2 Interactive & Typography Customizations
+  dark_interactive_default: string;
+  dark_interactive_active: string;
+  dark_interactive_hover: string;
+  dark_text_title: string;
+  dark_text_label: string;
+  dark_text_value: string;
+  dark_highlight_up: string;
+  dark_highlight_down: string;
+
+  light_bg: string;
+  light_card: string;
+  light_accent: string;
+  light_up_candle: string;
+  light_down_candle: string;
+  light_card_opacity: number;
+
+  // Phase 2 Interactive & Typography Customizations
+  light_interactive_default: string;
+  light_interactive_active: string;
+  light_interactive_hover: string;
+  light_text_title: string;
+  light_text_label: string;
+  light_text_value: string;
+  light_highlight_up: string;
+  light_highlight_down: string;
+}
+
+export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
+  dark_bg: '#020617',
+  dark_card: '#0f172a',
+  dark_accent: '#a855f7',
+  dark_up_candle: '#50ffaf',
+  dark_down_candle: '#ffb4ab',
+  dark_card_opacity: 90,
+  
+  dark_interactive_default: '#94a3b8',
+  dark_interactive_active: '#a855f7',
+  dark_interactive_hover: '#ffffff',
+  dark_text_title: '#ffffff',
+  dark_text_label: '#64748b',
+  dark_text_value: '#f8fafc',
+  dark_highlight_up: '#50ffaf',
+  dark_highlight_down: '#ffb4ab',
+
+  light_bg: '#fafafa',
+  light_card: '#ffffff',
+  light_accent: '#4f46e5',
+  light_up_candle: '#059669',
+  light_down_candle: '#e11d48',
+  light_card_opacity: 75,
+
+  light_interactive_default: '#475569',
+  light_interactive_active: '#4f46e5',
+  light_interactive_hover: '#020617',
+  light_text_title: '#020617',
+  light_text_label: '#64748b',
+  light_text_value: '#334155',
+  light_highlight_up: '#059669',
+  light_highlight_down: '#e11d48',
+};
+
 export interface Candle {
   t: number;
   o: number;
@@ -82,6 +152,16 @@ export function useMarketData(selectedInterval: string = '5m') {
   const [data, setData] = useState<MarketDataPayload | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => {
+    if (typeof window === 'undefined') return DEFAULT_THEME_SETTINGS;
+    try {
+      const stored = localStorage.getItem('gem_theme_settings');
+      return stored ? JSON.parse(stored) : DEFAULT_THEME_SETTINGS;
+    } catch {
+      return DEFAULT_THEME_SETTINGS;
+    }
+  });
 
   const [signalAlerts, setSignalAlerts] = useState<SignalAlerts>(() => {
     if (typeof window === 'undefined') return DEFAULT_SIGNAL_ALERTS;
@@ -127,6 +207,28 @@ export function useMarketData(selectedInterval: string = '5m') {
     };
   }, []);
 
+  const updateThemeSettings = useCallback(async (newSettings: Partial<ThemeSettings>) => {
+    setThemeSettings((prev) => {
+      const updated = { ...prev, ...newSettings };
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('gem_theme_settings', JSON.stringify(updated));
+        } catch (e) {
+          console.error('[MarketData] Failed to save theme settings to localStorage:', e);
+        }
+      }
+      
+      // Persist delta to DB
+      fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: newSettings }),
+      }).catch(err => console.error('[MarketData] Failed to sync theme settings:', err));
+
+      return updated;
+    });
+  }, []);
+
   // Background SWR Rehydration: fetch settings from Neon on mount to overwrite localStorage
   useEffect(() => {
     const loadSettings = async () => {
@@ -134,6 +236,49 @@ export function useMarketData(selectedInterval: string = '5m') {
         const res = await fetch('/api/settings');
         if (res.ok) {
           const data = await res.json();
+          
+          // Rehydrate dynamic theme settings
+          const s = data.settings || {};
+          const loadedTheme: ThemeSettings = {
+            dark_bg: s.dark_bg || DEFAULT_THEME_SETTINGS.dark_bg,
+            dark_card: s.dark_card || DEFAULT_THEME_SETTINGS.dark_card,
+            dark_accent: s.dark_accent || DEFAULT_THEME_SETTINGS.dark_accent,
+            dark_up_candle: s.dark_up_candle || DEFAULT_THEME_SETTINGS.dark_up_candle,
+            dark_down_candle: s.dark_down_candle || DEFAULT_THEME_SETTINGS.dark_down_candle,
+            dark_card_opacity: s.dark_card_opacity ? Number(s.dark_card_opacity) : DEFAULT_THEME_SETTINGS.dark_card_opacity,
+            
+            // Phase 2 Interactive & Typography mappings
+            dark_interactive_default: s.dark_interactive_default || DEFAULT_THEME_SETTINGS.dark_interactive_default,
+            dark_interactive_active: s.dark_interactive_active || DEFAULT_THEME_SETTINGS.dark_interactive_active,
+            dark_interactive_hover: s.dark_interactive_hover || DEFAULT_THEME_SETTINGS.dark_interactive_hover,
+            dark_text_title: s.dark_text_title || DEFAULT_THEME_SETTINGS.dark_text_title,
+            dark_text_label: s.dark_text_label || DEFAULT_THEME_SETTINGS.dark_text_label,
+            dark_text_value: s.dark_text_value || DEFAULT_THEME_SETTINGS.dark_text_value,
+            dark_highlight_up: s.dark_highlight_up || DEFAULT_THEME_SETTINGS.dark_highlight_up,
+            dark_highlight_down: s.dark_highlight_down || DEFAULT_THEME_SETTINGS.dark_highlight_down,
+
+            light_bg: s.light_bg || DEFAULT_THEME_SETTINGS.light_bg,
+            light_card: s.light_card || DEFAULT_THEME_SETTINGS.light_card,
+            light_accent: s.light_accent || DEFAULT_THEME_SETTINGS.light_accent,
+            light_up_candle: s.light_up_candle || DEFAULT_THEME_SETTINGS.light_up_candle,
+            light_down_candle: s.light_down_candle || DEFAULT_THEME_SETTINGS.light_down_candle,
+            light_card_opacity: s.light_card_opacity ? Number(s.light_card_opacity) : DEFAULT_THEME_SETTINGS.light_card_opacity,
+
+            // Phase 2 Interactive & Typography mappings
+            light_interactive_default: s.light_interactive_default || DEFAULT_THEME_SETTINGS.light_interactive_default,
+            light_interactive_active: s.light_interactive_active || DEFAULT_THEME_SETTINGS.light_interactive_active,
+            light_interactive_hover: s.light_interactive_hover || DEFAULT_THEME_SETTINGS.light_interactive_hover,
+            light_text_title: s.light_text_title || DEFAULT_THEME_SETTINGS.light_text_title,
+            light_text_label: s.light_text_label || DEFAULT_THEME_SETTINGS.light_text_label,
+            light_text_value: s.light_text_value || DEFAULT_THEME_SETTINGS.light_text_value,
+            light_highlight_up: s.light_highlight_up || DEFAULT_THEME_SETTINGS.light_highlight_up,
+            light_highlight_down: s.light_highlight_down || DEFAULT_THEME_SETTINGS.light_highlight_down,
+          };
+          setThemeSettings(loadedTheme);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('gem_theme_settings', JSON.stringify(loadedTheme));
+          }
+
           if (data.terminalSettings) {
             const { signalSounds, enabledSignals } = data.terminalSettings;
             if (signalSounds) {
@@ -372,7 +517,9 @@ export function useMarketData(selectedInterval: string = '5m') {
     updateSignalAlert,
     signalAlertsEnabled,
     toggleSignalAlertEnabled,
-    syncStatus
+    syncStatus,
+    themeSettings,
+    updateThemeSettings
   };
 }
 

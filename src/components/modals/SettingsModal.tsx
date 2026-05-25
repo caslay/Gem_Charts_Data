@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { X, Volume2, Play, Trash2, Bell, Sparkles, AlertCircle, Cpu, FileText, KeyRound, Shield, Save, Loader2, CheckCircle2, AlertTriangle, Brain, Crosshair, Music } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Volume2, Play, Trash2, Bell, Sparkles, AlertCircle, Music, Crosshair } from 'lucide-react';
 import { useAlertSounds, AVAILABLE_ALERT_FILES, AlertSound } from '@/hooks/useAlertSounds';
 import { useMarketDataContext } from '@/context/MarketDataContext';
 import EquationBuilder from './EquationBuilder';
@@ -116,31 +116,31 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     switch (syncStatus) {
       case 'syncing':
         return (
-          <div className="flex items-center gap-1.5 text-[9px] text-[#d1bcff] font-bold tracking-widest">
+          <div className="flex items-center gap-1.5 text-[9px] text-[#d1bcff] font-bold tracking-widest font-sans uppercase">
             <span className="w-1.5 h-1.5 rounded-full bg-[#d1bcff] animate-ping" />
-            <span>SYNCING TO CLOUD...</span>
+            <span>Syncing to Cloud...</span>
           </div>
         );
       case 'saved':
         return (
-          <div className="flex items-center gap-1.5 text-[9px] text-[#50ffaf] font-bold tracking-widest">
+          <div className="flex items-center gap-1.5 text-[9px] text-[#50ffaf] font-bold tracking-widest font-sans uppercase">
             <span className="w-1.5 h-1.5 rounded-full bg-[#50ffaf]" />
-            <span>CLOUD SYNCED</span>
+            <span>Cloud Synced</span>
           </div>
         );
       case 'error':
         return (
-          <div className="flex items-center gap-1.5 text-[9px] text-red-400 font-bold tracking-widest">
-            <AlertCircle size={10} className="text-red-500 animate-pulse" />
-            <span>SYNC ERROR</span>
+          <div className="flex items-center gap-1.5 text-[9px] text-rose-500 font-bold tracking-widest font-sans uppercase">
+            <AlertCircle size={10} className="text-rose-500 animate-pulse" />
+            <span>Sync Error</span>
           </div>
         );
       case 'idle':
       default:
         return (
-          <div className="flex items-center gap-1.5 text-[9px] text-[#958da3]">
-            <span className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
-            <span>CLOUD AUTOSAVE ACTIVE</span>
+          <div className="flex items-center gap-1.5 text-[9px] text-slate-500 dark:text-zinc-500 font-black font-sans uppercase">
+            <span className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
+            <span>Cloud Autosave Active</span>
           </div>
         );
     }
@@ -160,50 +160,50 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
       <>
         {/* Backdrop */}
         <div
-          className="fixed inset-0 bg-[#0e0e0f]/80 backdrop-blur-md z-[200] transition-opacity duration-200"
+          className="fixed inset-0 bg-background/80 backdrop-blur-md z-[200] transition-opacity duration-200"
           onClick={onClose}
         />
-        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[204] w-full max-w-sm bg-[#0e0e0f]/95 border border-[#4a4457] shadow-[0_0_80px_rgba(0,0,0,0.95)] font-mono text-xs text-[#e5e2e3] select-none rounded-none animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[204] w-full max-w-sm bg-card/95 backdrop-blur-xl border border-card-border shadow-[0_10px_50px_rgba(0,0,0,0.3)] font-sans text-xs text-foreground select-none rounded-2xl animate-in fade-in zoom-in-95 duration-150 overflow-hidden">
           {/* Price Overlay Header */}
-          <div className="flex items-center justify-between p-4 border-b border-[#4a4457] bg-[#141416]/95">
+          <div className="flex items-center justify-between p-4.5 border-b border-card-border bg-card/50">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-amber-400 rounded-none animate-pulse" />
-              <h3 className="text-xs font-bold tracking-[0.15em] uppercase text-white">PRICE ALERT CONFIG</h3>
+              <div className="w-2.5 h-2.5 bg-accent rounded-sm animate-pulse" />
+              <h3 className="text-xs font-bold tracking-widest uppercase text-foreground">PRICE ALERT CONFIG</h3>
             </div>
-            <button onClick={onClose} className="text-[#958da3] hover:text-white transition-colors p-1 cursor-pointer">
+            <button onClick={onClose} className="text-muted hover:text-foreground transition-colors p-1.5 cursor-pointer rounded-lg hover:bg-card/50">
               <X size={14} />
             </button>
           </div>
 
           {/* Price Alert Form */}
-          <div className="p-5 space-y-4 max-h-[50vh] overflow-y-auto scrollbar-thin scrollbar-thumb-[#4a4457] scrollbar-track-transparent">
+          <div className="p-5 space-y-4 max-h-[50vh] overflow-y-auto scrollbar-thin scrollbar-thumb-card-border scrollbar-track-transparent">
             {/* Static Price read-out */}
-            <div className="flex justify-between items-center bg-[#141416] border border-[#4a4457] px-3.5 py-2.5">
-              <span className="text-[10px] text-[#958da3] uppercase font-bold tracking-wider">Level Target</span>
-              <span className="text-sm font-bold tracking-tight text-[#50ffaf]">
+            <div className="flex justify-between items-center glass-panel bg-card/45 border border-card-border/80 px-4 py-3 rounded-xl shadow-sm">
+              <span className="text-[10px] text-muted uppercase font-bold tracking-wider">Level Target</span>
+              <span className="text-sm font-black tracking-tight text-emerald-600 dark:text-[#50ffaf] font-mono">
                 {alert.price.toFixed(2)} USDC
               </span>
             </div>
 
-            {/* Label Input */}
+            {/* Descriptor Input */}
             <div className="space-y-1.5">
-              <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Alert Descriptor</label>
+              <label className="block text-[9px] text-muted uppercase font-bold tracking-widest">Alert Descriptor</label>
               <input
                 type="text"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
-                className="w-full bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-3 py-2 text-xs font-mono text-white rounded-none transition-colors"
+                className="w-full bg-background/60 backdrop-blur-md border border-card-border/80 focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3.5 py-2.5 text-xs text-foreground rounded-lg transition-all shadow-sm"
                 placeholder="e.g. PDH Sweep Trap"
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Condition</label>
+                <label className="block text-[9px] text-muted uppercase font-bold tracking-widest">Condition</label>
                 <select
                   value={triggerCondition}
                   onChange={(e: any) => setTriggerCondition(e.target.value)}
-                  className="w-full bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-2.5 py-2 text-xs font-mono text-white rounded-none transition-colors cursor-pointer"
+                  className="w-full bg-background/60 backdrop-blur-md border border-card-border/80 focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3 py-2.5 text-xs text-foreground rounded-lg transition-all cursor-pointer shadow-sm"
                 >
                   <option value="TOUCH">TOUCH</option>
                   <option value="CLOSE_ABOVE">CLOSE_ABOVE</option>
@@ -212,11 +212,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </select>
               </div>
               <div className="space-y-1.5">
-                <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Timeframe</label>
+                <label className="block text-[9px] text-muted uppercase font-bold tracking-widest">Timeframe</label>
                 <select
                   value={timeframe}
                   onChange={(e: any) => setTimeframe(e.target.value)}
-                  className="w-full bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-2.5 py-2 text-xs font-mono text-white rounded-none transition-colors cursor-pointer"
+                  className="w-full bg-background/60 backdrop-blur-md border border-card-border/80 focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3 py-2.5 text-xs text-foreground rounded-lg transition-all cursor-pointer shadow-sm"
                 >
                   <option value="1m">1m</option>
                   <option value="5m">5m</option>
@@ -230,27 +230,27 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* Action Chain */}
             <div className="space-y-2">
-              <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Action Chain</label>
-              <div className="space-y-2 bg-[#141416]/50 border border-[#4a4457] p-3">
-                <label className="flex items-center gap-3 cursor-pointer group">
-                  <input type="checkbox" checked={browserNotification} onChange={(e) => setBrowserNotification(e.target.checked)} className="rounded-none bg-[#141416] border border-[#4a4457] w-3.5 h-3.5 cursor-pointer accent-[#50ffaf]" />
-                  <div className="flex items-center gap-1.5">
-                    <Bell size={11} className="text-[#958da3] group-hover:text-white transition-colors" />
-                    <span className="text-[10px] text-[#958da3] group-hover:text-white transition-colors">Browser Notification</span>
+              <label className="block text-[9px] text-muted uppercase font-bold tracking-widest">Action Chain</label>
+              <div className="space-y-2.5 glass-panel bg-card/40 border border-card-border/80 p-3.5 rounded-xl">
+                <label className="flex items-center gap-3 cursor-pointer group hover:bg-accent/10 p-2 rounded-lg transition-all select-none">
+                  <input type="checkbox" checked={browserNotification} onChange={(e) => setBrowserNotification(e.target.checked)} className="rounded border border-card-border w-4 h-4 cursor-pointer accent-accent transition-all" />
+                  <div className="flex items-center gap-2">
+                    <Bell size={13} className="text-muted group-hover:text-foreground transition-colors" />
+                    <span className="text-xs text-foreground font-semibold group-hover:text-foreground transition-colors">Browser Notification</span>
                   </div>
                 </label>
-                <label className="flex items-center gap-3 cursor-pointer group">
-                  <input type="checkbox" checked={triggerAiAnalysis} onChange={(e) => setTriggerAiAnalysis(e.target.checked)} className="rounded-none bg-[#141416] border border-[#4a4457] w-3.5 h-3.5 cursor-pointer accent-[#50ffaf]" />
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles size={11} className="text-[#958da3] group-hover:text-white transition-colors" />
-                    <span className="text-[10px] text-[#958da3] group-hover:text-white transition-colors">Trigger AI Analysis</span>
+                <label className="flex items-center gap-3 cursor-pointer group hover:bg-accent/10 p-2 rounded-lg transition-all select-none">
+                  <input type="checkbox" checked={triggerAiAnalysis} onChange={(e) => setTriggerAiAnalysis(e.target.checked)} className="rounded border border-card-border w-4 h-4 cursor-pointer accent-accent transition-all" />
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={13} className="text-muted group-hover:text-foreground transition-colors" />
+                    <span className="text-xs text-foreground font-semibold group-hover:text-foreground transition-colors">Trigger AI Analysis</span>
                   </div>
                 </label>
-                <label className="flex items-center gap-3 cursor-pointer group">
-                  <input type="checkbox" checked={soundAlert} onChange={(e) => setSoundAlert(e.target.checked)} className="rounded-none bg-[#141416] border border-[#4a4457] w-3.5 h-3.5 cursor-pointer accent-[#50ffaf]" />
-                  <div className="flex items-center gap-1.5">
-                    <Volume2 size={11} className="text-[#958da3] group-hover:text-white transition-colors" />
-                    <span className="text-[10px] text-[#958da3] group-hover:text-white transition-colors">Sound Alert</span>
+                <label className="flex items-center gap-3 cursor-pointer group hover:bg-accent/10 p-2 rounded-lg transition-all select-none">
+                  <input type="checkbox" checked={soundAlert} onChange={(e) => setSoundAlert(e.target.checked)} className="rounded border border-card-border w-4 h-4 cursor-pointer accent-accent transition-all" />
+                  <div className="flex items-center gap-2">
+                    <Volume2 size={13} className="text-muted group-hover:text-foreground transition-colors" />
+                    <span className="text-xs text-foreground font-semibold group-hover:text-foreground transition-colors">Sound Alert</span>
                   </div>
                 </label>
               </div>
@@ -258,14 +258,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* Sound */}
             <div className="space-y-1.5">
-              <label className="block text-[9px] text-[#958da3] uppercase font-bold tracking-widest">Audio Profile</label>
+              <label className="block text-[9px] text-muted uppercase font-bold tracking-widest">Audio Profile</label>
               <div className="flex gap-2">
-                <select value={soundSelection} disabled={!soundAlert} onChange={(e: any) => setSoundSelection(e.target.value)} className="flex-1 bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-2.5 py-2 text-xs font-mono text-white rounded-none transition-colors disabled:opacity-40 cursor-pointer">
+                <select value={soundSelection} disabled={!soundAlert} onChange={(e: any) => setSoundSelection(e.target.value)} className="flex-1 bg-background/60 backdrop-blur-md border border-card-border/80 focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3 py-2.5 text-xs text-foreground rounded-lg transition-all disabled:opacity-40 cursor-pointer shadow-sm">
                   <option value="Institutional Pulse">Institutional Pulse (Sine)</option>
                   <option value="Mechanical Click">Mechanical Click (Tri/Noise)</option>
                   <option value="Target Chime">Target Chime (Harmonic)</option>
                 </select>
-                <button type="button" disabled={!soundAlert} onClick={handleTestAudio} className="flex items-center gap-1 px-3 py-2 bg-[#141416] border border-[#4a4457] hover:bg-zinc-800 disabled:opacity-40 transition-all text-[10px] font-bold uppercase text-[#958da3] rounded-none cursor-pointer">
+                <button type="button" disabled={!soundAlert} onClick={handleTestAudio} className="flex items-center gap-1.5 px-3 py-2.5 bg-card/60 border border-card-border/80 hover:bg-accent/10 hover:text-accent disabled:opacity-40 transition-all text-[10px] font-bold uppercase text-muted hover:text-foreground rounded-lg cursor-pointer shadow-sm shadow-black/5">
                   <Play size={10} fill="currentColor" />
                   <span>Test</span>
                 </button>
@@ -274,16 +274,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           {/* Price Overlay Footer */}
-          <div className="flex justify-between items-center p-4 border-t border-[#4a4457] bg-[#141416]/95">
-            <button type="button" onClick={() => onDelete(alert.id)} className="flex items-center gap-1 px-2.5 py-1.5 border border-red-500/30 hover:border-red-500 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 font-bold transition-all uppercase text-[10px] rounded-none cursor-pointer">
+          <div className="flex justify-between items-center p-4 border-t border-card-border bg-card/50 rounded-b-2xl">
+            <button type="button" onClick={() => onDelete(alert.id)} className="flex items-center gap-1.5 px-3.5 py-2 border border-rose-500/30 hover:border-rose-500 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 hover:text-rose-400 font-bold transition-all uppercase text-[10px] rounded-lg cursor-pointer shadow-sm shadow-black/5">
               <Trash2 size={12} />
               <span>Delete</span>
             </button>
             <div className="flex items-center gap-2">
-              <button type="button" onClick={onClose} className="px-3 py-1.5 border border-[#4a4457] hover:bg-white/5 text-[#958da3] hover:text-white font-bold transition-all uppercase text-[10px] rounded-none cursor-pointer">
+              <button type="button" onClick={onClose} className="px-3.5 py-2 border border-card-border hover:bg-card-hover/20 text-muted hover:text-foreground font-bold transition-all uppercase text-[10px] rounded-lg cursor-pointer">
                 Cancel
               </button>
-              <button type="button" onClick={handleSavePriceAlert} className="px-4 py-1.5 bg-[#50ffaf] border border-[#50ffaf] hover:bg-[#40dd96] text-black font-bold transition-all uppercase text-[10px] rounded-none cursor-pointer">
+              <button type="button" onClick={handleSavePriceAlert} className="px-4 py-2 bg-accent hover:opacity-90 text-black font-black transition-all uppercase text-[10px] rounded-lg cursor-pointer shadow-md">
                 Save Config
               </button>
             </div>
@@ -298,21 +298,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-[#0e0e0f]/80 backdrop-blur-md z-[200] transition-opacity duration-200"
+        className="fixed inset-0 bg-background/80 backdrop-blur-md z-[200] transition-opacity duration-200"
         onClick={onClose}
       />
 
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[201] w-full max-w-5xl bg-[#0e0e0f]/90 border border-[#4a4457] shadow-[0_0_80px_rgba(0,0,0,0.95)] font-mono text-xs text-[#e5e2e3] select-none rounded-none animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]">
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[201] w-full max-w-5xl bg-card/95 backdrop-blur-xl border border-card-border shadow-[0_20px_80px_rgba(0,0,0,0.5)] font-sans text-xs text-foreground select-none rounded-2xl animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[85vh] overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[#4a4457] bg-[#141416]/95 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 bg-[#50ffaf] rounded-none animate-pulse" />
-            <h3 className="text-xs font-bold tracking-[0.15em] uppercase text-white">COMMAND CENTER</h3>
+        <div className="flex items-center justify-between p-4.5 border-b border-card-border bg-card/50 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-2.5 h-2.5 bg-accent rounded-sm animate-pulse" />
+            <h3 className="text-xs font-bold tracking-widest uppercase text-foreground">SYSTEM COMMAND CENTER</h3>
           </div>
           <button
             onClick={onClose}
-            className="text-[#958da3] hover:text-white transition-colors p-1 cursor-pointer"
+            className="text-muted hover:text-foreground transition-colors p-1.5 cursor-pointer rounded-lg hover:bg-card/50"
           >
             <X size={16} />
           </button>
@@ -321,14 +321,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Main content area: vertical tabs + panel */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* ── Vertical Tabs Sidebar ──────────────────────────────────── */}
-          <div className="w-[140px] shrink-0 bg-[#141416]/50 border-r border-[#4a4457] flex flex-col py-1">
+          <div className="w-[160px] shrink-0 bg-card/30 border-r border-card-border flex flex-col py-2.5 gap-1 select-none font-sans">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2.5 px-4 py-3 text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer border-l-2 ${activeTab === tab.id
-                  ? 'bg-[#50ffaf]/10 text-[#50ffaf] border-l-[#50ffaf]'
-                  : 'text-[#958da3] hover:text-white hover:bg-white/3 border-l-transparent'
+                className={`flex items-center gap-2.5 px-4.5 py-3.5 text-xs font-bold uppercase tracking-widest transition-all cursor-pointer border-l-3 ${activeTab === tab.id
+                  ? 'bg-accent/15 text-accent border-l-accent'
+                  : 'text-muted hover:text-foreground hover:bg-card/45 border-l-transparent'
                   }`}
               >
                 {tab.icon}
@@ -338,7 +338,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           {/* ── Tab Content Panel ──────────────────────────────────────── */}
-          <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin scrollbar-thumb-[#4a4457] scrollbar-track-transparent">
+          <div className="flex-1 min-w-0 overflow-y-auto scrollbar-thin scrollbar-thumb-card-border scrollbar-track-transparent">
 
             {/* TAB CONTENT ────────────────────────────────────────── */}
 
@@ -349,9 +349,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {/* TAB 3: AUDIO VAULT ──────────────────────────────────────── */}
             {activeTab === 'audio' && (
-              <div className="p-5 space-y-4">
-                <div className="bg-[#141416]/50 border border-[#4a4457] p-3 text-[10px] text-[#958da3] uppercase tracking-wide leading-relaxed">
-                  Configure dedicated audio mappings for critical quantitative engine events. Audio files are loaded from the <span className="text-[#50ffaf]">/public/audio/</span> directory.
+              <div className="p-6 space-y-4">
+                <div className="glass-panel bg-card/45 border border-card-border/80 p-4 rounded-xl text-xs text-muted uppercase tracking-wide leading-relaxed shadow-sm">
+                  Configure dedicated audio mappings for critical quantitative engine events. Audio files are loaded from the <span className="text-accent font-bold">/public/audio/</span> directory.
                 </div>
 
                 {[
@@ -369,32 +369,32 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                   const isEnabled = signalAlertsEnabled ? (signalAlertsEnabled as any)[ev.key] !== false : true;
 
                   return (
-                    <div key={ev.key} className="space-y-1.5 border-b border-[#4a4457]/30 pb-3 last:border-0 last:pb-0">
+                    <div key={ev.key} className="space-y-2 border-b border-card-border/40 pb-4.5 last:border-0 last:pb-0">
                       <div className="flex justify-between items-baseline">
-                        <label className="flex items-center gap-2 cursor-pointer group">
+                        <label className="flex items-center gap-2.5 cursor-pointer group select-none">
                           <input
                             type="checkbox"
                             checked={isEnabled}
                             onChange={() => toggleSignalAlertEnabled && toggleSignalAlertEnabled(ev.key as any)}
-                            className="rounded-none bg-[#141416] border border-[#4a4457] text-[#50ffaf] focus:ring-0 focus:ring-offset-0 w-3.5 h-3.5 cursor-pointer accent-[#50ffaf]"
+                            className="rounded border border-card-border w-4 h-4 cursor-pointer accent-accent transition-all"
                           />
-                          <span className="text-[10px] font-black uppercase text-white tracking-widest group-hover:text-[#50ffaf] transition-colors">
+                          <span className="text-xs font-bold uppercase text-foreground tracking-widest group-hover:text-accent transition-colors">
                             {ev.label}
                           </span>
                         </label>
-                        <span className="text-[8px] text-[#958da3] font-bold uppercase">
+                        <span className="text-[9px] text-muted font-bold uppercase tracking-wider">
                           {ev.key}
                         </span>
                       </div>
-                      <span className="block text-[9px] text-[#958da3] italic -mt-1 mb-1 leading-none pl-5">
+                      <span className="block text-xs text-muted italic -mt-1.5 mb-1 leading-none pl-6.5 font-sans">
                         {ev.desc}
                       </span>
-                      <div className="flex gap-2 pl-5">
+                      <div className="flex gap-2 pl-6.5">
                         <select
                           value={currentVal}
                           disabled={!isEnabled}
                           onChange={(e) => updateSignalAlert(ev.key as any, e.target.value)}
-                          className="flex-1 bg-[#141416] border border-[#4a4457] focus:border-[#50ffaf] focus:outline-none px-2.5 py-2 text-xs font-mono text-white rounded-none transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                          className="flex-1 bg-background/60 border border-card-border/80 focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3.5 py-2.5 text-xs text-foreground rounded-lg transition-all cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed shadow-sm font-sans"
                         >
                           {AVAILABLE_ALERT_FILES.map((file) => (
                             <option key={file} value={file}>
@@ -406,7 +406,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           type="button"
                           onClick={() => handlePlaySignalSound(currentVal)}
                           disabled={!currentVal || !isEnabled}
-                          className="flex items-center justify-center gap-1 px-3 py-2 bg-[#141416] border border-[#4a4457] hover:bg-zinc-800 transition-all text-[10px] font-bold uppercase text-[#958da3] hover:text-[#e5e2e3] rounded-none cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                          className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-card/60 border border-card-border/80 hover:bg-accent/10 hover:text-accent transition-all text-[10px] font-bold uppercase text-muted hover:text-foreground rounded-lg cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
                           title="Preview audio output"
                         >
                           <Play size={10} fill="currentColor" />
@@ -422,12 +422,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex justify-between items-center p-4 border-t border-[#4a4457] bg-[#141416]/95 shrink-0">
+        <div className="flex justify-between items-center p-4 border-t border-card-border bg-card/50 shrink-0 rounded-b-2xl">
           {renderSyncIndicator()}
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-1.5 border border-[#4a4457] hover:bg-white/5 text-[#958da3] hover:text-white font-bold transition-all uppercase text-[10px] rounded-none cursor-pointer"
+            className="px-3.5 py-2 border border-card-border hover:bg-card-hover/20 text-muted hover:text-foreground font-bold transition-all uppercase text-[10px] rounded-lg cursor-pointer shadow-sm"
           >
             Close
           </button>

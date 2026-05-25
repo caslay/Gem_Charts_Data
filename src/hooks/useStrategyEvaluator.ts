@@ -267,6 +267,9 @@ export function useStrategyEvaluator() {
   const [strategies, setStrategies] = useState<CustomStrategy[]>([]);
   const [lastMatch, setLastMatch] = useState<StrategyMatch | null>(null);
 
+  // Dynamic Trade Sensing state
+  const [trades, setTrades] = useState<any[]>([]);
+
   // Per-strategy debounce lock: maps strategy ID → last fired candle time
   const firedLockRef = useRef<Map<string, number>>(new Map());
   
@@ -294,11 +297,13 @@ export function useStrategyEvaluator() {
       const res = await fetch('/api/trades');
       if (res.ok) {
         const json = await res.json();
-        const trades: { strategy_name: string; status: string }[] = json.trades || [];
-        const activeNames = new Set(
-          trades
-            .filter(t => t.status === 'OPEN' || t.status === 'PAUSED')
-            .map(t => t.strategy_name)
+        const tradesList = json.trades || [];
+        setTrades(tradesList);
+
+        const activeNames = new Set<string>(
+          tradesList
+            .filter((t: any) => t.status === 'OPEN' || t.status === 'PAUSED')
+            .map((t: any) => t.strategy_name as string)
         );
         activeTradeNamesRef.current = activeNames;
       }
@@ -325,11 +330,11 @@ export function useStrategyEvaluator() {
   useEffect(() => {
     if (!data || strategies.length === 0) return;
 
+    // Derived states for Directional & Active Trade Sensing
+    const hasOpenShort = trades.some(t => t.status === 'OPEN' && t.direction === 'SHORT');
+    const hasOpenLong = trades.some(t => t.status === 'OPEN' && t.direction === 'LONG');
+
     for (const strategy of strategies) {
-      const isMatch = evaluateStrategy(strategy, data, livePrice, liveCandle);
-
-      if (!isMatch) continue;
-
       const conditions = Array.isArray(strategy.conditions)
         ? strategy.conditions
         : (strategy.conditions?.conditions || []);
@@ -337,6 +342,29 @@ export function useStrategyEvaluator() {
       const settings = Array.isArray(strategy.conditions)
         ? {}
         : strategy.conditions;
+
+      const direction = settings.direction || 'LONG';
+
+      // ── Directional Lock Gate (Cross-Strategy Conflict) ──
+      // LONG Gate: Before evaluating any strategy for a LONG entry, check: if (hasOpenShort) return;
+      // SHORT Gate: Before evaluating any strategy for a SHORT entry, check: if (hasOpenLong) return;
+      const isAnyTradeOpenInOppositeDirection =
+        (direction === 'LONG' && hasOpenShort) ||
+        (direction === 'SHORT' && hasOpenLong);
+
+      // Check if the current specific strategy already has an OPEN position in the trades array
+      const isThisStrategyAlreadyOpen = trades.some(
+        t => t.strategy_name === strategy.name && t.status === 'OPEN'
+      );
+
+      // Wrap the execution trigger in a pre-check block:
+      if (isAnyTradeOpenInOppositeDirection || isThisStrategyAlreadyOpen) {
+        continue; // Pure silence, no alerts
+      }
+
+      const isMatch = evaluateStrategy(strategy, data, livePrice, liveCandle);
+
+      if (!isMatch) continue;
 
       const temporalMode = settings.temporal_mode || 'INSTANT';
 
@@ -371,7 +399,6 @@ export function useStrategyEvaluator() {
       // ── LINKAGE: Automatically execute a paper trade ──────────────
       const sl_logic = settings.sl_logic || 'Structural Swing';
       const tp_logic = settings.tp_logic || 'Nearest Order Book Magnet';
-      const direction = settings.direction || 'LONG';
       const risk_percent = settings.risk_percent ?? 1.0;
 
       // V8.5 — One-Trade Rule: abort if this strategy already has an OPEN/PAUSED position
@@ -419,6 +446,19 @@ export function useStrategyEvaluator() {
         } else {
           // Mark strategy as having an active trade in the local cache immediately
           activeTradeNamesRef.current.add(strategy.name);
+
+          // Instantly append new trade to local trades state to trigger immediate guardrail protection
+          setTrades(prevTrades => [
+            {
+              id: json.trade_id,
+              strategy_name: strategy.name,
+              status: 'OPEN',
+              direction: direction,
+              timestamp: json.timestamp || Date.now()
+            },
+            ...prevTrades
+          ]);
+
           if (triggerSmartAlert) {
             triggerSmartAlert(
               'FLOW_STATE' as any,
@@ -431,7 +471,7 @@ export function useStrategyEvaluator() {
         console.error(`[StrategyEvaluator] Trade execution connection error:`, err);
       });
     }
-  }, [data, liveCandle, livePrice, strategies, triggerSmartAlert]);
+  }, [data, liveCandle, livePrice, strategies, trades, triggerSmartAlert]);
 
   return {
     strategies,
