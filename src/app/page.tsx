@@ -69,7 +69,7 @@ export default function Home() {
         }
       }
       parsedAiResponse = JSON.parse(candidate.trim());
-      masterBias = parsedAiResponse?.diagnostics?.master_bias || 'NEUTRAL';
+      masterBias = parsedAiResponse?.bias_label || parsedAiResponse?.diagnostics?.master_bias || 'NEUTRAL';
     } catch (e) {
       console.error('[Home] Failed to parse AI Analysis JSON for Master Bias:', e);
     }

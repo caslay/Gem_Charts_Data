@@ -119,8 +119,8 @@ const ColorPickerItem: React.FC<{
       </div>
       <div className="flex items-center gap-2">
         <div className="relative w-8 h-8 rounded-lg border border-card-border overflow-hidden cursor-pointer shadow-inner hover:scale-105 transition-transform">
-          <div 
-            className="w-full h-full" 
+          <div
+            className="w-full h-full"
             style={{ backgroundColor: value }}
           />
           <input
@@ -327,7 +327,7 @@ export default function SettingsPage() {
   }, [status, fetchAllSettings]);
 
   // ── Save handlers per tab ──────────────────────────────────────────────────
-  
+
   // Save Tab 5: APPEARANCE Customizer Config
   const handleSaveAppearance = async () => {
     try {
@@ -556,11 +556,10 @@ export default function SettingsPage() {
                     setActiveTab(tab.id);
                     setErrorMessage("");
                   }}
-                  className={`flex items-center gap-3 px-4.5 py-3.5 text-xs md:text-sm font-black uppercase tracking-widest transition-all cursor-pointer whitespace-nowrap lg:w-full border-b-2 lg:border-b-0 lg:border-l-3 ${
-                    active
-                      ? "bg-accent/15 text-accent border-accent shadow-inner rounded-r-none lg:rounded-r-lg rounded-lg"
-                      : "text-slate-500 dark:text-zinc-400 border-transparent hover:text-foreground hover:bg-card/45 rounded-lg"
-                  }`}
+                  className={`flex items-center gap-3 px-4.5 py-3.5 text-xs md:text-sm font-black uppercase tracking-widest transition-all cursor-pointer whitespace-nowrap lg:w-full border-b-2 lg:border-b-0 lg:border-l-3 ${active
+                    ? "bg-accent/15 text-accent border-accent shadow-inner rounded-r-none lg:rounded-r-lg rounded-lg"
+                    : "text-slate-500 dark:text-zinc-400 border-transparent hover:text-foreground hover:bg-card/45 rounded-lg"
+                    }`}
                 >
                   {tab.icon}
                   <span>{tab.label}</span>
@@ -571,7 +570,7 @@ export default function SettingsPage() {
 
           {/* Active Pane Container (Glassmorphic dark design) */}
           <div className="flex-1 w-full min-w-0 glass-panel p-5 lg:p-8 relative">
-            
+
             {/* Error Telemetry Alert Banner */}
             {errorMessage && (
               <div className="mb-6 flex items-start gap-3 bg-rose-500/10 border border-rose-500/40 p-4 text-[10px] text-rose-600 dark:text-rose-400 leading-relaxed rounded-xl">
@@ -671,15 +670,14 @@ export default function SettingsPage() {
                   <button
                     onClick={handleSaveQuantAi}
                     disabled={saveStatus === "saving"}
-                    className={`flex items-center gap-2 px-5 py-2.5 border font-black text-[10px] uppercase tracking-widest transition-all cursor-pointer rounded-lg shadow-sm ${
-                      saveStatus === "saving"
-                        ? "bg-accent/10 border-accent/30 text-accent/50 cursor-wait"
-                        : saveStatus === "success"
+                    className={`flex items-center gap-2 px-5 py-2.5 border font-black text-[10px] uppercase tracking-widest transition-all cursor-pointer rounded-lg shadow-sm ${saveStatus === "saving"
+                      ? "bg-accent/10 border-accent/30 text-accent/50 cursor-wait"
+                      : saveStatus === "success"
                         ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
                         : saveStatus === "error"
-                        ? "bg-rose-500/10 border-rose-500/40 text-rose-600 dark:text-rose-400"
-                        : "bg-card border border-card-border hover:border-accent text-slate-500 dark:text-zinc-400 hover:text-foreground"
-                    }`}
+                          ? "bg-rose-500/10 border-rose-500/40 text-rose-600 dark:text-rose-400"
+                          : "bg-card border border-card-border hover:border-accent text-slate-500 dark:text-zinc-400 hover:text-foreground"
+                      }`}
                   >
                     {saveStatus === "saving" ? (
                       <>
@@ -794,15 +792,14 @@ export default function SettingsPage() {
                   <button
                     onClick={handleSaveAccountRisk}
                     disabled={saveStatus === "saving"}
-                    className={`flex items-center gap-2 px-5 py-2.5 border font-black text-[10px] uppercase tracking-widest transition-all cursor-pointer rounded-lg shadow-sm ${
-                      saveStatus === "saving"
-                        ? "bg-accent/10 border-accent/30 text-accent/50 cursor-wait"
-                        : saveStatus === "success"
+                    className={`flex items-center gap-2 px-5 py-2.5 border font-black text-[10px] uppercase tracking-widest transition-all cursor-pointer rounded-lg shadow-sm ${saveStatus === "saving"
+                      ? "bg-accent/10 border-accent/30 text-accent/50 cursor-wait"
+                      : saveStatus === "success"
                         ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
                         : saveStatus === "error"
-                        ? "bg-rose-500/10 border-rose-500/40 text-rose-600 dark:text-rose-400"
-                        : "bg-card border border-card-border hover:border-accent text-slate-500 dark:text-zinc-400 hover:text-foreground"
-                    }`}
+                          ? "bg-rose-500/10 border-rose-500/40 text-rose-600 dark:text-rose-400"
+                          : "bg-card border border-card-border hover:border-accent text-slate-500 dark:text-zinc-400 hover:text-foreground"
+                      }`}
                   >
                     {saveStatus === "saving" ? (
                       <>
@@ -945,7 +942,7 @@ export default function SettingsPage() {
                         <span className="text-[9px] font-black uppercase text-foreground tracking-wider group-hover:text-accent transition-colors">
                           Ambient Neon Glow
                         </span>
-                        <span className="text-[8px] text-slate-400 dark:text-zinc-500">Enable neon background glows</span>
+                        <span className="text-[11px] text-slate-400 dark:text-zinc-150">Enable neon background glows</span>
                       </div>
                     </label>
 
@@ -961,7 +958,7 @@ export default function SettingsPage() {
                         <span className="text-[9px] font-black uppercase text-foreground tracking-wider group-hover:text-accent transition-colors">
                           Compact Dashboard
                         </span>
-                        <span className="text-[8px] text-slate-400 dark:text-zinc-500">Reduce spacing of layout cells</span>
+                        <span className="text-[11px] text-slate-400 dark:text-zinc-150">Reduce spacing of layout cells</span>
                       </div>
                     </label>
 
@@ -977,7 +974,7 @@ export default function SettingsPage() {
                         <span className="text-[9px] font-black uppercase text-foreground tracking-wider group-hover:text-accent transition-colors">
                           Price Ticks Sound
                         </span>
-                        <span className="text-[8px] text-slate-400 dark:text-zinc-500">Play mechanical clicks on WS updates</span>
+                        <span className="text-[11px] text-slate-400 dark:text-zinc-150">Play mechanical clicks on WS updates</span>
                       </div>
                     </label>
                   </div>
@@ -1071,15 +1068,14 @@ export default function SettingsPage() {
                   <button
                     onClick={handleSaveTerminal}
                     disabled={saveStatus === "saving"}
-                    className={`flex items-center gap-2 px-5 py-2.5 border font-black text-[10px] uppercase tracking-widest transition-all cursor-pointer rounded-lg shadow-sm ${
-                      saveStatus === "saving"
-                        ? "bg-accent/10 border-accent/30 text-accent/50 cursor-wait"
-                        : saveStatus === "success"
+                    className={`flex items-center gap-2 px-5 py-2.5 border font-black text-[10px] uppercase tracking-widest transition-all cursor-pointer rounded-lg shadow-sm ${saveStatus === "saving"
+                      ? "bg-accent/10 border-accent/30 text-accent/50 cursor-wait"
+                      : saveStatus === "success"
                         ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
                         : saveStatus === "error"
-                        ? "bg-rose-500/10 border-rose-500/40 text-rose-600 dark:text-rose-400"
-                        : "bg-card border border-card-border hover:border-accent text-slate-500 dark:text-zinc-400 hover:text-foreground"
-                    }`}
+                          ? "bg-rose-500/10 border-rose-500/40 text-rose-600 dark:text-rose-400"
+                          : "bg-card border border-card-border hover:border-accent text-slate-500 dark:text-zinc-400 hover:text-foreground"
+                      }`}
                   >
                     {saveStatus === "saving" ? (
                       <>
@@ -1152,11 +1148,11 @@ export default function SettingsPage() {
                     {/* Midnight Live Swatch Mockup Box */}
                     <div className="space-y-1 select-none">
                       <span className="text-[8px] text-zinc-500 uppercase tracking-widest block font-bold">Midnight Swatch Preview</span>
-                      <div 
+                      <div
                         className="w-full h-24 rounded-xl p-2.5 flex flex-col justify-between border transition-all text-[8px] font-sans leading-none"
-                        style={{ 
-                          backgroundColor: themeSettings.dark_bg, 
-                          borderColor: `color-mix(in srgb, ${themeSettings.dark_accent} 25%, transparent)` 
+                        style={{
+                          backgroundColor: themeSettings.dark_bg,
+                          borderColor: `color-mix(in srgb, ${themeSettings.dark_accent} 25%, transparent)`
                         }}
                       >
                         <div className="flex justify-between items-center w-full border-b pb-1.5" style={{ borderColor: `color-mix(in srgb, ${themeSettings.dark_accent} 15%, transparent)` }}>
@@ -1257,11 +1253,11 @@ export default function SettingsPage() {
                     {/* Daylight Live Swatch Mockup Box */}
                     <div className="space-y-1 select-none">
                       <span className="text-[8px] text-zinc-500 uppercase tracking-widest block font-bold">Daylight Swatch Preview</span>
-                      <div 
+                      <div
                         className="w-full h-24 rounded-xl p-2.5 flex flex-col justify-between border transition-all text-[8px] font-sans leading-none"
-                        style={{ 
-                          backgroundColor: themeSettings.light_bg, 
-                          borderColor: `color-mix(in srgb, ${themeSettings.light_accent} 25%, transparent)` 
+                        style={{
+                          backgroundColor: themeSettings.light_bg,
+                          borderColor: `color-mix(in srgb, ${themeSettings.light_accent} 25%, transparent)`
                         }}
                       >
                         <div className="flex justify-between items-center w-full border-b pb-1.5" style={{ borderColor: `color-mix(in srgb, ${themeSettings.light_accent} 15%, transparent)` }}>
@@ -1336,15 +1332,14 @@ export default function SettingsPage() {
                   <button
                     onClick={handleSaveAppearance}
                     disabled={saveStatus === "saving"}
-                    className={`flex items-center gap-2 px-5 py-2.5 border font-black text-[10px] uppercase tracking-widest transition-all cursor-pointer rounded-lg shadow-sm ${
-                      saveStatus === "saving"
-                        ? "bg-accent/10 border-accent/30 text-accent/50 cursor-wait"
-                        : saveStatus === "success"
+                    className={`flex items-center gap-2 px-5 py-2.5 border font-black text-[10px] uppercase tracking-widest transition-all cursor-pointer rounded-lg shadow-sm ${saveStatus === "saving"
+                      ? "bg-accent/10 border-accent/30 text-accent/50 cursor-wait"
+                      : saveStatus === "success"
                         ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
                         : saveStatus === "error"
-                        ? "bg-rose-500/10 border-rose-500/40 text-rose-600 dark:text-rose-400"
-                        : "bg-card border border-card-border hover:border-accent text-slate-500 dark:text-zinc-400 hover:text-foreground"
-                    }`}
+                          ? "bg-rose-500/10 border-rose-500/40 text-rose-600 dark:text-rose-400"
+                          : "bg-card border border-card-border hover:border-accent text-slate-500 dark:text-zinc-400 hover:text-foreground"
+                      }`}
                   >
                     {saveStatus === "saving" ? (
                       <>
