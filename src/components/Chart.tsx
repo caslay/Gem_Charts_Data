@@ -457,6 +457,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       if (interval === '1m') initialTimeframe = '1m';
       else if (interval === '5m') initialTimeframe = '5m';
       else if (interval === '15m') initialTimeframe = '15m';
+      else if (interval === '30m') initialTimeframe = '15m'; // map 30m to closest standard alert TF
       else if (interval === '1h') initialTimeframe = '1h';
       else if (interval === '4h') initialTimeframe = '4h';
 
@@ -820,18 +821,23 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
 
   // ── Phase 2: Live Candle Injection & Snapping Update ─────────────────────
   useEffect(() => {
-    if (seriesRef.current && liveCandle) {
+    if (seriesRef.current && liveCandle && data && data.length > 0) {
       try {
-        //console.log('[Chart] Live Candle Time:', liveCandle.time, '| Close:', liveCandle.close);
-        seriesRef.current.update(liveCandle as any);
+        const lastBar = data[data.length - 1];
+        const lastBarTimeSec = Math.floor(lastBar.t / 1000);
 
-        // Live price can resize or rescale the chart, sync badges immediately
-        updateAlertPositions();
+        // Ensure liveCandle time is >= lastBarTimeSec to avoid out-of-order errors / overlapping / ghost wicks
+        if (liveCandle.time >= lastBarTimeSec) {
+          seriesRef.current.update(liveCandle as any);
+          updateAlertPositions();
+        } else {
+          console.warn('[Chart] Suppressed out-of-order live candle tick to prevent Ghost Wick:', liveCandle.time, 'last historical:', lastBarTimeSec);
+        }
       } catch (error) {
         console.error('[Chart] Lightweight Charts Update Error:', error);
       }
     }
-  }, [liveCandle, updateAlertPositions]);
+  }, [liveCandle, data, updateAlertPositions]);
 
   // ── Phase 3: The Execution Loop & Tick Crossovers ─────────────────────────
   const executeAlert = useCallback((alert: Alert) => {

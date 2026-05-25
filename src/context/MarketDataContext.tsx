@@ -25,10 +25,10 @@ interface MarketDataContextValue extends MarketDataReturnType {
 const MarketDataContext = createContext<MarketDataContextValue | null>(null);
 
 export function MarketDataProvider({ children }: { children: ReactNode }) {
-  const marketData = useMarketDataHook();
-
   // Centralized WS interval state — Chart and other consumers set this
   const [wsInterval, setWsInterval] = useState<'1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '4h'>('5m');
+
+  const marketData = useMarketDataHook(wsInterval);
 
   // Single, global WebSocket connection — prevents duplicate connections (Lesson #7)
   const {

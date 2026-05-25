@@ -8,12 +8,11 @@ import SmartAlertsToast from '@/components/SmartAlertsToast';
 import SettingsModal from '@/components/modals/SettingsModal';
 import { Loader2, Menu, Settings } from 'lucide-react';
 import { useStrategyEvaluator } from '@/hooks/useStrategyEvaluator';
-
-type Timeframe = '5m' | '15m' | '1h';
+import TimeframeSwitcher, { Timeframe } from '@/components/TimeframeSwitcher';
 
 export default function Home() {
-  const { data, isLoading, error, refetch, downloadV6, downloadV7Sliced, activeAlerts, dismissAlert } = useMarketDataContext();
-  const [timeframe, setTimeframe] = useState<Timeframe>('5m');
+  const { data, isLoading, error, refetch, downloadV6, downloadV7Sliced, activeAlerts, dismissAlert, setWsInterval } = useMarketDataContext();
+  const [selectedInterval, setSelectedInterval] = useState<Timeframe>('5m');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSoundSettingsOpen, setIsSoundSettingsOpen] = useState(false);
   const [commandCenterTab, setCommandCenterTab] = useState<'ai_config' | 'strategy' | 'audio'>('strategy');
@@ -22,17 +21,20 @@ export default function Home() {
   // Strategy Execution Engine — runs silently in the background
   useStrategyEvaluator();
 
-  // Fetch fresh historical candles when timeframe changes or Home mounts
+  // Sync localized selection with global WebSocket context interval
+  useEffect(() => {
+    setWsInterval(selectedInterval);
+  }, [selectedInterval, setWsInterval]);
+
+  // Fetch fresh historical candles when selectedInterval changes or Home mounts
   useEffect(() => {
     refetch();
-  }, [timeframe, refetch]);
+  }, [selectedInterval, refetch]);
 
   const getChartData = () => {
     if (!data) return [];
-    if (timeframe === '5m') return data.data_payload.candles_5m ?? [];
-    if (timeframe === '15m') return data.data_payload.candles_15m ?? [];
-    if (timeframe === '1h') return data.data_payload.candles_1h ?? [];
-    return [];
+    const key = `candles_${selectedInterval}`;
+    return data.data_payload[key] ?? [];
   };
 
   const currentPrice = data?.data_payload?.candles_5m?.slice(-1)[0]?.c ?? null;
@@ -49,7 +51,7 @@ export default function Home() {
         <div className="absolute bottom-[-10%] right-[10%] w-[40%] h-[40%] rounded-full bg-purple-900/20 blur-[120px] pointer-events-none" />
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
-        <div className="h-14 lg:h-16 border-b border-[#4a4457]/50 flex items-center justify-between px-4 lg:px-6 relative z-10 bg-[#0e0e0f]/60 backdrop-blur-xl gap-4">
+        <div className="h-14 lg:h-16 border-b border-[#4a4457]/50 flex items-center justify-between px-4 lg:px-6 relative z-12 bg-[#0e0e0f]/60 backdrop-blur-xl gap-4">
 
           {/* Brand / Context Title */}
           <div className="flex items-center gap-3 min-w-0">
@@ -63,7 +65,7 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 <span className="text-[9px] font-bold text-[#958da3] uppercase tracking-widest">Institutional Flow</span>
                 <span className="px-1.5 py-0.5 bg-[#d1bcff]/10 text-[8px] font-black text-[#d1bcff] border border-[#d1bcff]/20 leading-none">
-                  V8.2
+                  V8.8
                 </span>
               </div>
             </div>
@@ -84,21 +86,7 @@ export default function Home() {
               <span className="hidden sm:inline">[ COMMAND CENTER ]</span>
             </button>
 
-            <div className="flex items-center p-0.5 bg-[#1c1b1c] border border-[#4a4457]/50">
-              {(['5m', '15m', '1h'] as const).map((tf) => (
-                <button
-                  key={tf}
-                  id={`tf-${tf}`}
-                  onClick={() => setTimeframe(tf)}
-                  className={`px-3 lg:px-5 py-1.5 text-[10px] lg:text-[11px] font-black uppercase tracking-widest transition-all duration-200 ${timeframe === tf
-                    ? 'bg-[#d1bcff] text-black shadow-[0_0_20px_rgba(209,188,255,0.2)]'
-                    : 'text-[#958da3] hover:text-[#e5e2e3] hover:bg-white/5'
-                    }`}
-                >
-                  {tf}
-                </button>
-              ))}
-            </div>
+            <TimeframeSwitcher selectedInterval={selectedInterval} onChange={setSelectedInterval} />
 
             {/* Hamburger — visible only on <lg screens */}
             <button
@@ -122,7 +110,7 @@ export default function Home() {
                 <span className="font-semibold">Error:</span> {error}
               </div>
             </div>
-          ) : isLoading ? (
+          ) : !data && isLoading ? (
             <div className="w-full h-full flex items-center justify-center">
               <div className="flex flex-col items-center gap-4">
                 <Loader2 className="w-10 h-10 text-[#d1bcff] animate-spin" />
@@ -139,8 +127,17 @@ export default function Home() {
                 data={getChartData()}
                 activeFvgs={data?.ipda_metrics?.active_fvgs || []}
                 localDealingRange={data?.ipda_metrics?.pricing_context?.local_dealing_range}
-                interval={timeframe}
+                interval={selectedInterval}
               />
+              {/* Premium overlay for timeframe transition load states */}
+              {isLoading && (
+                <div className="absolute inset-0 bg-[#0e0e0f]/60 backdrop-blur-sm z-20 flex flex-col items-center justify-center gap-3 transition-opacity duration-300">
+                  <Loader2 className="w-8 h-8 text-[#a855f7] animate-spin" />
+                  <span className="text-[10px] font-mono tracking-widest uppercase text-[#958da3] animate-pulse">
+                    Pivoting Timeframe Scale...
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -167,8 +164,8 @@ export default function Home() {
         alert={null}
         initialTab={commandCenterTab}
         onClose={() => setIsSoundSettingsOpen(false)}
-        onSave={() => {}}
-        onDelete={() => {}}
+        onSave={() => { }}
+        onDelete={() => { }}
       />
     </main>
   );
