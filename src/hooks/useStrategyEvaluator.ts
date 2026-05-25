@@ -18,7 +18,8 @@ import type { MetricKey, OperatorKey, TemporalMode, CustomStrategy, StrategyCond
 function resolveMetric(
   condition: StrategyCondition,
   data: MarketDataPayload | null,
-  livePrice: number | null
+  livePrice: number | null,
+  aiBias: number | null
 ): boolean | string | number {
   if (!data) return false;
 
@@ -27,6 +28,13 @@ function resolveMetric(
   const metric = condition.metric;
 
   switch (metric) {
+    case 'AI_DAILY_BIAS': {
+      if (aiBias === 1) return 'BULLISH';
+      if (aiBias === -1) return 'BEARISH';
+      if (aiBias === 0) return 'NEUTRAL';
+      return 'NEUTRAL';
+    }
+
     case 'FVG': {
       let fvgs = ipda.active_fvgs || [];
       if (!Array.isArray(fvgs)) return false;
@@ -177,9 +185,10 @@ function evaluateCondition(
   strategyId: string,
   condition: StrategyCondition,
   data: MarketDataPayload | null,
-  livePrice: number | null
+  livePrice: number | null,
+  aiBias: number | null
 ): boolean {
-  const resolved = resolveMetric(condition, data, livePrice);
+  const resolved = resolveMetric(condition, data, livePrice, aiBias);
 
   const expected = (condition.operator === 'IS_TRUE')
     ? 'true'
@@ -223,7 +232,8 @@ function evaluateStrategy(
   strategy: CustomStrategy,
   data: MarketDataPayload | null,
   livePrice: number | null,
-  liveCandle: LiveCandle | null
+  liveCandle: LiveCandle | null,
+  aiBias: number | null
 ): boolean {
   const conditions = Array.isArray(strategy.conditions)
     ? strategy.conditions
@@ -250,7 +260,7 @@ function evaluateStrategy(
   }
 
   // All conditions must pass
-  return conditions.every((c: any) => evaluateCondition(strategy.id, c, data, livePrice));
+  return conditions.every((c: any) => evaluateCondition(strategy.id, c, data, livePrice, aiBias));
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -262,7 +272,7 @@ export interface StrategyMatch {
 }
 
 export function useStrategyEvaluator() {
-  const { data, liveCandle, livePrice, triggerSmartAlert } = useMarketDataContext();
+  const { data, liveCandle, livePrice, triggerSmartAlert, aiBias } = useMarketDataContext();
 
   const [strategies, setStrategies] = useState<CustomStrategy[]>([]);
   const [lastMatch, setLastMatch] = useState<StrategyMatch | null>(null);
@@ -362,7 +372,7 @@ export function useStrategyEvaluator() {
         continue; // Pure silence, no alerts
       }
 
-      const isMatch = evaluateStrategy(strategy, data, livePrice, liveCandle);
+      const isMatch = evaluateStrategy(strategy, data, livePrice, liveCandle, aiBias);
 
       if (!isMatch) continue;
 

@@ -17,7 +17,8 @@ export type MetricKey =
   | 'PRICE_VS_OPEN'
   | 'EQUILIBRIUM_STATUS'
   | 'TARGET_EXHAUSTION'
-  | 'NEARBY_MAGNET';
+  | 'NEARBY_MAGNET'
+  | 'AI_DAILY_BIAS';
 export type OperatorKey = 'IS_TRUE' | 'IS_FALSE' | 'EQUALS' | 'NOT_EQUALS' | 'GREATER_THAN' | 'LESS_THAN';
 export type TemporalMode = 'INSTANT' | 'ON_CLOSE';
 
@@ -53,6 +54,7 @@ const METRICS: { key: MetricKey; label: string; type: 'boolean' | 'enum' | 'numb
   { key: 'EQUILIBRIUM_STATUS', label: 'Equilibrium Status', type: 'enum', options: ['PREMIUM', 'DISCOUNT'] },
   { key: 'TARGET_EXHAUSTION', label: 'Target Exhaustion', type: 'enum', options: ['PENDING', 'EXHAUSTED', 'ASIAN_HIGH_SWEPT', 'ASIAN_LOW_SWEPT', 'LONDON_HIGH_SWEPT', 'LONDON_LOW_SWEPT'] },
   { key: 'NEARBY_MAGNET', label: 'Nearby Magnet', type: 'boolean' },
+  { key: 'AI_DAILY_BIAS', label: 'AI Daily Bias', type: 'enum', options: ['BULLISH', 'BEARISH', 'NEUTRAL'] },
 ];
 
 function getMetricDef(key: MetricKey) {
@@ -60,6 +62,11 @@ function getMetricDef(key: MetricKey) {
 }
 
 function getOperatorsForMetric(key: MetricKey): { value: OperatorKey; label: string }[] {
+  if (key === 'AI_DAILY_BIAS') {
+    return [
+      { value: 'EQUALS', label: '==' },
+    ];
+  }
   const def = getMetricDef(key);
   if (def.type === 'boolean') {
     return [
