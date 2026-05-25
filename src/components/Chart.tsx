@@ -536,7 +536,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       localization: {
         timeFormatter: (timestamp: number) => {
           return new Date(timestamp * 1000).toLocaleTimeString('en-EG', {
-            timeZone: 'UTC',
+            timeZone: 'Africa/Cairo',
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,
@@ -555,7 +555,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
         borderColor: 'rgba(74, 68, 87, 0.5)',
         tickMarkFormatter: (time: number) => {
           return new Date(time * 1000).toLocaleTimeString('en-EG', {
-            timeZone: 'UTC',
+            timeZone: 'Africa/Cairo',
             hour: '2-digit',
             minute: '2-digit',
             hour12: true,

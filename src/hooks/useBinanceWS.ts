@@ -21,8 +21,7 @@ import type { UTCTimestamp } from 'lightweight-charts';
 export interface LiveCandle {
   /**
    * Bar open time as lightweight-charts UTCTimestamp (UNIX seconds).
-   * IMPORTANT: includes the same UTC+3 offset baked in by the backend
-   * `formatCandles()` so it aligns with the historical series time scale.
+   * Operates strictly on raw UTC-0.
    */
   time: UTCTimestamp;
   open: number;
@@ -68,15 +67,7 @@ export interface UseBinanceWSReturn {
  */
 const BINANCE_WS_BASE = 'wss://fstream.binance.com/market/ws';
 
-/**
- * UTC+3 offset in seconds — MUST match the `utcPlus3OffsetMs` applied by the
- * backend `formatCandles()` in `/api/market-data/route.ts` (line 70-77).
- * Historical candle `t` values are stored as: `binance_open_time_ms + 10_800_000 ms`
- * then divided by 1000 in Chart.tsx → unix seconds with +3h baked in.
- * The live WS tick must carry the same offset or lightweight-charts will
- * silently reject .update() (incoming time < last bar time).
- */
-const UTC_PLUS_3_OFFSET_S = 3 * 60 * 60; // 10_800 seconds
+// UTC+3 offset removed. Operating strictly on UTC-0.
 const BACKOFF_BASE_MS = 1_000;   // 1s initial delay
 const BACKOFF_MAX_MS = 30_000;  // 30s ceiling
 const BACKOFF_FACTOR = 2;
@@ -143,10 +134,8 @@ export function useBinanceWS({
 
       const k = msg.k;
       return {
-        // +10_800s: mirrors the utcPlus3OffsetMs the backend bakes into every
-        // historical candle (route.ts → formatCandles). Without this the time
-        // sent to .update() would be 3h behind the last bar and be silently dropped.
-        time: (Math.floor(k.t / 1000) + UTC_PLUS_3_OFFSET_S) as UTCTimestamp,
+        // Converted to seconds as required by lightweight-charts.
+        time: Math.floor(k.t / 1000) as UTCTimestamp,
         open: parseFloat(k.o),
         high: parseFloat(k.h),
         low: parseFloat(k.l),

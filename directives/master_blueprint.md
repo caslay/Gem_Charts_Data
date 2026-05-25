@@ -1,10 +1,55 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.1
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.4
 
 > **Classification:** Institutional Architecture Document  
-> **Generated:** 2026-05-25  
-> **Last Updated:** 2026-05-25 (V10.1 Price Alerts & System Command Center Visual Overhauls Complete)  
+> **Generated:** 2026-05-26  
+> **Last Updated:** 2026-05-26 (V10.4 Smart Strategy Guardrails & Directional Locks Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 52+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.4 Changelog — Smart Strategy Guardrails & Directional Lock Gates (Completed)
+
+### 1. Active Trade & Directional Lock Sensing
+- **Direct Trades State Binding:** Ingested the full paper trades dataset directly into React state (`trades`) in `src/hooks/useStrategyEvaluator.ts`, polling on mount and every 30s.
+- **Immediate State Synchronization:** When a new paper trade is executed, immediately appended the new trade object to the local `trades` state callback before the next API fetch, preventing subsequent candles or ticks from triggering duplicate matches.
+- **Derived Directional States:** Implemented `hasOpenShort` and `hasOpenLong` derived state checkers using `trades.some` to scan the active trade pool in real-time.
+
+### 2. Logic Gate Injection & Cross-Strategy Conflict Prevention
+- **Directional Locks Enforced:** Injected check rules prior to strategy evaluation:
+  - **LONG Gate:** If `hasOpenShort` is true, LONG setups are silently bypassed.
+  - **SHORT Gate:** If `hasOpenLong` is true, SHORT setups are silently bypassed.
+  - This eliminates hedging conflicts and prevents competing trades across all strategies.
+
+### 3. Silent Redundant Alert Suppression
+- **Specific Strategy Guard:** Evaluates if a specific strategy already has a trade with `status === 'OPEN'`.
+- **Pre-Check Evaluation Block:** Wrapped the strategy matching trigger inside a pre-check:
+  ```typescript
+  if (isAnyTradeOpenInOppositeDirection || isThisStrategyAlreadyOpen) {
+    continue; // Pure silence, no alerts
+  }
+  ```
+- **Zero UI Clutter:** When skipped, no toast notifications or audio alarms are fired, and no `/api/trades` requests are sent, ensuring a pristine terminal HUD without "ENTRY_BLOCKED" or "Failed" alerts.
+
+---
+
+## 🆕 V10.3 Changelog — UTC-Zero Standardization & Cairo Decoupling (Completed)
+
+### 1. Backend Quant Logic Layer Normalization
+- **Removed Time Offsets:** Deleted `utcPlus3OffsetMs` time shifting in `src/app/api/market-data/route.ts` format candles. Operating strictly on UTC-0 under the hood.
+- **TDO 07:00 Cairo Anchor Shifted:** Adjusted True Day Open search patterns (both BTC and ETH) to check for UTC 04:00 (which corresponds exactly to Cairo 07:00).
+- **Killzone Temporal Ranges Adjusted:** Mapped Cairo Killzones to pure UTC hours (Asian: 0-3 UTC, London: 6-8 UTC, NY AM: 12-14 UTC, NY PM: 17-18 UTC).
+- **Dealing Range Day Boundary Guarded:** Integrated a dynamic `getCairoDate` offset helper to preserve daily session day transition logic correctly relative to the Cairo calendar day boundaries.
+- **Timezone Header Normalization:** Updated default timezone header output in the API payload from `UTC+3` to `UTC`.
+
+### 2. Client Hook & WebSocket Layer Normalization
+- **Raw WS Time Ingestion:** Removed `UTC_PLUS_3_OFFSET_S` from `src/hooks/useBinanceWS.ts` and set live ticks to ingest raw Binance timestamps in seconds.
+
+### 3. Display Layer Decoupling & Display Refactoring
+- **Lightweight-Charts Display Timezone:** Adjusted localization time formatter and tick mark formatter timezone properties in `src/components/Chart.tsx` to `Africa/Cairo` to display Cairo time locally while ingesting standardized UTC-0 data underneath.
+
+### 4. Entry Price Fallback Chain Upgrade
+- **Direct Binance Price Fallback:** Upgraded `src/app/api/trades/route.ts` entry price fallback logic. Added support for `body.price` as first choice, and added a secondary high-accuracy fallback to fetch the live Binance mark price directly from REST API before resorting to stale FVG CE or local market prices.
+
+---
 
 ## 🆕 V10.2 Changelog — Workspace Secret Sanitation & Push Protection (Completed)
 
@@ -1861,7 +1906,7 @@ The `useLiveAlerts` hook **suppresses ALL non-DEAD_ZONE alerts** when the DEAD_Z
 | **LD-7** | Candle Interface Duplication | `Candle` is defined in both [fvgEngine.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/lib/fvgEngine.ts#L1-L11) and [useMarketData.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/hooks/useMarketData.ts#L5-L12). The hook version omits `taker_buy_vol` and `taker_sell_vol`. Should be consolidated into a single shared type. | 🟢 Low |
 | **LD-8** | No-Direction Invalidation Guard | When `parsedState.trade_direction` is null/undefined, the invalidation guard in `quant-analyze/route.ts` sets `breached = true` unconditionally ([line 98](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/app/api/quant-analyze/route.ts#L95-L99)), meaning ANY state with an `invalidation_level` but no `trade_direction` will always reset to SEARCHING. | 🟡 Medium |
 | **LD-9** | Python File Duplication | [quant_engine_api.py](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/quant_engine_api.py) (root, local dev) and [api/index.py](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/api/index.py) (Vercel deploy) contain identical logic but different route decorators. The root file has `/calculate-displacement` while `index.py` has `/api/py/calculate-displacement` + `/api/index`. Changes to one must be manually synced. | 🟡 Medium |
-| **LD-10** | WebSocket vs API Time Sync | The WS hook bakes in `UTC_PLUS_3_OFFSET_S` (10,800s) to match the backend's `utcPlus3OffsetMs`. If either offset changes independently, the chart will show a 3-hour gap or overlap between historical bars and live ticks. No runtime validation ensures they match. | 🟡 Medium |
+| **LD-10** | WebSocket vs API Time Sync | **Resolved in V10.3:** Standardized the entire logic layer to UTC-0, completely eliminating the time offset injection drift. Time offsets (Cairo Time) are decoupled and applied strictly in the UI display layer (`Chart.tsx` formatters). | 🟢 Resolved |
 | **LD-11** | Server-Side Implicit Any Gating | **Resolved in V8.2:** The `/journal` page query had an implicit `any[]` declaration for `initialTrades` that caused Vercel deployment builds to fail under strict TypeScript compiling. Resolved by explicitly importing and applying the `TradeRecord[]` interface. | 🟢 Resolved |
 
 ---

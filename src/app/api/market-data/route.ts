@@ -106,7 +106,6 @@ export async function GET(req: Request) {
       smartMoneyPromise,
     ]);
 
-    const utcPlus3OffsetMs = 3 * 60 * 60 * 1000;
     const formatCandles = (data: any[]) => {
       const now = Date.now();
       return data.map((c) => {
@@ -114,7 +113,7 @@ export async function GET(req: Request) {
         const taker_buy_vol = parseFloat(c[9]);
         const taker_sell_vol = v - taker_buy_vol;
         return {
-          t: c[0] + utcPlus3OffsetMs,
+          t: c[0],
           o: parseFloat(c[1]),
           h: parseFloat(c[2]),
           l: parseFloat(c[3]),
@@ -150,11 +149,11 @@ export async function GET(req: Request) {
     });
     if (btcPdl === Infinity) btcPdl = 0;
 
-    // BTC True Day Open solver (07:00 Cairo Open)
+    // BTC True Day Open solver (07:00 Cairo Open = 04:00 UTC)
     let btc_true_day_open_0700: number | null = null;
     for (let i = candlesBtc15m.length - 1; i >= 0; i--) {
       const d = new Date(candlesBtc15m[i].t);
-      if (d.getUTCHours() === 7 && d.getUTCMinutes() === 0) {
+      if (d.getUTCHours() === 4 && d.getUTCMinutes() === 0) {
         btc_true_day_open_0700 = candlesBtc15m[i].o;
         break;
       }
@@ -163,8 +162,8 @@ export async function GET(req: Request) {
     const isPriceRising = candles15m.length > 1 && candles15m[candles15m.length - 1].c > candles15m[candles15m.length - 2].c;
     const { open_interest_trend, liquidation_events } = await fetchOIMetricsAndLiquidations(symbol, isPriceRising);
 
-    // Helper to get true UTC date from modified timestamp
-    const getUtcDate = (t: number) => new Date(t - utcPlus3OffsetMs);
+    // Helper to get true UTC date
+    const getUtcDate = (t: number) => new Date(t);
 
     // 1. Macro Context
     const lastCandle = candles1h[candles1h.length - 1];
@@ -257,11 +256,11 @@ export async function GET(req: Request) {
       target_status = uniqueSweeps.join(" | ") + " / PDH_PDL_PENDING";
     }
 
-    // 5. True Day Open (07:00 Anchor)
+    // 5. True Day Open (07:00 Anchor = 04:00 UTC)
     let true_day_open_0700: number | null = null;
     for (let i = candles15m.length - 1; i >= 0; i--) {
       const d = new Date(candles15m[i].t);
-      if (d.getUTCHours() === 7 && d.getUTCMinutes() === 0) {
+      if (d.getUTCHours() === 4 && d.getUTCMinutes() === 0) {
         true_day_open_0700 = candles15m[i].o;
         break;
       }
@@ -364,27 +363,26 @@ export async function GET(req: Request) {
       };
     }
 
-    // 9. Killzone Clock (Current Time Window)
+    // 9. Killzone Clock (Current Time Window - UTC hours)
     const getCurrentKillzone = () => {
       const now = new Date();
-      const shiftedTime = new Date(now.getTime() + (3 * 60 * 60 * 1000));
-      const hour = shiftedTime.getUTCHours();
+      const hour = now.getUTCHours();
 
-      if (hour >= 3 && hour <= 6) return "ASIAN_RANGE";
-      if (hour >= 9 && hour <= 11) return "LONDON_AM_KILLZONE";
-      if (hour >= 15 && hour <= 17) return "NY_AM_KILLZONE";
-      if (hour >= 20 && hour <= 21) return "NY_PM_KILLZONE";
+      if (hour >= 0 && hour <= 3) return "ASIAN_RANGE";
+      if (hour >= 6 && hour <= 8) return "LONDON_AM_KILLZONE";
+      if (hour >= 12 && hour <= 14) return "NY_AM_KILLZONE";
+      if (hour >= 17 && hour <= 18) return "NY_PM_KILLZONE";
       return "DEAD_ZONE";
     };
 
     // 11. Local Dealing Range & Dual-Pricing Context (V8.2)
-    //     c.t already has +3h baked in, so getUTCHours() reads Cairo local time.
-    const todayCairo = new Date(lastCandle.t); // reference from last 1h candle
+    const getCairoDate = (t: number) => new Date(t + 3 * 60 * 60 * 1000);
+    const todayCairo = getCairoDate(lastCandle.t); // reference from last 1h candle
     const todayDayStr = `${todayCairo.getUTCFullYear()}-${todayCairo.getUTCMonth()}-${todayCairo.getUTCDate()}`;
 
     // Filter intraday candles: same calendar day AND at or after 07:00 Cairo
     const intradayCandles = candles15m.filter(c => {
-      const d = new Date(c.t);
+      const d = getCairoDate(c.t);
       const candleDayStr = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
       const candleHour = d.getUTCHours();
       const candleMin = d.getUTCMinutes();
@@ -422,7 +420,7 @@ export async function GET(req: Request) {
     } else {
       // Edge-case: exactly 07:00 and no range has formed yet — seed from the 07:00 candle itself
       const anchorCandle = candles15m.find(c => {
-        const d = new Date(c.t);
+        const d = getCairoDate(c.t);
         const candleDayStr = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
         return candleDayStr === todayDayStr && d.getUTCHours() === 7 && d.getUTCMinutes() === 0;
       });
@@ -538,7 +536,7 @@ export async function GET(req: Request) {
     const payload = {
       ticker: "ETHUSDC.p",
       timestamp: new Date().toISOString(),
-      timezone: "UTC+3",
+      timezone: "UTC",
       ipda_metrics,
       risk_management,
       open_interest: parseFloat(dataOi.openInterest),

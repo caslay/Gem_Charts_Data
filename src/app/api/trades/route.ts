@@ -185,13 +185,37 @@ export async function POST(req: Request) {
           : null);
 
     // ── 5. Resolve Entry Price ──────────────────────────────────────────────
-    let entry_price = body.entry_price;
+    let entry_price = body.entry_price !== undefined && body.entry_price !== null ? body.entry_price : body.price;
+
     if (entry_price === undefined || entry_price === null) {
-      const fvg_ce = ipda_metrics.trade_execution_parameters?.closest_active_fvg_ce;
-      if (fvg_ce !== undefined && fvg_ce !== null && !isNaN(fvg_ce)) {
-        entry_price = fvg_ce;
-      } else if (current_market_price !== undefined && current_market_price !== null && !isNaN(current_market_price)) {
-        entry_price = current_market_price;
+      // 1st Fallback: Fetch fresh live Binance price directly from REST API
+      try {
+        const sanitizedSymbol = symbol.replace('.p', '').replace('.P', '').toUpperCase();
+        const binanceUrl = `https://fapi.binance.com/fapi/v1/ticker/price?symbol=${sanitizedSymbol}`;
+        const binanceRes = await fetch(binanceUrl);
+        if (binanceRes.ok) {
+          const binanceData = await binanceRes.json();
+          const livePrice = parseFloat(binanceData.price);
+          if (livePrice && !isNaN(livePrice)) {
+            entry_price = livePrice;
+            console.log(`[Trades API] Successfully fetched fresh Binance price for ${sanitizedSymbol}: ${livePrice}`);
+          }
+        } else {
+          console.warn(`[Trades API] Binance price fetch returned status ${binanceRes.status}`);
+        }
+      } catch (err) {
+        console.error("[Trades API] Failed to fetch live Binance price fallback:", err);
+      }
+
+      // 2nd Fallback: closest FVG Consequent Encroachment (stale)
+      if (entry_price === undefined || entry_price === null) {
+        const fvg_ce = ipda_metrics.trade_execution_parameters?.closest_active_fvg_ce;
+        if (fvg_ce !== undefined && fvg_ce !== null && !isNaN(fvg_ce)) {
+          entry_price = fvg_ce;
+        } else if (current_market_price !== undefined && current_market_price !== null && !isNaN(current_market_price)) {
+          // 3rd Fallback: Stale market price
+          entry_price = current_market_price;
+        }
       }
     }
 
