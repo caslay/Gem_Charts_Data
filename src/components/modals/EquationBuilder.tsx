@@ -43,7 +43,7 @@ export interface CustomStrategy {
 const METRICS: { key: MetricKey; label: string; type: 'boolean' | 'enum' | 'number'; options?: string[] }[] = [
   { key: 'FVG', label: 'Fair Value Gap', type: 'boolean' },
   { key: 'PRICE_IN_FVG', label: 'Price in FVG', type: 'boolean' },
-  { key: 'DISPLACEMENT', label: 'Displacement', type: 'boolean' },
+  { key: 'DISPLACEMENT', label: 'Displacement', type: 'enum', options: ['ANY', 'ACTIVE_BULLISH', 'ACTIVE_BEARISH'] },
   { key: 'DISPLACEMENT_VALUE', label: 'Displacement Value', type: 'number' },
   { key: 'OI_TREND', label: 'OI Trend', type: 'enum', options: ['RISING', 'FALLING', 'FLAT'] },
   { key: 'MSS', label: 'Market Structure Shift', type: 'boolean' },
@@ -539,7 +539,13 @@ export default function EquationBuilder() {
                       >
                         {metricDef.options.map((opt) => (
                           <option key={opt} value={opt}>
-                            {opt}
+                            {cond.metric === 'DISPLACEMENT'
+                              ? opt === 'ANY'
+                                ? 'Any'
+                                : opt === 'ACTIVE_BULLISH'
+                                ? 'Bullish'
+                                : 'Bearish'
+                              : opt}
                           </option>
                         ))}
                       </select>

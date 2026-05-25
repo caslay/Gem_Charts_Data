@@ -22,6 +22,11 @@
 ### 3. Dark Brutalist Strategy Architect Widget (`EquationBuilder.tsx`)
 - **Brutalist Info Card:** Added a sharp institutional-slate helper tip above the Strategy Architect's rows to clarify sniper combinations: *"💡 Use FVG [CLOSE] to confirm structure. Use PRICE_IN_FVG [TICK] for zero-latency mitigation entries."*
 
+### 4. Directional Displacement Metric Upgrade (`EquationBuilder.tsx` & `useStrategyEvaluator.ts`)
+- **Metric Type Refactoring:** Changed `DISPLACEMENT` from a simple boolean type to an enum type metric with options `['ANY', 'ACTIVE_BULLISH', 'ACTIVE_BEARISH']`.
+- **UI Custom Rendering:** Displays the option keys as user-friendly labels `Any`, `Bullish`, and `Bearish` respectively in the Equation Builder logic rows.
+- **Directional Evaluator Engine:** Resolves the displacement condition with a directional matching check, ensuring active bullish or bearish displacement states align perfectly with user-defined rules.
+
 ---
 
 ## 🆕 V8.7 Changelog — Multi-Timeframe BTC-Correlation & SMT Integration
@@ -775,7 +780,7 @@ The execution hook `useStrategyEvaluator.ts` runs silently in the dashboard back
 |---|---|---|
 | `FVG` | `ipda_metrics.active_fvgs.length > 0` (Supports condition-level `timeframe` ['ANY', '5m', '15m'] and `direction` ['ANY', 'BULLISH', 'BEARISH'] sub-filters) | boolean |
 | `PRICE_IN_FVG` | `livePrice` is between the `top` and `bottom` coordinates of any matching FVG in `active_fvgs` (Supports condition-level `timeframe` ['ANY', '5m', '15m'] and `direction` ['ANY', 'BULLISH', 'BEARISH'] sub-filters) | boolean |
-| `DISPLACEMENT` | `institutional_sponsorship.status === 'ACTIVE_BULLISH' || status === 'ACTIVE_BEARISH' || status === 'ACTIVE'` | boolean |
+| `DISPLACEMENT` | `institutional_sponsorship.status` (resolves directionality to match `'ACTIVE_BULLISH'`, `'ACTIVE_BEARISH'`, or `'ANY'`) | string (enum) |
 | `DISPLACEMENT_VALUE` | `institutional_sponsorship.anomaly_multiplier` | number |
 | `OI_TREND` | `order_flow_engine.open_interest_trend` (`RISING`/`FALLING`/`FLAT`) | string (enum) |
 | `MSS` | `market_structure_shift` flag | boolean |

@@ -67,9 +67,25 @@ function resolveMetric(
     }
 
     case 'DISPLACEMENT': {
-      const sponsorship = ipda.institutional_sponsorship?.status
-        || orderFlow.displacement_sponsorship;
-      return sponsorship === 'ACTIVE' || sponsorship === 'ACTIVE_BULLISH' || sponsorship === 'ACTIVE_BEARISH';
+      const sponsorshipObj = ipda.institutional_sponsorship || {};
+      const status = sponsorshipObj.status || orderFlow.displacement_sponsorship || 'INACTIVE';
+      const direction = sponsorshipObj.direction || (status.includes('BULLISH') ? 'BULLISH' : status.includes('BEARISH') ? 'BEARISH' : 'NONE');
+
+      const isBullishActive = status === 'ACTIVE_BULLISH' || (status === 'ACTIVE' && direction === 'BULLISH');
+      const isBearishActive = status === 'ACTIVE_BEARISH' || (status === 'ACTIVE' && direction === 'BEARISH');
+      
+      const userValue = condition.value;
+
+      if (userValue === 'ACTIVE_BULLISH') {
+        return isBullishActive ? 'ACTIVE_BULLISH' : 'INACTIVE';
+      }
+      if (userValue === 'ACTIVE_BEARISH') {
+        return isBearishActive ? 'ACTIVE_BEARISH' : 'INACTIVE';
+      }
+      
+      // For 'ANY' or default/fallback matching
+      const isAnyActive = isBullishActive || isBearishActive || status === 'ACTIVE';
+      return isAnyActive ? 'ANY' : 'INACTIVE';
     }
 
     case 'DISPLACEMENT_VALUE': {
