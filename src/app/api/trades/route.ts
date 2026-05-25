@@ -82,6 +82,7 @@ async function initTradesTable() {
     await sql`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS exit_price DECIMAL(18, 4);`;
     await sql`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS realized_pnl DECIMAL(18, 4);`;
     await sql`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS roi DECIMAL(18, 4);`;
+    await sql`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS risk_amount_usd DECIMAL(18, 2);`;
   } catch (error) {
     console.error("[PAPER TRADES API] Self-healing table initialization failed:", error);
     throw error;
@@ -376,7 +377,7 @@ export async function POST(req: Request) {
       rrRatio = parseFloat((reward / risk).toFixed(4));
     }
 
-    // ── 9. Portfolio-Aware Position Sizing Math (V8.4) ──────────────────────
+    // ── 9. Portfolio-Aware Position Sizing Math (V8.8) ──────────────────────
     // Retrieve strategy-specific risk percent (fallbacks: body parameter → database lookup → default 1.0)
     let risk_percent = 1.0;
     if (body.risk_percent !== undefined && body.risk_percent !== null) {
@@ -407,11 +408,19 @@ export async function POST(req: Request) {
 
     // Dynamic position sizing based on real balance from database
     const risk_amount_usd = current_balance * (risk_percent / 100);
-    const risk_per_unit = Math.abs(entry_price - stop_loss);
-    const position_size = risk_per_unit > 0 ? parseFloat((risk_amount_usd / risk_per_unit).toFixed(4)) : 1.0;
+    const sl_distance = Math.abs(entry_price - stop_loss);
+
+    if (sl_distance === 0) {
+      return NextResponse.json(
+        { error: "Stop Loss distance cannot be zero." },
+        { status: 400 }
+      );
+    }
+
+    const position_size = parseFloat((risk_amount_usd / sl_distance).toFixed(4));
 
     // ── 9b. Global Portfolio Risk Guard Veto Gate (V8.4) ────────────────────
-    const newTradeRiskUsd = risk_per_unit * position_size;
+    const newTradeRiskUsd = sl_distance * position_size;
 
     // Calculate sum of Risk Amount for all currently OPEN trades
     const openTradesRes = await sql`
@@ -465,7 +474,8 @@ export async function POST(req: Request) {
         status,
         strategy_name,
         ai_narrative_summary,
-        position_size
+        position_size,
+        risk_amount_usd
       ) VALUES (
         ${symbol},
         ${direction},
@@ -475,7 +485,8 @@ export async function POST(req: Request) {
         ${status},
         ${strategy_name},
         ${ai_narrative_summary || null},
-        ${position_size}
+        ${position_size},
+        ${risk_amount_usd}
       ) RETURNING id, timestamp;
     `;
 
@@ -495,7 +506,8 @@ export async function POST(req: Request) {
       strategy_name,
       ai_narrative_summary: ai_narrative_summary || null,
       position_size,
-      risk_percent
+      risk_percent,
+      risk_amount_usd
     };
 
     return NextResponse.json({
@@ -588,7 +600,7 @@ export async function PATCH(req: Request) {
       try {
         // 1. Fetch trade parameters to calculate realized P&L
         const tradeResult = await sql`
-          SELECT entry_price, direction, position_size, status FROM paper_trades
+          SELECT entry_price, stop_loss, direction, position_size, risk_amount_usd, status FROM paper_trades
           WHERE id = ${trade_id}
           LIMIT 1
         `;
@@ -620,17 +632,22 @@ export async function PATCH(req: Request) {
         }
 
         const entryPrice = parseFloat(trade.entry_price);
+        const stopLoss = parseFloat(trade.stop_loss);
         const positionSize = parseFloat(trade.position_size ?? 1.0);
         const direction = trade.direction;
+
+        // Fallback for legacy trades without risk_amount_usd
+        const rawRiskAmountUsd = trade.risk_amount_usd !== null && trade.risk_amount_usd !== undefined ? parseFloat(trade.risk_amount_usd) : 0;
+        const riskAmountUsd = rawRiskAmountUsd > 0 ? rawRiskAmountUsd : Math.abs(entryPrice - stopLoss) * positionSize;
 
         // 3. Calculate Realized P&L
         let realized_pnl = direction === "LONG"
           ? (exit_price - entryPrice) * positionSize
           : (entryPrice - exit_price) * positionSize;
 
-        // 4. Calculate ROI Percentage
-        let roi = (entryPrice > 0 && positionSize > 0)
-          ? (realized_pnl / (entryPrice * positionSize)) * 100
+        // 4. Calculate ROI Percentage based on risk taken
+        let roi = riskAmountUsd > 0
+          ? (realized_pnl / riskAmountUsd) * 100
           : 0;
 
         exit_price = parseFloat(exit_price.toFixed(4));

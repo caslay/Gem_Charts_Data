@@ -27,6 +27,12 @@
 - **UI Custom Rendering:** Displays the option keys as user-friendly labels `Any`, `Bullish`, and `Bearish` respectively in the Equation Builder logic rows.
 - **Directional Evaluator Engine:** Resolves the displacement condition with a directional matching check, ensuring active bullish or bearish displacement states align perfectly with user-defined rules.
 
+### 5. Institutional Sizing Math Integration (`route.ts` & `JournalTable.tsx`)
+- **Self-Healing Schema Upgrade:** Adds `risk_amount_usd` as a decimal column to `paper_trades` dynamically inside `initTradesTable()`.
+- **Dynamic Position Sizing Calculation:** Integrates proper dynamic position size math: `position_size = risk_amount_usd / sl_distance` where `risk_amount_usd = current_balance * (risk_percent / 100)`. Includes a zero sl-distance error guard.
+- **Closed ROI Formula Correction:** Refactored realized P&L and closed ROI calculations inside PATCH to base return percentages on the actual dollar risk taken rather than whole notional sizes: `roi = (realized_pnl / risk_amount_usd) * 100`.
+- **Brutalist Sizing UI Additions:** Renders the exact calculated position sizes and dollar risks under the Asset name and Stop Loss columns inside `JournalTable.tsx` for both active and closed trades.
+
 ---
 
 ## 🆕 V8.7 Changelog — Multi-Timeframe BTC-Correlation & SMT Integration
