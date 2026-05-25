@@ -53,7 +53,7 @@ export function generateVolumetricMarkers(candles: MarkerCandle[], isDark: boole
       markers.push({
         time: markerTime as any,
         position: isValidBullishShift ? 'belowBar' : 'aboveBar',
-        color: isDark ? '#ffffff' : '#000000',
+        color: isDark ? '#ffffff' : '#827b71ff',
         shape: isValidBullishShift ? 'arrowUp' : 'arrowDown',
         text: '', // 'Special',
       });
@@ -62,7 +62,7 @@ export function generateVolumetricMarkers(candles: MarkerCandle[], isDark: boole
       markers.push({
         time: markerTime as any,
         position: isValidBullishShift ? 'belowBar' : 'aboveBar',
-        color: isDark ? (isValidBullishShift ? '#00bcd4' : '#ff9800') : '#4f46e5',
+        color: isDark ? (isValidBullishShift ? '#00bcd4' : '#ff9800') : '#b4aea6ff',
         shape: 'circle',
         text: '', //'Vol',
       });
