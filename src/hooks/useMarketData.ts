@@ -74,10 +74,11 @@ export interface MarketDataPayload {
     candles_1h?: Candle[];
     candles_15m?: Candle[];
     candles_5m?: Candle[];
+    [key: string]: Candle[] | undefined;
   };
 }
 
-export function useMarketData() {
+export function useMarketData(selectedInterval: string = '5m') {
   const [data, setData] = useState<MarketDataPayload | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -223,7 +224,7 @@ export function useMarketData() {
         setIsLoading(true);
       }
       setError(null);
-      const res = await fetch('/api/market-data');
+      const res = await fetch(`/api/market-data?interval=${selectedInterval}`);
       if (!res.ok) {
         throw new Error('Failed to fetch market data');
       }
@@ -244,7 +245,7 @@ export function useMarketData() {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [selectedInterval]);
 
   useEffect(() => {
     // Wrap initial fetch in a macro-task to prevent synchronous cascading React state updates

@@ -17,6 +17,9 @@ export async function GET(req: Request) {
     const limit4h = parseInt(url.searchParams.get('limit4h') || '100', 10);
     const limit = 350;
 
+    const visualInterval = url.searchParams.get('interval') || '5m';
+    const isStandardInterval = ['5m', '15m', '1h', '4h'].includes(visualInterval);
+
     const urls = {
       '5m': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=${limit}`,
       '15m': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=15m&limit=${limit}`,
@@ -32,10 +35,24 @@ export async function GET(req: Request) {
       'btc_1h': `https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=24`,
     };
 
+    let visualFetchPromise = Promise.resolve(null as any);
+    if (!isStandardInterval) {
+      const visualUrl = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${visualInterval}&limit=${limit}`;
+      visualFetchPromise = fetch(visualUrl).then(async (res) => {
+        if (!res.ok) {
+          throw new Error(`Failed to fetch visual interval ${visualInterval}`);
+        }
+        return res.json();
+      }).catch((err) => {
+        console.error(`[MarketData API] Visual fetch error for ${visualInterval}:`, err);
+        return null;
+      });
+    }
+
     const restingLiquidityPromise = fetchRestingLiquidity(symbol);
     const smartMoneyPromise = fetchSmartMoneySentiment(symbol);
 
-    const [res5m, res15m, res1h, res4h, res1d, res1w, resOi, resBtc5m, resBtc15m, resBtc1h] = await Promise.all([
+    const [res5m, res15m, res1h, res4h, res1d, res1w, resOi, resBtc5m, resBtc15m, resBtc1h, visualDataRaw] = await Promise.all([
       fetch(urls['5m']),
       fetch(urls['15m']),
       fetch(urls['1h']),
@@ -46,6 +63,7 @@ export async function GET(req: Request) {
       fetch(urls['btc_5m']),
       fetch(urls['btc_15m']),
       fetch(urls['btc_1h']),
+      visualFetchPromise,
     ]);
 
     if (
@@ -113,6 +131,7 @@ export async function GET(req: Request) {
     const candles1h = formatCandles(data1h);
     const candles15m = formatCandles(data15m);
     const candles5m = formatCandles(data5m);
+    const dynamicVisualCandles = (!isStandardInterval && visualDataRaw) ? formatCandles(visualDataRaw) : [];
     // HTF — kept in local scope only; NEVER added to data_payload
     const candles1d = formatCandles(data1d);
     const candles1w = formatCandles(data1w);
@@ -536,6 +555,7 @@ export async function GET(req: Request) {
         candles_1h: limit1h > 0 ? candles1h.slice(-limit1h) : [],
         candles_15m: limit15m > 0 ? candles15m.slice(-limit15m) : [],
         candles_5m: limit5m > 0 ? candles5m.slice(-limit5m) : [],
+        ...(!isStandardInterval ? { [`candles_${visualInterval}`]: dynamicVisualCandles } : {}),
       },
     };
 

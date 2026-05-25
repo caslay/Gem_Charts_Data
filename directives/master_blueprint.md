@@ -1,10 +1,49 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V8.8
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V9.0
 
 > **Classification:** Institutional Architecture Document  
-> **Generated:** 2026-05-24  
-> **Last Updated:** 2026-05-24 (V8.8 Sniper FVG Mitigation Engine)  
+> **Generated:** 2026-05-25  
+> **Last Updated:** 2026-05-25 (V9.0 Settings Architecture Refactoring & Tabbed Navigation)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
-> **Source Files Analyzed:** 30+ across TypeScript (Next.js 16), Python (FastAPI), and Markdown directives.
+> **Source Files Analyzed:** 37+ across TypeScript (Next.js 16), Python (FastAPI), and Markdown directives.
+
+---
+
+## 🆕 V9.0 Changelog — Settings Architecture Refactoring & Tabbed Navigation
+
+### 1. Dedicated Dynamic Settings Command Center (`/settings` page) [NEW]
+- **State-Driven Tabbed Navigation:** Created a premium, responsive multi-tab layout (`quant_ai`, `account_risk`, `profile`, `terminal`) with glassmorphic slate borders (`border-[#4a4457]/60`) and purple neon active states (`bg-[#a855f7]/10 text-[#d1bcff] border-l-2 border-[#a855f7]`).
+- **Unified DB & API Integration:** 
+  - **QUANT AI tab:** Manages dynamic system configurations (`ACTIVE_MODEL`, `SYSTEM_PROMPT`, `GEMINI_LIVE_KEY`) with password visibility eye icons and masked preview layers, directly updating the `system_settings` database table via `/api/settings` POST.
+  - **ACCOUNT & RISK tab:** Integrates exposure inputs (`initial_capital`, `max_risk_limit_pct`) alongside high-fidelity dynamic calculation visual cards presenting Ledger Balance and single-deal maximum risk allocation caps, updating the `trading_account` database table via `/api/account` POST.
+  - **PROFILE tab:** Renders NextAuth user email and connection metadata details within a premium Brutalist grid panel.
+  - **TERMINAL tab:** Integrates direct checkboxes and file sound mapping dropdowns for the 9 core quantitative alert events, saving sound profiles directly to the `terminal_settings` Postgres table via `/api/settings` POST, alongside client visual preferences (ambient glow, compact layout) written directly to local storage.
+
+### 2. Cleaned Settings Modal & Redundancy Removal (`SettingsModal.tsx`)
+- **Isolation of AI Configurations:** Completely removed duplicate prompt configuration panels, active model selections, and API key states from `SettingsModal.tsx`.
+- **Refinement of HUD Preferences:** Focused the global settings modal strictly on Price Alert Targets config and HUD quick tweaks (`STRATEGY` builder and `AUDIO` event alarms).
+- **Legacy Mappings Resilience:** Rewrote the tab resolution mappers inside the modal effect block to gracefully redirect legacy tab parameters (`ai_config` and `price`) to the Strategy Builder tab (`strategy`), preserving dashboard navigation.
+
+---
+
+## 🆕 V8.9 Changelog — Real-Time Timeframe Switcher with WebSocket Sync
+
+### 1. Visual vs. Quant Engine Temporal Separation (Separation of Concerns)
+- **Visual Scale Isolation:** Allows the visual chart and frontend WebSocket streams to dynamically pivot to user-selected timeframe intervals (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`).
+- **Quant Engine Preservation:** Keeps the core analytical backend (`ipda_metrics`, `active_fvgs`, `dealing_ranges`, `displacement`) locked strictly onto high-fidelity `5m/15m` logic to prevent calculation drifts or performance bottlenecks.
+- **Dynamic Parallel Fetching:** Modified `/api/market-data` GET route to accept an `interval` parameter. For non-standard intervals (`1m`, `30m`), the route dynamically performs a parallel kline query to Binance and appends formatting into `data_payload` under `candles_<interval>` (e.g. `candles_1m`), fully isolating the fetch from existing quant calculations.
+
+### 2. Sleek Glassmorphism Dropdown Switcher (`TimeframeSwitcher.tsx`) [NEW]
+- **Glassmorphic Styling:** Added `TimeframeSwitcher` component with an institutional `bg-zinc-900/80 backdrop-blur` glass styling and subtle glowing purple borders (`border-[#a855f7]/40` and hover `border-[#a855f7]/60`).
+- **Chevron Trigger HUD:** Features Chevron triggering behavior which displays the active selected timeframe with interactive rotation state changes.
+- **Neon Purple Selected Glow:** Highlighting selected timeframes within the dropdown using a custom glowing label (`text-[#d1bcff]`) inside a blurred container.
+
+### 3. Overlapping Candle & Ghost Wick Protection (`Chart.tsx`)
+- **Strict Timestamp Guards:** Implemented timestamp boundary checks inside the WebSocket tick `.update()` listener in `Chart.tsx`.
+- **Validation Rule:** The chart will reject any incoming WebSocket live tick unless `liveCandle.time >= Math.floor(lastBar.t / 1000)` (last historical candle timestamp), completely eliminating gaps, out-of-order candles, or "Ghost Wicks" during timeframe pivots.
+
+### 4. Transition Loading States (`page.tsx`)
+- **Component Preservation:** Hides the unstyled chart flash by keeping the `<Chart />` component mounted during scale hot-swaps.
+- **Timeframe Transition Blur Overlay:** Renders a premium, semi-transparent backdrop blur overlay (`bg-[#0e0e0f]/60 backdrop-blur-sm`) directly on top of the active chart container while `isLoading` is true, keeping the "Flow-State" feel alive while fresh historical candles are resolved.
 
 ---
 
