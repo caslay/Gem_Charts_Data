@@ -1,10 +1,30 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.6
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.7
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-26  
-> **Last Updated:** 2026-05-26 (V10.6 HTF Liquidity Enrichment & Daily Bias Stabilization Complete)  
+> **Last Updated:** 2026-05-26 (V10.7 Timezone Standardization & Trade Guardrails Hardening Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
-> **Source Files Analyzed:** 53+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+> **Source Files Analyzed:** 54+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.7 Changelog — Timezone Standardization & Trade Guardrails Hardening (Completed)
+
+### 1. Timezone Normalization to UTC-0
+- **Removed Cairo Manual Offsets:** Deleted the manual cairo date shifting utility `getCairoDate` and its hardcoded offset shift of `+3 hours` from `src/app/api/market-data/route.ts`.
+- **UTC-0 Logic Standardization:** Shifted all logic-layer quantitative computations to UTC-0.
+- **Intraday Range Boundaries:** Mapped the local Cairo day's start (07:00 Cairo) to **04:00 UTC** and refactored the intraday range filter and the anchor seed candle selection to check for UTC hours >= 4 relative to current UTC dates, ensuring zero calculation drift.
+- **Logic-Display Separation:** Confirmed `Chart.tsx` confines Cairo time shifts strictly to display layers (`Africa/Cairo` localized tooltips and X-axis ticks) while utilizing standard UTC-0 seconds epoch timestamps for data and crossovers under the hood.
+
+### 2. Backend Directional Lock Hardening
+- **POST Trade Global Lock:** Reinforced the active trade checker block in `src/app/api/trades/route.ts` to return `403 Forbidden` with the exact message: `"GLOBAL_LOCK: An active trade is already in progress. Close it before initiating new setups."` if any open position exists in `paper_trades`.
+- **Fail-Closed Execution:** Updated the catch block for pre-flight lock verification database query exceptions to return `500 Internal Server Error` instead of letting trade creation silently continue, avoiding accidental lock bypasses.
+
+### 3. Server-Side Auto-Closer Resilience Updates
+- **Self-Healing Seeding:** Integrated a dynamic self-healing account creator inside the auto-closer loop in `src/app/api/market-data/route.ts`. If no database record exists for the user session, seeds their starting account dynamically with `$10,000` capital before performing realized P&L calculations and balance updates.
+
+### 4. Client-Side Silent Error Handling
+- **403 Veto Silence:** Updated the response handler inside `src/hooks/useStrategyEvaluator.ts` to log `Execution vetoed by Global Lock` to the console and short-circuit the handler, suppressing user-facing Toast alerts for expected guard vetoes.
+
+---
 
 ## 🆕 V10.6 Changelog — HTF Liquidity Enrichment & Daily Bias Stabilization (Completed)
 

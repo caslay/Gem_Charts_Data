@@ -436,17 +436,15 @@ export async function GET(req: Request) {
     };
 
     // 11. Local Dealing Range & Dual-Pricing Context (V8.2)
-    const getCairoDate = (t: number) => new Date(t + 3 * 60 * 60 * 1000);
-    const todayCairo = getCairoDate(lastCandle.t); // reference from last 1h candle
-    const todayDayStr = `${todayCairo.getUTCFullYear()}-${todayCairo.getUTCMonth()}-${todayCairo.getUTCDate()}`;
+    const todayDayStr = `${currentYear}-${currentMonth}-${currentDate}`;
 
-    // Filter intraday candles: same calendar day AND at or after 07:00 Cairo
+    // Filter intraday candles: same calendar day AND at or after 04:00 UTC (07:00 Cairo)
     const intradayCandles = candles15m.filter(c => {
-      const d = getCairoDate(c.t);
+      const d = new Date(c.t);
       const candleDayStr = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
       const candleHour = d.getUTCHours();
       const candleMin = d.getUTCMinutes();
-      return candleDayStr === todayDayStr && (candleHour > 7 || (candleHour === 7 && candleMin === 0));
+      return candleDayStr === todayDayStr && (candleHour > 4 || (candleHour === 4 && candleMin === 0));
     });
 
     let pricing_context: {
@@ -488,7 +486,7 @@ export async function GET(req: Request) {
       { label: 'PML', val: distance_to_PML },
       { label: 'DAILY_SIBI', val: distance_to_nearest_daily_sibi },
       { label: 'DAILY_BISI', val: distance_to_nearest_daily_bisi }
-    ].filter(d => d.val !== null);
+    ].filter((d): d is { label: string; val: number } => d.val !== null);
 
     const nearestHtfMagnet = allHtfDistances.length > 0
       ? allHtfDistances.reduce((min, cur) => (cur.val! < min.val! ? cur : min), allHtfDistances[0])
@@ -581,26 +579,34 @@ export async function GET(req: Request) {
             `;
 
             // Recalculate account balance from scratch to prevent ghost PnL drift
+            let initialCapital = 10000.0000;
             const accountCapRes = await sql`
               SELECT initial_capital FROM trading_account WHERE user_id = ${userEmail}
             `;
-            if (accountCapRes.rows.length > 0) {
-              const initialCapital = parseFloat(String(accountCapRes.rows[0].initial_capital));
-              const pnlSumRes = await sql`
-                SELECT COALESCE(SUM(realized_pnl), 0) AS total_realized_pnl
-                FROM paper_trades
-                WHERE status = 'CLOSED'
-              `;
-              const totalRealizedPnl = parseFloat(String(pnlSumRes.rows[0].total_realized_pnl));
-              const newBalance = parseFloat((initialCapital + totalRealizedPnl).toFixed(4));
-
+            if (accountCapRes.rows.length === 0) {
+              // Seed the account with $10,000 if it does not exist yet
               await sql`
-                UPDATE trading_account
-                SET current_balance = ${newBalance}, updated_at = CURRENT_TIMESTAMP
-                WHERE user_id = ${userEmail}
+                INSERT INTO trading_account (user_id, current_balance, initial_capital, max_risk_limit_pct)
+                VALUES (${userEmail}, 10000.0000, 10000.0000, 3.00)
               `;
-              console.log(`[LAZY EXIT] Account balance updated for ${userEmail}: $${newBalance}`);
+            } else {
+              initialCapital = parseFloat(String(accountCapRes.rows[0].initial_capital));
             }
+
+            const pnlSumRes = await sql`
+              SELECT COALESCE(SUM(realized_pnl), 0) AS total_realized_pnl
+              FROM paper_trades
+              WHERE status = 'CLOSED'
+            `;
+            const totalRealizedPnl = parseFloat(String(pnlSumRes.rows[0].total_realized_pnl));
+            const newBalance = parseFloat((initialCapital + totalRealizedPnl).toFixed(4));
+
+            await sql`
+              UPDATE trading_account
+              SET current_balance = ${newBalance}, updated_at = CURRENT_TIMESTAMP
+              WHERE user_id = ${userEmail}
+            `;
+            console.log(`[LAZY EXIT] Account balance updated for ${userEmail}: $${newBalance}`);
           }
         }
       }
@@ -626,11 +632,11 @@ export async function GET(req: Request) {
         ...pricing_context_addon
       };
     } else {
-      // Edge-case: exactly 07:00 and no range has formed yet — seed from the 07:00 candle itself
+      // Edge-case: exactly 04:00 UTC (07:00 Cairo) and no range has formed yet — seed from the 04:00 UTC candle itself
       const anchorCandle = candles15m.find(c => {
-        const d = getCairoDate(c.t);
+        const d = new Date(c.t);
         const candleDayStr = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
-        return candleDayStr === todayDayStr && d.getUTCHours() === 7 && d.getUTCMinutes() === 0;
+        return candleDayStr === todayDayStr && d.getUTCHours() === 4 && d.getUTCMinutes() === 0;
       });
 
       if (anchorCandle) {

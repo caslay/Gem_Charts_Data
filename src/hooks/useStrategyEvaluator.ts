@@ -461,7 +461,7 @@ export function useStrategyEvaluator() {
           
           // Silently log the 403 directional guardrail lock/veto to the console without triggering generic UI warnings
           if (res.status === 403) {
-            console.log(`[StrategyEvaluator] Trade execution vetoed:`, json.error);
+            console.log("Execution vetoed by Global Lock");
             return;
           }
 

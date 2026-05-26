@@ -162,6 +162,10 @@ export async function POST(req: Request) {
       }
     } catch (guardError) {
       console.error("[PAPER TRADES API] Directional Guard DB check failed:", guardError);
+      return NextResponse.json(
+        { error: "Database error during Global Lock verification." },
+        { status: 500 }
+      );
     }
 
     // ── 3. Parse and Validate Request Payload ──────────────────────────────
