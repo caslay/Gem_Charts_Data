@@ -58,7 +58,7 @@ const BINANCE_REST = 'https://fapi.binance.com/fapi/v1/klines';
  */
 function parseBinanceKlines(raw: unknown[][]): BtCandle[] {
   return raw.map((c) => ({
-    t: Number(c[0]) + UTC_PLUS3_MS,
+    t: Number(c[0]),
     o: parseFloat(c[1] as string),
     h: parseFloat(c[2] as string),
     l: parseFloat(c[3] as string),
@@ -107,8 +107,8 @@ function utcDayRange(dateStr: string): [number, number] {
  * reaches or exceeds cutoffHour:cutoffMinute.
  */
 function findCutoffIndex(candles: BtCandle[], dateStr: string, cutoffHour: number, cutoffMinute: number): number {
-  // exactCutoffMs represents the cutoff exact time in shifted +3h ms.
-  const exactCutoffMs = Date.parse(`${dateStr}T00:00:00.000Z`) + (cutoffHour * 60 + cutoffMinute) * 60 * 1000;
+  // cutoff time in UTC milliseconds (Cairo is UTC+3, so we subtract 3 hours in minutes = 180 minutes)
+  const exactCutoffMs = Date.parse(`${dateStr}T00:00:00.000Z`) + (cutoffHour * 60 + cutoffMinute - 180) * 60 * 1000;
 
   for (let i = 0; i < candles.length; i++) {
     if (candles[i].t >= exactCutoffMs) {
@@ -127,13 +127,13 @@ function buildEnrichedPayload(
 ): Record<string, unknown> {
   const { candles_1h, candles_15m, candles_5m } = visible;
 
-  // ── True Day Open (07:00 Cairo) ─────────────────────────────
+  // ── True Day Open (07:00 Cairo = 04:00 UTC) ─────────────────────────────
   let trueDayOpen0700: number | null = null;
   let dayOpenIndex = -1;
 
   for (let i = candles_15m.length - 1; i >= 0; i--) {
     const d = new Date(candles_15m[i].t);
-    if (d.getUTCHours() === 7 && d.getUTCMinutes() === 0) {
+    if (d.getUTCHours() === 4 && d.getUTCMinutes() === 0) {
       trueDayOpen0700 = candles_15m[i].o;
       dayOpenIndex = i;
       break;
@@ -148,7 +148,7 @@ function buildEnrichedPayload(
   let pdh = 0;
   let pdl = Infinity;
   candles_1h.forEach((c) => {
-    const rawUtcMs = c.t - UTC_PLUS3_MS;
+    const rawUtcMs = c.t;
     if (rawUtcMs >= prevDayStart && rawUtcMs < prevDayEnd) {
       if (c.h > pdh) pdh = c.h;
       if (c.l < pdl) pdl = c.l;
@@ -177,9 +177,10 @@ function buildEnrichedPayload(
   // ── Session Ranges ──────────────────────────────────────────────────────
   const getSessionLiquidityLocal = (candles: BtCandle[], startHourLocal: number, endHourLocal: number) => {
     const sessionCandles = candles.filter(c => {
-      const d = new Date(c.t);
-      const candleDayStr = d.toISOString().slice(0, 10);
-      const hLocal = d.getUTCHours();
+      // Shift raw UTC timestamp by +3h to evaluate local Cairo day and local Cairo hour
+      const cairoDate = new Date(c.t + UTC_PLUS3_MS);
+      const candleDayStr = cairoDate.toISOString().slice(0, 10);
+      const hLocal = cairoDate.getUTCHours();
       return candleDayStr === selectedDate && hLocal >= startHourLocal && hLocal < endHourLocal;
     });
 
@@ -211,7 +212,7 @@ function buildEnrichedPayload(
   }
 
   // Check Asian sweeps (only candles at or after 10:00 Cairo local time = 07:00 UTC)
-  const afterAsianCandles = todayCandles.filter(c => new Date(c.t).getUTCHours() >= 10);
+  const afterAsianCandles = todayCandles.filter(c => new Date(c.t).getUTCHours() >= 7);
   for (const c of afterAsianCandles) {
     if (asianLiquidity.high && c.h >= asianLiquidity.high && c.h < pdh) {
       sweeps.push("ASIAN_HIGH_SWEPT");
@@ -222,7 +223,7 @@ function buildEnrichedPayload(
   }
 
   // Check London sweeps (only candles at or after 15:00 Cairo local time = 12:00 UTC)
-  const afterLondonCandles = todayCandles.filter(c => new Date(c.t).getUTCHours() >= 15);
+  const afterLondonCandles = todayCandles.filter(c => new Date(c.t).getUTCHours() >= 12);
   for (const c of afterLondonCandles) {
     if (londonLiquidity.high && c.h >= londonLiquidity.high && c.h < pdh) {
       sweeps.push("LONDON_HIGH_SWEPT");
@@ -257,7 +258,17 @@ function buildEnrichedPayload(
 
   // Determine current killzone from replayed candle time
   const current_time_window = liveCandle ? (() => {
-    const utcDate = new Date(liveCandle.t - UTC_PLUS3_MS);
+    const utcDate = new Date(liveCandle.t);
+    
+    // NY Lunch Dead Zone Preemption (12:00 PM – 1:30 PM New York Time)
+    const nyTimeStr = utcDate.toLocaleString("en-US", { timeZone: "America/New_York" });
+    const nyDate = new Date(nyTimeStr);
+    const nyHour = nyDate.getHours();
+    const nyMin = nyDate.getMinutes();
+    if (nyHour === 12 || (nyHour === 13 && nyMin <= 30)) {
+      return "DEAD_ZONE";
+    }
+
     const hour = utcDate.getUTCHours();
     if (hour >= 0 && hour <= 3) return "ASIAN_RANGE";
     if (hour >= 6 && hour <= 8) return "LONDON_AM_KILLZONE";

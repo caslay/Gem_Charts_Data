@@ -1313,6 +1313,7 @@ To comply with Lesson #10, the evaluator tracks `lastFiredCandleTime` (mapped vi
   `[SYSTEM: JOURNAL_LOGGED → {STRATEGY_NAME} trade successfully posted to Journal @ ${ENTRY_PRICE}]`
 - **Execution Failure Guard:** If the calculation validation fails (such as an invalid Risk-Reward setup), the system overrides the signal and prints a warning alert under the `RISK_OVERRIDE` protocol, generating a warning audio chime (`/audio/fvg_alert.mp3`):
   `[SYSTEM: TRADE_FAILED → {STRATEGY_NAME}: {REASON}]`
+- **Market Replay Separation (Backtest Page):** Backtest replay execution uses a completely isolated, local toast state manager in `src/app/backtest/page.tsx`. This intercepts `useStrategyEvaluator` alerts to render high-contrast brutalist toasts directly on the replay HUD, maintaining the strict **Zero UI Clutter** directive by ensuring backtest matches never bleed or pollute the live HUD's active alert stream.
 
 
 #### 6. Dark Brutalist Strategy Settings UI
@@ -1553,7 +1554,7 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 [1] Fetch 7 Binance endpoints (5m, 15m, 1h, 4h, 1d, 1w, OI)
      │
      ▼
-[2] Format candles → Add UTC+3 offset → Compute PDH/PDL
+[2] Format candles → Standardize to UTC-Zero → Compute PDH/PDL
      │
      ▼
 [3] Detect Asian/London session ranges
@@ -2072,15 +2073,15 @@ The `useLiveAlerts` hook **suppresses ALL non-DEAD_ZONE alerts** when the DEAD_Z
 
 | # | Category | Description | Severity |
 |---|---|---|---|
-| **LD-1** | Killzone Clock | `getCurrentKillzone()` shifts server time by +3h and reads UTC hours. On Vercel (UTC server), this correctly maps to Cairo time. Locally, if the system isn't UTC, it will produce incorrect windows. Additionally, the function has gaps: hours 7-8, 12-14, 18-19, 22+ are all `DEAD_ZONE`, which may be too aggressive. | 🟡 Medium |
-| **LD-2** | SMT Trap Detector | The SMT/Equal Highs detector in `route.ts` uses pure 3-bar price-action fractal detection (`curr.h > prev.h && curr.h > next.h`) without the **"Strict Directional Lock" color validation** mandated by `02_lessons.md` Lesson #1 and `03_quant_logic.md` Section 1. This could produce false pivots from "Outside Bars." | 🔴 High |
-| **LD-3** | Confidence Interval Naming | `confidence_interval_95` is TRUE when `p < 0.15 AND t > 1.96`. A true 95% CI requires `p < 0.05`. The name is misleading. Comment in code says "backward compatibility." | 🟡 Medium |
-| **LD-4** | Dead Zone Time Mismatch | **Python OLS:** `is_dead_zone` flags hours `{12, 13, 14}` on Cairo-offset timestamps. **Frontend alerts:** checks NY Time `{12:00, 13:00-13:30}`. **Backend Killzone:** no explicit dead zone hours listed (any non-killzone hour). These are three different dead zone definitions across three different timezones. | 🔴 High |
+| **LD-1** | Killzone Clock | **Resolved in V10.3/10.4:** Standardized the entire pipeline layer to raw UTC-0, eliminating timezone shifting. Intercepts local NY Lunch slots in `getCurrentKillzone()` to safely return `"DEAD_ZONE"`. | 🟢 Resolved |
+| **LD-2** | SMT Trap Detector | **Resolved in V10.4:** Enforced strict color validation lock on SMT fractal highs (peak candle must be RED and preceded by a GREEN candle), eliminating fake sweeps from outside bars. | 🟢 Resolved |
+| **LD-3** | Confidence Interval Naming | **Resolved in V10.4:** Retained legacy `confidence_interval_95` flag for backward compatibility, but introduced mathematically correct strict check `confidence_interval_95_strict` (using `p_value < 0.05`) across Python and Next.js layers. | 🟢 Resolved |
+| **LD-4** | Dead Zone Time Mismatch | **Resolved in V10.4:** Standardized the NY Lunch Dead Zone to 12:00 PM – 1:30 PM America/New_York (localized NY time) across all levels (Next.js getCurrentKillzone clock, useBacktestEngine replay, useLiveAlerts, and statsmodels Python OLS microservice). | 🟢 Resolved |
 | **LD-5** | 1:2 RR Rule | **Resolved in V8.2:** The `/api/trades` route now implements a strict programmatic validation gate validating that risk/reward ratio is strictly `>= 2.0` before any trade is permitted to log. Any failing payload is aborted with `400 Inefficient Algorithm`. *(Note: The AI synthesis endpoint `/api/quant-analyze` still relies on prompt adherence, but the actual execution journal acts as a bulletproof gate).* | 🟢 Resolved |
-| **LD-6** | `true_day_open` Duplication | `ipda_metrics.true_day_open` and `ipda_metrics.macro_levels.true_day_open` contain the same value. One should be removed to reduce payload size and avoid confusion. | 🟢 Low |
-| **LD-7** | Candle Interface Duplication | `Candle` is defined in both [fvgEngine.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/lib/fvgEngine.ts#L1-L11) and [useMarketData.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/hooks/useMarketData.ts#L5-L12). The hook version omits `taker_buy_vol` and `taker_sell_vol`. Should be consolidated into a single shared type. | 🟢 Low |
-| **LD-8** | No-Direction Invalidation Guard | When `parsedState.trade_direction` is null/undefined, the invalidation guard in `quant-analyze/route.ts` sets `breached = true` unconditionally ([line 98](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/app/api/quant-analyze/route.ts#L95-L99)), meaning ANY state with an `invalidation_level` but no `trade_direction` will always reset to SEARCHING. | 🟡 Medium |
-| **LD-9** | Python File Duplication | [quant_engine_api.py](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/quant_engine_api.py) (root, local dev) and [api/index.py](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/api/index.py) (Vercel deploy) contain identical logic but different route decorators. The root file has `/calculate-displacement` while `index.py` has `/api/py/calculate-displacement` + `/api/index`. Changes to one must be manually synced. | 🟡 Medium |
+| **LD-6** | `true_day_open` Duplication | **Resolved in V10.4:** Cleaned up payload and removed duplicate `true_day_open` key under `macro_levels` inside the market-data handler. | 🟢 Resolved |
+| **LD-7** | Candle Interface Duplication | **Resolved in V10.4:** Consolidated `interface Candle` into `src/lib/fvgEngine.ts` and successfully imported it in `useMarketData.ts` and `smtEngine.ts`, eliminating type duplication. | 🟢 Resolved |
+| **LD-8** | No-Direction Invalidation Guard | **Resolved in V10.4:** Corrected the invalidation guard inside `quant-analyze/route.ts` to skip breach resets (setting `breached = false`) if no directional bias is present in the state memory. | 🟢 Resolved |
+| **LD-9** | Python File Duplication | **Resolved in V10.4:** Mirror-aligned `quant_engine_api.py` and `api/index.py` logic and route decorators completely, avoiding any local dev vs production OLS calculation differences. | 🟢 Resolved |
 | **LD-10** | WebSocket vs API Time Sync | **Resolved in V10.3:** Standardized the entire logic layer to UTC-0, completely eliminating the time offset injection drift. Time offsets (Cairo Time) are decoupled and applied strictly in the UI display layer (`Chart.tsx` formatters). | 🟢 Resolved |
 | **LD-11** | Server-Side Implicit Any Gating | **Resolved in V8.2:** The `/journal` page query had an implicit `any[]` declaration for `initialTrades` that caused Vercel deployment builds to fail under strict TypeScript compiling. Resolved by explicitly importing and applying the `TradeRecord[]` interface. | 🟢 Resolved |
 

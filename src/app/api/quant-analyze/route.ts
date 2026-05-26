@@ -93,9 +93,9 @@ export async function POST(req: Request) {
       } else if (direction === 'SHORT' && livePrice >= invalidation) {
         breached = true;
       } else if (!direction) {
-        // Direction-agnostic: any crossing is a breach
-        // Check if the live price has moved past invalidation in either direction
-        breached = true;
+        // Direction-agnostic: if there is no active directional bias in state memory,
+        // do NOT breach unconditionally. Skip breach reset.
+        breached = false;
       }
 
       if (breached) {

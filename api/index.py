@@ -86,9 +86,11 @@ async def calculate_displacement(candles: List[CandleInput], symbol: Optional[st
     df['rolling_vol_14'] = df['v'].rolling(window=14, min_periods=1).mean()
     df['anomaly_multiplier'] = df['v'] / (df['rolling_vol_14'] + 1e-5)
     
-    # Hour extraction using UTC+3 offset Egypt timezone baked in Next.js
-    df['hour'] = pd.to_datetime(df['t'], unit='ms').dt.hour
-    df['is_dead_zone'] = df['hour'].isin([12, 13, 14]).astype(int)
+    # Hour/minute extraction with localized America/New_York timezone conversion (NY Lunch Dead Zone: 12:00 PM – 1:30 PM NY local time)
+    ny_time = pd.to_datetime(df['t'], unit='ms').dt.tz_localize('UTC').dt.tz_convert('America/New_York')
+    df['hour'] = ny_time.dt.hour
+    df['minute'] = ny_time.dt.minute
+    df['is_dead_zone'] = ((df['hour'] == 12) | ((df['hour'] == 13) & (df['minute'] <= 30))).astype(int)
     
     # Forward 1-candle return for OLS target
     df['future_return'] = df['c'].pct_change(fill_method=None).shift(-1)
@@ -106,6 +108,7 @@ async def calculate_displacement(candles: List[CandleInput], symbol: Optional[st
     t_statistic = 0.0
     p_value = 1.0
     confidence_interval_95 = "CONSOLIDATION" if is_consolidation else False
+    confidence_interval_95_strict = "CONSOLIDATION" if is_consolidation else False
     confidence_level = "LOW"
 
     if is_consolidation:
@@ -133,6 +136,7 @@ async def calculate_displacement(candles: List[CandleInput], symbol: Optional[st
                 
             # Backward compatibility: Confidence Interval validation: p-value < 0.15 and t_statistic > 1.96
             confidence_interval_95 = bool(p_value < 0.15 and t_statistic > 1.96)
+            confidence_interval_95_strict = bool(p_value < 0.05 and t_statistic > 1.96)
         except Exception as e:
             # Handle collinearity/singular matrix errors gracefully in low-volatility situations
             pass
@@ -181,7 +185,8 @@ async def calculate_displacement(candles: List[CandleInput], symbol: Optional[st
             "t_statistic": float(round(t_statistic, 4)),
             "p_value": float(round(p_value, 4)),
             "confidence_level": confidence_level,
-            "confidence_interval_95": confidence_interval_95
+            "confidence_interval_95": confidence_interval_95,
+            "confidence_interval_95_strict": confidence_interval_95_strict
         }
     )
 

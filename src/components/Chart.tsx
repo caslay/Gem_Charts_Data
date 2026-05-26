@@ -31,6 +31,7 @@ interface ChartProps {
   liveCandle?: LiveCandle | null;
   livePrice?: number | null;
   themeSettings?: any;
+  triggerSmartAlert?: (type: any, message: string, sound?: string) => void;
 }
 
 export default function Chart({
@@ -44,6 +45,7 @@ export default function Chart({
   liveCandle: propsLiveCandle,
   livePrice: propsLivePrice,
   themeSettings: propsThemeSettings,
+  triggerSmartAlert: propsTriggerSmartAlert,
 }: ChartProps) {
   const { theme } = useTheme();
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -103,7 +105,8 @@ export default function Chart({
   const livePrice = propsLivePrice !== undefined ? propsLivePrice : context.livePrice;
   const liveCandle = propsLiveCandle !== undefined ? propsLiveCandle : context.liveCandle;
   const themeSettings = propsThemeSettings !== undefined ? propsThemeSettings : context.themeSettings;
-  const { triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert, setWsInterval } = context;
+  const { triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert: contextTriggerSmartAlert, setWsInterval } = context;
+  const triggerSmartAlert = propsTriggerSmartAlert !== undefined ? propsTriggerSmartAlert : contextTriggerSmartAlert;
 
   const activeFvgs = propsActiveFvgs !== undefined ? propsActiveFvgs : (marketContextData?.ipda_metrics?.active_fvgs || []);
   const localDealingRange = propsLocalDealingRange !== undefined ? propsLocalDealingRange : marketContextData?.ipda_metrics?.pricing_context?.local_dealing_range;

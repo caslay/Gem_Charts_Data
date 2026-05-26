@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { slicePayloadByLookback } from '@/components/Sidebar';
 import { useLiveAlerts } from './useLiveAlerts';
 import { useAIAnalysis } from './useAIAnalysis';
+import { Candle } from '@/lib/fvgEngine';
+export type { Candle };
 
 export interface SignalAlerts {
   FVG_DETECTION: string;
@@ -121,14 +123,7 @@ export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   light_highlight_down: '#e11d48',
 };
 
-export interface Candle {
-  t: number;
-  o: number;
-  h: number;
-  l: number;
-  c: number;
-  v: number;
-}
+
 
 export interface MarketDataPayload {
   ticker: string;

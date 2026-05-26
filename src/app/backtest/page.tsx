@@ -10,6 +10,8 @@ import type { MarketDataPayload } from '@/hooks/useMarketData';
 import type { LiveCandle } from '@/hooks/useBinanceWS';
 import Chart from '@/components/Chart';
 import DashboardMetrics from '@/components/DashboardMetrics';
+import SmartAlertsToast from '@/components/SmartAlertsToast';
+import type { SmartAlert } from '@/hooks/useLiveAlerts';
 import {
   ChevronLeft, ChevronRight, Eye, Download, Copy,
   Calendar, Clock, BarChart2, Loader2, AlertTriangle,
@@ -43,6 +45,36 @@ export default function BacktestPage() {
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   const [activeTimeframe, setActiveTimeframe] = useState<BacktestTimeframe>('5m');
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
+
+  // ── Backtest Toast Alerts State ───────────────────────────────────────────
+  const [activeAlerts, setActiveAlerts] = useState<SmartAlert[]>([]);
+
+  const dismissAlert = useCallback((id: string) => {
+    setActiveAlerts((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
+  const triggerSmartAlert = useCallback((type: any, message: string, soundPath?: string) => {
+    setActiveAlerts((prev) => {
+      const newAlert: SmartAlert = {
+        id: `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        type,
+        message,
+        timestamp: Date.now(),
+      };
+      return [newAlert, ...prev].slice(0, 10);
+    });
+
+    if (typeof window !== 'undefined' && soundPath) {
+      const audio = new Audio(soundPath);
+      audio.play().catch(e => {
+        if (e.name === 'NotAllowedError') {
+          console.log('[Audio] Playback blocked by browser autoplay policy until user interacts.');
+        } else {
+          console.error('Audio play error:', e);
+        }
+      });
+    }
+  }, []);
 
   // ── Backtest Trades & Account State ───────────────────────────────────────
   const [backtestTrades, setBacktestTrades] = useState<TradeRecord[]>([]);
@@ -126,7 +158,8 @@ export default function BacktestPage() {
     data: engine.enrichedPayload as unknown as MarketDataPayload,
     livePrice: lastPrice,
     liveCandle: liveCandle as unknown as LiveCandle,
-    aiBias: aiBias
+    aiBias: aiBias,
+    triggerSmartAlert
   });
 
   // Dynamic backtest statistics calculations
@@ -195,14 +228,12 @@ export default function BacktestPage() {
   })();
 
   const cairoTime = lastCandle
-    ? (() => {
-      const d = new Date(lastCandle.t);
-      const hh = d.getUTCHours();
-      const mm = d.getUTCMinutes().toString().padStart(2, '0');
-      const suffix = hh >= 12 ? 'PM' : 'AM';
-      const h12 = (hh % 12 || 12).toString().padStart(2, '0');
-      return `${h12}:${mm} ${suffix}`;
-    })()
+    ? new Date(lastCandle.t).toLocaleTimeString('en-EG', {
+        timeZone: 'Africa/Cairo',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      })
     : '--:--';
 
   const progressPct = engine.totalCandles > 0
@@ -496,6 +527,7 @@ export default function BacktestPage() {
                       liveCandle={liveCandle as unknown as LiveCandle}
                       livePrice={lastPrice}
                       interval={activeTimeframe as any}
+                      triggerSmartAlert={triggerSmartAlert}
                     />
                   )
                   : (
@@ -622,6 +654,9 @@ export default function BacktestPage() {
 
         </div>
       </div>
+
+      {/* Backtest Toast alerts */}
+      <SmartAlertsToast activeAlerts={activeAlerts} dismissAlert={dismissAlert} />
     </main>
   );
 }
