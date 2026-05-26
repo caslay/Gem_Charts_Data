@@ -2096,7 +2096,20 @@ To enable premium, desktop and mobile installability ("Add to Home Screen" suppo
 - **Role:** Implements a dynamic manifest metadata route served by Next.js 16. It generates dynamic webmanifest schemas with matching colors (`#09090b` dark background and themes) and standalone app viewport constraints.
 - **Icons:** Configures high-quality institutional branding icons at standard sizes (`192x192` and `512x512`) served as maskable assets.
 
-### 13.2 Asset Repository
+### 13.2 Pass-Through Service Worker (PWA Compliance)
+- **Source:** [public/sw.js](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/public/sw.js)
+- **Role:** Implements a lightweight service worker intercepting the standard `fetch` event. This satisfies Chrome's strict offline capability requirement, immediately enabling the native PWA download prompt in modern browsers.
+- **Registration:** Automatically registered on client page mount via an inline script block inside [src/app/layout.tsx](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/app/layout.tsx).
+
+### 13.3 Dynamic Layout Metadata Override
+- **Source:** [src/app/layout.tsx](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/app/layout.tsx)
+- **Role:** Declares explicit high-resolution PNG icon mappings within the exported App Router `metadata` object. This forces modern browsers to immediately bypass cached legacy `.ico` files and render the newly generated, premium branding favicon.
+
+### 13.4 Route Protection Proxy Bypass
+- **Source:** [src/proxy.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/proxy.ts)
+- **Role:** Configures Route Protection Middleware bypass matcher rules. Explicitly whitelists `/manifest.webmanifest`, `/manifest.json`, and `/sw.js` in the request pathname scanner and matcher arrays to prevent NextAuth redirects to `/login` when these assets are fetched by the browser.
+
+### 13.5 Asset Repository
 - **`/public/icon-192.png`**: Standard low-overhead notification and launch icon.
 - **`/public/icon-512.png`**: High-fidelity app install and dashboard splash icon.
 

@@ -29,7 +29,10 @@ export default auth((req) => {
   const isPublicAsset =
     nextUrl.pathname.startsWith("/_next") ||
     nextUrl.pathname.startsWith("/favicon.ico") ||
-    nextUrl.pathname.startsWith("/audio");
+    nextUrl.pathname.startsWith("/audio") ||
+    nextUrl.pathname.startsWith("/manifest.webmanifest") ||
+    nextUrl.pathname.startsWith("/manifest.json") ||
+    nextUrl.pathname.startsWith("/sw.js");
 
   // Skip proxy for auth API routes, python backend, and static assets
   if (isAuthRoute || isPyBackend || isPublicAsset) {
@@ -60,6 +63,6 @@ export default auth((req) => {
  */
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|audio|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp3)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|audio|manifest\\.webmanifest|manifest\\.json|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp3)$).*)",
   ],
 };
