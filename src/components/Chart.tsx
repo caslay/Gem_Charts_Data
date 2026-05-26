@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, SeriesMarker, createSeriesMarkers, ISeriesMarkersPluginApi, LineStyle } from 'lightweight-charts';
 import { Candle } from '@/hooks/useMarketData';
 import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
@@ -10,6 +10,9 @@ import { AlertSound, useAlertSounds } from '@/hooks/useAlertSounds';
 import { useMarketDataContext } from '@/context/MarketDataContext';
 import { Volume2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { registry } from '@/lib/chartLayers/registry';
+import { useLayerStore } from '@/lib/chartLayers/store';
+import ChartLayerHud from './ChartLayerHud';
 
 interface ChartProps {
   data: Candle[];
@@ -33,6 +36,17 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<any> | null>(null);
   const isInitialLoad = useRef(true);
   const dataRef = useRef(data);
+
+  // Zustand persistent chart layer store visibility states
+  const { visibility } = useLayerStore();
+  const layerStorageRef = useRef<Map<string, Map<string, any>>>(new Map());
+
+  const getLayerStorage = useCallback((layerId: string) => {
+    if (!layerStorageRef.current.has(layerId)) {
+      layerStorageRef.current.set(layerId, new Map());
+    }
+    return layerStorageRef.current.get(layerId)!;
+  }, []);
 
   // Sync data to ref to avoid stale closures in crosshair listeners
   useEffect(() => {
@@ -731,7 +745,7 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
     }
   }, [theme, themeSettings]);
 
-  // ── Sync Historical Data & Markers ───────────────────────────────────────
+  // ── Sync Historical Data ──────────────────────────────────────────────────
   useEffect(() => {
     if (seriesRef.current && data && data.length > 0) {
       const formattedData = data.map((d) => ({
@@ -745,11 +759,6 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       formattedData.sort((a, b) => a.time - b.time);
       seriesRef.current.setData(formattedData);
 
-      const sortedDataForMarkers = [...data].sort((a, b) => a.t - b.t);
-      const isDark = theme === 'dark';
-      const markers = generateVolumetricMarkers(sortedDataForMarkers, isDark);
-      seriesMarkersRef.current?.setMarkers(markers);
-
       if (isInitialLoad.current) {
         chartRef.current?.timeScale().fitContent();
         isInitialLoad.current = false;
@@ -759,6 +768,50 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
       updateAlertPositions();
     }
   }, [data, theme]); // eslint-disable-next-line react-hooks/exhaustive-deps
+
+  // ── Dynamic Chart Layer Orchestrator ─────────────────────────────────────
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series || !data || data.length === 0 || !marketContextData) return;
+
+    const activeTheme = theme === 'dark' ? 'dark' : 'light';
+    const layers = registry.getAll();
+
+    layers.forEach((layer) => {
+      const isEnabled = visibility[layer.id] !== false;
+      const storage = getLayerStorage(layer.id);
+
+      const context = {
+        chart,
+        series,
+        seriesMarkers: seriesMarkersRef.current,
+        data: marketContextData,
+        activeCandles: data,
+        theme: activeTheme as 'dark' | 'light',
+        themeSettings,
+        storage,
+      };
+
+      if (isEnabled) {
+        if (layer.renderChart) {
+          try {
+            layer.renderChart(context);
+          } catch (err) {
+            console.error(`[LayerOrchestrator] Failed to render chart layer ${layer.id}:`, err);
+          }
+        }
+      } else {
+        if (layer.clearChart) {
+          try {
+            layer.clearChart(context);
+          } catch (err) {
+            console.error(`[LayerOrchestrator] Failed to clear chart layer ${layer.id}:`, err);
+          }
+        }
+      }
+    });
+  }, [data, marketContextData, visibility, theme, themeSettings, getLayerStorage]);
 
   // ── Sync Active Alerts with Price Lines ───────────────────────────────────
   useEffect(() => {
@@ -1105,22 +1158,37 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
         onClick={handleChartClick}
       />
 
-      {/* V8.6 — FVG Zone Overlays (Unmitigated only, finite and anchored) */}
-      {fvgOverlayBoxes.map((box) => (
-        <div
-          key={box.key}
-          className="absolute pointer-events-none z-[1]"
-          style={{
-            top: `${box.top}px`,
-            height: `${box.height}px`,
-            left: `${box.left}px`,
-            width: `${box.width}px`,
-            backgroundColor: box.isBullish ? '#50ffaf' : '#ffb4ab',
-            opacity: 0.2,
-            border: `0.3px solid ${box.isBullish ? '#50ffaf' : '#ffb4ab'}`,
-          }}
-        />
-      ))}
+      {/* Dynamic Layer Orchestrator HTML Overlays */}
+      {registry.getAll().map((layer) => {
+        const isEnabled = visibility[layer.id] !== false;
+        if (!isEnabled || !layer.renderHtml || !chartRef.current || !seriesRef.current || !marketContextData) return null;
+
+        const storage = getLayerStorage(layer.id);
+        const context = {
+          chart: chartRef.current,
+          series: seriesRef.current,
+          seriesMarkers: seriesMarkersRef.current,
+          data: marketContextData,
+          activeCandles: data,
+          theme: (theme === 'dark' ? 'dark' : 'light') as 'dark' | 'light',
+          themeSettings,
+          storage,
+        };
+
+        try {
+          return (
+            <React.Fragment key={layer.id}>
+              {layer.renderHtml(context)}
+            </React.Fragment>
+          );
+        } catch (err) {
+          console.error(`[LayerOrchestrator] Failed to render HTML layer ${layer.id}:`, err);
+          return null;
+        }
+      })}
+
+      {/* Persistent Layer Visibility Control HUD Panel */}
+      <ChartLayerHud />
 
       {/* HTML Overlays for Placed Alerts */}
       <div className="absolute right-0 top-0 bottom-0 w-28 pointer-events-none z-10 overflow-hidden">

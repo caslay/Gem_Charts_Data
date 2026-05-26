@@ -1,10 +1,36 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.7
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.8
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-26  
-> **Last Updated:** 2026-05-26 (V10.7 Timezone Standardization & Trade Guardrails Hardening Complete)  
+> **Last Updated:** 2026-05-26 (V10.8 Chart Layer Orchestrator & Persistent HUD Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
-> **Source Files Analyzed:** 54+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+> **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.8 Changelog — Chart Layer Orchestrator & Persistent HUD (Completed)
+
+### 1. Persistent Chart Layer Zustand Store
+- **Store Persistent State:** Implemented a persistent Zustand store `src/lib/chartLayers/store.ts` to manage the enabled/disabled visibility states of all visual chart indicator layers.
+- **LocalStorage Syncing:** visibility configurations are saved automatically to browser `localStorage` and persist safely across user session transitions and browser page refreshes.
+
+### 2. Extensible Chart Layer Registry
+- **Central Indicator Registry:** Designed a central registry class `src/lib/chartLayers/registry.ts` following a highly scalable plugin-based architecture, allowing any developer to register new visual indicator layers by adding them to the registration constructor.
+- **Render Context Binding:** Bound drawing and cleanup loops dynamically to the `RenderContext` interface (`src/lib/chartLayers/types.ts`), providing each plugin access to the chart, candlestick series, volumetric markers plugin, active klines context, and private instance maps (`storage`) to prevent memory leaks.
+
+### 3. Indicator Layer Plugins
+- **Modularized Indicator Logic:** Extracted calculations and drawings into isolated, clean visual layer plugins:
+  - **FVG Layer** (`fvgLayer`): Computes pixel bounds and returns glassmorphic absolute-positioned HTML overlays for active unmitigated Fair Value Gaps.
+  - **Magnets Layer** (`magnetsLayer`): Iterates order book liquidity resting pools and draws dashed horizontal price lines for BSL and SSL magnets.
+  - **Sessions Layer** (`sessionsLayer`): Visualizes Asian Range, London Range, and True Day Open (Cairo 07:00 / UTC 04:00) price boundary lines.
+  - **Displacement Layer** (`displacementLayer`): Draws volumetric markers representing Institutional Sponsorship, SMT sweeps, and Market Structure Shifts (MSS).
+
+### 4. Floating Glass HUD Control Panel
+- **Floating Glass Capsule:** Implemented `src/components/ChartLayerHud.tsx` as a floating, glassmorphic capsule overlay positioned cleanly at the top-right of the chart column (`bg-[#0e0e0f]/85 border-[#4a4457]/30`).
+- **Collapsible Toggle HUD:** Minimizes into a single pill that expands dynamically to present responsive, high-contrast, interactive button switches representing standard visual indicators, updating Zustand states instantly.
+
+### 5. Standardized JSON Export Filenames
+- **System Timestamp Appending:** Upgraded the `triggerDownload` helper in `src/hooks/useMarketData.ts` to dynamically retrieve the active system time formatted as `_YYYYMMDD_HHMM` (e.g. `_20260526_1825`) and append it to all exported V6 Naked and V8.2 Enriched JSON files prior to downloading.
+
+---
 
 ## 🆕 V10.7 Changelog — Timezone Standardization & Trade Guardrails Hardening (Completed)
 

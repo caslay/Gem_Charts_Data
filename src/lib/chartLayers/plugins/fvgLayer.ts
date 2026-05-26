@@ -1,0 +1,65 @@
+import React from 'react';
+import type { ChartLayer } from '../types';
+
+export const fvgLayer: ChartLayer = {
+  id: 'fvg',
+  name: 'Fair Value Gaps',
+  description: 'Unmitigated institutional FVG zones',
+  icon: 'Layers',
+  renderHtml(context) {
+    const { chart, series, data } = context;
+    
+    const ipda = data.ipda_metrics || {};
+    const activeFvgs = ipda.active_fvgs || [];
+    if (activeFvgs.length === 0) return null;
+
+    const layoutOptions = chart.options()?.layout as any;
+    const timeScaleOptions = chart.timeScale().options() as any;
+    const barSpacing = layoutOptions?.barSpacing ?? timeScaleOptions?.barSpacing ?? 6;
+    const width = 9 * barSpacing;
+
+    const boxes: React.ReactNode[] = [];
+
+    for (const fvg of activeFvgs) {
+      // Only render unmitigated zones
+      if (fvg.status !== 'UNMITIGATED') continue;
+
+      const topY = series.priceToCoordinate(fvg.top) as number | null;
+      const bottomY = series.priceToCoordinate(fvg.bottom) as number | null;
+
+      if (topY === null || bottomY === null) continue;
+
+      // Starting X position: anchored to origin candle
+      const timeSec = Math.floor(fvg.origin_time / 1000);
+      const left = chart.timeScale().timeToCoordinate(timeSec as any);
+
+      if (left === null) continue;
+
+      const pixelTop = Math.min(topY, bottomY);
+      const height = Math.abs(topY - bottomY);
+
+      if (height <= 0) continue;
+
+      const isBullish = fvg.type === 'BULLISH';
+      const color = isBullish ? '#50ffaf' : '#ffb4ab';
+
+      boxes.push(
+        React.createElement('div', {
+          key: `${fvg.timeframe}_${fvg.type}_${fvg.top}_${fvg.bottom}_${fvg.origin_time}`,
+          className: "absolute pointer-events-none z-[1] transition-all duration-150",
+          style: {
+            top: `${pixelTop}px`,
+            height: `${height}px`,
+            left: `${left}px`,
+            width: `${width}px`,
+            backgroundColor: color,
+            opacity: 0.2,
+            border: `0.3px solid ${color}`,
+          }
+        })
+      );
+    }
+
+    return React.createElement(React.Fragment, null, ...boxes);
+  }
+};
