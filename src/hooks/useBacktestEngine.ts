@@ -12,17 +12,21 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
+import { verifyDisplacementOffline } from '@/lib/displacementEngine';
+import { generateTradeExecutionParameters } from '@/lib/riskEngine';
 
 
 // ── Internal types ────────────────────────────────────────────────────────────
 export interface BtCandle {
-  /** Open time in **milliseconds**, already shifted +3 h to Cairo local time. */
+  /** Open time in **milliseconds** (raw UTC). */
   t: number;
   o: number;
   h: number;
   l: number;
   c: number;
   v: number;
+  taker_buy_vol: number;
+  taker_sell_vol: number;
 }
 
 export interface BtMasterArrays {
@@ -54,17 +58,23 @@ const BINANCE_REST = 'https://fapi.binance.com/fapi/v1/klines';
 
 /**
  * Parse raw Binance kline array into BtCandle[].
- * Applies +3 h shift so all `t` values read as Cairo local milliseconds.
+ * Pulls index 9 as taker_buy_vol and computes taker_sell_vol.
  */
 function parseBinanceKlines(raw: unknown[][]): BtCandle[] {
-  return raw.map((c) => ({
-    t: Number(c[0]),
-    o: parseFloat(c[1] as string),
-    h: parseFloat(c[2] as string),
-    l: parseFloat(c[3] as string),
-    c: parseFloat(c[4] as string),
-    v: parseFloat(c[5] as string),
-  }));
+  return raw.map((c) => {
+    const v = parseFloat(c[5] as string);
+    const taker_buy_vol = parseFloat(c[9] as string);
+    return {
+      t: Number(c[0]),
+      o: parseFloat(c[1] as string),
+      h: parseFloat(c[2] as string),
+      l: parseFloat(c[3] as string),
+      c: parseFloat(c[4] as string),
+      v,
+      taker_buy_vol,
+      taker_sell_vol: parseFloat((v - taker_buy_vol).toFixed(4)),
+    };
+  });
 }
 
 /**
@@ -133,7 +143,8 @@ function buildEnrichedPayload(
 
   for (let i = candles_15m.length - 1; i >= 0; i--) {
     const d = new Date(candles_15m[i].t);
-    if (d.getUTCHours() === 4 && d.getUTCMinutes() === 0) {
+    const candleDateStr = d.toISOString().slice(0, 10);
+    if (candleDateStr === selectedDate && d.getUTCHours() === 4 && d.getUTCMinutes() === 0) {
       trueDayOpen0700 = candles_15m[i].o;
       dayOpenIndex = i;
       break;
@@ -240,21 +251,45 @@ function buildEnrichedPayload(
     target_status = uniqueSweeps.join(" | ") + " / PDH_PDL_PENDING";
   }
 
-  // ── Intraday Dealing Range (07:00 Cairo → last visible candle) ──────────
-  const intradayCandles = dayOpenIndex !== -1 ? candles_15m.slice(dayOpenIndex) : [];
+  // ── Structural Dealing Range (based strictly on 5-bar fractals) ─────────
+  const getStructuralDealingRange = (candles: BtCandle[], currentPrice: number) => {
+    let recentHigh: number | null = null;
+    let recentLow: number | null = null;
 
-  let localDealingRange: Record<string, any> = {
-    high: null, low: null, equilibrium: null, current_status: 'UNKNOWN',
-  };
-  if (intradayCandles.length > 0 && livePrice !== null) {
-    const idHigh = parseFloat(Math.max(...intradayCandles.map((c) => c.h)).toFixed(2));
-    const idLow = parseFloat(Math.min(...intradayCandles.map((c) => c.l)).toFixed(2));
-    const idEqui = parseFloat(((idHigh + idLow) / 2).toFixed(2));
-    localDealingRange = {
-      high: idHigh, low: idLow, equilibrium: idEqui,
-      current_status: livePrice > idEqui ? 'PREMIUM' : 'DISCOUNT',
+    for (let i = 2; i < candles.length - 2; i++) {
+      const c2Prev = candles[i - 2];
+      const prev = candles[i - 1];
+      const curr = candles[i];
+      const next = candles[i + 1];
+      const c2Next = candles[i + 2];
+
+      if (curr.h > prev.h && curr.h > c2Prev.h && curr.h > next.h && curr.h > c2Next.h) {
+        recentHigh = curr.h;
+      }
+      if (curr.l < prev.l && curr.l < c2Prev.l && curr.l < next.l && curr.l < c2Next.l) {
+        recentLow = curr.l;
+      }
+    }
+
+    if (recentHigh === null || recentLow === null) {
+      const highs = candles.map(c => c.h);
+      const lows = candles.map(c => c.l);
+      recentHigh = recentHigh ?? Math.max(...highs);
+      recentLow = recentLow ?? Math.min(...lows);
+    }
+
+    const equilibrium = parseFloat(((recentHigh + recentLow) / 2).toFixed(2));
+    return {
+      high: parseFloat(recentHigh.toFixed(2)),
+      low: parseFloat(recentLow.toFixed(2)),
+      equilibrium,
+      current_status: currentPrice > equilibrium ? 'PREMIUM' : 'DISCOUNT',
     };
-  }
+  };
+
+  const localDealingRange = livePrice !== null
+    ? getStructuralDealingRange(candles_15m, livePrice)
+    : { high: null, low: null, equilibrium: null, current_status: 'UNKNOWN' };
 
   // Determine current killzone from replayed candle time
   const current_time_window = liveCandle ? (() => {
@@ -276,6 +311,28 @@ function buildEnrichedPayload(
     if (hour >= 17 && hour <= 18) return "NY_PM_KILLZONE";
     return "DEAD_ZONE";
   })() : "DEAD_ZONE";
+
+  // ── Offline Sponsorship and Risk calculations ────────────────────────────
+  const displacement = verifyDisplacementOffline(candles_15m, SYMBOL);
+  const displacementSponsorship = displacement.status !== 'INACTIVE' && displacement.status !== 'CONSOLIDATION'
+    ? 'ACTIVE'
+    : 'INACTIVE';
+  
+  const openInterestTrend = displacement.status !== 'INACTIVE' && displacement.status !== 'CONSOLIDATION'
+    ? 'RISING'
+    : 'FLAT';
+
+  const trade_execution_parameters = generateTradeExecutionParameters(
+    target_status,
+    current_time_window,
+    displacement,
+    livePrice ?? 0,
+    activeFVGs,
+    {
+      BSL_Magnets: pdh > 0 ? [pdh] : [],
+      SSL_Magnets: pdl > 0 ? [pdl] : [],
+    }
+  );
 
   return {
     ticker: `${SYMBOL}.backtest`,
@@ -308,8 +365,8 @@ function buildEnrichedPayload(
         local_dealing_range: localDealingRange,
       },
       order_flow_engine: {
-        open_interest_trend: 'FLAT',
-        displacement_sponsorship: 'INACTIVE',
+        open_interest_trend: openInterestTrend,
+        displacement_sponsorship: displacementSponsorship,
         market_structure_shift: false,
         smart_money_sentiment: { smart_money_divergence: false },
         resting_liquidity_pools: {
@@ -317,6 +374,8 @@ function buildEnrichedPayload(
           SSL_Magnets: pdl > 0 ? [pdl] : [],
         },
       },
+      institutional_sponsorship: displacement,
+      trade_execution_parameters,
     },
     active_arrays: {
       fvgs: activeFVGs,

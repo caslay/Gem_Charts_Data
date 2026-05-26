@@ -363,8 +363,8 @@ export function useMarketData(selectedInterval: string = '5m') {
     try {
       if (!isPolling) {
         setIsLoading(true);
+        setError(null);
       }
-      setError(null);
       const res = await fetch(`/api/market-data?interval=${selectedInterval}`);
       if (!res.ok) {
         throw new Error('Failed to fetch market data');
@@ -380,12 +380,18 @@ export function useMarketData(selectedInterval: string = '5m') {
         };
       });
 
+      // Clear any pre-existing initial load error upon a successful poll
+      setError(null);
+
       // Unified event sync: Trigger a refresh of the trades state across the UI on server-side closes
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('trades-refresh'));
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      console.warn('[MarketData] Background poll error caught:', err);
+      if (!isPolling) {
+        setError(err instanceof Error ? err.message : 'An error occurred');
+      }
     } finally {
       if (!isPolling) {
         setIsLoading(false);

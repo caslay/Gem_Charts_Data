@@ -1,10 +1,35 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.11
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.12
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-26  
-> **Last Updated:** 2026-05-26 (V10.11 Database Fault-Tolerance & In-Memory Fallback Complete)  
+> **Last Updated:** 2026-05-26 (V10.12 Backtest Replay Mathematical Parity Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.12 Changelog — Backtest Replay Mathematical Parity (Completed)
+
+### 1. Taker Volume Historical Ingestion
+- **Taker Volume Parsing:** Upgraded `parseBinanceKlines` and the `BtCandle` interface in the backtest engine (`useBacktestEngine.ts`) to extract index `9` (Taker buy base asset volume) from the Binance REST payload. 
+- **Taker Sell Volume Computation:** Dynamically computes `taker_sell_vol = total_volume - taker_buy_vol` for each historical candle slice.
+
+### 2. Client-Side Offline Displacement & Sponsorship
+- **Volumetric Sponsorship calculations:** Integrated client-side `verifyDisplacementOffline` inside `buildEnrichedPayload`, enabling real-time, historical taker volume evaluations.
+- **Dynamic OI Trend Simulation:** Links the Open Interest trend context dynamically to displacement, returning `RISING` when sponsorship is active and `FLAT` otherwise, completely eliminating standard strategy check vetos during replays.
+
+### 3. Sizing, Risk Mode & Hard Invalidation Synthesis
+- **Dynamic Risk Sizing:** Integrates `generateTradeExecutionParameters` directly inside the client-side replay builder, synthesizing `trade_execution_parameters` and `hard_invalidation_levels` (BSL/SSL margins) dynamically on each replayed index step.
+- **Parity Execution Gating:** Injects all necessary quantitative trade metadata into the `ipda_metrics` block of `enrichedPayload`. This ensures `/api/backtest-trades` POST transactions receive perfect mathematical coordinates to validate Risk-Reward constraints (RR >= 2.0) and successfully persist execution parameters to the backtest ledger.
+
+### 4. Timezone-Gated True Day Open Anchor
+- **Date-Gated Day Open Search:** Modified the `trueDayOpen0700` lookup in `buildEnrichedPayload` to evaluate candles matching specifically the active `selectedDate`, preventing replay timezone leaks from accessing previous days' opens before 07:00 Cairo has occurred.
+
+### 5. Market Structure Visualizer & Pure 5-Bar Fractal Decoupling (V10.12)
+- **Visual-Structural Decoupling (`structureLayer.ts`):** Created and refactored a dedicated chart layer plugin in `src/lib/chartLayers/plugins/structureLayer.ts` to perform visual audits of swings and structural dealing ranges based strictly on pure price-extreme fractals. It completely eliminates candle color locks and directional flags from market structure checks.
+- **Pure Price-Extreme Swings Detector:** Implements dynamic client-side 3-Bar (Inner) and 5-Bar (Major) peak and trough detection on the active candle series based strictly on price extremes (H/L). Major Swing pivots are rendered as hollow circles (`var(--up-candle)` Neon Green), and Inner Swings are rendered as small diamonds (`var(--accent)` Electric Purple).
+- **Zig-Zag Structural Connection:** Filters the alternating Zig-Zag line solver to connect **ONLY** confirmed 5-bar fractals, ensuring a clean, uncluttered visual of major structural changes while ignoring inner swings unless they represent verified 5-bar pivots.
+- **System-Wide IPDA Dealing Range Re-Sync:** Replaces the daily anchor and time-clock based dealing range calculations with a chronological 5-bar fractal solver inside both `/api/market-data` GET route (Live engine) and `useBacktestEngine.ts` (Backtest replay engine). It scans the 15m candle stream for the most recent valid 5-bar pivots to recalculate premium/discount math, eliminating false ranges and timezone leaks system-wide.
+- **SVG Canvas Overlay Rendering:** Pixel-maps coordinates and draws lines, hollow circles, diamonds, and midpoint "BOS/MSS" horizontal text labels on a hardware-accelerated SVG overlay.
+- **Zustand & HUD Sub-Toggles Integration:** Updates Zustand `useLayerStore` and the collapsible `ChartLayerHud` component to support independent toggles for Major Swings, Inner Swings, and Zig-Zag paths.
 
 ## 🆕 V10.11 Changelog — Database Fault-Tolerance & In-Memory Fallback (Completed)
 
@@ -2084,6 +2109,7 @@ The `useLiveAlerts` hook **suppresses ALL non-DEAD_ZONE alerts** when the DEAD_Z
 | **LD-9** | Python File Duplication | **Resolved in V10.4:** Mirror-aligned `quant_engine_api.py` and `api/index.py` logic and route decorators completely, avoiding any local dev vs production OLS calculation differences. | 🟢 Resolved |
 | **LD-10** | WebSocket vs API Time Sync | **Resolved in V10.3:** Standardized the entire logic layer to UTC-0, completely eliminating the time offset injection drift. Time offsets (Cairo Time) are decoupled and applied strictly in the UI display layer (`Chart.tsx` formatters). | 🟢 Resolved |
 | **LD-11** | Server-Side Implicit Any Gating | **Resolved in V8.2:** The `/journal` page query had an implicit `any[]` declaration for `initialTrades` that caused Vercel deployment builds to fail under strict TypeScript compiling. Resolved by explicitly importing and applying the `TradeRecord[]` interface. | 🟢 Resolved |
+| **LD-12** | Swing Detection & IPDA Range Decoupling | **Resolved in V10.12:** Decoupled market structure swings (Major/Inner) and `local_dealing_range` from directional candle color flips. Re-engineered both Live and Backtest Replay engines to use a strictly chronological 5-bar price-extreme fractal scanner, establishing 100% mathematical parity. | 🟢 Resolved |
 
 ---
 
@@ -2115,5 +2141,25 @@ To enable premium, desktop and mobile installability ("Add to Home Screen" suppo
 
 ---
 
+## 14. Market Structure Visualizer & IPDA Decoupling (V10.12)
+
+To enable visually auditing structural pivot detection and guarantee pristine algorithmic precision, this layer decouples price-action market structures from visual indicators and candle-direction shifts:
+
+### 14.1 Standardized 5-Bar and 3-Bar Pure-Price Fractals
+- **Major Swings (5-Bar):** A high/low extreme that is strictly higher/lower than the 2 candles to its left AND the 2 candles to its right. Independent of candle colors. Drawn on the chart using Hollow Circles.
+- **Inner Swings (3-Bar):** A high/low extreme that is strictly higher/lower than the 1 candle to its left and right, excluding any candles that are also Major Swings. Drawn on the chart using Small Diamonds.
+
+### 14.2 Alternating Swing Path & Zig-Zag Visualizer
+- **Chronological Path Solver:** Connects verified Major Swings (5-Bar) in a strictly alternating (High -> Low -> High -> Low) path. When consecutive swings of the same type occur, only the most extreme value (highest high or lowest low) is retained.
+- **MSS/BOS & Retracement Line Segment Classification:**
+  - **BOS/MSS Expansion:** If a segment breaks a previous Major Swing High (upward expansion) or Major Swing Low (downward expansion), it is drawn as a Solid Line (`var(--accent)` or neon purple) with custom text tags.
+  - **Retracement:** Internal pullbacks are drawn as a Dashed Line with lower opacity.
+
+### 14.3 Mathematical Unified Dealing Range Solver (`local_dealing_range`)
+- **Live Endpoint Pipeline ([src/app/api/market-data/route.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/app/api/market-data/route.ts)):** Scrapes `candles15m` chronologically to isolate the current structural 5-Bar fractal bounds, computing the true local structural High, Low, Equilibrium (50% midpoint), and bias context independent of candle color sweeps.
+- **Backtest Replay Engine ([src/hooks/useBacktestEngine.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/hooks/useBacktestEngine.ts)):** Executes an identical chronological `getStructuralDealingRange` algorithm, establishing absolute live-to-backtest mathematical parity.
+- **Fault-Tolerant SWR Polling Hook ([src/hooks/useMarketData.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/hooks/useMarketData.ts)):** Feeds real-time data to the UI using a 5-second SWR background-polling loop. If a background fetch fails (e.g. due to temporary Next.js dev compilation latency or connection drops), the hook catches the exception, outputs a warning in the console, and preserves the existing chart data and HUD state instead of showing a blocking full-screen error modal, guaranteeing high UX stability.
+
+---
 
 > **End of Master Blueprint.** This document should be treated as the canonical reference for all future modifications to the Flow-State Quant Engine. When in doubt, trace back to the source files linked throughout this document.

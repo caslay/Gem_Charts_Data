@@ -7,6 +7,41 @@ import { getSmtContext } from '@/lib/smtEngine';
 import { auth } from '@/auth';
 import { sql } from '@vercel/postgres';
 
+function getStructuralDealingRange(candles: any[], currentPrice: number) {
+  let recentHigh: number | null = null;
+  let recentLow: number | null = null;
+
+  for (let i = 2; i < candles.length - 2; i++) {
+    const c2Prev = candles[i - 2];
+    const prev = candles[i - 1];
+    const curr = candles[i];
+    const next = candles[i + 1];
+    const c2Next = candles[i + 2];
+
+    if (curr.h > prev.h && curr.h > c2Prev.h && curr.h > next.h && curr.h > c2Next.h) {
+      recentHigh = curr.h;
+    }
+    if (curr.l < prev.l && curr.l < c2Prev.l && curr.l < next.l && curr.l < c2Next.l) {
+      recentLow = curr.l;
+    }
+  }
+
+  if (recentHigh === null || recentLow === null) {
+    const highs = candles.map(c => c.h);
+    const lows = candles.map(c => c.l);
+    recentHigh = recentHigh ?? Math.max(...highs);
+    recentLow = recentLow ?? Math.min(...lows);
+  }
+
+  const equilibrium = parseFloat(((recentHigh + recentLow) / 2).toFixed(2));
+  return {
+    high: parseFloat(recentHigh.toFixed(2)),
+    low: parseFloat(recentLow.toFixed(2)),
+    equilibrium,
+    current_status: currentPrice > equilibrium ? "PREMIUM" : "DISCOUNT",
+  };
+}
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
@@ -628,61 +663,14 @@ export async function GET(req: Request) {
       console.error("[LAZY EXIT ERROR] Failed to execute server-side trade monitoring:", lazyExitError);
     }
 
-    if (intradayCandles.length > 0) {
-      const intradayHigh = parseFloat(Math.max(...intradayCandles.map(c => c.h)).toFixed(2));
-      const intradayLow = parseFloat(Math.min(...intradayCandles.map(c => c.l)).toFixed(2));
-      const equilibrium = parseFloat(((intradayHigh + intradayLow) / 2).toFixed(2));
-
-      pricing_context = {
-        vs_daily_open: (true_day_open_0700 !== null)
-          ? (currentLivePrice > true_day_open_0700 ? "ABOVE_OPEN" : "BELOW_OPEN")
-          : "UNKNOWN",
-        local_dealing_range: {
-          high: intradayHigh,
-          low: intradayLow,
-          equilibrium,
-          current_status: currentLivePrice > equilibrium ? "PREMIUM" : "DISCOUNT",
-        },
-        ...pricing_context_addon
-      };
-    } else {
-      // Edge-case: exactly 04:00 UTC (07:00 Cairo) and no range has formed yet — seed from the 04:00 UTC candle itself
-      const anchorCandle = candles15m.find(c => {
-        const d = new Date(c.t);
-        const candleDayStr = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
-        return candleDayStr === todayDayStr && d.getUTCHours() === 4 && d.getUTCMinutes() === 0;
-      });
-
-      if (anchorCandle) {
-        const seedHigh = parseFloat(anchorCandle.h.toFixed(2));
-        const seedLow = parseFloat(anchorCandle.l.toFixed(2));
-        const seedEquil = parseFloat(((seedHigh + seedLow) / 2).toFixed(2));
-        pricing_context = {
-          vs_daily_open: (true_day_open_0700 !== null)
-            ? (currentLivePrice > true_day_open_0700 ? "ABOVE_OPEN" : "BELOW_OPEN")
-            : "UNKNOWN",
-          local_dealing_range: {
-            high: seedHigh,
-            low: seedLow,
-            equilibrium: seedEquil,
-            current_status: currentLivePrice > seedEquil ? "PREMIUM" : "DISCOUNT",
-          },
-          ...pricing_context_addon
-        };
-      } else {
-        // Pre-open: no 07:00 candle exists yet
-        pricing_context = {
-          vs_daily_open: "UNKNOWN",
-          local_dealing_range: {
-            high: currentLivePrice,
-            low: currentLivePrice,
-            equilibrium: currentLivePrice,
-            current_status: "FAIR_VALUE",
-          },
-          ...pricing_context_addon
-        };
-      }
-    }
+    const localDealingRange = getStructuralDealingRange(candles15m, currentLivePrice);
+    pricing_context = {
+      vs_daily_open: (true_day_open_0700 !== null)
+        ? (currentLivePrice > true_day_open_0700 ? "ABOVE_OPEN" : "BELOW_OPEN")
+        : "UNKNOWN",
+      local_dealing_range: localDealingRange,
+      ...pricing_context_addon
+    };
 
     const active_fvgs = mapAndConsolidateFVGs(detectActiveFVGs(candles15m, true), detectActiveFVGs(candles5m, true));
     const all_fvgs = mapAndConsolidateFVGs(detectActiveFVGs(candles15m, false), detectActiveFVGs(candles5m, false));

@@ -18,6 +18,10 @@ export const useLayerStore = create<LayerState>()(
         magnets: true,
         sessions: true,
         displacement: true,
+        structure: true,
+        structure_major: true,
+        structure_inner: true,
+        structure_zigzag: true,
       },
       toggleVisibility: (layerId) =>
         set((state) => ({
