@@ -30,6 +30,7 @@ export async function GET(req: Request) {
       // HTF — fetched for background calculations only, NEVER exposed in data_payload
       '1d': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=100`,
       '1w': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1w&limit=100`,
+      '1M': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1M&limit=24`,
       'openInterest': `https://fapi.binance.com/fapi/v1/openInterest?symbol=${symbol}`,
       // Parallel fetches for BTCUSDT
       'btc_5m': `https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=5m&limit=20`,
@@ -54,13 +55,14 @@ export async function GET(req: Request) {
     const restingLiquidityPromise = fetchRestingLiquidity(symbol);
     const smartMoneyPromise = fetchSmartMoneySentiment(symbol);
 
-    const [res5m, res15m, res1h, res4h, res1d, res1w, resOi, resBtc5m, resBtc15m, resBtc1h, visualDataRaw] = await Promise.all([
+    const [res5m, res15m, res1h, res4h, res1d, res1w, res1M, resOi, resBtc5m, resBtc15m, resBtc1h, visualDataRaw] = await Promise.all([
       fetch(urls['5m']),
       fetch(urls['15m']),
       fetch(urls['1h']),
       fetch(urls['4h']),
       fetch(urls['1d']),
       fetch(urls['1w']),
+      fetch(urls['1M']),
       fetch(urls['openInterest']),
       fetch(urls['btc_5m']),
       fetch(urls['btc_15m']),
@@ -69,7 +71,7 @@ export async function GET(req: Request) {
     ]);
 
     if (
-      !res5m.ok || !res15m.ok || !res1h.ok || !res4h.ok || !res1d.ok || !res1w.ok || !resOi.ok ||
+      !res5m.ok || !res15m.ok || !res1h.ok || !res4h.ok || !res1d.ok || !res1w.ok || !res1M.ok || !resOi.ok ||
       !resBtc5m.ok || !resBtc15m.ok || !resBtc1h.ok
     ) {
       const errorText = await res5m.text();
@@ -80,6 +82,7 @@ export async function GET(req: Request) {
         status4h: res4h.status,
         status1d: res1d.status,
         status1w: res1w.status,
+        status1M: res1M.status,
         statusOi: resOi.status,
         statusBtc5m: resBtc5m.status,
         statusBtc15m: resBtc15m.status,
@@ -90,7 +93,7 @@ export async function GET(req: Request) {
     }
 
     const [
-      data5m, data15m, data1h, data4h, data1d, data1w, dataOi,
+      data5m, data15m, data1h, data4h, data1d, data1w, data1M, dataOi,
       dataBtc5m, dataBtc15m, dataBtc1h,
       resting_liquidity_pools, smart_money_sentiment
     ] = await Promise.all([
@@ -100,6 +103,7 @@ export async function GET(req: Request) {
       res4h.json(),
       res1d.json(),
       res1w.json(),
+      res1M.json(),
       resOi.json(),
       resBtc5m.json(),
       resBtc15m.json(),
@@ -136,6 +140,7 @@ export async function GET(req: Request) {
     // HTF — kept in local scope only; NEVER added to data_payload
     const candles1d = formatCandles(data1d);
     const candles1w = formatCandles(data1w);
+    const candles1M = formatCandles(data1M);
 
     // Format BTC klines
     const candlesBtc5m = formatCandles(dataBtc5m);
@@ -309,6 +314,16 @@ export async function GET(req: Request) {
     // 7. Historical Magnets Scanner (HTF — 1w / 1d)
     const livePrice = candles5m[candles5m.length - 1].c;
 
+    // Previous Week High / Low (exclude current open week)
+    const prevWeeklyCandle = candles1w.length > 1 ? candles1w[candles1w.length - 2] : null;
+    const pwh = prevWeeklyCandle ? prevWeeklyCandle.h : null;
+    const pwl = prevWeeklyCandle ? prevWeeklyCandle.l : null;
+
+    // Previous Month High / Low (exclude current open month)
+    const prevMonthlyCandle = candles1M.length > 1 ? candles1M[candles1M.length - 2] : null;
+    const pmh = prevMonthlyCandle ? prevMonthlyCandle.h : null;
+    const pml = prevMonthlyCandle ? prevMonthlyCandle.l : null;
+
     // 7a. Weekly High / Low — last 4 completed weekly candles (exclude current open)
     const last4Weeks = candles1w.slice(-5, -1);
     const nearest_weekly_high = last4Weeks.length > 0
@@ -330,7 +345,50 @@ export async function GET(req: Request) {
       .filter((fvg: any) => fvg.type === 'BISI' && fvg.coordinates.top < livePrice)
       .sort((a: any, b: any) => b.coordinates.top - a.coordinates.top);
 
+    const bsl_long_term = [];
+    if (pwh !== null) {
+      bsl_long_term.push({ label: 'PWH', price: pwh, distance: parseFloat(Math.abs(pwh - livePrice).toFixed(2)) });
+    }
+    if (pmh !== null) {
+      bsl_long_term.push({ label: 'PMH', price: pmh, distance: parseFloat(Math.abs(pmh - livePrice).toFixed(2)) });
+    }
+    if (sibisAbove.length > 0) {
+      const sibiPrice = sibisAbove[0].coordinates.bottom;
+      bsl_long_term.push({
+        label: 'DAILY_SIBI_ENTRY',
+        price: sibiPrice,
+        distance: parseFloat(Math.abs(sibiPrice - livePrice).toFixed(2)),
+        details: sibisAbove[0]
+      });
+    }
+
+    const ssl_long_term = [];
+    if (pwl !== null) {
+      ssl_long_term.push({ label: 'PWL', price: pwl, distance: parseFloat(Math.abs(pwl - livePrice).toFixed(2)) });
+    }
+    if (pml !== null) {
+      ssl_long_term.push({ label: 'PML', price: pml, distance: parseFloat(Math.abs(pml - livePrice).toFixed(2)) });
+    }
+    if (bisiBelow.length > 0) {
+      const bisiPrice = bisiBelow[0].coordinates.top;
+      ssl_long_term.push({
+        label: 'DAILY_BISI_ENTRY',
+        price: bisiPrice,
+        distance: parseFloat(Math.abs(bisiPrice - livePrice).toFixed(2)),
+        details: bisiBelow[0]
+      });
+    }
+
+    const macro_structural_magnets = {
+      bsl_long_term,
+      ssl_long_term
+    };
+
     const historical_magnets = {
+      pwh,
+      pwl,
+      pmh,
+      pml,
       nearest_weekly_high,
       nearest_weekly_low,
       nearest_daily_sibi: sibisAbove.length > 0 ? sibisAbove[0] : null,
@@ -399,9 +457,55 @@ export async function GET(req: Request) {
         equilibrium: number;
         current_status: string;
       };
+      distance_to_PWH: number | null;
+      distance_to_PWL: number | null;
+      distance_to_PMH: number | null;
+      distance_to_PML: number | null;
+      distance_to_nearest_daily_sibi: number | null;
+      distance_to_nearest_daily_bisi: number | null;
+      nearest_htf_magnet: {
+        label: string;
+        distance: number;
+      } | null;
     };
 
     const currentLivePrice = candles5m[candles5m.length - 1].c;
+
+    const distance_to_PWH = pwh !== null ? parseFloat(Math.abs(pwh - currentLivePrice).toFixed(2)) : null;
+    const distance_to_PWL = pwl !== null ? parseFloat(Math.abs(pwl - currentLivePrice).toFixed(2)) : null;
+    const distance_to_PMH = pmh !== null ? parseFloat(Math.abs(pmh - currentLivePrice).toFixed(2)) : null;
+    const distance_to_PML = pml !== null ? parseFloat(Math.abs(pml - currentLivePrice).toFixed(2)) : null;
+
+    const nearestSibiPrice = sibisAbove.length > 0 ? sibisAbove[0].coordinates.bottom : null;
+    const nearestBisiPrice = bisiBelow.length > 0 ? bisiBelow[0].coordinates.top : null;
+    const distance_to_nearest_daily_sibi = nearestSibiPrice !== null ? parseFloat(Math.abs(nearestSibiPrice - currentLivePrice).toFixed(2)) : null;
+    const distance_to_nearest_daily_bisi = nearestBisiPrice !== null ? parseFloat(Math.abs(nearestBisiPrice - currentLivePrice).toFixed(2)) : null;
+
+    const allHtfDistances = [
+      { label: 'PWH', val: distance_to_PWH },
+      { label: 'PWL', val: distance_to_PWL },
+      { label: 'PMH', val: distance_to_PMH },
+      { label: 'PML', val: distance_to_PML },
+      { label: 'DAILY_SIBI', val: distance_to_nearest_daily_sibi },
+      { label: 'DAILY_BISI', val: distance_to_nearest_daily_bisi }
+    ].filter(d => d.val !== null);
+
+    const nearestHtfMagnet = allHtfDistances.length > 0
+      ? allHtfDistances.reduce((min, cur) => (cur.val! < min.val! ? cur : min), allHtfDistances[0])
+      : null;
+
+    const pricing_context_addon = {
+      distance_to_PWH,
+      distance_to_PWL,
+      distance_to_PMH,
+      distance_to_PML,
+      distance_to_nearest_daily_sibi,
+      distance_to_nearest_daily_bisi,
+      nearest_htf_magnet: nearestHtfMagnet ? {
+        label: nearestHtfMagnet.label,
+        distance: nearestHtfMagnet.val
+      } : null
+    };
 
     // ── Server-Side "Lazy Exit" Logic (Phase 3) ─────────────────────────────
     try {
@@ -519,6 +623,7 @@ export async function GET(req: Request) {
           equilibrium,
           current_status: currentLivePrice > equilibrium ? "PREMIUM" : "DISCOUNT",
         },
+        ...pricing_context_addon
       };
     } else {
       // Edge-case: exactly 07:00 and no range has formed yet — seed from the 07:00 candle itself
@@ -542,6 +647,7 @@ export async function GET(req: Request) {
             equilibrium: seedEquil,
             current_status: currentLivePrice > seedEquil ? "PREMIUM" : "DISCOUNT",
           },
+          ...pricing_context_addon
         };
       } else {
         // Pre-open: no 07:00 candle exists yet
@@ -553,6 +659,7 @@ export async function GET(req: Request) {
             equilibrium: currentLivePrice,
             current_status: "FAIR_VALUE",
           },
+          ...pricing_context_addon
         };
       }
     }
@@ -612,6 +719,7 @@ export async function GET(req: Request) {
         london_range: londonLiquidity
       },
       historical_magnets,
+      macro_structural_magnets,
       projected_targets,
       smt_traps,
       pricing_context,

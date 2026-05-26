@@ -23,17 +23,40 @@ export interface OrderFlowEngine {
 
 export async function fetchRestingLiquidity(symbol: string = 'ETHUSDC'): Promise<RestingLiquidityPools> {
   try {
-    const response = await fetch(`https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}&limit=1000`, { signal: AbortSignal.timeout(5000) });
-    if (!response.ok) throw new Error(`Failed to fetch depth data for ${symbol}`);
-    const data = await response.json();
+    const [depthRes, tickerRes] = await Promise.all([
+      fetch(`https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}&limit=1000`, { signal: AbortSignal.timeout(5000) }),
+      fetch(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${symbol}`, { signal: AbortSignal.timeout(5000) })
+    ]);
 
-    const bids = data.bids || [];
-    const asks = data.asks || [];
+    if (!depthRes.ok) throw new Error(`Failed to fetch depth data for ${symbol}`);
+    if (!tickerRes.ok) throw new Error(`Failed to fetch ticker price for ${symbol}`);
 
-    const sortedBids = [...bids].sort((a, b) => parseFloat(b[1]) - parseFloat(a[1]));
+    const [depthData, tickerData] = await Promise.all([
+      depthRes.json(),
+      tickerRes.json()
+    ]);
+
+    const livePrice = parseFloat(tickerData.price);
+    if (isNaN(livePrice)) throw new Error(`Invalid live price fetched: ${tickerData.price}`);
+
+    const bids = depthData.bids || [];
+    const asks = depthData.asks || [];
+
+    // Filter nodes that are at least 0.5% away from current price
+    const filteredBids = bids.filter((bid: any) => {
+      const price = parseFloat(bid[0]);
+      return (livePrice - price) / livePrice >= 0.005;
+    });
+
+    const filteredAsks = asks.filter((ask: any) => {
+      const price = parseFloat(ask[0]);
+      return (price - livePrice) / livePrice >= 0.005;
+    });
+
+    const sortedBids = [...filteredBids].sort((a, b) => parseFloat(b[1]) - parseFloat(a[1]));
     const topBids = sortedBids.slice(0, 3).map(bid => parseFloat(bid[0]));
 
-    const sortedAsks = [...asks].sort((a, b) => parseFloat(b[1]) - parseFloat(a[1]));
+    const sortedAsks = [...filteredAsks].sort((a, b) => parseFloat(b[1]) - parseFloat(a[1]));
     const topAsks = sortedAsks.slice(0, 3).map(ask => parseFloat(ask[0]));
 
     return {
