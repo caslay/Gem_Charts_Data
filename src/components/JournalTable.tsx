@@ -594,6 +594,18 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
     }
   }, []);
 
+  // Listen to server-side scan triggers to automatically update local journal state
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleRefresh = () => {
+      refreshTrades();
+    };
+    window.addEventListener('trades-refresh', handleRefresh);
+    return () => {
+      window.removeEventListener('trades-refresh', handleRefresh);
+    };
+  }, [refreshTrades]);
+
   // ── 2. PATCH: Toggle position status (Pause / Stop / Reactivate) ────────
   const handleToggleStatus = useCallback(async (trade: TradeRecord) => {
     const nextStatus = trade.status === "PAUSED" ? "OPEN" : "PAUSED";

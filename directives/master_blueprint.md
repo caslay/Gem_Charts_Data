@@ -1,10 +1,99 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.4
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.8
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-26  
-> **Last Updated:** 2026-05-26 (V10.4 Smart Strategy Guardrails & Directional Locks Complete)  
+> **Last Updated:** 2026-05-26 (V10.8 Chart Layer Orchestrator & Persistent HUD Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
-> **Source Files Analyzed:** 52+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+> **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.8 Changelog — Chart Layer Orchestrator & Persistent HUD (Completed)
+
+### 1. Persistent Chart Layer Zustand Store
+- **Store Persistent State:** Implemented a persistent Zustand store `src/lib/chartLayers/store.ts` to manage the enabled/disabled visibility states of all visual chart indicator layers.
+- **LocalStorage Syncing:** visibility configurations are saved automatically to browser `localStorage` and persist safely across user session transitions and browser page refreshes.
+
+### 2. Extensible Chart Layer Registry
+- **Central Indicator Registry:** Designed a central registry class `src/lib/chartLayers/registry.ts` following a highly scalable plugin-based architecture, allowing any developer to register new visual indicator layers by adding them to the registration constructor.
+- **Render Context Binding:** Bound drawing and cleanup loops dynamically to the `RenderContext` interface (`src/lib/chartLayers/types.ts`), providing each plugin access to the chart, candlestick series, volumetric markers plugin, active klines context, and private instance maps (`storage`) to prevent memory leaks.
+
+### 3. Indicator Layer Plugins
+- **Modularized Indicator Logic:** Extracted calculations and drawings into isolated, clean visual layer plugins:
+  - **FVG Layer** (`fvgLayer`): Computes pixel bounds and returns glassmorphic absolute-positioned HTML overlays for active unmitigated Fair Value Gaps.
+  - **Magnets Layer** (`magnetsLayer`): Iterates order book liquidity resting pools and draws dashed horizontal price lines for BSL and SSL magnets.
+  - **Sessions Layer** (`sessionsLayer`): Visualizes Asian Range, London Range, and True Day Open (Cairo 07:00 / UTC 04:00) price boundary lines.
+  - **Displacement Layer** (`displacementLayer`): Draws volumetric markers representing Institutional Sponsorship, SMT sweeps, and Market Structure Shifts (MSS).
+
+### 4. Floating Glass HUD Control Panel
+- **Floating Glass Capsule:** Implemented `src/components/ChartLayerHud.tsx` as a floating, glassmorphic capsule overlay positioned cleanly at the top-right of the chart column (`bg-[#0e0e0f]/85 border-[#4a4457]/30`).
+- **Collapsible Toggle HUD:** Minimizes into a single pill that expands dynamically to present responsive, high-contrast, interactive button switches representing standard visual indicators, updating Zustand states instantly.
+
+### 5. Standardized JSON Export Filenames
+- **System Timestamp Appending:** Upgraded the `triggerDownload` helper in `src/hooks/useMarketData.ts` to dynamically retrieve the active system time formatted as `_YYYYMMDD_HHMM` (e.g. `_20260526_1825`) and append it to all exported V6 Naked and V8.2 Enriched JSON files prior to downloading.
+
+---
+
+## 🆕 V10.7 Changelog — Timezone Standardization & Trade Guardrails Hardening (Completed)
+
+### 1. Timezone Normalization to UTC-0
+- **Removed Cairo Manual Offsets:** Deleted the manual cairo date shifting utility `getCairoDate` and its hardcoded offset shift of `+3 hours` from `src/app/api/market-data/route.ts`.
+- **UTC-0 Logic Standardization:** Shifted all logic-layer quantitative computations to UTC-0.
+- **Intraday Range Boundaries:** Mapped the local Cairo day's start (07:00 Cairo) to **04:00 UTC** and refactored the intraday range filter and the anchor seed candle selection to check for UTC hours >= 4 relative to current UTC dates, ensuring zero calculation drift.
+- **Logic-Display Separation:** Confirmed `Chart.tsx` confines Cairo time shifts strictly to display layers (`Africa/Cairo` localized tooltips and X-axis ticks) while utilizing standard UTC-0 seconds epoch timestamps for data and crossovers under the hood.
+
+### 2. Backend Directional Lock Hardening
+- **POST Trade Global Lock:** Reinforced the active trade checker block in `src/app/api/trades/route.ts` to return `403 Forbidden` with the exact message: `"GLOBAL_LOCK: An active trade is already in progress. Close it before initiating new setups."` if any open position exists in `paper_trades`.
+- **Fail-Closed Execution:** Updated the catch block for pre-flight lock verification database query exceptions to return `500 Internal Server Error` instead of letting trade creation silently continue, avoiding accidental lock bypasses.
+
+### 3. Server-Side Auto-Closer Resilience Updates
+- **Self-Healing Seeding:** Integrated a dynamic self-healing account creator inside the auto-closer loop in `src/app/api/market-data/route.ts`. If no database record exists for the user session, seeds their starting account dynamically with `$10,000` capital before performing realized P&L calculations and balance updates.
+
+### 4. Client-Side Silent Error Handling
+- **403 Veto Silence:** Updated the response handler inside `src/hooks/useStrategyEvaluator.ts` to log `Execution vetoed by Global Lock` to the console and short-circuit the handler, suppressing user-facing Toast alerts for expected guard vetoes.
+
+---
+
+## 🆕 V10.6 Changelog — HTF Liquidity Enrichment & Daily Bias Stabilization (Completed)
+
+### 1. HTF Structural Magnet Extraction (V10.6)
+- **Macro Magnet Payload:** Injected a new object `macro_structural_magnets: { bsl_long_term: [], ssl_long_term: [] }` in the `/api/market-data` GET route inside `ipda_metrics`.
+- **Temporal Klines Fetch:** Integrated parallel monthly `1M` kline fetches from Binance Futures alongside daily and weekly klines.
+- **Structural Levels Extraction:**
+  - Extracts **Previous Week High / Low (PWH / PWL)** from weekly candles.
+  - Extracts **Previous Month High / Low (PMH / PML)** from monthly candles.
+  - Extracts the absolute nearest unmitigated Daily **BISI** (above price) and Daily **SIBI** (below price) imbalances.
+
+### 2. Order Book Noise Filtering
+- **Micro-Liquidity Suppression:** Refactored `fetchRestingLiquidity` in `src/lib/orderFlowEngine.ts` to query mark price in parallel with the depth data.
+- **Distance Suppression Gate:** Filters out all micro-liquidity depth orders that are closer than **0.5%** to the live price, preventing the stateful AI analyst from generating "Micro-Bias" from tick-noise in the order book.
+
+### 3. Pricing Context Distances
+- **USD Distance Metrics:** Appended precise USD price distances to all HTF targets (`distance_to_PWH`, `distance_to_PWL`, `distance_to_PMH`, `distance_to_PML`, `distance_to_nearest_daily_sibi`, and `distance_to_nearest_daily_bisi`) under the `/api/market-data` `pricing_context` block.
+- **HTF Magnet Finder:** Injected `nearest_htf_magnet` as a quick-lookup object exposing the absolute closest macro magnet label and its exact distance in USD.
+
+### 4. Bias-Only Quant Prompt Rule & Neon Vault Sync
+- **Bias-Only Quant Protocol:** Refactored the system prompt in `src/lib/aiSystemPrompt.ts` to strictly enforce the **Institutional HTF Bias Anchor** role, focusing exclusively on Higher Timeframe Draw on Liquidity (DOL) from `macro_structural_magnets` and `true_day_open_0700` boundaries while completely discarding outdated stateful memory logic.
+- **Database Vault Synchronization:** Successfully executed `scratch/update_db_prompt.js` via Node, updating the `SYSTEM_PROMPT` key in the database `system_settings` table, synchronizing the live stateful AI engine with the new protocol.
+
+---
+
+## 🆕 V10.5 Changelog — Backend Directional Guard & Server-Side "Lazy Exit" Logic (Completed)
+
+### 1. Backend Directional Guard (V10.5)
+- **POST Trade Guard Gate:** Injected a strict server-level directional lock guard inside `src/app/api/trades/route.ts` (POST handler).
+- **Absolute Veto Activation:** Before creating any paper trade, queries the database to check if there are ANY entries with `status = 'OPEN'`. If a record exists, halts execution and rejects the new trade immediately with a `403 Forbidden` status and payload `{ error: "GLOBAL_LOCK: An active trade is already in progress. Close it before initiating new setups." }`. This prevents competing trades and mitigates overlapping LONG/SHORT trade conflicts at the server level.
+
+### 2. Server-Side "Lazy Exit" Loop
+- **Market Data Sweep:** Injected high-performance background execution monitoring inside `src/app/api/market-data/route.ts` (GET handler).
+- **Automated Exit Detection:** Every time live market data is scanned, queries the database for all currently `OPEN` positions.
+- **SL/TP Touch Evaluation:** Automatically compares live prices against the trade's Stop Loss (SL) and Take Profit (TP) parameters. If breached (Price <= SL or Price >= TP for LONG; Price >= SL or Price <= TP for SHORT), auto-closes the trade (`status = 'CLOSED'`), sets `exit_price` exactly to the breached level, computes realized P&L and ROI percentage moves, and commits the update to the database on the server.
+- **Deterministic Balance Recalculation:** Re-runs the global balance recalculation formula (`initial_capital + SUM(realized_pnl)`) to immediately update the user's persistent capital account balance, completely eliminating ghost profits.
+
+### 3. Decoupled Frontend Sync Event Bus & 403 Silence
+- **Trades Refresh Event Dispatch:** Updated `useMarketData.ts` to dispatch a `'trades-refresh'` custom event to the global window context upon each successful market-data scan.
+- **Instant Client Re-hydration:** Subscribed `JournalTable.tsx` and `useStrategyEvaluator.ts` to the `'trades-refresh'` window event. Upon receiving the signal, they trigger immediate, asynchronous re-fetching of trade lists and account capital stats, synchronizing the entire user interface and execution block in real-time.
+- **Silent 403 Veto Suppression:** Configured `useStrategyEvaluator.ts` to intercept `403 Forbidden` responses from the `/api/trades` POST handler. Instead of launching a visual overlay alert or audio risk warning, it cleanly logs the absolute veto to the console, ensuring a pristine terminal HUD without generic error alarms.
+
+---
 
 ## 🆕 V10.4 Changelog — Smart Strategy Guardrails & Directional Lock Gates (Completed)
 

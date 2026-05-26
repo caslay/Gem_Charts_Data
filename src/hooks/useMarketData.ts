@@ -383,6 +383,11 @@ export function useMarketData(selectedInterval: string = '5m') {
           data_payload: isPolling ? prev.data_payload : jsonData.data_payload
         };
       });
+
+      // Unified event sync: Trigger a refresh of the trades state across the UI on server-side closes
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('trades-refresh'));
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -448,11 +453,7 @@ export function useMarketData(selectedInterval: string = '5m') {
       hours = hours % 12;
       hours = hours ? hours : 12; // تحويل الصفر لـ 12
 
-      const hoursStr = hours < 10 ? '0' + hours : hours.toString();
-      const minutesStr = minutes < 10 ? '0' + minutes : minutes.toString();
-      const timeString = `${hoursStr}-${minutesStr}-${ampm}`;
-
-      triggerDownload(v7Data, `V8.2_Enriched_Data_${data.ticker}_${timeString}.json`);
+      triggerDownload(v7Data, `V8.2_Enriched_Data_${data.ticker}.json`);
     },
     [data]
   );
@@ -545,8 +546,23 @@ export function useMarketData(selectedInterval: string = '5m') {
   };
 }
 
+function getFormattedTimestamp(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${year}${month}${day}_${hours}${minutes}`;
+}
+
 // ── Shared file-download helper ───────────────────────────────────────────────
-function triggerDownload(payload: unknown, filename: string) {
+function triggerDownload(payload: unknown, baseFilename: string) {
+  const ts = getFormattedTimestamp();
+  const dotIndex = baseFilename.lastIndexOf('.');
+  const baseWithoutExt = dotIndex !== -1 ? baseFilename.substring(0, dotIndex) : baseFilename;
+  const filename = `${baseWithoutExt}_${ts}.json`;
+
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
