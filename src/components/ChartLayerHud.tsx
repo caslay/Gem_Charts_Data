@@ -43,21 +43,70 @@ export default function ChartLayerHud() {
               const isVisible = visibility[layer.id] !== false;
               // Dynamically resolve icon from Lucide
               const IconComponent = (Icons as any)[layer.icon] || Icons.HelpCircle;
+              const isStructure = layer.id === 'structure';
               
               return (
-                <button
-                  key={layer.id}
-                  onClick={() => toggleVisibility(layer.id)}
-                  className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-mono font-bold tracking-wider transition-all duration-200 cursor-pointer ${
-                    isVisible 
-                      ? 'bg-[#a855f7]/15 border border-[#a855f7]/40 text-[#d1bcff] shadow-[0_0_8px_rgba(168,85,247,0.15)]' 
-                      : 'bg-white/5 border border-white/10 text-white/40 hover:bg-white/10 hover:text-white/60'
-                  }`}
-                  title={`${layer.name}: ${layer.description}`}
-                >
-                  <IconComponent size={10} />
-                  <span>{layer.name.split(' ')[0].toUpperCase()}</span>
-                </button>
+                <div key={layer.id} className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => toggleVisibility(layer.id)}
+                    className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-mono font-bold tracking-wider transition-all duration-200 cursor-pointer ${
+                      isVisible 
+                        ? 'bg-[#a855f7]/15 border border-[#a855f7]/40 text-[#d1bcff] shadow-[0_0_8px_rgba(168,85,247,0.15)]' 
+                        : 'bg-white/5 border border-white/10 text-white/40 hover:bg-white/10 hover:text-white/60'
+                    }`}
+                    title={`${layer.name}: ${layer.description}`}
+                  >
+                    <IconComponent size={10} />
+                    <span>{layer.name.split(' ')[0].toUpperCase()}</span>
+                  </button>
+
+                  {isStructure && isVisible && (
+                    <div className="flex items-center gap-1 px-1 py-0.5 rounded bg-white/5 border border-white/10 animate-[fadeIn_0.15s_ease-out]">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleVisibility('structure_major');
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold transition-all cursor-pointer ${
+                          visibility.structure_major !== false
+                            ? 'bg-[#50ffaf]/20 border border-[#50ffaf]/40 text-[#50ffaf] shadow-[0_0_6px_rgba(80,255,175,0.15)]'
+                            : 'text-white/30 hover:text-white/60 bg-transparent border border-transparent'
+                        }`}
+                        title="Toggle Major Swings (5-Bar Fractals)"
+                      >
+                        MAJ
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleVisibility('structure_inner');
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold transition-all cursor-pointer ${
+                          visibility.structure_inner !== false
+                            ? 'bg-[#a855f7]/20 border border-[#a855f7]/40 text-[#d1bcff] shadow-[0_0_6px_rgba(168,85,247,0.15)]'
+                            : 'text-white/30 hover:text-white/60 bg-transparent border border-transparent'
+                        }`}
+                        title="Toggle Inner Swings (3-Bar Fractals)"
+                      >
+                        INN
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleVisibility('structure_zigzag');
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold transition-all cursor-pointer ${
+                          visibility.structure_zigzag !== false
+                            ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.15)]'
+                            : 'text-white/30 hover:text-white/60 bg-transparent border border-transparent'
+                        }`}
+                        title="Toggle Zig-Zag Paths"
+                      >
+                        ZIG
+                      </button>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </div>

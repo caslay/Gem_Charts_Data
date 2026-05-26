@@ -23,6 +23,14 @@
 ### 4. Timezone-Gated True Day Open Anchor
 - **Date-Gated Day Open Search:** Modified the `trueDayOpen0700` lookup in `buildEnrichedPayload` to evaluate candles matching specifically the active `selectedDate`, preventing replay timezone leaks from accessing previous days' opens before 07:00 Cairo has occurred.
 
+### 5. Market Structure Visualizer Layer (V10.12)
+- **Plugin Architecture (`structureLayer.ts`):** Created a new chart layer plugin in `src/lib/chartLayers/plugins/structureLayer.ts` to perform high-fidelity visual audits of swing points and dealing ranges.
+- **Strict Color-Locked Fractals:** Implements dynamic client-side 3-Bar (Inner) and 5-Bar (Major) peak and trough detection on the active candle series. It enforces the "Strict Directional Lock" (Peak RED preceded by GREEN, Trough GREEN preceded by RED) to eliminate false outside-bar triggers.
+- **Alternating Zig-Zag Path Constructor:** Chronologically sorts and filters detected pivots to guarantee a strictly alternating high-to-low and low-to-high swing path.
+- **BOS / MSS Solid Line Classification:** Classifies path segments by comparing swing values against previous pivots and local dealing ranges. True structural expansions (BOS/MSS) are highlighted as bright solid lines (Neon Green/Electric Purple) labeled with elegant midline horizontal text tags, while pullbacks render as dashed retracement lines.
+- **SVG Canvas Overlay Rendering:** Utilizes pixel coordinate transformations (`timeToCoordinate`, `priceToCoordinate`) to render hollow circles (Major Swings), small diamonds (Inner Swings), lines, and text labels on a hardware-accelerated absolute SVG overlay.
+- **Zustand & HUD Sub-Toggles Integration:** Expanded Zustand `useLayerStore` and updated the collapsing glass capsule `ChartLayerHud` component to support independent toggles for "Major Swings", "Inner Swings", and "Zig-Zag Paths" dynamically next to the main indicator toggle.
+
 ## 🆕 V10.11 Changelog — Database Fault-Tolerance & In-Memory Fallback (Completed)
 
 ### 1. Connection-Unreachable Self-Healing Fallback
