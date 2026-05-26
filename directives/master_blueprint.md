@@ -1,10 +1,27 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.11
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.12
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-26  
-> **Last Updated:** 2026-05-26 (V10.11 Database Fault-Tolerance & In-Memory Fallback Complete)  
+> **Last Updated:** 2026-05-26 (V10.12 Backtest Replay Mathematical Parity Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.12 Changelog — Backtest Replay Mathematical Parity (Completed)
+
+### 1. Taker Volume Historical Ingestion
+- **Taker Volume Parsing:** Upgraded `parseBinanceKlines` and the `BtCandle` interface in the backtest engine (`useBacktestEngine.ts`) to extract index `9` (Taker buy base asset volume) from the Binance REST payload. 
+- **Taker Sell Volume Computation:** Dynamically computes `taker_sell_vol = total_volume - taker_buy_vol` for each historical candle slice.
+
+### 2. Client-Side Offline Displacement & Sponsorship
+- **Volumetric Sponsorship calculations:** Integrated client-side `verifyDisplacementOffline` inside `buildEnrichedPayload`, enabling real-time, historical taker volume evaluations.
+- **Dynamic OI Trend Simulation:** Links the Open Interest trend context dynamically to displacement, returning `RISING` when sponsorship is active and `FLAT` otherwise, completely eliminating standard strategy check vetos during replays.
+
+### 3. Sizing, Risk Mode & Hard Invalidation Synthesis
+- **Dynamic Risk Sizing:** Integrates `generateTradeExecutionParameters` directly inside the client-side replay builder, synthesizing `trade_execution_parameters` and `hard_invalidation_levels` (BSL/SSL margins) dynamically on each replayed index step.
+- **Parity Execution Gating:** Injects all necessary quantitative trade metadata into the `ipda_metrics` block of `enrichedPayload`. This ensures `/api/backtest-trades` POST transactions receive perfect mathematical coordinates to validate Risk-Reward constraints (RR >= 2.0) and successfully persist execution parameters to the backtest ledger.
+
+### 4. Timezone-Gated True Day Open Anchor
+- **Date-Gated Day Open Search:** Modified the `trueDayOpen0700` lookup in `buildEnrichedPayload` to evaluate candles matching specifically the active `selectedDate`, preventing replay timezone leaks from accessing previous days' opens before 07:00 Cairo has occurred.
 
 ## 🆕 V10.11 Changelog — Database Fault-Tolerance & In-Memory Fallback (Completed)
 
