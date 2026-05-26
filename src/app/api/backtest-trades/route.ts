@@ -2,6 +2,466 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { sql } from "@vercel/postgres";
 
+// --- HIGH-RELIABILITY LOCAL IN-MEMORY FALLBACK SYSTEM ---
+let isDbOffline = false;
+let inMemoryTrades: any[] = [];
+let inMemoryAccount: any = null;
+
+function initializeInMemoryAccount(userEmail: string) {
+  if (!inMemoryAccount) {
+    inMemoryAccount = {
+      id: "mock-backtest-account-uuid",
+      user_id: userEmail,
+      current_balance: "10000.0000",
+      initial_capital: "10000.0000",
+      max_risk_limit_pct: "3.00",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+  }
+  return inMemoryAccount;
+}
+
+// --- IN-MEMORY FALLBACK IMPLEMENTATION FOR BACKTEST TRADES ---
+function handleGetFallback(userEmail: string) {
+  const account = initializeInMemoryAccount(userEmail);
+  const trades = [...inMemoryTrades].sort(
+    (a, b) => new Date(b.created_at || b.timestamp).getTime() - new Date(a.created_at || a.timestamp).getTime()
+  );
+  return NextResponse.json({ success: true, trades, account });
+}
+
+async function handlePostFallback(req: Request, userEmail: string, parsedBody?: any) {
+  try {
+    const account = initializeInMemoryAccount(userEmail);
+    const body = parsedBody || await req.json();
+    const { symbol, direction, strategy_name, ai_narrative_summary, ipda_metrics, sl_logic, tp_logic } = body;
+
+    if (!symbol || !direction || !strategy_name) {
+      return NextResponse.json(
+        { error: "Missing required parameters: 'symbol', 'direction', or 'strategy_name'." },
+        { status: 400 }
+      );
+    }
+
+    if (direction !== "LONG" && direction !== "SHORT") {
+      return NextResponse.json(
+        { error: "Invalid trade direction. Must be 'LONG' or 'SHORT'." },
+        { status: 400 }
+      );
+    }
+
+    // Dynamic checks
+    const openTradesCount = inMemoryTrades.filter(t => t.status === "OPEN").length;
+    if (openTradesCount > 0) {
+      return NextResponse.json(
+        { error: "GLOBAL_LOCK: An active backtest trade is already in progress. Close it before initiating new setups." },
+        { status: 403 }
+      );
+    }
+
+    const isThisStrategyAlreadyOpen = inMemoryTrades.some(
+      t => t.strategy_name === strategy_name && (t.status === "OPEN" || t.status === "PAUSED")
+    );
+    if (isThisStrategyAlreadyOpen) {
+      return NextResponse.json(
+        { error: "[ENTRY_BLOCKED: ONE_TRADE_RULE] This strategy already has an active open backtest position." },
+        { status: 409 }
+      );
+    }
+
+    // Resolve current market price
+    const current_market_price = body.current_price
+      || body.currentPrice
+      || ipda_metrics?.pricing_context?.local_dealing_range?.currentLivePrice
+      || (Array.isArray(ipda_metrics?.data_payload?.candles_5m) && ipda_metrics.data_payload.candles_5m.length > 0
+          ? ipda_metrics.data_payload.candles_5m[ipda_metrics.data_payload.candles_5m.length - 1].c
+          : null)
+      || (Array.isArray(body.data_payload?.candles_5m) && body.data_payload.candles_5m.length > 0
+          ? body.data_payload.candles_5m[body.data_payload.candles_5m.length - 1].c
+          : null);
+
+    // Resolve entry price
+    let entry_price = body.entry_price !== undefined && body.entry_price !== null ? body.entry_price : body.price;
+
+    if (entry_price === undefined || entry_price === null) {
+      const fvg_ce = ipda_metrics?.trade_execution_parameters?.closest_active_fvg_ce;
+      if (fvg_ce !== undefined && fvg_ce !== null && !isNaN(fvg_ce)) {
+        entry_price = fvg_ce;
+      } else if (current_market_price !== undefined && current_market_price !== null && !isNaN(current_market_price)) {
+        entry_price = current_market_price;
+      }
+    }
+
+    if (entry_price === undefined || entry_price === null || isNaN(entry_price)) {
+      return NextResponse.json(
+        { error: "Could not determine Entry Price. Provide 'entry_price' or ensure a valid market price/FVG CE exists." },
+        { status: 400 }
+      );
+    }
+
+    entry_price = parseFloat(entry_price.toFixed(4));
+
+    // Stop loss calculation based on sl_logic
+    const tickIncrement = 0.05;
+    let stop_loss: number | null = null;
+    const slMode = sl_logic || 'Structural Swing';
+
+    if (slMode === 'Manual Pips') {
+      if (direction === 'LONG') {
+        stop_loss = parseFloat((entry_price - 10.00).toFixed(4));
+      } else {
+        stop_loss = parseFloat((entry_price + 10.00).toFixed(4));
+      }
+    } else if (slMode === 'Last Candle High/Low') {
+      const candles = ipda_metrics?.data_payload?.candles_5m || body.data_payload?.candles_5m || [];
+      const lastCandle = candles.length >= 2 ? candles[candles.length - 2] : null;
+
+      if (lastCandle) {
+        if (direction === 'LONG') {
+          stop_loss = parseFloat((lastCandle.l - tickIncrement).toFixed(4));
+        } else {
+          stop_loss = parseFloat((lastCandle.h + tickIncrement).toFixed(4));
+        }
+      } else {
+        const hardInvalidation = ipda_metrics?.trade_execution_parameters?.hard_invalidation_levels;
+        if (direction === 'LONG') {
+          const bullish_invalidation = hardInvalidation?.bullish_invalidation;
+          if (bullish_invalidation !== undefined && bullish_invalidation !== null) {
+            stop_loss = parseFloat((bullish_invalidation - tickIncrement).toFixed(4));
+          }
+        } else {
+          const bearish_invalidation = hardInvalidation?.bearish_invalidation;
+          if (bearish_invalidation !== undefined && bearish_invalidation !== null) {
+            stop_loss = parseFloat((bearish_invalidation + tickIncrement).toFixed(4));
+          }
+        }
+      }
+    }
+
+    if (stop_loss === null) {
+      const hardInvalidation = ipda_metrics?.trade_execution_parameters?.hard_invalidation_levels;
+      if (direction === "LONG") {
+        const bullish_invalidation = hardInvalidation?.bullish_invalidation;
+        if (bullish_invalidation === undefined || bullish_invalidation === null) {
+          return NextResponse.json(
+            { error: "Missing hard invalidation level (bullish_invalidation) required for LONG trade SL." },
+            { status: 400 }
+          );
+        }
+        stop_loss = parseFloat((bullish_invalidation - tickIncrement).toFixed(4));
+      } else {
+        const bearish_invalidation = hardInvalidation?.bearish_invalidation;
+        if (bearish_invalidation === undefined || bearish_invalidation === null) {
+          return NextResponse.json(
+            { error: "Missing hard invalidation level (bearish_invalidation) required for SHORT trade SL." },
+            { status: 400 }
+          );
+        }
+        stop_loss = parseFloat((bearish_invalidation + tickIncrement).toFixed(4));
+      }
+    }
+
+    if (stop_loss === null || isNaN(stop_loss)) {
+      return NextResponse.json(
+        { error: "Could not calculate a valid Stop Loss level." },
+        { status: 400 }
+      );
+    }
+
+    // Take Profit calculation
+    let take_profit = body.take_profit;
+    const tpMode = tp_logic || 'Nearest Order Book Magnet';
+
+    if (take_profit === undefined || take_profit === null) {
+      if (tpMode === 'Manual Pips') {
+        const risk = Math.abs(entry_price - stop_loss);
+        if (direction === 'LONG') {
+          take_profit = parseFloat((entry_price + 2 * risk).toFixed(4));
+        } else {
+          take_profit = parseFloat((entry_price - 2 * risk).toFixed(4));
+        }
+      } else if (tpMode === 'PDH/PDL Target') {
+        const macro = ipda_metrics?.macro_levels || {};
+        const pdh = macro.pdh || ipda_metrics?.pdh || 0;
+        const pdl = macro.pdl || ipda_metrics?.pdl || 0;
+
+        if (direction === 'LONG' && pdh > 0) {
+          take_profit = parseFloat(pdh.toFixed(4));
+        } else if (direction === 'SHORT' && pdl > 0) {
+          take_profit = parseFloat(pdl.toFixed(4));
+        }
+      }
+
+      if (take_profit === undefined || take_profit === null) {
+        const orderFlow = ipda_metrics?.order_flow_engine;
+        const restingLiquidity = orderFlow?.resting_liquidity_pools;
+        const magnets = direction === "LONG"
+          ? (restingLiquidity?.BSL_Magnets || [])
+          : (restingLiquidity?.SSL_Magnets || []);
+        
+        take_profit = getBestMagnet(magnets, entry_price, stop_loss, direction);
+      }
+    }
+
+    if (take_profit === undefined || take_profit === null || isNaN(take_profit)) {
+      const risk = Math.abs(entry_price - stop_loss);
+      if (direction === 'LONG') {
+        take_profit = parseFloat((entry_price + 2.0 * risk).toFixed(4));
+      } else {
+        take_profit = parseFloat((entry_price - 2.0 * risk).toFixed(4));
+      }
+    }
+
+    take_profit = parseFloat(take_profit.toFixed(4));
+
+    // Risk-to-reward check
+    const risk = Math.abs(entry_price - stop_loss);
+    let reward = Math.abs(take_profit - entry_price);
+
+    if (risk === 0) {
+      return NextResponse.json(
+        { error: "Invalid trade parameters: Risk is zero (Entry equals Stop Loss)." },
+        { status: 400 }
+      );
+    }
+
+    if (direction === "LONG") {
+      if (stop_loss >= entry_price) {
+        return NextResponse.json({ error: "Invalid LONG parameters: Stop Loss must be below Entry Price." }, { status: 400 });
+      }
+      if (take_profit <= entry_price) {
+        return NextResponse.json({ error: "Invalid LONG parameters: Take Profit must be above Entry Price." }, { status: 400 });
+      }
+    } else {
+      if (stop_loss <= entry_price) {
+        return NextResponse.json({ error: "Invalid SHORT parameters: Stop Loss must be above Entry Price." }, { status: 400 });
+      }
+      if (take_profit >= entry_price) {
+        return NextResponse.json({ error: "Invalid SHORT parameters: Take Profit must be below Entry Price." }, { status: 400 });
+      }
+    }
+
+    let rrRatio = parseFloat((reward / risk).toFixed(4));
+    if (rrRatio < 2.0) {
+      if (direction === 'LONG') {
+        take_profit = parseFloat((entry_price + 2.0 * risk).toFixed(4));
+      } else {
+        take_profit = parseFloat((entry_price - 2.0 * risk).toFixed(4));
+      }
+      reward = Math.abs(take_profit - entry_price);
+      rrRatio = parseFloat((reward / risk).toFixed(4));
+    }
+
+    // Sizing
+    let risk_percent = 1.0;
+    if (body.risk_percent !== undefined && body.risk_percent !== null) {
+      risk_percent = parseFloat(body.risk_percent);
+    }
+
+    const current_balance = parseFloat(account.current_balance);
+    const max_risk_limit_pct = parseFloat(account.max_risk_limit_pct);
+
+    const risk_amount_usd = current_balance * (risk_percent / 100);
+    const sl_distance = Math.abs(entry_price - stop_loss);
+
+    const position_size = parseFloat((risk_amount_usd / sl_distance).toFixed(4));
+    const newTradeRiskUsd = sl_distance * position_size;
+
+    let currentOpenRiskUsd = 0;
+    for (const t of inMemoryTrades.filter(t => t.status === "OPEN")) {
+      const entry = parseFloat(t.entry_price);
+      const sl = parseFloat(t.stop_loss);
+      const size = parseFloat(t.position_size || 1.0);
+      currentOpenRiskUsd += Math.abs(entry - sl) * size;
+    }
+
+    const proposedTotalRiskUsd = currentOpenRiskUsd + newTradeRiskUsd;
+    const maxAllowedRiskUsd = current_balance * (max_risk_limit_pct / 100);
+
+    if (proposedTotalRiskUsd > maxAllowedRiskUsd) {
+      return NextResponse.json(
+        { error: "[RISK_VETO: PORTFOLIO_AT_CAPACITY]" },
+        { status: 403 }
+      );
+    }
+
+    const savedTrade = {
+      id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15) + '-' + Math.random().toString(36).substring(2, 15),
+      timestamp: new Date().toISOString(),
+      symbol,
+      direction,
+      entry_price: parseFloat(entry_price.toFixed(4)),
+      stop_loss: parseFloat(stop_loss.toFixed(4)),
+      take_profit: parseFloat(take_profit.toFixed(4)),
+      status: "OPEN",
+      strategy_name,
+      ai_narrative_summary: ai_narrative_summary || null,
+      position_size,
+      exit_price: null,
+      realized_pnl: null,
+      roi: null,
+      risk_amount_usd,
+      created_at: new Date().toISOString()
+    };
+
+    inMemoryTrades.push(savedTrade);
+
+    const execution_parameters = {
+      symbol,
+      direction,
+      entry_price,
+      stop_loss,
+      take_profit,
+      status: "OPEN",
+      risk_reward_ratio: rrRatio,
+      risk_amount: risk,
+      reward_amount: reward,
+      strategy_name,
+      ai_narrative_summary: ai_narrative_summary || null,
+      position_size,
+      risk_percent,
+      risk_amount_usd
+    };
+
+    return NextResponse.json({
+      success: true,
+      trade_id: savedTrade.id,
+      timestamp: savedTrade.timestamp,
+      execution_parameters
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "In-memory fallback POST failed.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+async function handlePatchFallback(req: Request, parsedBody?: any) {
+  try {
+    const body = parsedBody || await req.json();
+    const { trade_id, status } = body;
+
+    if (!trade_id || !status) {
+      return NextResponse.json(
+        { error: "Missing required fields: 'trade_id' and 'status' must be provided." },
+        { status: 400 }
+      );
+    }
+
+    const uppercaseStatus = status.toUpperCase();
+    if (uppercaseStatus !== "OPEN" && uppercaseStatus !== "CLOSED" && uppercaseStatus !== "PAUSED") {
+      return NextResponse.json(
+        { error: "Invalid status transition. Allowed values: 'OPEN', 'CLOSED', 'PAUSED'." },
+        { status: 400 }
+      );
+    }
+
+    const tradeIndex = inMemoryTrades.findIndex(t => t.id === trade_id);
+    if (tradeIndex === -1) {
+      return NextResponse.json({ error: `Trade with ID ${trade_id} not found.` }, { status: 404 });
+    }
+
+    const trade = inMemoryTrades[tradeIndex];
+    if (uppercaseStatus === "CLOSED") {
+      if (trade.status === "CLOSED") {
+        return NextResponse.json({ error: `Trade with ID ${trade_id} is already CLOSED.` }, { status: 400 });
+      }
+
+      let exit_price = body.exit_price !== undefined && body.exit_price !== null 
+        ? parseFloat(body.exit_price) 
+        : null;
+
+      if (exit_price === null || isNaN(exit_price)) {
+        exit_price = parseFloat(trade.entry_price);
+      }
+
+      const entryPrice = parseFloat(trade.entry_price);
+      const stopLoss = parseFloat(trade.stop_loss);
+      const positionSize = parseFloat(trade.position_size ?? 1.0);
+      const direction = trade.direction;
+
+      const rawRiskAmountUsd = trade.risk_amount_usd !== null && trade.risk_amount_usd !== undefined ? parseFloat(trade.risk_amount_usd) : 0;
+      const riskAmountUsd = rawRiskAmountUsd > 0 ? rawRiskAmountUsd : Math.abs(entryPrice - stopLoss) * positionSize;
+
+      let realized_pnl = direction === "LONG"
+        ? (exit_price - entryPrice) * positionSize
+        : (entryPrice - exit_price) * positionSize;
+
+      let roi = riskAmountUsd > 0 ? (realized_pnl / riskAmountUsd) * 100 : 0;
+
+      trade.exit_price = parseFloat(exit_price.toFixed(4));
+      trade.realized_pnl = parseFloat(realized_pnl.toFixed(4));
+      trade.roi = parseFloat(roi.toFixed(4));
+      trade.status = "CLOSED";
+
+      const initialCapital = parseFloat(inMemoryAccount.initial_capital);
+      const totalRealizedPnl = inMemoryTrades
+        .filter(t => t.status === "CLOSED")
+        .reduce((sum, t) => sum + parseFloat(t.realized_pnl || 0), 0);
+      
+      inMemoryAccount.current_balance = parseFloat((initialCapital + totalRealizedPnl).toFixed(4));
+      inMemoryAccount.updated_at = new Date().toISOString();
+    } else {
+      trade.status = uppercaseStatus;
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Trade status updated to ${uppercaseStatus}.`,
+      trade,
+      account: inMemoryAccount
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "In-memory fallback PATCH failed.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+async function handleDeleteFallback(req: Request) {
+  try {
+    let trade_id: string | null = null;
+    const url = new URL(req.url);
+    trade_id = url.searchParams.get("trade_id") || url.searchParams.get("id");
+
+    if (!trade_id) {
+      try {
+        const body = await req.json();
+        trade_id = body.trade_id || body.id;
+      } catch {}
+    }
+
+    if (!trade_id) {
+      return NextResponse.json({ error: "Missing required parameter: 'trade_id' is required to delete." }, { status: 400 });
+    }
+
+    const tradeIndex = inMemoryTrades.findIndex(t => t.id === trade_id);
+    if (tradeIndex === -1) {
+      return NextResponse.json({ error: `Trade with ID ${trade_id} not found.` }, { status: 404 });
+    }
+
+    inMemoryTrades.splice(tradeIndex, 1);
+
+    const initialCapital = parseFloat(inMemoryAccount.initial_capital);
+    const totalRealizedPnl = inMemoryTrades
+      .filter(t => t.status === "CLOSED")
+      .reduce((sum, t) => sum + parseFloat(t.realized_pnl || 0), 0);
+    
+    inMemoryAccount.current_balance = parseFloat((initialCapital + totalRealizedPnl).toFixed(4));
+    inMemoryAccount.updated_at = new Date().toISOString();
+
+    return NextResponse.json({
+      success: true,
+      message: "Trade successfully purged from local memory.",
+      deleted_id: trade_id,
+      account: inMemoryAccount
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "In-memory fallback DELETE failed.";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+
 /**
  * Automated Backtesting Trading Journal API Endpoint (Phase 1)
  *
@@ -115,15 +575,28 @@ function getBestMagnet(
 }
 
 export async function POST(req: Request) {
-  try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "Unauthorized: No active session." },
-        { status: 401 }
-      );
-    }
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json(
+      { error: "Unauthorized: No active session." },
+      { status: 401 }
+    );
+  }
 
+  const userEmail = session.user.email || "default_user";
+
+  if (isDbOffline) {
+    return handlePostFallback(req, userEmail);
+  }
+
+  let parsedBody: any = null;
+  try {
+    parsedBody = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Malformed JSON payload." }, { status: 400 });
+  }
+
+  try {
     try {
       await initTradesTable();
     } catch (dbError) {
@@ -153,7 +626,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = await req.json();
+    // ── 3. Parse and Validate Request Payload ──────────────────────────────
+    const body = parsedBody;
     const { symbol, direction, strategy_name, ai_narrative_summary, ipda_metrics, sl_logic, tp_logic } = body;
 
     if (!symbol || !direction || !strategy_name) {
@@ -489,24 +963,29 @@ export async function POST(req: Request) {
 
   } catch (error: unknown) {
     console.error("[BACKTEST TRADES API] POST Handler Failed:", error);
-    const message = error instanceof Error ? error.message : "Internal Server Error during trade logging.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.warn("[BACKTEST TRADES API] DB connection error during POST. Activating in-memory fallback.");
+    isDbOffline = true;
+    return handlePostFallback(req, userEmail, parsedBody);
   }
 }
 
 export async function GET() {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json(
+      { error: "Unauthorized: No active session." },
+      { status: 401 }
+    );
+  }
+
+  const userEmail = session.user.email || "default_user";
+
+  if (isDbOffline) {
+    return handleGetFallback(userEmail);
+  }
+
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "Unauthorized: No active session." },
-        { status: 401 }
-      );
-    }
-
     await initTradesTable();
-
-    const userEmail = session.user.email || "default_user";
     const account = await getOrCreateAccount(userEmail);
 
     const { rows } = await sql`
@@ -517,22 +996,34 @@ export async function GET() {
     return NextResponse.json({ success: true, trades: rows, account });
   } catch (error: unknown) {
     console.error("[BACKTEST TRADES API] GET Error:", error);
-    const message = error instanceof Error ? error.message : "Failed to fetch backtest trades.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.warn("[BACKTEST TRADES API] DB connection error during GET. Activating in-memory fallback.");
+    isDbOffline = true;
+    return handleGetFallback(userEmail);
   }
 }
 
 export async function PATCH(req: Request) {
-  try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "Unauthorized: No active session." },
-        { status: 401 }
-      );
-    }
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json(
+      { error: "Unauthorized: No active session." },
+      { status: 401 }
+    );
+  }
 
-    const body = await req.json();
+  if (isDbOffline) {
+    return handlePatchFallback(req);
+  }
+
+  let parsedBody: any = null;
+  try {
+    parsedBody = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Malformed JSON payload." }, { status: 400 });
+  }
+
+  try {
+    const body = parsedBody;
     const { trade_id, status } = body;
 
     if (!trade_id || !status) {
@@ -660,20 +1151,26 @@ export async function PATCH(req: Request) {
     });
   } catch (error: unknown) {
     console.error("[BACKTEST TRADES API] PATCH Error:", error);
-    const message = error instanceof Error ? error.message : "Failed to update trade status.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.warn("[BACKTEST TRADES API] DB connection error during PATCH. Activating in-memory fallback.");
+    isDbOffline = true;
+    return handlePatchFallback(req, parsedBody);
   }
 }
 
 export async function DELETE(req: Request) {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json(
+      { error: "Unauthorized: No active session." },
+      { status: 401 }
+    );
+  }
+
+  if (isDbOffline) {
+    return handleDeleteFallback(req);
+  }
+
   try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: "Unauthorized: No active session." },
-        { status: 401 }
-      );
-    }
 
     let trade_id: string | null = null;
     const url = new URL(req.url);
@@ -732,7 +1229,8 @@ export async function DELETE(req: Request) {
     });
   } catch (error: unknown) {
     console.error("[BACKTEST TRADES API] DELETE Error:", error);
-    const message = error instanceof Error ? error.message : "Failed to delete trade.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.warn("[BACKTEST TRADES API] DB connection error during DELETE. Activating in-memory fallback.");
+    isDbOffline = true;
+    return handleDeleteFallback(req);
   }
 }

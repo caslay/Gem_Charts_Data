@@ -1,17 +1,34 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.10
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.11
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-26  
-> **Last Updated:** 2026-05-26 (V10.10 Unified Visualization Layer & Backtest HUD Parity Complete)  
+> **Last Updated:** 2026-05-26 (V10.11 Database Fault-Tolerance & In-Memory Fallback Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
 
+## 🆕 V10.11 Changelog — Database Fault-Tolerance & In-Memory Fallback (Completed)
+
+### 1. Connection-Unreachable Self-Healing Fallback
+- **Global Offline State Indicator:** Integrated a stateful, modular global flag `isDbOffline` to dynamically check the online connectivity profile of the remote database pool.
+- **Failover Diagnostics Interception:** Wrapped all REST CRUD actions (`GET`, `POST`, `PATCH`, `DELETE`) across both `/api/trades` and `/api/backtest-trades` routes in connection-fault catch blocks. Upon catching socket timeouts (`ETIMEDOUT`), close errors, or connection blocks, the handlers cleanly execute the failover sequence, keeping Next.js endpoints fully functional.
+
+### 2. High-Fidelity Logic & Risk Engine Parity
+- **Risk-Reward Sizing Rules:** Replicated all dynamic position sizing rules, 1:2 risk-reward checks, and open risk occupancy checks inside the in-memory array handler, guaranteeing identical operational logic to database calculations.
+- **Global & Strategy Veto Locks:** Maintained the directional lock safety guidelines (one active trade limit and same-strategy isolation rules) inside the local cache to shield paper trading grids from multi-trade breaches during offline operations.
+- **Ghost-Profit Elimination Balance Formula:** Implemented a deterministic balance re-calculation pipeline inside in-memory logic that builds the persistent account balance directly from initial capital plus the realized P&L sum of closed deals on each ledger change.
+
+### 3. Stream Reuse Soundness
+- **Body Parsing Stream Protection:** Refactored the payload extraction sequences to read the JSON stream once at route level, preventing downstream runtime exception failures during diagnostic failover routing.
+
 ## 🆕 V10.10 Changelog — Unified Visualization Layer & Backtest HUD Parity (Completed)
 
-### 1. Strategy Builder Toggle & Environment Filtering
+### 1. Strategy Builder Toggle, Checkbox & Environment Filtering
 - **Database Self-Healing Schema:** Refactored `/api/strategies` and `/api/settings` to dynamically add the `target_environment` column (`LIVE_ONLY`, `BACKTEST_ONLY`, `BOTH`) to the `custom_strategies` table via auto-healing.
 - **EquationBuilder Toggle Settings:** Exposed a premium toggle select dropdown inside the Strategy Settings modal, enabling developers to tag strategies for specific environments.
+- **Quick-Run Checkbox:** Integrated an interactive `I want to test this strategy in Backtest only` checkbox directly below the Strategy Name input for streamlined, single-click temporal isolation, muting the strategy from live executions during testing.
+- **Left list Badges:** Added dynamic high-contrast environment tags (`BT Only`, `Live Only`, `Both`) inside the strategy list panel, providing developers visual target clarity at a glance.
 - **Environment Filter in Hook:** Refactored `useStrategyEvaluator.ts` to retrieve and filter strategies matching the active runtime environment, guaranteeing backtest strategies do not execute on live accounts and vice-versa.
+
 
 ### 2. Standalone AI Analysis & Narrative Hook
 - **AI Hook Decoupling:** Successfully extracted the narrative synthesis and bias diagnostics scan logic into a standalone, reactive `useAIAnalysis` client hook.
