@@ -148,6 +148,22 @@ export async function POST(req: Request) {
       );
     }
 
+    // ── 2b. Backend Directional Guard (GLOBAL_LOCK Veto) ────────────────────
+    try {
+      const openCheckRes = await sql`
+        SELECT COUNT(*) AS count FROM paper_trades WHERE status = 'OPEN'
+      `;
+      const openCount = parseInt(openCheckRes.rows[0]?.count || "0", 10);
+      if (openCount > 0) {
+        return NextResponse.json(
+          { error: "GLOBAL_LOCK: An active trade is already in progress. Close it before initiating new setups." },
+          { status: 403 }
+        );
+      }
+    } catch (guardError) {
+      console.error("[PAPER TRADES API] Directional Guard DB check failed:", guardError);
+    }
+
     // ── 3. Parse and Validate Request Payload ──────────────────────────────
     const body = await req.json();
     const { symbol, direction, strategy_name, ai_narrative_summary, ipda_metrics, sl_logic, tp_logic } = body;

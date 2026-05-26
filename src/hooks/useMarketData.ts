@@ -383,6 +383,11 @@ export function useMarketData(selectedInterval: string = '5m') {
           data_payload: isPolling ? prev.data_payload : jsonData.data_payload
         };
       });
+
+      // Unified event sync: Trigger a refresh of the trades state across the UI on server-side closes
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('trades-refresh'));
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {

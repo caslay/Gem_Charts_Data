@@ -1,10 +1,29 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.4
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.5
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-26  
-> **Last Updated:** 2026-05-26 (V10.4 Smart Strategy Guardrails & Directional Locks Complete)  
+> **Last Updated:** 2026-05-26 (V10.5 Backend Directional Guard & Server-Side "Lazy Exit" Logic Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 52+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.5 Changelog — Backend Directional Guard & Server-Side "Lazy Exit" Logic (Completed)
+
+### 1. Backend Directional Guard (V10.5)
+- **POST Trade Guard Gate:** Injected a strict server-level directional lock guard inside `src/app/api/trades/route.ts` (POST handler).
+- **Absolute Veto Activation:** Before creating any paper trade, queries the database to check if there are ANY entries with `status = 'OPEN'`. If a record exists, halts execution and rejects the new trade immediately with a `403 Forbidden` status and payload `{ error: "GLOBAL_LOCK: An active trade is already in progress. Close it before initiating new setups." }`. This prevents competing trades and mitigates overlapping LONG/SHORT trade conflicts at the server level.
+
+### 2. Server-Side "Lazy Exit" Loop
+- **Market Data Sweep:** Injected high-performance background execution monitoring inside `src/app/api/market-data/route.ts` (GET handler).
+- **Automated Exit Detection:** Every time live market data is scanned, queries the database for all currently `OPEN` positions.
+- **SL/TP Touch Evaluation:** Automatically compares live prices against the trade's Stop Loss (SL) and Take Profit (TP) parameters. If breached (Price <= SL or Price >= TP for LONG; Price >= SL or Price <= TP for SHORT), auto-closes the trade (`status = 'CLOSED'`), sets `exit_price` exactly to the breached level, computes realized P&L and ROI percentage moves, and commits the update to the database on the server.
+- **Deterministic Balance Recalculation:** Re-runs the global balance recalculation formula (`initial_capital + SUM(realized_pnl)`) to immediately update the user's persistent capital account balance, completely eliminating ghost profits.
+
+### 3. Decoupled Frontend Sync Event Bus & 403 Silence
+- **Trades Refresh Event Dispatch:** Updated `useMarketData.ts` to dispatch a `'trades-refresh'` custom event to the global window context upon each successful market-data scan.
+- **Instant Client Re-hydration:** Subscribed `JournalTable.tsx` and `useStrategyEvaluator.ts` to the `'trades-refresh'` window event. Upon receiving the signal, they trigger immediate, asynchronous re-fetching of trade lists and account capital stats, synchronizing the entire user interface and execution block in real-time.
+- **Silent 403 Veto Suppression:** Configured `useStrategyEvaluator.ts` to intercept `403 Forbidden` responses from the `/api/trades` POST handler. Instead of launching a visual overlay alert or audio risk warning, it cleanly logs the absolute veto to the console, ensuring a pristine terminal HUD without generic error alarms.
+
+---
 
 ## 🆕 V10.4 Changelog — Smart Strategy Guardrails & Directional Lock Gates (Completed)
 

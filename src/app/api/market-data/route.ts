@@ -4,6 +4,8 @@ import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
 import { verifyDisplacement } from '@/lib/displacementEngine';
 import { calculateDynamicRisk, generateTradeExecutionParameters } from '@/lib/riskEngine';
 import { getSmtContext } from '@/lib/smtEngine';
+import { auth } from '@/auth';
+import { sql } from '@vercel/postgres';
 
 export const dynamic = 'force-dynamic';
 
@@ -400,6 +402,107 @@ export async function GET(req: Request) {
     };
 
     const currentLivePrice = candles5m[candles5m.length - 1].c;
+
+    // ── Server-Side "Lazy Exit" Logic (Phase 3) ─────────────────────────────
+    try {
+      const openTradesRes = await sql`
+        SELECT * FROM paper_trades WHERE status = 'OPEN'
+      `;
+      
+      if (openTradesRes.rows.length > 0) {
+        let userEmail = "default_user";
+        try {
+          const session = await auth();
+          if (session?.user?.email) {
+            userEmail = session.user.email;
+          }
+        } catch (sessErr) {
+          console.warn("[LAZY EXIT] Auth session lookup skipped/failed:", sessErr);
+        }
+
+        for (const trade of openTradesRes.rows) {
+          const entryPrice = parseFloat(trade.entry_price);
+          const stopLoss = parseFloat(trade.stop_loss);
+          const takeProfit = parseFloat(trade.take_profit);
+          const direction = trade.direction;
+          const positionSize = parseFloat(trade.position_size ?? 1.0);
+          const rawRiskAmountUsd = trade.risk_amount_usd !== null && trade.risk_amount_usd !== undefined ? parseFloat(trade.risk_amount_usd) : 0;
+          const riskAmountUsd = rawRiskAmountUsd > 0 ? rawRiskAmountUsd : Math.abs(entryPrice - stopLoss) * positionSize;
+
+          let isBreached = false;
+          let exitPrice = entryPrice;
+
+          if (direction === "LONG") {
+            if (currentLivePrice >= takeProfit) {
+              isBreached = true;
+              exitPrice = takeProfit;
+            } else if (currentLivePrice <= stopLoss) {
+              isBreached = true;
+              exitPrice = stopLoss;
+            }
+          } else if (direction === "SHORT") {
+            if (currentLivePrice <= takeProfit) {
+              isBreached = true;
+              exitPrice = takeProfit;
+            } else if (currentLivePrice >= stopLoss) {
+              isBreached = true;
+              exitPrice = stopLoss;
+            }
+          }
+
+          if (isBreached) {
+            // Calculate Realized P&L and ROI
+            let realized_pnl = direction === "LONG"
+              ? (exitPrice - entryPrice) * positionSize
+              : (entryPrice - exitPrice) * positionSize;
+
+            let roi = riskAmountUsd > 0
+              ? (realized_pnl / riskAmountUsd) * 100
+              : 0;
+
+            exitPrice = parseFloat(exitPrice.toFixed(4));
+            realized_pnl = parseFloat(realized_pnl.toFixed(4));
+            roi = parseFloat(roi.toFixed(4));
+
+            console.log(`[LAZY EXIT] Breach detected for trade ${trade.id} (${direction}). Auto-closing at ${exitPrice}. Realized P&L: $${realized_pnl}`);
+
+            // Update trade status to CLOSED in the database
+            await sql`
+              UPDATE paper_trades
+              SET status = 'CLOSED',
+                  exit_price = ${exitPrice},
+                  realized_pnl = ${realized_pnl},
+                  roi = ${roi}
+              WHERE id = ${trade.id}
+            `;
+
+            // Recalculate account balance from scratch to prevent ghost PnL drift
+            const accountCapRes = await sql`
+              SELECT initial_capital FROM trading_account WHERE user_id = ${userEmail}
+            `;
+            if (accountCapRes.rows.length > 0) {
+              const initialCapital = parseFloat(String(accountCapRes.rows[0].initial_capital));
+              const pnlSumRes = await sql`
+                SELECT COALESCE(SUM(realized_pnl), 0) AS total_realized_pnl
+                FROM paper_trades
+                WHERE status = 'CLOSED'
+              `;
+              const totalRealizedPnl = parseFloat(String(pnlSumRes.rows[0].total_realized_pnl));
+              const newBalance = parseFloat((initialCapital + totalRealizedPnl).toFixed(4));
+
+              await sql`
+                UPDATE trading_account
+                SET current_balance = ${newBalance}, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ${userEmail}
+              `;
+              console.log(`[LAZY EXIT] Account balance updated for ${userEmail}: $${newBalance}`);
+            }
+          }
+        }
+      }
+    } catch (lazyExitError) {
+      console.error("[LAZY EXIT ERROR] Failed to execute server-side trade monitoring:", lazyExitError);
+    }
 
     if (intradayCandles.length > 0) {
       const intradayHigh = parseFloat(Math.max(...intradayCandles.map(c => c.h)).toFixed(2));

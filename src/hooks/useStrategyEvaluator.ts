@@ -336,6 +336,18 @@ export function useStrategyEvaluator() {
     return () => clearInterval(interval);
   }, [fetchStrategies, refreshActiveTradeNames]);
 
+  // Sync active trades with server-side closes triggered by background scans
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleRefresh = () => {
+      refreshActiveTradeNames();
+    };
+    window.addEventListener('trades-refresh', handleRefresh);
+    return () => {
+      window.removeEventListener('trades-refresh', handleRefresh);
+    };
+  }, [refreshActiveTradeNames]);
+
   // ── Main Evaluation Loop ────────────────────────────────────────────────
   useEffect(() => {
     if (!data || strategies.length === 0) return;
@@ -446,6 +458,13 @@ export function useStrategyEvaluator() {
         const json = await res.json();
         if (!res.ok) {
           console.warn(`[StrategyEvaluator] Trade execution declined:`, json.error || json);
+          
+          // Silently log the 403 directional guardrail lock/veto to the console without triggering generic UI warnings
+          if (res.status === 403) {
+            console.log(`[StrategyEvaluator] Trade execution vetoed:`, json.error);
+            return;
+          }
+
           if (triggerSmartAlert) {
             triggerSmartAlert(
               'RISK_OVERRIDE' as any,
