@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Flow-State Quant Engine V9.0",
   description: "Flow-State Quant Engine V9.0",
+  manifest: "/manifest.webmanifest",
   icons: {
     icon: "/icon-192.png",
     shortcut: "/icon-192.png",
