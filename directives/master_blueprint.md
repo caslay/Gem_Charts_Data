@@ -2087,5 +2087,20 @@ The `useLiveAlerts` hook **suppresses ALL non-DEAD_ZONE alerts** when the DEAD_Z
 
 ---
 
+## 13. PWA Web App Manifest Setup
+
+To enable premium, desktop and mobile installability ("Add to Home Screen" support), the system integrates a native Progressive Web Application (PWA) configuration:
+
+### 13.1 Dynamic Metadata Route Manifest
+- **Source:** [src/app/manifest.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/app/manifest.ts)
+- **Role:** Implements a dynamic manifest metadata route served by Next.js 16. It generates dynamic webmanifest schemas with matching colors (`#09090b` dark background and themes) and standalone app viewport constraints.
+- **Icons:** Configures high-quality institutional branding icons at standard sizes (`192x192` and `512x512`) served as maskable assets.
+
+### 13.2 Asset Repository
+- **`/public/icon-192.png`**: Standard low-overhead notification and launch icon.
+- **`/public/icon-512.png`**: High-fidelity app install and dashboard splash icon.
+
+---
+
 
 > **End of Master Blueprint.** This document should be treated as the canonical reference for all future modifications to the Flow-State Quant Engine. When in doubt, trace back to the source files linked throughout this document.
