@@ -14,7 +14,7 @@ interface MappedPoint {
 export const structureLayer: ChartLayer = {
   id: 'structure',
   name: 'Market Structure',
-  description: 'Swings, dealing ranges, and BOS/MSS Zig-Zag paths',
+  description: 'Swings, dealing ranges, and BOS/MSS Zig-Zag paths based on 5-Bar Fractals',
   icon: 'Activity',
   renderHtml(context) {
     const { activeCandles, chart, series, data } = context;
@@ -38,7 +38,7 @@ export const structureLayer: ChartLayer = {
     const idHigh = ldr.high || null;
     const idLow = ldr.low || null;
 
-    // 2. Multi-Bar Fractal Detection Loop with Strict Directional Color Lock
+    // 2. Pure price extreme Fractal Detection Loop (Decoupled from color lock or visual flags)
     const points: { t: number; price: number; type: 'HIGH' | 'LOW'; isMajor: boolean }[] = [];
 
     for (let i = 2; i < activeCandles.length - 2; i++) {
@@ -48,30 +48,48 @@ export const structureLayer: ChartLayer = {
       const next = activeCandles[i + 1];
       const c2Next = activeCandles[i + 2];
 
-      // A. Swing High Check (Strict directional lock: Peak RED, preceded by GREEN)
-      const is3BarHigh = curr.h > prev.h && curr.h > next.h;
-      const isHighColorLock = curr.c < curr.o && prev.c > prev.o;
-      if (is3BarHigh && isHighColorLock) {
-        const is5BarHigh = curr.h > c2Prev.h && curr.h > c2Next.h;
+      // A. Swing High Check (Pure 5-Bar Extreme vs 3-Bar Extreme, no color locks)
+      const is5BarHigh = curr.h > prev.h && curr.h > c2Prev.h && curr.h > next.h && curr.h > c2Next.h;
+      if (is5BarHigh) {
         points.push({
           t: curr.t,
           price: curr.h,
           type: 'HIGH',
-          isMajor: is5BarHigh,
+          isMajor: true,
         });
         continue;
       }
 
-      // B. Swing Low Check (Strict directional lock: Trough GREEN, preceded by RED)
-      const is3BarLow = curr.l < prev.l && curr.l < next.l;
-      const isLowColorLock = curr.c > curr.o && prev.c < prev.o;
-      if (is3BarLow && isLowColorLock) {
-        const is5BarLow = curr.l < c2Prev.l && curr.l < c2Next.l;
+      const is3BarHigh = curr.h > prev.h && curr.h > next.h;
+      if (is3BarHigh) {
+        points.push({
+          t: curr.t,
+          price: curr.h,
+          type: 'HIGH',
+          isMajor: false,
+        });
+        continue;
+      }
+
+      // B. Swing Low Check (Pure 5-Bar Extreme vs 3-Bar Extreme, no color locks)
+      const is5BarLow = curr.l < prev.l && curr.l < c2Prev.l && curr.l < next.l && curr.l < c2Next.l;
+      if (is5BarLow) {
         points.push({
           t: curr.t,
           price: curr.l,
           type: 'LOW',
-          isMajor: is5BarLow,
+          isMajor: true,
+        });
+        continue;
+      }
+
+      const is3BarLow = curr.l < prev.l && curr.l < next.l;
+      if (is3BarLow) {
+        points.push({
+          t: curr.t,
+          price: curr.l,
+          type: 'LOW',
+          isMajor: false,
         });
         continue;
       }
@@ -80,9 +98,10 @@ export const structureLayer: ChartLayer = {
     // Sort detected points by chronological time
     points.sort((a, b) => a.t - b.t);
 
-    // 3. Alternating Zig-Zag Path Constructor
+    // 3. Alternating Zig-Zag Path Constructor (Restricted STRICTLY to Major 5-Bar Swings)
+    const majorPoints = points.filter((pt) => pt.isMajor);
     const zigZagPoints: typeof points = [];
-    for (const pt of points) {
+    for (const pt of majorPoints) {
       if (zigZagPoints.length === 0) {
         zigZagPoints.push(pt);
         continue;
@@ -131,7 +150,7 @@ export const structureLayer: ChartLayer = {
         'svg',
         { className: 'w-full h-full' },
         
-        // A. Draw Zig-Zag Path Segments
+        // A. Draw Zig-Zag Path Segments (Strictly 5-Bar)
         showZigZag &&
           mappedZigZag.map((pt, idx) => {
             if (idx === 0) return null;
@@ -148,7 +167,7 @@ export const structureLayer: ChartLayer = {
                 if (B.price < prevPeakTrough.price) isMssBos = true;
               }
             } else {
-              // Boundary Sweep checks anchored to the local dealing range
+              // Boundary Sweep checks anchored to the structural local dealing range
               if (B.type === 'HIGH' && idHigh && B.price >= idHigh) isMssBos = true;
               if (B.type === 'LOW' && idLow && B.price <= idLow) isMssBos = true;
             }
@@ -208,7 +227,7 @@ export const structureLayer: ChartLayer = {
             );
           }),
 
-        // B. Plot Major Swings (Hollow Circles)
+        // B. Plot Major Swings (Hollow Circles at 5-Bar Fractals)
         showMajor &&
           mappedSwings
             .filter((s) => s.isMajor)
@@ -224,7 +243,7 @@ export const structureLayer: ChartLayer = {
               })
             ),
 
-        // C. Plot Inner Swings (Small Diamonds)
+        // C. Plot Inner Swings (Small Diamonds at 3-Bar Fractals)
         showInner &&
           mappedSwings
             .filter((s) => !s.isMajor)

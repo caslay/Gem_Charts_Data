@@ -251,21 +251,45 @@ function buildEnrichedPayload(
     target_status = uniqueSweeps.join(" | ") + " / PDH_PDL_PENDING";
   }
 
-  // ── Intraday Dealing Range (07:00 Cairo → last visible candle) ──────────
-  const intradayCandles = dayOpenIndex !== -1 ? candles_15m.slice(dayOpenIndex) : [];
+  // ── Structural Dealing Range (based strictly on 5-bar fractals) ─────────
+  const getStructuralDealingRange = (candles: BtCandle[], currentPrice: number) => {
+    let recentHigh: number | null = null;
+    let recentLow: number | null = null;
 
-  let localDealingRange: Record<string, any> = {
-    high: null, low: null, equilibrium: null, current_status: 'UNKNOWN',
-  };
-  if (intradayCandles.length > 0 && livePrice !== null) {
-    const idHigh = parseFloat(Math.max(...intradayCandles.map((c) => c.h)).toFixed(2));
-    const idLow = parseFloat(Math.min(...intradayCandles.map((c) => c.l)).toFixed(2));
-    const idEqui = parseFloat(((idHigh + idLow) / 2).toFixed(2));
-    localDealingRange = {
-      high: idHigh, low: idLow, equilibrium: idEqui,
-      current_status: livePrice > idEqui ? 'PREMIUM' : 'DISCOUNT',
+    for (let i = 2; i < candles.length - 2; i++) {
+      const c2Prev = candles[i - 2];
+      const prev = candles[i - 1];
+      const curr = candles[i];
+      const next = candles[i + 1];
+      const c2Next = candles[i + 2];
+
+      if (curr.h > prev.h && curr.h > c2Prev.h && curr.h > next.h && curr.h > c2Next.h) {
+        recentHigh = curr.h;
+      }
+      if (curr.l < prev.l && curr.l < c2Prev.l && curr.l < next.l && curr.l < c2Next.l) {
+        recentLow = curr.l;
+      }
+    }
+
+    if (recentHigh === null || recentLow === null) {
+      const highs = candles.map(c => c.h);
+      const lows = candles.map(c => c.l);
+      recentHigh = recentHigh ?? Math.max(...highs);
+      recentLow = recentLow ?? Math.min(...lows);
+    }
+
+    const equilibrium = parseFloat(((recentHigh + recentLow) / 2).toFixed(2));
+    return {
+      high: parseFloat(recentHigh.toFixed(2)),
+      low: parseFloat(recentLow.toFixed(2)),
+      equilibrium,
+      current_status: currentPrice > equilibrium ? 'PREMIUM' : 'DISCOUNT',
     };
-  }
+  };
+
+  const localDealingRange = livePrice !== null
+    ? getStructuralDealingRange(candles_15m, livePrice)
+    : { high: null, low: null, equilibrium: null, current_status: 'UNKNOWN' };
 
   // Determine current killzone from replayed candle time
   const current_time_window = liveCandle ? (() => {
