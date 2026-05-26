@@ -25,6 +25,11 @@ async function ensureTable() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `;
+  try {
+    await sql`ALTER TABLE custom_strategies ADD COLUMN IF NOT EXISTS target_environment VARCHAR(20) DEFAULT 'BOTH';`;
+  } catch (err) {
+    console.error("[STRATEGIES API] Failed to alter table custom_strategies:", err);
+  }
 }
 
 // ─── GET: Fetch all strategies for the current user ───────────────────────────
@@ -42,7 +47,7 @@ export async function GET() {
 
     const userEmail = session.user.email;
     const { rows } = await sql`
-      SELECT id, name, logic_json, is_active, created_at, updated_at
+      SELECT id, name, logic_json, is_active, target_environment, created_at, updated_at
       FROM custom_strategies
       WHERE user_id = ${userEmail}
       ORDER BY created_at DESC
@@ -54,6 +59,7 @@ export async function GET() {
       name: row.name,
       conditions: row.logic_json,
       is_active: row.is_active,
+      target_environment: row.target_environment || 'BOTH',
       created_at: row.created_at,
       updated_at: row.updated_at,
     }));
@@ -80,11 +86,12 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { id, name, conditions, is_active } = body as {
+    const { id, name, conditions, is_active, target_environment } = body as {
       id?: string;
       name: string;
       conditions: any;
       is_active?: boolean;
+      target_environment?: string;
     };
 
     const isLegacyArray = Array.isArray(conditions);
@@ -100,6 +107,7 @@ export async function POST(req: Request) {
     await ensureTable();
     const userEmail = session.user.email;
     const active = is_active !== undefined ? is_active : true;
+    const targetEnv = target_environment || 'BOTH';
 
     if (id) {
       // UPDATE existing strategy (verify ownership)
@@ -108,6 +116,7 @@ export async function POST(req: Request) {
         SET name = ${name},
             logic_json = ${JSON.stringify(conditions)},
             is_active = ${active},
+            target_environment = ${targetEnv},
             updated_at = NOW()
         WHERE id = ${id}::uuid AND user_id = ${userEmail}
       `;
@@ -123,8 +132,8 @@ export async function POST(req: Request) {
     } else {
       // CREATE new strategy
       const { rows } = await sql`
-        INSERT INTO custom_strategies (user_id, name, logic_json, is_active)
-        VALUES (${userEmail}, ${name}, ${JSON.stringify(conditions)}, ${active})
+        INSERT INTO custom_strategies (user_id, name, logic_json, is_active, target_environment)
+        VALUES (${userEmail}, ${name}, ${JSON.stringify(conditions)}, ${active}, ${targetEnv})
         RETURNING id
       `;
 

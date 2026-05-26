@@ -37,6 +37,7 @@ export interface CustomStrategy {
   name: string;
   conditions: any;
   is_active: boolean;
+  target_environment?: 'LIVE_ONLY' | 'BACKTEST_ONLY' | 'BOTH';
 }
 
 // ─── Metric Definitions ──────────────────────────────────────────────────────
@@ -120,6 +121,7 @@ export default function EquationBuilder() {
   const [editTpLogic, setEditTpLogic] = useState('Nearest Order Book Magnet');
   const [editDirection, setEditDirection] = useState<'LONG' | 'SHORT'>('LONG');
   const [editRiskPercent, setEditRiskPercent] = useState('1.0');
+  const [editTargetEnvironment, setEditTargetEnvironment] = useState<'LIVE_ONLY' | 'BACKTEST_ONLY' | 'BOTH'>('BOTH');
 
   // ── Fetch strategies from API on mount ────────────────────────────────────
   const fetchStrategies = useCallback(async () => {
@@ -157,6 +159,7 @@ export default function EquationBuilder() {
           parsedConditions.map((c: any) => ({ ...c, id: c.id || generateId() }))
         );
         setEditActive(strategy.is_active);
+        setEditTargetEnvironment(strategy.target_environment || 'BOTH');
 
         // Load strategy-level settings
         const isObj = !Array.isArray(strategy.conditions);
@@ -177,6 +180,7 @@ export default function EquationBuilder() {
     setEditTpLogic('Nearest Order Book Magnet');
     setEditDirection('LONG');
     setEditRiskPercent('1.0');
+    setEditTargetEnvironment('BOTH');
   }, [selectedId, strategies]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -195,6 +199,7 @@ export default function EquationBuilder() {
         risk_percent: 1.0,
       },
       is_active: true,
+      target_environment: 'BOTH',
     };
     setStrategies((prev) => [newStrategy, ...prev]);
     setSelectedId(newId);
@@ -222,6 +227,7 @@ export default function EquationBuilder() {
         name: editName.trim(),
         conditions: conditionsPayload,
         is_active: editActive,
+        target_environment: editTargetEnvironment,
       };
 
       const res = await fetch('/api/strategies', {
@@ -238,6 +244,7 @@ export default function EquationBuilder() {
           name: editName.trim(),
           conditions: conditionsPayload,
           is_active: editActive,
+          target_environment: editTargetEnvironment,
         };
 
         if (isNew && data.id) {
@@ -414,9 +421,26 @@ export default function EquationBuilder() {
                 >
                   {s.name}
                 </span>
-                <span className="block text-[8px] text-muted font-mono mt-0.5">
-                  {(Array.isArray(s.conditions) ? s.conditions : (s.conditions?.conditions || [])).length} condition{(Array.isArray(s.conditions) ? s.conditions : (s.conditions?.conditions || [])).length !== 1 ? 's' : ''}
-                </span>
+                <div className="flex items-center flex-wrap gap-1 mt-0.5 select-none">
+                  <span className="text-[7.5px] text-muted/80 font-mono">
+                    {(Array.isArray(s.conditions) ? s.conditions : (s.conditions?.conditions || [])).length} cond
+                  </span>
+                  {s.target_environment === 'BACKTEST_ONLY' && (
+                    <span className="text-[6.5px] font-black bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1 rounded uppercase">
+                      BT Only
+                    </span>
+                  )}
+                  {s.target_environment === 'LIVE_ONLY' && (
+                    <span className="text-[6.5px] font-black bg-purple-500/10 text-purple-500 border border-purple-500/20 px-1 rounded uppercase">
+                      Live Only
+                    </span>
+                  )}
+                  {s.target_environment === 'BOTH' && (
+                    <span className="text-[6.5px] font-black bg-blue-500/10 text-blue-500 border border-blue-500/20 px-1 rounded uppercase">
+                      Both
+                    </span>
+                  )}
+                </div>
               </div>
               {selectedId === s.id && (
                 <ChevronRight size={10} className="text-accent shrink-0" />
@@ -442,17 +466,33 @@ export default function EquationBuilder() {
         ) : (
           <div className="flex flex-col h-full">
             {/* Strategy Name */}
-            <div className="px-4 pt-3.5 pb-2.5 border-b border-card-border/50">
-              <label className="block text-[8px] text-muted uppercase font-bold tracking-widest mb-1">
-                Strategy Name
-              </label>
-              <input
-                type="text"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                className="w-full bg-background/50 border border-card-border focus:border-accent focus:outline-none px-3.5 py-2.5 text-xs font-sans text-title rounded-lg transition-all shadow-sm"
-                placeholder="e.g. OI Reversal + FVG Confirm"
-              />
+            <div className="px-4 pt-3.5 pb-2.5 border-b border-card-border/50 flex flex-col gap-2">
+              <div>
+                <label className="block text-[8px] text-muted uppercase font-bold tracking-widest mb-1">
+                  Strategy Name
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full bg-background/50 border border-card-border focus:border-accent focus:outline-none px-3.5 py-2.5 text-xs font-sans text-title rounded-lg transition-all shadow-sm"
+                  placeholder="e.g. OI Reversal + FVG Confirm"
+                />
+              </div>
+
+              {/* Quick Checkbox: Backtest Only */}
+              <div className="flex items-center gap-2 mt-0.5 select-none">
+                <input
+                  id="chk-backtest-only"
+                  type="checkbox"
+                  checked={editTargetEnvironment === 'BACKTEST_ONLY'}
+                  onChange={(e) => setEditTargetEnvironment(e.target.checked ? 'BACKTEST_ONLY' : 'BOTH')}
+                  className="w-3.5 h-3.5 rounded border-card-border bg-background/50 text-accent focus:ring-accent accent-accent cursor-pointer"
+                />
+                <label htmlFor="chk-backtest-only" className="text-[9px] font-bold text-slate-400 hover:text-foreground cursor-pointer transition-colors uppercase tracking-wider flex items-center gap-1">
+                  I want to test this strategy in Backtest only <span className="text-[7.5px] text-muted font-normal lowercase tracking-normal">(Mutes this strategy from executing on the Live HUD)</span>
+                </label>
+              </div>
             </div>
 
             {/* Conditions */}
@@ -619,6 +659,22 @@ export default function EquationBuilder() {
                 </span>
 
                 <div className="grid grid-cols-2 gap-4 glass-panel bg-card/40 border border-card-border/80 p-4.5 rounded-2xl shadow-lg">
+                   {/* Target Environment */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted">
+                      Target Environment
+                    </label>
+                    <select
+                      value={editTargetEnvironment}
+                      onChange={(e) => setEditTargetEnvironment(e.target.value as any)}
+                      className="bg-background/60 border border-card-border/80 hover:border-accent/40 focus:border-accent focus:outline-none px-3.5 py-2.5 text-xs font-sans text-foreground rounded-lg cursor-pointer w-full transition-all shadow-sm"
+                    >
+                      <option value="BOTH">BOTH (Live & Backtest)</option>
+                      <option value="LIVE_ONLY">LIVE ONLY</option>
+                      <option value="BACKTEST_ONLY">BACKTEST ONLY</option>
+                    </select>
+                  </div>
+
                   {/* Trade Direction */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted">

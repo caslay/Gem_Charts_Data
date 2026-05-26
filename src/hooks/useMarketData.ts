@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { slicePayloadByLookback } from '@/components/Sidebar';
 import { useLiveAlerts } from './useLiveAlerts';
+import { useAIAnalysis } from './useAIAnalysis';
+import { Candle } from '@/lib/fvgEngine';
+export type { Candle };
 
 export interface SignalAlerts {
   FVG_DETECTION: string;
@@ -120,14 +123,7 @@ export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   light_highlight_down: '#e11d48',
 };
 
-export interface Candle {
-  t: number;
-  o: number;
-  h: number;
-  l: number;
-  c: number;
-  v: number;
-}
+
 
 export interface MarketDataPayload {
   ticker: string;
@@ -458,67 +454,18 @@ export function useMarketData(selectedInterval: string = '5m') {
     [data]
   );
 
-  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
-  const [aiBias, setAiBias] = useState<number | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const {
+    aiAnalysis,
+    aiBias,
+    isAnalyzing,
+    triggerAiAnalysisScan: triggerScan,
+    setAiAnalysis,
+    setAiBias
+  } = useAIAnalysis();
 
   const triggerAiAnalysisScan = useCallback(async (alertMetadata?: unknown) => {
-    if (!data) return;
-    setIsAnalyzing(true);
-    setAiAnalysis(null);
-    setAiBias(null);
- 
-    // Create the pruned AI payload to prevent "Lost in the Middle" syndrome
-    const ai_payload = {
-      ...data,
-      data_payload: {
-        candles_4h: data.data_payload?.candles_4h?.slice(-30) ?? [],
-        candles_1h: data.data_payload?.candles_1h?.slice(-30) ?? [],
-        candles_15m: data.data_payload?.candles_15m?.slice(-30) ?? [],
-        candles_5m: data.data_payload?.candles_5m?.slice(-30) ?? [],
-      },
-      ...(alertMetadata ? { alert_metadata: alertMetadata } : {})
-    };
- 
-    try {
-      const response = await fetch('/api/quant-analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ai_payload)
-      });
- 
-      const result = await response.json();
-      if (response.ok) {
-        setAiAnalysis(result.analysis);
-        try {
-          // Robust extraction of bias_signal
-          let candidate = result.analysis.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)?.[1];
-          if (!candidate) {
-            const start = result.analysis.indexOf('{');
-            const end = result.analysis.lastIndexOf('}');
-            if (start !== -1 && end !== -1 && end > start) {
-              candidate = result.analysis.slice(start, end + 1);
-            } else {
-              candidate = result.analysis;
-            }
-          }
-          const parsed = JSON.parse(candidate.trim());
-          if (parsed && parsed.bias_signal !== undefined) {
-            setAiBias(Number(parsed.bias_signal));
-          }
-        } catch (e) {
-          console.error('[MarketData] Failed to parse bias_signal from AI response:', e);
-        }
-      } else {
-        setAiAnalysis(`**Error:** ${result.error || 'Synthesis failed.'}`);
-      }
-    } catch (err) {
-      console.error(err);
-      setAiAnalysis('**Error:** Connection lost during synthesis.');
-    } finally {
-      setIsAnalyzing(false);
-    }
-  }, [data]);
+    return triggerScan(data, alertMetadata);
+  }, [data, triggerScan]);
 
   return {
     data,

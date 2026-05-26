@@ -4,7 +4,7 @@ export interface Candle {
   h: number;
   l: number;
   c: number;
-  v?: number;
+  v: number;
   taker_buy_vol?: number;
   taker_sell_vol?: number;
   isClosed?: boolean;

@@ -1,10 +1,69 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.8
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.11
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-26  
-> **Last Updated:** 2026-05-26 (V10.8 Chart Layer Orchestrator & Persistent HUD Complete)  
+> **Last Updated:** 2026-05-26 (V10.11 Database Fault-Tolerance & In-Memory Fallback Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.11 Changelog — Database Fault-Tolerance & In-Memory Fallback (Completed)
+
+### 1. Connection-Unreachable Self-Healing Fallback
+- **Global Offline State Indicator:** Integrated a stateful, modular global flag `isDbOffline` to dynamically check the online connectivity profile of the remote database pool.
+- **Failover Diagnostics Interception:** Wrapped all REST CRUD actions (`GET`, `POST`, `PATCH`, `DELETE`) across both `/api/trades` and `/api/backtest-trades` routes in connection-fault catch blocks. Upon catching socket timeouts (`ETIMEDOUT`), close errors, or connection blocks, the handlers cleanly execute the failover sequence, keeping Next.js endpoints fully functional.
+
+### 2. High-Fidelity Logic & Risk Engine Parity
+- **Risk-Reward Sizing Rules:** Replicated all dynamic position sizing rules, 1:2 risk-reward checks, and open risk occupancy checks inside the in-memory array handler, guaranteeing identical operational logic to database calculations.
+- **Global & Strategy Veto Locks:** Maintained the directional lock safety guidelines (one active trade limit and same-strategy isolation rules) inside the local cache to shield paper trading grids from multi-trade breaches during offline operations.
+- **Ghost-Profit Elimination Balance Formula:** Implemented a deterministic balance re-calculation pipeline inside in-memory logic that builds the persistent account balance directly from initial capital plus the realized P&L sum of closed deals on each ledger change.
+
+### 3. Stream Reuse Soundness
+- **Body Parsing Stream Protection:** Refactored the payload extraction sequences to read the JSON stream once at route level, preventing downstream runtime exception failures during diagnostic failover routing.
+
+## 🆕 V10.10 Changelog — Unified Visualization Layer & Backtest HUD Parity (Completed)
+
+### 1. Strategy Builder Toggle, Checkbox & Environment Filtering
+- **Database Self-Healing Schema:** Refactored `/api/strategies` and `/api/settings` to dynamically add the `target_environment` column (`LIVE_ONLY`, `BACKTEST_ONLY`, `BOTH`) to the `custom_strategies` table via auto-healing.
+- **EquationBuilder Toggle Settings:** Exposed a premium toggle select dropdown inside the Strategy Settings modal, enabling developers to tag strategies for specific environments.
+- **Quick-Run Checkbox:** Integrated an interactive `I want to test this strategy in Backtest only` checkbox directly below the Strategy Name input for streamlined, single-click temporal isolation, muting the strategy from live executions during testing.
+- **Left list Badges:** Added dynamic high-contrast environment tags (`BT Only`, `Live Only`, `Both`) inside the strategy list panel, providing developers visual target clarity at a glance.
+- **Environment Filter in Hook:** Refactored `useStrategyEvaluator.ts` to retrieve and filter strategies matching the active runtime environment, guaranteeing backtest strategies do not execute on live accounts and vice-versa.
+
+
+### 2. Standalone AI Analysis & Narrative Hook
+- **AI Hook Decoupling:** Successfully extracted the narrative synthesis and bias diagnostics scan logic into a standalone, reactive `useAIAnalysis` client hook.
+- **Replayed Narrative Trigger:** Embedded this hook in the `/backtest` page alongside a new `[ 🧠 TRIGGER AI ANALYSIS ]` dashboard control, enabling users to invoke Gemini quantitative reviews directly on historical data slices.
+- **Unified Temporal Gating:** Extracted replayed `aiBias` values feed dynamically into backtest strategy evaluation, unlocking AI-driven temporal filters during backtesting.
+
+### 3. Props-over-Context Premium Chart Integration
+- **Chart Prop Fallbacks:** Refactored the core `<Chart />` component to dynamically accept `isBacktest`, `marketContextData`, `liveCandle`, and `livePrice` parameters as overrides, seamlessly falling back to context singletons.
+- **Full Indicator parity:** Replaced the local, basic `BacktestChart` component with the unified `<Chart />` component on `/backtest` page. The backtest chart now renders FVG boxes, order book magnet lines, session range boundaries, and volumetric sponsorship indicators seamlessly.
+
+### 4. Zero-Latency HUD Parity & Compact Performance Statistics
+- **Unified Top HUD Metrics:** Integrated the `<DashboardMetrics />` component at the top of the Backtest page, populating Master Bias, Range Context, and Target Status sweep metrics in perfect visual and functional parity with the Live HUD.
+- **Compact Results Ledger Card:** Relocated backtest statistics (Total realized P&L, Win Rate, maximum Drawdown) into a beautiful, compact glassmorphic row positioned right above the Journal Table, keeping them mathematically bound to the trade list.
+- **Replay Index Reactivity:** Bound all visual overlays, sweep statuses, session lines, and HUD indicators directly to the backtest `currentIndex`, updating all data pipelines in zero-latency synchronization as users step through historical data.
+
+---
+
+## 🆕 V10.9 Changelog — Unified Execution Engine (Live to Backtest Bridge) (Completed)
+
+
+### 1. Isolated Database Persistence Layer
+- **Dedicated Tables Schema:** Implemented self-healing SQL creation logic for two dedicated tables: `backtest_trades` and `backtest_trading_account`. This isolates replayed backtest runs completely from production/paper trading accounts.
+- **Risk-Reward Guardrails:** Automatically computes position sizes based on capital account dynamic rules and enforces a 1:2 risk-to-reward ratio on all executions.
+- **Global Veto Lock:** Features backend directional lock checks and one-trade-per-strategy validation rules to prevent concurrency and multi-trade leaks during high-speed replays.
+
+### 2. Extensible Hook Refactoring
+- **Configuration-based Hook Interface:** Refactored the `useStrategyEvaluator` hook to support a new `StrategyEvaluatorConfig` argument.
+- **Dynamic Pivot Source:** Dynamically switches data payloads (`data`, `livePrice`, `liveCandle`, `aiBias`) and persistence endpoints (`/api/backtest-trades` vs `/api/trades`) based on the active backtest context flag `isBacktest`.
+- **Zero-lag Replay Optimization:** Disables setInterval background polling when running in backtest mode, completely avoiding UI-blocking render delays or API loop congestion.
+
+### 3. Decoupled UI & Dynamic Statistics HUD
+- **Flexible Journal Grid Rendering:** Decoupled `JournalTable` and `ActiveTradeRow` from live-only react contexts, allowing backtest price streams and local state arrays to inject custom realized P&L calculations.
+- **Stateful Live Statistics HUD:** Replaced hardcoded backtest cards with dynamic calculations that walk over the trade array to compute real-time cumulative P&L, Win Rate, and maximum Drawdown walk.
+
+---
 
 ## 🆕 V10.8 Changelog — Chart Layer Orchestrator & Persistent HUD (Completed)
 
@@ -1254,6 +1313,7 @@ To comply with Lesson #10, the evaluator tracks `lastFiredCandleTime` (mapped vi
   `[SYSTEM: JOURNAL_LOGGED → {STRATEGY_NAME} trade successfully posted to Journal @ ${ENTRY_PRICE}]`
 - **Execution Failure Guard:** If the calculation validation fails (such as an invalid Risk-Reward setup), the system overrides the signal and prints a warning alert under the `RISK_OVERRIDE` protocol, generating a warning audio chime (`/audio/fvg_alert.mp3`):
   `[SYSTEM: TRADE_FAILED → {STRATEGY_NAME}: {REASON}]`
+- **Market Replay Separation (Backtest Page):** Backtest replay execution uses a completely isolated, local toast state manager in `src/app/backtest/page.tsx`. This intercepts `useStrategyEvaluator` alerts to render high-contrast brutalist toasts directly on the replay HUD, maintaining the strict **Zero UI Clutter** directive by ensuring backtest matches never bleed or pollute the live HUD's active alert stream.
 
 
 #### 6. Dark Brutalist Strategy Settings UI
@@ -1494,7 +1554,7 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 [1] Fetch 7 Binance endpoints (5m, 15m, 1h, 4h, 1d, 1w, OI)
      │
      ▼
-[2] Format candles → Add UTC+3 offset → Compute PDH/PDL
+[2] Format candles → Standardize to UTC-Zero → Compute PDH/PDL
      │
      ▼
 [3] Detect Asian/London session ranges
@@ -2013,15 +2073,15 @@ The `useLiveAlerts` hook **suppresses ALL non-DEAD_ZONE alerts** when the DEAD_Z
 
 | # | Category | Description | Severity |
 |---|---|---|---|
-| **LD-1** | Killzone Clock | `getCurrentKillzone()` shifts server time by +3h and reads UTC hours. On Vercel (UTC server), this correctly maps to Cairo time. Locally, if the system isn't UTC, it will produce incorrect windows. Additionally, the function has gaps: hours 7-8, 12-14, 18-19, 22+ are all `DEAD_ZONE`, which may be too aggressive. | 🟡 Medium |
-| **LD-2** | SMT Trap Detector | The SMT/Equal Highs detector in `route.ts` uses pure 3-bar price-action fractal detection (`curr.h > prev.h && curr.h > next.h`) without the **"Strict Directional Lock" color validation** mandated by `02_lessons.md` Lesson #1 and `03_quant_logic.md` Section 1. This could produce false pivots from "Outside Bars." | 🔴 High |
-| **LD-3** | Confidence Interval Naming | `confidence_interval_95` is TRUE when `p < 0.15 AND t > 1.96`. A true 95% CI requires `p < 0.05`. The name is misleading. Comment in code says "backward compatibility." | 🟡 Medium |
-| **LD-4** | Dead Zone Time Mismatch | **Python OLS:** `is_dead_zone` flags hours `{12, 13, 14}` on Cairo-offset timestamps. **Frontend alerts:** checks NY Time `{12:00, 13:00-13:30}`. **Backend Killzone:** no explicit dead zone hours listed (any non-killzone hour). These are three different dead zone definitions across three different timezones. | 🔴 High |
+| **LD-1** | Killzone Clock | **Resolved in V10.3/10.4:** Standardized the entire pipeline layer to raw UTC-0, eliminating timezone shifting. Intercepts local NY Lunch slots in `getCurrentKillzone()` to safely return `"DEAD_ZONE"`. | 🟢 Resolved |
+| **LD-2** | SMT Trap Detector | **Resolved in V10.4:** Enforced strict color validation lock on SMT fractal highs (peak candle must be RED and preceded by a GREEN candle), eliminating fake sweeps from outside bars. | 🟢 Resolved |
+| **LD-3** | Confidence Interval Naming | **Resolved in V10.4:** Retained legacy `confidence_interval_95` flag for backward compatibility, but introduced mathematically correct strict check `confidence_interval_95_strict` (using `p_value < 0.05`) across Python and Next.js layers. | 🟢 Resolved |
+| **LD-4** | Dead Zone Time Mismatch | **Resolved in V10.4:** Standardized the NY Lunch Dead Zone to 12:00 PM – 1:30 PM America/New_York (localized NY time) across all levels (Next.js getCurrentKillzone clock, useBacktestEngine replay, useLiveAlerts, and statsmodels Python OLS microservice). | 🟢 Resolved |
 | **LD-5** | 1:2 RR Rule | **Resolved in V8.2:** The `/api/trades` route now implements a strict programmatic validation gate validating that risk/reward ratio is strictly `>= 2.0` before any trade is permitted to log. Any failing payload is aborted with `400 Inefficient Algorithm`. *(Note: The AI synthesis endpoint `/api/quant-analyze` still relies on prompt adherence, but the actual execution journal acts as a bulletproof gate).* | 🟢 Resolved |
-| **LD-6** | `true_day_open` Duplication | `ipda_metrics.true_day_open` and `ipda_metrics.macro_levels.true_day_open` contain the same value. One should be removed to reduce payload size and avoid confusion. | 🟢 Low |
-| **LD-7** | Candle Interface Duplication | `Candle` is defined in both [fvgEngine.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/lib/fvgEngine.ts#L1-L11) and [useMarketData.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/hooks/useMarketData.ts#L5-L12). The hook version omits `taker_buy_vol` and `taker_sell_vol`. Should be consolidated into a single shared type. | 🟢 Low |
-| **LD-8** | No-Direction Invalidation Guard | When `parsedState.trade_direction` is null/undefined, the invalidation guard in `quant-analyze/route.ts` sets `breached = true` unconditionally ([line 98](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/app/api/quant-analyze/route.ts#L95-L99)), meaning ANY state with an `invalidation_level` but no `trade_direction` will always reset to SEARCHING. | 🟡 Medium |
-| **LD-9** | Python File Duplication | [quant_engine_api.py](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/quant_engine_api.py) (root, local dev) and [api/index.py](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/api/index.py) (Vercel deploy) contain identical logic but different route decorators. The root file has `/calculate-displacement` while `index.py` has `/api/py/calculate-displacement` + `/api/index`. Changes to one must be manually synced. | 🟡 Medium |
+| **LD-6** | `true_day_open` Duplication | **Resolved in V10.4:** Cleaned up payload and removed duplicate `true_day_open` key under `macro_levels` inside the market-data handler. | 🟢 Resolved |
+| **LD-7** | Candle Interface Duplication | **Resolved in V10.4:** Consolidated `interface Candle` into `src/lib/fvgEngine.ts` and successfully imported it in `useMarketData.ts` and `smtEngine.ts`, eliminating type duplication. | 🟢 Resolved |
+| **LD-8** | No-Direction Invalidation Guard | **Resolved in V10.4:** Corrected the invalidation guard inside `quant-analyze/route.ts` to skip breach resets (setting `breached = false`) if no directional bias is present in the state memory. | 🟢 Resolved |
+| **LD-9** | Python File Duplication | **Resolved in V10.4:** Mirror-aligned `quant_engine_api.py` and `api/index.py` logic and route decorators completely, avoiding any local dev vs production OLS calculation differences. | 🟢 Resolved |
 | **LD-10** | WebSocket vs API Time Sync | **Resolved in V10.3:** Standardized the entire logic layer to UTC-0, completely eliminating the time offset injection drift. Time offsets (Cairo Time) are decoupled and applied strictly in the UI display layer (`Chart.tsx` formatters). | 🟢 Resolved |
 | **LD-11** | Server-Side Implicit Any Gating | **Resolved in V8.2:** The `/journal` page query had an implicit `any[]` declaration for `initialTrades` that caused Vercel deployment builds to fail under strict TypeScript compiling. Resolved by explicitly importing and applying the `TradeRecord[]` interface. | 🟢 Resolved |
 

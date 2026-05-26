@@ -9,6 +9,7 @@ export interface InstitutionalSponsorship {
     p_value: number;
     confidence_level: 'HIGH' | 'MEDIUM' | 'LOW';
     confidence_interval_95: boolean | 'CONSOLIDATION'; // Must be TRUE to execute
+    confidence_interval_95_strict?: boolean | 'CONSOLIDATION';
   };
 }
  
@@ -22,7 +23,8 @@ export function verifyDisplacementOffline(recentCandles: Candle[], symbol: strin
         t_statistic: 0,
         p_value: 1,
         confidence_level: 'LOW',
-        confidence_interval_95: false
+        confidence_interval_95: false,
+        confidence_interval_95_strict: false
       }
     };
   }
@@ -79,7 +81,8 @@ export function verifyDisplacementOffline(recentCandles: Candle[], symbol: strin
       t_statistic: 0,
       p_value: 1,
       confidence_level: 'LOW',
-      confidence_interval_95: isConsolidation ? 'CONSOLIDATION' : false
+      confidence_interval_95: isConsolidation ? 'CONSOLIDATION' : false,
+      confidence_interval_95_strict: isConsolidation ? 'CONSOLIDATION' : false
     }
   };
 }

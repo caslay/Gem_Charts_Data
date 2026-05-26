@@ -271,8 +271,27 @@ export interface StrategyMatch {
   timestamp: number;
 }
 
-export function useStrategyEvaluator() {
-  const { data, liveCandle, livePrice, triggerSmartAlert, aiBias } = useMarketDataContext();
+export interface StrategyEvaluatorConfig {
+  isBacktest?: boolean;
+  data?: MarketDataPayload | null;
+  livePrice?: number | null;
+  liveCandle?: LiveCandle | null;
+  aiBias?: number | null;
+  triggerSmartAlert?: (type: any, message: string, sound?: string) => void;
+}
+
+export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
+  const context = useMarketDataContext();
+
+  // Pivot configuration values: use config first, fall back to Live HUD Context
+  const data = config?.data !== undefined ? config.data : context.data;
+  const livePrice = config?.livePrice !== undefined ? config.livePrice : context.livePrice;
+  const liveCandle = config?.liveCandle !== undefined ? config.liveCandle : context.liveCandle;
+  const aiBias = config?.aiBias !== undefined ? config.aiBias : context.aiBias;
+  const triggerSmartAlert = config?.triggerSmartAlert !== undefined ? config.triggerSmartAlert : context.triggerSmartAlert;
+
+  const isBacktest = !!config?.isBacktest;
+  const tradesApiUrl = isBacktest ? '/api/backtest-trades' : '/api/trades';
 
   const [strategies, setStrategies] = useState<CustomStrategy[]>([]);
   const [lastMatch, setLastMatch] = useState<StrategyMatch | null>(null);
@@ -292,19 +311,28 @@ export function useStrategyEvaluator() {
       const res = await fetch('/api/strategies');
       if (res.ok) {
         const json = await res.json();
-        setStrategies((json.strategies || []).filter((s: CustomStrategy) => s.is_active));
+        const activeStrats = (json.strategies || []).filter((s: CustomStrategy) => s.is_active);
+        const filtered = activeStrats.filter((s: any) => {
+          const env = s.target_environment || 'BOTH';
+          if (isBacktest) {
+            return env === 'BACKTEST_ONLY' || env === 'BOTH';
+          } else {
+            return env === 'LIVE_ONLY' || env === 'BOTH';
+          }
+        });
+        setStrategies(filtered);
       }
     } catch (err) {
       console.error('[StrategyEvaluator] Failed to fetch strategies:', err);
     }
-  }, []);
+  }, [isBacktest]);
 
   // V8.5 — One-Trade Rule: cache of strategy names that already have OPEN/PAUSED positions
   const activeTradeNamesRef = useRef<Set<string>>(new Set());
 
   const refreshActiveTradeNames = useCallback(async () => {
     try {
-      const res = await fetch('/api/trades');
+      const res = await fetch(tradesApiUrl);
       if (res.ok) {
         const json = await res.json();
         const tradesList = json.trades || [];
@@ -320,21 +348,23 @@ export function useStrategyEvaluator() {
     } catch (err) {
       console.error('[StrategyEvaluator] Failed to refresh active trade names:', err);
     }
-  }, []);
+  }, [tradesApiUrl]);
 
-  // Fetch on mount + periodically refresh every 30s
+  // Fetch on mount + periodically refresh (ONLY in live mode to prevent backtest lag/refetch loops)
   useEffect(() => {
     if (!hasFetchedRef.current) {
       fetchStrategies();
       refreshActiveTradeNames();
       hasFetchedRef.current = true;
     }
+    if (isBacktest) return;
+
     const interval = setInterval(() => {
       fetchStrategies();
       refreshActiveTradeNames();
     }, 30_000);
     return () => clearInterval(interval);
-  }, [fetchStrategies, refreshActiveTradeNames]);
+  }, [fetchStrategies, refreshActiveTradeNames, isBacktest]);
 
   // Sync active trades with server-side closes triggered by background scans
   useEffect(() => {
@@ -342,11 +372,12 @@ export function useStrategyEvaluator() {
     const handleRefresh = () => {
       refreshActiveTradeNames();
     };
-    window.addEventListener('trades-refresh', handleRefresh);
+    const eventName = isBacktest ? 'backtest-trades-refresh' : 'trades-refresh';
+    window.addEventListener(eventName, handleRefresh);
     return () => {
-      window.removeEventListener('trades-refresh', handleRefresh);
+      window.removeEventListener(eventName, handleRefresh);
     };
-  }, [refreshActiveTradeNames]);
+  }, [refreshActiveTradeNames, isBacktest]);
 
   // ── Main Evaluation Loop ────────────────────────────────────────────────
   useEffect(() => {
@@ -418,7 +449,7 @@ export function useStrategyEvaluator() {
         );
       }
 
-      // ── LINKAGE: Automatically execute a paper trade ──────────────
+      // ── LINKAGE: Automatically execute a paper/backtest trade ──────────────
       const sl_logic = settings.sl_logic || 'Structural Swing';
       const tp_logic = settings.tp_logic || 'Nearest Order Book Magnet';
       const risk_percent = settings.risk_percent ?? 1.0;
@@ -439,7 +470,7 @@ export function useStrategyEvaluator() {
       const hasPriceInFvg = conditions.some((c: any) => c.metric === 'PRICE_IN_FVG');
       const entry_price = (hasPriceInFvg && typeof livePrice === 'number' && livePrice > 0) ? livePrice : undefined;
 
-      fetch('/api/trades', {
+      fetch(tradesApiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -495,16 +526,24 @@ export function useStrategyEvaluator() {
               '/audio/flow_state.wav'
             );
           }
+
+          // Trigger a refresh event for components displaying trades
+          if (typeof window !== 'undefined') {
+            const refreshEventName = isBacktest ? 'backtest-trades-refresh' : 'trades-refresh';
+            window.dispatchEvent(new CustomEvent(refreshEventName));
+          }
         }
       }).catch((err) => {
         console.error(`[StrategyEvaluator] Trade execution connection error:`, err);
       });
     }
-  }, [data, liveCandle, livePrice, strategies, trades, triggerSmartAlert]);
+  }, [data, liveCandle, livePrice, strategies, trades, triggerSmartAlert, isBacktest, tradesApiUrl]);
 
   return {
     strategies,
     lastMatch,
     refetchStrategies: fetchStrategies,
+    trades,
+    refetchTrades: refreshActiveTradeNames
   };
 }

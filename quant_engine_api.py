@@ -53,7 +53,9 @@ class DisplacementResponse(BaseModel):
 
 
 @app.post("/calculate-displacement", response_model=DisplacementResponse)
-async def calculate_displacement(candles: List[CandleInput]):
+@app.post("/api/py/calculate-displacement", response_model=DisplacementResponse)
+@app.post("/api/index", response_model=DisplacementResponse)
+async def calculate_displacement(candles: List[CandleInput], symbol: Optional[str] = None):
     """
     POST endpoint to ingest formatted market candles, perform statsmodels OLS regression,
     and returns a statistically validated InstitutionalSponsorship signature.
@@ -85,23 +87,36 @@ async def calculate_displacement(candles: List[CandleInput]):
     df['rolling_vol_14'] = df['v'].rolling(window=14, min_periods=1).mean()
     df['anomaly_multiplier'] = df['v'] / (df['rolling_vol_14'] + 1e-5)
     
-    # Hour extraction using UTC+3 offset Egypt timezone baked in Next.js
-    df['hour'] = pd.to_datetime(df['t'], unit='ms').dt.hour
-    df['is_dead_zone'] = df['hour'].isin([12, 13, 14]).astype(int)
+    # Hour/minute extraction with localized America/New_York timezone conversion (NY Lunch Dead Zone: 12:00 PM – 1:30 PM NY local time)
+    ny_time = pd.to_datetime(df['t'], unit='ms').dt.tz_localize('UTC').dt.tz_convert('America/New_York')
+    df['hour'] = ny_time.dt.hour
+    df['minute'] = ny_time.dt.minute
+    df['is_dead_zone'] = ((df['hour'] == 12) | ((df['hour'] == 13) & (df['minute'] <= 30))).astype(int)
     
     # Forward 1-candle return for OLS target
     df['future_return'] = df['c'].pct_change(fill_method=None).shift(-1)
 
-    # 3. Fit Statsmodels OLS model to validate the statistical significance of anomaly_multiplier
+    # 3. Volatility Filter Check (Price Range < 0.1% is CONSOLIDATION)
+    price_min = df['l'].min()
+    price_max = df['h'].max()
+    volatility_range = (price_max - price_min) / (price_min + 1e-9)
+    is_consolidation = bool(volatility_range < 0.001)
+
+    # 4. Fit Statsmodels OLS model to validate the statistical significance of anomaly_multiplier
     # Drop first 14 elements (rolling warmup) and the last element (current incomplete future return)
     reg_df = df.iloc[14:-1].dropna(subset=['future_return', 'anomaly_multiplier', 'volume_delta', 'is_dead_zone'])
     
     t_statistic = 0.0
     p_value = 1.0
-    confidence_interval_95 = False
+    confidence_interval_95 = "CONSOLIDATION" if is_consolidation else False
+    confidence_interval_95_strict = "CONSOLIDATION" if is_consolidation else False
     confidence_level = "LOW"
 
-    if len(reg_df) >= 10:
+    if is_consolidation:
+        t_statistic = 0.0
+        p_value = 1.0
+        confidence_level = "LOW"
+    elif len(reg_df) >= 10:
         try:
             X = reg_df[['anomaly_multiplier', 'volume_delta', 'is_dead_zone']]
             X = sm.add_constant(X, has_constant='add')
@@ -122,11 +137,12 @@ async def calculate_displacement(candles: List[CandleInput]):
                 
             # Backward compatibility: Confidence Interval validation: p-value < 0.15 and t_statistic > 1.96
             confidence_interval_95 = bool(p_value < 0.15 and t_statistic > 1.96)
+            confidence_interval_95_strict = bool(p_value < 0.05 and t_statistic > 1.96)
         except Exception as e:
             # Handle collinearity/singular matrix errors gracefully in low-volatility situations
             pass
 
-    # 4. Compute latest closed candle sponsorship status (index N-2)
+    # 5. Compute latest closed candle sponsorship status (index N-2)
     latest_closed = df.iloc[-2]
     prior_14 = df.iloc[-16:-2]
 
@@ -139,16 +155,21 @@ async def calculate_displacement(candles: List[CandleInput]):
     is_bullish = latest_closed['c'] > latest_closed['o']
     is_bearish = latest_closed['c'] < latest_closed['o']
 
-    status = 'INACTIVE'
+    status = 'CONSOLIDATION' if is_consolidation else 'INACTIVE'
     anomaly_multiplier_val = 0.0
     volume_delta_val = float(round(latest_buy_vol - latest_sell_vol, 2))
 
-    if is_bullish and latest_buy_vol > (avg_buy_vol * 2.5) and avg_buy_vol > 0:
-        status = 'ACTIVE_BULLISH'
-        anomaly_multiplier_val = float(round(latest_buy_vol / avg_buy_vol, 2))
-    elif is_bearish and latest_sell_vol > (avg_sell_vol * 2.5) and avg_sell_vol > 0:
-        status = 'ACTIVE_BEARISH'
-        anomaly_multiplier_val = float(round(latest_sell_vol / avg_sell_vol, 2))
+    # Dynamic multiplier: Calibrated to 2.0 for ETH due to higher 5m liquidity concentration
+    is_eth = symbol is not None and "ETH" in symbol.upper()
+    vol_multiplier = 2.0 if is_eth else 2.5
+
+    if not is_consolidation:
+        if is_bullish and latest_buy_vol > (avg_buy_vol * vol_multiplier) and avg_buy_vol > 0:
+            status = 'ACTIVE_BULLISH'
+            anomaly_multiplier_val = float(round(latest_buy_vol / avg_buy_vol, 2))
+        elif is_bearish and latest_sell_vol > (avg_sell_vol * vol_multiplier) and avg_sell_vol > 0:
+            status = 'ACTIVE_BEARISH'
+            anomaly_multiplier_val = float(round(latest_sell_vol / avg_sell_vol, 2))
 
     # Fallback to prevent invalid division in statsmodels values
     if np.isnan(t_statistic) or np.isinf(t_statistic):
@@ -165,7 +186,8 @@ async def calculate_displacement(candles: List[CandleInput]):
             "t_statistic": float(round(t_statistic, 4)),
             "p_value": float(round(p_value, 4)),
             "confidence_level": confidence_level,
-            "confidence_interval_95": confidence_interval_95
+            "confidence_interval_95": confidence_interval_95,
+            "confidence_interval_95_strict": confidence_interval_95_strict
         }
     )
 

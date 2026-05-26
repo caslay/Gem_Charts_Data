@@ -292,7 +292,11 @@ export async function GET(req: Request) {
       const prev = scanWindow[i - 1];
       const curr = scanWindow[i];
       const next = scanWindow[i + 1];
-      if (curr.h > prev.h && curr.h > next.h) {
+      // Swing High Color Lock: peak candle 'curr' must be RED (close < open) preceded by a GREEN candle (close > open)
+      const isFractalHigh = curr.h > prev.h && curr.h > next.h;
+      const isColorLocked = curr.c < curr.o && prev.c > prev.o;
+      
+      if (isFractalHigh && isColorLocked) {
         swingHighs.push({ index: i, price: curr.h, time: curr.t });
       }
     }
@@ -426,6 +430,16 @@ export async function GET(req: Request) {
     // 9. Killzone Clock (Current Time Window - UTC hours)
     const getCurrentKillzone = () => {
       const now = new Date();
+      
+      // NY Lunch Dead Zone Preemption (12:00 PM – 1:30 PM New York Time)
+      const nyTimeStr = now.toLocaleString("en-US", { timeZone: "America/New_York" });
+      const nyDate = new Date(nyTimeStr);
+      const nyHour = nyDate.getHours();
+      const nyMin = nyDate.getMinutes();
+      if (nyHour === 12 || (nyHour === 13 && nyMin <= 30)) {
+        return "DEAD_ZONE";
+      }
+
       const hour = now.getUTCHours();
 
       if (hour >= 0 && hour <= 3) return "ASIAN_RANGE";
@@ -717,8 +731,7 @@ export async function GET(req: Request) {
         pdh,
         pdl,
         asian_high: asianLiquidity.high,
-        asian_low: asianLiquidity.low,
-        true_day_open: true_day_open_0700
+        asian_low: asianLiquidity.low
       },
       session_ranges: {
         asian_range: asianLiquidity,

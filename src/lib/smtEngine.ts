@@ -1,12 +1,4 @@
-export interface Candle {
-  t: number;
-  o: number;
-  h: number;
-  l: number;
-  c: number;
-  v?: number;
-  [key: string]: any;
-}
+import { Candle } from './fvgEngine';
 
 export interface SmtContext {
   m5_divergence: 'BULLISH_CONFIRMED' | 'BEARISH_CONFIRMED' | 'NONE';

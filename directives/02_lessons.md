@@ -85,3 +85,15 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
 - **The Cause:** Injecting a +3h timezone shift directly into candle timestamps (`c[0] + utcPlus3OffsetMs`) forced downstream quantitative calculations, True Day Open search, and Killzone rules to run on shifted numbers while the rest of the systems ran on raw UTC.
 - **The Fix:** Standardized the entire Quant Engine (API endpoints, kline data shape, WebSocket hook) to UTC-Zero at the logic layer. Shifted Cairo timezone calculations to the display/rendering layer (lightweight-charts time scale tick formatter and hover tooltip formatter configured with `timeZone: 'Africa/Cairo'`).
 
+### 15. Backtest Replay Alert Separation & HUD Bleeding (Resolved in V10.4)
+- **The Bug:** Toast notifications for strategy matches and trade executions during backtests were not appearing on the Market Replay screen, but were bleeding into the Live HUD alerts context, causing clutter and out-of-context toasts when navigating back to the main dashboard.
+- **The Cause:** The `useStrategyEvaluator` hook executed on the backtest page fell back to the global `MarketDataContext` alert trigger (`triggerSmartAlert`) because no local override was provided. This appended backtest alerts directly to the live alert state. Meanwhile, the backtest page did not render the `<SmartAlertsToast>` component, so replay alerts were never displayed to the user during backtesting.
+- **The Fix:** We implemented a decoupled local alert state manager (`activeAlerts`, `dismissAlert`, `triggerSmartAlert`) directly within `src/app/backtest/page.tsx` and explicitly passed the local `triggerSmartAlert` hook to the backtest `useStrategyEvaluator` configuration. We then rendered the `<SmartAlertsToast>` component at the bottom of the replay layout, ensuring instant, premium, zero-latency visual feedback on strategy executions during historical replays while completely isolating the live HUD from backtest alerts.
+
+### 16. Backtest Double-Timezone Offset Shift (Resolved in V10.4)
+- **The Bug:** During backtesting, the chart's timeframe was adding 3 additional hours (showing 12:00 PM instead of 9:00 AM), while the sidebar displayed the correct 9:00 AM Cairo time.
+- **The Cause:** The replay engine `useBacktestEngine.ts` applied a manual `+3h` shift (`UTC_PLUS3_MS`) directly to the candle timestamps inside `parseBinanceKlines`. However, the Lightweight Charts component in `Chart.tsx` was also configured to format timestamps using `'Africa/Cairo'`, which shifted them by another `+3h`. This created a double shift at the rendering layer.
+- **The Fix:** Standardized the backtest replay engine to UTC-Zero at the logic layer, matching the live HUD standard from Lesson 14. We removed the manual +3h shift from `parseBinanceKlines`, corrected the cutoff index search and True Day Open (07:00 Cairo = 04:00 UTC) calculations, and updated the backtest page sidebar `cairoTime` display to format raw UTC timestamps using the `Africa/Cairo` timezone dynamically.
+
+
+
