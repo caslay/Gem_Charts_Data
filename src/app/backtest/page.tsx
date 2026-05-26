@@ -1,10 +1,15 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, createSeriesMarkers, ISeriesMarkersPluginApi } from 'lightweight-charts';
-import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
-import { useBacktestEngine, BacktestTimeframe, BtCandle } from '@/hooks/useBacktestEngine';
+import { useBacktestEngine, BacktestTimeframe } from '@/hooks/useBacktestEngine';
 import { useMarketDataContext } from '@/context/MarketDataContext';
+import { useStrategyEvaluator } from '@/hooks/useStrategyEvaluator';
+import { useAIAnalysis } from '@/hooks/useAIAnalysis';
+import { JournalTable, type TradeRecord } from '@/components/JournalTable';
+import type { MarketDataPayload } from '@/hooks/useMarketData';
+import type { LiveCandle } from '@/hooks/useBinanceWS';
+import Chart from '@/components/Chart';
+import DashboardMetrics from '@/components/DashboardMetrics';
 import {
   ChevronLeft, ChevronRight, Eye, Download, Copy,
   Calendar, Clock, BarChart2, Loader2, AlertTriangle,
@@ -13,149 +18,6 @@ import {
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
 
-// ─── Isolated chart component (no shared state with live Chart.tsx) ──────────
-interface BacktestChartProps {
-  data: BtCandle[];
-  themeSettings: any;
-}
-
-function BacktestChart({ data, themeSettings }: BacktestChartProps) {
-  const { theme } = useTheme();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
-  const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<any> | null>(null);
-
-  const isDark = theme === 'dark';
-  const upColor = themeSettings ? (isDark ? themeSettings.dark_up_candle : themeSettings.light_up_candle) : (isDark ? '#50ffaf' : '#059669');
-  const downColor = themeSettings ? (isDark ? themeSettings.dark_down_candle : themeSettings.light_down_candle) : (isDark ? '#ffb4ab' : '#e11d48');
-
-  // Init chart once
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const chart = createChart(containerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: isDark ? '#020617' : '#fafafa' },
-        textColor: isDark ? '#94a3b8' : '#475569',
-        fontFamily: 'var(--font-geist-sans), sans-serif',
-      },
-      grid: {
-        vertLines: { color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15, 23, 42, 0.04)' },
-        horzLines: { color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15, 23, 42, 0.04)' },
-      },
-      width: containerRef.current.clientWidth,
-      height: containerRef.current.clientHeight,
-      timeScale: {
-        timeVisible: true,
-        secondsVisible: false,
-        borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15, 23, 42, 0.04)',
-        tickMarkFormatter: (time: number) =>
-          new Date(time * 1000).toLocaleTimeString('en-EG', {
-            timeZone: 'UTC', hour: '2-digit', minute: '2-digit', hour12: true,
-          }),
-      },
-      localization: {
-        timeFormatter: (ts: number) =>
-          new Date(ts * 1000).toLocaleString('en-EG', {
-            timeZone: 'UTC', hour: '2-digit', minute: '2-digit',
-            day: '2-digit', month: 'short', hour12: true,
-          }),
-      },
-      rightPriceScale: { borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15, 23, 42, 0.04)' },
-      crosshair: {
-        vertLine: { color: isDark ? 'rgba(168,85,247,0.4)' : 'rgba(79, 70, 229, 0.4)', width: 1, style: 3 },
-        horzLine: { color: isDark ? 'rgba(168,85,247,0.4)' : 'rgba(79, 70, 229, 0.4)', width: 1, style: 3 },
-      },
-    });
-
-    chartRef.current = chart;
-
-    const series = chart.addSeries(CandlestickSeries, {
-      upColor: upColor,
-      downColor: downColor,
-      borderVisible: false,
-      wickUpColor: upColor,
-      wickDownColor: downColor,
-    });
-    seriesRef.current = series;
-    seriesMarkersRef.current = createSeriesMarkers(series);
-
-    const onResize = () => {
-      if (containerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({
-          width: containerRef.current.clientWidth,
-          height: containerRef.current.clientHeight,
-        });
-      }
-    };
-    window.addEventListener('resize', onResize);
-
-    return () => {
-      window.removeEventListener('resize', onResize);
-      chart.remove();
-      chartRef.current = null;
-      seriesRef.current = null;
-      seriesMarkersRef.current = null;
-    };
-  }, []);
-
-  // ── Sync Chart Colors with Theme and Dynamic Presets ─────────────────────
-  useEffect(() => {
-    const chart = chartRef.current;
-    const series = seriesRef.current;
-    if (!chart || !series) return;
-
-    const bg = isDark ? '#020617' : '#fafafa';
-    const text = isDark ? '#94a3b8' : '#475569';
-    const grid = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(15, 23, 42, 0.04)';
-    const crosshairColor = isDark ? 'rgba(168, 85, 247, 0.4)' : 'rgba(79, 70, 229, 0.4)';
-
-    chart.applyOptions({
-      layout: {
-        background: { type: ColorType.Solid, color: bg },
-        textColor: text,
-      },
-      grid: {
-        vertLines: { color: grid },
-        horzLines: { color: grid },
-      },
-      timeScale: { borderColor: grid },
-      rightPriceScale: { borderColor: grid },
-      crosshair: {
-        vertLine: { color: crosshairColor },
-        horzLine: { color: crosshairColor },
-      },
-    });
-
-    series.applyOptions({
-      upColor: upColor,
-      downColor: downColor,
-      wickUpColor: upColor,
-      wickDownColor: downColor,
-    });
-  }, [theme, upColor, downColor, isDark]);
-
-  // Update data whenever visible slice changes or theme shifts
-  useEffect(() => {
-    if (!seriesRef.current || !data || data.length === 0) return;
-    const formatted = data
-      .map((d) => ({
-        time: Math.floor(d.t / 1000) as unknown as number,
-        open: d.o, high: d.h, low: d.l, close: d.c,
-      }))
-      .sort((a, b) => (a.time as number) - (b.time as number));
-
-    seriesRef.current.setData(formatted as never);
-
-    const sortedDataForMarkers = [...data].sort((a, b) => a.t - b.t);
-    seriesMarkersRef.current?.setMarkers(generateVolumetricMarkers(sortedDataForMarkers, isDark));
-
-    chartRef.current?.timeScale().fitContent();
-  }, [data, isDark]);
-
-  return <div ref={containerRef} className="w-full h-full" />;
-}
 
 // ─── Stat badge ──────────────────────────────────────────────────────────────
 interface StatBadgeProps {
@@ -177,9 +39,127 @@ function StatBadge({ label, value, accent = false }: StatBadgeProps) {
 export default function BacktestPage() {
   const engine = useBacktestEngine();
   const { themeSettings } = useMarketDataContext();
+  const { aiAnalysis, aiBias, isAnalyzing, triggerAiAnalysisScan } = useAIAnalysis();
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   const [activeTimeframe, setActiveTimeframe] = useState<BacktestTimeframe>('5m');
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
+
+  // ── Backtest Trades & Account State ───────────────────────────────────────
+  const [backtestTrades, setBacktestTrades] = useState<TradeRecord[]>([]);
+  const [backtestAccount, setBacktestAccount] = useState<any>(null);
+  const [isLoadingTrades, setIsLoadingTrades] = useState(true);
+
+  const fetchBacktestTrades = useCallback(async () => {
+    try {
+      const res = await fetch('/api/backtest-trades');
+      if (res.ok) {
+        const json = await res.json();
+        setBacktestTrades(json.trades || []);
+        setBacktestAccount(json.account || null);
+      }
+    } catch (err) {
+      console.error('[Backtest] Failed to fetch backtest trades:', err);
+    } finally {
+      setIsLoadingTrades(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBacktestTrades();
+  }, [fetchBacktestTrades]);
+
+  // Sync replayed trade executions with table states
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleRefresh = () => {
+      fetchBacktestTrades();
+    };
+    window.addEventListener('backtest-trades-refresh', handleRefresh);
+    return () => {
+      window.removeEventListener('backtest-trades-refresh', handleRefresh);
+    };
+  }, [fetchBacktestTrades]);
+
+  // Candle price extracts
+  const lastCandle = engine.visibleArrays?.candles_5m.slice(-1)[0] ?? null;
+  const lastPrice = lastCandle?.c ?? null;
+
+  // Map replayed 5m candle as a closed liveCandle for Strategy Evaluator temporal gating
+  const liveCandle = lastCandle
+    ? {
+      t: lastCandle.t,
+      time: lastCandle.t / 1000,
+      open: lastCandle.o,
+      high: lastCandle.h,
+      low: lastCandle.l,
+      close: lastCandle.c,
+      volume: lastCandle.v,
+      isClosed: true,
+    }
+    : null;
+
+  // ── Parse AI analysis response for the HUD Bar ──────────────────────────────
+  let parsedAiResponse: any = null;
+  let masterBias = 'NEUTRAL';
+  if (aiAnalysis) {
+    try {
+      let candidate = aiAnalysis.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)?.[1];
+      if (!candidate) {
+        const start = aiAnalysis.indexOf('{');
+        const end = aiAnalysis.lastIndexOf('}');
+        if (start !== -1 && end !== -1 && end > start) {
+          candidate = aiAnalysis.slice(start, end + 1);
+        } else {
+          candidate = aiAnalysis;
+        }
+      }
+      parsedAiResponse = JSON.parse(candidate.trim());
+      masterBias = parsedAiResponse?.bias_label || parsedAiResponse?.diagnostics?.master_bias || 'NEUTRAL';
+    } catch (e) {
+      console.error('[Backtest] Failed to parse AI Analysis JSON for Master Bias:', e);
+    }
+  }
+
+  // Strategy Execution Engine — re-evaluates automatically on replayed steps
+  useStrategyEvaluator({
+    isBacktest: true,
+    data: engine.enrichedPayload as unknown as MarketDataPayload,
+    livePrice: lastPrice,
+    liveCandle: liveCandle as unknown as LiveCandle,
+    aiBias: aiBias
+  });
+
+  // Dynamic backtest statistics calculations
+  const closedTrades = backtestTrades.filter((t: any) => t.status === "CLOSED");
+  const winningTrades = closedTrades.filter((t: any) => parseFloat(String(t.realized_pnl || 0)) > 0);
+  const totalRealizedPnL = closedTrades.reduce((sum, t) => sum + parseFloat(String(t.realized_pnl || 0)), 0);
+
+  const winRate = closedTrades.length > 0
+    ? (winningTrades.length / closedTrades.length) * 100
+    : 0;
+
+  const initialCapital = backtestAccount ? parseFloat(String(backtestAccount.initial_capital)) : 10000;
+  const returnPercentage = (totalRealizedPnL / initialCapital) * 100;
+
+  // Max drawdown walk
+  let maxDrawdown = 0;
+  let peak = initialCapital;
+  let runningBalance = initialCapital;
+
+  const sortedClosedTrades = [...closedTrades].sort(
+    (a, b) => new Date(a.created_at || a.timestamp).getTime() - new Date(b.created_at || b.timestamp).getTime()
+  );
+
+  for (const t of sortedClosedTrades) {
+    runningBalance += parseFloat(String(t.realized_pnl || 0));
+    if (runningBalance > peak) {
+      peak = runningBalance;
+    }
+    const drawdown = ((peak - runningBalance) / peak) * 100;
+    if (drawdown > maxDrawdown) {
+      maxDrawdown = drawdown;
+    }
+  }
 
   const handleCountChange = (tf: '5m' | '15m' | '1h' | '4h', value: string) => {
     const num = parseInt(value, 10);
@@ -214,9 +194,6 @@ export default function BacktestPage() {
     return engine.visibleArrays.candles_5m;
   })();
 
-  const lastCandle = engine.visibleArrays?.candles_5m.slice(-1)[0] ?? null;
-  const lastPrice = lastCandle?.c ?? null;
-  
   const cairoTime = lastCandle
     ? (() => {
       const d = new Date(lastCandle.t);
@@ -281,46 +258,12 @@ export default function BacktestPage() {
         </div>
       </header>
 
-      {/* ── 3 Visual HUD Cards (Total P&L, Win Rate, Drawdown) ────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-4 lg:px-8 py-4 shrink-0 relative z-10">
-        
-        {/* Card 1: Total P&L */}
-        <div className="glass-panel p-4 lg:p-5 min-h-[100px] flex flex-col justify-between relative overflow-hidden group select-none transition-all duration-300 shadow-[inset_0_0_20px_rgba(16,185,129,0.02)] border-emerald-500/20">
-          <div className="absolute -right-4 -bottom-4 w-24 h-24 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-all duration-300 bg-emerald-500/10 dark:bg-emerald-500/20" />
-          <div className="flex justify-between items-start">
-            <span className="text-[10px] lg:text-xs font-black uppercase tracking-widest text-slate-500 dark:text-zinc-400">Total Backtest P&L</span>
-            <TrendingUp size={14} className="text-emerald-500 dark:text-emerald-400" />
-          </div>
-          <span className="text-2xl lg:text-3xl font-black mt-2 leading-none text-emerald-600 dark:text-emerald-400 font-mono">
-            +$12,430.20 <span className="text-xs lg:text-sm font-semibold tracking-tight opacity-90">(+14.2%)</span>
-          </span>
-        </div>
-
-        {/* Card 2: Win Rate */}
-        <div className="glass-panel p-4 lg:p-5 min-h-[100px] flex flex-col justify-between relative overflow-hidden group select-none transition-all duration-300 border-accent/20">
-          <div className="absolute -right-4 -bottom-4 w-24 h-24 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-all duration-300 bg-accent/10" />
-          <div className="flex justify-between items-start">
-            <span className="text-[10px] lg:text-xs font-black uppercase tracking-widest text-slate-500 dark:text-zinc-400">Backtest Win Rate</span>
-            <Percent size={14} className="text-accent" />
-          </div>
-          <span className="text-2xl lg:text-3xl font-black mt-2 leading-none text-accent font-mono">
-            73.5%
-          </span>
-        </div>
-
-        {/* Card 3: Max Drawdown */}
-        <div className="glass-panel p-4 lg:p-5 min-h-[100px] flex flex-col justify-between relative overflow-hidden group select-none transition-all duration-300 border-rose-500/20 shadow-[inset_0_0_20px_rgba(244,63,94,0.02)]">
-          <div className="absolute -right-4 -bottom-4 w-24 h-24 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-all duration-300 bg-rose-500/10 dark:bg-rose-500/20" />
-          <div className="flex justify-between items-start">
-            <span className="text-[10px] lg:text-xs font-black uppercase tracking-widest text-slate-500 dark:text-zinc-400">Maximum Drawdown</span>
-            <AlertCircle size={14} className="text-rose-500 dark:text-rose-400" />
-          </div>
-          <span className="text-2xl lg:text-3xl font-black mt-2 leading-none text-rose-600 dark:text-rose-400 font-mono">
-            -2.15%
-          </span>
-        </div>
-
-      </div>
+      {/* ── 3 Unified Visual HUD Cards (Parity with Live HUD) ────────── */}
+      <DashboardMetrics
+        masterBias={masterBias}
+        pricing={(engine.enrichedPayload?.ipda_metrics as any)?.current_pricing || 'SCANNING'}
+        targetStatus={(engine.enrichedPayload?.ipda_metrics as any)?.target_status || 'PENDING'}
+      />
 
       {/* ── Body: controls + chart ────────────────────────────────────────── */}
       <div className="flex flex-1 min-h-0 relative z-10">
@@ -408,6 +351,36 @@ export default function BacktestPage() {
             </div>
           )}
 
+          {/* Section: Gemini Synthesis ───────────────── */}
+          {engine.status === 'ready' && (
+            <div className="flex flex-col gap-2 pt-3 border-t border-card-border select-none">
+              <p className="text-[11px] font-black text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Gemini Synthesis</p>
+              <button
+                onClick={async () => {
+                  if (!engine.enrichedPayload) return;
+                  await triggerAiAnalysisScan(engine.enrichedPayload as unknown as MarketDataPayload);
+                }}
+                disabled={isAnalyzing || !engine.enrichedPayload}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl
+                               bg-accent text-white font-black text-xs hover:opacity-90
+                               disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 cursor-pointer
+                               shadow-md hover:shadow-accent/25 active:scale-95"
+              >
+                {isAnalyzing ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Synthesizing…</>
+                ) : (
+                  <><Brain className="w-4 h-4" /> Trigger AI Analysis</>
+                )}
+              </button>
+
+              {aiAnalysis && (
+                <div className="mt-2 max-h-36 overflow-y-auto text-[10px] text-emerald-500 leading-relaxed whitespace-pre-wrap bg-card p-3 rounded-lg border border-card-border font-mono select-text scrollbar-thin">
+                  {aiAnalysis}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Error banner */}
           {engine.status === 'error' && (
             <div className="flex items-start gap-2 px-3 py-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs">
@@ -485,11 +458,11 @@ export default function BacktestPage() {
           )}
         </aside>
 
-        {/* ── Chart + replay controls ─────────────────────────────────────── */}
-        <div className="flex-1 flex flex-col min-w-0">
+        {/* ── Chart + replay controls + Journal ───────────────────────────── */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto scrollbar-thin scrollbar-thumb-card-border scrollbar-track-transparent">
 
           {/* Chart area */}
-          <div className="flex-1 relative p-3 lg:p-5 min-h-0">
+          <div className="h-[680px] relative p-3 lg:p-5 shrink-0 min-h-0">
             {engine.status === 'idle' && (
               <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-muted">
                 <div className="w-20 h-20 rounded-2xl bg-card border border-card-border flex items-center justify-center shadow-lg">
@@ -515,7 +488,16 @@ export default function BacktestPage() {
               <div className="w-full h-full rounded-2xl overflow-hidden border border-card-border bg-card/20 backdrop-blur-xl shadow-2xl relative group">
                 <div className="absolute inset-0 shadow-[inset_0_0_80px_rgba(var(--accent),0.01)] pointer-events-none z-10" />
                 {engine.visibleArrays && chartData.length > 0
-                  ? <BacktestChart data={chartData} themeSettings={themeSettings} />
+                  ? (
+                    <Chart
+                      data={chartData as any}
+                      isBacktest={true}
+                      marketContextData={engine.enrichedPayload as unknown as MarketDataPayload}
+                      liveCandle={liveCandle as unknown as LiveCandle}
+                      livePrice={lastPrice}
+                      interval={activeTimeframe as any}
+                    />
+                  )
                   : (
                     <div className="w-full h-full flex items-center justify-center text-slate-500 dark:text-zinc-400 text-sm select-none font-black uppercase">
                       No visible candles yet — press Next Candle ⏩
@@ -526,7 +508,7 @@ export default function BacktestPage() {
                 {/* Sleek Floating Glass Replay Controls (Centered Bottom Overlay) */}
                 {engine.status === 'ready' && (
                   <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex items-center gap-4 bg-card/60 backdrop-blur-xl border border-card-border px-6 py-3.5 rounded-2xl shadow-xl transition-all duration-300 hover:border-accent/40 select-none">
-                    
+
                     {/* Prev */}
                     <button
                       id="bt-prev-candle"
@@ -586,6 +568,58 @@ export default function BacktestPage() {
               </div>
             )}
           </div>
+
+          {/* Journal Table area */}
+          {engine.status === 'ready' && (
+            <div className="flex-1 p-4 lg:p-6 border-t border-card-border bg-card/10 relative z-10 shrink-0">
+              <div className="flex justify-between items-center mb-4 select-none">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-4 rounded-full bg-accent" />
+                  <h2 className="text-xs font-black uppercase tracking-[0.12em] text-foreground">
+                    Backtest Strategy execution & journaling ledger
+                  </h2>
+                </div>
+              </div>
+
+              {/* Sleek, compact backtest performance overview row */}
+              <div className="grid grid-cols-3 gap-3 mb-4 select-none">
+                {/* Total P&L Card */}
+                <div className={`glass-panel p-3 flex flex-col justify-between border ${totalRealizedPnL >= 0 ? 'border-emerald-500/20 shadow-[inset_0_0_12px_rgba(16,185,129,0.02)]' : 'border-rose-500/20 shadow-[inset_0_0_12px_rgba(244,63,94,0.02)]'}`}>
+                  <span className="text-[9px] font-black text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Backtest P&L</span>
+                  <span className={`text-sm font-black font-mono ${totalRealizedPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {totalRealizedPnL >= 0 ? '+' : ''}${totalRealizedPnL.toFixed(2)} <span className="text-[10px] font-semibold opacity-90">({totalRealizedPnL >= 0 ? '+' : ''}{returnPercentage.toFixed(2)}%)</span>
+                  </span>
+                </div>
+                {/* Win Rate Card */}
+                <div className="glass-panel p-3 flex flex-col justify-between border border-accent/20">
+                  <span className="text-[9px] font-black text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Win Rate</span>
+                  <span className="text-sm font-black font-mono text-accent">
+                    {winRate.toFixed(1)}%
+                  </span>
+                </div>
+                {/* Max Drawdown Card */}
+                <div className="glass-panel p-3 flex flex-col justify-between border border-rose-500/20 shadow-[inset_0_0_12px_rgba(244,63,94,0.02)]">
+                  <span className="text-[9px] font-black text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Max Drawdown</span>
+                  <span className="text-sm font-black font-mono text-rose-500">
+                    -{maxDrawdown.toFixed(2)}%
+                  </span>
+                </div>
+              </div>
+              {isLoadingTrades ? (
+                <div className="flex justify-center items-center py-12 text-xs font-mono uppercase text-muted">
+                  <Loader2 className="w-4 h-4 animate-spin mr-2 text-accent" /> Loading Backtest Ledger...
+                </div>
+              ) : (
+                <JournalTable
+                  initialTrades={backtestTrades}
+                  initialAccount={backtestAccount}
+                  isBacktest={true}
+                  backtestLivePrice={lastPrice}
+                />
+              )}
+            </div>
+          )}
+
         </div>
       </div>
     </main>

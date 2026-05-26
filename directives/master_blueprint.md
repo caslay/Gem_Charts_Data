@@ -1,10 +1,52 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.8
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.10
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-26  
-> **Last Updated:** 2026-05-26 (V10.8 Chart Layer Orchestrator & Persistent HUD Complete)  
+> **Last Updated:** 2026-05-26 (V10.10 Unified Visualization Layer & Backtest HUD Parity Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.10 Changelog — Unified Visualization Layer & Backtest HUD Parity (Completed)
+
+### 1. Strategy Builder Toggle & Environment Filtering
+- **Database Self-Healing Schema:** Refactored `/api/strategies` and `/api/settings` to dynamically add the `target_environment` column (`LIVE_ONLY`, `BACKTEST_ONLY`, `BOTH`) to the `custom_strategies` table via auto-healing.
+- **EquationBuilder Toggle Settings:** Exposed a premium toggle select dropdown inside the Strategy Settings modal, enabling developers to tag strategies for specific environments.
+- **Environment Filter in Hook:** Refactored `useStrategyEvaluator.ts` to retrieve and filter strategies matching the active runtime environment, guaranteeing backtest strategies do not execute on live accounts and vice-versa.
+
+### 2. Standalone AI Analysis & Narrative Hook
+- **AI Hook Decoupling:** Successfully extracted the narrative synthesis and bias diagnostics scan logic into a standalone, reactive `useAIAnalysis` client hook.
+- **Replayed Narrative Trigger:** Embedded this hook in the `/backtest` page alongside a new `[ 🧠 TRIGGER AI ANALYSIS ]` dashboard control, enabling users to invoke Gemini quantitative reviews directly on historical data slices.
+- **Unified Temporal Gating:** Extracted replayed `aiBias` values feed dynamically into backtest strategy evaluation, unlocking AI-driven temporal filters during backtesting.
+
+### 3. Props-over-Context Premium Chart Integration
+- **Chart Prop Fallbacks:** Refactored the core `<Chart />` component to dynamically accept `isBacktest`, `marketContextData`, `liveCandle`, and `livePrice` parameters as overrides, seamlessly falling back to context singletons.
+- **Full Indicator parity:** Replaced the local, basic `BacktestChart` component with the unified `<Chart />` component on `/backtest` page. The backtest chart now renders FVG boxes, order book magnet lines, session range boundaries, and volumetric sponsorship indicators seamlessly.
+
+### 4. Zero-Latency HUD Parity & Compact Performance Statistics
+- **Unified Top HUD Metrics:** Integrated the `<DashboardMetrics />` component at the top of the Backtest page, populating Master Bias, Range Context, and Target Status sweep metrics in perfect visual and functional parity with the Live HUD.
+- **Compact Results Ledger Card:** Relocated backtest statistics (Total realized P&L, Win Rate, maximum Drawdown) into a beautiful, compact glassmorphic row positioned right above the Journal Table, keeping them mathematically bound to the trade list.
+- **Replay Index Reactivity:** Bound all visual overlays, sweep statuses, session lines, and HUD indicators directly to the backtest `currentIndex`, updating all data pipelines in zero-latency synchronization as users step through historical data.
+
+---
+
+## 🆕 V10.9 Changelog — Unified Execution Engine (Live to Backtest Bridge) (Completed)
+
+
+### 1. Isolated Database Persistence Layer
+- **Dedicated Tables Schema:** Implemented self-healing SQL creation logic for two dedicated tables: `backtest_trades` and `backtest_trading_account`. This isolates replayed backtest runs completely from production/paper trading accounts.
+- **Risk-Reward Guardrails:** Automatically computes position sizes based on capital account dynamic rules and enforces a 1:2 risk-to-reward ratio on all executions.
+- **Global Veto Lock:** Features backend directional lock checks and one-trade-per-strategy validation rules to prevent concurrency and multi-trade leaks during high-speed replays.
+
+### 2. Extensible Hook Refactoring
+- **Configuration-based Hook Interface:** Refactored the `useStrategyEvaluator` hook to support a new `StrategyEvaluatorConfig` argument.
+- **Dynamic Pivot Source:** Dynamically switches data payloads (`data`, `livePrice`, `liveCandle`, `aiBias`) and persistence endpoints (`/api/backtest-trades` vs `/api/trades`) based on the active backtest context flag `isBacktest`.
+- **Zero-lag Replay Optimization:** Disables setInterval background polling when running in backtest mode, completely avoiding UI-blocking render delays or API loop congestion.
+
+### 3. Decoupled UI & Dynamic Statistics HUD
+- **Flexible Journal Grid Rendering:** Decoupled `JournalTable` and `ActiveTradeRow` from live-only react contexts, allowing backtest price streams and local state arrays to inject custom realized P&L calculations.
+- **Stateful Live Statistics HUD:** Replaced hardcoded backtest cards with dynamic calculations that walk over the trade array to compute real-time cumulative P&L, Win Rate, and maximum Drawdown walk.
+
+---
 
 ## 🆕 V10.8 Changelog — Chart Layer Orchestrator & Persistent HUD (Completed)
 

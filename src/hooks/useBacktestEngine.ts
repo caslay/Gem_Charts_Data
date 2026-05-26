@@ -11,6 +11,8 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
+import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
+
 
 // ── Internal types ────────────────────────────────────────────────────────────
 export interface BtCandle {
@@ -165,47 +167,82 @@ function buildEnrichedPayload(
     else currentPricing = 'FAIR_VALUE';
   }
 
-  // ── Active FVGs from 15m visible slice ──────────────────────────────────
-  const activeFVGs: Array<{
-    type: string; top: number; bottom: number; ce_50: number;
-  }> = [];
+  // ── Active FVGs from 15m and 5m visible slices using lib/fvgEngine ──────
+  const candles_15m_with_closed = candles_15m.map(c => ({ ...c, isClosed: true }));
+  const candles_5m_with_closed = candles_5m.map(c => ({ ...c, isClosed: true }));
+  const fvgs15m = detectActiveFVGs(candles_15m_with_closed, true);
+  const fvgs5m = detectActiveFVGs(candles_5m_with_closed, true);
+  const activeFVGs = mapAndConsolidateFVGs(fvgs15m, fvgs5m);
 
-  for (let i = 0; i < candles_15m.length - 2; i++) {
-    const c1 = candles_15m[i];
-    const c3 = candles_15m[i + 2];
+  // ── Session Ranges ──────────────────────────────────────────────────────
+  const getSessionLiquidityLocal = (candles: BtCandle[], startHourLocal: number, endHourLocal: number) => {
+    const sessionCandles = candles.filter(c => {
+      const d = new Date(c.t);
+      const candleDayStr = d.toISOString().slice(0, 10);
+      const hLocal = d.getUTCHours();
+      return candleDayStr === selectedDate && hLocal >= startHourLocal && hLocal < endHourLocal;
+    });
 
-    let type: string | null = null;
-    let gapTop: number | null = null;
-    let gapBottom: number | null = null;
+    if (sessionCandles.length === 0) return { high: null, low: null };
 
-    if (c1.l > c3.h) {
-      type = 'Bearish_SIBI'; gapTop = c1.l; gapBottom = c3.h;
-    } else if (c1.h < c3.l) {
-      type = 'Bullish_BISI'; gapTop = c3.l; gapBottom = c1.h;
+    return {
+      high: parseFloat(Math.max(...sessionCandles.map(c => c.h)).toFixed(2)),
+      low: parseFloat(Math.min(...sessionCandles.map(c => c.l)).toFixed(2))
+    };
+  };
+
+  const asianLiquidity = getSessionLiquidityLocal(candles_15m, 3, 10);
+  const londonLiquidity = getSessionLiquidityLocal(candles_15m, 10, 15);
+
+  // ── Target Sweeps and DOL Status ────────────────────────────────────────
+  let target_status = "PENDING";
+  const todayCandles = candles_15m.filter(c => {
+    const d = new Date(c.t);
+    return d.toISOString().slice(0, 10) === selectedDate;
+  });
+
+  const sweeps: string[] = [];
+
+  // Check PDH/PDL Exhaustion across all today's candles
+  for (const c of todayCandles) {
+    if (c.h >= pdh || c.l <= pdl) {
+      sweeps.push("EXHAUSTED");
     }
+  }
 
-    if (type && gapTop !== null && gapBottom !== null) {
-      let mitigated = false;
-      for (let j = i + 3; j < candles_15m.length; j++) {
-        const fc = candles_15m[j];
-        if (type === 'Bearish_SIBI' && fc.h >= gapBottom!) { mitigated = true; break; }
-        if (type === 'Bullish_BISI' && fc.l <= gapTop!) { mitigated = true; break; }
-      }
-      if (!mitigated) {
-        activeFVGs.push({
-          type,
-          top: gapTop,
-          bottom: gapBottom,
-          ce_50: Number(((gapTop + gapBottom) / 2).toFixed(2)),
-        });
-      }
+  // Check Asian sweeps (only candles at or after 10:00 Cairo local time = 07:00 UTC)
+  const afterAsianCandles = todayCandles.filter(c => new Date(c.t).getUTCHours() >= 10);
+  for (const c of afterAsianCandles) {
+    if (asianLiquidity.high && c.h >= asianLiquidity.high && c.h < pdh) {
+      sweeps.push("ASIAN_HIGH_SWEPT");
     }
+    if (asianLiquidity.low && c.l <= asianLiquidity.low && c.l > pdl) {
+      sweeps.push("ASIAN_LOW_SWEPT");
+    }
+  }
+
+  // Check London sweeps (only candles at or after 15:00 Cairo local time = 12:00 UTC)
+  const afterLondonCandles = todayCandles.filter(c => new Date(c.t).getUTCHours() >= 15);
+  for (const c of afterLondonCandles) {
+    if (londonLiquidity.high && c.h >= londonLiquidity.high && c.h < pdh) {
+      sweeps.push("LONDON_HIGH_SWEPT");
+    }
+    if (londonLiquidity.low && c.l <= londonLiquidity.low && c.l > pdl) {
+      sweeps.push("LONDON_LOW_SWEPT");
+    }
+  }
+
+  if (sweeps.includes("EXHAUSTED")) {
+    target_status = "EXHAUSTED";
+  } else if (sweeps.length > 0) {
+    const uniqueSweeps = Array.from(new Set(sweeps));
+    target_status = uniqueSweeps.join(" | ") + " / PDH_PDL_PENDING";
   }
 
   // ── Intraday Dealing Range (07:00 Cairo → last visible candle) ──────────
   const intradayCandles = dayOpenIndex !== -1 ? candles_15m.slice(dayOpenIndex) : [];
 
-  let localDealingRange: Record<string, unknown> = {
+  let localDealingRange: Record<string, any> = {
     high: null, low: null, equilibrium: null, current_status: 'UNKNOWN',
   };
   if (intradayCandles.length > 0 && livePrice !== null) {
@@ -218,6 +255,17 @@ function buildEnrichedPayload(
     };
   }
 
+  // Determine current killzone from replayed candle time
+  const current_time_window = liveCandle ? (() => {
+    const utcDate = new Date(liveCandle.t - UTC_PLUS3_MS);
+    const hour = utcDate.getUTCHours();
+    if (hour >= 0 && hour <= 3) return "ASIAN_RANGE";
+    if (hour >= 6 && hour <= 8) return "LONDON_AM_KILLZONE";
+    if (hour >= 12 && hour <= 14) return "NY_AM_KILLZONE";
+    if (hour >= 17 && hour <= 18) return "NY_PM_KILLZONE";
+    return "DEAD_ZONE";
+  })() : "DEAD_ZONE";
+
   return {
     ticker: `${SYMBOL}.backtest`,
     timezone: 'UTC+3 (Cairo)',
@@ -225,14 +273,38 @@ function buildEnrichedPayload(
     ipda_metrics: {
       note: 'Backtest replay — metrics computed from visible slice only.',
       true_day_open: trueDayOpen0700,
+      true_day_open_0700: trueDayOpen0700,
+      current_time_window,
       current_pricing: currentPricing,
-      macro_levels: { pdh, pdl },
+      target_status,
+      active_fvgs: activeFVGs,
+      macro_levels: {
+        pdh,
+        pdl,
+        asian_high: asianLiquidity.high,
+        asian_low: asianLiquidity.low,
+        true_day_open: trueDayOpen0700
+      },
+      session_ranges: {
+        asian_range: asianLiquidity,
+        london_range: londonLiquidity
+      },
       pricing_context: {
         vs_daily_open:
           trueDayOpen0700 !== null && livePrice !== null
             ? livePrice > trueDayOpen0700 ? 'ABOVE_OPEN' : 'BELOW_OPEN'
             : 'UNKNOWN',
         local_dealing_range: localDealingRange,
+      },
+      order_flow_engine: {
+        open_interest_trend: 'FLAT',
+        displacement_sponsorship: 'INACTIVE',
+        market_structure_shift: false,
+        smart_money_sentiment: { smart_money_divergence: false },
+        resting_liquidity_pools: {
+          BSL_Magnets: pdh > 0 ? [pdh] : [],
+          SSL_Magnets: pdl > 0 ? [pdl] : [],
+        },
       },
     },
     active_arrays: {

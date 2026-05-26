@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, SeriesMarker, createSeriesMarkers, ISeriesMarkersPluginApi, LineStyle } from 'lightweight-charts';
-import { Candle } from '@/hooks/useMarketData';
+import { Candle, MarketDataPayload } from '@/hooks/useMarketData';
 import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
 import type { LiveCandle } from '@/hooks/useBinanceWS';
 import SettingsModal, { Alert } from './modals/SettingsModal';
@@ -26,9 +26,25 @@ interface ChartProps {
     upColor?: string;
     downColor?: string;
   };
+  isBacktest?: boolean;
+  marketContextData?: MarketDataPayload | null;
+  liveCandle?: LiveCandle | null;
+  livePrice?: number | null;
+  themeSettings?: any;
 }
 
-export default function Chart({ data, activeFvgs, localDealingRange, interval = '5m', colors }: ChartProps) {
+export default function Chart({
+  data,
+  activeFvgs: propsActiveFvgs,
+  localDealingRange: propsLocalDealingRange,
+  interval = '5m',
+  colors,
+  isBacktest = false,
+  marketContextData: propsMarketContextData,
+  liveCandle: propsLiveCandle,
+  livePrice: propsLivePrice,
+  themeSettings: propsThemeSettings,
+}: ChartProps) {
   const { theme } = useTheme();
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -81,7 +97,16 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   const [settingsModalTab, setSettingsModalTab] = useState<'price' | 'signal'>('price');
 
   const { playSound, playFile } = useAlertSounds();
-  const { data: marketContextData, triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert, liveCandle, livePrice, setWsInterval, themeSettings } = useMarketDataContext();
+  const context = useMarketDataContext();
+
+  const marketContextData = propsMarketContextData !== undefined ? propsMarketContextData : context.data;
+  const livePrice = propsLivePrice !== undefined ? propsLivePrice : context.livePrice;
+  const liveCandle = propsLiveCandle !== undefined ? propsLiveCandle : context.liveCandle;
+  const themeSettings = propsThemeSettings !== undefined ? propsThemeSettings : context.themeSettings;
+  const { triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert, setWsInterval } = context;
+
+  const activeFvgs = propsActiveFvgs !== undefined ? propsActiveFvgs : (marketContextData?.ipda_metrics?.active_fvgs || []);
+  const localDealingRange = propsLocalDealingRange !== undefined ? propsLocalDealingRange : marketContextData?.ipda_metrics?.pricing_context?.local_dealing_range;
 
   const smtContext = marketContextData?.ipda_metrics?.smt_context;
   const hasMicroDivergence = 
@@ -336,8 +361,9 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
   // WebSocket data is now consumed from the global MarketDataContext (hoisted).
   // Sync the chart's interval prop into the global WS interval.
   useEffect(() => {
+    if (isBacktest) return;
     setWsInterval(interval as any);
-  }, [interval, setWsInterval]);
+  }, [interval, setWsInterval, isBacktest]);
 
   const isDark = theme === 'dark';
   const {
@@ -1019,6 +1045,8 @@ export default function Chart({ data, activeFvgs, localDealingRange, interval = 
 
   // Monitor tick-by-tick and bar-by-bar
   useEffect(() => {
+    if (isBacktest) return;
+
     // 1. Resolve current active price (with WebSocket-to-REST fallback)
     const currentPriceForAlerts = livePrice !== null
       ? livePrice

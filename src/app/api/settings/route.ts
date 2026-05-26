@@ -42,6 +42,11 @@ async function initTables() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `;
+  try {
+    await sql`ALTER TABLE custom_strategies ADD COLUMN IF NOT EXISTS target_environment VARCHAR(20) DEFAULT 'BOTH';`;
+  } catch (err) {
+    console.error("[SETTINGS API] Failed to alter table custom_strategies:", err);
+  }
 }
 
 // ─── GET: Fetch all settings ──────────────────────────────────────────────────

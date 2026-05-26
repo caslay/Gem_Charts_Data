@@ -18,6 +18,9 @@ export interface TradeRecord {
   ai_narrative_summary: string | null;
   created_at: string;
   position_size?: string | number; // Added for V8.3 P&L calculations
+  realized_pnl?: string | number;
+  roi?: string | number;
+  risk_amount_usd?: string | number;
 }
 
 interface JournalTableProps {
@@ -27,6 +30,8 @@ interface JournalTableProps {
     initial_capital: string | number;
     max_risk_limit_pct: string | number;
   };
+  isBacktest?: boolean;
+  backtestLivePrice?: number | null;
 }
 
 // ── ACTIONS CELL SUB-COMPONENT (Memoized Shared UI) ──────────────────────
@@ -267,7 +272,8 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
   handleClosePosition,
   setDeleteConfirmId,
   handleDeleteTrade,
-  formatDate
+  formatDate,
+  livePrice
 }: {
   trade: TradeRecord;
   isLoading: boolean;
@@ -278,8 +284,8 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
   setDeleteConfirmId: (id: string | null) => void;
   handleDeleteTrade: (id: string) => void;
   formatDate: (date: string) => string;
+  livePrice: number | null;
 }) {
-  const { livePrice } = useMarketDataContext();
 
   // Resolve position multiplier
   const positionSize = trade.position_size !== undefined && trade.position_size !== null
@@ -476,7 +482,8 @@ const JournalTableRow = memo(function JournalTableRow({
   handleClosePosition,
   setDeleteConfirmId,
   handleDeleteTrade,
-  formatDate
+  formatDate,
+  livePrice
 }: {
   trade: TradeRecord;
   isLoading: boolean;
@@ -487,6 +494,7 @@ const JournalTableRow = memo(function JournalTableRow({
   setDeleteConfirmId: (id: string | null) => void;
   handleDeleteTrade: (id: string) => void;
   formatDate: (date: string) => string;
+  livePrice: number | null;
 }) {
   if (trade.status === "CLOSED") {
     return (
@@ -515,12 +523,16 @@ const JournalTableRow = memo(function JournalTableRow({
       setDeleteConfirmId={setDeleteConfirmId}
       handleDeleteTrade={handleDeleteTrade}
       formatDate={formatDate}
+      livePrice={livePrice}
     />
   );
 });
 
-export function JournalTable({ initialTrades, initialAccount }: JournalTableProps) {
-  const { livePrice } = useMarketDataContext();
+export function JournalTable({ initialTrades, initialAccount, isBacktest = false, backtestLivePrice }: JournalTableProps) {
+  const context = useMarketDataContext();
+  const livePrice = isBacktest ? (backtestLivePrice ?? null) : context.livePrice;
+  const tradesApiUrl = isBacktest ? "/api/backtest-trades" : "/api/trades";
+
   const [trades, setTrades] = useState<TradeRecord[]>(initialTrades);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -577,7 +589,7 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
   const refreshTrades = useCallback(async () => {
     setIsRefreshing(true);
     try {
-      const res = await fetch("/api/trades");
+      const res = await fetch(tradesApiUrl);
       if (res.ok) {
         const json = await res.json();
         setTrades(json.trades || []);
@@ -592,7 +604,7 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [tradesApiUrl]);
 
   // Listen to server-side scan triggers to automatically update local journal state
   useEffect(() => {
@@ -600,11 +612,12 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
     const handleRefresh = () => {
       refreshTrades();
     };
-    window.addEventListener('trades-refresh', handleRefresh);
+    const eventName = isBacktest ? 'backtest-trades-refresh' : 'trades-refresh';
+    window.addEventListener(eventName, handleRefresh);
     return () => {
-      window.removeEventListener('trades-refresh', handleRefresh);
+      window.removeEventListener(eventName, handleRefresh);
     };
-  }, [refreshTrades]);
+  }, [refreshTrades, isBacktest]);
 
   // ── 2. PATCH: Toggle position status (Pause / Stop / Reactivate) ────────
   const handleToggleStatus = useCallback(async (trade: TradeRecord) => {
@@ -612,7 +625,7 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
     setActionLoadingId(`${trade.id}-toggle`);
 
     try {
-      const res = await fetch("/api/trades", {
+      const res = await fetch(tradesApiUrl, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ trade_id: trade.id, status: nextStatus })
@@ -636,14 +649,14 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
     } finally {
       setActionLoadingId(null);
     }
-  }, []);
+  }, [tradesApiUrl]);
 
   // ── 3. PATCH: Manually close active trade ──────────────────────────────
   const handleClosePosition = useCallback(async (tradeId: string) => {
     setActionLoadingId(`${tradeId}-close`);
 
     try {
-      const res = await fetch("/api/trades", {
+      const res = await fetch(tradesApiUrl, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -671,14 +684,14 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
     } finally {
       setActionLoadingId(null);
     }
-  }, [livePrice]);
+  }, [livePrice, tradesApiUrl]);
 
   // ── 4. DELETE: Surgical hard row deletion ──────────────────────────────
   const handleDeleteTrade = useCallback(async (tradeId: string) => {
     setActionLoadingId(`${tradeId}-delete`);
 
     try {
-      const res = await fetch(`/api/trades?trade_id=${tradeId}`, {
+      const res = await fetch(`${tradesApiUrl}?trade_id=${tradeId}`, {
         method: "DELETE"
       });
 
@@ -872,10 +885,11 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
               </tr>
             </thead>
             <tbody>
+              {/* Dynamic Interactive Rows */}
               {trades.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-16 text-center text-muted font-mono">
-                    No trade records found. Execute trades from the terminal or wait for custom strategies to trigger.
+                  <td colSpan={11} className="py-8 px-4 text-center font-mono text-[10px] text-muted uppercase tracking-wider leading-relaxed">
+                    No active positions tracked in the ledger
                   </td>
                 </tr>
               ) : (
@@ -883,7 +897,7 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
                   <JournalTableRow
                     key={trade.id}
                     trade={trade}
-                    isLoading={!!actionLoadingId && actionLoadingId.startsWith(trade.id)}
+                    isLoading={actionLoadingId !== null}
                     actionLoadingId={actionLoadingId}
                     isDeletingConfirm={deleteConfirmId === trade.id}
                     handleToggleStatus={handleToggleStatus}
@@ -891,6 +905,7 @@ export function JournalTable({ initialTrades, initialAccount }: JournalTableProp
                     setDeleteConfirmId={setDeleteConfirmId}
                     handleDeleteTrade={handleDeleteTrade}
                     formatDate={formatDate}
+                    livePrice={livePrice}
                   />
                 ))
               )}
