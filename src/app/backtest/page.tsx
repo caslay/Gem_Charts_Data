@@ -15,10 +15,13 @@ import type { SmartAlert } from '@/hooks/useLiveAlerts';
 import {
   ChevronLeft, ChevronRight, Eye, Download, Copy,
   Calendar, Clock, BarChart2, Loader2, AlertTriangle,
-  ArrowLeft, Zap, CheckCheck, Brain, TrendingUp, Percent, AlertCircle
+  ArrowLeft, Zap, CheckCheck, Brain, TrendingUp, Percent, AlertCircle,
+  Settings, Activity
 } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
+import SettingsModal from '@/components/modals/SettingsModal';
+import BacktestSidebar from './BacktestSidebar';
 
 
 // ─── Stat badge ──────────────────────────────────────────────────────────────
@@ -45,6 +48,17 @@ export default function BacktestPage() {
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   const [activeTimeframe, setActiveTimeframe] = useState<BacktestTimeframe>('5m');
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
+
+  // ── Unified Dropdowns & Collapsible Sidebar State ─────────────────────────
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isSoundSettingsOpen, setIsSoundSettingsOpen] = useState(false);
+  const [commandCenterTab, setCommandCenterTab] = useState<'strategy' | 'audio'>('strategy');
+  const [isTfDropdownOpen, setIsTfDropdownOpen] = useState(false);
+
+  // Sync page activeTimeframe scale with backtest engine scale
+  useEffect(() => {
+    engine.setTimeframe(activeTimeframe);
+  }, [activeTimeframe, engine]);
 
   // ── Backtest Toast Alerts State ───────────────────────────────────────────
   const [activeAlerts, setActiveAlerts] = useState<SmartAlert[]>([]);
@@ -153,7 +167,7 @@ export default function BacktestPage() {
   }
 
   // Strategy Execution Engine — re-evaluates automatically on replayed steps
-  useStrategyEvaluator({
+  const { refetchStrategies } = useStrategyEvaluator({
     isBacktest: true,
     data: engine.enrichedPayload as unknown as MarketDataPayload,
     livePrice: lastPrice,
@@ -229,11 +243,11 @@ export default function BacktestPage() {
 
   const cairoTime = lastCandle
     ? new Date(lastCandle.t).toLocaleTimeString('en-EG', {
-        timeZone: 'Africa/Cairo',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true,
-      })
+      timeZone: 'Africa/Cairo',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    })
     : '--:--';
 
   const progressPct = engine.totalCandles > 0
@@ -271,21 +285,74 @@ export default function BacktestPage() {
           </span>
         </div>
 
-        {/* Timeframe pills */}
-        <div className="flex items-center gap-1 bg-card/65 p-1 rounded-full border border-card-border shrink-0">
-          {(['5m', '15m', '1h'] as BacktestTimeframe[]).map((tf) => (
+        {/* Timeframe dropdown & Command Center */}
+        <div className="flex items-center gap-3 shrink-0 select-none">
+          {/* Command Center */}
+          <button
+            onClick={() => {
+              setCommandCenterTab('strategy');
+              setIsSoundSettingsOpen(true);
+            }}
+            className="bg-card border border-card-border hover:border-accent text-slate-500 dark:text-zinc-400 hover:text-foreground px-3.5 py-2 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm"
+            title="Open Command Center"
+          >
+            <Settings className="w-3.5 h-3.5 text-accent" />
+            <span className="hidden sm:inline">[ COMMAND CENTER ]</span>
+          </button>
+
+          {/* Timeframe dropdown */}
+          <div className="relative inline-block text-left">
             <button
-              key={tf}
-              id={`bt-tf-${tf}`}
-              onClick={() => setActiveTimeframe(tf)}
-              className={`px-3 py-1.5 rounded-full text-xs font-black transition-all duration-200 cursor-pointer ${activeTimeframe === tf
-                ? 'bg-accent/15 text-accent border border-accent/30 shadow-[0_0_12px_rgba(var(--accent),0.12)]'
-                : 'text-slate-500 dark:text-zinc-400 hover:text-foreground hover:bg-card/50 border border-transparent'
-                }`}
+              onClick={() => setIsTfDropdownOpen(!isTfDropdownOpen)}
+              className="bg-card border border-card-border hover:border-accent text-slate-500 dark:text-zinc-400 hover:text-foreground px-4 py-2 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm"
+              id="bt-timeframe-dropdown"
             >
-              {tf.toUpperCase()}
+              <span>TIMEFRAME: {activeTimeframe.toUpperCase()}</span>
+              <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${isTfDropdownOpen ? 'rotate-90 text-accent' : ''}`} />
             </button>
-          ))}
+
+            {isTfDropdownOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-30"
+                  onClick={() => setIsTfDropdownOpen(false)}
+                />
+                <div className="absolute right-0 z-40 mt-1.5 w-32 origin-top-right rounded-xl bg-card border border-card-border shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="py-1">
+                    {(['5m', '15m', '1h'] as const).map((tf) => {
+                      const isActive = activeTimeframe === tf;
+                      return (
+                        <button
+                          key={tf}
+                          onClick={() => {
+                            setActiveTimeframe(tf);
+                            setIsTfDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-2.5 font-mono text-[10px] font-black tracking-widest uppercase cursor-pointer transition-all duration-150 first:rounded-t-xl last:rounded-b-xl ${isActive
+                              ? 'bg-accent/10 text-accent border-l-2 border-accent'
+                              : 'text-slate-500 dark:text-zinc-400 hover:text-foreground hover:bg-accent/5 border-l-2 border-transparent'
+                            }`}
+                        >
+                          {tf.toUpperCase()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Sidebar Toggle */}
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className={`bg-card border border-card-border hover:border-accent px-3.5 py-2 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm ${sidebarOpen ? 'text-accent border-accent/35 shadow-[0_0_12px_rgba(var(--accent),0.12)]' : 'text-slate-500 dark:text-zinc-400 hover:text-foreground'
+              }`}
+            title="Toggle HUD Sidebar"
+          >
+            <Activity className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">[ HUD SIDEBAR ]</span>
+          </button>
         </div>
       </header>
 
@@ -653,10 +720,36 @@ export default function BacktestPage() {
           )}
 
         </div>
+
+        {/* ── Right HUD Sidebar Clone ─────────────────────────────────────── */}
+        <BacktestSidebar
+          enrichedPayload={engine.enrichedPayload}
+          lastPrice={lastPrice}
+          activeTimeframe={activeTimeframe}
+          aiAnalysis={aiAnalysis}
+          isAnalyzing={isAnalyzing}
+          triggerAiAnalysisScan={triggerAiAnalysisScan}
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+        />
       </div>
 
       {/* Backtest Toast alerts */}
       <SmartAlertsToast activeAlerts={activeAlerts} dismissAlert={dismissAlert} />
+
+      {/* Global Command Center Modal */}
+      <SettingsModal
+        isOpen={isSoundSettingsOpen}
+        alert={null}
+        initialTab={commandCenterTab}
+        onClose={() => setIsSoundSettingsOpen(false)}
+        onSave={() => {
+          refetchStrategies();
+        }}
+        onDelete={() => {
+          refetchStrategies();
+        }}
+      />
     </main>
   );
 }

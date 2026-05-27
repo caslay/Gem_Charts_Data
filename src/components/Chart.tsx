@@ -75,6 +75,11 @@ export default function Chart({
     dataRef.current = data;
   }, [data]);
 
+  // Reset initial load zoom anchor on timeframe/interval switches
+  useEffect(() => {
+    isInitialLoad.current = true;
+  }, [interval]);
+
   // ── Phase 1: Alerts State & Interaction Refs ──────────────────────────────
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
@@ -109,10 +114,18 @@ export default function Chart({
   const livePrice = propsLivePrice !== undefined ? propsLivePrice : context.livePrice;
   const liveCandle = propsLiveCandle !== undefined ? propsLiveCandle : context.liveCandle;
   const themeSettings = propsThemeSettings !== undefined ? propsThemeSettings : context.themeSettings;
-  const { triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert: contextTriggerSmartAlert, setWsInterval, loadMoreHistory: contextLoadMoreHistory, isFetchingMore: contextIsFetchingMore, structureState, contextAnchorTimestamp } = context;
+  const { triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert: contextTriggerSmartAlert, setWsInterval, loadMoreHistory: contextLoadMoreHistory, isFetchingMore: contextIsFetchingMore, structureState: liveStructureState, contextAnchorTimestamp: liveContextAnchorTimestamp } = context;
   const triggerSmartAlert = propsTriggerSmartAlert !== undefined ? propsTriggerSmartAlert : contextTriggerSmartAlert;
   const loadMoreHistory = propsLoadMoreHistory !== undefined ? propsLoadMoreHistory : contextLoadMoreHistory;
   const isFetchingMore = propsIsFetchingMore !== undefined ? propsIsFetchingMore : contextIsFetchingMore;
+
+  const structureState = isBacktest
+    ? marketContextData?.ipda_metrics?.full_structure_map
+    : liveStructureState;
+
+  const contextAnchorTimestamp = isBacktest
+    ? (marketContextData?.ipda_metrics?.full_structure_map?.swings?.[0]?.t ?? null)
+    : liveContextAnchorTimestamp;
 
   const activeFvgs = propsActiveFvgs !== undefined ? propsActiveFvgs : (marketContextData?.ipda_metrics?.active_fvgs || []);
   const localDealingRange = propsLocalDealingRange !== undefined ? propsLocalDealingRange : marketContextData?.ipda_metrics?.pricing_context?.local_dealing_range;
@@ -795,14 +808,27 @@ export default function Chart({
       seriesRef.current.setData(formattedData);
 
       if (isInitialLoad.current) {
-        chartRef.current?.timeScale().fitContent();
+        if (isBacktest) {
+          // comfortable standard logical range zoom (last 150 candles) for replay parity
+          const totalCount = formattedData.length;
+          if (totalCount > 150) {
+            chartRef.current?.timeScale().setVisibleRange({
+              from: formattedData[totalCount - 150].time,
+              to: formattedData[totalCount - 1].time,
+            });
+          } else {
+            chartRef.current?.timeScale().fitContent();
+          }
+        } else {
+          chartRef.current?.timeScale().fitContent();
+        }
         isInitialLoad.current = false;
       }
 
       // Update coordinates
       updateAlertPositions();
     }
-  }, [data, theme]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, theme, isBacktest]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // ── Dynamic Chart Layer Orchestrator ─────────────────────────────────────
   useEffect(() => {

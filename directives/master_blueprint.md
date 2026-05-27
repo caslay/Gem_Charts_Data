@@ -1,10 +1,32 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.20
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.24
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-27  
-> **Last Updated:** 2026-05-27 (V10.20 BOS + PRICE_IN_OTE Strategy Metrics & Full Structural Integration Complete)  
+> **Last Updated:** 2026-05-27 (V10.24 Backtest HUD Sidebar Parity & Command Center Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.24 Changelog — Backtest HUD Sidebar Parity & Command Center Integration (Completed)
+
+### 1. Isolated Backtest HUD Sidebar (`BacktestSidebar.tsx`)
+- **Visual & Functional Sidebar Clone:** Engineered and integrated a custom `BacktestSidebar` component under `src/app/backtest/BacktestSidebar.tsx`. It provides 100% visual and structural design parity with the live HUD sidebar, including collapsible layouts and premium glassmorphic `.glass-panel` cards.
+- **Pure Replay-Data Binding:** The sidebar is completely decoupled from live WebSockets and contexts, preventing live data leakage. It maps directly to replayed variables, including `engine.enrichedPayload` (IPDA metrics, true day open, displacement status, sweeps, statistical confidence), `lastPrice` (replay ticks), and the local `useAIAnalysis` narrative/bias outputs.
+- **AI Synthesis Table & Note Parsing:** Clones the premium, institutional JSON-synthesis table parsing logic. Supports both diagnostics/execution and legacy hud-display schemas, rendering custom green/red color highlights, italicized narrative summaries, and simulated TradingView alert matrices.
+
+### 2. Timeframe Dropdown Switcher & Structure Alignment Sync (`page.tsx` & `useBacktestEngine.ts`)
+- **Dropdown Paradigm Realization:** Replaced the legacy static pill-based selectors in the backtest header with a beautiful, custom-built, fully responsive timeframe dropdown. Restricted strictly to loaded backtest scales (`5m`, `15m`, `1h`) to guarantee data integrity and eliminate blank-chart render anomalies.
+- **Dynamic Timeframe Synchronization:** Added a reactive `useEffect` on the backtest page to instantly forward `activeTimeframe` selections to the replay engine's internal state (`engine.setTimeframe`).
+- **Dynamic Structural Recalculations:** Refactored `buildEnrichedPayload` to dynamically resolve active candlestick arrays (`candles_5m`, `candles_15m`, `candles_1h`) matching the visual timeframe scale. Market structures (BOS/MSS, trend bias, and dealing ranges) are now mathematically and visually aligned with the active chart scale, eliminating the historical 15m hardcoding and solving the live-vs-backtest Trend Bias discrepancy (`BEARISH` vs `BULLISH`) perfectly.
+
+### 3. Command Center Integration (`page.tsx` & `SettingsModal.tsx`)
+- **Settings Launcher Entry:** Embedded the standard institutional `[ COMMAND CENTER ]` button inside the backtest page header, triggering a local stateful `isSoundSettingsOpen` modal.
+- **Instant Strategy Refetching:** Destructured the `refetchStrategies` handler returned by the strategy execution engine `useStrategyEvaluator` and bound it to `SettingsModal`'s `onSave` and `onDelete` properties. This ensures that any logic modifications made in the Equation Builder during a backtest are instantly synced, applying the updated rules immediately on the subsequent replay candles.
+
+## 🆕 V10.23 Changelog — SMC Mid-Candle Tick Replay Simulation (Completed)
+
+### 1. Mid-Candle Extreme Tick Fills (`useStrategyEvaluator.ts`)
+- **Simulating Wick Entry:** Integrated an advanced price projection simulation inside the strategy evaluator when running in offline backtest replay mode.
+- **Directional Extreme Mapping:** Evaluates candle extreme price spikes instead of closed-body noise during historical replay steps. Short strategy setups automatically evaluate candle **`High`** wicks to capture premium zone entries, while Long strategy setups evaluate candle **`Low`** wicks to capture discount zone entries. This bridges the gap between historical static klines and real-time intra-candle ticks perfectly.
 
 ## 🆕 V10.20 Changelog — Interactive Structure UI & Strategy Builder Integration (Completed)
 
@@ -18,22 +40,23 @@
 - **Extended `MatrixDataPayload` Interface:** Added `full_structure_map` and `structureState` fields to the drawer's data interface to resolve TypeScript compilation errors and ensure full type coverage.
 
 ### 3. Custom Strategy Builder Integration (`EquationBuilder.tsx` & `useStrategyEvaluator.ts`)
-- **Metric Key Registration (5 Metrics):** Registered the following inside the `MetricKey` union type and the `METRICS` descriptor registry:
+- **Metric Key Registration (6 Metrics):** Registered the following inside the `MetricKey` union type and the `METRICS` descriptor registry, supporting high-fidelity single-row sub-dropdown parameters:
   | Metric Key | Type | Description |
   |---|---|---|
   | `MARKET_TREND` | `enum` | Active structural bias: `BULLISH`, `BEARISH`, `UNSET` |
   | `LOCAL_PRICING` | `enum` | Dealing range zone: `PREMIUM`, `DISCOUNT`, `EQUILIBRIUM` |
-  | `MSS_CONFIRMED` | `boolean` | Whether the last MSS is displacement-confirmed |
-  | `BOS` | `boolean` | True if last structural break is a confirmed BOS (trend continuation) |
-  | `PRICE_IN_OTE` | `boolean` | True if current price is within the 62%–79% Fibonacci OTE retracement zone |
+  | `MSS` | `boolean` | **[Unified V10.21]** Market Structure Shift reversal, supporting inline Direction and Confirmation sub-dropdowns. |
+  | `BOS` | `boolean` | True if last structural break is a confirmed BOS (trend continuation), supporting inline Direction sub-dropdown. |
+  | `PRICE_IN_OTE` | `boolean` | **[Unified V10.22]** Price Retracement (Fib), supporting inline Retracement Level sub-dropdown (OTE 62%-79%, >=50%, >=60%, >=70.5%, >=79%). |
+  | `MSS_CONFIRMED` | `boolean` | *[Legacy / Deprecated]* Auto-migrates on load to unified `MSS` + `CONFIRMED` filter. |
 
-- **Evaluation Engine — `BOS` Resolver:** Parses the `zigzag` array from `full_structure_map`, inspects `trendAfter` on the most recent structural break event, and confirms it aligns with a trend-continuation direction (not reversal), returning `true` only on a validated BOS.
-- **Evaluation Engine — `PRICE_IN_OTE` Resolver:** Extracts the active dealing range `[dealLow, dealHigh]` from `structureState`, computes 0.62 and 0.79 Fibonacci retracement levels relative to the swing amplitude, and gates the current close price within that institutional OTE corridor.
-- **Clean Type-Safety:** All 5 metrics compile with zero TypeScript errors (`npx tsc --noEmit` → clean), with full offline backtest replay compatibility via the `ipda_metrics` pipeline.
+- **Evaluation Engine — `MSS` & `BOS` Resolvers:** Parses `zigzag` structural swings from the active wave engine, dynamically evaluating Direction (`BULLISH` vs `BEARISH`) and Confirmation (`CONFIRMED` vs `UNCONFIRMED`) criteria inline.
+- **Evaluation Engine — `PRICE_IN_OTE` Resolver:** Extracts the active dealing range `[dealLow, dealHigh]` from `structureState`, computes Fibonacci retracement levels (50%, 60%, 70.5%, 79%) relative to the swing amplitude, and gates the current price context within the selected retracement zone.
+- **Clean Type-Safety:** All 6 metrics compile with zero TypeScript errors (`npx tsc --noEmit` → clean), with full offline backtest replay compatibility via the `ipda_metrics` pipeline.
 
 ### 4. Strategy Customizer Reference Documentation (`directives/05_strategy_customizer.md`)
 - **New Directive File:** Created a comprehensive reference mapping every available strategy condition operator, metric key, value enum, and comparison operator. Serves as the canonical human-readable spec for the strategy equation builder UI.
-- **Covers:** All 5 structural metrics, all legacy price/volume/risk metrics, operator semantics (`==`, `>`, `<`, `>=`, `<=`, `!=`), and multi-condition `AND`/`OR` logic.
+- **Covers:** All 6 structural metrics, all legacy price/volume/risk metrics, operator semantics (`==`, `>`, `<`, `>=`, `<=`, `!=`), and multi-condition `AND`/`OR` logic.
 
 ## 🆕 V10.19 Changelog — Multi-Timeframe Separation & Chronological MSS Validation (Completed)
 
@@ -55,6 +78,21 @@
 ### 2. JSON Payload Integration (`route.ts`)
 - **Rich `full_structure_map` Injection:** Injected a `full_structure_map` object (containing swings, zigzag, innerSwings, innerZigzag, currentTrend, dealingRange) inside the `ipda_metrics` payload returned by `/api/market-data`.
 - **Decoupled AI Strategy Context:** Allows the AI prompt parser and automated trading strategies to evaluate high-fidelity structural changes across the entire 60-day historical context buffer, completely independent of the dynamic, visual OHLC slice displayed on the client.
+
+## 🆕 V10.21 Changelog — Backtest Parity & Structural Redraw Optimization (Completed)
+
+### 1. Unified Structure Mappings & Redraw Fixes
+- **Visual Timeframe Decoupling:** Decoupled `structureState` and `contextAnchorTimestamp` inside [Chart.tsx](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/components/Chart.tsx) by resolving them dynamically from the backtest's `enrichedPayload` instead of the global live context, solving disappearing lines on timeframe switches.
+- **Timeframe Change Observer:** Watch the `interval` prop and dynamically reset `isInitialLoad.current` to `true` to force Lightweight Charts coordinate refitting upon interval swaps.
+- **Missing Payload Injection:** Modified the backtest enriched payload inside [useBacktestEngine.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/hooks/useBacktestEngine.ts) to populate `full_structure_map` inside `ipda_metrics` matching the exact live API schema.
+
+### 2. High-Fidelity Mathematical Lookback Slicing
+- **Sliding Lookback Window:** Constrained active candles passed to structural analysis in `buildEnrichedPayload` to a rolling window of exactly `350` candles, aligning pivots, trend bias, and extremes perfectly with the live HUD standard.
+- **Dynamic UTC Date Evaluation:** Replaced local date filtering for `todayCandles` and target sweeps with dynamic UTC checks relative to the latest visible candle, resolving timezone leaks and achieving 100% target status parity.
+- **UTC Session Hours Sync:** Standardized London and Asian session hours to UTC zero limits (0-7 UTC and 7-12 UTC), mirroring live calculations.
+
+### 3. Visual Candle Zoom Optimization
+- **Lookback Bloat Erasure:** Enhanced the historical data sync effect in `Chart.tsx` to set a standard, high-fidelity logical range focus showing only the last `150` candles by default during backtests, while keeping older scrollable history accessible.
 
 ## 🆕 V10.17 Changelog — Historical Context Stabilization (Completed)
 
@@ -2294,6 +2332,52 @@ To enable visually auditing structural pivot detection and guarantee pristine al
 - **Live Endpoint Pipeline ([src/app/api/market-data/route.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/app/api/market-data/route.ts)):** Scrapes `candles15m` chronologically to isolate the current structural 5-Bar fractal bounds, computing the true local structural High, Low, Equilibrium (50% midpoint), and bias context independent of candle color sweeps.
 - **Backtest Replay Engine ([src/hooks/useBacktestEngine.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/hooks/useBacktestEngine.ts)):** Executes an identical chronological `getStructuralDealingRange` algorithm, establishing absolute live-to-backtest mathematical parity.
 - **Fault-Tolerant SWR Polling Hook ([src/hooks/useMarketData.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/hooks/useMarketData.ts)):** Feeds real-time data to the UI using a 5-second SWR background-polling loop. If a background fetch fails (e.g. due to temporary Next.js dev compilation latency or connection drops), the hook catches the exception, outputs a warning in the console, and preserves the existing chart data and HUD state instead of showing a blocking full-screen error modal, guaranteeing high UX stability.
+
+---
+
+## 🗺️ Graphify Knowledge Graph — V10.20 Snapshot (2026-05-27)
+
+> Generated from `graphify .` on 146 files · ~184,236 words → `graphify-out/`
+
+### God Nodes (Most Connected Abstractions)
+| Rank | Node | Edges |
+|---|---|---|
+| 1 | `useMarketDataContext()` | 16 |
+| 2 | `useStrategyEvaluator` | 13 |
+| 3 | `GET()` (/api/market-data route) | 12 |
+| 4 | Quant Logic & IPDA Rules (directive) | 9 |
+| 5 | `useBinanceWS()` | 8 |
+| 6 | `structureEngine` (State Machine) | 8 |
+| 7 | `GET /api/market-data` (God Node) | 8 |
+| 8 | `buildEnrichedPayload()` | 7 |
+| 9 | Chart Layer Registry | 7 |
+
+### Community Map (24 detected)
+| ID | Label | Cohesion |
+|---|---|---|
+| 0 | Market Data API & Python Bridge | 0.06 |
+| 1 | Frontend Pages & App Router | 0.07 |
+| 2 | Backtest Replay Engine | 0.15 |
+| 4 | Backtest Trade Routes | 0.36 |
+| 5 | Live Trade API & Execution | 0.36 |
+| 7 | Strategy Equation Builder | 0.19 |
+| 8 | FastAPI Quant Displacement | 0.25 |
+| 10 | AI Analysis & Live Alerts | 0.36 |
+| 13 | Chart Layer Registry | 0.37 |
+| 14 | Account & Balance API | 0.60 |
+| 15 | Custom Strategies API | 0.70 |
+| 16 | SMT Divergence Engine | 0.70 |
+| 17 | Quant Analyze Route | 0.83 |
+| 18 | System Settings API | 0.83 |
+
+### Hyperedges (Group Relationships)
+- **Core Quant Analysis Pipeline** — `structureEngine`, `fvgEngine`, `displacementEngine`, `orderFlowEngine`, `smtEngine` [EXTRACTED 0.95]
+- **Strategy Evaluation & Trade Execution Flow** — `useStrategyEvaluator`, `EquationBuilder`, `/api/strategies`, `/api/trades` [INFERRED 0.90]
+- **Market Data Singleton Context Chain** — `MarketDataContext`, `useMarketData`, `useLiveAlerts`, `useAIAnalysis` [EXTRACTED 0.95]
+
+### Token Reduction
+- Corpus: ~245,648 tokens → average query: ~1,378 tokens → **178x reduction**
+- Outputs: [`graphify-out/graph.html`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/graphify-out/graph.html) | [`graphify-out/GRAPH_REPORT.md`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/graphify-out/GRAPH_REPORT.md) | [`graphify-out/graph.json`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/graphify-out/graph.json)
 
 ---
 

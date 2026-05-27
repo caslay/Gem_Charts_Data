@@ -35,6 +35,8 @@ export interface StrategyCondition {
   temporal: TemporalMode;
   timeframe?: 'ANY' | '5m' | '15m';
   direction?: 'ANY' | 'BULLISH' | 'BEARISH';
+  confirmation?: 'CONFIRMED' | 'UNCONFIRMED' | 'ANY';
+  retracement?: 'OTE' | 'FIB_50' | 'FIB_60' | 'FIB_705' | 'FIB_79';
 }
 
 export interface CustomStrategy {
@@ -65,7 +67,7 @@ const METRICS: { key: MetricKey; label: string; type: 'boolean' | 'enum' | 'numb
   { key: 'LOCAL_PRICING', label: 'Dealing Range Pricing', type: 'enum', options: ['PREMIUM', 'DISCOUNT'] },
   { key: 'MSS_CONFIRMED', label: 'MSS Shift Confirmed', type: 'boolean' },
   { key: 'BOS', label: 'Break of Structure (BOS)', type: 'boolean' },
-  { key: 'PRICE_IN_OTE', label: 'Price in OTE Zone (62%-79%)', type: 'boolean' },
+  { key: 'PRICE_IN_OTE', label: 'Price Retracement (Fib)', type: 'boolean' },
 ];
 
 function getMetricDef(key: MetricKey) {
@@ -111,6 +113,8 @@ function createEmptyCondition(): StrategyCondition {
     temporal: 'INSTANT',
     timeframe: 'ANY',
     direction: 'ANY',
+    confirmation: 'CONFIRMED',
+    retracement: 'OTE',
   };
 }
 
@@ -160,13 +164,33 @@ export default function EquationBuilder() {
       if (strategy) {
         setEditName(strategy.name);
         
-        // Extract conditions with backward compatibility support
+        // Extract conditions with backward compatibility support and auto-migration
         const parsedConditions = Array.isArray(strategy.conditions)
           ? strategy.conditions
           : (strategy.conditions?.conditions || []);
 
         setEditConditions(
-          parsedConditions.map((c: any) => ({ ...c, id: c.id || generateId() }))
+          parsedConditions.map((c: any) => {
+            const condId = c.id || generateId();
+            if (c.metric === 'MSS_CONFIRMED') {
+              return {
+                ...c,
+                id: condId,
+                metric: 'MSS',
+                operator: c.operator || 'IS_TRUE',
+                direction: c.direction || 'ANY',
+                confirmation: 'CONFIRMED',
+                retracement: 'OTE'
+              };
+            }
+            return {
+              ...c,
+              id: condId,
+              direction: c.direction || 'ANY',
+              confirmation: c.confirmation || 'CONFIRMED',
+              retracement: c.retracement || 'OTE'
+            };
+          })
         );
         setEditActive(strategy.is_active);
         setEditTargetEnvironment(strategy.target_environment || 'BOTH');
@@ -342,12 +366,21 @@ export default function EquationBuilder() {
           if (def.type === 'boolean') {
             updated.operator = 'IS_TRUE';
             delete updated.value;
+            updated.direction = 'ANY';
+            updated.confirmation = 'CONFIRMED';
+            updated.retracement = 'OTE';
           } else if (def.type === 'number') {
             updated.operator = 'GREATER_THAN';
             updated.value = '0.0';
+            delete updated.direction;
+            delete updated.confirmation;
+            delete updated.retracement;
           } else {
             updated.operator = 'EQUALS';
             updated.value = def.options?.[0] || '';
+            delete updated.direction;
+            delete updated.confirmation;
+            delete updated.retracement;
           }
         }
 
@@ -541,7 +574,7 @@ export default function EquationBuilder() {
                       onChange={(e) => updateCondition(cond.id, 'metric', e.target.value)}
                       className="bg-background/60 border border-card-border/60 focus:border-accent focus:outline-none px-3 py-2 text-xs font-sans text-foreground rounded-lg cursor-pointer flex-1 min-w-0 transition-all shadow-sm"
                     >
-                      {METRICS.map((m) => (
+                      {METRICS.filter((m) => m.key !== 'MSS_CONFIRMED').map((m) => (
                         <option key={m.key} value={m.key}>
                           {m.label}
                         </option>
@@ -574,8 +607,8 @@ export default function EquationBuilder() {
                       </select>
                     )}
 
-                    {/* Direction selector (FVG / PRICE_IN_FVG / SMT_DIVERGENCE) */}
-                    {(cond.metric === 'FVG' || cond.metric === 'PRICE_IN_FVG' || cond.metric === 'SMT_DIVERGENCE') && (
+                    {/* Direction selector (FVG / PRICE_IN_FVG / SMT_DIVERGENCE / MSS / BOS) */}
+                    {(cond.metric === 'FVG' || cond.metric === 'PRICE_IN_FVG' || cond.metric === 'SMT_DIVERGENCE' || cond.metric === 'MSS' || cond.metric === 'BOS') && (
                       <select
                         value={cond.direction || 'ANY'}
                         onChange={(e) => updateCondition(cond.id, 'direction', e.target.value)}
@@ -584,6 +617,34 @@ export default function EquationBuilder() {
                         <option value="ANY">ANY DIR</option>
                         <option value="BULLISH">BULLISH</option>
                         <option value="BEARISH">BEARISH</option>
+                      </select>
+                    )}
+
+                    {/* Confirmation selector (MSS only) */}
+                    {cond.metric === 'MSS' && (
+                      <select
+                        value={cond.confirmation || 'CONFIRMED'}
+                        onChange={(e) => updateCondition(cond.id, 'confirmation', e.target.value)}
+                        className="bg-background/60 border border-card-border/60 focus:border-accent focus:outline-none px-2 py-2 text-xs font-sans text-foreground rounded-lg cursor-pointer w-[116px] shrink-0 transition-all shadow-sm"
+                      >
+                        <option value="CONFIRMED">CONFIRMED</option>
+                        <option value="UNCONFIRMED">UNCONFIRMED</option>
+                        <option value="ANY">ANY STATUS</option>
+                      </select>
+                    )}
+
+                    {/* Retracement selector (PRICE_IN_OTE only) */}
+                    {cond.metric === 'PRICE_IN_OTE' && (
+                      <select
+                        value={cond.retracement || 'OTE'}
+                        onChange={(e) => updateCondition(cond.id, 'retracement', e.target.value)}
+                        className="bg-background/60 border border-card-border/60 focus:border-accent focus:outline-none px-2 py-2 text-xs font-sans text-foreground rounded-lg cursor-pointer w-[146px] shrink-0 transition-all shadow-sm"
+                      >
+                        <option value="OTE">OTE Zone (62%-79%)</option>
+                        <option value="FIB_50">At least 50% (Equil)</option>
+                        <option value="FIB_60">At least 60%</option>
+                        <option value="FIB_705">At least 70.5% (Mid)</option>
+                        <option value="FIB_79">At least 79% (Deep)</option>
                       </select>
                     )}
 

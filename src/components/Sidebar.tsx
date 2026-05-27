@@ -1,21 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { 
-  DownloadCloud, 
-  TrendingUp, 
-  Activity, 
-  X, 
-  Brain, 
-  Zap, 
-  Target, 
-  Magnet, 
-  BarChart3, 
-  Terminal, 
-  Loader2, 
-  Copy, 
-  Download, 
-  Search, 
+import {
+  DownloadCloud,
+  TrendingUp,
+  Activity,
+  X,
+  Brain,
+  Zap,
+  Target,
+  Magnet,
+  BarChart3,
+  Terminal,
+  Loader2,
+  Copy,
+  Download,
+  Search,
   Database,
   Clock,
   ArrowRight
@@ -211,14 +211,13 @@ export default function Sidebar({
               <Activity className="w-4 h-4 text-accent" />
               <h2 className="text-xs font-black uppercase tracking-[0.2em] text-foreground">Flow Execution</h2>
             </div>
-            
+
             <div className="flex items-center gap-1.5">
               {/* Database Drawer Trigger Icon */}
-              <button 
+              <button
                 onClick={() => setIsJsonDrawerOpen(!isJsonDrawerOpen)}
-                className={`p-1.5 rounded-full transition-colors flex items-center justify-center shrink-0 cursor-pointer ${
-                  isJsonDrawerOpen ? 'bg-accent/15 text-accent border border-accent/35' : 'text-muted hover:text-foreground hover:bg-card border border-transparent'
-                }`}
+                className={`p-1.5 rounded-full transition-colors flex items-center justify-center shrink-0 cursor-pointer ${isJsonDrawerOpen ? 'bg-accent/15 text-accent border border-accent/35' : 'text-muted hover:text-foreground hover:bg-card border border-transparent'
+                  }`}
                 title="Toggle JSON Data Drawer"
               >
                 <Database size={14} />
@@ -248,7 +247,7 @@ export default function Sidebar({
                   <span className="text-[11px] lg:text-xs text-muted uppercase font-bold">NY Day Open</span>
                   <span className="text-sm font-mono font-bold text-foreground">{formatPrice(metrics?.true_day_open)}</span>
                 </div>
-                
+
                 {/* Killzone Timings Reference */}
                 <div className="bg-background/40 border border-card-border p-2 mt-2 space-y-1.5 rounded-lg select-none">
                   <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
@@ -266,14 +265,14 @@ export default function Sidebar({
                 </div>
               </div>
             </div>
- 
+
             {/* Market Structure Card (Timeframe-Isolated) */}
             <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
               <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
                 <TrendingUp size={12} className="text-accent" />
                 <span>Market Structure ({wsInterval || '---'})</span>
               </div>
-              
+
               <div className="space-y-2.5">
                 {/* Trend Bias and Shift Status */}
                 <div className="flex justify-between items-center">
@@ -296,7 +295,7 @@ export default function Sidebar({
                     const mssConfirmed = structureState?.market_structure_shift || data?.ipda_metrics?.market_structure_shift || false;
                     const latestMSS = structureState?.latestMSS || data?.ipda_metrics?.full_structure_map?.zigzag?.find((z: any) => z.label === 'MSS') || null;
                     const statusText = latestMSS ? (latestMSS.displacementConfirmed ? 'CONFIRMED' : 'PENDING') : (mssConfirmed ? 'CONFIRMED' : 'NONE');
-                    
+
                     if (statusText === 'CONFIRMED') {
                       return (
                         <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-500 text-[9px] font-black rounded border border-emerald-500/20 tracking-wider">
@@ -334,7 +333,7 @@ export default function Sidebar({
                           {formatPrice(range.low)} - {formatPrice(range.high)}
                         </span>
                       </div>
-                      
+
                       <div className="flex justify-between items-center text-[10px] lg:text-[11px] border-t border-card-border/30 pt-1.5">
                         <span className="text-muted font-bold uppercase tracking-wider">Equilibrium (0.5)</span>
                         <span className="font-mono font-bold text-accent">
@@ -362,7 +361,7 @@ export default function Sidebar({
                 <Magnet size={12} className="text-accent" />
                 <span>Liquidity Pool context</span>
               </div>
-              
+
               <div className="space-y-2.5">
                 {/* PDH / PDL */}
                 <div className="grid grid-cols-2 gap-2">
@@ -429,7 +428,7 @@ export default function Sidebar({
                   <span className="text-[11px] lg:text-xs text-muted font-bold">Displacement</span>
                   <span className={`text-[11px] lg:text-xs font-black uppercase tracking-wider ${metrics?.institutional_sponsorship?.status?.includes('BULLISH') ? 'text-emerald-500' :
                     metrics?.institutional_sponsorship?.status?.includes('BEARISH') ? 'text-rose-500' :
-                    metrics?.institutional_sponsorship?.status === 'CONSOLIDATION' ? 'text-accent' : 'text-muted'
+                      metrics?.institutional_sponsorship?.status === 'CONSOLIDATION' ? 'text-accent' : 'text-muted'
                     }`}>
                     {metrics?.institutional_sponsorship?.status || 'INACTIVE'}
                   </span>
@@ -450,12 +449,11 @@ export default function Sidebar({
                     </div>
                     <div className="flex justify-between text-[10px] items-center">
                       <span className="text-muted">OLS VALIDATION</span>
-                      <span className={`font-black uppercase text-[9px] tracking-wider ${
-                        metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'text-emerald-500' :
+                      <span className={`font-black uppercase text-[9px] tracking-wider ${metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'text-emerald-500' :
                         metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === 'CONSOLIDATION' ? 'text-accent' : 'text-rose-500'
-                      }`}>
+                        }`}>
                         {metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'CONFIRMED' :
-                         metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === 'CONSOLIDATION' ? 'CONSOLIDATION' : 'REJECTED'}
+                          metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === 'CONSOLIDATION' ? 'CONSOLIDATION' : 'REJECTED'}
                       </span>
                     </div>
                   </div>
@@ -660,7 +658,7 @@ export default function Sidebar({
                 <Database className="w-4 h-4 text-accent animate-pulse" />
                 <h3 className="text-xs font-black uppercase tracking-[0.15em] text-foreground">JSON Data Stream</h3>
               </div>
-              <button 
+              <button
                 onClick={() => setIsJsonDrawerOpen(false)}
                 className="p-1 text-muted hover:text-foreground rounded-full hover:bg-background/80 cursor-pointer"
                 title="Close Data Drawer"
@@ -671,7 +669,7 @@ export default function Sidebar({
 
             {/* Drawer Content */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              
+
               {/* Lookback filters */}
               <div className="bg-background/40 rounded-xl p-4 border border-card-border backdrop-blur-md">
                 <span className="text-[9px] font-black text-accent uppercase tracking-widest block mb-2">Lookback Configurations</span>
