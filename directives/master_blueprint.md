@@ -1,8 +1,8 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.19
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.20
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-27  
-> **Last Updated:** 2026-05-27 (V10.19 Multi-Timeframe Separation & Chronological MSS Validation Complete)  
+> **Last Updated:** 2026-05-27 (V10.20 BOS + PRICE_IN_OTE Strategy Metrics & Full Structural Integration Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
 
@@ -15,10 +15,25 @@
 ### 2. IPDA Matrix Config Drawer expansion (`MatrixConfigDrawer.tsx`)
 - **Section 1.2: Stateful Market Structure:** Expanded the live-synced drawer with an institutional-style section detailing structural counts. Shows Major Swings count (5-bar fractals) and Inner Swings count (3-bar fractals).
 - **Exact Swing Anchors:** Displays dealing range high and low anchor swings with exact price levels and precise timestamps formatted in Cairo timezone (`Africa/Cairo` UTC+3).
+- **Extended `MatrixDataPayload` Interface:** Added `full_structure_map` and `structureState` fields to the drawer's data interface to resolve TypeScript compilation errors and ensure full type coverage.
 
 ### 3. Custom Strategy Builder Integration (`EquationBuilder.tsx` & `useStrategyEvaluator.ts`)
-- **Metric Key Registration:** Registered `'MARKET_TREND'`, `'LOCAL_PRICING'`, and `'MSS_CONFIRMED'` inside `MetricKey` types and the `METRICS` registry, complete with enum and boolean properties.
-- **Evaluation Engine Case Resolvers:** Enhanced `resolveMetric` to evaluate these structural variables dynamically against `ipda_metrics`. Compiles with 100% clean type-safety and full offline backtest replay compatibility.
+- **Metric Key Registration (5 Metrics):** Registered the following inside the `MetricKey` union type and the `METRICS` descriptor registry:
+  | Metric Key | Type | Description |
+  |---|---|---|
+  | `MARKET_TREND` | `enum` | Active structural bias: `BULLISH`, `BEARISH`, `UNSET` |
+  | `LOCAL_PRICING` | `enum` | Dealing range zone: `PREMIUM`, `DISCOUNT`, `EQUILIBRIUM` |
+  | `MSS_CONFIRMED` | `boolean` | Whether the last MSS is displacement-confirmed |
+  | `BOS` | `boolean` | True if last structural break is a confirmed BOS (trend continuation) |
+  | `PRICE_IN_OTE` | `boolean` | True if current price is within the 62%–79% Fibonacci OTE retracement zone |
+
+- **Evaluation Engine — `BOS` Resolver:** Parses the `zigzag` array from `full_structure_map`, inspects `trendAfter` on the most recent structural break event, and confirms it aligns with a trend-continuation direction (not reversal), returning `true` only on a validated BOS.
+- **Evaluation Engine — `PRICE_IN_OTE` Resolver:** Extracts the active dealing range `[dealLow, dealHigh]` from `structureState`, computes 0.62 and 0.79 Fibonacci retracement levels relative to the swing amplitude, and gates the current close price within that institutional OTE corridor.
+- **Clean Type-Safety:** All 5 metrics compile with zero TypeScript errors (`npx tsc --noEmit` → clean), with full offline backtest replay compatibility via the `ipda_metrics` pipeline.
+
+### 4. Strategy Customizer Reference Documentation (`directives/05_strategy_customizer.md`)
+- **New Directive File:** Created a comprehensive reference mapping every available strategy condition operator, metric key, value enum, and comparison operator. Serves as the canonical human-readable spec for the strategy equation builder UI.
+- **Covers:** All 5 structural metrics, all legacy price/volume/risk metrics, operator semantics (`==`, `>`, `<`, `>=`, `<=`, `!=`), and multi-condition `AND`/`OR` logic.
 
 ## 🆕 V10.19 Changelog — Multi-Timeframe Separation & Chronological MSS Validation (Completed)
 

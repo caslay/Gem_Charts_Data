@@ -196,6 +196,40 @@ function resolveMetric(
       return ipda.market_structure_shift === true;
     }
 
+    case 'BOS': {
+      const zigzag = ipda.full_structure_map?.zigzag || [];
+      if (!Array.isArray(zigzag) || zigzag.length === 0) return false;
+      const latestSegment = zigzag[zigzag.length - 1];
+      const isBOSActive = latestSegment?.label === 'BOS';
+
+      const condDir = (condition as any).direction;
+      if (condDir === 'BULLISH') return isBOSActive && latestSegment?.trendAfter === 'BULLISH';
+      if (condDir === 'BEARISH') return isBOSActive && latestSegment?.trendAfter === 'BEARISH';
+
+      return isBOSActive;
+    }
+
+    case 'PRICE_IN_OTE': {
+      const range = ipda.full_structure_map?.dealingRange || {};
+      const high = range.high || 0;
+      const low = range.low || 0;
+      const price = livePrice || 0;
+      
+      if (high === 0 || low === 0 || price === 0) return false;
+      const trend = ipda.current_trend || 'UNSET';
+      
+      if (trend === 'BULLISH') {
+        const minOte = high - 0.79 * (high - low);
+        const maxOte = high - 0.62 * (high - low);
+        return price >= minOte && price <= maxOte;
+      } else if (trend === 'BEARISH') {
+        const minOte = low + 0.62 * (high - low);
+        const maxOte = low + 0.79 * (high - low);
+        return price >= minOte && price <= maxOte;
+      }
+      return false;
+    }
+
     default:
       return false;
   }

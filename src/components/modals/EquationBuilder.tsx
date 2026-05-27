@@ -21,7 +21,9 @@ export type MetricKey =
   | 'AI_DAILY_BIAS'
   | 'MARKET_TREND'
   | 'LOCAL_PRICING'
-  | 'MSS_CONFIRMED';
+  | 'MSS_CONFIRMED'
+  | 'BOS'
+  | 'PRICE_IN_OTE';
 export type OperatorKey = 'IS_TRUE' | 'IS_FALSE' | 'EQUALS' | 'NOT_EQUALS' | 'GREATER_THAN' | 'LESS_THAN';
 export type TemporalMode = 'INSTANT' | 'ON_CLOSE';
 
@@ -62,6 +64,8 @@ const METRICS: { key: MetricKey; label: string; type: 'boolean' | 'enum' | 'numb
   { key: 'MARKET_TREND', label: 'Market Structure Trend', type: 'enum', options: ['BULLISH', 'BEARISH', 'UNSET'] },
   { key: 'LOCAL_PRICING', label: 'Dealing Range Pricing', type: 'enum', options: ['PREMIUM', 'DISCOUNT'] },
   { key: 'MSS_CONFIRMED', label: 'MSS Shift Confirmed', type: 'boolean' },
+  { key: 'BOS', label: 'Break of Structure (BOS)', type: 'boolean' },
+  { key: 'PRICE_IN_OTE', label: 'Price in OTE Zone (62%-79%)', type: 'boolean' },
 ];
 
 function getMetricDef(key: MetricKey) {
