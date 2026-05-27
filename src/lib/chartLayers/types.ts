@@ -19,6 +19,10 @@ export interface RenderContext {
   themeSettings?: ThemeSettings;
   /** A persistent private storage map scoped to this specific plugin instance */
   storage: Map<string, any>;
+  /** The stabilized calculated structure state */
+  structureState?: any;
+  /** The stable lookback context anchor timestamp */
+  contextAnchorTimestamp?: number | null;
 }
 
 export interface ChartLayer {

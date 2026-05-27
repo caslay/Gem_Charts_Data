@@ -22,3 +22,29 @@ Do NOT parse raw OHLCV arrays to guess liquidity. Use the parsed `order_flow_eng
 
 ## 4. Temporal Filters (The DEAD_ZONE)
 - Do NOT execute setups during the NY Lunch/Mid-day pause (The DEAD_ZONE). If the time window aligns with this zone, output `[⚪ NEUTRAL / 🚫 ABORT]` and await the PM Killzone.
+
+## 5. Market Structure Classification Rules (V10.13)
+
+### 5.1 The Trend State Machine
+The Market Structure Engine maintains a running trend state (`BULLISH` | `BEARISH` | `UNSET`). Classification of structural breaks depends entirely on this state:
+
+| Current Trend | Break Direction | Classification | State After |
+|---|---|---|---|
+| BULLISH | Above prior Swing HIGH | **BOS** (continuation) | BULLISH (unchanged) |
+| BULLISH | Below prior Swing LOW | **MSS** (reversal) | BEARISH (flipped) |
+| BEARISH | Below prior Swing LOW | **BOS** (continuation) | BEARISH (unchanged) |
+| BEARISH | Above prior Swing HIGH | **MSS** (reversal) | BULLISH (flipped) |
+
+### 5.2 Critical Rule: Direction-Blind Classification is FORBIDDEN
+Labeling ALL upward breaks as "BOS" and ALL downward breaks as "MSS" is a systemic failure that produces false narratives. The label depends on the CONTEXT of the current trend, not the raw direction of the price movement. Source of truth: `src/lib/structureEngine.ts`.
+
+### 5.3 MSS Displacement Gating (Soft Gate)
+A Market Structure Shift (MSS) event is classified as:
+- **CONFIRMED** — When `institutional_sponsorship.status` is `ACTIVE_BULLISH` or `ACTIVE_BEARISH` at the time of the break. Only CONFIRMED MSS events set `market_structure_shift: true` in `ipda_metrics` and trigger strategy evaluator conditions.
+- **UNCONFIRMED** — When displacement sponsorship is `INACTIVE` or `CONSOLIDATION`. The visual layer renders this as a dashed amber line with "MSS?" label. The strategy evaluator IGNORES unconfirmed MSS events.
+
+### 5.4 Dealing Range Anchor Rules
+- The Structural Dealing Range is anchored ONLY on **color-validated 5-bar (MAJOR) fractals**.
+- 3-bar (INNER) fractals are informational visual aids only and NEVER anchor the dealing range.
+- Color Lock (§1 above) is MANDATORY for dealing range fractal anchors: a fractal without proper institutional color signature is rejected.
+- Fallback: if no validated fractals exist in the candle window, raw candle extremes are used (documented as degraded mode).

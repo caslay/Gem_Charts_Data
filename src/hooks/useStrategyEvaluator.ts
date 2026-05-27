@@ -110,9 +110,37 @@ function resolveMetric(
     }
 
     case 'MSS': {
-      const mss = ipda.market_structure_shift
-        || orderFlow.market_structure_shift;
-      return mss === true || mss === 'ACTIVE' || mss === 'CONFIRMED';
+      const condDir = condition.direction || 'ANY';
+      const condConf = (condition as any).confirmation || 'CONFIRMED';
+
+      const zigzag = ipda.full_structure_map?.zigzag || [];
+      const mssSegments = zigzag.filter((z: any) => z.label === 'MSS');
+      const latestMssSegment = mssSegments[mssSegments.length - 1] || null;
+
+      // Fallback to top-level ipda metrics if zigzag is unavailable
+      if (!latestMssSegment) {
+        const mssActive = ipda.market_structure_shift === true;
+        const mssDir = ipda.market_structure_shift_direction;
+        const isDirMatch = condDir === 'ANY' || mssDir === condDir;
+        if (condConf === 'UNCONFIRMED') return false; // top-level flag is only for confirmed
+        return mssActive && isDirMatch;
+      }
+
+      // Check confirmation matching
+      let isConfMatch = false;
+      if (condConf === 'CONFIRMED') {
+        isConfMatch = latestMssSegment.displacementConfirmed === true;
+      } else if (condConf === 'UNCONFIRMED') {
+        isConfMatch = latestMssSegment.displacementConfirmed === false;
+      } else {
+        isConfMatch = true; // ANY
+      }
+
+      // Check direction matching
+      const mssDir = latestMssSegment.trendAfter || ipda.market_structure_shift_direction;
+      const isDirMatch = condDir === 'ANY' || mssDir === condDir;
+
+      return isConfMatch && isDirMatch;
     }
 
     case 'SMT': {
@@ -171,6 +199,92 @@ function resolveMetric(
       const price = livePrice || 0;
       if (price === 0 || allMagnets.length === 0) return false;
       return allMagnets.some((magnetPrice: number) => Math.abs(price - magnetPrice) <= 2.00);
+    }
+
+    case 'MARKET_TREND': {
+      return ipda.current_trend || 'UNSET';
+    }
+
+    case 'LOCAL_PRICING': {
+      const pricing = ipda.pricing_context || {};
+      const range = pricing.local_dealing_range || {};
+      const fullRange = ipda.full_structure_map?.dealingRange || {};
+      return fullRange.current_status || range.current_status || 'UNKNOWN';
+    }
+
+    case 'MSS_CONFIRMED': {
+      return ipda.market_structure_shift === true;
+    }
+
+    case 'BOS': {
+      const zigzag = ipda.full_structure_map?.zigzag || [];
+      if (!Array.isArray(zigzag) || zigzag.length === 0) return false;
+      const latestSegment = zigzag[zigzag.length - 1];
+      const isBOSActive = latestSegment?.label === 'BOS';
+
+      const condDir = (condition as any).direction;
+      if (condDir === 'BULLISH') return isBOSActive && latestSegment?.trendAfter === 'BULLISH';
+      if (condDir === 'BEARISH') return isBOSActive && latestSegment?.trendAfter === 'BEARISH';
+
+      return isBOSActive;
+    }
+
+    case 'PRICE_IN_OTE': {
+      const range = ipda.full_structure_map?.dealingRange || {};
+      const high = range.high || 0;
+      const low = range.low || 0;
+      const price = livePrice || 0;
+      
+      if (high === 0 || low === 0 || price === 0) return false;
+      const trend = ipda.current_trend || 'UNSET';
+      const zone = (condition as any).retracement || 'OTE';
+      
+      if (trend === 'BULLISH') {
+        if (zone === 'OTE') {
+          const minOte = high - 0.79 * (high - low);
+          const maxOte = high - 0.62 * (high - low);
+          return price >= minOte && price <= maxOte;
+        }
+        if (zone === 'FIB_50') {
+          const level = high - 0.50 * (high - low);
+          return price <= level;
+        }
+        if (zone === 'FIB_60') {
+          const level = high - 0.60 * (high - low);
+          return price <= level;
+        }
+        if (zone === 'FIB_705') {
+          const level = high - 0.705 * (high - low);
+          return price <= level;
+        }
+        if (zone === 'FIB_79') {
+          const level = high - 0.79 * (high - low);
+          return price <= level;
+        }
+      } else if (trend === 'BEARISH') {
+        if (zone === 'OTE') {
+          const minOte = low + 0.62 * (high - low);
+          const maxOte = low + 0.79 * (high - low);
+          return price >= minOte && price <= maxOte;
+        }
+        if (zone === 'FIB_50') {
+          const level = low + 0.50 * (high - low);
+          return price >= level;
+        }
+        if (zone === 'FIB_60') {
+          const level = low + 0.60 * (high - low);
+          return price >= level;
+        }
+        if (zone === 'FIB_705') {
+          const level = low + 0.705 * (high - low);
+          return price >= level;
+        }
+        if (zone === 'FIB_79') {
+          const level = low + 0.79 * (high - low);
+          return price >= level;
+        }
+      }
+      return false;
     }
 
     default:
@@ -415,7 +529,15 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
         continue; // Pure silence, no alerts
       }
 
-      const isMatch = evaluateStrategy(strategy, data, livePrice, liveCandle, aiBias);
+      // V10.23 — Backtest Replay mid-candle TICK fills simulation:
+      // If evaluating in the backtest replay engine, a mid-candle TICK strategy (TICK temporal/conditions)
+      // can fire if the candle's extreme price (High for shorts, Low for longs) enters the zone.
+      let backtestPrice = livePrice;
+      if (isBacktest && liveCandle) {
+        backtestPrice = direction === 'SHORT' ? liveCandle.high : liveCandle.low;
+      }
+
+      const isMatch = evaluateStrategy(strategy, data, backtestPrice, liveCandle, aiBias);
 
       if (!isMatch) continue;
 

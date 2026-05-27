@@ -14,6 +14,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
 import { verifyDisplacementOffline } from '@/lib/displacementEngine';
 import { generateTradeExecutionParameters } from '@/lib/riskEngine';
+import { analyzeMarketStructure } from '@/lib/structureEngine';
 
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -133,44 +134,54 @@ function findCutoffIndex(candles: BtCandle[], dateStr: string, cutoffHour: numbe
 // ─────────────────────────────────────────────────────────────────────────────
 function buildEnrichedPayload(
   visible: BtMasterArrays,
-  selectedDate: string
+  selectedDate: string,
+  timeframe: BacktestTimeframe
 ): Record<string, unknown> {
   const { candles_1h, candles_15m, candles_5m } = visible;
 
-  // ── True Day Open (07:00 Cairo = 04:00 UTC) ─────────────────────────────
-  let trueDayOpen0700: number | null = null;
-  let dayOpenIndex = -1;
-
-  for (let i = candles_15m.length - 1; i >= 0; i--) {
-    const d = new Date(candles_15m[i].t);
-    const candleDateStr = d.toISOString().slice(0, 10);
-    if (candleDateStr === selectedDate && d.getUTCHours() === 4 && d.getUTCMinutes() === 0) {
-      trueDayOpen0700 = candles_15m[i].o;
-      dayOpenIndex = i;
-      break;
-    }
-  }
-
-  // ── Previous Day H/L from 1h candles ────────────────────────────────────
-  const [targetStartMs] = utcDayRange(selectedDate);
-  const prevDayStart = targetStartMs - 24 * 60 * 60 * 1000;
-  const prevDayEnd = targetStartMs;
-
-  let pdh = 0;
-  let pdl = Infinity;
-  candles_1h.forEach((c) => {
-    const rawUtcMs = c.t;
-    if (rawUtcMs >= prevDayStart && rawUtcMs < prevDayEnd) {
-      if (c.h > pdh) pdh = c.h;
-      if (c.l < pdl) pdl = c.l;
-    }
-  });
-  if (pdl === Infinity) pdl = 0;
+  const activeCandles = timeframe === '1h'
+    ? candles_1h
+    : timeframe === '15m'
+      ? candles_15m
+      : candles_5m;
 
   // ── Current price & premium/discount ────────────────────────────────────
   const liveCandle = candles_5m[candles_5m.length - 1] ?? null;
   const livePrice = liveCandle?.c ?? null;
 
+  const lastDateUtc = liveCandle ? new Date(liveCandle.t) : null;
+
+  // ── True Day Open (07:00 Cairo = 04:00 UTC) ─────────────────────────────
+  // Search backward to locate the most recent 04:00 UTC anchor
+  let trueDayOpen0700: number | null = null;
+  for (let i = candles_15m.length - 1; i >= 0; i--) {
+    const d = new Date(candles_15m[i].t);
+    if (d.getUTCHours() === 4 && d.getUTCMinutes() === 0) {
+      trueDayOpen0700 = candles_15m[i].o;
+      break;
+    }
+  }
+
+  // ── Previous Day H/L from 1h candles ────────────────────────────────────
+  let pdh = 0;
+  let pdl = Infinity;
+  if (lastDateUtc) {
+    const previousDayDateUtc = new Date(Date.UTC(lastDateUtc.getUTCFullYear(), lastDateUtc.getUTCMonth(), lastDateUtc.getUTCDate() - 1));
+    const prevYear = previousDayDateUtc.getUTCFullYear();
+    const prevMonth = previousDayDateUtc.getUTCMonth();
+    const prevDate = previousDayDateUtc.getUTCDate();
+
+    candles_1h.forEach((c) => {
+      const dUtc = new Date(c.t);
+      if (dUtc.getUTCFullYear() === prevYear && dUtc.getUTCMonth() === prevMonth && dUtc.getUTCDate() === prevDate) {
+        if (c.h > pdh) pdh = c.h;
+        if (c.l < pdl) pdl = c.l;
+      }
+    });
+  }
+  if (pdl === Infinity) pdl = 0;
+
+  // ── Current price & premium/discount status ──────────────────────────────
   let currentPricing = 'UNKNOWN';
   if (trueDayOpen0700 !== null && livePrice !== null) {
     if (livePrice > trueDayOpen0700) currentPricing = 'PREMIUM';
@@ -185,14 +196,17 @@ function buildEnrichedPayload(
   const fvgs5m = detectActiveFVGs(candles_5m_with_closed, true);
   const activeFVGs = mapAndConsolidateFVGs(fvgs15m, fvgs5m);
 
-  // ── Session Ranges ──────────────────────────────────────────────────────
-  const getSessionLiquidityLocal = (candles: BtCandle[], startHourLocal: number, endHourLocal: number) => {
+  // ── Session Ranges (Aligned with live HUD's UTC hour metrics) ─────────────
+  const getSessionLiquidityUTC = (candles: BtCandle[], startHourUTC: number, endHourUTC: number) => {
+    if (!lastDateUtc) return { high: null, low: null };
+
     const sessionCandles = candles.filter(c => {
-      // Shift raw UTC timestamp by +3h to evaluate local Cairo day and local Cairo hour
-      const cairoDate = new Date(c.t + UTC_PLUS3_MS);
-      const candleDayStr = cairoDate.toISOString().slice(0, 10);
-      const hLocal = cairoDate.getUTCHours();
-      return candleDayStr === selectedDate && hLocal >= startHourLocal && hLocal < endHourLocal;
+      const d = new Date(c.t);
+      return d.getUTCFullYear() === lastDateUtc.getUTCFullYear() &&
+        d.getUTCMonth() === lastDateUtc.getUTCMonth() &&
+        d.getUTCDate() === lastDateUtc.getUTCDate() &&
+        d.getUTCHours() >= startHourUTC &&
+        d.getUTCHours() < endHourUTC;
     });
 
     if (sessionCandles.length === 0) return { high: null, low: null };
@@ -203,15 +217,19 @@ function buildEnrichedPayload(
     };
   };
 
-  const asianLiquidity = getSessionLiquidityLocal(candles_15m, 3, 10);
-  const londonLiquidity = getSessionLiquidityLocal(candles_15m, 10, 15);
+  const asianLiquidity = getSessionLiquidityUTC(candles_15m, 0, 7);
+  const londonLiquidity = getSessionLiquidityUTC(candles_15m, 7, 12);
 
   // ── Target Sweeps and DOL Status ────────────────────────────────────────
   let target_status = "PENDING";
-  const todayCandles = candles_15m.filter(c => {
-    const d = new Date(c.t);
-    return d.toISOString().slice(0, 10) === selectedDate;
-  });
+  const todayCandles = lastDateUtc
+    ? candles_15m.filter(c => {
+      const d = new Date(c.t);
+      return d.getUTCFullYear() === lastDateUtc.getUTCFullYear() &&
+        d.getUTCMonth() === lastDateUtc.getUTCMonth() &&
+        d.getUTCDate() === lastDateUtc.getUTCDate();
+    })
+    : [];
 
   const sweeps: string[] = [];
 
@@ -222,7 +240,7 @@ function buildEnrichedPayload(
     }
   }
 
-  // Check Asian sweeps (only candles at or after 10:00 Cairo local time = 07:00 UTC)
+  // Check Asian sweeps (only candles at or after 07:00 UTC)
   const afterAsianCandles = todayCandles.filter(c => new Date(c.t).getUTCHours() >= 7);
   for (const c of afterAsianCandles) {
     if (asianLiquidity.high && c.h >= asianLiquidity.high && c.h < pdh) {
@@ -233,7 +251,7 @@ function buildEnrichedPayload(
     }
   }
 
-  // Check London sweeps (only candles at or after 15:00 Cairo local time = 12:00 UTC)
+  // Check London sweeps (only candles at or after 12:00 UTC)
   const afterLondonCandles = todayCandles.filter(c => new Date(c.t).getUTCHours() >= 12);
   for (const c of afterLondonCandles) {
     if (londonLiquidity.high && c.h >= londonLiquidity.high && c.h < pdh) {
@@ -251,50 +269,31 @@ function buildEnrichedPayload(
     target_status = uniqueSweeps.join(" | ") + " / PDH_PDL_PENDING";
   }
 
-  // ── Structural Dealing Range (based strictly on 5-bar fractals) ─────────
-  const getStructuralDealingRange = (candles: BtCandle[], currentPrice: number) => {
-    let recentHigh: number | null = null;
-    let recentLow: number | null = null;
+  // ── Offline Sponsorship and Risk calculations ────────────────────────────
+  const displacement = verifyDisplacementOffline(activeCandles, SYMBOL);
+  const displacementSponsorship = displacement.status !== 'INACTIVE' && displacement.status !== 'CONSOLIDATION'
+    ? 'ACTIVE'
+    : 'INACTIVE';
 
-    for (let i = 2; i < candles.length - 2; i++) {
-      const c2Prev = candles[i - 2];
-      const prev = candles[i - 1];
-      const curr = candles[i];
-      const next = candles[i + 1];
-      const c2Next = candles[i + 2];
+  const openInterestTrend = displacement.status !== 'INACTIVE' && displacement.status !== 'CONSOLIDATION'
+    ? 'RISING'
+    : 'FLAT';
 
-      if (curr.h > prev.h && curr.h > c2Prev.h && curr.h > next.h && curr.h > c2Next.h) {
-        recentHigh = curr.h;
-      }
-      if (curr.l < prev.l && curr.l < c2Prev.l && curr.l < next.l && curr.l < c2Next.l) {
-        recentLow = curr.l;
-      }
-    }
+  // ── V10.13 Centralized Structure Analysis via structureEngine ─────────────
+  // Slice active candles to match the standard 350-candle lookback limit of the live HUD
+  const structureCandles = activeCandles.slice(-350);
 
-    if (recentHigh === null || recentLow === null) {
-      const highs = candles.map(c => c.h);
-      const lows = candles.map(c => c.l);
-      recentHigh = recentHigh ?? Math.max(...highs);
-      recentLow = recentLow ?? Math.min(...lows);
-    }
-
-    const equilibrium = parseFloat(((recentHigh + recentLow) / 2).toFixed(2));
-    return {
-      high: parseFloat(recentHigh.toFixed(2)),
-      low: parseFloat(recentLow.toFixed(2)),
-      equilibrium,
-      current_status: currentPrice > equilibrium ? 'PREMIUM' : 'DISCOUNT',
-    };
-  };
-
-  const localDealingRange = livePrice !== null
-    ? getStructuralDealingRange(candles_15m, livePrice)
+  const structureAnalysis = (livePrice !== null)
+    ? analyzeMarketStructure(structureCandles, livePrice, displacement)
+    : null;
+  const localDealingRange = structureAnalysis
+    ? structureAnalysis.dealingRange
     : { high: null, low: null, equilibrium: null, current_status: 'UNKNOWN' };
 
   // Determine current killzone from replayed candle time
   const current_time_window = liveCandle ? (() => {
     const utcDate = new Date(liveCandle.t);
-    
+
     // NY Lunch Dead Zone Preemption (12:00 PM – 1:30 PM New York Time)
     const nyTimeStr = utcDate.toLocaleString("en-US", { timeZone: "America/New_York" });
     const nyDate = new Date(nyTimeStr);
@@ -311,16 +310,6 @@ function buildEnrichedPayload(
     if (hour >= 17 && hour <= 18) return "NY_PM_KILLZONE";
     return "DEAD_ZONE";
   })() : "DEAD_ZONE";
-
-  // ── Offline Sponsorship and Risk calculations ────────────────────────────
-  const displacement = verifyDisplacementOffline(candles_15m, SYMBOL);
-  const displacementSponsorship = displacement.status !== 'INACTIVE' && displacement.status !== 'CONSOLIDATION'
-    ? 'ACTIVE'
-    : 'INACTIVE';
-  
-  const openInterestTrend = displacement.status !== 'INACTIVE' && displacement.status !== 'CONSOLIDATION'
-    ? 'RISING'
-    : 'FLAT';
 
   const trade_execution_parameters = generateTradeExecutionParameters(
     target_status,
@@ -345,6 +334,18 @@ function buildEnrichedPayload(
       current_time_window,
       current_pricing: currentPricing,
       target_status,
+      // V10.13 — Market Structure Shift from centralized engine
+      market_structure_shift: structureAnalysis?.market_structure_shift ?? false,
+      market_structure_shift_direction: structureAnalysis?.market_structure_shift_direction ?? null,
+      current_trend: structureAnalysis?.currentTrend ?? 'UNSET',
+      full_structure_map: structureAnalysis ? {
+        swings: structureAnalysis.swings,
+        zigzag: structureAnalysis.zigzag,
+        innerSwings: structureAnalysis.innerSwings || [],
+        innerZigzag: structureAnalysis.innerZigzag || [],
+        currentTrend: structureAnalysis.currentTrend,
+        dealingRange: structureAnalysis.dealingRange,
+      } : null,
       active_fvgs: activeFVGs,
       macro_levels: {
         pdh,
@@ -367,7 +368,6 @@ function buildEnrichedPayload(
       order_flow_engine: {
         open_interest_trend: openInterestTrend,
         displacement_sponsorship: displacementSponsorship,
-        market_structure_shift: false,
         smart_money_sentiment: { smart_money_divergence: false },
         resting_liquidity_pools: {
           BSL_Magnets: pdh > 0 ? [pdh] : [],
@@ -459,8 +459,8 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
 
   const enrichedPayload = useMemo<Record<string, unknown> | null>(() => {
     if (!visibleArrays) return null;
-    return buildEnrichedPayload(visibleArrays, selectedDate);
-  }, [visibleArrays, selectedDate]);
+    return buildEnrichedPayload(visibleArrays, selectedDate, timeframe);
+  }, [visibleArrays, selectedDate, timeframe]);
 
   const loadDay = useCallback(async () => {
     setStatus('fetching');
@@ -620,4 +620,4 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     downloadPayload,
     copyPayload,
   };
-}
+}

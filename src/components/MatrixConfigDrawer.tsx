@@ -1,6 +1,7 @@
 import React from 'react';
-import { X, Activity, ChevronRight, Magnet, Target, Clock, History } from 'lucide-react';
+import { X, Activity, ChevronRight, Magnet, Target, Clock, History, TrendingUp } from 'lucide-react';
 import { useBinanceWS } from '@/hooks/useBinanceWS';
+import { useMarketDataContext } from '@/context/MarketDataContext';
 
 export interface MatrixDataPayload {
   ipda_metrics?: {
@@ -46,6 +47,9 @@ export interface MatrixDataPayload {
         SSL_Magnets?: number[];
       };
     };
+    current_trend?: string;
+    market_structure_shift?: boolean;
+    full_structure_map?: any;
   };
 }
 
@@ -61,6 +65,7 @@ interface MatrixConfigDrawerProps {
  */
 const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose, data }) => {
   const { livePrice } = useBinanceWS();
+  const { wsInterval, structureState } = useMarketDataContext();
 
   if (!isOpen) return null;
 
@@ -149,6 +154,120 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
                   </div>
                 </div>
               </div>
+            </div>
+          </section>
+
+          {/* Section 1.2: Stateful Market Structure */}
+          <section className="p-5 border-b border-card-border bg-accent/5">
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp size={14} className="text-accent animate-pulse" />
+              <h3 className="text-[11px] text-accent font-bold uppercase tracking-[0.1em]">
+                Market Structure Basin ({wsInterval || '---'})
+              </h3>
+            </div>
+            <div className="space-y-4">
+              {/* Core metrics grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="glass-panel p-2.5 rounded-lg flex flex-col justify-between">
+                  <span className="block text-[8px] text-muted font-bold uppercase">Trend Bias</span>
+                  {(() => {
+                    const trend = structureState?.currentTrend || data?.ipda_metrics?.current_trend || 'UNSET';
+                    if (trend === 'BULLISH') return <span className="text-xs font-black text-emerald-500 mt-1 uppercase">🟢 BULLISH</span>;
+                    if (trend === 'BEARISH') return <span className="text-xs font-black text-rose-500 mt-1 uppercase">🔴 BEARISH</span>;
+                    return <span className="text-xs font-black text-muted mt-1 uppercase">⚪ UNSET</span>;
+                  })()}
+                </div>
+
+                <div className="glass-panel p-2.5 rounded-lg flex flex-col justify-between">
+                  <span className="block text-[8px] text-muted font-bold uppercase">Shift Status</span>
+                  {(() => {
+                    const mssConfirmed = structureState?.market_structure_shift || data?.ipda_metrics?.market_structure_shift || false;
+                    const latestMSS = structureState?.latestMSS || data?.ipda_metrics?.full_structure_map?.zigzag?.find((z: any) => z.label === 'MSS') || null;
+                    const statusText = latestMSS ? (latestMSS.displacementConfirmed ? 'CONFIRMED' : 'PENDING') : (mssConfirmed ? 'CONFIRMED' : 'NONE');
+
+                    if (statusText === 'CONFIRMED') {
+                      return (
+                        <span className="text-xs font-black text-emerald-500 mt-1 uppercase tracking-wider">
+                          CONFIRMED ⚡
+                        </span>
+                      );
+                    }
+                    if (statusText === 'PENDING') {
+                      return (
+                        <span className="text-xs font-black text-amber-500 mt-1 uppercase tracking-wider animate-pulse">
+                          PENDING ⏳
+                        </span>
+                      );
+                    }
+                    return <span className="text-xs font-mono font-semibold text-muted mt-1 uppercase">NONE</span>;
+                  })()}
+                </div>
+              </div>
+
+              {/* Swing counters */}
+              {(() => {
+                const swings = structureState?.swings || data?.ipda_metrics?.full_structure_map?.swings || [];
+                const majorCount = swings.filter((s: any) => s.grade === 'MAJOR').length;
+                const innerCount = swings.filter((s: any) => s.grade === 'INNER').length;
+
+                return (
+                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-muted font-medium">Major Swings (5-Bar Fractals)</span>
+                      <span className="font-mono font-bold text-foreground">{majorCount}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs border-t border-card-border/30 pt-1.5">
+                      <span className="text-muted font-medium">Inner Swings (3-Bar Fractals)</span>
+                      <span className="font-mono font-semibold text-accent">{innerCount}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Anchor Swings */}
+              {(() => {
+                const range = structureState?.dealingRange || data?.ipda_metrics?.full_structure_map?.dealingRange;
+                if (!range) return null;
+
+                const formatCairoTime = (timeMs: number | undefined) => {
+                  if (!timeMs) return '---';
+                  return new Date(timeMs).toLocaleString('en-EG', {
+                    timeZone: 'Africa/Cairo',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false,
+                  }) + ' UTC+3';
+                };
+
+                return (
+                  <div className="space-y-3">
+                    <span className="text-[9px] text-muted uppercase font-black tracking-widest block mb-1">Dealing Range Anchors</span>
+                    <div className="glass-panel p-3 space-y-2.5">
+                      <div className="flex flex-col gap-0.5 text-xs">
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted font-semibold uppercase text-[10px]">Anchor High</span>
+                          <span className="font-mono font-bold text-foreground">{formatPrice(range.high)}</span>
+                        </div>
+                        <span className="text-[9.5px] text-muted/70 font-mono text-right">
+                          {range.anchor_high_swing?.t ? formatCairoTime(range.anchor_high_swing.t) : 'N/A'}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col gap-0.5 text-xs border-t border-card-border/30 pt-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted font-semibold uppercase text-[10px]">Anchor Low</span>
+                          <span className="font-mono font-bold text-foreground">{formatPrice(range.low)}</span>
+                        </div>
+                        <span className="text-[9.5px] text-muted/70 font-mono text-right">
+                          {range.anchor_low_swing?.t ? formatCairoTime(range.anchor_low_swing.t) : 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
             </div>
           </section>
 
