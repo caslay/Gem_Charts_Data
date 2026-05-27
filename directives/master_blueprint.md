@@ -1,10 +1,130 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.12
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.19
 
 > **Classification:** Institutional Architecture Document  
-> **Generated:** 2026-05-26  
-> **Last Updated:** 2026-05-26 (V10.12 Backtest Replay Mathematical Parity Complete)  
+> **Generated:** 2026-05-27  
+> **Last Updated:** 2026-05-27 (V10.19 Multi-Timeframe Separation & Chronological MSS Validation Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.20 Changelog — Interactive Structure UI & Strategy Builder Integration (Completed)
+
+### 1. High-Fidelity Sidebar Card (`Sidebar.tsx`)
+- **Stateful Structural HUD Card:** Designed and injected a premium, glassmorphic `.glass-panel` card inside the visual Sidebar. Hooked into `useMarketDataContext` to consume the active timeframe's `wsInterval` and `structureState`.
+- **Real-Time Display Metrics:** Presents the isolated trend bias (`BULLISH` in vibrant emerald, `BEARISH` in rose, `UNSET` in muted grey), Dealing Range bounds `[low - high]`, Equilibrium (0.50 retracement level), premium/discount pricing context status, and chronological MSS shift status (`CONFIRMED` ⚡ vs `PENDING` ⏳).
+
+### 2. IPDA Matrix Config Drawer expansion (`MatrixConfigDrawer.tsx`)
+- **Section 1.2: Stateful Market Structure:** Expanded the live-synced drawer with an institutional-style section detailing structural counts. Shows Major Swings count (5-bar fractals) and Inner Swings count (3-bar fractals).
+- **Exact Swing Anchors:** Displays dealing range high and low anchor swings with exact price levels and precise timestamps formatted in Cairo timezone (`Africa/Cairo` UTC+3).
+
+### 3. Custom Strategy Builder Integration (`EquationBuilder.tsx` & `useStrategyEvaluator.ts`)
+- **Metric Key Registration:** Registered `'MARKET_TREND'`, `'LOCAL_PRICING'`, and `'MSS_CONFIRMED'` inside `MetricKey` types and the `METRICS` registry, complete with enum and boolean properties.
+- **Evaluation Engine Case Resolvers:** Enhanced `resolveMetric` to evaluate these structural variables dynamically against `ipda_metrics`. Compiles with 100% clean type-safety and full offline backtest replay compatibility.
+
+## 🆕 V10.19 Changelog — Multi-Timeframe Separation & Chronological MSS Validation (Completed)
+
+### 1. Chronological MSS Validation (`structureEngine.ts`)
+- **Native Historical Displacement Confirmation:** Refactored `runEquilibriumStateMachine` to check native candle displacement `disp.active` at the break index `i` (using the direction of the breakout). Confirms reversals dynamically based on volume sponsorship *at the time of the event*, solving the static `MSS?` issue.
+
+### 2. Timeframe-Isolated Stateful Caches (`structureEngine.ts` & `route.ts`)
+- **Compound Cache Key Partitioning:** Swapped out symbol-only caching keys inside `src/lib/structureEngine.ts` for compound keys (`${symbol}_${interval}`). This guarantees that 5m, 15m, 1h, and 4h structural maps, anchors, and histories are calculated and stored in completely separated, isolated buffers.
+- **Timeframe-Matched API Route:** Refactored `/api/market-data/route.ts` to dynamically calculate `stat_payload` (for OLS volume displacement) and `activeCandlesForStructure` (for stateful structures) matching the client requested `visualInterval`. Resolves all cross-timeframe structural and displacement leaks.
+
+## 🆕 V10.18 Changelog — Stateful Structure Mapping & Decoupling (Completed)
+
+### 1. Structural Persistence Layer (`structureEngine.ts`)
+- **Incremental Backend Caches:** Implemented process-lifetime backend caches `accumulatedCandlesCache` and `contextAnchorCache` keyed by symbol in `src/lib/structureEngine.ts`.
+- **Stateful Calculation Solver (`analyzeMarketStructureStateful`):** Replaced visual-slice calculations with an incremental stateful solver. It aggregates candle batches, filters duplicates, maintains a strict `10,000` candle ceiling to optimize RAM usage, and processes the full accumulated dataset from a mathematically locked historical context anchor.
+- **Dynamic Chronological Indexing:** Appended `candle_index` (mapping the precise index of each swing to the processed candle series, accounting for post-anchor slicing offsets) and a readable ISO `timestamp` string directly inside each `StructuralSwing` object returned in the `full_structure_map` and structural ranges.
+- **Splicing Instability Elimination:** Anchors, pivots, and Equilibrium boundaries are rendered 100% immune to dynamic scroll prepends or new live tick arrivals, ensuring perfect stability for quantitative AI strategy execution.
+
+### 2. JSON Payload Integration (`route.ts`)
+- **Rich `full_structure_map` Injection:** Injected a `full_structure_map` object (containing swings, zigzag, innerSwings, innerZigzag, currentTrend, dealingRange) inside the `ipda_metrics` payload returned by `/api/market-data`.
+- **Decoupled AI Strategy Context:** Allows the AI prompt parser and automated trading strategies to evaluate high-fidelity structural changes across the entire 60-day historical context buffer, completely independent of the dynamic, visual OHLC slice displayed on the client.
+
+## 🆕 V10.17 Changelog — Historical Context Stabilization (Completed)
+
+### 1. Stable Lookback Anchor & Context Buffer
+- **60-Day Initial Context Buffer:** Enhanced `/api/market-data/route.ts` to support an `init=true` parameter. When requested on symbol initialization, the API fetches 60 days of 15m candles (~5760 candles) in the background via low-latency, sequential/paginated REST calls to Binance, establishing a rich "Truth Layer" context.
+- **Stable Context Anchor (`useMarketData.ts`):** Client-side hook extracts the oldest timestamp in this 60-day buffer as the `contextAnchorTimestamp`. This timestamp remains mathematically fixed throughout the session.
+- **Lightweight Historical Interception Path:** Added a high-speed early-return interception block. If `endTime` is passed to the GET endpoint, it fetches only the requested interval from Binance, formats the klines, and returns them instantly. It completely bypasses all SMT, risk, orderflow, database writes, and other parallel HTF fetches. This resolves all `Failed to fetch more history` API errors and serverless timeouts during infinite scrolls.
+
+### 2. Snapshot Persistence (`structureState` Object)
+- **Persistent State Caching:** In `src/hooks/useMarketData.ts`, declared the `structureState` object to compute structural coordinates exactly once on data load or poll. This completely bypasses redundant render-time mathematical iterations during SVG paint cycles.
+- **Stitched Structural Stitching (`structureEngine.ts`):**
+  - Decoupled the mathematical state machine inside `analyzeMarketStructure` into independent pre-anchor and post-anchor segments.
+  - Swings and zig-zag segments with timestamps `>= contextAnchorTimestamp` are computed starting exactly at the anchor, rendering them 100% mathematically stable and immune to any subsequent dynamic scroll prepending.
+  - Older scrolling history is computed independently up to the anchor boundary. A thin dotted grey bridging segment stitches both segments perfectly at the boundary.
+
+### 3. Exposing & Forwarding Enriched Context (`Chart.tsx` & `types.ts`)
+- **RenderContext Interface Expansion (`types.ts`):** Added `structureState` and `contextAnchorTimestamp` as optional typed variables inside `RenderContext`.
+- **Chart Forwarding (`Chart.tsx`):** Destructured `structureState` from global `MarketDataContext` and forwarded it in `context` parameters to both chart overlays and custom React container renders.
+- **Optimized Rendering Plugin (`structureLayer.ts`):** Completely removed render-time calculations. The visual layer extracts the pre-calculated, stabilized coordinates from `context.structureState` and immediately converts them to SVG coordinates.
+
+## 🆕 V10.16 Changelog — Multi-Level Structural Analysis & Dynamic Historical Loading (Completed)
+
+### 1. Multi-Level Structural Analysis ("Inner-Structure")
+- **Dual-Depth Mathematical Decoupling:** Centralized the mathematical state machine inside `src/lib/structureEngine.ts` to run twice. The Major Wave structures are identified using a volatility volume multiplier of `2.0`, while the Inner Sub-Wave structures (minor internal swings that retrace to Equilibrium within the Major Dealing Range) are identified using a volatility volume multiplier of `1.0`.
+- **Dashed Sub-Wave Visual Rendering:** Enhanced the visual chart layer plugin in `src/lib/chartLayers/plugins/structureLayer.ts` to convert and render inner sub-wave zig-zag segments as premium muted purple dashed lines (`rgba(168, 85, 247, 0.35)`) with a `1.0` stroke width and `strokeDasharray: '3,3'`.
+- **Visually Subordinate Layers:** Linked the sub-wave rendering to Zustand's persistent layer store visibility states (`visibility.structure_inner`), allowing users to toggle the visibility of Major Structure, Inner Structure, and Zig-Zag paths independently.
+
+### 2. Dynamic Lazy-Loading for Candle History ("Infinity Scroll")
+- **High-Performance Infinite Scrolling:** Resolved the "Limited Candle View" issue by introducing a Scroll/Zoom Observer on Lightweight Charts in `src/components/Chart.tsx`. When the user scrolls to the left historical edge (where `logicalRange.from < 15`), the frontend automatically triggers a fetch.
+- **State-Prepend without Re-rendering:** In `src/hooks/useMarketData.ts`, implemented a non-duplicative prepending algorithm within the `loadMoreHistory` callback. It extracts the oldest timestamp in the current data payload, queries the `/api/market-data` API with `endTime=${oldestTimestamp}`, filters out duplicate candles, and prepends unique historical candles while preserving wicks, positions, and structural anchors without causing full chart flashes or re-renders.
+- **End-to-End API Integration:** Updated `/api/market-data` to support optional `endTime` search parameter, appending it to the Binance Futures REST API endpoints to retrieve historical candles backward from the given timestamp in the series.
+
+## 🆕 V10.15 Changelog — Equilibrium-Based Market Structure Re-Pricing Model (Completed)
+
+### 1. Abandoning Fractal Counting (`structureEngine.ts`)
+- **Fractal Removal:** Completely eliminated the 5-bar and 3-bar color-locked fractal counting checks (`detectFractals()`, `isColorLockedHigh()`, and `isColorLockedLow()`), resolving standard retail pattern noise.
+- **Displacement-Based Ranges:** Anchor identification (High/Low) is set strictly by the absolute price extremes of displacement waves (momentum legs), verified by a 14-period rolling Taker volume check.
+
+### 2. The Retracement Gate (0.50 Equilibrium Rule) (`structureEngine.ts`)
+- **Mid-Move Validation:** Enforces a dynamic Retracement Gate where the system remains in a tracking state within the active range and blocks any new structural breaks until the price mathematically retraces to or exceeds the Equilibrium (0.50 level): `(high + low) / 2`.
+
+### 3. State-Machine Driven Wave Validations (`structureEngine.ts`)
+- **BOS Wave Confirmation:** Only confirmed if the price retraces to or exceeds the 0.50 Equilibrium level AND subsequently expands to break the active range's extreme (`high` for Bullish continuation, `low` for Bearish continuation).
+- **MSS Reversal Confirmation:** Only confirmed if the price retraces to or exceeds the 0.50 Equilibrium level AND subsequently violently breaks the original move's origin point (`low` for Bearish reversal, `high` for Bullish reversal), flipping the active trend direction in the state machine.
+
+### 4. Real-time Absolute Extreme Tracking (`structureEngine.ts`)
+- **Dynamic Anchor Shifting:** Any new price extreme (higher high during bullish expansion, lower low during bearish expansion) formed before a retracement/break confirmation instantly shifts the active range boundaries. Swings are treated strictly as dynamic mathematical ceiling/floors.
+
+## 🆕 V10.14 Changelog — Market Structure Extreme Alignment (Completed)
+
+### 1. Dynamic Anchor Displacement (`structureEngine.ts`)
+- **Premature Anchor Resolution:** In `buildZigZagPoints()`, added sequential scanning of each segment to identify any price action that breaches a Swing Point in the same direction before an opposing fractal is formed.
+- **Dynamic Shifting:** When a breach is detected, dynamically shifts the anchor's price and timestamp to the new absolute maximum (for Swing Highs) or minimum (for Swing Lows). This prevents locked mid-move anchors during active trend expansions.
+
+### 2. Chronological Parity (`structureEngine.ts`)
+- **End Extension Loop:** Implemented an iterative end extension algorithm that scans remaining focus window candles following the last swing point to append alternating peaks/troughs.
+- **Path Completeness:** Guarantees that the visual and mathematical Zig-Zag path always completes perfectly at the lowest low (for bearish moves) or highest high (for bullish moves) currently visible in the focus window.
+
+### 3. No-Lag Anchoring (`structureEngine.ts`)
+- **Path-Bound Dealing Range:** Refactored `computeDealingRange()` to search backwards through the refined Zig-Zag path rather than the raw detected swings.
+- **Extreme Mathematical Alignment:** Guarantees that the structural dealing range is anchored on the absolute mathematical extremes, resolving all latencies in Equilibrium, Premium, and Discount calculations.
+
+## 🆕 V10.13 Changelog — Centralized Market Structure Engine & Contextual BOS/MSS (Completed)
+
+### 1. Centralized Core Math Engine (`structureEngine.ts`)
+- **Directional Color Lock:** Enforces Institutional Color Lock on 5-Bar (MAJOR) fractals, gating them behind a green-before-red signature for highs and red-before-green for lows to prevent Outside Bar noise.
+- **Alternating Zig-Zag solver:** Resolves 5-Bar Major pivots into a clean, alternating peak-to-trough structural path.
+- **Trend State Machine:** Tracks active trend states (`BULLISH` | `BEARISH` | `UNSET`) using a rigorous state machine where breaks in trend direction are categorized as BOS (trend continuation) and breaks against trend direction are categorized as MSS (trend reversal), flipping the state.
+- **Displacement Gating (Soft Gate):** Gates MSS events into `CONFIRMED` and `UNCONFIRMED` states based on dynamic Volume/OI Institutional Sponsorship, preventing false strategy evaluation triggers on non-sponsored reversals.
+- **Unified Mathematical API:** Single source of truth exporting `analyzeMarketStructure()` consumed across both live and backtest engines.
+
+### 2. Refactored Visual Layer (`structureLayer.ts`)
+- **Decoupled Math Logic:** Completely removed inline, direction-blind fractal and pivot calculations from the rendering layer.
+- **Context-Aware Visual Mappings:** Renders standard purple dashed paths for BOS (continuation), bright solid neon green paths + badges for `CONFIRMED` MSS (displacement-backed reversals), and amber dashed paths + dimmed badges for `UNCONFIRMED` MSS (reversals without displacement).
+- **Subordinate Swings:** Displays minor 3-bar (INNER) swings as small diamonds, keeping them visually and mathematically subordinate to major institutional pivots.
+
+### 3. Backend & Replay Mathematical Parity
+- **Backend API Integration (`route.ts`):** Replaced the inline, color-lock-less `getStructuralDealingRange()` helper with a call to the centralized `analyzeMarketStructure()`, injecting structured `market_structure_shift` and direction variables into `ipda_metrics`.
+- **Replay Hook Parity (`useBacktestEngine.ts`):** Removed hardcoded `market_structure_shift: false` and replaced the duplicate inline fractal loops with the core `analyzeMarketStructure()` solver, matching the live API exactly.
+
+### 4. Direction-Aware Strategy Evaluator (`useStrategyEvaluator.ts`)
+- **Metric Resolution Upgrade:** Upgraded the `MSS` condition block to parse the new structural variables, enabling strategies to enforce directional filters (e.g. `BULLISH` MSS vs `BEARISH` MSS).
+
+### 5. Unified Quant Directives
+- **Rule Codification:** Codified §5 Market Structure Classification Rules in `03_quant_logic.md` and added system post-mortems in `02_lessons.md` to prevent future regression.
 
 ## 🆕 V10.12 Changelog — Backtest Replay Mathematical Parity (Completed)
 

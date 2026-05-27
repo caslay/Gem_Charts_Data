@@ -3,6 +3,7 @@ import { slicePayloadByLookback } from '@/components/Sidebar';
 import { useLiveAlerts } from './useLiveAlerts';
 import { useAIAnalysis } from './useAIAnalysis';
 import { Candle } from '@/lib/fvgEngine';
+import { analyzeMarketStructure, MarketStructureAnalysis } from '@/lib/structureEngine';
 export type { Candle };
 
 export interface SignalAlerts {
@@ -148,6 +149,15 @@ export function useMarketData(selectedInterval: string = '5m') {
   const [data, setData] = useState<MarketDataPayload | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [contextAnchorTimestamp, setContextAnchorTimestamp] = useState<number | null>(null);
+  const [structureState, setStructureState] = useState<MarketStructureAnalysis | null>(null);
+
+  // Reset stable context anchor on timeframe interval swaps
+  useEffect(() => {
+    setContextAnchorTimestamp(null);
+    setStructureState(null);
+  }, [selectedInterval]);
 
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => {
     if (typeof window === 'undefined') return DEFAULT_THEME_SETTINGS;
@@ -365,7 +375,8 @@ export function useMarketData(selectedInterval: string = '5m') {
         setIsLoading(true);
         setError(null);
       }
-      const res = await fetch(`/api/market-data?interval=${selectedInterval}`);
+      const initParam = !isPolling ? '&init=true' : '';
+      const res = await fetch(`/api/market-data?interval=${selectedInterval}${initParam}`);
       if (!res.ok) {
         throw new Error('Failed to fetch market data');
       }
@@ -414,6 +425,30 @@ export function useMarketData(selectedInterval: string = '5m') {
     };
   }, [fetchData]);
 
+  // Synchronize and update the stabilized structural state
+  useEffect(() => {
+    if (!data) return;
+
+    const activeSeriesKey = `candles_${selectedInterval}`;
+    const activeCandles = data.data_payload[activeSeriesKey] || data.data_payload.candles_15m || [];
+    if (activeCandles.length === 0) return;
+
+    // 1. Establish the stable Context Anchor on the very first successful initial load
+    let anchor = contextAnchorTimestamp;
+    if (anchor === null) {
+      anchor = activeCandles[0].t;
+      setContextAnchorTimestamp(anchor);
+      console.log('[MarketData] Established stable lookback context anchor at:', new Date(anchor).toISOString());
+    }
+
+    // 2. Compute structural analysis using the stable lookback anchor
+    const currentPrice = activeCandles[activeCandles.length - 1]?.c ?? 0;
+    const displacementStatus = data.ipda_metrics?.institutional_sponsorship ?? null;
+    const analysis = analyzeMarketStructure(activeCandles, currentPrice, displacementStatus, anchor);
+
+    setStructureState(analysis);
+  }, [data, selectedInterval, contextAnchorTimestamp]);
+
   // Hook into live alerts: Triggers Binance WS, performs diffs, fires audio/push alerts
   const { activeAlerts, clearAlerts, dismissAlert, triggerAlert } = useLiveAlerts(data, fetchData);
 
@@ -460,6 +495,52 @@ export function useMarketData(selectedInterval: string = '5m') {
     [data]
   );
 
+  const [isFetchingMore, setIsFetchingMore] = useState<boolean>(false);
+
+  const loadMoreHistory = useCallback(async () => {
+    if (!data || isFetchingMore) return;
+
+    const activeSeriesKey = `candles_${selectedInterval}`;
+    const prevCandles = data.data_payload[activeSeriesKey] || data.data_payload.candles_15m || [];
+    if (prevCandles.length === 0) return;
+
+    // Find the oldest candle timestamp in the active series
+    const oldestTimestamp = prevCandles[0].t;
+
+    setIsFetchingMore(true);
+    try {
+      const res = await fetch(`/api/market-data?interval=${selectedInterval}&endTime=${oldestTimestamp}`);
+      if (!res.ok) throw new Error('Failed to fetch more history');
+
+      const newBatch: MarketDataPayload = await res.json();
+      const newCandles = newBatch.data_payload[activeSeriesKey] || newBatch.data_payload.candles_15m || [];
+
+      if (newCandles.length > 0) {
+        setData((prev) => {
+          if (!prev) return newBatch;
+
+          const prevActiveCandles = prev.data_payload[activeSeriesKey] || [];
+          const existingIds = new Set(prevActiveCandles.map((c) => c.t));
+          const uniqueNewCandles = newCandles.filter((c) => !existingIds.has(c.t));
+
+          const combinedCandles = [...uniqueNewCandles, ...prevActiveCandles].sort((a, b) => a.t - b.t);
+
+          return {
+            ...prev,
+            data_payload: {
+              ...prev.data_payload,
+              [activeSeriesKey]: combinedCandles,
+            },
+          };
+        });
+      }
+    } catch (err) {
+      console.error('[MarketData] Failed to load more history:', err);
+    } finally {
+      setIsFetchingMore(false);
+    }
+  }, [data, selectedInterval, isFetchingMore]);
+
   const {
     aiAnalysis,
     aiBias,
@@ -495,7 +576,11 @@ export function useMarketData(selectedInterval: string = '5m') {
     toggleSignalAlertEnabled,
     syncStatus,
     themeSettings,
-    updateThemeSettings
+    updateThemeSettings,
+    isFetchingMore,
+    loadMoreHistory,
+    structureState,
+    contextAnchorTimestamp
   };
 }
 

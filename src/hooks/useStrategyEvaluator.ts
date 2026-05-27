@@ -110,9 +110,17 @@ function resolveMetric(
     }
 
     case 'MSS': {
-      const mss = ipda.market_structure_shift
-        || orderFlow.market_structure_shift;
-      return mss === true || mss === 'ACTIVE' || mss === 'CONFIRMED';
+      // V10.13 — Context-aware MSS from centralized structureEngine
+      const mssActive = ipda.market_structure_shift === true;
+      const mssDir = ipda.market_structure_shift_direction;
+
+      // Support directional filtering from strategy conditions
+      const condDir = (condition as any).direction;
+      if (condDir === 'BULLISH') return mssActive && mssDir === 'BULLISH';
+      if (condDir === 'BEARISH') return mssActive && mssDir === 'BEARISH';
+
+      // Default: any confirmed MSS (backward compatible)
+      return mssActive;
     }
 
     case 'SMT': {
@@ -171,6 +179,21 @@ function resolveMetric(
       const price = livePrice || 0;
       if (price === 0 || allMagnets.length === 0) return false;
       return allMagnets.some((magnetPrice: number) => Math.abs(price - magnetPrice) <= 2.00);
+    }
+
+    case 'MARKET_TREND': {
+      return ipda.current_trend || 'UNSET';
+    }
+
+    case 'LOCAL_PRICING': {
+      const pricing = ipda.pricing_context || {};
+      const range = pricing.local_dealing_range || {};
+      const fullRange = ipda.full_structure_map?.dealingRange || {};
+      return fullRange.current_status || range.current_status || 'UNKNOWN';
+    }
+
+    case 'MSS_CONFIRMED': {
+      return ipda.market_structure_shift === true;
     }
 
     default:

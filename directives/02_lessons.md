@@ -95,5 +95,14 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
 - **The Cause:** The replay engine `useBacktestEngine.ts` applied a manual `+3h` shift (`UTC_PLUS3_MS`) directly to the candle timestamps inside `parseBinanceKlines`. However, the Lightweight Charts component in `Chart.tsx` was also configured to format timestamps using `'Africa/Cairo'`, which shifted them by another `+3h`. This created a double shift at the rendering layer.
 - **The Fix:** Standardized the backtest replay engine to UTC-Zero at the logic layer, matching the live HUD standard from Lesson 14. We removed the manual +3h shift from `parseBinanceKlines`, corrected the cutoff index search and True Day Open (07:00 Cairo = 04:00 UTC) calculations, and updated the backtest page sidebar `cairoTime` display to format raw UTC timestamps using the `Africa/Cairo` timezone dynamically.
 
+### 17. The Inner-Swing Inducement Trap & Direction-Blind Structure (Resolved in V10.13)
+- **The Bug:** The system was producing "Visual Noise" and mathematical corruption by treating minor 3-bar "Inner Swings" as major structural pivots, leading to false dealing ranges and premium/discount errors. In addition, the BOS/MSS classifications were direction-blind (e.g. upward breaks were ALWAYS labeled BOS, and downward breaks ALWAYS labeled MSS), which violated the contextual rules of trending markets. Finally, MSS events were hardcoded to `false` in the backtest engine, creating parity voids.
+- **The Cause:** 
+  1. Fractal detection in the visual layer, backend API, and backtest hooks was calculated inline without a unified mathematical model or Institutional Directional Color Lock, allowing Outside Bars to register false pivot extremes.
+  2. The visual layer used a simple `B.type === 'HIGH' ? 'BOS' : 'MSS'` ternary check without tracking the active structural trend state (`BULLISH` or `BEARISH`).
+  3. The Strategy Evaluator was unable to filter by directional MSS conditions (Bullish vs Bearish shift).
+- **The Fix:** We created a centralized, pure-logic quant module `src/lib/structureEngine.ts` to govern all calculations. This engine enforces the **Directional Color Lock** on 5-Bar (MAJOR) fractals, tracks active trend states using a rigorous state machine (where breaks in trend direction are **BOS** and breaks against are **MSS**), gates MSS confirmation behind volume-based **displacement sponsorship**, and anchors the Structural Dealing Range strictly on color-validated major fractals. The visual layer, backend API route, backtest engine hook, and strategy evaluator were all refactored to consume this unified engine.
+
+
 
 

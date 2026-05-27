@@ -32,6 +32,8 @@ interface ChartProps {
   livePrice?: number | null;
   themeSettings?: any;
   triggerSmartAlert?: (type: any, message: string, sound?: string) => void;
+  loadMoreHistory?: () => Promise<void>;
+  isFetchingMore?: boolean;
 }
 
 export default function Chart({
@@ -46,6 +48,8 @@ export default function Chart({
   livePrice: propsLivePrice,
   themeSettings: propsThemeSettings,
   triggerSmartAlert: propsTriggerSmartAlert,
+  loadMoreHistory: propsLoadMoreHistory,
+  isFetchingMore: propsIsFetchingMore,
 }: ChartProps) {
   const { theme } = useTheme();
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -105,8 +109,10 @@ export default function Chart({
   const livePrice = propsLivePrice !== undefined ? propsLivePrice : context.livePrice;
   const liveCandle = propsLiveCandle !== undefined ? propsLiveCandle : context.liveCandle;
   const themeSettings = propsThemeSettings !== undefined ? propsThemeSettings : context.themeSettings;
-  const { triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert: contextTriggerSmartAlert, setWsInterval } = context;
+  const { triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert: contextTriggerSmartAlert, setWsInterval, loadMoreHistory: contextLoadMoreHistory, isFetchingMore: contextIsFetchingMore, structureState, contextAnchorTimestamp } = context;
   const triggerSmartAlert = propsTriggerSmartAlert !== undefined ? propsTriggerSmartAlert : contextTriggerSmartAlert;
+  const loadMoreHistory = propsLoadMoreHistory !== undefined ? propsLoadMoreHistory : contextLoadMoreHistory;
+  const isFetchingMore = propsIsFetchingMore !== undefined ? propsIsFetchingMore : contextIsFetchingMore;
 
   const activeFvgs = propsActiveFvgs !== undefined ? propsActiveFvgs : (marketContextData?.ipda_metrics?.active_fvgs || []);
   const localDealingRange = propsLocalDealingRange !== undefined ? propsLocalDealingRange : marketContextData?.ipda_metrics?.pricing_context?.local_dealing_range;
@@ -820,6 +826,8 @@ export default function Chart({
         theme: activeTheme as 'dark' | 'light',
         themeSettings,
         storage,
+        structureState,
+        contextAnchorTimestamp,
       };
 
       if (isEnabled) {
@@ -840,7 +848,7 @@ export default function Chart({
         }
       }
     });
-  }, [data, marketContextData, visibility, theme, themeSettings, getLayerStorage]);
+  }, [data, marketContextData, visibility, theme, themeSettings, getLayerStorage, structureState, contextAnchorTimestamp]);
 
   // ── Sync Active Alerts with Price Lines ───────────────────────────────────
   useEffect(() => {
@@ -888,9 +896,13 @@ export default function Chart({
     const chart = chartRef.current;
     if (!chart) return;
 
-    const handleChartUpdate = () => {
+    const handleChartUpdate = (logicalRange?: any) => {
       updateAlertPositions();
       computeFvgOverlay();
+
+      if (logicalRange && logicalRange.from < 15 && loadMoreHistory && !isFetchingMore) {
+        loadMoreHistory();
+      }
     };
 
     chart.timeScale().subscribeVisibleLogicalRangeChange(handleChartUpdate);
@@ -908,7 +920,7 @@ export default function Chart({
         priceScaleApi.unsubscribeVisiblePriceRangeChange(handleChartUpdate);
       }
     };
-  }, [alerts, updateAlertPositions]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alerts, updateAlertPositions, loadMoreHistory, isFetchingMore]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // ── V8.6: FVG Overlay Pixel Calculator (Finite & Anchored) ───────────────
   const computeFvgOverlay = useCallback(() => {
@@ -1204,6 +1216,8 @@ export default function Chart({
           theme: (theme === 'dark' ? 'dark' : 'light') as 'dark' | 'light',
           themeSettings,
           storage,
+          structureState,
+          contextAnchorTimestamp,
         };
 
         try {

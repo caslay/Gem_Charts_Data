@@ -14,6 +14,7 @@ import { useState, useCallback, useMemo } from 'react';
 import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
 import { verifyDisplacementOffline } from '@/lib/displacementEngine';
 import { generateTradeExecutionParameters } from '@/lib/riskEngine';
+import { analyzeMarketStructure } from '@/lib/structureEngine';
 
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -251,44 +252,22 @@ function buildEnrichedPayload(
     target_status = uniqueSweeps.join(" | ") + " / PDH_PDL_PENDING";
   }
 
-  // ── Structural Dealing Range (based strictly on 5-bar fractals) ─────────
-  const getStructuralDealingRange = (candles: BtCandle[], currentPrice: number) => {
-    let recentHigh: number | null = null;
-    let recentLow: number | null = null;
+  // ── Offline Sponsorship and Risk calculations ────────────────────────────
+  const displacement = verifyDisplacementOffline(candles_15m, SYMBOL);
+  const displacementSponsorship = displacement.status !== 'INACTIVE' && displacement.status !== 'CONSOLIDATION'
+    ? 'ACTIVE'
+    : 'INACTIVE';
+  
+  const openInterestTrend = displacement.status !== 'INACTIVE' && displacement.status !== 'CONSOLIDATION'
+    ? 'RISING'
+    : 'FLAT';
 
-    for (let i = 2; i < candles.length - 2; i++) {
-      const c2Prev = candles[i - 2];
-      const prev = candles[i - 1];
-      const curr = candles[i];
-      const next = candles[i + 1];
-      const c2Next = candles[i + 2];
-
-      if (curr.h > prev.h && curr.h > c2Prev.h && curr.h > next.h && curr.h > c2Next.h) {
-        recentHigh = curr.h;
-      }
-      if (curr.l < prev.l && curr.l < c2Prev.l && curr.l < next.l && curr.l < c2Next.l) {
-        recentLow = curr.l;
-      }
-    }
-
-    if (recentHigh === null || recentLow === null) {
-      const highs = candles.map(c => c.h);
-      const lows = candles.map(c => c.l);
-      recentHigh = recentHigh ?? Math.max(...highs);
-      recentLow = recentLow ?? Math.min(...lows);
-    }
-
-    const equilibrium = parseFloat(((recentHigh + recentLow) / 2).toFixed(2));
-    return {
-      high: parseFloat(recentHigh.toFixed(2)),
-      low: parseFloat(recentLow.toFixed(2)),
-      equilibrium,
-      current_status: currentPrice > equilibrium ? 'PREMIUM' : 'DISCOUNT',
-    };
-  };
-
-  const localDealingRange = livePrice !== null
-    ? getStructuralDealingRange(candles_15m, livePrice)
+  // ── V10.13 Centralized Structure Analysis via structureEngine ─────────────
+  const structureAnalysis = (livePrice !== null)
+    ? analyzeMarketStructure(candles_15m, livePrice, displacement)
+    : null;
+  const localDealingRange = structureAnalysis
+    ? structureAnalysis.dealingRange
     : { high: null, low: null, equilibrium: null, current_status: 'UNKNOWN' };
 
   // Determine current killzone from replayed candle time
@@ -312,16 +291,6 @@ function buildEnrichedPayload(
     return "DEAD_ZONE";
   })() : "DEAD_ZONE";
 
-  // ── Offline Sponsorship and Risk calculations ────────────────────────────
-  const displacement = verifyDisplacementOffline(candles_15m, SYMBOL);
-  const displacementSponsorship = displacement.status !== 'INACTIVE' && displacement.status !== 'CONSOLIDATION'
-    ? 'ACTIVE'
-    : 'INACTIVE';
-  
-  const openInterestTrend = displacement.status !== 'INACTIVE' && displacement.status !== 'CONSOLIDATION'
-    ? 'RISING'
-    : 'FLAT';
-
   const trade_execution_parameters = generateTradeExecutionParameters(
     target_status,
     current_time_window,
@@ -344,7 +313,10 @@ function buildEnrichedPayload(
       true_day_open_0700: trueDayOpen0700,
       current_time_window,
       current_pricing: currentPricing,
-      target_status,
+      // V10.13 — Market Structure Shift from centralized engine
+      market_structure_shift: structureAnalysis?.market_structure_shift ?? false,
+      market_structure_shift_direction: structureAnalysis?.market_structure_shift_direction ?? null,
+      current_trend: structureAnalysis?.currentTrend ?? 'UNSET',
       active_fvgs: activeFVGs,
       macro_levels: {
         pdh,
@@ -367,7 +339,6 @@ function buildEnrichedPayload(
       order_flow_engine: {
         open_interest_trend: openInterestTrend,
         displacement_sponsorship: displacementSponsorship,
-        market_structure_shift: false,
         smart_money_sentiment: { smart_money_divergence: false },
         resting_liquidity_pools: {
           BSL_Magnets: pdh > 0 ? [pdh] : [],

@@ -78,7 +78,7 @@ export default function Sidebar({
   onClose,
 }: SidebarProps) {
   const { livePrice } = useBinanceWS();
-  const { isAnalyzing, aiAnalysis, triggerAiAnalysisScan } = useMarketDataContext();
+  const { isAnalyzing, aiAnalysis, triggerAiAnalysisScan, wsInterval, structureState } = useMarketDataContext();
   const [isJsonDrawerOpen, setIsJsonDrawerOpen] = useState(false);
   const [isHudModalOpen, setIsHudModalOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
@@ -266,6 +266,95 @@ export default function Sidebar({
                 </div>
               </div>
             </div>
+ 
+            {/* Market Structure Card (Timeframe-Isolated) */}
+            <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
+              <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
+                <TrendingUp size={12} className="text-accent" />
+                <span>Market Structure ({wsInterval || '---'})</span>
+              </div>
+              
+              <div className="space-y-2.5">
+                {/* Trend Bias and Shift Status */}
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] lg:text-xs text-muted uppercase font-bold">Trend Bias</span>
+                  {(() => {
+                    const trend = structureState?.currentTrend || data?.ipda_metrics?.current_trend || 'UNSET';
+                    if (trend === 'BULLISH') {
+                      return <span className="text-sm font-black text-emerald-500 uppercase">🟢 BULLISH</span>;
+                    }
+                    if (trend === 'BEARISH') {
+                      return <span className="text-sm font-black text-rose-500 uppercase">🔴 BEARISH</span>;
+                    }
+                    return <span className="text-sm font-black text-muted uppercase">⚪ UNSET</span>;
+                  })()}
+                </div>
+
+                <div className="flex justify-between items-center border-t border-card-border/30 pt-2">
+                  <span className="text-[11px] lg:text-xs text-muted uppercase font-bold">Shift Status</span>
+                  {(() => {
+                    const mssConfirmed = structureState?.market_structure_shift || data?.ipda_metrics?.market_structure_shift || false;
+                    const latestMSS = structureState?.latestMSS || data?.ipda_metrics?.full_structure_map?.zigzag?.find((z: any) => z.label === 'MSS') || null;
+                    const statusText = latestMSS ? (latestMSS.displacementConfirmed ? 'CONFIRMED' : 'PENDING') : (mssConfirmed ? 'CONFIRMED' : 'NONE');
+                    
+                    if (statusText === 'CONFIRMED') {
+                      return (
+                        <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-500 text-[9px] font-black rounded border border-emerald-500/20 tracking-wider">
+                          CONFIRMED ⚡
+                        </span>
+                      );
+                    }
+                    if (statusText === 'PENDING') {
+                      return (
+                        <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-500 text-[9px] font-black rounded border border-amber-500/20 tracking-wider animate-pulse">
+                          PENDING ⏳
+                        </span>
+                      );
+                    }
+                    return <span className="text-xs font-mono font-bold text-muted uppercase">NONE</span>;
+                  })()}
+                </div>
+
+                {/* Dealing Range Bounds */}
+                {(() => {
+                  const range = structureState?.dealingRange || data?.ipda_metrics?.full_structure_map?.dealingRange;
+                  if (!range) return null;
+                  const pricingStatus = range.current_status || 'UNKNOWN';
+                  const pricingColorClass = pricingStatus === 'DISCOUNT'
+                    ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20'
+                    : pricingStatus === 'PREMIUM'
+                      ? 'text-amber-500 bg-amber-500/10 border-amber-500/20'
+                      : 'text-muted bg-card-border/20 border-transparent';
+
+                  return (
+                    <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-2 mt-1">
+                      <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
+                        <span className="text-muted font-bold uppercase tracking-wider">Dealing Range</span>
+                        <span className="font-mono font-bold text-foreground">
+                          {formatPrice(range.low)} - {formatPrice(range.high)}
+                        </span>
+                      </div>
+                      
+                      <div className="flex justify-between items-center text-[10px] lg:text-[11px] border-t border-card-border/30 pt-1.5">
+                        <span className="text-muted font-bold uppercase tracking-wider">Equilibrium (0.5)</span>
+                        <span className="font-mono font-bold text-accent">
+                          {formatPrice(range.equilibrium)}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between items-center text-[10px] lg:text-[11px] border-t border-card-border/30 pt-1.5">
+                        <span className="text-muted font-bold uppercase tracking-wider">Pricing Context</span>
+                        <span className={`px-1.5 py-0.5 text-[9px] font-black rounded border tracking-widest uppercase ${pricingColorClass}`}>
+                          {pricingStatus}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+              </div>
+            </div>
+
 
             {/* Liquidity Card: Macro Ranges */}
             <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">

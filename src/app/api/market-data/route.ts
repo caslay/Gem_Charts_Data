@@ -4,45 +4,60 @@ import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
 import { verifyDisplacement } from '@/lib/displacementEngine';
 import { calculateDynamicRisk, generateTradeExecutionParameters } from '@/lib/riskEngine';
 import { getSmtContext } from '@/lib/smtEngine';
+import { analyzeMarketStructureStateful } from '@/lib/structureEngine';
 import { auth } from '@/auth';
 import { sql } from '@vercel/postgres';
 
-function getStructuralDealingRange(candles: any[], currentPrice: number) {
-  let recentHigh: number | null = null;
-  let recentLow: number | null = null;
-
-  for (let i = 2; i < candles.length - 2; i++) {
-    const c2Prev = candles[i - 2];
-    const prev = candles[i - 1];
-    const curr = candles[i];
-    const next = candles[i + 1];
-    const c2Next = candles[i + 2];
-
-    if (curr.h > prev.h && curr.h > c2Prev.h && curr.h > next.h && curr.h > c2Next.h) {
-      recentHigh = curr.h;
-    }
-    if (curr.l < prev.l && curr.l < c2Prev.l && curr.l < next.l && curr.l < c2Next.l) {
-      recentLow = curr.l;
-    }
-  }
-
-  if (recentHigh === null || recentLow === null) {
-    const highs = candles.map(c => c.h);
-    const lows = candles.map(c => c.l);
-    recentHigh = recentHigh ?? Math.max(...highs);
-    recentLow = recentLow ?? Math.min(...lows);
-  }
-
-  const equilibrium = parseFloat(((recentHigh + recentLow) / 2).toFixed(2));
-  return {
-    high: parseFloat(recentHigh.toFixed(2)),
-    low: parseFloat(recentLow.toFixed(2)),
-    equilibrium,
-    current_status: currentPrice > equilibrium ? "PREMIUM" : "DISCOUNT",
-  };
-}
+// NOTE: getStructuralDealingRange() removed — V10.13 Refactor.
+// All structural analysis is now centralized in src/lib/structureEngine.ts
+// via analyzeMarketStructure(). See implementation_plan.md for rationale.
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Sequential/paginated fetch to Binance REST API for large history sizes.
+ * Keeps serverless call roundtrips fast and structured.
+ */
+async function fetchLargeHistory(symbol: string, interval: string, totalLimit: number, endTime?: string): Promise<any[]> {
+  let allKlines: any[] = [];
+  let currentEndTime = endTime || '';
+  const batchLimit = 1500;
+  
+  while (allKlines.length < totalLimit) {
+    const limitToFetch = Math.min(batchLimit, totalLimit - allKlines.length);
+    const suffix = currentEndTime ? `&endTime=${currentEndTime}` : '';
+    const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limitToFetch}${suffix}`;
+    
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error(`[fetchLargeHistory] Failed to fetch batch: ${res.statusText}`);
+        break;
+      }
+      
+      const batch: any[] = await res.json();
+      if (!Array.isArray(batch) || batch.length === 0) break;
+      
+      // Prepend older batch to allKlines
+      allKlines = [...batch, ...allKlines];
+      
+      // Update currentEndTime to the oldest candle timestamp in the fetched batch
+      const oldestTimestamp = batch[0][0];
+      currentEndTime = String(oldestTimestamp);
+      
+      // If we got fewer candles than requested, we reached the end of history
+      if (batch.length < limitToFetch) {
+        break;
+      }
+    } catch (err) {
+      console.error('[fetchLargeHistory] Error in batch fetch:', err);
+      break;
+    }
+  }
+  
+  // Return sorted oldest to newest
+  return allKlines.sort((a, b) => a[0] - b[0]);
+}
 
 export async function GET(req: Request) {
   try {
@@ -57,11 +72,65 @@ export async function GET(req: Request) {
     const visualInterval = url.searchParams.get('interval') || '5m';
     const isStandardInterval = ['5m', '15m', '1h', '4h'].includes(visualInterval);
 
+    const endTime = url.searchParams.get('endTime') || '';
+
+    if (endTime) {
+      // Direct fast path for historical lazy-loading.
+      // Bypasses SMT, risk, orderflow pools, database transactions, and unnecessary HTF fetches.
+      const urlBinance = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${visualInterval}&limit=${limit}&endTime=${endTime}`;
+      try {
+        const resBinance = await fetch(urlBinance);
+        if (!resBinance.ok) {
+          console.error(`[MarketData API] Historical fetch failed: ${resBinance.statusText}`);
+          return NextResponse.json({ error: 'Failed to fetch historical data from Binance' }, { status: 400 });
+        }
+        
+        const rawData = await resBinance.json();
+        if (!Array.isArray(rawData)) {
+          throw new Error('Invalid response from Binance API');
+        }
+        
+        const formatted = rawData.map((c: any) => {
+          const v = parseFloat(c[5]);
+          const taker_buy_vol = parseFloat(c[9]);
+          const taker_sell_vol = v - taker_buy_vol;
+          return {
+            t: c[0],
+            o: parseFloat(c[1]),
+            h: parseFloat(c[2]),
+            l: parseFloat(c[3]),
+            c: parseFloat(c[4]),
+            v: v,
+            taker_buy_vol,
+            taker_sell_vol,
+            isClosed: true
+          };
+        });
+        
+        const payload = {
+          ticker: `${symbol}.p`,
+          timestamp: new Date().toISOString(),
+          timezone: "UTC",
+          data_payload: {
+            [`candles_${visualInterval}`]: formatted
+          }
+        };
+        
+        return NextResponse.json(payload);
+      } catch (err) {
+        console.error('[MarketData API] Historical fetch error:', err);
+        return NextResponse.json({ error: 'Internal server error during historical fetch' }, { status: 500 });
+      }
+    }
+
+    const endTimeSuffix = endTime ? `&endTime=${endTime}` : '';
+    const isInit = url.searchParams.get('init') === 'true';
+
     const urls = {
-      '5m': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=${limit}`,
-      '15m': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=15m&limit=${limit}`,
-      '1h': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=${limit}`,
-      '4h': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=4h&limit=${limit}`,
+      '5m': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=${limit}${endTimeSuffix}`,
+      '15m': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=15m&limit=${limit}${endTimeSuffix}`,
+      '1h': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1h&limit=${limit}${endTimeSuffix}`,
+      '4h': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=4h&limit=${limit}${endTimeSuffix}`,
       // HTF — fetched for background calculations only, NEVER exposed in data_payload
       '1d': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1d&limit=100`,
       '1w': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=1w&limit=100`,
@@ -75,7 +144,7 @@ export async function GET(req: Request) {
 
     let visualFetchPromise = Promise.resolve(null as any);
     if (!isStandardInterval) {
-      const visualUrl = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${visualInterval}&limit=${limit}`;
+      const visualUrl = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${visualInterval}&limit=${limit}${endTimeSuffix}`;
       visualFetchPromise = fetch(visualUrl).then(async (res) => {
         if (!res.ok) {
           throw new Error(`Failed to fetch visual interval ${visualInterval}`);
@@ -90,9 +159,16 @@ export async function GET(req: Request) {
     const restingLiquidityPromise = fetchRestingLiquidity(symbol);
     const smartMoneyPromise = fetchSmartMoneySentiment(symbol);
 
-    const [res5m, res15m, res1h, res4h, res1d, res1w, res1M, resOi, resBtc5m, resBtc15m, resBtc1h, visualDataRaw] = await Promise.all([
+    // If init parameter is passed, fetch a minimum of 60 days of 15m candles (5760 candles)
+    const res15mPromise = isInit
+      ? fetchLargeHistory(symbol, '15m', 5760, endTime)
+      : fetch(urls['15m']).then(async (res) => {
+          if (!res.ok) throw new Error('Failed to fetch 15m candles');
+          return res.json();
+        });
+
+    const [res5m, res1h, res4h, res1d, res1w, res1M, resOi, resBtc5m, resBtc15m, resBtc1h, visualDataRaw] = await Promise.all([
       fetch(urls['5m']),
-      fetch(urls['15m']),
       fetch(urls['1h']),
       fetch(urls['4h']),
       fetch(urls['1d']),
@@ -106,34 +182,20 @@ export async function GET(req: Request) {
     ]);
 
     if (
-      !res5m.ok || !res15m.ok || !res1h.ok || !res4h.ok || !res1d.ok || !res1w.ok || !res1M.ok || !resOi.ok ||
+      !res5m.ok || !res1h.ok || !res4h.ok || !res1d.ok || !res1w.ok || !res1M.ok || !resOi.ok ||
       !resBtc5m.ok || !resBtc15m.ok || !resBtc1h.ok
     ) {
-      const errorText = await res5m.text();
-      console.error('Binance API Error:', {
-        status5m: res5m.status,
-        status15m: res15m.status,
-        status1h: res1h.status,
-        status4h: res4h.status,
-        status1d: res1d.status,
-        status1w: res1w.status,
-        status1M: res1M.status,
-        statusOi: resOi.status,
-        statusBtc5m: resBtc5m.status,
-        statusBtc15m: resBtc15m.status,
-        statusBtc1h: resBtc1h.status,
-        response: errorText
-      });
+      console.error('Binance API Error: some endpoints failed to fetch');
       throw new Error('Failed to fetch from Binance API');
     }
 
     const [
-      data5m, data15m, data1h, data4h, data1d, data1w, data1M, dataOi,
+      data5m, data1h, data4h, data1d, data1w, data1M, dataOi,
       dataBtc5m, dataBtc15m, dataBtc1h,
-      resting_liquidity_pools, smart_money_sentiment
+      resting_liquidity_pools, smart_money_sentiment,
+      data15m
     ] = await Promise.all([
       res5m.json(),
-      res15m.json(),
       res1h.json(),
       res4h.json(),
       res1d.json(),
@@ -145,6 +207,7 @@ export async function GET(req: Request) {
       resBtc1h.json(),
       restingLiquidityPromise,
       smartMoneyPromise,
+      res15mPromise,
     ]);
 
     const formatCandles = (data: any[]) => {
@@ -663,7 +726,26 @@ export async function GET(req: Request) {
       console.error("[LAZY EXIT ERROR] Failed to execute server-side trade monitoring:", lazyExitError);
     }
 
-    const localDealingRange = getStructuralDealingRange(candles15m, currentLivePrice);
+    // Explicitly define stat_payload with at least 200 candles matching the requested visual interval to ensure OLS significance and prevent multi-timeframe leak
+    let stat_payload = candles15m.slice(-200);
+    let activeCandlesForStructure = candles15m;
+
+    if (visualInterval === '5m') {
+      stat_payload = candles5m.slice(-200);
+      activeCandlesForStructure = candles5m;
+    } else if (visualInterval === '1h') {
+      stat_payload = candles1h.slice(-200);
+      activeCandlesForStructure = candles1h;
+    } else if (visualInterval === '4h') {
+      stat_payload = candles4h.slice(-200);
+      activeCandlesForStructure = candles4h;
+    }
+
+    const institutional_sponsorship = await verifyDisplacement(stat_payload, symbol);
+
+    // V10.19 — Centralized Stateful Market Structure Analysis via structureEngine (Fully Isolated per timeframe)
+    const structureAnalysis = analyzeMarketStructureStateful(symbol, visualInterval, activeCandlesForStructure, currentLivePrice, institutional_sponsorship, isInit);
+    const localDealingRange = structureAnalysis.dealingRange;
     pricing_context = {
       vs_daily_open: (true_day_open_0700 !== null)
         ? (currentLivePrice > true_day_open_0700 ? "ABOVE_OPEN" : "BELOW_OPEN")
@@ -676,9 +758,6 @@ export async function GET(req: Request) {
     const all_fvgs = mapAndConsolidateFVGs(detectActiveFVGs(candles15m, false), detectActiveFVGs(candles5m, false));
     const pending_fvgs = all_fvgs.filter(fvg => fvg.status === 'PENDING');
     
-    // Explicitly define stat_payload with at least 200 candles to ensure OLS significance
-    const stat_payload = candles15m.slice(-200);
-    const institutional_sponsorship = await verifyDisplacement(stat_payload, symbol);
     const current_time_window = getCurrentKillzone();
 
     const trade_execution_parameters = generateTradeExecutionParameters(
@@ -715,6 +794,18 @@ export async function GET(req: Request) {
       institutional_sponsorship,
       current_pricing,
       target_status,
+      // V10.13 — Market Structure Shift fields from centralized engine
+      market_structure_shift: structureAnalysis.market_structure_shift,
+      market_structure_shift_direction: structureAnalysis.market_structure_shift_direction,
+      current_trend: structureAnalysis.currentTrend,
+      full_structure_map: {
+        swings: structureAnalysis.swings,
+        zigzag: structureAnalysis.zigzag,
+        innerSwings: structureAnalysis.innerSwings || [],
+        innerZigzag: structureAnalysis.innerZigzag || [],
+        currentTrend: structureAnalysis.currentTrend,
+        dealingRange: structureAnalysis.dealingRange,
+      },
       macro_levels: {
         pdh,
         pdl,
