@@ -53,6 +53,14 @@ export const structureLayer: ChartLayer = {
       ? (themeSettings?.dark_chart_swing_low || 'rgba(80, 255, 175, 0.85)')
       : (themeSettings?.light_chart_swing_low || 'rgba(5, 150, 105, 0.85)');
 
+    const swingHighInternalColor = theme === 'dark'
+      ? (themeSettings?.dark_chart_swing_high_internal || 'rgba(239, 68, 68, 0.45)')
+      : (themeSettings?.light_chart_swing_high_internal || 'rgba(225, 29, 72, 0.45)');
+
+    const swingLowInternalColor = theme === 'dark'
+      ? (themeSettings?.dark_chart_swing_low_internal || 'rgba(80, 255, 175, 0.45)')
+      : (themeSettings?.light_chart_swing_low_internal || 'rgba(5, 150, 105, 0.45)');
+
     const bosColor = theme === 'dark'
       ? (themeSettings?.dark_chart_bos || 'rgba(168, 85, 247, 0.85)')
       : (themeSettings?.light_chart_bos || 'rgba(79, 70, 229, 0.85)');
@@ -92,7 +100,12 @@ export const structureLayer: ChartLayer = {
           );
 
         const xEnd = breachSwing ? breachSwing.x : rightX;
-        const color = S.type === 'HIGH' ? swingHighColor : swingLowColor;
+        
+        // ─── Visual Separation: Check if this 5-bar swing is a Parent range boundary or an Internal wave ───
+        const isInternal = S.structure_type === 'INTERNAL';
+        const color = isInternal
+          ? (S.type === 'HIGH' ? swingHighInternalColor : swingLowInternalColor)
+          : (S.type === 'HIGH' ? swingHighColor : swingLowColor);
 
         // Draw structural price line
         horizontalLevels.push(
@@ -103,7 +116,8 @@ export const structureLayer: ChartLayer = {
             x2: xEnd,
             y2: S.y,
             stroke: color,
-            strokeWidth: 1.5,
+            strokeWidth: isInternal ? 0.9 : 1.5,
+            strokeDasharray: isInternal ? '3,3' : undefined, // Dashed lines for internal swings
           })
         );
 
@@ -120,7 +134,9 @@ export const structureLayer: ChartLayer = {
               fontFamily: 'monospace',
               fontWeight: 'bold',
             },
-            S.type === 'HIGH' ? 'MAJOR HIGH' : 'MAJOR LOW'
+            isInternal
+              ? (S.type === 'HIGH' ? 'INT HIGH' : 'INT LOW')
+              : (S.type === 'HIGH' ? 'MAJOR HIGH' : 'MAJOR LOW')
           )
         );
       });
@@ -331,7 +347,12 @@ export const structureLayer: ChartLayer = {
             .filter((s) => s.grade === 'MAJOR')
             .map((pt, idx) => {
               const isConfirmed = pt.confirmed !== false;
-              const color = pt.type === 'HIGH' ? swingHighColor : swingLowColor;
+              const isInternal = pt.structure_type === 'INTERNAL';
+              const color = isConfirmed
+                ? (isInternal
+                    ? (pt.type === 'HIGH' ? swingHighInternalColor : swingLowInternalColor)
+                    : (pt.type === 'HIGH' ? swingHighColor : swingLowColor))
+                : (theme === 'dark' ? 'rgba(251, 191, 36, 0.85)' : 'rgba(217, 119, 6, 0.85)');
               return React.createElement('circle', {
                 key: `major-swing-${idx}`,
                 cx: pt.x,
