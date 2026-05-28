@@ -48,7 +48,6 @@ export type BacktestTimeframe = '5m' | '15m' | '1h';
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 const SYMBOL = 'ETHUSDC';
-const UTC_PLUS3_MS = 3 * 60 * 60 * 1000;
 
 /** Binance Futures REST base — public, no auth required. */
 const BINANCE_REST = 'https://fapi.binance.com/fapi/v1/klines';
@@ -151,12 +150,12 @@ function buildEnrichedPayload(
 
   const lastDateUtc = liveCandle ? new Date(liveCandle.t) : null;
 
-  // ── True Day Open (07:00 Cairo = 04:00 UTC) ─────────────────────────────
-  // Search backward to locate the most recent 04:00 UTC anchor
+  // ── True Day Open (00:00 UTC Anchor) ─────────────────────────────
+  // Search backward to locate the most recent 00:00 UTC anchor
   let trueDayOpen0700: number | null = null;
   for (let i = candles_15m.length - 1; i >= 0; i--) {
     const d = new Date(candles_15m[i].t);
-    if (d.getUTCHours() === 4 && d.getUTCMinutes() === 0) {
+    if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
       trueDayOpen0700 = candles_15m[i].o;
       break;
     }
@@ -190,8 +189,9 @@ function buildEnrichedPayload(
   }
 
   // ── Active FVGs from 15m and 5m visible slices using lib/fvgEngine ──────
-  const candles_15m_with_closed = candles_15m.map(c => ({ ...c, isClosed: true }));
-  const candles_5m_with_closed = candles_5m.map(c => ({ ...c, isClosed: true }));
+  // Treat all historical candles as closed, and the very last visible candle as the active open candle
+  const candles_15m_with_closed = candles_15m.map((c, idx) => ({ ...c, isClosed: idx < candles_15m.length - 1 }));
+  const candles_5m_with_closed = candles_5m.map((c, idx) => ({ ...c, isClosed: idx < candles_5m.length - 1 }));
   const fvgs15m = detectActiveFVGs(candles_15m_with_closed, true);
   const fvgs5m = detectActiveFVGs(candles_5m_with_closed, true);
   const activeFVGs = mapAndConsolidateFVGs(fvgs15m, fvgs5m);
@@ -280,8 +280,13 @@ function buildEnrichedPayload(
     : 'FLAT';
 
   // ── V10.13 Centralized Structure Analysis via structureEngine ─────────────
-  // Slice active candles to match the standard 350-candle lookback limit of the live HUD
-  const structureCandles = activeCandles.slice(-350);
+  // Slice active candles to match the standard 350-candle lookback limit of the live HUD.
+  // Treat all historical candles as closed, and the very last visible candle as the active open candle.
+  const activeCandlesWithClosed = activeCandles.map((c, idx) => ({
+    ...c,
+    isClosed: idx < activeCandles.length - 1
+  }));
+  const structureCandles = activeCandlesWithClosed.slice(-350);
 
   const structureAnalysis = (livePrice !== null)
     ? analyzeMarketStructure(structureCandles, livePrice, displacement)
@@ -320,12 +325,13 @@ function buildEnrichedPayload(
     {
       BSL_Magnets: pdh > 0 ? [pdh] : [],
       SSL_Magnets: pdl > 0 ? [pdl] : [],
-    }
+    },
+    activeCandles
   );
 
   return {
     ticker: `${SYMBOL}.backtest`,
-    timezone: 'UTC+3 (Cairo)',
+    timezone: 'UTC',
     replay_date: selectedDate,
     ipda_metrics: {
       note: 'Backtest replay — metrics computed from visible slice only.',
@@ -338,6 +344,9 @@ function buildEnrichedPayload(
       market_structure_shift: structureAnalysis?.market_structure_shift ?? false,
       market_structure_shift_direction: structureAnalysis?.market_structure_shift_direction ?? null,
       current_trend: structureAnalysis?.currentTrend ?? 'UNSET',
+      expansion_mode: structureAnalysis?.expansion_mode ?? 'NORMAL',
+      market_velocity: structureAnalysis?.market_velocity ?? 0,
+      runaway_origin_price: structureAnalysis?.runaway_origin_price ?? null,
       full_structure_map: structureAnalysis ? {
         swings: structureAnalysis.swings,
         zigzag: structureAnalysis.zigzag,
@@ -422,8 +431,8 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [isDayRevealed, setIsDayRevealed] = useState<boolean>(false);
 
-  const todayCairo = new Date(Date.now() + UTC_PLUS3_MS);
-  const todayStr = todayCairo.toISOString().slice(0, 10);
+  const todayUtc = new Date();
+  const todayStr = todayUtc.toISOString().slice(0, 10);
 
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
   const [cutoffTime, setCutoffTime] = useState<string>('09:00');
@@ -442,13 +451,15 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
   const visibleArrays = useMemo<BtMasterArrays | null>(() => {
     if (!masterArrays || currentIndex === 0) return null;
 
-    const visible5m = masterArrays.candles_5m.slice(0, currentIndex);
+    // Slice up to currentIndex + 1 to include the current active candle
+    const visible5m = masterArrays.candles_5m.slice(0, currentIndex + 1);
     const boundaryMs = visible5m.length > 0
       ? visible5m[visible5m.length - 1].t + 5 * 60 * 1000
       : 0;
 
-    const visible15m = masterArrays.candles_15m.filter((c) => c.t < boundaryMs);
-    const visible1h = masterArrays.candles_1h.filter((c) => c.t < boundaryMs);
+    // Exclude HTF candles that are not fully closed at boundaryMs to prevent look-ahead bias
+    const visible15m = masterArrays.candles_15m.filter((c) => c.t + 15 * 60 * 1000 <= boundaryMs);
+    const visible1h = masterArrays.candles_1h.filter((c) => c.t + 60 * 60 * 1000 <= boundaryMs);
 
     return {
       candles_5m: visible5m,

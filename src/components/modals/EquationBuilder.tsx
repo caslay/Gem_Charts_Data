@@ -23,7 +23,9 @@ export type MetricKey =
   | 'LOCAL_PRICING'
   | 'MSS_CONFIRMED'
   | 'BOS'
-  | 'PRICE_IN_OTE';
+  | 'PRICE_IN_OTE'
+  | 'MARKET_VELOCITY'
+  | 'STRUCTURE_TYPE';
 export type OperatorKey = 'IS_TRUE' | 'IS_FALSE' | 'EQUALS' | 'NOT_EQUALS' | 'GREATER_THAN' | 'LESS_THAN';
 export type TemporalMode = 'INSTANT' | 'ON_CLOSE';
 
@@ -68,6 +70,8 @@ const METRICS: { key: MetricKey; label: string; type: 'boolean' | 'enum' | 'numb
   { key: 'MSS_CONFIRMED', label: 'MSS Shift Confirmed', type: 'boolean' },
   { key: 'BOS', label: 'Break of Structure (BOS)', type: 'boolean' },
   { key: 'PRICE_IN_OTE', label: 'Price Retracement (Fib)', type: 'boolean' },
+  { key: 'MARKET_VELOCITY', label: 'Market Velocity (FVGs)', type: 'number' },
+  { key: 'STRUCTURE_TYPE', label: 'Structural Wave Type', type: 'enum', options: ['MAJOR', 'INTERNAL'] },
 ];
 
 function getMetricDef(key: MetricKey) {
@@ -135,7 +139,9 @@ export default function EquationBuilder() {
   const [editTpLogic, setEditTpLogic] = useState('Nearest Order Book Magnet');
   const [editDirection, setEditDirection] = useState<'LONG' | 'SHORT'>('LONG');
   const [editRiskPercent, setEditRiskPercent] = useState('1.0');
+  const [editStatisticalSensitivity, setEditStatisticalSensitivity] = useState<'STRICT' | 'RELAXED' | 'OFF'>('STRICT');
   const [editTargetEnvironment, setEditTargetEnvironment] = useState<'LIVE_ONLY' | 'BACKTEST_ONLY' | 'BOTH'>('BOTH');
+  const [editMomentumOverride, setEditMomentumOverride] = useState<boolean>(false);
 
   // ── Fetch strategies from API on mount ────────────────────────────────────
   const fetchStrategies = useCallback(async () => {
@@ -202,6 +208,8 @@ export default function EquationBuilder() {
         setEditTpLogic(isObj ? (strategy.conditions.tp_logic || 'Nearest Order Book Magnet') : 'Nearest Order Book Magnet');
         setEditDirection(isObj ? (strategy.conditions.direction || 'LONG') : 'LONG');
         setEditRiskPercent(isObj ? String(strategy.conditions.risk_percent ?? '1.0') : '1.0');
+        setEditStatisticalSensitivity(isObj ? (strategy.conditions.statistical_sensitivity || 'STRICT') : 'STRICT');
+        setEditMomentumOverride(isObj ? !!strategy.conditions.momentum_override : false);
         return;
       }
     }
@@ -214,7 +222,9 @@ export default function EquationBuilder() {
     setEditTpLogic('Nearest Order Book Magnet');
     setEditDirection('LONG');
     setEditRiskPercent('1.0');
+    setEditStatisticalSensitivity('STRICT');
     setEditTargetEnvironment('BOTH');
+    setEditMomentumOverride(false);
   }, [selectedId, strategies]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -231,6 +241,8 @@ export default function EquationBuilder() {
         tp_logic: 'Nearest Order Book Magnet',
         direction: 'LONG',
         risk_percent: 1.0,
+        statistical_sensitivity: 'STRICT',
+        momentum_override: false,
       },
       is_active: true,
       target_environment: 'BOTH',
@@ -254,6 +266,8 @@ export default function EquationBuilder() {
         tp_logic: editTpLogic,
         direction: editDirection,
         risk_percent: parseFloat(editRiskPercent) || 1.0,
+        statistical_sensitivity: editStatisticalSensitivity,
+        momentum_override: editMomentumOverride,
       };
 
       const payload = {
@@ -822,6 +836,41 @@ export default function EquationBuilder() {
                       onChange={(e) => setEditRiskPercent(e.target.value)}
                       className="bg-background/60 border border-card-border/80 hover:border-accent/40 focus:border-accent focus:outline-none px-3.5 py-2.5 text-xs font-mono text-foreground rounded-lg w-full transition-all shadow-sm"
                       placeholder="1.0"
+                    />
+                  </div>
+                  
+                  {/* Statistical Sensitivity (OLS Gate) */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted">
+                      OLS Statistical Sensitivity
+                    </label>
+                    <select
+                      value={editStatisticalSensitivity}
+                      onChange={(e) => setEditStatisticalSensitivity(e.target.value as 'STRICT' | 'RELAXED' | 'OFF')}
+                      className="bg-background/60 border border-card-border/80 hover:border-accent/40 focus:border-accent focus:outline-none px-3.5 py-2.5 text-xs font-sans text-foreground rounded-lg cursor-pointer w-full transition-all shadow-sm"
+                    >
+                      <option value="STRICT">STRICT (t &ge; 1.96, p &lt; 0.05)</option>
+                      <option value="RELAXED">RELAXED (t &ge; 1.65, p &lt; 0.15)</option>
+                      <option value="OFF">OFF (Bypass OLS Validation)</option>
+                    </select>
+                  </div>
+
+                  {/* Momentum Override */}
+                  <div className="flex items-center justify-between col-span-2 border-t border-card-border/30 pt-3 mt-1">
+                    <div className="flex flex-col gap-0.5">
+                      <label className="text-[9px] font-black uppercase tracking-wider text-title flex items-center gap-1.5">
+                        <Zap size={10} className="text-amber-500 animate-pulse" />
+                        Momentum Override (Runaway Market Protection)
+                      </label>
+                      <span className="text-[7.5px] text-muted leading-relaxed">
+                        Bypasses the 50% Equilibrium retracement gate during high-velocity moves (expansion multiplier &gt; 4.0x with unmitigated FVGs).
+                      </span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={editMomentumOverride}
+                      onChange={(e) => setEditMomentumOverride(e.target.checked)}
+                      className="w-4 h-4 rounded border-card-border bg-background/50 text-accent focus:ring-accent accent-accent cursor-pointer"
                     />
                   </div>
                 </div>

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { fetchRestingLiquidity, fetchOIMetricsAndLiquidations, fetchSmartMoneySentiment } from '@/lib/orderFlowEngine';
 import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
 import { verifyDisplacement } from '@/lib/displacementEngine';
-import { calculateDynamicRisk, generateTradeExecutionParameters } from '@/lib/riskEngine';
+import { calculateDynamicRisk, generateTradeExecutionParameters, calculateATR } from '@/lib/riskEngine';
 import { getSmtContext } from '@/lib/smtEngine';
 import { analyzeMarketStructureStateful } from '@/lib/structureEngine';
 import { auth } from '@/auth';
@@ -254,11 +254,11 @@ export async function GET(req: Request) {
     });
     if (btcPdl === Infinity) btcPdl = 0;
 
-    // BTC True Day Open solver (07:00 Cairo Open = 04:00 UTC)
+    // BTC True Day Open solver (00:00 UTC Anchor)
     let btc_true_day_open_0700: number | null = null;
     for (let i = candlesBtc15m.length - 1; i >= 0; i--) {
       const d = new Date(candlesBtc15m[i].t);
-      if (d.getUTCHours() === 4 && d.getUTCMinutes() === 0) {
+      if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
         btc_true_day_open_0700 = candlesBtc15m[i].o;
         break;
       }
@@ -361,11 +361,11 @@ export async function GET(req: Request) {
       target_status = uniqueSweeps.join(" | ") + " / PDH_PDL_PENDING";
     }
 
-    // 5. True Day Open (07:00 Anchor = 04:00 UTC)
+    // 5. True Day Open (00:00 UTC Anchor)
     let true_day_open_0700: number | null = null;
     for (let i = candles15m.length - 1; i >= 0; i--) {
       const d = new Date(candles15m[i].t);
-      if (d.getUTCHours() === 4 && d.getUTCMinutes() === 0) {
+      if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
         true_day_open_0700 = candles15m[i].o;
         break;
       }
@@ -399,10 +399,13 @@ export async function GET(req: Request) {
       }
     }
 
+    const smtAtr = calculateATR(candles15m);
+    const smtBuffer = smtAtr > 0 ? 0.2 * smtAtr : 0.50;
+
     const smt_traps = [];
     for (let i = 0; i < swingHighs.length; i++) {
       for (let j = i + 1; j < swingHighs.length; j++) {
-        if (Math.abs(swingHighs[i].price - swingHighs[j].price) <= 0.50) {
+        if (Math.abs(swingHighs[i].price - swingHighs[j].price) <= smtBuffer) {
           smt_traps.push({
             type: "engineered_liquidity",
             price: parseFloat(((swingHighs[i].price + swingHighs[j].price) / 2).toFixed(2)),
@@ -550,13 +553,11 @@ export async function GET(req: Request) {
     // 11. Local Dealing Range & Dual-Pricing Context (V8.2)
     const todayDayStr = `${currentYear}-${currentMonth}-${currentDate}`;
 
-    // Filter intraday candles: same calendar day AND at or after 04:00 UTC (07:00 Cairo)
+    // Filter intraday candles: same calendar day starting at 00:00 UTC
     const intradayCandles = candles15m.filter(c => {
       const d = new Date(c.t);
       const candleDayStr = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
-      const candleHour = d.getUTCHours();
-      const candleMin = d.getUTCMinutes();
-      return candleDayStr === todayDayStr && (candleHour > 4 || (candleHour === 4 && candleMin === 0));
+      return candleDayStr === todayDayStr;
     });
 
     let pricing_context: {
@@ -766,7 +767,8 @@ export async function GET(req: Request) {
       institutional_sponsorship,
       currentLivePrice,
       active_fvgs,
-      resting_liquidity_pools
+      resting_liquidity_pools,
+      stat_payload
     );
 
     // Calculate SMT context using the new SMT Detection Engine
@@ -798,6 +800,9 @@ export async function GET(req: Request) {
       market_structure_shift: structureAnalysis.market_structure_shift,
       market_structure_shift_direction: structureAnalysis.market_structure_shift_direction,
       current_trend: structureAnalysis.currentTrend,
+      expansion_mode: structureAnalysis.expansion_mode || 'NORMAL',
+      market_velocity: structureAnalysis.market_velocity || 0,
+      runaway_origin_price: structureAnalysis.runaway_origin_price || null,
       full_structure_map: {
         swings: structureAnalysis.swings,
         zigzag: structureAnalysis.zigzag,
