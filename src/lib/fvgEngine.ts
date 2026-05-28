@@ -5,8 +5,8 @@ export interface Candle {
   l: number;
   c: number;
   v: number;
-  taker_buy_vol?: number;
-  taker_sell_vol?: number;
+  taker_buy_vol: number;
+  taker_sell_vol: number;
   isClosed?: boolean;
   [key: string]: any;
 }

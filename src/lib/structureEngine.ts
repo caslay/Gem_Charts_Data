@@ -16,6 +16,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+import { detectActiveFVGs } from './fvgEngine';
 import type { Candle } from './fvgEngine';
 import type { InstitutionalSponsorship } from './displacementEngine';
 
@@ -36,6 +37,10 @@ export interface StructuralSwing {
   candle_index?: number;
   /** ISO timestamp string of the swing candle. */
   timestamp?: string;
+  /** Structure hierarchy classification: MAJOR (Parent Range) vs INTERNAL (Child Wave) */
+  structure_type?: 'MAJOR' | 'INTERNAL';
+  /** Confirmation flag: TRUE only when the succeeding candles have fully closed */
+  confirmed?: boolean;
 }
 
 export interface ZigZagSegment {
@@ -95,6 +100,11 @@ export interface MarketStructureAnalysis {
   innerZigzag?: ZigZagSegment[];
   /** Inner sub-wave detected swings. */
   innerSwings?: StructuralSwing[];
+
+  // Runaway momentum override fields
+  expansion_mode?: 'NORMAL' | 'RUNAWAY';
+  market_velocity?: number;
+  runaway_origin_price?: number | null;
 }
 
 // ─── Internal Helpers ─────────────────────────────────────────────────────────
@@ -141,473 +151,222 @@ function runEquilibriumStateMachine(
   volMultiplier: number,
   indexOffset: number = 0
 ) {
-  // Running range state
-  let range: {
-    high: number;
-    low: number;
-    origin: number;
-    type: 'BULLISH' | 'BEARISH';
-    originT: number;
-    extremeT: number;
-    originIdx: number;
-    extremeIdx: number;
-  } | null = null;
+  const span = volMultiplier >= 2.0 ? 2 : 1; // MAJOR (5-bar fractal, span = 2), INNER (3-bar fractal, span = 1)
+  const swings: StructuralSwing[] = [];
 
-  let trend: 'BULLISH' | 'BEARISH' | 'UNSET' = 'UNSET';
-  let hasTappedEquilibrium = false;
+  // Robust boundary check helper to check if a candle has closed
+  const isCandleClosed = (idx: number): boolean => {
+    if (idx < 0 || idx >= candles.length) return false;
+    const c = candles[idx];
+    if (!c) return false;
+    return c.isClosed !== false;
+  };
+  
+  // 1. Detect raw price-extreme-only fractals
+  for (let i = span; i < candles.length - span; i++) {
+    const curr = candles[i];
+    
+    // Check Swing High
+    let isHigh = true;
+    for (let j = 1; j <= span; j++) {
+      if (curr.h <= candles[i - j].h || curr.h <= candles[i + j].h) {
+        isHigh = false;
+        break;
+      }
+    }
+    
+    // Check Swing Low
+    let isLow = true;
+    for (let j = 1; j <= span; j++) {
+      if (curr.l >= candles[i - j].l || curr.l >= candles[i + j].l) {
+        isLow = false;
+        break;
+      }
+    }
+    
+    if (isHigh) {
+      swings.push({
+        t: curr.t,
+        price: curr.h,
+        type: 'HIGH',
+        grade: volMultiplier >= 2.0 ? 'MAJOR' : 'INNER',
+        colorValidated: true,
+        candle_index: i + indexOffset,
+        timestamp: new Date(curr.t).toISOString(),
+        confirmed: isCandleClosed(i + span)
+      });
+    } else if (isLow) {
+      swings.push({
+        t: curr.t,
+        price: curr.l,
+        type: 'LOW',
+        grade: volMultiplier >= 2.0 ? 'MAJOR' : 'INNER',
+        colorValidated: true,
+        candle_index: i + indexOffset,
+        timestamp: new Date(curr.t).toISOString(),
+        confirmed: isCandleClosed(i + span)
+      });
+    }
+  }
 
-  // Retracement extremes trackers
-  let retracementExtreme = 0;
-  let retracementExtremeT = 0;
-  let retracementExtremeIdx = 0;
+  // Partition raw swings into confirmed and unconfirmed
+  const confirmedRawSwings = swings.filter(s => s.confirmed);
+  const unconfirmedRawSwings = swings.filter(s => !s.confirmed);
+  
+  // 2. Strict Zig-Zag Alternation ON CONFIRMED SWINGS ONLY to maintain 0% repainting
+  const alternatingSwings: StructuralSwing[] = [];
+  for (const s of confirmedRawSwings) {
+    if (alternatingSwings.length === 0) {
+      alternatingSwings.push(s);
+      continue;
+    }
+    
+    const last = alternatingSwings[alternatingSwings.length - 1];
+    if (last.type === s.type) {
+      // Consecutive peaks of the same type: retain only the highest peak / lowest valley
+      if (s.type === 'HIGH') {
+        if (s.price > last.price) {
+          alternatingSwings[alternatingSwings.length - 1] = s;
+        }
+      } else {
+        if (s.price < last.price) {
+          alternatingSwings[alternatingSwings.length - 1] = s;
+        }
+      }
+    } else {
+      alternatingSwings.push(s);
+    }
+  }
 
-  // Alternating swing points & segments in the zig-zag
-  const zigzagPoints: StructuralSwing[] = [];
+  // ─── Parent-Child Wave Containment Tagging ON CONFIRMED SWINGS ONLY ───
+  let currentMajorHigh = -Infinity;
+  let currentMajorLow = Infinity;
+
+  const markedConfirmedSwings = alternatingSwings.map((s) => {
+    let structure_type: 'MAJOR' | 'INTERNAL' = 'MAJOR';
+
+    // For 3-bar (INNER) sub-waves, we treat all of them as INTERNAL to separate them cleanly.
+    if (volMultiplier < 2.0) {
+      return { ...s, structure_type: 'INTERNAL' as const };
+    }
+
+    if (currentMajorHigh === -Infinity || currentMajorLow === Infinity) {
+      if (s.type === 'HIGH') {
+        currentMajorHigh = s.price;
+      } else {
+        currentMajorLow = s.price;
+      }
+      return { ...s, structure_type };
+    }
+
+    // Containment Rule: Formed entirely within the active Major Range
+    if (s.price >= currentMajorLow && s.price <= currentMajorHigh) {
+      structure_type = 'INTERNAL';
+    } else {
+      structure_type = 'MAJOR';
+      if (s.type === 'HIGH' && s.price > currentMajorHigh) {
+        currentMajorHigh = s.price;
+      } else if (s.type === 'LOW' && s.price < currentMajorLow) {
+        currentMajorLow = s.price;
+      }
+    }
+
+    return { ...s, structure_type };
+  });
+
+  // Filter out INTERNAL swings from Major wave trend logic, Zig-Zag lines, and Dealing Ranges
+  const majorSwingsOnly = markedConfirmedSwings.filter(s => s.structure_type === 'MAJOR');
+  
+  // 3. Build Zig-Zag Segments & Track Trend State Machine ON CONFIRMED SWINGS ONLY
   const zigzagSegments: ZigZagSegment[] = [];
+  let trend: 'BULLISH' | 'BEARISH' | 'UNSET' = 'UNSET';
   let latestMSS: ZigZagSegment | null = null;
-
+  
   const isDisplacementActive = displacementStatus !== null &&
     displacementStatus !== undefined &&
     displacementStatus.status !== 'INACTIVE' &&
     displacementStatus.status !== 'CONSOLIDATION';
-
-  // Process candles chronologically to build wave structure
-  for (let i = 0; i < candles.length; i++) {
-    const curr = candles[i];
-    const disp = isDisplacementCandle(i, candles, volMultiplier);
-
-    if (range === null) {
-      // Look for the first displacement candle to anchor the initial range
-      if (disp.active) {
-        if (disp.direction === 'BULLISH') {
-          range = {
-            high: curr.h,
-            low: curr.l,
-            origin: curr.l,
-            type: 'BULLISH',
-            originT: curr.t,
-            extremeT: curr.t,
-            originIdx: i + indexOffset,
-            extremeIdx: i + indexOffset,
-          };
-          trend = 'BULLISH';
-          hasTappedEquilibrium = false;
-          retracementExtreme = Infinity;
-          retracementExtremeT = curr.t;
-          retracementExtremeIdx = i + indexOffset;
-
-          zigzagPoints.push({ t: curr.t, price: curr.l, type: 'LOW', grade: 'MAJOR', colorValidated: true, candle_index: i + indexOffset, timestamp: new Date(curr.t).toISOString() });
-          zigzagPoints.push({ t: curr.t, price: curr.h, type: 'HIGH', grade: 'MAJOR', colorValidated: true, candle_index: i + indexOffset, timestamp: new Date(curr.t).toISOString() });
-        } else if (disp.direction === 'BEARISH') {
-          range = {
-            high: curr.h,
-            low: curr.l,
-            origin: curr.h,
-            type: 'BEARISH',
-            originT: curr.t,
-            extremeT: curr.t,
-            originIdx: i + indexOffset,
-            extremeIdx: i + indexOffset,
-          };
-          trend = 'BEARISH';
-          hasTappedEquilibrium = false;
-          retracementExtreme = -Infinity;
-          retracementExtremeT = curr.t;
-          retracementExtremeIdx = i + indexOffset;
-
-          zigzagPoints.push({ t: curr.t, price: curr.h, type: 'HIGH', grade: 'MAJOR', colorValidated: true, candle_index: i + indexOffset, timestamp: new Date(curr.t).toISOString() });
-          zigzagPoints.push({ t: curr.t, price: curr.l, type: 'LOW', grade: 'MAJOR', colorValidated: true, candle_index: i + indexOffset, timestamp: new Date(curr.t).toISOString() });
+    
+  for (let i = 0; i < majorSwingsOnly.length - 1; i++) {
+    const from = majorSwingsOnly[i];
+    const to = majorSwingsOnly[i + 1];
+    const trendBefore = trend;
+    let label: 'BOS' | 'MSS' | 'INTERNAL' = 'INTERNAL';
+    let trendAfter: 'BULLISH' | 'BEARISH' | 'UNSET' = trend;
+    
+    if (to.type === 'HIGH') {
+      const priorHigh = i >= 1 ? majorSwingsOnly[i - 1] : null;
+      if (priorHigh && to.price > priorHigh.price) {
+        if (trend === 'BULLISH') {
+          label = 'BOS';
+          trendAfter = 'BULLISH';
+        } else if (trend === 'BEARISH') {
+          label = 'MSS';
+          trendAfter = 'BULLISH';
+        } else {
+          trendAfter = 'BULLISH';
         }
-      }
-      continue;
-    }
-
-    // Evaluate active range
-    const eq = (range.high + range.low) / 2;
-
-    // Check if price retraces to or exceeds Equilibrium (0.50 level)
-    if (!hasTappedEquilibrium) {
-      if (range.type === 'BULLISH' && curr.l <= eq) {
-        hasTappedEquilibrium = true;
-        retracementExtreme = curr.l;
-        retracementExtremeT = curr.t;
-        retracementExtremeIdx = i + indexOffset;
-      } else if (range.type === 'BEARISH' && curr.h >= eq) {
-        hasTappedEquilibrium = true;
-        retracementExtreme = curr.h;
-        retracementExtremeT = curr.t;
+      } else if (trend === 'UNSET') {
+        trendAfter = 'BULLISH';
       }
     } else {
-      // Record the absolute deepest extreme of the retracement since the high/low was set
-      if (range.type === 'BULLISH') {
-        if (curr.l < retracementExtreme) {
-          retracementExtreme = curr.l;
-          retracementExtremeT = curr.t;
-          retracementExtremeIdx = i + indexOffset;
+      // to.type === 'LOW'
+      const priorLow = i >= 1 ? majorSwingsOnly[i - 1] : null;
+      if (priorLow && to.price < priorLow.price) {
+        if (trend === 'BEARISH') {
+          label = 'BOS';
+          trendAfter = 'BEARISH';
+        } else if (trend === 'BULLISH') {
+          label = 'MSS';
+          trendAfter = 'BEARISH';
+        } else {
+          trendAfter = 'BEARISH';
         }
-      } else {
-        if (curr.h > retracementExtreme) {
-          retracementExtreme = curr.h;
-          retracementExtremeT = curr.t;
-          retracementExtremeIdx = i + indexOffset;
-        }
+      } else if (trend === 'UNSET') {
+        trendAfter = 'BEARISH';
       }
     }
-
-    // Wave Validation
-    if (range.type === 'BULLISH') {
-      // BOS (Trend Continuation): expands to break previous High
-      if (hasTappedEquilibrium && curr.h > range.high) {
-        const fromSwing = zigzagPoints[zigzagPoints.length - 1]; // Previous HIGH
-
-        // Push the retracement LOW point
-        const lowSwing: StructuralSwing = {
-          t: retracementExtremeT,
-          price: retracementExtreme,
-          type: 'LOW',
-          grade: 'MAJOR',
-          colorValidated: true,
-          candle_index: retracementExtremeIdx,
-          timestamp: new Date(retracementExtremeT).toISOString()
-        };
-        zigzagPoints.push(lowSwing);
-
-        // Push the new HIGH point
-        const highSwing: StructuralSwing = {
-          t: curr.t,
-          price: curr.h,
-          type: 'HIGH',
-          grade: 'MAJOR',
-          colorValidated: true,
-          candle_index: i + indexOffset,
-          timestamp: new Date(curr.t).toISOString()
-        };
-        zigzagPoints.push(highSwing);
-
-        const segment: ZigZagSegment = {
-          from: fromSwing,
-          to: lowSwing,
-          label: 'INTERNAL',
-          trendBefore: trend,
-          trendAfter: trend,
-          displacementConfirmed: false
-        };
-        const activeSegment: ZigZagSegment = {
-          from: lowSwing,
-          to: highSwing,
-          label: trend === 'BULLISH' ? 'BOS' : 'MSS',
-          trendBefore: trend,
-          trendAfter: 'BULLISH',
-          displacementConfirmed: trend !== 'BULLISH' && (isDisplacementActive || (disp.active && disp.direction === 'BULLISH'))
-        };
-
-        zigzagSegments.push(segment);
-        zigzagSegments.push(activeSegment);
-
-        if (activeSegment.label === 'MSS') {
-          latestMSS = activeSegment;
-          trend = 'BULLISH';
-        }
-
-        // Establish new range
-        range = {
-          high: curr.h,
-          low: retracementExtreme,
-          origin: retracementExtreme,
-          type: 'BULLISH',
-          originT: retracementExtremeT,
-          extremeT: curr.t,
-          originIdx: retracementExtremeIdx,
-          extremeIdx: i + indexOffset,
-        };
-        hasTappedEquilibrium = false;
-        retracementExtreme = Infinity;
-        retracementExtremeT = curr.t;
-        retracementExtremeIdx = i + indexOffset;
-      }
-      // MSS (Trend Reversal): breaks the origin point (low)
-      else if (hasTappedEquilibrium && curr.l < range.low) {
-        const fromSwing = zigzagPoints[zigzagPoints.length - 1]; // Previous HIGH
-
-        const highSwing: StructuralSwing = {
-          t: range.extremeT,
-          price: range.high,
-          type: 'HIGH',
-          grade: 'MAJOR',
-          colorValidated: true,
-          candle_index: range.extremeIdx,
-          timestamp: new Date(range.extremeT).toISOString()
-        };
-        zigzagPoints.push(highSwing);
-
-        const lowSwing: StructuralSwing = {
-          t: curr.t,
-          price: curr.l,
-          type: 'LOW',
-          grade: 'MAJOR',
-          colorValidated: true,
-          candle_index: i + indexOffset,
-          timestamp: new Date(curr.t).toISOString()
-        };
-        zigzagPoints.push(lowSwing);
-
-        const segment: ZigZagSegment = {
-          from: fromSwing,
-          to: highSwing,
-          label: 'INTERNAL',
-          trendBefore: trend,
-          trendAfter: trend,
-          displacementConfirmed: false
-        };
-        const activeSegment: ZigZagSegment = {
-          from: highSwing,
-          to: lowSwing,
-          label: trend === 'BEARISH' ? 'BOS' : 'MSS',
-          trendBefore: trend,
-          trendAfter: 'BEARISH',
-          displacementConfirmed: trend !== 'BEARISH' && (isDisplacementActive || (disp.active && disp.direction === 'BEARISH'))
-        };
-
-        zigzagSegments.push(segment);
-        zigzagSegments.push(activeSegment);
-
-        if (activeSegment.label === 'MSS') {
-          latestMSS = activeSegment;
-          trend = 'BEARISH';
-        }
-
-        // Establish new bearish range
-        range = {
-          high: range.high,
-          low: curr.l,
-          origin: range.high,
-          type: 'BEARISH',
-          originT: range.extremeT,
-          extremeT: curr.t,
-          originIdx: range.extremeIdx,
-          extremeIdx: i + indexOffset,
-        };
-        hasTappedEquilibrium = false;
-        retracementExtreme = -Infinity;
-        retracementExtremeT = curr.t;
-        retracementExtremeIdx = i + indexOffset;
-      }
-      // Absolute Extreme Tracking (shifts high on same-direction expansion)
-      else if (curr.h > range.high) {
-        range.high = curr.h;
-        range.extremeT = curr.t;
-        range.extremeIdx = i + indexOffset;
-        // Shift last HIGH in structural swings list
-        if (zigzagPoints.length > 0) {
-          const lastIdx = zigzagPoints.map(p => p.type).lastIndexOf('HIGH');
-          if (lastIdx !== -1) {
-            zigzagPoints[lastIdx].price = curr.h;
-            zigzagPoints[lastIdx].t = curr.t;
-            zigzagPoints[lastIdx].candle_index = i + indexOffset;
-            zigzagPoints[lastIdx].timestamp = new Date(curr.t).toISOString();
-          }
-        }
-        retracementExtreme = Infinity;
-        retracementExtremeT = curr.t;
-        retracementExtremeIdx = i + indexOffset;
-      }
-    } else {
-      // Bearish Range
-      // BOS (Trend Continuation): expands to break previous Low
-      if (hasTappedEquilibrium && curr.l < range.low) {
-        const fromSwing = zigzagPoints[zigzagPoints.length - 1]; // Previous LOW
-
-        // Push the retracement HIGH point
-        const highSwing: StructuralSwing = {
-          t: retracementExtremeT,
-          price: retracementExtreme,
-          type: 'HIGH',
-          grade: 'MAJOR',
-          colorValidated: true,
-          candle_index: retracementExtremeIdx,
-          timestamp: new Date(retracementExtremeT).toISOString()
-        };
-        zigzagPoints.push(highSwing);
-
-        // Push the new LOW point
-        const lowSwing: StructuralSwing = {
-          t: curr.t,
-          price: curr.l,
-          type: 'LOW',
-          grade: 'MAJOR',
-          colorValidated: true,
-          candle_index: i + indexOffset,
-          timestamp: new Date(curr.t).toISOString()
-        };
-        zigzagPoints.push(lowSwing);
-
-        const segment: ZigZagSegment = {
-          from: fromSwing,
-          to: highSwing,
-          label: 'INTERNAL',
-          trendBefore: trend,
-          trendAfter: trend,
-          displacementConfirmed: false
-        };
-        const activeSegment: ZigZagSegment = {
-          from: highSwing,
-          to: lowSwing,
-          label: trend === 'BEARISH' ? 'BOS' : 'MSS',
-          trendBefore: trend,
-          trendAfter: 'BEARISH',
-          displacementConfirmed: trend !== 'BEARISH' && (isDisplacementActive || (disp.active && disp.direction === 'BEARISH'))
-        };
-
-        zigzagSegments.push(segment);
-        zigzagSegments.push(activeSegment);
-
-        if (activeSegment.label === 'MSS') {
-          latestMSS = activeSegment;
-          trend = 'BEARISH';
-        }
-
-        // Establish new range
-        range = {
-          high: retracementExtreme,
-          low: curr.l,
-          origin: retracementExtreme,
-          type: 'BEARISH',
-          originT: retracementExtremeT,
-          extremeT: curr.t,
-          originIdx: retracementExtremeIdx,
-          extremeIdx: i + indexOffset,
-        };
-        hasTappedEquilibrium = false;
-        retracementExtreme = -Infinity;
-        retracementExtremeT = curr.t;
-        retracementExtremeIdx = i + indexOffset;
-      }
-      // MSS (Trend Reversal): breaks origin point (high)
-      else if (hasTappedEquilibrium && curr.h > range.high) {
-        const fromSwing = zigzagPoints[zigzagPoints.length - 1]; // Previous LOW
-
-        const lowSwing: StructuralSwing = {
-          t: range.extremeT,
-          price: range.low,
-          type: 'LOW',
-          grade: 'MAJOR',
-          colorValidated: true,
-          candle_index: range.extremeIdx,
-          timestamp: new Date(range.extremeT).toISOString()
-        };
-        zigzagPoints.push(lowSwing);
-
-        const highSwing: StructuralSwing = {
-          t: curr.t,
-          price: curr.h,
-          type: 'HIGH',
-          grade: 'MAJOR',
-          colorValidated: true,
-          candle_index: i + indexOffset,
-          timestamp: new Date(curr.t).toISOString()
-        };
-        zigzagPoints.push(highSwing);
-
-        const segment: ZigZagSegment = {
-          from: fromSwing,
-          to: lowSwing,
-          label: 'INTERNAL',
-          trendBefore: trend,
-          trendAfter: trend,
-          displacementConfirmed: false
-        };
-        const activeSegment: ZigZagSegment = {
-          from: lowSwing,
-          to: highSwing,
-          label: trend === 'BULLISH' ? 'BOS' : 'MSS',
-          trendBefore: trend,
-          trendAfter: 'BULLISH',
-          displacementConfirmed: trend !== 'BULLISH' && (isDisplacementActive || (disp.active && disp.direction === 'BULLISH'))
-        };
-
-        zigzagSegments.push(segment);
-        zigzagSegments.push(activeSegment);
-
-        if (activeSegment.label === 'MSS') {
-          latestMSS = activeSegment;
-          trend = 'BULLISH';
-        }
-
-        // Establish new bullish range
-        range = {
-          high: curr.h,
-          low: range.low,
-          origin: range.low,
-          type: 'BULLISH',
-          originT: range.extremeT,
-          extremeT: curr.t,
-          originIdx: range.extremeIdx,
-          extremeIdx: i + indexOffset,
-        };
-        hasTappedEquilibrium = false;
-        retracementExtreme = Infinity;
-        retracementExtremeT = curr.t;
-        retracementExtremeIdx = i + indexOffset;
-      }
-      // Absolute Extreme Tracking (shifts low on same-direction expansion)
-      else if (curr.l < range.low) {
-        range.low = curr.l;
-        range.extremeT = curr.t;
-        range.extremeIdx = i + indexOffset;
-        // Shift last LOW in structural swings list
-        if (zigzagPoints.length > 0) {
-          const lastIdx = zigzagPoints.map(p => p.type).lastIndexOf('LOW');
-          if (lastIdx !== -1) {
-            zigzagPoints[lastIdx].price = curr.l;
-            zigzagPoints[lastIdx].t = curr.t;
-            zigzagPoints[lastIdx].candle_index = i + indexOffset;
-            zigzagPoints[lastIdx].timestamp = new Date(curr.t).toISOString();
-          }
-        }
-        retracementExtreme = -Infinity;
-        retracementExtremeT = curr.t;
-        retracementExtremeIdx = i + indexOffset;
-      }
+    
+    trend = trendAfter;
+    
+    const segment: ZigZagSegment = {
+      from,
+      to,
+      label,
+      trendBefore,
+      trendAfter,
+      displacementConfirmed: label === 'MSS' && isDisplacementActive
+    };
+    
+    zigzagSegments.push(segment);
+    if (label === 'MSS') {
+      latestMSS = segment;
     }
   }
-
-  // Determine structural dealing range
+  
+  // 4. Determine structural dealing range anchored strictly on confirmed major structural pivots
   let dealingRange: StructuralDealingRange;
-  if (range !== null) {
-    const highVal = parseFloat(range.high.toFixed(2));
-    const lowVal = parseFloat(range.low.toFixed(2));
+  const majorHighs = majorSwingsOnly.filter(s => s.type === 'HIGH');
+  const majorLows = majorSwingsOnly.filter(s => s.type === 'LOW');
+  
+  if (majorHighs.length > 0 && majorLows.length > 0) {
+    const lastHigh = majorHighs[majorHighs.length - 1];
+    const lastLow = majorLows[majorLows.length - 1];
+    const highVal = parseFloat(lastHigh.price.toFixed(2));
+    const lowVal = parseFloat(lastLow.price.toFixed(2));
     const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
-
-    const anchorHigh: StructuralSwing = {
-      t: range.type === 'BULLISH' ? range.extremeT : range.originT,
-      price: highVal,
-      type: 'HIGH',
-      grade: 'MAJOR',
-      colorValidated: true,
-      candle_index: range.type === 'BULLISH' ? range.extremeIdx : range.originIdx,
-      timestamp: new Date(range.type === 'BULLISH' ? range.extremeT : range.originT).toISOString()
-    };
-    const anchorLow: StructuralSwing = {
-      t: range.type === 'BULLISH' ? range.originT : range.extremeT,
-      price: lowVal,
-      type: 'LOW',
-      grade: 'MAJOR',
-      colorValidated: true,
-      candle_index: range.type === 'BULLISH' ? range.originIdx : range.extremeIdx,
-      timestamp: new Date(range.type === 'BULLISH' ? range.originT : range.extremeT).toISOString()
-    };
-
+    
     dealingRange = {
       high: highVal,
       low: lowVal,
       equilibrium: eqVal,
       current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
-      anchor_high_swing: anchorHigh,
-      anchor_low_swing: anchorLow,
+      anchor_high_swing: lastHigh,
+      anchor_low_swing: lastLow
     };
   } else {
-    const highVal = Math.max(...candles.map(c => c.h));
-    const lowVal = Math.min(...candles.map(c => c.l));
+    const highVal = candles.length > 0 ? Math.max(...candles.map(c => c.h)) : 0;
+    const lowVal = candles.length > 0 ? Math.min(...candles.map(c => c.l)) : 0;
     const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
     dealingRange = {
       high: highVal,
@@ -615,43 +374,37 @@ function runEquilibriumStateMachine(
       equilibrium: eqVal,
       current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
       anchor_high_swing: null,
-      anchor_low_swing: null,
+      anchor_low_swing: null
     };
   }
-
+  
   const hasConfirmedMSS = latestMSS !== null && latestMSS.displacementConfirmed;
 
-  // Collapse consecutive duplicate swing types for clean rendering
-  const collapsedSwings: StructuralSwing[] = [];
-  for (const pt of zigzagPoints) {
-    if (collapsedSwings.length === 0) {
-      collapsedSwings.push(pt);
-      continue;
-    }
-    const last = collapsedSwings[collapsedSwings.length - 1];
-    if (last.type === pt.type) {
-      if (pt.type === 'HIGH' && pt.price > last.price) {
-        collapsedSwings[collapsedSwings.length - 1] = pt;
-      } else if (pt.type === 'LOW' && pt.price < last.price) {
-        collapsedSwings[collapsedSwings.length - 1] = pt;
+  // Stitch unconfirmed raw swings back into the returned swings array strictly for visualization/display
+  const returnedSwings = [...markedConfirmedSwings];
+  unconfirmedRawSwings.forEach(s => {
+    let structure_type: 'MAJOR' | 'INTERNAL' = 'MAJOR';
+    if (volMultiplier < 2.0) {
+      structure_type = 'INTERNAL';
+    } else if (currentMajorHigh !== -Infinity && currentMajorLow !== Infinity) {
+      if (s.price >= currentMajorLow && s.price <= currentMajorHigh) {
+        structure_type = 'INTERNAL';
       }
-    } else {
-      collapsedSwings.push(pt);
     }
-  }
-
-  collapsedSwings.forEach(s => {
-    s.grade = volMultiplier >= 2.0 ? 'MAJOR' : 'INNER';
-    s.colorValidated = true;
+    returnedSwings.push({
+      ...s,
+      structure_type
+    });
   });
-
+  returnedSwings.sort((a, b) => a.t - b.t);
+  
   return {
-    swings: collapsedSwings,
+    swings: returnedSwings, // Return combined swings (marked with confirmed: true/false) for display
     zigzag: zigzagSegments,
     dealingRange,
     trend,
     latestMSS,
-    market_structure_shift: hasConfirmedMSS,
+    market_structure_shift: hasConfirmedMSS
   };
 }
 
@@ -688,6 +441,34 @@ export function analyzeMarketStructure(
   const majorFull = runEquilibriumStateMachine(candles, currentPrice, displacementStatus, 2.0);
   const innerFull = runEquilibriumStateMachine(candles, currentPrice, displacementStatus, 1.0);
 
+  // ─── Velocity-Based Momentum Override ───
+  let expansion_mode: 'NORMAL' | 'RUNAWAY' = 'NORMAL';
+  let market_velocity = 0;
+  let runaway_origin_price: number | null = null;
+
+  const dispActive = displacementStatus !== null && displacementStatus !== undefined && displacementStatus.status.includes('ACTIVE');
+  const dispMult = displacementStatus?.anomaly_multiplier || 0;
+
+  if (dispActive && dispMult > 4.0) {
+    const dispDir = displacementStatus?.status.includes('BULLISH') ? 'BULLISH' : 'BEARISH';
+    // Count active unmitigated FVGs in the dominant direction on the active timeframe (which matches candles)
+    const fvgs = detectActiveFVGs(candles, true);
+    const matchingFvgs = fvgs.filter((f: any) => f.type === (dispDir === 'BULLISH' ? 'BISI' : 'SIBI'));
+    market_velocity = matchingFvgs.length;
+
+    if (market_velocity >= 2) {
+      expansion_mode = 'RUNAWAY';
+      // Find oldest FVG in matchingFvgs to establish the Origin Low/High
+      if (matchingFvgs.length > 0) {
+        const oldestFvg = matchingFvgs.reduce((oldest: any, fvg: any) => fvg.origin_time < oldest.origin_time ? fvg : oldest, matchingFvgs[0]);
+        const originCandle = candles.find(c => c.t === oldestFvg.origin_time);
+        if (originCandle) {
+          runaway_origin_price = dispDir === 'BULLISH' ? originCandle.l : originCandle.h;
+        }
+      }
+    }
+  }
+
   // If no anchor timestamp is provided, or all candles are older than the anchor, return the full run
   if (!contextAnchorTimestamp || candles[0].t >= contextAnchorTimestamp) {
     // Combine both sets of swings for visual display
@@ -701,11 +482,30 @@ export function analyzeMarketStructure(
     });
     combinedSwings.sort((a, b) => a.t - b.t);
 
+    let finalTrend: 'BULLISH' | 'BEARISH' | 'UNSET' = majorFull.trend;
+    let finalExpansionMode = expansion_mode;
+    if (expansion_mode === 'RUNAWAY' && runaway_origin_price !== null) {
+      const dispDir = displacementStatus?.status.includes('BULLISH') ? 'BULLISH' : 'BEARISH';
+      if (dispDir === 'BULLISH') {
+        if (currentPrice >= runaway_origin_price) {
+          finalTrend = 'BULLISH';
+        } else {
+          finalExpansionMode = 'NORMAL';
+        }
+      } else {
+        if (currentPrice <= runaway_origin_price) {
+          finalTrend = 'BEARISH';
+        } else {
+          finalExpansionMode = 'NORMAL';
+        }
+      }
+    }
+
     return {
       swings: combinedSwings,
       zigzag: majorFull.zigzag,
       dealingRange: majorFull.dealingRange,
-      currentTrend: majorFull.trend !== 'UNSET' ? majorFull.trend : 'UNSET',
+      currentTrend: finalTrend,
       latestMSS: majorFull.latestMSS,
       market_structure_shift: majorFull.market_structure_shift,
       market_structure_shift_direction: majorFull.market_structure_shift
@@ -713,6 +513,9 @@ export function analyzeMarketStructure(
         : null,
       innerZigzag: innerFull.zigzag,
       innerSwings: innerFull.swings,
+      expansion_mode: finalExpansionMode,
+      market_velocity,
+      runaway_origin_price
     };
   }
 
@@ -727,11 +530,31 @@ export function analyzeMarketStructure(
       if (!majorTimes.has(s.t)) combinedSwings.push({ ...s, grade: 'INNER' });
     });
     combinedSwings.sort((a, b) => a.t - b.t);
+
+    let finalTrend: 'BULLISH' | 'BEARISH' | 'UNSET' = majorFull.trend;
+    let finalExpansionMode = expansion_mode;
+    if (expansion_mode === 'RUNAWAY' && runaway_origin_price !== null) {
+      const dispDir = displacementStatus?.status.includes('BULLISH') ? 'BULLISH' : 'BEARISH';
+      if (dispDir === 'BULLISH') {
+        if (currentPrice >= runaway_origin_price) {
+          finalTrend = 'BULLISH';
+        } else {
+          finalExpansionMode = 'NORMAL';
+        }
+      } else {
+        if (currentPrice <= runaway_origin_price) {
+          finalTrend = 'BEARISH';
+        } else {
+          finalExpansionMode = 'NORMAL';
+        }
+      }
+    }
+
     return {
       swings: combinedSwings,
       zigzag: majorFull.zigzag,
       dealingRange: majorFull.dealingRange,
-      currentTrend: majorFull.trend !== 'UNSET' ? majorFull.trend : 'UNSET',
+      currentTrend: finalTrend,
       latestMSS: majorFull.latestMSS,
       market_structure_shift: majorFull.market_structure_shift,
       market_structure_shift_direction: majorFull.market_structure_shift
@@ -739,6 +562,9 @@ export function analyzeMarketStructure(
         : null,
       innerZigzag: innerFull.zigzag,
       innerSwings: innerFull.swings,
+      expansion_mode: finalExpansionMode,
+      market_velocity,
+      runaway_origin_price
     };
   }
 
@@ -808,12 +634,31 @@ export function analyzeMarketStructure(
   const zigzagStitched = stitchZigZag(majorFull.zigzag, majorPost.zigzag, majorFull.swings, majorPost.swings);
   const innerZigzagStitched = stitchZigZag(innerFull.zigzag, innerPost.zigzag, innerFull.swings, innerPost.swings);
 
+  let finalTrend: 'BULLISH' | 'BEARISH' | 'UNSET' = majorPost.trend;
+  let finalExpansionMode = expansion_mode;
+  if (expansion_mode === 'RUNAWAY' && runaway_origin_price !== null) {
+    const dispDir = displacementStatus?.status.includes('BULLISH') ? 'BULLISH' : 'BEARISH';
+    if (dispDir === 'BULLISH') {
+      if (currentPrice >= runaway_origin_price) {
+        finalTrend = 'BULLISH';
+      } else {
+        finalExpansionMode = 'NORMAL';
+      }
+    } else {
+      if (currentPrice <= runaway_origin_price) {
+        finalTrend = 'BEARISH';
+      } else {
+        finalExpansionMode = 'NORMAL';
+      }
+    }
+  }
+
   // The active dealing range, trend, and MSS metrics are strictly taken from the stabilized post-anchor run
   return {
     swings: combinedSwings,
     zigzag: zigzagStitched,
     dealingRange: majorPost.dealingRange,
-    currentTrend: majorPost.trend !== 'UNSET' ? majorPost.trend : 'UNSET',
+    currentTrend: finalTrend,
     latestMSS: majorPost.latestMSS,
     market_structure_shift: majorPost.market_structure_shift,
     market_structure_shift_direction: majorPost.market_structure_shift
@@ -821,6 +666,9 @@ export function analyzeMarketStructure(
       : null,
     innerZigzag: innerZigzagStitched,
     innerSwings: innerSwingsCombined,
+    expansion_mode: finalExpansionMode,
+    market_velocity,
+    runaway_origin_price
   };
 }
 

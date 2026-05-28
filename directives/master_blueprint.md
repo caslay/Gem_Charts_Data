@@ -1,10 +1,65 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.24
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.27
 
 > **Classification:** Institutional Architecture Document  
-> **Generated:** 2026-05-27  
-> **Last Updated:** 2026-05-27 (V10.24 Backtest HUD Sidebar Parity & Command Center Complete)  
+> **Generated:** 2026-05-28  
+> **Last Updated:** 2026-05-28 (V10.27 Strict Structural Confirmation Lag & Repainting Prevention Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.27 Changelog — Strict Structural Confirmation Lag & Repainting Prevention (Completed)
+
+### 1. 2-Bar Confirmation Lag Buffer
+- **Fractal Validation helper:** Engineered a robust `isCandleClosed` helper featuring full array boundary safety checks. A Major 5-bar Swing at index `i` is validated as **CONFIRMED** only if the second succeeding candle `i+2` is a fully closed candle (`c.isClosed !== false`).
+- **Raw Partitioning:** Splitted detected raw fractals into two isolated slices: `confirmedRawSwings` and `unconfirmedRawSwings`.
+- **Backtest Parity Sync:** Refactored the backtest replay payload generator inside `src/hooks/useBacktestEngine.ts` to map the active step index candle as `isClosed: false` and older historical candles as `isClosed: true`. This successfully extends the 2-bar Confirmation Lag buffer to backtesting, guaranteeing 100% mathematical symmetry and preventing execution on unconfirmed live-edge wicks during backtest replays.
+
+### 2. Repainting-Free Quantitative State Core
+- **Absolute Core Isolation:** Restricted the alternations solver, Parent-Child wave containment rules, state machine trend updates (`trend`), Zig-Zag segment builder (`zigzag`), and local dealing range anchors (`dealingRange`) to run **STRICTLY ON CONFIRMED SWINGS**.
+- **Execution Stability:** This guarantees 0% repainting on the trend bias and confirmed ranges used by `useStrategyEvaluator.ts`, completely eliminating false signals on open/forming candles at the live edge of the chart.
+
+### 3. Active Price Expansion Visuals
+- **Visualization Stitching:** Appended unconfirmed swings (marked `confirmed: false`) back into the returned `swings` array strictly for visual rendering, mapping them to the correct hierarchy structure context.
+- **Premium Dotted Amber Circles:** Refactored the hardware-accelerated SVG renderer `structureLayer.ts` to map `confirmed === false` swings as premium cautionary dotted amber hollow circles (`rgba(251, 191, 36, 0.85)` with `strokeDasharray: '2,2'`), making "Active Price Expansion" visually distinguishable from solid green "Confirmed Major Swings".
+
+## 🆕 V10.26 Changelog — Structural Wave Hierarchy & Velocity-Based Runaway Momentum (Completed)
+
+### 1. Structural Hierarchy (Parent-Child Waves)
+- **Containment Boundaries:** Defined a Major Dealing Range bounded strictly by the most recent validated 5-bar alternating Major Swing High and Swing Low.
+- **Internal Swing Partitioning:** Swings that form entirely within the containment boundaries of the active Major Range are automatically categorized as `INTERNAL_SWINGS`.
+- **Trend and Dealing Range Lock:** Market structural trends (`MARKET_TREND` / `BULLISH` | `BEARISH`) and local dealing ranges are locked to Major extremes and ignore minor internal retracement swings, preventing false trend flips or invalidations.
+
+### 2. Velocity-Based Momentum Override (Runaway Market Protection)
+- **Momentum Metrics:** Introduced `MARKET_VELOCITY` tracking based on sequential unmitigated Fair Value Gaps in the displacement direction, and `STRUCTURE_TYPE` distinguishing `MAJOR` waves from `INTERNAL` waves.
+- **Runaway Mode Trigger:** If the count of sequential unmitigated FVGs $\ge 2$ and the volume displacement `anomaly_multiplier` exceeds $4.0x$, the engine transitions to `RUNAWAY` expansion mode.
+- **Gate Softening & Retracement Bypass:** Custom strategies that toggle the `momentum_override` setting can execute entries at the first available internal FVG or Order Block, bypassing the 50% Equilibrium/Premium-Discount retracement gates entirely while in `RUNAWAY` mode.
+- **Directional Origin Guard:** Locks the strategy execution bias to prevent trend reversals as long as the price stays above (for Bullish) or below (for Bearish) the breakout origin price (`runaway_origin_price`) established at the oldest unmitigated FVG's extreme.
+
+### 3. Strategy Customizer & Equation Builder UI Integration
+- **Metric Definitions:** Registered `'MARKET_VELOCITY'` (Number) and `'STRUCTURE_TYPE'` (Enum: `['MAJOR', 'INTERNAL']`) in the metric definitions list of `EquationBuilder.tsx`.
+- **Momentum Override Switch:** Placed a sleek, premium, animated glassmorphic toggle switch labeled `Momentum Override (Runaway Market Protection)` right below the OLS statistical sensitivity parameters, saving/loading the `momentum_override` state directly to the custom strategy conditions JSONB payload.
+
+## 🆕 V10.25 Changelog — Standardized Timezone, Strict Swings, and Dynamic ATR/OLS Gating (Completed)
+
+### 1. Global Timezone Standardization (00:00 UTC)
+- **Unified Day Open Solver:** Shifted the True Day Open (TDO) solver and the intraday calendar day filter strictly to `00:00 UTC` across the backend API route (`src/app/api/market-data/route.ts`) and the backtest replay engine (`src/hooks/useBacktestEngine.ts`). 
+- **Decoupled Local UI Shifts:** Removed all timezone offset injections from the quantitative logic layer. All internal mathematical intervals (Session Sweeps, equilibrium boundaries, and pivot coordinates) run on raw UTC epochs, while Cairo timezone rendering (`Africa/Cairo` UTC+3) is isolated cleanly to lightweight-charts axis formatters and HUD clock displays.
+
+### 2. Strict Alternating Swings & Alternation Filters
+- **Color-Lock Override:** Centralized the visual, backend, and backtest market structure calculations in `src/lib/structureEngine.ts` to detect Swing Highs and Lows strictly based on pure price extremes (5-bar fractals: H/L higher/lower than 2 preceding and 2 succeeding candles), completely eliminating candle color dependencies.
+- **Strict Zig-Zag Alternation:** Implemented an alternation state machine that ensures consecutive swing types strictly alternate (Peak $\leftrightarrow$ Valley). Consecutive peaks of the same type automatically filter to retain only the highest extreme (for highs) or the lowest extreme (for lows). Aligned all Dealing Ranges and Trend state machine transitions strictly with these alternating pivots.
+
+### 3. Statistical OLS Veto Gate
+- **Interactive UI Settings:** Enforced strategy settings support for `statistical_sensitivity` (`STRICT`, `RELAXED`, `OFF`) inside the Equation Builder custom strategy configuration.
+- **Immediate Execution Veto:** Programmed a strict OLS statistical sensitivity check in the strategy evaluation loop (`src/hooks/useStrategyEvaluator.ts`). Custom strategies fail immediately (veto entry) if OLS indicators do not satisfy the selected threshold ($t \ge 1.96, p < 0.05$ for STRICT; $t \ge 1.65, p < 0.15$ for RELAXED).
+
+### 4. Dynamic Volatility (ATR) Buffers
+- **Smoothed Wilder's ATR Engine:** Designed a robust `calculateATR()` indicator inside `src/lib/riskEngine.ts`.
+- **Dynamic Risk Invalidation Buffer:** Replaced the legacy hardcoded `±0.50` pips offset with a dynamic, volatility-adjusted buffer set to `0.2 * ATR` computed on the active timeframe's candle history, adapting stop losses and invalidation bounds dynamically.
+- **Dynamic SMT Liquidity Scan:** Upgraded the Equal Highs Trap scanner inside `route.ts` to use the dynamic `0.2 * ATR` buffer threshold instead of static margins.
+
+### 5. Unified Taker Volume Ingestion
+- **Strict Typing Parity:** Defined `taker_buy_vol` and `taker_sell_vol` as required properties inside `Candle` (`src/lib/fvgEngine.ts`) and `LiveCandle` (`src/hooks/useBinanceWS.ts`) typings.
+- **WebSocket Ingestion Parity:** Configured `useBinanceWS.ts` to map the raw Binance `V` field (Taker buy base asset volume) and compute `taker_sell_vol = volume - taker_buy_vol` in real-time, matching the backtesting historical kline stream interface perfectly.
 
 ## 🆕 V10.24 Changelog — Backtest HUD Sidebar Parity & Command Center Integration (Completed)
 

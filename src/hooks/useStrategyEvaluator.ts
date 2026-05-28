@@ -16,6 +16,7 @@ import type { MetricKey, OperatorKey, TemporalMode, CustomStrategy, StrategyCond
  * (for enum-type metrics like OI_TREND, PRICE_VS_OPEN).
  */
 function resolveMetric(
+  strategy: CustomStrategy,
   condition: StrategyCondition,
   data: MarketDataPayload | null,
   livePrice: number | null,
@@ -182,6 +183,15 @@ function resolveMetric(
     }
 
     case 'EQUILIBRIUM_STATUS': {
+      const isObj = !Array.isArray(strategy.conditions);
+      const momentumOverride = isObj ? !!strategy.conditions.momentum_override : false;
+      const expansionMode = ipda.expansion_mode || 'NORMAL';
+      
+      if (momentumOverride && expansionMode === 'RUNAWAY') {
+        const stratDirection = isObj ? (strategy.conditions.direction || 'LONG') : 'LONG';
+        return stratDirection === 'LONG' ? 'DISCOUNT' : 'PREMIUM';
+      }
+
       const pricing = ipda.pricing_context || {};
       const range = pricing.local_dealing_range || {};
       return range.current_status || 'UNKNOWN';
@@ -206,6 +216,15 @@ function resolveMetric(
     }
 
     case 'LOCAL_PRICING': {
+      const isObj = !Array.isArray(strategy.conditions);
+      const momentumOverride = isObj ? !!strategy.conditions.momentum_override : false;
+      const expansionMode = ipda.expansion_mode || 'NORMAL';
+      
+      if (momentumOverride && expansionMode === 'RUNAWAY') {
+        const stratDirection = isObj ? (strategy.conditions.direction || 'LONG') : 'LONG';
+        return stratDirection === 'LONG' ? 'DISCOUNT' : 'PREMIUM';
+      }
+
       const pricing = ipda.pricing_context || {};
       const range = pricing.local_dealing_range || {};
       const fullRange = ipda.full_structure_map?.dealingRange || {};
@@ -230,6 +249,14 @@ function resolveMetric(
     }
 
     case 'PRICE_IN_OTE': {
+      const isObj = !Array.isArray(strategy.conditions);
+      const momentumOverride = isObj ? !!strategy.conditions.momentum_override : false;
+      const expansionMode = ipda.expansion_mode || 'NORMAL';
+      
+      if (momentumOverride && expansionMode === 'RUNAWAY') {
+        return true; // Bypass Equilibrium retracement gate
+      }
+
       const range = ipda.full_structure_map?.dealingRange || {};
       const high = range.high || 0;
       const low = range.low || 0;
@@ -287,6 +314,17 @@ function resolveMetric(
       return false;
     }
 
+    case 'MARKET_VELOCITY': {
+      return typeof ipda.market_velocity === 'number' ? ipda.market_velocity : 0;
+    }
+
+    case 'STRUCTURE_TYPE': {
+      const swings = ipda.full_structure_map?.swings || [];
+      if (swings.length === 0) return 'MAJOR';
+      const latest = swings[swings.length - 1];
+      return latest.structure_type || 'MAJOR';
+    }
+
     default:
       return false;
   }
@@ -296,13 +334,13 @@ function resolveMetric(
  * Evaluates a single condition against the current data snapshot.
  */
 function evaluateCondition(
-  strategyId: string,
+  strategy: CustomStrategy,
   condition: StrategyCondition,
   data: MarketDataPayload | null,
   livePrice: number | null,
   aiBias: number | null
 ): boolean {
-  const resolved = resolveMetric(condition, data, livePrice, aiBias);
+  const resolved = resolveMetric(strategy, condition, data, livePrice, aiBias);
 
   const expected = (condition.operator === 'IS_TRUE')
     ? 'true'
@@ -355,11 +393,31 @@ function evaluateStrategy(
 
   if (!Array.isArray(conditions) || conditions.length === 0) return false;
 
+  const isObj = !Array.isArray(strategy.conditions);
+
+  // ── OLS Statistical Validation Veto Gate ──
+  const sensitivity = isObj ? (strategy.conditions.statistical_sensitivity || 'STRICT') : 'STRICT';
+
+  if (sensitivity !== 'OFF' && data?.ipda_metrics?.institutional_sponsorship?.statistical_validation) {
+    const statVal = data.ipda_metrics.institutional_sponsorship.statistical_validation;
+    const tStat = Math.abs(statVal.t_statistic || 0);
+    const pVal = statVal.p_value ?? 1.0;
+
+    if (sensitivity === 'STRICT') {
+      if (tStat < 1.96 || pVal >= 0.05) {
+        return false; // Vetoed!
+      }
+    } else if (sensitivity === 'RELAXED') {
+      if (tStat < 1.65 || pVal >= 0.15) {
+        return false; // Vetoed!
+      }
+    }
+  }
+
   const hasOnCloseCondition = conditions.some((c: any) => c.temporal === 'ON_CLOSE');
   const hasInstantCondition = conditions.some((c: any) => c.temporal === 'INSTANT');
   
   // Strategy settings level check
-  const isObj = !Array.isArray(strategy.conditions);
   const temporalMode = isObj ? (strategy.conditions.temporal_mode || 'INSTANT') : 'INSTANT';
 
   // Decide if we need to gate this evaluation behind the candle close event:
@@ -374,7 +432,7 @@ function evaluateStrategy(
   }
 
   // All conditions must pass
-  return conditions.every((c: any) => evaluateCondition(strategy.id, c, data, livePrice, aiBias));
+  return conditions.every((c: any) => evaluateCondition(strategy, c, data, livePrice, aiBias));
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────

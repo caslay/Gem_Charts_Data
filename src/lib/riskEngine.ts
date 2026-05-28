@@ -32,6 +32,47 @@ import { MappedFVG } from './fvgEngine';
 import { RestingLiquidityPools } from './orderFlowEngine';
 import { InstitutionalSponsorship } from './displacementEngine';
 
+export interface ATRCandle {
+  h: number;
+  l: number;
+  c: number;
+}
+
+/**
+ * Calculate the Average True Range (ATR) over a candle series.
+ * Uses the standard Wilder's smoothing technique.
+ */
+export function calculateATR(candles: ATRCandle[], period = 14): number {
+  if (candles.length === 0) return 0;
+  if (candles.length === 1) return candles[0].h - candles[0].l;
+
+  const trs: number[] = [];
+  for (let i = 0; i < candles.length; i++) {
+    const c = candles[i];
+    if (i === 0) {
+      trs.push(c.h - c.l);
+    } else {
+      const prevC = candles[i - 1];
+      const tr = Math.max(
+        c.h - c.l,
+        Math.abs(c.h - prevC.c),
+        Math.abs(c.l - prevC.c)
+      );
+      trs.push(tr);
+    }
+  }
+
+  if (trs.length <= period) {
+    return trs.reduce((sum, tr) => sum + tr, 0) / trs.length;
+  }
+
+  let atr = trs.slice(0, period).reduce((sum, tr) => sum + tr, 0) / period;
+  for (let i = period; i < trs.length; i++) {
+    atr = (atr * (period - 1) + trs[i]) / period;
+  }
+  return atr;
+}
+
 export interface HardInvalidationLevels {
   bearish_invalidation: number | null;
   bullish_invalidation: number | null;
@@ -49,7 +90,8 @@ export function generateTradeExecutionParameters(
   institutional_sponsorship: InstitutionalSponsorship,
   currentPrice: number,
   active_fvgs: MappedFVG[],
-  resting_liquidity_pools: RestingLiquidityPools
+  resting_liquidity_pools: RestingLiquidityPools,
+  candles?: ATRCandle[]
 ): TradeExecutionParameters {
   let risk_mode: "HALF_RISK_OR_STAND_DOWN" | "FULL_MACRO_RISK" | "STANDARD_RISK" = "STANDARD_RISK";
 
@@ -81,12 +123,16 @@ export function generateTradeExecutionParameters(
 
   const { BSL_Magnets, SSL_Magnets } = resting_liquidity_pools;
 
+  // Calculate volatility-adjusted buffer or default to 0.50 pips
+  const atr = candles ? calculateATR(candles) : 0;
+  const buffer = candles && atr > 0 ? 0.2 * atr : 0.50;
+
   const bearish_invalidation = BSL_Magnets.length > 0 
-    ? parseFloat((Math.max(...BSL_Magnets) + 0.50).toFixed(2)) 
+    ? parseFloat((Math.max(...BSL_Magnets) + buffer).toFixed(2)) 
     : null;
     
   const bullish_invalidation = SSL_Magnets.length > 0 
-    ? parseFloat((Math.min(...SSL_Magnets) - 0.50).toFixed(2)) 
+    ? parseFloat((Math.min(...SSL_Magnets) - buffer).toFixed(2)) 
     : null;
 
   return {
@@ -98,3 +144,4 @@ export function generateTradeExecutionParameters(
     }
   };
 }
+

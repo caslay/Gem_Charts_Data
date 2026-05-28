@@ -196,23 +196,25 @@ export const structureLayer: ChartLayer = {
           }),
 
         // B. Plot Major Swings (Hollow Circles at 5-Bar Fractals)
-        // Color-validated = bright neon green; unvalidated = dimmed outline
+        // Differentiate: Confirmed = solid neon green/dimmed; Active Price Expansion = dotted amber
         showMajor &&
           mappedSwings
             .filter((s) => s.grade === 'MAJOR')
-            .map((pt, idx) =>
-              React.createElement('circle', {
+            .map((pt, idx) => {
+              const isConfirmed = pt.confirmed !== false;
+              return React.createElement('circle', {
                 key: `major-swing-${idx}`,
                 cx: pt.x,
                 cy: pt.y,
                 r: 4.5,
-                stroke: pt.colorValidated
-                  ? 'var(--up-candle, #50ffaf)'
-                  : 'rgba(148, 163, 184, 0.4)',
-                strokeWidth: pt.colorValidated ? 1.5 : 0.8,
+                stroke: isConfirmed
+                  ? (pt.colorValidated ? 'var(--up-candle, #50ffaf)' : 'rgba(148, 163, 184, 0.4)')
+                  : 'rgba(251, 191, 36, 0.85)',
+                strokeWidth: isConfirmed ? (pt.colorValidated ? 1.5 : 0.8) : 1.2,
+                strokeDasharray: isConfirmed ? undefined : '2,2',
                 fill: 'none',
-              })
-            ),
+              });
+            }),
 
         // C. Plot Inner Swings (Small Diamonds at 3-Bar Fractals)
         showInner &&

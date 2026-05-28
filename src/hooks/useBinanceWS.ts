@@ -29,6 +29,8 @@ export interface LiveCandle {
   low: number;
   close: number;
   volume: number;
+  taker_buy_vol: number;
+  taker_sell_vol: number;
   isClosed?: boolean;
 }
 
@@ -125,6 +127,7 @@ export function useBinanceWS({
           l: string;
           c: string;
           v: string;
+          V: string; // Taker buy base asset volume
           x: boolean; // Candle is closed flag
         };
       };
@@ -133,6 +136,10 @@ export function useBinanceWS({
       if (msg.e !== 'kline' || !msg.k) return null;
 
       const k = msg.k;
+      const volume = parseFloat(k.v);
+      const taker_buy_vol = parseFloat(k.V || '0');
+      const taker_sell_vol = parseFloat((volume - taker_buy_vol).toFixed(4));
+
       return {
         // Converted to seconds as required by lightweight-charts.
         time: Math.floor(k.t / 1000) as UTCTimestamp,
@@ -140,7 +147,9 @@ export function useBinanceWS({
         high: parseFloat(k.h),
         low: parseFloat(k.l),
         close: parseFloat(k.c),
-        volume: parseFloat(k.v),
+        volume,
+        taker_buy_vol,
+        taker_sell_vol,
         isClosed: k.x,
       };
     } catch {
