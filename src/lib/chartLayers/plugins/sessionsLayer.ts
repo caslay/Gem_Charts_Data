@@ -6,8 +6,7 @@ export const sessionsLayer: ChartLayer = {
   description: 'Asian / London Killzone range boundaries & True Open',
   icon: 'Clock',
   renderChart(context) {
-    const { series, data, theme, storage } = context;
-    const isDark = theme === 'dark';
+    const { series, data, theme, themeSettings, storage } = context;
 
     // Clear old lines
     const oldLines = storage.get('lines') || [];
@@ -31,7 +30,7 @@ export const sessionsLayer: ChartLayer = {
     if (typeof tdo === 'number' && tdo > 0) {
       const line = series.createPriceLine({
         price: tdo,
-        color: isDark ? '#a855f7' : '#4f46e5',
+        color: theme === 'dark' ? (themeSettings?.dark_chart_tdo || '#a855f7') : (themeSettings?.light_chart_tdo || '#4f46e5'),
         lineStyle: 0, // Solid
         lineWidth: 2,
         axisLabelVisible: true,
@@ -44,7 +43,7 @@ export const sessionsLayer: ChartLayer = {
     if (typeof asian.high === 'number' && asian.high > 0) {
       const line = series.createPriceLine({
         price: asian.high,
-        color: 'rgba(245, 158, 11, 0.5)', // Amber
+        color: theme === 'dark' ? (themeSettings?.dark_chart_session_asian || 'rgba(245, 158, 11, 0.5)') : (themeSettings?.light_chart_session_asian || 'rgba(217, 119, 6, 0.5)'),
         lineStyle: 2,
         lineWidth: 1,
         axisLabelVisible: true,
@@ -55,7 +54,7 @@ export const sessionsLayer: ChartLayer = {
     if (typeof asian.low === 'number' && asian.low > 0) {
       const line = series.createPriceLine({
         price: asian.low,
-        color: 'rgba(245, 158, 11, 0.5)', // Amber
+        color: theme === 'dark' ? (themeSettings?.dark_chart_session_asian || 'rgba(245, 158, 11, 0.5)') : (themeSettings?.light_chart_session_asian || 'rgba(217, 119, 6, 0.5)'),
         lineStyle: 2,
         lineWidth: 1,
         axisLabelVisible: true,
@@ -68,7 +67,7 @@ export const sessionsLayer: ChartLayer = {
     if (typeof london.high === 'number' && london.high > 0) {
       const line = series.createPriceLine({
         price: london.high,
-        color: 'rgba(59, 130, 246, 0.5)', // Blue
+        color: theme === 'dark' ? (themeSettings?.dark_chart_session_london || 'rgba(59, 130, 246, 0.5)') : (themeSettings?.light_chart_session_london || 'rgba(37, 99, 235, 0.5)'),
         lineStyle: 2,
         lineWidth: 1,
         axisLabelVisible: true,
@@ -79,7 +78,7 @@ export const sessionsLayer: ChartLayer = {
     if (typeof london.low === 'number' && london.low > 0) {
       const line = series.createPriceLine({
         price: london.low,
-        color: 'rgba(59, 130, 246, 0.5)', // Blue
+        color: theme === 'dark' ? (themeSettings?.dark_chart_session_london || 'rgba(59, 130, 246, 0.5)') : (themeSettings?.light_chart_session_london || 'rgba(37, 99, 235, 0.5)'),
         lineStyle: 2,
         lineWidth: 1,
         axisLabelVisible: true,

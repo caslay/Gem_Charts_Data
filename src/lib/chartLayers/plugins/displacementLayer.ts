@@ -7,13 +7,29 @@ export const displacementLayer: ChartLayer = {
   description: 'MSS, Institutional Sponsorship, and SMT divergence markers',
   icon: 'TrendingUp',
   renderChart(context) {
-    const { seriesMarkers, activeCandles, theme, storage } = context;
-    const isDark = theme === 'dark';
+    const { seriesMarkers, activeCandles, theme, themeSettings, storage } = context;
 
     if (seriesMarkers) {
+      // Resolve dynamic customizer colors
+      const sponsorshipColor = theme === 'dark'
+        ? (themeSettings?.dark_text_title || '#ffffff')
+        : (themeSettings?.light_text_title || '#020617');
+
+      const bullishSweepColor = theme === 'dark'
+        ? (themeSettings?.dark_chart_swing_low || '#50ffaf')
+        : (themeSettings?.light_chart_swing_low || '#059669');
+
+      const bearishSweepColor = theme === 'dark'
+        ? (themeSettings?.dark_chart_swing_high || '#ffb4ab')
+        : (themeSettings?.light_chart_swing_high || '#e11d48');
+
       // Draw markers using the volumetric generator
       const sortedData = [...activeCandles].sort((a, b) => a.t - b.t);
-      const markers = generateVolumetricMarkers(sortedData, isDark);
+      const markers = generateVolumetricMarkers(sortedData, {
+        sponsorshipColor,
+        bullishSweepColor,
+        bearishSweepColor,
+      });
 
       // Set markers on the series
       seriesMarkers.setMarkers(markers);

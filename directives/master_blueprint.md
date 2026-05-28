@@ -1,10 +1,42 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.27
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.29
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-28  
-> **Last Updated:** 2026-05-28 (V10.27 Strict Structural Confirmation Lag & Repainting Prevention Complete)  
+> **Last Updated:** 2026-05-28 (V10.29 System Theme Customization Studio & Modular Decoupling Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.29 Changelog — System Theme Customization Studio & Modular Decoupling (Completed)
+
+### 1. Expanded Decoupled Theme Variables
+- **Color Key Matrix:** Expanded the unified SWR-backed settings model to encompass 30 distinct visual parameters per theme, bringing full customizable styling access to all layout zones.
+- **Header Aesthetics:** Decoupled colors for navigation links (idle, hover, active, and active background), navigation icons, and overall header backgrounds and borders.
+- **Volumetric Chart Controls:** Decoupled colors for candle bodies, scales, grid lines, structural swings, BOS/MSS structural break labels, Fair Value Gaps (bullish/bearish), Asian/London session markers, and resting liquidity magnets (BSL/SSL).
+- **UI Button Variations:** Decoupled colors for filled/solid buttons (bg, hover bg, text) and outline/transparent buttons (border, hover fill, text).
+- **Sidebar Typography Categorization:** Decoupled colors for titles, info labels, readout values, and small footnote annotation notes.
+
+### 2. High-Fidelity Customization Command Center
+- **Dynamic Swatch Dashboard Mockups:** Designed a responsive, live-rendered miniature dashboard mockup that simulates visual elements in real-time, previewing changes instantly inside the customizer.
+- **Collapsible Control Clusters:** Segmented the 46 theme input parameters into 5 beautifully grouped `<details>` collapsible cards (Base Layout, Header, Chart, Buttons, Sidebar), eliminating scroll fatigue.
+- **Dynamic Reset Engine:** Replaced manual resetting with a dynamic, prefix-based SWR filter that scans all properties starting with `dark_` or `light_` and resets them instantly to their institutional default standards.
+
+## 🆕 V10.28 Changelog — Bloomberg-Style Horizontal HUD Overhaul (Completed)
+
+### 1. Diagonal Zig-Zag Slopes Retired
+- **Slope Deactivation:** Retired and removed the visual drawing of diagonal Zig-Zag connector lines for both major and inner structure paths. Market structure is now represented strictly as horizontal price levels, reflecting institutional analysis standards.
+
+### 2. Horizontal Structural Ceilings & Floors
+- **Confirmed Price Levels:** Programmed Confirmed Major Swing Highs and Lows as solid horizontal lines (thickness: 1.5px) starting from the validated fractal index.
+- **Chronological Breach Terminations:** Level lines extend forward and terminate precisely at the timestamp of the first confirmed major swing that breaches them (price > High for highs, price < Low for lows). Unbreached active levels extend cleanly to the right edge of the chart (current candle).
+- **Typography Labels:** Labeled start points with clean, high-contrast typography `"MAJOR HIGH"` (red) and `"MAJOR LOW"` (green) for quick level scans.
+
+### 3. Dealing Range Shadow Boxes & Midlines
+- **Low-Opacity Context Rectangles:** Implemented dynamic transparent SVG rects spanning vertically from the active Major Low to the Major High, and horizontally from the oldest anchor to the right edge. Fill opacities are coded to the current trend state: emerald green (`rgba(80, 255, 175, 0.04)`) for bullish, rose red (`rgba(239, 68, 68, 0.04)`) for bearish, and purple (`rgba(168, 85, 247, 0.04)`) for neutral.
+- **Persistent Equilibrium Midline:** Injected a distinct dashed horizontal midline exactly at the 50% Equilibrium level, accompanied by a clean monospace label `"EQUILIBRIUM (0.50)"`.
+
+### 4. Active Expansion Trace Rays & Horizontals
+- **Cautionary Expansion Traces:** Unconfirmed swings (amber circles) now project a dotted horizontal ray (`strokeDasharray: '2,3'`) in amber caution color (`rgba(251, 191, 36, 0.65)`) all the way to the right edge, visualizing price expansions before they close their 2-bar lag buffer.
+- **Horizontal Breach Badges:** Placed BOS and MSS badge labels horizontally at the exact breach time coordinate, vertically offset above or below the broken level for maximum institutional clarity.
 
 ## 🆕 V10.27 Changelog — Strict Structural Confirmation Lag & Repainting Prevention (Completed)
 
