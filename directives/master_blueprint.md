@@ -1,10 +1,23 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.29
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.30
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-28  
-> **Last Updated:** 2026-05-28 (V10.29 System Theme Customization Studio & Modular Decoupling Complete)  
+> **Last Updated:** 2026-05-28 (V10.30 Market Structure Engine Specification Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.30 Changelog — Market Structure Engine Specification (Completed)
+
+### 1. Unified Market Structure Specification Map
+- **Logic Mapping:** Created the canonical engineering specification file at [MARKET_STRUCTURE_LOGIC_MAP.md](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/MARKET_STRUCTURE_LOGIC_MAP.md) to map the end-to-end mathematical and visualization pipelines of the Flow-State Market Structure Engine.
+- **Spec Coverage:** Fully documented:
+  1. The 5-Bar Fractal Math, Color Lock, and 2-Bar Confirmation Lag.
+  2. State Machine & Wave Hierarchy (Strict Alternation & Parent-Child Containment).
+  3. Structural Shift Logic (BOS/MSS, Retracement Gate, and displacement-based soft-gates).
+  4. Pricing Matrix (Equilibrium formulas, Premium/Discount zones, and Strategy Veto Gates).
+  5. Backtest Replay Symmetry (emulating the live edge via `isClosed: false` to prevent look-ahead bias).
+  6. Technical Payload Schemas (confirmed swings, expansion swings, and dealing ranges) and SVG Visual Mapping configurations.
+  7. Exhaustive Bullish Continuation (BOS) and Bearish Reversal (MSS) scenarios.
 
 ## 🆕 V10.29 Changelog — System Theme Customization Studio & Modular Decoupling (Completed)
 
