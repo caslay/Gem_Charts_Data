@@ -18,10 +18,10 @@ interface MappedSegment extends ZigZagSegment {
 export const structureLayer: ChartLayer = {
   id: 'structure',
   name: 'Market Structure',
-  description: 'Swings, dealing ranges, and context-aware BOS/MSS Zig-Zag based on Color-Locked 5-Bar Fractals',
+  description: 'Bloomberg-style horizontal ceilings/floors, dealing range boxes, and unconfirmed expansion rays',
   icon: 'Activity',
   renderHtml(context) {
-    const { activeCandles, chart, series, data } = context;
+    const { activeCandles, chart, series } = context;
     if (!activeCandles || activeCandles.length < 5) return null;
 
     // 1. Fetch visibility states from Zustand store
@@ -29,7 +29,7 @@ export const structureLayer: ChartLayer = {
     const showParent = visibility.structure !== false;
     const showMajor = visibility.structure_major !== false;
     const showInner = visibility.structure_inner !== false;
-    const showZigZag = visibility.structure_zigzag !== false;
+    const showZigZag = visibility.structure_zigzag !== false; // Governs the Horizontal Price Levels
 
     // If the main layer is hidden, do not render any children
     if (!showParent) return null;
@@ -39,6 +39,10 @@ export const structureLayer: ChartLayer = {
     // 2. Fetch the pre-calculated, stabilized structural analysis state from context
     const analysis = (context as any).structureState;
     if (!analysis) return null;
+
+    const lastCandle = activeCandles[activeCandles.length - 1];
+    const rightX = timeScale.timeToCoordinate(Math.floor(lastCandle.t / 1000) as any);
+    if (rightX === null) return null;
 
     // 3. Pixel Coordinate Conversion — Map swings to SVG coordinates
     const mappedSwings: MappedPoint[] = [];
@@ -50,30 +54,205 @@ export const structureLayer: ChartLayer = {
       }
     }
 
-    // 4. Pixel Coordinate Conversion — Map major zig-zag segments
-    const mappedSegments: MappedSegment[] = [];
-    for (const seg of analysis.zigzag) {
-      const fromX = timeScale.timeToCoordinate(Math.floor(seg.from.t / 1000) as any);
-      const fromY = series.priceToCoordinate(seg.from.price);
-      const toX = timeScale.timeToCoordinate(Math.floor(seg.to.t / 1000) as any);
-      const toY = series.priceToCoordinate(seg.to.price);
-      if (fromX !== null && fromY !== null && toX !== null && toY !== null) {
-        mappedSegments.push({ ...seg, fromX, fromY, toX, toY });
+    // Isolate confirmed major swings and sort chronologically
+    const confirmedMajor = mappedSwings
+      .filter((s) => s.grade === 'MAJOR' && s.confirmed !== false)
+      .sort((a, b) => a.t - b.t);
+
+    // ─── 1. Implement Horizontal Price Ceilings / Floors ───
+    const horizontalLevels: React.ReactElement[] = [];
+    if (showZigZag && showMajor) {
+      confirmedMajor.forEach((S, idx) => {
+        // Find the first confirmed major swing after S that breaches S.price
+        const breachSwing = confirmedMajor
+          .slice(idx + 1)
+          .find((later) =>
+            S.type === 'HIGH' ? later.price > S.price : later.price < S.price
+          );
+
+        const xEnd = breachSwing ? breachSwing.x : rightX;
+        const color = S.type === 'HIGH' ? 'rgba(239, 68, 68, 0.45)' : 'rgba(80, 255, 175, 0.45)'; // Rose for high, green for low
+
+        // Draw structural price line
+        horizontalLevels.push(
+          React.createElement('line', {
+            key: `hz-level-line-${idx}`,
+            x1: S.x,
+            y1: S.y,
+            x2: xEnd,
+            y2: S.y,
+            stroke: color,
+            strokeWidth: 1.5,
+          })
+        );
+
+        // Draw structural label
+        horizontalLevels.push(
+          React.createElement(
+            'text',
+            {
+              key: `hz-level-label-${idx}`,
+              x: S.x + 4,
+              y: S.type === 'HIGH' ? S.y - 4 : S.y + 10,
+              fill: S.type === 'HIGH' ? 'rgba(239, 68, 68, 0.65)' : 'rgba(80, 255, 175, 0.65)',
+              fontSize: '6.5',
+              fontFamily: 'monospace',
+              fontWeight: 'bold',
+            },
+            S.type === 'HIGH' ? 'MAJOR HIGH' : 'MAJOR LOW'
+          )
+        );
+      });
+    }
+
+    // ─── 2. Implement BOS/MSS Horizontal Breach Badges ───
+    const breachBadges: React.ReactElement[] = [];
+    if (showZigZag) {
+      for (const seg of analysis.zigzag) {
+        if (seg.label === 'BOS' || seg.label === 'MSS') {
+          const toX = timeScale.timeToCoordinate(Math.floor(seg.to.t / 1000) as any);
+          const levelY = series.priceToCoordinate(seg.from.price);
+
+          if (toX !== null && levelY !== null) {
+            let badgeColor: string;
+            let badgeLabel: string = seg.label;
+
+            if (seg.label === 'BOS') {
+              badgeColor = 'rgba(168, 85, 247, 0.85)'; // purple
+            } else {
+              // MSS
+              if (seg.displacementConfirmed) {
+                badgeColor = 'var(--up-candle, #50ffaf)'; // neon green
+              } else {
+                badgeColor = 'rgba(251, 191, 36, 0.85)'; // amber
+                badgeLabel = 'MSS?';
+              }
+            }
+
+            const isHighBreak = seg.to.type === 'HIGH'; // High broken to the upside
+            const badgeY = isHighBreak ? levelY - 12 : levelY + 4;
+
+            breachBadges.push(
+              React.createElement(
+                'g',
+                { key: `breach-badge-${seg.to.t}` },
+                React.createElement('rect', {
+                  x: toX - 14,
+                  y: badgeY,
+                  width: badgeLabel.length > 3 ? 28 : 24,
+                  height: 9,
+                  rx: 2,
+                  fill: 'var(--background, #020617)',
+                  stroke: badgeColor,
+                  strokeWidth: 0.5,
+                  opacity: 0.9,
+                }),
+                React.createElement(
+                  'text',
+                  {
+                    x: toX - (badgeLabel.length > 3 ? 0 : 2),
+                    y: badgeY + 6.5,
+                    fill: badgeColor,
+                    fontSize: '6.5',
+                    fontFamily: 'monospace',
+                    fontWeight: 'bold',
+                    textAnchor: 'middle',
+                  },
+                  badgeLabel
+                )
+              )
+            );
+          }
+        }
       }
     }
 
-    // 4b. Pixel Coordinate Conversion — Map inner sub-wave zig-zag segments
-    const mappedInnerSegments: MappedSegment[] = [];
-    if (analysis.innerZigzag) {
-      for (const seg of analysis.innerZigzag) {
-        const fromX = timeScale.timeToCoordinate(Math.floor(seg.from.t / 1000) as any);
-        const fromY = series.priceToCoordinate(seg.from.price);
-        const toX = timeScale.timeToCoordinate(Math.floor(seg.to.t / 1000) as any);
-        const toY = series.priceToCoordinate(seg.to.price);
-        if (fromX !== null && fromY !== null && toX !== null && toY !== null) {
-          mappedInnerSegments.push({ ...seg, fromX, fromY, toX, toY });
+    // ─── 3. Implement The Dealing Range Shadow Box & Equilibrium ───
+    let drShadowBox: React.ReactElement | null = null;
+    let drEqMidline: React.ReactElement[] = [];
+
+    const dr = analysis.dealingRange;
+    if (dr && dr.anchor_high_swing && dr.anchor_low_swing) {
+      const highX = timeScale.timeToCoordinate(Math.floor(dr.anchor_high_swing.t / 1000) as any);
+      const lowX = timeScale.timeToCoordinate(Math.floor(dr.anchor_low_swing.t / 1000) as any);
+      const boxTopY = series.priceToCoordinate(dr.high);
+      const boxBottomY = series.priceToCoordinate(dr.low);
+      const eqY = series.priceToCoordinate(dr.equilibrium);
+
+      if (highX !== null && lowX !== null && boxTopY !== null && boxBottomY !== null && eqY !== null) {
+        const boxStartX = Math.min(highX, lowX);
+        const trendState = analysis.currentTrend || 'UNSET';
+        
+        let fillStyle = 'rgba(168, 85, 247, 0.04)'; // Muted purple for Neutral/Unset
+        if (trendState === 'BULLISH') {
+          fillStyle = 'rgba(80, 255, 175, 0.04)'; // Subtle emerald
+        } else if (trendState === 'BEARISH') {
+          fillStyle = 'rgba(239, 68, 68, 0.04)'; // Subtle rose
         }
+
+        // Draw shadow rectangle
+        drShadowBox = React.createElement('rect', {
+          key: 'dr-shadow-box',
+          x: boxStartX,
+          y: Math.min(boxTopY, boxBottomY),
+          width: rightX - boxStartX,
+          height: Math.abs(boxBottomY - boxTopY),
+          fill: fillStyle,
+          stroke: 'none',
+        });
+
+        // Draw dashed midline at 50% Equilibrium
+        drEqMidline.push(
+          React.createElement('line', {
+            key: 'dr-eq-midline',
+            x1: boxStartX,
+            y1: eqY,
+            x2: rightX,
+            y2: eqY,
+            stroke: 'rgba(255, 255, 255, 0.35)',
+            strokeWidth: 1.0,
+            strokeDasharray: '4,4',
+          })
+        );
+
+        // Draw equilibrium label
+        drEqMidline.push(
+          React.createElement(
+            'text',
+            {
+              key: 'dr-eq-label',
+              x: rightX - 52,
+              y: eqY - 4,
+              fill: 'rgba(255, 255, 255, 0.45)',
+              fontSize: '6px',
+              fontFamily: 'monospace',
+              fontWeight: 'bold',
+            },
+            'EQUILIBRIUM (0.50)'
+          )
+        );
       }
+    }
+
+    // ─── 4. Implement The Active Expansion Trace Ray (Unconfirmed Swings) ───
+    const expansionRays: React.ReactElement[] = [];
+    if (showMajor) {
+      mappedSwings
+        .filter((s) => s.grade === 'MAJOR' && s.confirmed === false)
+        .forEach((pt, idx) => {
+          expansionRays.push(
+            React.createElement('line', {
+              key: `expansion-ray-${idx}`,
+              x1: pt.x,
+              y1: pt.y,
+              x2: rightX,
+              y2: pt.y,
+              stroke: 'rgba(251, 191, 36, 0.65)', // Amber
+              strokeWidth: 1.0,
+              strokeDasharray: '2,3',
+            })
+          );
+        });
     }
 
     // 5. Native SVG Canvas Assembly
@@ -85,115 +264,43 @@ export const structureLayer: ChartLayer = {
         { className: 'w-full h-full' },
         
         // A1. Draw Inner Sub-Wave Zig-Zag Path (Muted, Dashed)
-        showZigZag && showInner &&
-          mappedInnerSegments.map((seg, idx) => {
-            return React.createElement('line', {
-              key: `inner-zz-segment-${idx}`,
-              x1: seg.fromX,
-              y1: seg.fromY,
-              x2: seg.toX,
-              y2: seg.toY,
-              stroke: 'rgba(168, 85, 247, 0.35)', // Muted transparent purple
-              strokeWidth: 1.0,
-              strokeDasharray: '3,3',
-            });
-          }),
+        // Kept for inner sub-wave visual subordinate mapping if visible
+        showZigZag && showInner && analysis.innerZigzag &&
+          analysis.innerZigzag.map((seg: any, idx: number) => {
+            const fromX = timeScale.timeToCoordinate(Math.floor(seg.from.t / 1000) as any);
+            const fromY = series.priceToCoordinate(seg.from.price);
+            const toX = timeScale.timeToCoordinate(Math.floor(seg.to.t / 1000) as any);
+            const toY = series.priceToCoordinate(seg.to.price);
 
-        // A2. Draw Major Zig-Zag Path Segments (Context-Aware BOS/MSS)
-        showZigZag &&
-          mappedSegments.map((seg, idx) => {
-            // ── Visual Styling based on classification ──
-            // BOS (continuation): dashed purple, standard weight
-            // MSS confirmed (reversal + displacement): solid neon green, bold
-            // MSS unconfirmed (reversal, no displacement): dashed amber, caution
-            // INTERNAL (first segment / no classification): thin dotted grey
-            let color: string;
-            let strokeWidth: number;
-            let strokeDash: string | undefined;
-            let badgeLabel: string | null = null;
-            let badgeColor: string;
-
-            switch (seg.label) {
-              case 'BOS':
-                color = 'rgba(168, 85, 247, 0.55)'; // purple
-                strokeWidth = 1.0;
-                strokeDash = '3,3';
-                badgeLabel = 'BOS';
-                badgeColor = 'rgba(168, 85, 247, 0.85)';
-                break;
-              case 'MSS':
-                if (seg.displacementConfirmed) {
-                  color = 'var(--up-candle, #50ffaf)'; // neon green — confirmed
-                  strokeWidth = 1.8;
-                  strokeDash = undefined; // solid
-                  badgeLabel = 'MSS';
-                  badgeColor = 'var(--up-candle, #50ffaf)';
-                } else {
-                  color = 'rgba(251, 191, 36, 0.65)'; // amber — unconfirmed
-                  strokeWidth = 1.2;
-                  strokeDash = '4,2';
-                  badgeLabel = 'MSS?';
-                  badgeColor = 'rgba(251, 191, 36, 0.85)';
-                }
-                break;
-              default: // INTERNAL
-                color = 'rgba(148, 163, 184, 0.3)'; // muted grey
-                strokeWidth = 0.8;
-                strokeDash = '2,4';
-                badgeLabel = null;
-                badgeColor = 'transparent';
-                break;
+            if (fromX !== null && fromY !== null && toX !== null && toY !== null) {
+              return React.createElement('line', {
+                key: `inner-zz-segment-${idx}`,
+                x1: fromX,
+                y1: fromY,
+                x2: toX,
+                y2: toY,
+                stroke: 'rgba(168, 85, 247, 0.35)', // Muted transparent purple
+                strokeWidth: 1.0,
+                strokeDasharray: '3,3',
+              });
             }
-
-            const midX = (seg.fromX + seg.toX) / 2;
-            const midY = (seg.fromY + seg.toY) / 2;
-
-            return React.createElement(
-              'g',
-              { key: `zz-segment-${idx}` },
-              // Draw the segment line
-              React.createElement('line', {
-                x1: seg.fromX,
-                y1: seg.fromY,
-                x2: seg.toX,
-                y2: seg.toY,
-                stroke: color,
-                strokeWidth: strokeWidth,
-                strokeDasharray: strokeDash,
-              }),
-              
-              // Draw label badge on BOS/MSS points
-              badgeLabel &&
-                React.createElement(
-                  'g',
-                  null,
-                  React.createElement('rect', {
-                    x: midX - 14,
-                    y: midY - 11,
-                    width: seg.label === 'MSS' && !seg.displacementConfirmed ? 28 : 24,
-                    height: 9,
-                    rx: 2,
-                    fill: 'var(--background, #020617)',
-                    stroke: badgeColor,
-                    strokeWidth: 0.5,
-                    opacity: 0.9,
-                  }),
-                  React.createElement(
-                    'text',
-                    {
-                      x: midX,
-                      y: midY - 4.5,
-                      fill: badgeColor,
-                      fontSize: '6.5',
-                      fontFamily: 'monospace',
-                      fontWeight: 'bold',
-                      textAnchor: 'middle',
-                    },
-                    badgeLabel
-                  )
-                )
-            );
+            return null;
           }),
+
+        // A2. Draw Shadow Box
+        drShadowBox,
+
+        // A3. Draw Equilibrium midline
+        drEqMidline,
+
+        // A4. Draw Horizontal price levels
+        horizontalLevels,
+
+        // A5. Draw Active Expansion Trace rays
+        expansionRays,
+
+        // A6. Draw BOS/MSS badges horizontally
+        breachBadges,
 
         // B. Plot Major Swings (Hollow Circles at 5-Bar Fractals)
         // Differentiate: Confirmed = solid neon green/dimmed; Active Price Expansion = dotted amber
