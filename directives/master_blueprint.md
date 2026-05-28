@@ -1,10 +1,27 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.30
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.31
 
 > **Classification:** Institutional Architecture Document  
-> **Generated:** 2026-05-28  
-> **Last Updated:** 2026-05-28 (V10.30 Market Structure Engine Specification Complete)  
+> **Generated:** 2026-05-29  
+> **Last Updated:** 2026-05-29 (V10.31 Internal Swing Aesthetics Customizer Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.31 Changelog — Internal Swing Aesthetics Customizer (Completed)
+
+### 1. Visual Separation of Contained Structure
+- **Decoupled Render Logic:** Programmed `structureLayer.ts` to check `S.structure_type === 'INTERNAL'` for major 5-bar swings.
+- **Thinner Dashed Strokes:** Internal swings forming inside the Parent Dealing Range boundaries are now rendered as dashed lines (`strokeDasharray: '3,3'`) with a thinner stroke weight (`0.9px`) and distinct customizable colors.
+- **Aesthetic Labels:** Labeled start points with high-contrast, professional, and muted typography labels: `"INT HIGH"` and `"INT LOW"`.
+- **Plotted Coordinate Sync:** Plotted hollow circle indicators centered at the swing extremes dynamically synchronize their border stroke colors to the new internal swing presets.
+
+### 2. SWR-Backed Appearance Settings Expansion
+- **Customizer Colors Integration:** Integrated four new customizable parameters in the theme settings dictionary across `useMarketData.ts` and `DEFAULT_THEME_SETTINGS` constants:
+  - `dark_chart_swing_high_internal` (Midnight: `rgba(239, 68, 68, 0.45)`)
+  - `dark_chart_swing_low_internal` (Midnight: `rgba(80, 255, 175, 0.45)`)
+  - `light_chart_swing_high_internal` (Daylight: `rgba(225, 29, 72, 0.45)`)
+  - `light_chart_swing_low_internal` (Daylight: `rgba(5, 150, 105, 0.45)`)
+- **Global CSS Mapping:** Configured `ThemeSync.tsx` to automatically map these keys to global CSS custom properties `--chart-swing-high-internal` and `--chart-swing-low-internal` in client runtime layouts.
+- **Accordion Color Pickers:** Injected stateful color picker items inside `src/app/settings/page.tsx` within tab 5 collapsible details sections for Midnight and Daylight. Allows instant customization and database persistence on commit.
 
 ## 🆕 V10.30 Changelog — Market Structure Engine Specification (Completed)
 

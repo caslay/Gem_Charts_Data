@@ -1279,6 +1279,8 @@ export default function SettingsPage() {
                           <ColorPickerItem label="Bearish Candle Body" value={themeSettings.dark_down_candle} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_down_candle: val }))} />
                           <ColorPickerItem label="Swing High Pivot" value={themeSettings.dark_chart_swing_high} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_swing_high: val }))} />
                           <ColorPickerItem label="Swing Low Pivot" value={themeSettings.dark_chart_swing_low} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_swing_low: val }))} />
+                          <ColorPickerItem label="Internal Swing High" value={themeSettings.dark_chart_swing_high_internal} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_swing_high_internal: val }))} />
+                          <ColorPickerItem label="Internal Swing Low" value={themeSettings.dark_chart_swing_low_internal} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_swing_low_internal: val }))} />
                           <ColorPickerItem label="BOS Structural Badge" value={themeSettings.dark_chart_bos} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_bos: val }))} />
                           <ColorPickerItem label="MSS Structural Badge" value={themeSettings.dark_chart_mss} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_mss: val }))} />
                           <ColorPickerItem label="Bullish FVG Box" value={themeSettings.dark_chart_fvg_bullish} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_fvg_bullish: val }))} />
@@ -1541,6 +1543,8 @@ export default function SettingsPage() {
                           <ColorPickerItem label="Bearish Candle Body" value={themeSettings.light_down_candle} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_down_candle: val }))} />
                           <ColorPickerItem label="Swing High Pivot" value={themeSettings.light_chart_swing_high} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_swing_high: val }))} />
                           <ColorPickerItem label="Swing Low Pivot" value={themeSettings.light_chart_swing_low} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_swing_low: val }))} />
+                          <ColorPickerItem label="Internal Swing High" value={themeSettings.light_chart_swing_high_internal} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_swing_high_internal: val }))} />
+                          <ColorPickerItem label="Internal Swing Low" value={themeSettings.light_chart_swing_low_internal} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_swing_low_internal: val }))} />
                           <ColorPickerItem label="BOS Structural Badge" value={themeSettings.light_chart_bos} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_bos: val }))} />
                           <ColorPickerItem label="MSS Structural Badge" value={themeSettings.light_chart_mss} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_mss: val }))} />
                           <ColorPickerItem label="Bullish FVG Box" value={themeSettings.light_chart_fvg_bullish} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_fvg_bullish: val }))} />

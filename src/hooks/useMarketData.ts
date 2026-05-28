@@ -88,6 +88,8 @@ export interface ThemeSettings {
   dark_chart_text: string;
   dark_chart_swing_high: string;
   dark_chart_swing_low: string;
+  dark_chart_swing_high_internal: string;
+  dark_chart_swing_low_internal: string;
   dark_chart_bos: string;
   dark_chart_mss: string;
   dark_chart_fvg_bullish: string;
@@ -145,6 +147,8 @@ export interface ThemeSettings {
   light_chart_text: string;
   light_chart_swing_high: string;
   light_chart_swing_low: string;
+  light_chart_swing_high_internal: string;
+  light_chart_swing_low_internal: string;
   light_chart_bos: string;
   light_chart_mss: string;
   light_chart_fvg_bullish: string;
@@ -203,6 +207,8 @@ export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   dark_chart_text: '#94a3b8',
   dark_chart_swing_high: 'rgba(239, 68, 68, 0.85)',
   dark_chart_swing_low: 'rgba(80, 255, 175, 0.85)',
+  dark_chart_swing_high_internal: 'rgba(239, 68, 68, 0.45)',
+  dark_chart_swing_low_internal: 'rgba(80, 255, 175, 0.45)',
   dark_chart_bos: 'rgba(168, 85, 247, 0.85)',
   dark_chart_mss: 'rgba(80, 255, 175, 0.85)',
   dark_chart_fvg_bullish: '#50ffaf',
@@ -259,6 +265,8 @@ export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   light_chart_text: '#475569',
   light_chart_swing_high: 'rgba(225, 29, 72, 0.85)',
   light_chart_swing_low: 'rgba(5, 150, 105, 0.85)',
+  light_chart_swing_high_internal: 'rgba(225, 29, 72, 0.45)',
+  light_chart_swing_low_internal: 'rgba(5, 150, 105, 0.45)',
   light_chart_bos: 'rgba(79, 70, 229, 0.85)',
   light_chart_mss: 'rgba(5, 150, 105, 0.85)',
   light_chart_fvg_bullish: '#059669',

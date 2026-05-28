@@ -52,6 +52,8 @@ export default function ThemeSync() {
           --chart-text: ${themeSettings.light_chart_text} !important;
           --chart-swing-high: ${themeSettings.light_chart_swing_high} !important;
           --chart-swing-low: ${themeSettings.light_chart_swing_low} !important;
+          --chart-swing-high-internal: ${themeSettings.light_chart_swing_high_internal} !important;
+          --chart-swing-low-internal: ${themeSettings.light_chart_swing_low_internal} !important;
           --chart-bos: ${themeSettings.light_chart_bos} !important;
           --chart-mss: ${themeSettings.light_chart_mss} !important;
           --chart-fvg-bullish: ${themeSettings.light_chart_fvg_bullish} !important;
@@ -112,6 +114,8 @@ export default function ThemeSync() {
           --chart-text: ${themeSettings.dark_chart_text} !important;
           --chart-swing-high: ${themeSettings.dark_chart_swing_high} !important;
           --chart-swing-low: ${themeSettings.dark_chart_swing_low} !important;
+          --chart-swing-high-internal: ${themeSettings.dark_chart_swing_high_internal} !important;
+          --chart-swing-low-internal: ${themeSettings.dark_chart_swing_low_internal} !important;
           --chart-bos: ${themeSettings.dark_chart_bos} !important;
           --chart-mss: ${themeSettings.dark_chart_mss} !important;
           --chart-fvg-bullish: ${themeSettings.dark_chart_fvg_bullish} !important;
