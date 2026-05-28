@@ -6,8 +6,7 @@ export const magnetsLayer: ChartLayer = {
   description: 'Resting order book liquidity levels (BSL/SSL)',
   icon: 'Magnet',
   renderChart(context) {
-    const { series, data, theme, storage } = context;
-    const isDark = theme === 'dark';
+    const { series, data, theme, themeSettings, storage } = context;
 
     // Clear old lines
     const oldLines = storage.get('lines') || [];
@@ -29,7 +28,7 @@ export const magnetsLayer: ChartLayer = {
     bsl.forEach((price: number, idx: number) => {
       const line = series.createPriceLine({
         price,
-        color: isDark ? 'rgba(255, 180, 171, 0.45)' : 'rgba(225, 29, 72, 0.45)',
+        color: theme === 'dark' ? (themeSettings?.dark_chart_magnet_bsl || 'rgba(255, 180, 171, 0.45)') : (themeSettings?.light_chart_magnet_bsl || 'rgba(225, 29, 72, 0.45)'),
         lineStyle: 2, // Dashed
         lineWidth: 1,
         axisLabelVisible: true,
@@ -42,7 +41,7 @@ export const magnetsLayer: ChartLayer = {
     ssl.forEach((price: number, idx: number) => {
       const line = series.createPriceLine({
         price,
-        color: isDark ? 'rgba(80, 255, 175, 0.45)' : 'rgba(5, 150, 105, 0.45)',
+        color: theme === 'dark' ? (themeSettings?.dark_chart_magnet_ssl || 'rgba(80, 255, 175, 0.45)') : (themeSettings?.light_chart_magnet_ssl || 'rgba(5, 150, 105, 0.45)'),
         lineStyle: 2, // Dashed
         lineWidth: 1,
         axisLabelVisible: true,

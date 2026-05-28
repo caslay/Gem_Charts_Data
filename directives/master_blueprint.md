@@ -1,10 +1,24 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.28
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.29
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-28  
-> **Last Updated:** 2026-05-28 (V10.28 Bloomberg-Style Horizontal HUD Overhaul Complete)  
+> **Last Updated:** 2026-05-28 (V10.29 System Theme Customization Studio & Modular Decoupling Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.29 Changelog — System Theme Customization Studio & Modular Decoupling (Completed)
+
+### 1. Expanded Decoupled Theme Variables
+- **Color Key Matrix:** Expanded the unified SWR-backed settings model to encompass 30 distinct visual parameters per theme, bringing full customizable styling access to all layout zones.
+- **Header Aesthetics:** Decoupled colors for navigation links (idle, hover, active, and active background), navigation icons, and overall header backgrounds and borders.
+- **Volumetric Chart Controls:** Decoupled colors for candle bodies, scales, grid lines, structural swings, BOS/MSS structural break labels, Fair Value Gaps (bullish/bearish), Asian/London session markers, and resting liquidity magnets (BSL/SSL).
+- **UI Button Variations:** Decoupled colors for filled/solid buttons (bg, hover bg, text) and outline/transparent buttons (border, hover fill, text).
+- **Sidebar Typography Categorization:** Decoupled colors for titles, info labels, readout values, and small footnote annotation notes.
+
+### 2. High-Fidelity Customization Command Center
+- **Dynamic Swatch Dashboard Mockups:** Designed a responsive, live-rendered miniature dashboard mockup that simulates visual elements in real-time, previewing changes instantly inside the customizer.
+- **Collapsible Control Clusters:** Segmented the 46 theme input parameters into 5 beautifully grouped `<details>` collapsible cards (Base Layout, Header, Chart, Buttons, Sidebar), eliminating scroll fatigue.
+- **Dynamic Reset Engine:** Replaced manual resetting with a dynamic, prefix-based SWR filter that scans all properties starting with `dark_` or `light_` and resets them instantly to their institutional default standards.
 
 ## 🆕 V10.28 Changelog — Bloomberg-Style Horizontal HUD Overhaul (Completed)
 

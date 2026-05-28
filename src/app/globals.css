@@ -63,6 +63,46 @@
   --color-text-value: var(--text-value);
   --color-highlight-up: var(--highlight-up);
   --color-highlight-down: var(--highlight-down);
+
+  /* Header Customizations */
+  --color-header-bg: var(--header-bg);
+  --color-header-border: var(--header-border);
+  --color-header-text: var(--header-text);
+  --color-header-icon: var(--header-icon);
+  --color-nav-link-idle: var(--nav-link-idle);
+  --color-nav-link-hover: var(--nav-link-hover);
+  --color-nav-link-active: var(--nav-link-active);
+  --color-nav-link-active-bg: var(--nav-link-active-bg);
+
+  /* Chart Customizations */
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-border: var(--chart-border);
+  --color-chart-text: var(--chart-text);
+  --color-chart-swing-high: var(--chart-swing-high);
+  --color-chart-swing-low: var(--chart-swing-low);
+  --color-chart-bos: var(--chart-bos);
+  --color-chart-mss: var(--chart-mss);
+  --color-chart-fvg-bullish: var(--chart-fvg-bullish);
+  --color-chart-fvg-bearish: var(--chart-fvg-bearish);
+  --color-chart-tdo: var(--chart-tdo);
+  --color-chart-session-asian: var(--chart-session-asian);
+  --color-chart-session-london: var(--chart-session-london);
+  --color-chart-magnet-bsl: var(--chart-magnet-bsl);
+  --color-chart-magnet-ssl: var(--chart-magnet-ssl);
+
+  /* UI Button Variations */
+  --color-btn-solid-bg: var(--btn-solid-bg);
+  --color-btn-solid-bg-hover: var(--btn-solid-bg-hover);
+  --color-btn-solid-text: var(--btn-solid-text);
+  --color-btn-trans-border: var(--btn-trans-border);
+  --color-btn-trans-bg-hover: var(--btn-trans-bg-hover);
+  --color-btn-trans-text: var(--btn-trans-text);
+
+  /* Sidebar Typography Customizations */
+  --color-text-sidebar-title: var(--text-sidebar-title);
+  --color-text-sidebar-label: var(--text-sidebar-label);
+  --color-text-sidebar-value: var(--text-sidebar-value);
+  --color-text-sidebar-notes: var(--text-sidebar-notes);
 }
 
 body {
@@ -246,6 +286,76 @@ input[type='range']::-moz-range-track {
    own CSS variables (set by ThemeSync into :root and .dark respectively).
    ────────────────────────────────────────────────────────────────────────── */
 
+/* ==========================================
+   COMMON OVERRIDES (SHARED DYNAMIC SELECTORS)
+   ========================================== */
+
+/* Header Override Cascade */
+header {
+  background-color: var(--header-bg) !important;
+  border-bottom-color: var(--header-border) !important;
+}
+header .lucide {
+  color: var(--header-icon) !important;
+}
+header span.text-muted, header span.text-slate-500 {
+  color: var(--header-text) !important;
+}
+/* Header Navigation Links */
+header a[href] {
+  color: var(--nav-link-idle) !important;
+  background-color: transparent !important;
+}
+header a[href]:hover {
+  color: var(--nav-link-hover) !important;
+}
+header a.bg-accent, header a.text-accent-foreground {
+  color: var(--nav-link-active) !important;
+  background-color: var(--nav-link-active-bg) !important;
+}
+
+/* Sidebar & System Information Override Cascade */
+aside, .glass-panel {
+  background-color: var(--card) !important;
+  border-color: var(--card-border) !important;
+}
+aside .text-title, aside h2, aside h3 {
+  color: var(--text-sidebar-title) !important;
+}
+aside .text-muted, aside .text-slate-500, aside .text-zinc-500, aside .text-slate-600, aside .text-zinc-400 {
+  color: var(--text-sidebar-label) !important;
+}
+aside .text-foreground, aside .text-zinc-100, aside .text-slate-200 {
+  color: var(--text-sidebar-value) !important;
+}
+aside .text-\[8px\], aside .text-\[9px\], aside .text-[10px], aside .text-zinc-500.block {
+  color: var(--text-sidebar-notes) !important;
+}
+
+/* UI Button Variations Cascade */
+/* Solid/Filled Buttons (with bg-accent) */
+.bg-accent, button.bg-accent, a.bg-accent, button.bg-purple-600, button.bg-indigo-600 {
+  background-color: var(--btn-solid-bg) !important;
+  border-color: var(--btn-solid-bg) !important;
+  color: var(--btn-solid-text) !important;
+}
+.bg-accent:hover:not(:disabled), button.bg-accent:hover:not(:disabled), a.bg-accent:hover:not(:disabled) {
+  background-color: var(--btn-solid-bg-hover) !important;
+  border-color: var(--btn-solid-bg-hover) !important;
+}
+
+/* Transparent/Outline Buttons */
+button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(.bg-background):not(.btn-solid),
+.btn-trans {
+  color: var(--btn-trans-text) !important;
+  border-color: var(--btn-trans-border) !important;
+  background-color: transparent !important;
+}
+button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(.bg-background):not(.btn-solid):hover:not(:disabled),
+.btn-trans:hover:not(:disabled) {
+  background-color: var(--btn-trans-bg-hover) !important;
+}
+
 /* ═══════════════════════════════════════════════════════════
    LIGHT THEME OVERRIDES  (applies when .dark is NOT on <html>)
    ═══════════════════════════════════════════════════════════ */
@@ -307,7 +417,7 @@ html:not(.dark) .bg-rose-500\/5 {
 }
 
 /* Default Interactive (links, buttons, icons) — Light */
-html:not(.dark) a:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500),
+html:not(.dark) a:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not([href^="/"]):not([href=""]),
 html:not(.dark) button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(.bg-background),
 html:not(.dark) .text-muted-link,
 html:not(.dark) .lucide:not(.text-accent) {
@@ -315,7 +425,7 @@ html:not(.dark) .lucide:not(.text-accent) {
 }
 
 /* Hover State — Light */
-html:not(.dark) a:hover,
+html:not(.dark) a:hover:not([href^="/"]),
 html:not(.dark) button:hover:not(:disabled),
 html:not(.dark) .hover\:text-foreground:hover,
 html:not(.dark) .hover\:text-white:hover {
@@ -401,7 +511,7 @@ html:not(.dark) .border-l-accent {
 }
 
 /* Default Interactive (links, buttons, icons) — Dark */
-.dark a:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500),
+.dark a:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not([href^="/"]):not([href=""]),
 .dark button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(.bg-background),
 .dark .text-muted-link,
 .dark .lucide:not(.text-accent) {
@@ -409,7 +519,7 @@ html:not(.dark) .border-l-accent {
 }
 
 /* Hover State — Dark */
-.dark a:hover,
+.dark a:hover:not([href^="/"]),
 .dark button:hover:not(:disabled),
 .dark .hover\:text-foreground:hover,
 .dark .hover\:text-white:hover {

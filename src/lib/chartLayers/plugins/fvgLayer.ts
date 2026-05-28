@@ -7,7 +7,7 @@ export const fvgLayer: ChartLayer = {
   description: 'Unmitigated institutional FVG zones',
   icon: 'Layers',
   renderHtml(context) {
-    const { chart, series, data } = context;
+    const { chart, series, data, theme, themeSettings } = context;
     
     const ipda = data.ipda_metrics || {};
     const activeFvgs = ipda.active_fvgs || [];
@@ -41,7 +41,9 @@ export const fvgLayer: ChartLayer = {
       if (height <= 0) continue;
 
       const isBullish = fvg.type === 'BULLISH';
-      const color = isBullish ? '#50ffaf' : '#ffb4ab';
+      const color = isBullish
+        ? (theme === 'dark' ? (themeSettings?.dark_chart_fvg_bullish || '#50ffaf') : (themeSettings?.light_chart_fvg_bullish || '#059669'))
+        : (theme === 'dark' ? (themeSettings?.dark_chart_fvg_bearish || '#ffb4ab') : (themeSettings?.light_chart_fvg_bearish || '#e11d48'));
 
       boxes.push(
         React.createElement('div', {

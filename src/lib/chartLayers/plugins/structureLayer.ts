@@ -21,7 +21,7 @@ export const structureLayer: ChartLayer = {
   description: 'Bloomberg-style horizontal ceilings/floors, dealing range boxes, and unconfirmed expansion rays',
   icon: 'Activity',
   renderHtml(context) {
-    const { activeCandles, chart, series } = context;
+    const { activeCandles, chart, series, theme, themeSettings } = context;
     if (!activeCandles || activeCandles.length < 5) return null;
 
     // 1. Fetch visibility states from Zustand store
@@ -43,6 +43,27 @@ export const structureLayer: ChartLayer = {
     const lastCandle = activeCandles[activeCandles.length - 1];
     const rightX = timeScale.timeToCoordinate(Math.floor(lastCandle.t / 1000) as any);
     if (rightX === null) return null;
+
+    // Resolve dynamic colors based on theme settings
+    const swingHighColor = theme === 'dark'
+      ? (themeSettings?.dark_chart_swing_high || 'rgba(239, 68, 68, 0.85)')
+      : (themeSettings?.light_chart_swing_high || 'rgba(225, 29, 72, 0.85)');
+
+    const swingLowColor = theme === 'dark'
+      ? (themeSettings?.dark_chart_swing_low || 'rgba(80, 255, 175, 0.85)')
+      : (themeSettings?.light_chart_swing_low || 'rgba(5, 150, 105, 0.85)');
+
+    const bosColor = theme === 'dark'
+      ? (themeSettings?.dark_chart_bos || 'rgba(168, 85, 247, 0.85)')
+      : (themeSettings?.light_chart_bos || 'rgba(79, 70, 229, 0.85)');
+
+    const mssColor = theme === 'dark'
+      ? (themeSettings?.dark_chart_mss || 'rgba(80, 255, 175, 0.85)')
+      : (themeSettings?.light_chart_mss || 'rgba(5, 150, 105, 0.85)');
+
+    const accentColor = theme === 'dark'
+      ? (themeSettings?.dark_accent || '#a855f7')
+      : (themeSettings?.light_accent || '#4f46e5');
 
     // 3. Pixel Coordinate Conversion — Map swings to SVG coordinates
     const mappedSwings: MappedPoint[] = [];
@@ -71,7 +92,7 @@ export const structureLayer: ChartLayer = {
           );
 
         const xEnd = breachSwing ? breachSwing.x : rightX;
-        const color = S.type === 'HIGH' ? 'rgba(239, 68, 68, 0.45)' : 'rgba(80, 255, 175, 0.45)'; // Rose for high, green for low
+        const color = S.type === 'HIGH' ? swingHighColor : swingLowColor;
 
         // Draw structural price line
         horizontalLevels.push(
@@ -94,7 +115,7 @@ export const structureLayer: ChartLayer = {
               key: `hz-level-label-${idx}`,
               x: S.x + 4,
               y: S.type === 'HIGH' ? S.y - 4 : S.y + 10,
-              fill: S.type === 'HIGH' ? 'rgba(239, 68, 68, 0.65)' : 'rgba(80, 255, 175, 0.65)',
+              fill: color,
               fontSize: '6.5',
               fontFamily: 'monospace',
               fontWeight: 'bold',
@@ -118,13 +139,13 @@ export const structureLayer: ChartLayer = {
             let badgeLabel: string = seg.label;
 
             if (seg.label === 'BOS') {
-              badgeColor = 'rgba(168, 85, 247, 0.85)'; // purple
+              badgeColor = bosColor;
             } else {
               // MSS
               if (seg.displacementConfirmed) {
-                badgeColor = 'var(--up-candle, #50ffaf)'; // neon green
+                badgeColor = mssColor;
               } else {
-                badgeColor = 'rgba(251, 191, 36, 0.85)'; // amber
+                badgeColor = theme === 'dark' ? 'rgba(251, 191, 36, 0.85)' : 'rgba(217, 119, 6, 0.85)'; // Amber
                 badgeLabel = 'MSS?';
               }
             }
@@ -183,11 +204,11 @@ export const structureLayer: ChartLayer = {
         const boxStartX = Math.min(highX, lowX);
         const trendState = analysis.currentTrend || 'UNSET';
         
-        let fillStyle = 'rgba(168, 85, 247, 0.04)'; // Muted purple for Neutral/Unset
+        let fillStyle = `color-mix(in srgb, ${accentColor} 4%, transparent)`;
         if (trendState === 'BULLISH') {
-          fillStyle = 'rgba(80, 255, 175, 0.04)'; // Subtle emerald
+          fillStyle = `color-mix(in srgb, ${swingLowColor} 4%, transparent)`;
         } else if (trendState === 'BEARISH') {
-          fillStyle = 'rgba(239, 68, 68, 0.04)'; // Subtle rose
+          fillStyle = `color-mix(in srgb, ${swingHighColor} 4%, transparent)`;
         }
 
         // Draw shadow rectangle
@@ -209,7 +230,7 @@ export const structureLayer: ChartLayer = {
             y1: eqY,
             x2: rightX,
             y2: eqY,
-            stroke: 'rgba(255, 255, 255, 0.35)',
+            stroke: theme === 'dark' ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.25)',
             strokeWidth: 1.0,
             strokeDasharray: '4,4',
           })
@@ -223,7 +244,7 @@ export const structureLayer: ChartLayer = {
               key: 'dr-eq-label',
               x: rightX - 52,
               y: eqY - 4,
-              fill: 'rgba(255, 255, 255, 0.45)',
+              fill: theme === 'dark' ? 'rgba(255, 255, 255, 0.45)' : 'rgba(0, 0, 0, 0.45)',
               fontSize: '6px',
               fontFamily: 'monospace',
               fontWeight: 'bold',
@@ -247,7 +268,7 @@ export const structureLayer: ChartLayer = {
               y1: pt.y,
               x2: rightX,
               y2: pt.y,
-              stroke: 'rgba(251, 191, 36, 0.65)', // Amber
+              stroke: theme === 'dark' ? 'rgba(251, 191, 36, 0.65)' : 'rgba(217, 119, 6, 0.65)',
               strokeWidth: 1.0,
               strokeDasharray: '2,3',
             })
@@ -279,7 +300,9 @@ export const structureLayer: ChartLayer = {
                 y1: fromY,
                 x2: toX,
                 y2: toY,
-                stroke: 'rgba(168, 85, 247, 0.35)', // Muted transparent purple
+                stroke: theme === 'dark'
+                  ? `color-mix(in srgb, ${themeSettings?.dark_accent || '#a855f7'} 35%, transparent)`
+                  : `color-mix(in srgb, ${themeSettings?.light_accent || '#4f46e5'} 35%, transparent)`,
                 strokeWidth: 1.0,
                 strokeDasharray: '3,3',
               });
@@ -303,20 +326,20 @@ export const structureLayer: ChartLayer = {
         breachBadges,
 
         // B. Plot Major Swings (Hollow Circles at 5-Bar Fractals)
-        // Differentiate: Confirmed = solid neon green/dimmed; Active Price Expansion = dotted amber
         showMajor &&
           mappedSwings
             .filter((s) => s.grade === 'MAJOR')
             .map((pt, idx) => {
               const isConfirmed = pt.confirmed !== false;
+              const color = pt.type === 'HIGH' ? swingHighColor : swingLowColor;
               return React.createElement('circle', {
                 key: `major-swing-${idx}`,
                 cx: pt.x,
                 cy: pt.y,
                 r: 4.5,
                 stroke: isConfirmed
-                  ? (pt.colorValidated ? 'var(--up-candle, #50ffaf)' : 'rgba(148, 163, 184, 0.4)')
-                  : 'rgba(251, 191, 36, 0.85)',
+                  ? (pt.colorValidated ? color : 'rgba(148, 163, 184, 0.4)')
+                  : (theme === 'dark' ? 'rgba(251, 191, 36, 0.85)' : 'rgba(217, 119, 6, 0.85)'),
                 strokeWidth: isConfirmed ? (pt.colorValidated ? 1.5 : 0.8) : 1.2,
                 strokeDasharray: isConfirmed ? undefined : '2,2',
                 fill: 'none',
@@ -332,8 +355,8 @@ export const structureLayer: ChartLayer = {
               return React.createElement('polygon', {
                 key: `inner-swing-${idx}`,
                 points: pointsStr,
-                fill: 'var(--accent, #a855f7)',
-                stroke: 'var(--accent, #a855f7)',
+                fill: accentColor,
+                stroke: accentColor,
                 strokeWidth: 1,
               });
             })

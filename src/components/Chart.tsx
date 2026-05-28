@@ -742,8 +742,15 @@ export default function Chart({
     const bg = isDark 
       ? (themeSettings?.dark_bg || '#020617') 
       : (themeSettings?.light_bg || '#fafafa');
-    const text = isDark ? '#94a3b8' : '#475569';
-    const grid = isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)';
+    const text = isDark 
+      ? (themeSettings?.dark_chart_text || '#94a3b8') 
+      : (themeSettings?.light_chart_text || '#475569');
+    const grid = isDark 
+      ? (themeSettings?.dark_chart_grid || 'rgba(255, 255, 255, 0.05)') 
+      : (themeSettings?.light_chart_grid || 'rgba(0, 0, 0, 0.04)');
+    const border = isDark 
+      ? (themeSettings?.dark_chart_border || 'rgba(255, 255, 255, 0.08)') 
+      : (themeSettings?.light_chart_border || 'rgba(0, 0, 0, 0.06)');
     
     // Crosshair matches dynamic accent color
     const crosshairColor = isDark
@@ -768,10 +775,10 @@ export default function Chart({
         horzLines: { color: grid },
       },
       timeScale: {
-        borderColor: grid,
+        borderColor: border,
       },
       rightPriceScale: {
-        borderColor: grid,
+        borderColor: border,
       },
       crosshair: {
         vertLine: {

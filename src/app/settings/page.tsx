@@ -194,34 +194,7 @@ export default function SettingsPage() {
 
   // ── Appearance Studio State ────────────────────────────────────────────────
   const [themeSettings, setThemeSettings] = useState<any>({
-    dark_bg: "#020617",
-    dark_card: "#0f172a",
-    dark_accent: "#a855f7",
-    dark_up_candle: "#50ffaf",
-    dark_down_candle: "#ffb4ab",
-    dark_card_opacity: 90,
-    dark_interactive_default: "#94a3b8",
-    dark_interactive_active: "#a855f7",
-    dark_interactive_hover: "#ffffff",
-    dark_text_title: "#ffffff",
-    dark_text_label: "#64748b",
-    dark_text_value: "#f8fafc",
-    dark_highlight_up: "#50ffaf",
-    dark_highlight_down: "#ffb4ab",
-    light_bg: "#fafafa",
-    light_card: "#ffffff",
-    light_accent: "#4f46e5",
-    light_up_candle: "#059669",
-    light_down_candle: "#e11d48",
-    light_card_opacity: 75,
-    light_interactive_default: "#475569",
-    light_interactive_active: "#4f46e5",
-    light_interactive_hover: "#020617",
-    light_text_title: "#020617",
-    light_text_label: "#64748b",
-    light_text_value: "#334155",
-    light_highlight_up: "#059669",
-    light_highlight_down: "#e11d48",
+    ...DEFAULT_THEME_SETTINGS
   });
 
   // ── UX Status States ───────────────────────────────────────────────────────
@@ -263,36 +236,19 @@ export default function SettingsPage() {
         GEMINI_LIVE_KEY: s.GEMINI_LIVE_KEY || "",
       });
 
-      setThemeSettings({
-        dark_bg: s.dark_bg || "#020617",
-        dark_card: s.dark_card || "#0f172a",
-        dark_accent: s.dark_accent || "#a855f7",
-        dark_up_candle: s.dark_up_candle || "#50ffaf",
-        dark_down_candle: s.dark_down_candle || "#ffb4ab",
-        dark_card_opacity: s.dark_card_opacity ? Number(s.dark_card_opacity) : 90,
-        dark_interactive_default: s.dark_interactive_default || "#94a3b8",
-        dark_interactive_active: s.dark_interactive_active || "#a855f7",
-        dark_interactive_hover: s.dark_interactive_hover || "#ffffff",
-        dark_text_title: s.dark_text_title || "#ffffff",
-        dark_text_label: s.dark_text_label || "#64748b",
-        dark_text_value: s.dark_text_value || "#f8fafc",
-        dark_highlight_up: s.dark_highlight_up || "#50ffaf",
-        dark_highlight_down: s.dark_highlight_down || "#ffb4ab",
-        light_bg: s.light_bg || "#fafafa",
-        light_card: s.light_card || "#ffffff",
-        light_accent: s.light_accent || "#4f46e5",
-        light_up_candle: s.light_up_candle || "#059669",
-        light_down_candle: s.light_down_candle || "#e11d48",
-        light_card_opacity: s.light_card_opacity ? Number(s.light_card_opacity) : 75,
-        light_interactive_default: s.light_interactive_default || "#475569",
-        light_interactive_active: s.light_interactive_active || "#4f46e5",
-        light_interactive_hover: s.light_interactive_hover || "#020617",
-        light_text_title: s.light_text_title || "#020617",
-        light_text_label: s.light_text_label || "#64748b",
-        light_text_value: s.light_text_value || "#334155",
-        light_highlight_up: s.light_highlight_up || "#059669",
-        light_highlight_down: s.light_highlight_down || "#e11d48",
+      // Merge retrieved settings on top of default settings to guarantee all keys exist
+      const mergedTheme = { ...DEFAULT_THEME_SETTINGS };
+      Object.keys(DEFAULT_THEME_SETTINGS).forEach((key) => {
+        const val = s[key];
+        if (val !== undefined && val !== null) {
+          if (typeof DEFAULT_THEME_SETTINGS[key as keyof typeof DEFAULT_THEME_SETTINGS] === "number") {
+            mergedTheme[key as keyof typeof DEFAULT_THEME_SETTINGS] = Number(val) as never;
+          } else {
+            mergedTheme[key as keyof typeof DEFAULT_THEME_SETTINGS] = String(val) as never;
+          }
+        }
       });
+      setThemeSettings(mergedTheme);
 
       if (settingsData.terminalSettings) {
         const { signalSounds, enabledSignals } = settingsData.terminalSettings;
@@ -1122,23 +1078,18 @@ export default function SettingsPage() {
                       <span className="text-[10px] font-black text-foreground tracking-widest uppercase">Midnight Customizer</span>
                       <button
                         type="button"
-                        onClick={() => setThemeSettings((prev: any) => ({
-                          ...prev,
-                          dark_bg: DEFAULT_THEME_SETTINGS.dark_bg,
-                          dark_card: DEFAULT_THEME_SETTINGS.dark_card,
-                          dark_accent: DEFAULT_THEME_SETTINGS.dark_accent,
-                          dark_up_candle: DEFAULT_THEME_SETTINGS.dark_up_candle,
-                          dark_down_candle: DEFAULT_THEME_SETTINGS.dark_down_candle,
-                          dark_card_opacity: DEFAULT_THEME_SETTINGS.dark_card_opacity,
-                          dark_interactive_default: DEFAULT_THEME_SETTINGS.dark_interactive_default,
-                          dark_interactive_active: DEFAULT_THEME_SETTINGS.dark_interactive_active,
-                          dark_interactive_hover: DEFAULT_THEME_SETTINGS.dark_interactive_hover,
-                          dark_text_title: DEFAULT_THEME_SETTINGS.dark_text_title,
-                          dark_text_label: DEFAULT_THEME_SETTINGS.dark_text_label,
-                          dark_text_value: DEFAULT_THEME_SETTINGS.dark_text_value,
-                          dark_highlight_up: DEFAULT_THEME_SETTINGS.dark_highlight_up,
-                          dark_highlight_down: DEFAULT_THEME_SETTINGS.dark_highlight_down,
-                        }))}
+                        onClick={() => {
+                          const resetDark: any = {};
+                          Object.keys(DEFAULT_THEME_SETTINGS).forEach((key) => {
+                            if (key.startsWith("dark_")) {
+                              resetDark[key] = DEFAULT_THEME_SETTINGS[key as keyof typeof DEFAULT_THEME_SETTINGS];
+                            }
+                          });
+                          setThemeSettings((prev: any) => ({
+                            ...prev,
+                            ...resetDark,
+                          }));
+                        }}
                         className="px-2.5 py-1 bg-card border border-card-border hover:border-rose-500/50 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 text-[8px] font-black uppercase rounded-lg transition-all cursor-pointer shadow-sm"
                       >
                         Reset Defaults
@@ -1149,75 +1100,237 @@ export default function SettingsPage() {
                     <div className="space-y-1 select-none">
                       <span className="text-[8px] text-zinc-500 uppercase tracking-widest block font-bold">Midnight Swatch Preview</span>
                       <div
-                        className="w-full h-24 rounded-xl p-2.5 flex flex-col justify-between border transition-all text-[8px] font-sans leading-none"
+                        className="w-full h-44 rounded-xl p-2.5 flex flex-col justify-between border transition-all text-[8px] font-sans leading-none overflow-hidden"
                         style={{
                           backgroundColor: themeSettings.dark_bg,
-                          borderColor: `color-mix(in srgb, ${themeSettings.dark_accent} 25%, transparent)`
+                          borderColor: themeSettings.dark_chart_border
                         }}
                       >
-                        <div className="flex justify-between items-center w-full border-b pb-1.5" style={{ borderColor: `color-mix(in srgb, ${themeSettings.dark_accent} 15%, transparent)` }}>
-                          <span className="font-black uppercase tracking-wider" style={{ color: themeSettings.dark_text_title }}>FS HUD</span>
-                          <div className="flex gap-2">
-                            <span style={{ color: themeSettings.dark_interactive_default }}>LINK</span>
-                            <span style={{ color: themeSettings.dark_interactive_hover }} className="underline">HOVER</span>
-                            <span className="px-1 py-0.5 rounded-[2px]" style={{ backgroundColor: `color-mix(in srgb, ${themeSettings.dark_card} ${themeSettings.dark_card_opacity}%, transparent)`, color: themeSettings.dark_interactive_active, border: `1px solid ${themeSettings.dark_accent}` }}>ACTIVE</span>
+                        {/* Mini Header */}
+                        <div 
+                          className="flex justify-between items-center w-full px-2 py-1.5 border-b rounded-t-lg transition-all animate-[fade-in_0.3s_ease-out]" 
+                          style={{ 
+                            backgroundColor: themeSettings.dark_header_bg, 
+                            borderColor: themeSettings.dark_header_border 
+                          }}
+                        >
+                          <div className="flex items-center gap-1">
+                            <Sliders className="w-2 h-2 animate-[spin_10s_linear_infinite]" style={{ color: themeSettings.dark_header_icon }} />
+                            <span className="font-black uppercase tracking-wider text-[7px]" style={{ color: themeSettings.dark_header_text }}>QUANT HUD</span>
+                          </div>
+                          <div className="flex gap-2 text-[6px] font-black items-center">
+                            <span style={{ color: themeSettings.dark_header_link_idle }}>IDLE</span>
+                            <span style={{ color: themeSettings.dark_header_link_hover }} className="underline">HOVER</span>
+                            <span className="px-1.5 py-0.5 rounded-[3px] text-[5px]" style={{ backgroundColor: themeSettings.dark_header_link_active_bg, color: themeSettings.dark_header_link_active }}>ACTIVE</span>
                           </div>
                         </div>
 
-                        <div className="flex justify-between items-end w-full flex-1 pt-1.5">
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-1">
-                              <span style={{ color: themeSettings.dark_text_label }}>LABEL:</span>
-                              <span className="font-bold font-mono" style={{ color: themeSettings.dark_text_value }}>1,340.50</span>
+                        {/* Mid Section: Chart and Sidebar */}
+                        <div className="flex-1 flex gap-2 w-full pt-1.5 overflow-hidden">
+                          {/* Mini Chart Area */}
+                          <div 
+                            className="flex-1 rounded-lg border p-1.5 flex flex-col justify-between relative transition-all" 
+                            style={{ 
+                              backgroundColor: themeSettings.dark_bg, 
+                              borderColor: themeSettings.dark_chart_border,
+                              backgroundImage: `radial-gradient(${themeSettings.dark_chart_grid} 1px, transparent 1px)`,
+                              backgroundSize: '8px 8px'
+                            }}
+                          >
+                            <div className="flex justify-between items-center text-[5px]">
+                              <span style={{ color: themeSettings.dark_chart_text }}>07:00 TDO</span>
+                              <span style={{ color: themeSettings.dark_chart_swing_high }} className="font-bold">▲ HIGH</span>
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="px-1.5 py-0.5 rounded-[2px] text-[7px]" style={{ backgroundColor: `color-mix(in srgb, ${themeSettings.dark_highlight_up} 10%, transparent)`, color: themeSettings.dark_highlight_up }}>BULLISH</span>
-                              <span className="px-1.5 py-0.5 rounded-[2px] text-[7px]" style={{ backgroundColor: `color-mix(in srgb, ${themeSettings.dark_highlight_down} 10%, transparent)`, color: themeSettings.dark_highlight_down }}>BEARISH</span>
+                            
+                            {/* Candles and FVG Box */}
+                            <div className="flex-1 flex items-center justify-center gap-2 relative">
+                              {/* FVG Box */}
+                              <div className="absolute inset-x-2 h-3 border" style={{ 
+                                backgroundColor: `color-mix(in srgb, ${themeSettings.dark_chart_fvg_bullish} 15%, transparent)`,
+                                borderColor: themeSettings.dark_chart_fvg_bullish,
+                                borderStyle: 'dashed'
+                              }} />
+                              
+                              {/* Candle 1 */}
+                              <div className="flex flex-col items-center w-1.5 h-full justify-center z-10">
+                                <div className="w-0.5 h-2" style={{ backgroundColor: themeSettings.dark_up_candle }} />
+                                <div className="w-1.5 h-6 rounded-sm" style={{ backgroundColor: themeSettings.dark_up_candle }} />
+                                <div className="w-0.5 h-2" style={{ backgroundColor: themeSettings.dark_up_candle }} />
+                              </div>
+                              {/* Candle 2 */}
+                              <div className="flex flex-col items-center w-1.5 h-full justify-center z-10">
+                                <div className="w-0.5 h-3" style={{ backgroundColor: themeSettings.dark_down_candle }} />
+                                <div className="w-1.5 h-5 rounded-sm" style={{ backgroundColor: themeSettings.dark_down_candle }} />
+                                <div className="w-0.5 h-3" style={{ backgroundColor: themeSettings.dark_down_candle }} />
+                              </div>
+                            </div>
+                            
+                            <div className="flex justify-between items-center text-[5px]">
+                              <span className="px-1 rounded-[2px] text-[5px] font-black" style={{ backgroundColor: `color-mix(in srgb, ${themeSettings.dark_chart_bos} 15%, transparent)`, color: themeSettings.dark_chart_bos }}>BOS</span>
+                              <span style={{ color: themeSettings.dark_chart_swing_low }} className="font-bold">▼ LOW</span>
                             </div>
                           </div>
-                          <div className="flex gap-2 items-end h-full pb-0.5">
-                            <div className="flex flex-col items-center h-full w-2">
-                              <div className="w-0.5 flex-1" style={{ backgroundColor: themeSettings.dark_up_candle }} />
-                              <div className="w-2 h-4 rounded-sm" style={{ backgroundColor: themeSettings.dark_up_candle }} />
-                              <div className="w-0.5 flex-1" style={{ backgroundColor: themeSettings.dark_up_candle }} />
+
+                          {/* Mini Sidebar Area */}
+                          <div 
+                            className="w-20 rounded-lg p-1.5 flex flex-col justify-between border transition-all" 
+                            style={{ 
+                              backgroundColor: `color-mix(in srgb, ${themeSettings.dark_card} ${themeSettings.dark_card_opacity}%, transparent)`, 
+                              borderColor: themeSettings.dark_chart_border 
+                            }}
+                          >
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-black text-[6px] tracking-wider" style={{ color: themeSettings.dark_text_sidebar_title }}>SYS INFO</span>
+                              <div className="h-[1px] w-full mt-0.5" style={{ backgroundColor: themeSettings.dark_chart_border }} />
                             </div>
-                            <div className="flex flex-col items-center h-full w-2">
-                              <div className="w-0.5 flex-1" style={{ backgroundColor: themeSettings.dark_down_candle }} />
-                              <div className="w-2 h-3 rounded-sm" style={{ backgroundColor: themeSettings.dark_down_candle }} />
-                              <div className="w-0.5 flex-1" style={{ backgroundColor: themeSettings.dark_down_candle }} />
+                            <div className="flex flex-col gap-0.5 my-1">
+                              <span style={{ color: themeSettings.dark_text_sidebar_label }} className="text-[5px] font-bold">METRIC LABEL</span>
+                              <span style={{ color: themeSettings.dark_text_sidebar_value }} className="font-bold font-mono text-[7px] leading-tight select-all">18,245.50</span>
                             </div>
+                            <div className="text-[5px] leading-tight font-medium" style={{ color: themeSettings.dark_text_sidebar_notes }}>
+                              * System telemetry active.
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Bottom Buttons Mock */}
+                        <div className="flex gap-2 pt-1.5 w-full">
+                          {/* Solid Button */}
+                          <div 
+                            className="flex-1 py-1 rounded-[3px] text-center font-black text-[6px] uppercase tracking-wider transition-all" 
+                            style={{ 
+                              backgroundColor: themeSettings.dark_btn_solid_bg, 
+                              color: themeSettings.dark_btn_solid_text 
+                            }}
+                          >
+                            SOLID BTN
+                          </div>
+                          {/* Transparent Button */}
+                          <div 
+                            className="flex-1 py-1 rounded-[3px] text-center font-black text-[6px] uppercase tracking-wider border transition-all" 
+                            style={{ 
+                              borderColor: themeSettings.dark_btn_trans_border, 
+                              color: themeSettings.dark_btn_trans_text,
+                              backgroundColor: 'transparent'
+                            }}
+                          >
+                            OUTLINE BTN
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-card-border">
+                    <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-card-border">
                       {/* Section 1: Panels */}
-                      <div className="space-y-2.5">
-                        <div className="text-[7.5px] uppercase tracking-widest text-[#a855f7] font-black border-b border-card-border pb-1">1. Layout Panels & Presets</div>
-                        <ColorPickerItem label="Obsidian Background" value={themeSettings.dark_bg} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_bg: val }))} />
-                        <ColorPickerItem label="Card Panel Fill" value={themeSettings.dark_card} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_card: val }))} />
-                        <SliderItem label="Card Panel Opacity" value={themeSettings.dark_card_opacity} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_card_opacity: val }))} />
-                        <ColorPickerItem label="Accent Neon Glow" value={themeSettings.dark_accent} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_accent: val }))} />
-                      </div>
+                      <details className="group border border-card-border/80 rounded-xl overflow-hidden [&_summary::-webkit-details-marker]:hidden bg-card/10 hover:border-accent/40 transition-colors" open>
+                        <summary className="flex justify-between items-center p-3.5 cursor-pointer select-none bg-card/30 hover:bg-card/50 transition-colors">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-accent flex items-center gap-2">
+                            <Sliders className="w-3.5 h-3.5 text-cyan-400 group-open:rotate-90 transition-transform" />
+                            1. Base Layout & Panels
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-bold uppercase transition-transform group-open:rotate-180">▼</span>
+                        </summary>
+                        <div className="p-4 space-y-3.5 border-t border-card-border/60 bg-card/5 animate-[fade-in_0.2s_ease-out]">
+                          <ColorPickerItem label="Obsidian Background" value={themeSettings.dark_bg} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_bg: val }))} />
+                          <ColorPickerItem label="Card Panel Fill" value={themeSettings.dark_card} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_card: val }))} />
+                          <SliderItem label="Card Panel Opacity" value={themeSettings.dark_card_opacity} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_card_opacity: val }))} />
+                          <ColorPickerItem label="Accent Neon Glow" value={themeSettings.dark_accent} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_accent: val }))} />
+                          <ColorPickerItem label="Interactive Default" value={themeSettings.dark_interactive_default} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_interactive_default: val }))} />
+                          <ColorPickerItem label="Interactive Active" value={themeSettings.dark_interactive_active} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_interactive_active: val }))} />
+                          <ColorPickerItem label="Interactive Hover" value={themeSettings.dark_interactive_hover} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_interactive_hover: val }))} />
+                        </div>
+                      </details>
 
-                      {/* Section 2: Interactive */}
-                      <div className="space-y-2.5">
-                        <div className="text-[7.5px] uppercase tracking-widest text-[#50ffaf] font-black border-b border-card-border pb-1">2. Interactive Controls & Buttons</div>
-                        <ColorPickerItem label="Interactive Default" value={themeSettings.dark_interactive_default} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_interactive_default: val }))} />
-                        <ColorPickerItem label="Interactive Active" value={themeSettings.dark_interactive_active} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_interactive_active: val }))} />
-                        <ColorPickerItem label="Interactive Hover" value={themeSettings.dark_interactive_hover} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_interactive_hover: val }))} />
-                      </div>
+                      {/* Section 2: Header & Navigation */}
+                      <details className="group border border-card-border/80 rounded-xl overflow-hidden [&_summary::-webkit-details-marker]:hidden bg-card/10 hover:border-accent/40 transition-colors">
+                        <summary className="flex justify-between items-center p-3.5 cursor-pointer select-none bg-card/30 hover:bg-card/50 transition-colors">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-accent flex items-center gap-2">
+                            <Layout className="w-3.5 h-3.5 text-pink-400 group-open:rotate-90 transition-transform" />
+                            2. Header & Navigation
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-bold uppercase transition-transform group-open:rotate-180">▼</span>
+                        </summary>
+                        <div className="p-4 space-y-3.5 border-t border-card-border/60 bg-card/5 animate-[fade-in_0.2s_ease-out]">
+                          <ColorPickerItem label="Header Background" value={themeSettings.dark_header_bg} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_header_bg: val }))} />
+                          <ColorPickerItem label="Header Border" value={themeSettings.dark_header_border} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_header_border: val }))} />
+                          <ColorPickerItem label="Header Text" value={themeSettings.dark_header_text} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_header_text: val }))} />
+                          <ColorPickerItem label="Header Icon" value={themeSettings.dark_header_icon} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_header_icon: val }))} />
+                          <ColorPickerItem label="Nav Link Idle" value={themeSettings.dark_header_link_idle} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_header_link_idle: val }))} />
+                          <ColorPickerItem label="Nav Link Hover" value={themeSettings.dark_header_link_hover} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_header_link_hover: val }))} />
+                          <ColorPickerItem label="Nav Link Active" value={themeSettings.dark_header_link_active} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_header_link_active: val }))} />
+                          <ColorPickerItem label="Nav Link Active BG" value={themeSettings.dark_header_link_active_bg} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_header_link_active_bg: val }))} />
+                        </div>
+                      </details>
 
-                      {/* Section 3: Typography */}
-                      <div className="space-y-2.5">
-                        <div className="text-[7.5px] uppercase tracking-widest text-cyan-400 font-black border-b border-card-border pb-1">3. Workspace Typography</div>
-                        <ColorPickerItem label="Title Text" value={themeSettings.dark_text_title} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_text_title: val }))} />
-                        <ColorPickerItem label="Label Text" value={themeSettings.dark_text_label} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_text_label: val }))} />
-                        <ColorPickerItem label="Value Text" value={themeSettings.dark_text_value} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_text_value: val }))} />
-                        <ColorPickerItem label="Bullish Candle & Signal" value={themeSettings.dark_up_candle} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_up_candle: val, dark_highlight_up: val }))} />
-                        <ColorPickerItem label="Bearish Candle & Signal" value={themeSettings.dark_down_candle} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_down_candle: val, dark_highlight_down: val }))} />
-                      </div>
+                      {/* Section 3: Chart Layout & Indicators */}
+                      <details className="group border border-card-border/80 rounded-xl overflow-hidden [&_summary::-webkit-details-marker]:hidden bg-card/10 hover:border-accent/40 transition-colors">
+                        <summary className="flex justify-between items-center p-3.5 cursor-pointer select-none bg-card/30 hover:bg-card/50 transition-colors">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-accent flex items-center gap-2">
+                            <Crosshair className="w-3.5 h-3.5 text-[#50ffaf] group-open:rotate-90 transition-transform" />
+                            3. Chart Layout & Indicators
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-bold uppercase transition-transform group-open:rotate-180">▼</span>
+                        </summary>
+                        <div className="p-4 space-y-3.5 border-t border-card-border/60 bg-card/5 animate-[fade-in_0.2s_ease-out]">
+                          <ColorPickerItem label="Grid Lines" value={themeSettings.dark_chart_grid} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_grid: val }))} />
+                          <ColorPickerItem label="Border Scales" value={themeSettings.dark_chart_border} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_border: val }))} />
+                          <ColorPickerItem label="Axes Text" value={themeSettings.dark_chart_text} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_text: val }))} />
+                          <ColorPickerItem label="Bullish Candle Body" value={themeSettings.dark_up_candle} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_up_candle: val }))} />
+                          <ColorPickerItem label="Bearish Candle Body" value={themeSettings.dark_down_candle} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_down_candle: val }))} />
+                          <ColorPickerItem label="Swing High Pivot" value={themeSettings.dark_chart_swing_high} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_swing_high: val }))} />
+                          <ColorPickerItem label="Swing Low Pivot" value={themeSettings.dark_chart_swing_low} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_swing_low: val }))} />
+                          <ColorPickerItem label="BOS Structural Badge" value={themeSettings.dark_chart_bos} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_bos: val }))} />
+                          <ColorPickerItem label="MSS Structural Badge" value={themeSettings.dark_chart_mss} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_mss: val }))} />
+                          <ColorPickerItem label="Bullish FVG Box" value={themeSettings.dark_chart_fvg_bullish} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_fvg_bullish: val }))} />
+                          <ColorPickerItem label="Bearish FVG Box" value={themeSettings.dark_chart_fvg_bearish} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_fvg_bearish: val }))} />
+                          <ColorPickerItem label="True Day Open Ray" value={themeSettings.dark_chart_tdo} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_tdo: val }))} />
+                          <ColorPickerItem label="Asian Session Range" value={themeSettings.dark_chart_session_asian} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_session_asian: val }))} />
+                          <ColorPickerItem label="London Session Range" value={themeSettings.dark_chart_session_london} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_session_london: val }))} />
+                          <ColorPickerItem label="Buy-Side Liquidity (BSL)" value={themeSettings.dark_chart_magnet_bsl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_magnet_bsl: val }))} />
+                          <ColorPickerItem label="Sell-Side Liquidity (SSL)" value={themeSettings.dark_chart_magnet_ssl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_magnet_ssl: val }))} />
+                        </div>
+                      </details>
+
+                      {/* Section 4: Interactive Buttons */}
+                      <details className="group border border-card-border/80 rounded-xl overflow-hidden [&_summary::-webkit-details-marker]:hidden bg-card/10 hover:border-accent/40 transition-colors">
+                        <summary className="flex justify-between items-center p-3.5 cursor-pointer select-none bg-card/30 hover:bg-card/50 transition-colors">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-accent flex items-center gap-2">
+                            <Palette className="w-3.5 h-3.5 text-amber-400 group-open:rotate-90 transition-transform" />
+                            4. Interactive Buttons
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-bold uppercase transition-transform group-open:rotate-180">▼</span>
+                        </summary>
+                        <div className="p-4 space-y-3.5 border-t border-card-border/60 bg-card/5 animate-[fade-in_0.2s_ease-out]">
+                          <ColorPickerItem label="Solid Button Background" value={themeSettings.dark_btn_solid_bg} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_btn_solid_bg: val }))} />
+                          <ColorPickerItem label="Solid Button Hover BG" value={themeSettings.dark_btn_solid_bg_hover} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_btn_solid_bg_hover: val }))} />
+                          <ColorPickerItem label="Solid Button Text" value={themeSettings.dark_btn_solid_text} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_btn_solid_text: val }))} />
+                          <ColorPickerItem label="Outline Button Border" value={themeSettings.dark_btn_trans_border} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_btn_trans_border: val }))} />
+                          <ColorPickerItem label="Outline Button Hover BG" value={themeSettings.dark_btn_trans_bg_hover} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_btn_trans_bg_hover: val }))} />
+                          <ColorPickerItem label="Outline Button Text" value={themeSettings.dark_btn_trans_text} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_btn_trans_text: val }))} />
+                        </div>
+                      </details>
+
+                      {/* Section 5: Sidebar & System Info */}
+                      <details className="group border border-card-border/80 rounded-xl overflow-hidden [&_summary::-webkit-details-marker]:hidden bg-card/10 hover:border-accent/40 transition-colors">
+                        <summary className="flex justify-between items-center p-3.5 cursor-pointer select-none bg-card/30 hover:bg-card/50 transition-colors">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-accent flex items-center gap-2">
+                            <FileText className="w-3.5 h-3.5 text-indigo-400 group-open:rotate-90 transition-transform" />
+                            5. Sidebar & System Info
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-bold uppercase transition-transform group-open:rotate-180">▼</span>
+                        </summary>
+                        <div className="p-4 space-y-3.5 border-t border-card-border/60 bg-card/5 animate-[fade-in_0.2s_ease-out]">
+                          <ColorPickerItem label="Sidebar Header Title" value={themeSettings.dark_text_sidebar_title} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_text_sidebar_title: val }))} />
+                          <ColorPickerItem label="Metric Info Label" value={themeSettings.dark_text_sidebar_label} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_text_sidebar_label: val }))} />
+                          <ColorPickerItem label="Metric Readout Value" value={themeSettings.dark_text_sidebar_value} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_text_sidebar_value: val }))} />
+                          <ColorPickerItem label="Small Footnote Annotation" value={themeSettings.dark_text_sidebar_notes} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_text_sidebar_notes: val }))} />
+                          <ColorPickerItem label="Standard Bullish Highlight" value={themeSettings.dark_highlight_up} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_highlight_up: val }))} />
+                          <ColorPickerItem label="Standard Bearish Highlight" value={themeSettings.dark_highlight_down} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_highlight_down: val }))} />
+                          <ColorPickerItem label="General Title Text" value={themeSettings.dark_text_title} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_text_title: val }))} />
+                          <ColorPickerItem label="General Label Text" value={themeSettings.dark_text_label} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_text_label: val }))} />
+                          <ColorPickerItem label="General Value Text" value={themeSettings.dark_text_value} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_text_value: val }))} />
+                        </div>
+                      </details>
                     </div>
                   </div>
 
@@ -1227,23 +1340,18 @@ export default function SettingsPage() {
                       <span className="text-[10px] font-black text-foreground tracking-widest uppercase">Daylight Customizer</span>
                       <button
                         type="button"
-                        onClick={() => setThemeSettings((prev: any) => ({
-                          ...prev,
-                          light_bg: DEFAULT_THEME_SETTINGS.light_bg,
-                          light_card: DEFAULT_THEME_SETTINGS.light_card,
-                          light_accent: DEFAULT_THEME_SETTINGS.light_accent,
-                          light_up_candle: DEFAULT_THEME_SETTINGS.light_up_candle,
-                          light_down_candle: DEFAULT_THEME_SETTINGS.light_down_candle,
-                          light_card_opacity: DEFAULT_THEME_SETTINGS.light_card_opacity,
-                          light_interactive_default: DEFAULT_THEME_SETTINGS.light_interactive_default,
-                          light_interactive_active: DEFAULT_THEME_SETTINGS.light_interactive_active,
-                          light_interactive_hover: DEFAULT_THEME_SETTINGS.light_interactive_hover,
-                          light_text_title: DEFAULT_THEME_SETTINGS.light_text_title,
-                          light_text_label: DEFAULT_THEME_SETTINGS.light_text_label,
-                          light_text_value: DEFAULT_THEME_SETTINGS.light_text_value,
-                          light_highlight_up: DEFAULT_THEME_SETTINGS.light_highlight_up,
-                          light_highlight_down: DEFAULT_THEME_SETTINGS.light_highlight_down,
-                        }))}
+                        onClick={() => {
+                          const resetLight: any = {};
+                          Object.keys(DEFAULT_THEME_SETTINGS).forEach((key) => {
+                            if (key.startsWith("light_")) {
+                              resetLight[key] = DEFAULT_THEME_SETTINGS[key as keyof typeof DEFAULT_THEME_SETTINGS];
+                            }
+                          });
+                          setThemeSettings((prev: any) => ({
+                            ...prev,
+                            ...resetLight,
+                          }));
+                        }}
                         className="px-2.5 py-1 bg-card border border-card-border hover:border-rose-500/50 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 text-[8px] font-black uppercase rounded-lg transition-all cursor-pointer shadow-sm"
                       >
                         Reset Defaults
@@ -1254,75 +1362,237 @@ export default function SettingsPage() {
                     <div className="space-y-1 select-none">
                       <span className="text-[8px] text-zinc-500 uppercase tracking-widest block font-bold">Daylight Swatch Preview</span>
                       <div
-                        className="w-full h-24 rounded-xl p-2.5 flex flex-col justify-between border transition-all text-[8px] font-sans leading-none"
+                        className="w-full h-44 rounded-xl p-2.5 flex flex-col justify-between border transition-all text-[8px] font-sans leading-none overflow-hidden"
                         style={{
                           backgroundColor: themeSettings.light_bg,
-                          borderColor: `color-mix(in srgb, ${themeSettings.light_accent} 25%, transparent)`
+                          borderColor: themeSettings.light_chart_border
                         }}
                       >
-                        <div className="flex justify-between items-center w-full border-b pb-1.5" style={{ borderColor: `color-mix(in srgb, ${themeSettings.light_accent} 15%, transparent)` }}>
-                          <span className="font-black uppercase tracking-wider" style={{ color: themeSettings.light_text_title }}>FS HUD</span>
-                          <div className="flex gap-2">
-                            <span style={{ color: themeSettings.light_interactive_default }}>LINK</span>
-                            <span style={{ color: themeSettings.light_interactive_hover }} className="underline">HOVER</span>
-                            <span className="px-1 py-0.5 rounded-[2px]" style={{ backgroundColor: `color-mix(in srgb, ${themeSettings.light_card} ${themeSettings.light_card_opacity}%, transparent)`, color: themeSettings.light_interactive_active, border: `1px solid ${themeSettings.light_accent}` }}>ACTIVE</span>
+                        {/* Mini Header */}
+                        <div 
+                          className="flex justify-between items-center w-full px-2 py-1.5 border-b rounded-t-lg transition-all animate-[fade-in_0.3s_ease-out]" 
+                          style={{ 
+                            backgroundColor: themeSettings.light_header_bg, 
+                            borderColor: themeSettings.light_header_border 
+                          }}
+                        >
+                          <div className="flex items-center gap-1">
+                            <Sliders className="w-2 h-2 animate-[spin_10s_linear_infinite]" style={{ color: themeSettings.light_header_icon }} />
+                            <span className="font-black uppercase tracking-wider text-[7px]" style={{ color: themeSettings.light_header_text }}>QUANT HUD</span>
+                          </div>
+                          <div className="flex gap-2 text-[6px] font-black items-center">
+                            <span style={{ color: themeSettings.light_header_link_idle }}>IDLE</span>
+                            <span style={{ color: themeSettings.light_header_link_hover }} className="underline">HOVER</span>
+                            <span className="px-1.5 py-0.5 rounded-[3px] text-[5px]" style={{ backgroundColor: themeSettings.light_header_link_active_bg, color: themeSettings.light_header_link_active }}>ACTIVE</span>
                           </div>
                         </div>
 
-                        <div className="flex justify-between items-end w-full flex-1 pt-1.5">
-                          <div className="flex flex-col gap-1.5">
-                            <div className="flex items-center gap-1">
-                              <span style={{ color: themeSettings.light_text_label }}>LABEL:</span>
-                              <span className="font-bold font-mono" style={{ color: themeSettings.light_text_value }}>1,340.50</span>
+                        {/* Mid Section: Chart and Sidebar */}
+                        <div className="flex-1 flex gap-2 w-full pt-1.5 overflow-hidden">
+                          {/* Mini Chart Area */}
+                          <div 
+                            className="flex-1 rounded-lg border p-1.5 flex flex-col justify-between relative transition-all" 
+                            style={{ 
+                              backgroundColor: themeSettings.light_bg, 
+                              borderColor: themeSettings.light_chart_border,
+                              backgroundImage: `radial-gradient(${themeSettings.light_chart_grid} 1px, transparent 1px)`,
+                              backgroundSize: '8px 8px'
+                            }}
+                          >
+                            <div className="flex justify-between items-center text-[5px]">
+                              <span style={{ color: themeSettings.light_chart_text }}>07:00 TDO</span>
+                              <span style={{ color: themeSettings.light_chart_swing_high }} className="font-bold">▲ HIGH</span>
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="px-1.5 py-0.5 rounded-[2px] text-[7px]" style={{ backgroundColor: `color-mix(in srgb, ${themeSettings.light_highlight_up} 10%, transparent)`, color: themeSettings.light_highlight_up }}>BULLISH</span>
-                              <span className="px-1.5 py-0.5 rounded-[2px] text-[7px]" style={{ backgroundColor: `color-mix(in srgb, ${themeSettings.light_highlight_down} 10%, transparent)`, color: themeSettings.light_highlight_down }}>BEARISH</span>
+                            
+                            {/* Candles and FVG Box */}
+                            <div className="flex-1 flex items-center justify-center gap-2 relative">
+                              {/* FVG Box */}
+                              <div className="absolute inset-x-2 h-3 border" style={{ 
+                                backgroundColor: `color-mix(in srgb, ${themeSettings.light_chart_fvg_bullish} 15%, transparent)`,
+                                borderColor: themeSettings.light_chart_fvg_bullish,
+                                borderStyle: 'dashed'
+                              }} />
+                              
+                              {/* Candle 1 */}
+                              <div className="flex flex-col items-center w-1.5 h-full justify-center z-10">
+                                <div className="w-0.5 h-2" style={{ backgroundColor: themeSettings.light_up_candle }} />
+                                <div className="w-1.5 h-6 rounded-sm" style={{ backgroundColor: themeSettings.light_up_candle }} />
+                                <div className="w-0.5 h-2" style={{ backgroundColor: themeSettings.light_up_candle }} />
+                              </div>
+                              {/* Candle 2 */}
+                              <div className="flex flex-col items-center w-1.5 h-full justify-center z-10">
+                                <div className="w-0.5 h-3" style={{ backgroundColor: themeSettings.light_down_candle }} />
+                                <div className="w-1.5 h-5 rounded-sm" style={{ backgroundColor: themeSettings.light_down_candle }} />
+                                <div className="w-0.5 h-3" style={{ backgroundColor: themeSettings.light_down_candle }} />
+                              </div>
+                            </div>
+                            
+                            <div className="flex justify-between items-center text-[5px]">
+                              <span className="px-1 rounded-[2px] text-[5px] font-black" style={{ backgroundColor: `color-mix(in srgb, ${themeSettings.light_chart_bos} 15%, transparent)`, color: themeSettings.light_chart_bos }}>BOS</span>
+                              <span style={{ color: themeSettings.light_chart_swing_low }} className="font-bold">▼ LOW</span>
                             </div>
                           </div>
-                          <div className="flex gap-2 items-end h-full pb-0.5">
-                            <div className="flex flex-col items-center h-full w-2">
-                              <div className="w-0.5 flex-1" style={{ backgroundColor: themeSettings.light_up_candle }} />
-                              <div className="w-2 h-4 rounded-sm" style={{ backgroundColor: themeSettings.light_up_candle }} />
-                              <div className="w-0.5 flex-1" style={{ backgroundColor: themeSettings.light_up_candle }} />
+
+                          {/* Mini Sidebar Area */}
+                          <div 
+                            className="w-20 rounded-lg p-1.5 flex flex-col justify-between border transition-all" 
+                            style={{ 
+                              backgroundColor: `color-mix(in srgb, ${themeSettings.light_card} ${themeSettings.light_card_opacity}%, transparent)`, 
+                              borderColor: themeSettings.light_chart_border 
+                            }}
+                          >
+                            <div className="flex flex-col gap-0.5">
+                              <span className="font-black text-[6px] tracking-wider" style={{ color: themeSettings.light_text_sidebar_title }}>SYS INFO</span>
+                              <div className="h-[1px] w-full mt-0.5" style={{ backgroundColor: themeSettings.light_chart_border }} />
                             </div>
-                            <div className="flex flex-col items-center h-full w-2">
-                              <div className="w-0.5 flex-1" style={{ backgroundColor: themeSettings.light_down_candle }} />
-                              <div className="w-2 h-3 rounded-sm" style={{ backgroundColor: themeSettings.light_down_candle }} />
-                              <div className="w-0.5 flex-1" style={{ backgroundColor: themeSettings.light_down_candle }} />
+                            <div className="flex flex-col gap-0.5 my-1">
+                              <span style={{ color: themeSettings.light_text_sidebar_label }} className="text-[5px] font-bold">METRIC LABEL</span>
+                              <span style={{ color: themeSettings.light_text_sidebar_value }} className="font-bold font-mono text-[7px] leading-tight select-all">18,245.50</span>
                             </div>
+                            <div className="text-[5px] leading-tight font-medium" style={{ color: themeSettings.light_text_sidebar_notes }}>
+                              * System telemetry active.
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Bottom Buttons Mock */}
+                        <div className="flex gap-2 pt-1.5 w-full">
+                          {/* Solid Button */}
+                          <div 
+                            className="flex-1 py-1 rounded-[3px] text-center font-black text-[6px] uppercase tracking-wider transition-all" 
+                            style={{ 
+                              backgroundColor: themeSettings.light_btn_solid_bg, 
+                              color: themeSettings.light_btn_solid_text 
+                            }}
+                          >
+                            SOLID BTN
+                          </div>
+                          {/* Transparent Button */}
+                          <div 
+                            className="flex-1 py-1 rounded-[3px] text-center font-black text-[6px] uppercase tracking-wider border transition-all" 
+                            style={{ 
+                              borderColor: themeSettings.light_btn_trans_border, 
+                              color: themeSettings.light_btn_trans_text,
+                              backgroundColor: 'transparent'
+                            }}
+                          >
+                            OUTLINE BTN
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-card-border">
+                    <div className="space-y-4 max-h-[480px] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-card-border">
                       {/* Section 1: Panels */}
-                      <div className="space-y-2.5">
-                        <div className="text-[7.5px] uppercase tracking-widest text-[#4f46e5] font-black border-b border-card-border pb-1">1. Layout Panels & Presets</div>
-                        <ColorPickerItem label="Daylight Background" value={themeSettings.light_bg} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_bg: val }))} />
-                        <ColorPickerItem label="Card Panel Fill" value={themeSettings.light_card} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_card: val }))} />
-                        <SliderItem label="Card Panel Opacity" value={themeSettings.light_card_opacity} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_card_opacity: val }))} />
-                        <ColorPickerItem label="Accent Primary Glow" value={themeSettings.light_accent} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_accent: val }))} />
-                      </div>
+                      <details className="group border border-card-border/80 rounded-xl overflow-hidden [&_summary::-webkit-details-marker]:hidden bg-card/10 hover:border-accent/40 transition-colors" open>
+                        <summary className="flex justify-between items-center p-3.5 cursor-pointer select-none bg-card/30 hover:bg-card/50 transition-colors">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-accent flex items-center gap-2">
+                            <Sliders className="w-3.5 h-3.5 text-[#4f46e5] group-open:rotate-90 transition-transform" />
+                            1. Base Layout & Panels
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-bold uppercase transition-transform group-open:rotate-180">▼</span>
+                        </summary>
+                        <div className="p-4 space-y-3.5 border-t border-card-border/60 bg-card/5 animate-[fade-in_0.2s_ease-out]">
+                          <ColorPickerItem label="Daylight Background" value={themeSettings.light_bg} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_bg: val }))} />
+                          <ColorPickerItem label="Card Panel Fill" value={themeSettings.light_card} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_card: val }))} />
+                          <SliderItem label="Card Panel Opacity" value={themeSettings.light_card_opacity} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_card_opacity: val }))} />
+                          <ColorPickerItem label="Accent Primary Glow" value={themeSettings.light_accent} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_accent: val }))} />
+                          <ColorPickerItem label="Interactive Default" value={themeSettings.light_interactive_default} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_interactive_default: val }))} />
+                          <ColorPickerItem label="Interactive Active" value={themeSettings.light_interactive_active} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_interactive_active: val }))} />
+                          <ColorPickerItem label="Interactive Hover" value={themeSettings.light_interactive_hover} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_interactive_hover: val }))} />
+                        </div>
+                      </details>
 
-                      {/* Section 2: Interactive */}
-                      <div className="space-y-2.5">
-                        <div className="text-[7.5px] uppercase tracking-widest text-indigo-500 font-black border-b border-card-border pb-1">2. Interactive Controls & Buttons</div>
-                        <ColorPickerItem label="Interactive Default" value={themeSettings.light_interactive_default} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_interactive_default: val }))} />
-                        <ColorPickerItem label="Interactive Active" value={themeSettings.light_interactive_active} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_interactive_active: val }))} />
-                        <ColorPickerItem label="Interactive Hover" value={themeSettings.light_interactive_hover} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_interactive_hover: val }))} />
-                      </div>
+                      {/* Section 2: Header & Navigation */}
+                      <details className="group border border-card-border/80 rounded-xl overflow-hidden [&_summary::-webkit-details-marker]:hidden bg-card/10 hover:border-accent/40 transition-colors">
+                        <summary className="flex justify-between items-center p-3.5 cursor-pointer select-none bg-card/30 hover:bg-card/50 transition-colors">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-accent flex items-center gap-2">
+                            <Layout className="w-3.5 h-3.5 text-[#4f46e5] group-open:rotate-90 transition-transform" />
+                            2. Header & Navigation
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-bold uppercase transition-transform group-open:rotate-180">▼</span>
+                        </summary>
+                        <div className="p-4 space-y-3.5 border-t border-card-border/60 bg-card/5 animate-[fade-in_0.2s_ease-out]">
+                          <ColorPickerItem label="Header Background" value={themeSettings.light_header_bg} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_header_bg: val }))} />
+                          <ColorPickerItem label="Header Border" value={themeSettings.light_header_border} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_header_border: val }))} />
+                          <ColorPickerItem label="Header Text" value={themeSettings.light_header_text} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_header_text: val }))} />
+                          <ColorPickerItem label="Header Icon" value={themeSettings.light_header_icon} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_header_icon: val }))} />
+                          <ColorPickerItem label="Nav Link Idle" value={themeSettings.light_header_link_idle} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_header_link_idle: val }))} />
+                          <ColorPickerItem label="Nav Link Hover" value={themeSettings.light_header_link_hover} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_header_link_hover: val }))} />
+                          <ColorPickerItem label="Nav Link Active" value={themeSettings.light_header_link_active} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_header_link_active: val }))} />
+                          <ColorPickerItem label="Nav Link Active BG" value={themeSettings.light_header_link_active_bg} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_header_link_active_bg: val }))} />
+                        </div>
+                      </details>
 
-                      {/* Section 3: Typography */}
-                      <div className="space-y-2.5">
-                        <div className="text-[7.5px] uppercase tracking-widest text-emerald-600 font-black border-b border-card-border pb-1">3. Workspace Typography</div>
-                        <ColorPickerItem label="Title Text" value={themeSettings.light_text_title} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_text_title: val }))} />
-                        <ColorPickerItem label="Label Text" value={themeSettings.light_text_label} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_text_label: val }))} />
-                        <ColorPickerItem label="Value Text" value={themeSettings.light_text_value} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_text_value: val }))} />
-                        <ColorPickerItem label="Bullish Candle & Signal" value={themeSettings.light_up_candle} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_up_candle: val, light_highlight_up: val }))} />
-                        <ColorPickerItem label="Bearish Candle & Signal" value={themeSettings.light_down_candle} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_down_candle: val, light_highlight_down: val }))} />
-                      </div>
+                      {/* Section 3: Chart Layout & Indicators */}
+                      <details className="group border border-card-border/80 rounded-xl overflow-hidden [&_summary::-webkit-details-marker]:hidden bg-card/10 hover:border-accent/40 transition-colors">
+                        <summary className="flex justify-between items-center p-3.5 cursor-pointer select-none bg-card/30 hover:bg-card/50 transition-colors">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-accent flex items-center gap-2">
+                            <Crosshair className="w-3.5 h-3.5 text-[#4f46e5] group-open:rotate-90 transition-transform" />
+                            3. Chart Layout & Indicators
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-bold uppercase transition-transform group-open:rotate-180">▼</span>
+                        </summary>
+                        <div className="p-4 space-y-3.5 border-t border-card-border/60 bg-card/5 animate-[fade-in_0.2s_ease-out]">
+                          <ColorPickerItem label="Grid Lines" value={themeSettings.light_chart_grid} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_grid: val }))} />
+                          <ColorPickerItem label="Border Scales" value={themeSettings.light_chart_border} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_border: val }))} />
+                          <ColorPickerItem label="Axes Text" value={themeSettings.light_chart_text} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_text: val }))} />
+                          <ColorPickerItem label="Bullish Candle Body" value={themeSettings.light_up_candle} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_up_candle: val }))} />
+                          <ColorPickerItem label="Bearish Candle Body" value={themeSettings.light_down_candle} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_down_candle: val }))} />
+                          <ColorPickerItem label="Swing High Pivot" value={themeSettings.light_chart_swing_high} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_swing_high: val }))} />
+                          <ColorPickerItem label="Swing Low Pivot" value={themeSettings.light_chart_swing_low} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_swing_low: val }))} />
+                          <ColorPickerItem label="BOS Structural Badge" value={themeSettings.light_chart_bos} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_bos: val }))} />
+                          <ColorPickerItem label="MSS Structural Badge" value={themeSettings.light_chart_mss} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_mss: val }))} />
+                          <ColorPickerItem label="Bullish FVG Box" value={themeSettings.light_chart_fvg_bullish} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_fvg_bullish: val }))} />
+                          <ColorPickerItem label="Bearish FVG Box" value={themeSettings.light_chart_fvg_bearish} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_fvg_bearish: val }))} />
+                          <ColorPickerItem label="True Day Open Ray" value={themeSettings.light_chart_tdo} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_tdo: val }))} />
+                          <ColorPickerItem label="Asian Session Range" value={themeSettings.light_chart_session_asian} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_session_asian: val }))} />
+                          <ColorPickerItem label="London Session Range" value={themeSettings.light_chart_session_london} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_session_london: val }))} />
+                          <ColorPickerItem label="Buy-Side Liquidity (BSL)" value={themeSettings.light_chart_magnet_bsl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_magnet_bsl: val }))} />
+                          <ColorPickerItem label="Sell-Side Liquidity (SSL)" value={themeSettings.light_chart_magnet_ssl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_magnet_ssl: val }))} />
+                        </div>
+                      </details>
+
+                      {/* Section 4: Interactive Buttons */}
+                      <details className="group border border-card-border/80 rounded-xl overflow-hidden [&_summary::-webkit-details-marker]:hidden bg-card/10 hover:border-accent/40 transition-colors">
+                        <summary className="flex justify-between items-center p-3.5 cursor-pointer select-none bg-card/30 hover:bg-card/50 transition-colors">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-accent flex items-center gap-2">
+                            <Palette className="w-3.5 h-3.5 text-[#4f46e5] group-open:rotate-90 transition-transform" />
+                            4. Interactive Buttons
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-bold uppercase transition-transform group-open:rotate-180">▼</span>
+                        </summary>
+                        <div className="p-4 space-y-3.5 border-t border-card-border/60 bg-card/5 animate-[fade-in_0.2s_ease-out]">
+                          <ColorPickerItem label="Solid Button Background" value={themeSettings.light_btn_solid_bg} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_btn_solid_bg: val }))} />
+                          <ColorPickerItem label="Solid Button Hover BG" value={themeSettings.light_btn_solid_bg_hover} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_btn_solid_bg_hover: val }))} />
+                          <ColorPickerItem label="Solid Button Text" value={themeSettings.light_btn_solid_text} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_btn_solid_text: val }))} />
+                          <ColorPickerItem label="Outline Button Border" value={themeSettings.light_btn_trans_border} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_btn_trans_border: val }))} />
+                          <ColorPickerItem label="Outline Button Hover BG" value={themeSettings.light_btn_trans_bg_hover} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_btn_trans_bg_hover: val }))} />
+                          <ColorPickerItem label="Outline Button Text" value={themeSettings.light_btn_trans_text} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_btn_trans_text: val }))} />
+                        </div>
+                      </details>
+
+                      {/* Section 5: Sidebar & System Info */}
+                      <details className="group border border-card-border/80 rounded-xl overflow-hidden [&_summary::-webkit-details-marker]:hidden bg-card/10 hover:border-accent/40 transition-colors">
+                        <summary className="flex justify-between items-center p-3.5 cursor-pointer select-none bg-card/30 hover:bg-card/50 transition-colors">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-accent flex items-center gap-2">
+                            <FileText className="w-3.5 h-3.5 text-[#4f46e5] group-open:rotate-90 transition-transform" />
+                            5. Sidebar & System Info
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-bold uppercase transition-transform group-open:rotate-180">▼</span>
+                        </summary>
+                        <div className="p-4 space-y-3.5 border-t border-card-border/60 bg-card/5 animate-[fade-in_0.2s_ease-out]">
+                          <ColorPickerItem label="Sidebar Header Title" value={themeSettings.light_text_sidebar_title} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_text_sidebar_title: val }))} />
+                          <ColorPickerItem label="Metric Info Label" value={themeSettings.light_text_sidebar_label} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_text_sidebar_label: val }))} />
+                          <ColorPickerItem label="Metric Readout Value" value={themeSettings.light_text_sidebar_value} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_text_sidebar_value: val }))} />
+                          <ColorPickerItem label="Small Footnote Annotation" value={themeSettings.light_text_sidebar_notes} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_text_sidebar_notes: val }))} />
+                          <ColorPickerItem label="Standard Bullish Highlight" value={themeSettings.light_highlight_up} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_highlight_up: val }))} />
+                          <ColorPickerItem label="Standard Bearish Highlight" value={themeSettings.light_highlight_down} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_highlight_down: val }))} />
+                          <ColorPickerItem label="General Title Text" value={themeSettings.light_text_title} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_text_title: val }))} />
+                          <ColorPickerItem label="General Label Text" value={themeSettings.light_text_label} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_text_label: val }))} />
+                          <ColorPickerItem label="General Value Text" value={themeSettings.light_text_value} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_text_value: val }))} />
+                        </div>
+                      </details>
                     </div>
                   </div>
                 </div>

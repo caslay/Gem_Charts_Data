@@ -72,6 +72,46 @@ export interface ThemeSettings {
   dark_highlight_up: string;
   dark_highlight_down: string;
 
+  // Header Customizations
+  dark_header_bg: string;
+  dark_header_border: string;
+  dark_header_text: string;
+  dark_header_icon: string;
+  dark_header_link_idle: string;
+  dark_header_link_hover: string;
+  dark_header_link_active: string;
+  dark_header_link_active_bg: string;
+
+  // Chart Customizations
+  dark_chart_grid: string;
+  dark_chart_border: string;
+  dark_chart_text: string;
+  dark_chart_swing_high: string;
+  dark_chart_swing_low: string;
+  dark_chart_bos: string;
+  dark_chart_mss: string;
+  dark_chart_fvg_bullish: string;
+  dark_chart_fvg_bearish: string;
+  dark_chart_tdo: string;
+  dark_chart_session_asian: string;
+  dark_chart_session_london: string;
+  dark_chart_magnet_bsl: string;
+  dark_chart_magnet_ssl: string;
+
+  // UI Button Variations
+  dark_btn_solid_bg: string;
+  dark_btn_solid_bg_hover: string;
+  dark_btn_solid_text: string;
+  dark_btn_trans_border: string;
+  dark_btn_trans_bg_hover: string;
+  dark_btn_trans_text: string;
+
+  // Sidebar Typography Customizations
+  dark_text_sidebar_title: string;
+  dark_text_sidebar_label: string;
+  dark_text_sidebar_value: string;
+  dark_text_sidebar_notes: string;
+
   light_bg: string;
   light_card: string;
   light_accent: string;
@@ -88,6 +128,46 @@ export interface ThemeSettings {
   light_text_value: string;
   light_highlight_up: string;
   light_highlight_down: string;
+
+  // Header Customizations
+  light_header_bg: string;
+  light_header_border: string;
+  light_header_text: string;
+  light_header_icon: string;
+  light_header_link_idle: string;
+  light_header_link_hover: string;
+  light_header_link_active: string;
+  light_header_link_active_bg: string;
+
+  // Chart Customizations
+  light_chart_grid: string;
+  light_chart_border: string;
+  light_chart_text: string;
+  light_chart_swing_high: string;
+  light_chart_swing_low: string;
+  light_chart_bos: string;
+  light_chart_mss: string;
+  light_chart_fvg_bullish: string;
+  light_chart_fvg_bearish: string;
+  light_chart_tdo: string;
+  light_chart_session_asian: string;
+  light_chart_session_london: string;
+  light_chart_magnet_bsl: string;
+  light_chart_magnet_ssl: string;
+
+  // UI Button Variations
+  light_btn_solid_bg: string;
+  light_btn_solid_bg_hover: string;
+  light_btn_solid_text: string;
+  light_btn_trans_border: string;
+  light_btn_trans_bg_hover: string;
+  light_btn_trans_text: string;
+
+  // Sidebar Typography Customizations
+  light_text_sidebar_title: string;
+  light_text_sidebar_label: string;
+  light_text_sidebar_value: string;
+  light_text_sidebar_notes: string;
 }
 
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
@@ -107,6 +187,46 @@ export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   dark_highlight_up: '#50ffaf',
   dark_highlight_down: '#ffb4ab',
 
+  // Header Customizations (Midnight)
+  dark_header_bg: '#0f172a',
+  dark_header_border: '#1e293b',
+  dark_header_text: '#ffffff',
+  dark_header_icon: '#94a3b8',
+  dark_header_link_idle: '#64748b',
+  dark_header_link_hover: '#ffffff',
+  dark_header_link_active: '#ffffff',
+  dark_header_link_active_bg: '#a855f7',
+
+  // Chart Customizations (Midnight)
+  dark_chart_grid: 'rgba(255, 255, 255, 0.05)',
+  dark_chart_border: 'rgba(255, 255, 255, 0.08)',
+  dark_chart_text: '#94a3b8',
+  dark_chart_swing_high: 'rgba(239, 68, 68, 0.85)',
+  dark_chart_swing_low: 'rgba(80, 255, 175, 0.85)',
+  dark_chart_bos: 'rgba(168, 85, 247, 0.85)',
+  dark_chart_mss: 'rgba(80, 255, 175, 0.85)',
+  dark_chart_fvg_bullish: '#50ffaf',
+  dark_chart_fvg_bearish: '#ffb4ab',
+  dark_chart_tdo: '#a855f7',
+  dark_chart_session_asian: 'rgba(245, 158, 11, 0.5)',
+  dark_chart_session_london: 'rgba(59, 130, 246, 0.5)',
+  dark_chart_magnet_bsl: 'rgba(255, 180, 171, 0.45)',
+  dark_chart_magnet_ssl: 'rgba(80, 255, 175, 0.45)',
+
+  // UI Button Variations (Midnight)
+  dark_btn_solid_bg: '#a855f7',
+  dark_btn_solid_bg_hover: '#c084fc',
+  dark_btn_solid_text: '#ffffff',
+  dark_btn_trans_border: '#1e293b',
+  dark_btn_trans_bg_hover: 'rgba(255, 255, 255, 0.05)',
+  dark_btn_trans_text: '#94a3b8',
+
+  // Sidebar Typography Customizations (Midnight)
+  dark_text_sidebar_title: '#ffffff',
+  dark_text_sidebar_label: '#64748b',
+  dark_text_sidebar_value: '#f8fafc',
+  dark_text_sidebar_notes: '#475569',
+
   light_bg: '#fafafa',
   light_card: '#ffffff',
   light_accent: '#4f46e5',
@@ -122,6 +242,46 @@ export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   light_text_value: '#334155',
   light_highlight_up: '#059669',
   light_highlight_down: '#e11d48',
+
+  // Header Customizations (Daylight)
+  light_header_bg: '#ffffff',
+  light_header_border: '#e2e8f0',
+  light_header_text: '#0f172a',
+  light_header_icon: '#475569',
+  light_header_link_idle: '#64748b',
+  light_header_link_hover: '#0f172a',
+  light_header_link_active: '#ffffff',
+  light_header_link_active_bg: '#4f46e5',
+
+  // Chart Customizations (Daylight)
+  light_chart_grid: 'rgba(0, 0, 0, 0.04)',
+  light_chart_border: 'rgba(0, 0, 0, 0.06)',
+  light_chart_text: '#475569',
+  light_chart_swing_high: 'rgba(225, 29, 72, 0.85)',
+  light_chart_swing_low: 'rgba(5, 150, 105, 0.85)',
+  light_chart_bos: 'rgba(79, 70, 229, 0.85)',
+  light_chart_mss: 'rgba(5, 150, 105, 0.85)',
+  light_chart_fvg_bullish: '#059669',
+  light_chart_fvg_bearish: '#e11d48',
+  light_chart_tdo: '#4f46e5',
+  light_chart_session_asian: 'rgba(217, 119, 6, 0.5)',
+  light_chart_session_london: 'rgba(37, 99, 235, 0.5)',
+  light_chart_magnet_bsl: 'rgba(225, 29, 72, 0.45)',
+  light_chart_magnet_ssl: 'rgba(5, 150, 105, 0.45)',
+
+  // UI Button Variations (Daylight)
+  light_btn_solid_bg: '#4f46e5',
+  light_btn_solid_bg_hover: '#4338ca',
+  light_btn_solid_text: '#ffffff',
+  light_btn_trans_border: '#cbd5e1',
+  light_btn_trans_bg_hover: 'rgba(0, 0, 0, 0.03)',
+  light_btn_trans_text: '#475569',
+
+  // Sidebar Typography Customizations (Daylight)
+  light_text_sidebar_title: '#0f172a',
+  light_text_sidebar_label: '#64748b',
+  light_text_sidebar_value: '#334155',
+  light_text_sidebar_notes: '#94a3b8',
 };
 
 
@@ -245,41 +405,17 @@ export function useMarketData(selectedInterval: string = '5m') {
           
           // Rehydrate dynamic theme settings
           const s = data.settings || {};
-          const loadedTheme: ThemeSettings = {
-            dark_bg: s.dark_bg || DEFAULT_THEME_SETTINGS.dark_bg,
-            dark_card: s.dark_card || DEFAULT_THEME_SETTINGS.dark_card,
-            dark_accent: s.dark_accent || DEFAULT_THEME_SETTINGS.dark_accent,
-            dark_up_candle: s.dark_up_candle || DEFAULT_THEME_SETTINGS.dark_up_candle,
-            dark_down_candle: s.dark_down_candle || DEFAULT_THEME_SETTINGS.dark_down_candle,
-            dark_card_opacity: s.dark_card_opacity ? Number(s.dark_card_opacity) : DEFAULT_THEME_SETTINGS.dark_card_opacity,
-            
-            // Phase 2 Interactive & Typography mappings
-            dark_interactive_default: s.dark_interactive_default || DEFAULT_THEME_SETTINGS.dark_interactive_default,
-            dark_interactive_active: s.dark_interactive_active || DEFAULT_THEME_SETTINGS.dark_interactive_active,
-            dark_interactive_hover: s.dark_interactive_hover || DEFAULT_THEME_SETTINGS.dark_interactive_hover,
-            dark_text_title: s.dark_text_title || DEFAULT_THEME_SETTINGS.dark_text_title,
-            dark_text_label: s.dark_text_label || DEFAULT_THEME_SETTINGS.dark_text_label,
-            dark_text_value: s.dark_text_value || DEFAULT_THEME_SETTINGS.dark_text_value,
-            dark_highlight_up: s.dark_highlight_up || DEFAULT_THEME_SETTINGS.dark_highlight_up,
-            dark_highlight_down: s.dark_highlight_down || DEFAULT_THEME_SETTINGS.dark_highlight_down,
-
-            light_bg: s.light_bg || DEFAULT_THEME_SETTINGS.light_bg,
-            light_card: s.light_card || DEFAULT_THEME_SETTINGS.light_card,
-            light_accent: s.light_accent || DEFAULT_THEME_SETTINGS.light_accent,
-            light_up_candle: s.light_up_candle || DEFAULT_THEME_SETTINGS.light_up_candle,
-            light_down_candle: s.light_down_candle || DEFAULT_THEME_SETTINGS.light_down_candle,
-            light_card_opacity: s.light_card_opacity ? Number(s.light_card_opacity) : DEFAULT_THEME_SETTINGS.light_card_opacity,
-
-            // Phase 2 Interactive & Typography mappings
-            light_interactive_default: s.light_interactive_default || DEFAULT_THEME_SETTINGS.light_interactive_default,
-            light_interactive_active: s.light_interactive_active || DEFAULT_THEME_SETTINGS.light_interactive_active,
-            light_interactive_hover: s.light_interactive_hover || DEFAULT_THEME_SETTINGS.light_interactive_hover,
-            light_text_title: s.light_text_title || DEFAULT_THEME_SETTINGS.light_text_title,
-            light_text_label: s.light_text_label || DEFAULT_THEME_SETTINGS.light_text_label,
-            light_text_value: s.light_text_value || DEFAULT_THEME_SETTINGS.light_text_value,
-            light_highlight_up: s.light_highlight_up || DEFAULT_THEME_SETTINGS.light_highlight_up,
-            light_highlight_down: s.light_highlight_down || DEFAULT_THEME_SETTINGS.light_highlight_down,
-          };
+          const loadedTheme: ThemeSettings = { ...DEFAULT_THEME_SETTINGS };
+          Object.keys(DEFAULT_THEME_SETTINGS).forEach((key) => {
+            const val = s[key];
+            if (val !== undefined && val !== null) {
+              if (typeof DEFAULT_THEME_SETTINGS[key as keyof typeof DEFAULT_THEME_SETTINGS] === 'number') {
+                loadedTheme[key as keyof typeof DEFAULT_THEME_SETTINGS] = Number(val) as never;
+              } else {
+                loadedTheme[key as keyof typeof DEFAULT_THEME_SETTINGS] = String(val) as never;
+              }
+            }
+          });
           setThemeSettings(loadedTheme);
           if (typeof window !== 'undefined') {
             localStorage.setItem('gem_theme_settings', JSON.stringify(loadedTheme));

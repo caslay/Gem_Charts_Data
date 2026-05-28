@@ -9,7 +9,13 @@ export interface MarkerCandle {
   v: number;
 }
 
-export function generateVolumetricMarkers(candles: MarkerCandle[], isDark: boolean = true) {
+export interface MarkerColors {
+  sponsorshipColor: string;
+  bullishSweepColor: string;
+  bearishSweepColor: string;
+}
+
+export function generateVolumetricMarkers(candles: MarkerCandle[], colors: MarkerColors) {
   const markers: SeriesMarker<any>[] = [];
 
   // Iterate through candles (need at least 3 to check a swing)
@@ -45,26 +51,26 @@ export function generateVolumetricMarkers(candles: MarkerCandle[], isDark: boole
     const isDirVolIncrease = dirVolMid > dirVolPrev;
 
     // 4. Generate Markers
-    // Lightweight charts time format handling (adjust if yours is string/Date)
+    // Lightweight charts time format handling
     const markerTime = mid.t.toString().length > 10 ? Math.floor(mid.t / 1000) : mid.t;
 
     if (isDirVolIncrease) {
-      // SPECIAL SIGNAL (White in Dark, Black in Light) - Institutional Sponsorship
+      // SPECIAL SIGNAL - Institutional Sponsorship
       markers.push({
         time: markerTime as any,
         position: isValidBullishShift ? 'belowBar' : 'aboveBar',
-        color: isDark ? '#ffffff' : '#827b71ff',
+        color: colors.sponsorshipColor,
         shape: isValidBullishShift ? 'arrowUp' : 'arrowDown',
-        text: '', // 'Special',
+        text: '',
       });
     } else if (isRawVolIncrease) {
-      // NORMAL SIGNAL - SMT Trap / Sweep (Neon Cyan/Orange in Dark, Indigo in Light)
+      // NORMAL SIGNAL - SMT Trap / Sweep
       markers.push({
         time: markerTime as any,
         position: isValidBullishShift ? 'belowBar' : 'aboveBar',
-        color: isDark ? (isValidBullishShift ? '#00bcd4' : '#ff9800') : '#b4aea6ff',
+        color: isValidBullishShift ? colors.bullishSweepColor : colors.bearishSweepColor,
         shape: 'circle',
-        text: '', //'Vol',
+        text: '',
       });
     }
   }
