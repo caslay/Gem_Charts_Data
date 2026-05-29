@@ -172,6 +172,7 @@ export interface ThemeSettings {
   light_text_sidebar_label: string;
   light_text_sidebar_value: string;
   light_text_sidebar_notes: string;
+  structure_istr_atr_multiplier: string;
 }
 
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
@@ -290,6 +291,7 @@ export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   light_text_sidebar_label: '#64748b',
   light_text_sidebar_value: '#334155',
   light_text_sidebar_notes: '#94a3b8',
+  structure_istr_atr_multiplier: '1.5',
 };
 
 
@@ -588,7 +590,8 @@ export function useMarketData(selectedInterval: string = '5m') {
     // 2. Compute structural analysis using the stable lookback anchor
     const currentPrice = activeCandles[activeCandles.length - 1]?.c ?? 0;
     const displacementStatus = data.ipda_metrics?.institutional_sponsorship ?? null;
-    const analysis = analyzeMarketStructure(activeCandles, currentPrice, displacementStatus, anchor);
+    const globalAnchors = data.ipda_metrics?.global_anchors ?? null;
+    const analysis = analyzeMarketStructure(activeCandles, currentPrice, displacementStatus, anchor, globalAnchors);
 
     setStructureState(analysis);
   }, [data, selectedInterval, contextAnchorTimestamp]);

@@ -22,6 +22,7 @@ export const useLayerStore = create<LayerState>()(
         structure_major: true,
         structure_inner: true,
         structure_zigzag: true,
+        structure_istr: true,
       },
       toggleVisibility: (layerId) =>
         set((state) => ({

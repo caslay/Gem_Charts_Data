@@ -28,7 +28,7 @@ function resolveMetric(
   const orderFlow = ipda.order_flow_engine || (data as any).order_flow_engine || {};
   const metric = condition.metric;
 
-  switch (metric) {
+  switch (metric as string) {
     case 'AI_DAILY_BIAS': {
       if (aiBias === 1) return 'BULLISH';
       if (aiBias === -1) return 'BEARISH';
@@ -192,6 +192,10 @@ function resolveMetric(
         return stratDirection === 'LONG' ? 'DISCOUNT' : 'PREMIUM';
       }
 
+      if (ipda.global_anchors) {
+        return ipda.global_anchors.current_status || 'UNKNOWN';
+      }
+
       const pricing = ipda.pricing_context || {};
       const range = pricing.local_dealing_range || {};
       return range.current_status || 'UNKNOWN';
@@ -212,7 +216,24 @@ function resolveMetric(
     }
 
     case 'MARKET_TREND': {
-      return ipda.current_trend || 'UNSET';
+      return ipda.global_anchors?.current_trend || ipda.current_trend || 'UNSET';
+    }
+
+    case 'SUB_TREND': {
+      return ipda.global_anchors?.sub_trend || ipda.full_structure_map?.subTrend || 'UNSET';
+    }
+
+    case 'INTERNAL_TREND': {
+      return ipda.global_anchors?.internal_market_trend || ipda.internal_market_trend || 'UNSET';
+    }
+
+    case 'INTERNAL_MSS': {
+      return ipda.global_anchors?.internal_structure_shift === true || ipda.internal_structure_shift === true;
+    }
+
+    case 'INTERNAL_PRICING': {
+      const internalRange = ipda.internal_context || ipda.full_structure_map?.internalDealingRange || {};
+      return internalRange.current_status || internalRange.pricing_status || 'UNKNOWN';
     }
 
     case 'LOCAL_PRICING': {
@@ -223,6 +244,10 @@ function resolveMetric(
       if (momentumOverride && expansionMode === 'RUNAWAY') {
         const stratDirection = isObj ? (strategy.conditions.direction || 'LONG') : 'LONG';
         return stratDirection === 'LONG' ? 'DISCOUNT' : 'PREMIUM';
+      }
+
+      if (ipda.global_anchors) {
+        return ipda.global_anchors.current_status || 'UNKNOWN';
       }
 
       const pricing = ipda.pricing_context || {};
@@ -257,13 +282,13 @@ function resolveMetric(
         return true; // Bypass Equilibrium retracement gate
       }
 
-      const range = ipda.full_structure_map?.dealingRange || {};
+      const range = ipda.global_anchors || ipda.full_structure_map?.dealingRange || {};
       const high = range.high || 0;
       const low = range.low || 0;
       const price = livePrice || 0;
       
       if (high === 0 || low === 0 || price === 0) return false;
-      const trend = ipda.current_trend || 'UNSET';
+      const trend = ipda.global_anchors?.current_trend || ipda.current_trend || 'UNSET';
       const zone = (condition as any).retracement || 'OTE';
       
       if (trend === 'BULLISH') {
@@ -323,6 +348,37 @@ function resolveMetric(
       if (swings.length === 0) return 'MAJOR';
       const latest = swings[swings.length - 1];
       return latest.structure_type || 'MAJOR';
+    }
+
+    case 'LIQUIDATION_STATUS': {
+      const status = orderFlow.liquidation_events?.status || 'NORMAL';
+      return status;
+    }
+
+    case 'SMART_MONEY_SYNC': {
+      const smartMoney = orderFlow.smart_money_sentiment || {};
+      const divergence = smartMoney.smart_money_divergence === true;
+      return !divergence;
+    }
+
+    case 'BTC_RELATIVE_STRENGTH': {
+      const smt = ipda.smt_context || {};
+      return smt.btc_relative_strength || 'LAGGARD';
+    }
+
+    case 'HTF_MAGNET_DIST': {
+      const pricing = ipda.pricing_context || {};
+      const magnet = pricing.nearest_htf_magnet || {};
+      return typeof magnet.distance === 'number' ? magnet.distance : 999999;
+    }
+
+    case 'HIGH_VOLUME_SESSION': {
+      const currentSession = ipda.current_time_window || 'DEAD_ZONE';
+      return currentSession !== 'DEAD_ZONE';
+    }
+
+    case 'CURRENT_SESSION': {
+      return ipda.current_time_window || 'DEAD_ZONE';
     }
 
     default:

@@ -63,11 +63,11 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const symbol = url.searchParams.get('symbol') || 'ETHUSDC';
-    const limit5m = parseInt(url.searchParams.get('limit5m') || '300', 10);
-    const limit15m = parseInt(url.searchParams.get('limit15m') || '200', 10);
-    const limit1h = parseInt(url.searchParams.get('limit1h') || '100', 10);
-    const limit4h = parseInt(url.searchParams.get('limit4h') || '100', 10);
-    const limit = 350;
+    const limit5m = parseInt(url.searchParams.get('limit5m') || '1000', 10);
+    const limit15m = parseInt(url.searchParams.get('limit15m') || '1000', 10);
+    const limit1h = parseInt(url.searchParams.get('limit1h') || '1000', 10);
+    const limit4h = parseInt(url.searchParams.get('limit4h') || '1000', 10);
+    const limit = 1000;
 
     const visualInterval = url.searchParams.get('interval') || '5m';
     const isStandardInterval = ['5m', '15m', '1h', '4h'].includes(visualInterval);
@@ -747,6 +747,26 @@ export async function GET(req: Request) {
     // V10.19 — Centralized Stateful Market Structure Analysis via structureEngine (Fully Isolated per timeframe)
     const structureAnalysis = analyzeMarketStructureStateful(symbol, visualInterval, activeCandlesForStructure, currentLivePrice, institutional_sponsorship, isInit);
     const localDealingRange = structureAnalysis.dealingRange;
+
+    const internal_dealing_range = structureAnalysis.internalDealingRange || {
+      high: 0,
+      low: 0,
+      equilibrium: 0,
+      current_status: 'UNKNOWN',
+      anchor_high_swing: null,
+      anchor_low_swing: null
+    };
+
+    const internal_context = {
+      trend: structureAnalysis.internalTrend || 'UNSET',
+      high: internal_dealing_range.high,
+      low: internal_dealing_range.low,
+      equilibrium: internal_dealing_range.equilibrium,
+      pricing_status: internal_dealing_range.current_status,
+      anchor_high_swing: internal_dealing_range.anchor_high_swing,
+      anchor_low_swing: internal_dealing_range.anchor_low_swing
+    };
+
     pricing_context = {
       vs_daily_open: (true_day_open_0700 !== null)
         ? (currentLivePrice > true_day_open_0700 ? "ABOVE_OPEN" : "BELOW_OPEN")
@@ -800,6 +820,7 @@ export async function GET(req: Request) {
       market_structure_shift: structureAnalysis.market_structure_shift,
       market_structure_shift_direction: structureAnalysis.market_structure_shift_direction,
       current_trend: structureAnalysis.currentTrend,
+      internal_context,
       expansion_mode: structureAnalysis.expansion_mode || 'NORMAL',
       market_velocity: structureAnalysis.market_velocity || 0,
       runaway_origin_price: structureAnalysis.runaway_origin_price || null,
@@ -809,7 +830,19 @@ export async function GET(req: Request) {
         innerSwings: structureAnalysis.innerSwings || [],
         innerZigzag: structureAnalysis.innerZigzag || [],
         currentTrend: structureAnalysis.currentTrend,
+        subTrend: structureAnalysis.subTrend || 'UNSET',
         dealingRange: structureAnalysis.dealingRange,
+        internalDealingRange: internal_dealing_range,
+      },
+      global_anchors: {
+        high: localDealingRange.high,
+        low: localDealingRange.low,
+        equilibrium: localDealingRange.equilibrium,
+        current_status: localDealingRange.current_status,
+        anchor_high_swing: localDealingRange.anchor_high_swing,
+        anchor_low_swing: localDealingRange.anchor_low_swing,
+        current_trend: structureAnalysis.currentTrend,
+        sub_trend: structureAnalysis.subTrend || 'UNSET'
       },
       macro_levels: {
         pdh,

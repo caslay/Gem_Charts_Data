@@ -24,6 +24,7 @@ import { useBinanceWS } from '@/hooks/useBinanceWS';
 import HudModal from './modals/HudModal';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
 import { useMarketDataContext } from '@/context/MarketDataContext';
+import { calculateATR } from '@/lib/riskEngine';
 
 // ─── Slicing Helper ──────────────────────────────────────────────────────────
 export function slicePayloadByLookback(
@@ -78,7 +79,7 @@ export default function Sidebar({
   onClose,
 }: SidebarProps) {
   const { livePrice } = useBinanceWS();
-  const { isAnalyzing, aiAnalysis, triggerAiAnalysisScan, wsInterval, structureState } = useMarketDataContext();
+  const { isAnalyzing, aiAnalysis, triggerAiAnalysisScan, wsInterval, structureState, themeSettings } = useMarketDataContext();
   const [isJsonDrawerOpen, setIsJsonDrawerOpen] = useState(false);
   const [isHudModalOpen, setIsHudModalOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
@@ -266,91 +267,174 @@ export default function Sidebar({
               </div>
             </div>
 
-            {/* Market Structure Card (Timeframe-Isolated) */}
-            <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
-              <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
-                <TrendingUp size={12} className="text-accent" />
-                <span>Market Structure ({wsInterval || '---'})</span>
-              </div>
-
-              <div className="space-y-2.5">
-                {/* Trend Bias and Shift Status */}
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] lg:text-xs text-muted uppercase font-bold">Trend Bias</span>
-                  {(() => {
-                    const trend = structureState?.currentTrend || data?.ipda_metrics?.current_trend || 'UNSET';
-                    if (trend === 'BULLISH') {
-                      return <span className="text-sm font-black text-emerald-500 uppercase">🟢 BULLISH</span>;
-                    }
-                    if (trend === 'BEARISH') {
-                      return <span className="text-sm font-black text-rose-500 uppercase">🔴 BEARISH</span>;
-                    }
-                    return <span className="text-sm font-black text-muted uppercase">⚪ UNSET</span>;
-                  })()}
+            {/* Market Structure Card (Nested Hierarchy View) */}
+            <div className="glass-panel p-4 space-y-3.5 relative overflow-hidden group">
+              {/* Header with Title and Alignment Status */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
+                  <TrendingUp size={12} className="text-accent" />
+                  <span>Market Structure ({wsInterval || '---'})</span>
                 </div>
-
-                <div className="flex justify-between items-center border-t border-card-border/30 pt-2">
-                  <span className="text-[11px] lg:text-xs text-muted uppercase font-bold">Shift Status</span>
-                  {(() => {
-                    const mssConfirmed = structureState?.market_structure_shift || data?.ipda_metrics?.market_structure_shift || false;
-                    const latestMSS = structureState?.latestMSS || data?.ipda_metrics?.full_structure_map?.zigzag?.find((z: any) => z.label === 'MSS') || null;
-                    const statusText = latestMSS ? (latestMSS.displacementConfirmed ? 'CONFIRMED' : 'PENDING') : (mssConfirmed ? 'CONFIRMED' : 'NONE');
-
-                    if (statusText === 'CONFIRMED') {
-                      return (
-                        <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-500 text-[9px] font-black rounded border border-emerald-500/20 tracking-wider">
-                          CONFIRMED ⚡
-                        </span>
-                      );
-                    }
-                    if (statusText === 'PENDING') {
-                      return (
-                        <span className="px-1.5 py-0.5 bg-amber-500/10 text-amber-500 text-[9px] font-black rounded border border-amber-500/20 tracking-wider animate-pulse">
-                          PENDING ⏳
-                        </span>
-                      );
-                    }
-                    return <span className="text-xs font-mono font-bold text-muted uppercase">NONE</span>;
-                  })()}
-                </div>
-
-                {/* Dealing Range Bounds */}
                 {(() => {
-                  const range = structureState?.dealingRange || data?.ipda_metrics?.full_structure_map?.dealingRange;
-                  if (!range) return null;
-                  const pricingStatus = range.current_status || 'UNKNOWN';
-                  const pricingColorClass = pricingStatus === 'DISCOUNT'
-                    ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20'
-                    : pricingStatus === 'PREMIUM'
-                      ? 'text-amber-500 bg-amber-500/10 border-amber-500/20'
-                      : 'text-muted bg-card-border/20 border-transparent';
-
+                  const majorTrend = structureState?.currentTrend || data?.ipda_metrics?.current_trend || 'UNSET';
+                  const internalTrend = structureState?.internalTrend || data?.ipda_metrics?.internal_context?.trend || 'UNSET';
+                  if (majorTrend === 'UNSET' || internalTrend === 'UNSET') return null;
+                  const isAligned = majorTrend === internalTrend;
                   return (
-                    <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-2 mt-1">
-                      <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
-                        <span className="text-muted font-bold uppercase tracking-wider">Dealing Range</span>
-                        <span className="font-mono font-bold text-foreground">
-                          {formatPrice(range.low)} - {formatPrice(range.high)}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between items-center text-[10px] lg:text-[11px] border-t border-card-border/30 pt-1.5">
-                        <span className="text-muted font-bold uppercase tracking-wider">Equilibrium (0.5)</span>
-                        <span className="font-mono font-bold text-accent">
-                          {formatPrice(range.equilibrium)}
-                        </span>
-                      </div>
-
-                      <div className="flex justify-between items-center text-[10px] lg:text-[11px] border-t border-card-border/30 pt-1.5">
-                        <span className="text-muted font-bold uppercase tracking-wider">Pricing Context</span>
-                        <span className={`px-1.5 py-0.5 text-[9px] font-black rounded border tracking-widest uppercase ${pricingColorClass}`}>
-                          {pricingStatus}
-                        </span>
-                      </div>
-                    </div>
+                    <span
+                      className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase transition-all duration-300 ${isAligned
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.08)]'
+                        : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.08)]'
+                        }`}
+                      title={isAligned ? 'Major and Internal trends are synchronized' : 'Retracement in progress (Intraday trend is running counter to Macro)'}
+                    >
+                      {isAligned ? '🟢 ALIGNED' : '⚪ DIVERGENT'}
+                    </span>
                   );
                 })()}
+              </div>
 
+              <div className="space-y-3">
+                {/* ──────── TOP SECTION: MACRO DEPTH ──────── */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80">
+                    <span>Macro Depth</span>
+                    <span className="text-[9px] font-mono text-muted">(Locked 1000)</span>
+                  </div>
+
+                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-muted uppercase font-bold">Macro Trend</span>
+                      {(() => {
+                        const trend = structureState?.currentTrend || data?.ipda_metrics?.current_trend || 'UNSET';
+                        if (trend === 'BULLISH') return <span className="text-[11px] font-black text-emerald-500 uppercase">🟢 BULLISH</span>;
+                        if (trend === 'BEARISH') return <span className="text-[11px] font-black text-rose-500 uppercase">🔴 BEARISH</span>;
+                        return <span className="text-[11px] font-black text-muted uppercase">⚪ UNSET</span>;
+                      })()}
+                    </div>
+
+                    {(() => {
+                      const range = structureState?.dealingRange || data?.ipda_metrics?.full_structure_map?.dealingRange;
+                      if (!range) return null;
+                      const pricingStatus = range.current_status || 'UNKNOWN';
+                      const pricingColorClass = pricingStatus === 'DISCOUNT'
+                        ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_6px_rgba(16,185,129,0.05)]'
+                        : pricingStatus === 'PREMIUM'
+                          ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
+                          : 'text-muted bg-card-border/20 border-transparent';
+
+                      return (
+                        <div className="space-y-1.5 border-t border-card-border/30 pt-1.5">
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-muted font-bold uppercase tracking-wider">Dealing Range</span>
+                            <span className="font-mono font-bold text-foreground/90">
+                              {formatPrice(range.low)} - {formatPrice(range.high)}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-muted font-bold uppercase tracking-wider">Equilibrium</span>
+                            <span className="font-mono font-bold text-accent">
+                              {formatPrice(range.equilibrium)}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-muted font-bold uppercase tracking-wider">Pricing Context</span>
+                            <span className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase ${pricingColorClass}`}>
+                              {pricingStatus}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                {/* ──────── BOTTOM SECTION: INTRADAY DEPTH ──────── */}
+                <div className="space-y-2 border-t border-card-border/30 pt-3">
+                  <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80">
+                    <span>Intraday Depth</span>
+                    <span className="text-[9px] font-mono text-muted">(Dynamic Swings)</span>
+                  </div>
+
+                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] text-muted uppercase font-bold">Internal Trend</span>
+                      {(() => {
+                        const trend = structureState?.internalTrend || data?.ipda_metrics?.internal_context?.trend || 'UNSET';
+                        if (trend === 'BULLISH') return <span className="text-[11px] font-black text-emerald-500 uppercase">🟢 BULLISH</span>;
+                        if (trend === 'BEARISH') return <span className="text-[11px] font-black text-rose-500 uppercase">🔴 BEARISH</span>;
+                        return <span className="text-[11px] font-black text-muted uppercase">⚪ UNSET</span>;
+                      })()}
+                    </div>
+
+                    {(() => {
+                      const internalRange = structureState?.internalDealingRange || data?.ipda_metrics?.internal_context || data?.ipda_metrics?.full_structure_map?.internalDealingRange;
+                      if (!internalRange || (!internalRange.high && !internalRange.low)) {
+                        return (
+                          <div className="text-[10px] text-muted italic text-center py-2 border-t border-card-border/30">
+                            No confirmed internal swings yet
+                          </div>
+                        );
+                      }
+                      const pricingStatus = internalRange.current_status || internalRange.pricing_status || 'UNKNOWN';
+                      const pricingColorClass = pricingStatus === 'DISCOUNT'
+                        ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_6px_rgba(16,185,129,0.05)]'
+                        : pricingStatus === 'PREMIUM'
+                          ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
+                          : 'text-muted bg-card-border/20 border-transparent';
+
+                      return (
+                        <div className="space-y-1.5 border-t border-card-border/30 pt-1.5">
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-muted font-bold uppercase tracking-wider">Internal Range</span>
+                            <span className="font-mono font-bold text-foreground/90">
+                              {formatPrice(internalRange.low)} - {formatPrice(internalRange.high)}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-muted font-bold uppercase tracking-wider">Equilibrium</span>
+                            <span className="font-mono font-bold text-accent">
+                              {formatPrice(internalRange.equilibrium)}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-muted font-bold uppercase tracking-wider">Pricing Context</span>
+                            <span className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase ${pricingColorClass}`}>
+                              {pricingStatus}
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-muted font-bold uppercase tracking-wider">Volatility Gate</span>
+                            {(() => {
+                              const multiplier = parseFloat(themeSettings?.structure_istr_atr_multiplier || '1.5');
+                              const activeCandles = data?.data_payload?.[`candles_${wsInterval}` as keyof typeof data.data_payload] || [];
+                              const atr = activeCandles.length > 0 ? calculateATR(activeCandles) : 0;
+                              const rangeHeight = internalRange.high && internalRange.low ? (internalRange.high - internalRange.low) : 0;
+                              const isSuppressed = rangeHeight > 0 && atr > 0 && rangeHeight < atr * multiplier;
+                              if (isSuppressed) {
+                                return (
+                                  <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded tracking-wider uppercase shadow-[0_0_6px_rgba(245,158,11,0.05)]">
+                                    ⚠️ NOISE_SUPPRESSED
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="text-[9px] font-black text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded tracking-wider uppercase shadow-[0_0_6px_rgba(16,185,129,0.05)]">
+                                  🟢 AUTHORIZED
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
               </div>
             </div>
 
