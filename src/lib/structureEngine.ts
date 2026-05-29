@@ -149,7 +149,8 @@ function runEquilibriumStateMachine(
   currentPrice: number,
   displacementStatus: InstitutionalSponsorship | null | undefined,
   volMultiplier: number,
-  indexOffset: number = 0
+  indexOffset: number = 0,
+  globalAnchors?: any | null
 ) {
   const span = volMultiplier >= 2.0 ? 2 : 1; // MAJOR (5-bar fractal, span = 2), INNER (3-bar fractal, span = 1)
   const swings: StructuralSwing[] = [];
@@ -239,8 +240,8 @@ function runEquilibriumStateMachine(
   }
 
   // ─── Parent-Child Wave Containment Tagging ON CONFIRMED SWINGS ONLY ───
-  let currentMajorHigh = -Infinity;
-  let currentMajorLow = Infinity;
+  let currentMajorHigh = (globalAnchors && typeof globalAnchors.high === 'number') ? globalAnchors.high : -Infinity;
+  let currentMajorLow = (globalAnchors && typeof globalAnchors.low === 'number') ? globalAnchors.low : Infinity;
 
   const markedConfirmedSwings = alternatingSwings.map((s) => {
     let structure_type: 'MAJOR' | 'INTERNAL' = 'MAJOR';
@@ -248,6 +249,26 @@ function runEquilibriumStateMachine(
     // For 3-bar (INNER) sub-waves, we treat all of them as INTERNAL to separate them cleanly.
     if (volMultiplier < 2.0) {
       return { ...s, structure_type: 'INTERNAL' as const };
+    }
+
+    let isAnchor = false;
+    if (globalAnchors) {
+      if (s.type === 'HIGH' && globalAnchors.anchor_high_swing && s.t === globalAnchors.anchor_high_swing.t) {
+        isAnchor = true;
+      }
+      if (s.type === 'LOW' && globalAnchors.anchor_low_swing && s.t === globalAnchors.anchor_low_swing.t) {
+        isAnchor = true;
+      }
+    }
+
+    if (isAnchor) {
+      structure_type = 'MAJOR';
+      if (s.type === 'HIGH') {
+        currentMajorHigh = s.price;
+      } else {
+        currentMajorLow = s.price;
+      }
+      return { ...s, structure_type };
     }
 
     if (currentMajorHigh === -Infinity || currentMajorLow === Infinity) {
@@ -349,7 +370,37 @@ function runEquilibriumStateMachine(
   const majorHighs = majorSwingsOnly.filter(s => s.type === 'HIGH');
   const majorLows = majorSwingsOnly.filter(s => s.type === 'LOW');
   
-  if (majorHighs.length > 0 && majorLows.length > 0) {
+  if (globalAnchors && typeof globalAnchors.high === 'number' && typeof globalAnchors.low === 'number') {
+    let highVal = globalAnchors.high;
+    let lowVal = globalAnchors.low;
+    let localHighAnchor = globalAnchors.anchor_high_swing;
+    let localLowAnchor = globalAnchors.anchor_low_swing;
+
+    if (majorHighs.length > 0) {
+      const lastHigh = majorHighs[majorHighs.length - 1];
+      if (!globalAnchors.anchor_high_swing || lastHigh.t > globalAnchors.anchor_high_swing.t || lastHigh.price > globalAnchors.high) {
+        highVal = parseFloat(lastHigh.price.toFixed(2));
+        localHighAnchor = lastHigh;
+      }
+    }
+    if (majorLows.length > 0) {
+      const lastLow = majorLows[majorLows.length - 1];
+      if (!globalAnchors.anchor_low_swing || lastLow.t > globalAnchors.anchor_low_swing.t || lastLow.price < globalAnchors.low) {
+        lowVal = parseFloat(lastLow.price.toFixed(2));
+        localLowAnchor = lastLow;
+      }
+    }
+
+    const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
+    dealingRange = {
+      high: highVal,
+      low: lowVal,
+      equilibrium: eqVal,
+      current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
+      anchor_high_swing: localHighAnchor,
+      anchor_low_swing: localLowAnchor
+    };
+  } else if (majorHighs.length > 0 && majorLows.length > 0) {
     const lastHigh = majorHighs[majorHighs.length - 1];
     const lastLow = majorLows[majorLows.length - 1];
     const highVal = parseFloat(lastHigh.price.toFixed(2));
@@ -423,7 +474,8 @@ export function analyzeMarketStructure(
   candles: Candle[],
   currentPrice: number,
   displacementStatus?: InstitutionalSponsorship | null,
-  contextAnchorTimestamp?: number | null
+  contextAnchorTimestamp?: number | null,
+  globalAnchors?: any | null
 ): MarketStructureAnalysis {
   if (candles.length === 0) {
     return {
@@ -438,8 +490,8 @@ export function analyzeMarketStructure(
   }
 
   // 1. Run full historical state machine for both Major and Inner
-  const majorFull = runEquilibriumStateMachine(candles, currentPrice, displacementStatus, 2.0);
-  const innerFull = runEquilibriumStateMachine(candles, currentPrice, displacementStatus, 1.0);
+  const majorFull = runEquilibriumStateMachine(candles, currentPrice, displacementStatus, 2.0, 0, globalAnchors);
+  const innerFull = runEquilibriumStateMachine(candles, currentPrice, displacementStatus, 1.0, 0, globalAnchors);
 
   // ─── Velocity-Based Momentum Override ───
   let expansion_mode: 'NORMAL' | 'RUNAWAY' = 'NORMAL';
@@ -571,8 +623,8 @@ export function analyzeMarketStructure(
   // 3. Run state machine strictly on the stabilized post-anchor candles
   const postAnchorIndexOffset = candles.findIndex(c => c.t >= contextAnchorTimestamp);
   const offsetToUse = postAnchorIndexOffset !== -1 ? postAnchorIndexOffset : 0;
-  const majorPost = runEquilibriumStateMachine(postCandles, currentPrice, displacementStatus, 2.0, offsetToUse);
-  const innerPost = runEquilibriumStateMachine(postCandles, currentPrice, displacementStatus, 1.0, offsetToUse);
+  const majorPost = runEquilibriumStateMachine(postCandles, currentPrice, displacementStatus, 2.0, offsetToUse, globalAnchors);
+  const innerPost = runEquilibriumStateMachine(postCandles, currentPrice, displacementStatus, 1.0, offsetToUse, globalAnchors);
 
   // 4. Stitch Swings
   // Swings with t < contextAnchorTimestamp are taken from full historical run.
@@ -687,6 +739,7 @@ const contextAnchorCache = new Map<string, number>();
  * @param currentPrice - The latest close/live price.
  * @param displacementStatus - Current displacement sponsorship status.
  * @param isInit - True if this is an initial 60-day buffer load.
+ * @param globalAnchors - Optional global anchors from structural scan.
  */
 export function analyzeMarketStructureStateful(
   symbol: string,
@@ -694,7 +747,8 @@ export function analyzeMarketStructureStateful(
   newCandles: Candle[],
   currentPrice: number,
   displacementStatus: InstitutionalSponsorship | null | undefined,
-  isInit: boolean = false
+  isInit: boolean = false,
+  globalAnchors?: any | null
 ): MarketStructureAnalysis {
   const cacheKey = `${symbol}_${interval}`;
   let accumulated = accumulatedCandlesCache.get(cacheKey) || [];
@@ -725,5 +779,5 @@ export function analyzeMarketStructureStateful(
   }
 
   // Compute stabilized structure over full accumulated history
-  return analyzeMarketStructure(accumulated, currentPrice, displacementStatus, anchor);
+  return analyzeMarketStructure(accumulated, currentPrice, displacementStatus, anchor, globalAnchors);
 }

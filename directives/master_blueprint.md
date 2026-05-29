@@ -1,10 +1,27 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.32
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.33
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-29  
-> **Last Updated:** 2026-05-29 (V10.32 Quant Engine Capability Map & Liquidity Audit Complete)  
+> **Last Updated:** 2026-05-29 (V10.33 Global Structural Persistence Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.33 Changelog — Global Structural Persistence (Completed)
+
+### 1. 1000-Candle Structural Discovery Scan
+- **API Fetch Limit Expansion:** Increased the default Binance kline limit in `route.ts` from `350` to `1000`. Also increased search param defaults for `limit5m`, `limit15m`, `limit1h`, and `limit4h` to `1000` to feed the client a larger buffer of historical context.
+- **Backend Metadata Block:** Before responding to the client, the API handler executes the `structureEngine` stateful scan on the full 1000-candle set. It serializes the absolute global boundaries into a new metadata block: `ipda_metrics.global_anchors`.
+
+### 2. Lock-In Containment State Core
+- **Seeded State Machine:** Modified `structureEngine.ts` to accept `globalAnchors`. The state machine's internal bounds `currentMajorHigh` and `currentMajorLow` are seeded directly from the global anchors when provided, locking all intermediate swings inside the lookback range to `INTERNAL` status.
+- **Anchor Swings Timestamp Tracking:** Implemented high-fidelity timestamp `t` verification for the anchor swings so they are correctly recognized as `MAJOR` boundaries, and prevented false local promotions of scroll-truncated peaks.
+
+### 3. Strategy Evaluator Veto Alignment
+- **Global Veto Metrics:** Configured `useStrategyEvaluator.ts` condition solvers (`EQUILIBRIUM_STATUS`, `MARKET_TREND`, `LOCAL_PRICING`, and `PRICE_IN_OTE`) to check and prioritize `ipda.global_anchors` metrics first, ensuring that directional shifts and OTE zone triggers remain mathematically locked to the parent dealing range.
+
+### 4. UI Coordinate Clamping & Structural Immobility
+- **Persistent SVG Rendering:** Updated `structureLayer.ts` to clamp off-screen anchor high/low coordinates to the left boundary of the chart (`0`) if they are `null`.
+- **Immobility Realized:** This guarantees that the Dealing Range Shadow Boxes and Equilibrium midline remain beautifully visible, stable, and anchored across refreshes and deep scrolling (achieving true structural immobility).
 
 ## 🆕 V10.32 Changelog — Flow-State Quant Engine Capability Map (Completed)
 

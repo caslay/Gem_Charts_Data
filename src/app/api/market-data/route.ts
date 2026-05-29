@@ -63,11 +63,11 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const symbol = url.searchParams.get('symbol') || 'ETHUSDC';
-    const limit5m = parseInt(url.searchParams.get('limit5m') || '300', 10);
-    const limit15m = parseInt(url.searchParams.get('limit15m') || '200', 10);
-    const limit1h = parseInt(url.searchParams.get('limit1h') || '100', 10);
-    const limit4h = parseInt(url.searchParams.get('limit4h') || '100', 10);
-    const limit = 350;
+    const limit5m = parseInt(url.searchParams.get('limit5m') || '1000', 10);
+    const limit15m = parseInt(url.searchParams.get('limit15m') || '1000', 10);
+    const limit1h = parseInt(url.searchParams.get('limit1h') || '1000', 10);
+    const limit4h = parseInt(url.searchParams.get('limit4h') || '1000', 10);
+    const limit = 1000;
 
     const visualInterval = url.searchParams.get('interval') || '5m';
     const isStandardInterval = ['5m', '15m', '1h', '4h'].includes(visualInterval);
@@ -810,6 +810,15 @@ export async function GET(req: Request) {
         innerZigzag: structureAnalysis.innerZigzag || [],
         currentTrend: structureAnalysis.currentTrend,
         dealingRange: structureAnalysis.dealingRange,
+      },
+      global_anchors: {
+        high: localDealingRange.high,
+        low: localDealingRange.low,
+        equilibrium: localDealingRange.equilibrium,
+        current_status: localDealingRange.current_status,
+        anchor_high_swing: localDealingRange.anchor_high_swing,
+        anchor_low_swing: localDealingRange.anchor_low_swing,
+        current_trend: structureAnalysis.currentTrend
       },
       macro_levels: {
         pdh,

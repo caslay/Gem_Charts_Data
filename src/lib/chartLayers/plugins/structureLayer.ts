@@ -210,13 +210,16 @@ export const structureLayer: ChartLayer = {
 
     const dr = analysis.dealingRange;
     if (dr && dr.anchor_high_swing && dr.anchor_low_swing) {
-      const highX = timeScale.timeToCoordinate(Math.floor(dr.anchor_high_swing.t / 1000) as any);
-      const lowX = timeScale.timeToCoordinate(Math.floor(dr.anchor_low_swing.t / 1000) as any);
+      const rawHighX = timeScale.timeToCoordinate(Math.floor(dr.anchor_high_swing.t / 1000) as any);
+      const rawLowX = timeScale.timeToCoordinate(Math.floor(dr.anchor_low_swing.t / 1000) as any);
       const boxTopY = series.priceToCoordinate(dr.high);
       const boxBottomY = series.priceToCoordinate(dr.low);
       const eqY = series.priceToCoordinate(dr.equilibrium);
 
-      if (highX !== null && lowX !== null && boxTopY !== null && boxBottomY !== null && eqY !== null) {
+      const highX = rawHighX !== null ? (rawHighX as unknown as number) : 0;
+      const lowX = rawLowX !== null ? (rawLowX as unknown as number) : 0;
+
+      if (boxTopY !== null && boxBottomY !== null && eqY !== null) {
         const boxStartX = Math.min(highX, lowX);
         const trendState = analysis.currentTrend || 'UNSET';
         

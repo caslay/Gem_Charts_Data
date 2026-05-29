@@ -192,6 +192,10 @@ function resolveMetric(
         return stratDirection === 'LONG' ? 'DISCOUNT' : 'PREMIUM';
       }
 
+      if (ipda.global_anchors) {
+        return ipda.global_anchors.current_status || 'UNKNOWN';
+      }
+
       const pricing = ipda.pricing_context || {};
       const range = pricing.local_dealing_range || {};
       return range.current_status || 'UNKNOWN';
@@ -212,7 +216,7 @@ function resolveMetric(
     }
 
     case 'MARKET_TREND': {
-      return ipda.current_trend || 'UNSET';
+      return ipda.global_anchors?.current_trend || ipda.current_trend || 'UNSET';
     }
 
     case 'LOCAL_PRICING': {
@@ -223,6 +227,10 @@ function resolveMetric(
       if (momentumOverride && expansionMode === 'RUNAWAY') {
         const stratDirection = isObj ? (strategy.conditions.direction || 'LONG') : 'LONG';
         return stratDirection === 'LONG' ? 'DISCOUNT' : 'PREMIUM';
+      }
+
+      if (ipda.global_anchors) {
+        return ipda.global_anchors.current_status || 'UNKNOWN';
       }
 
       const pricing = ipda.pricing_context || {};
@@ -257,13 +265,13 @@ function resolveMetric(
         return true; // Bypass Equilibrium retracement gate
       }
 
-      const range = ipda.full_structure_map?.dealingRange || {};
+      const range = ipda.global_anchors || ipda.full_structure_map?.dealingRange || {};
       const high = range.high || 0;
       const low = range.low || 0;
       const price = livePrice || 0;
       
       if (high === 0 || low === 0 || price === 0) return false;
-      const trend = ipda.current_trend || 'UNSET';
+      const trend = ipda.global_anchors?.current_trend || ipda.current_trend || 'UNSET';
       const zone = (condition as any).retracement || 'OTE';
       
       if (trend === 'BULLISH') {

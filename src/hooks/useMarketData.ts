@@ -588,7 +588,8 @@ export function useMarketData(selectedInterval: string = '5m') {
     // 2. Compute structural analysis using the stable lookback anchor
     const currentPrice = activeCandles[activeCandles.length - 1]?.c ?? 0;
     const displacementStatus = data.ipda_metrics?.institutional_sponsorship ?? null;
-    const analysis = analyzeMarketStructure(activeCandles, currentPrice, displacementStatus, anchor);
+    const globalAnchors = data.ipda_metrics?.global_anchors ?? null;
+    const analysis = analyzeMarketStructure(activeCandles, currentPrice, displacementStatus, anchor, globalAnchors);
 
     setStructureState(analysis);
   }, [data, selectedInterval, contextAnchorTimestamp]);
