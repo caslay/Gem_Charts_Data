@@ -188,13 +188,21 @@ function buildEnrichedPayload(
     else currentPricing = 'FAIR_VALUE';
   }
 
-  // ── Active FVGs from 15m and 5m visible slices using lib/fvgEngine ──────
+  // ── Active FVGs from 1h, 15m and 5m visible slices using lib/fvgEngine ──
   // Treat all historical candles as closed, and the very last visible candle as the active open candle
+  const candles_1h_with_closed = candles_1h.map((c, idx) => ({ ...c, isClosed: idx < candles_1h.length - 1 }));
   const candles_15m_with_closed = candles_15m.map((c, idx) => ({ ...c, isClosed: idx < candles_15m.length - 1 }));
   const candles_5m_with_closed = candles_5m.map((c, idx) => ({ ...c, isClosed: idx < candles_5m.length - 1 }));
+  
+  const fvgs1h = detectActiveFVGs(candles_1h_with_closed, true);
   const fvgs15m = detectActiveFVGs(candles_15m_with_closed, true);
   const fvgs5m = detectActiveFVGs(candles_5m_with_closed, true);
-  const activeFVGs = mapAndConsolidateFVGs(fvgs15m, fvgs5m);
+
+  const activeFVGs = mapAndConsolidateFVGs([
+    { fvgs: fvgs5m, timeframe: '5m' },
+    { fvgs: fvgs15m, timeframe: '15m' },
+    { fvgs: fvgs1h, timeframe: '1h' },
+  ]);
 
   // ── Session Ranges (Aligned with live HUD's UTC hour metrics) ─────────────
   const getSessionLiquidityUTC = (candles: BtCandle[], startHourUTC: number, endHourUTC: number) => {

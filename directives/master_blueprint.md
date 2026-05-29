@@ -1,10 +1,29 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.44
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.45
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-05-30 (V10.44 Equal Highs/Lows Visualizer & Capitalized IMSS/IBOS Complete)  
+> **Last Updated:** 2026-05-30 (V10.45 Multi-Timeframe Strategy Customizer & Execution Locks Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.45 Changelog — Multi-Timeframe Strategy Customizer & Target Timeframe Execution Lock (Completed)
+
+### 1. Expanded Timeframe Dropdowns in Customizer UI (`EquationBuilder.tsx`)
+- **Action:** Upgraded the `StrategyCondition` interface and timeframe dropdown options inside condition rows (for FVG, Price in FVG, and SMT Divergence) to support the full range of system timeframes (`1m`, `5m`, `15m`, `30m`, `1h`, `4h`).
+- **Target Timeframe Lock:** Added an animated dropdown selector next to Target Environment inside Strategy Settings to lock strategies to specific timeframes (`target_timeframe` attribute).
+- **Layout Balanced:** Formed a perfectly balanced 8-item premium grid in the customizer settings panel.
+
+### 2. Timeframe Execution Gating & SMT Mapping (`useStrategyEvaluator.ts`)
+- **Action:** Configured a zero-latency `target_timeframe` locking check at the very top of the strategy evaluation loop, silencing execution if the active chart scale does not match.
+- **SMT Parity:** Mapped condition-level `1m` & `5m` timeframes to `m5_divergence`, and `15m`, `30m`, `1h`, & `4h` to `m15_divergence` during SMT Divergence evaluations.
+
+### 3. Dynamic Multi-Timeframe FVG Aggregator (`fvgEngine.ts` & `route.ts`)
+- **Action:** Generalised `mapAndConsolidateFVGs` inside the FVG Engine to support a flexible timeframe groups format while maintaining legacy compatibility.
+- **Dynamic Calculation:** Upgraded `/api/market-data/route.ts` GET handler to scan and consolidate unmitigated and pending FVGs across all standard timeframes (`5m`, `15m`, `1h`, `4h`) and dynamically load custom timeframes (`1m`, `30m`) when they are active.
+
+### 4. Backtest Engine FVG Enrichment & Replay Wiring (`useBacktestEngine.ts` & `page.tsx`)
+- **Action:** Updated `buildEnrichedPayload` in the backtest engine to dynamically compute and aggregate `5m`, `15m`, and `1h` unmitigated Fair Value Gaps.
+- **Evaluator Parameter Integration:** Passed `activeInterval: activeTimeframe` to `useStrategyEvaluator` on the backtesting replay page to decouple and strictly enforce timeframe strategy execution locks.
 
 ## 🆕 V10.44 Changelog — Equal Highs/Lows Visualizer & Capitalized IMSS/IBOS Labels (Completed)
 

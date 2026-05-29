@@ -98,7 +98,10 @@ export interface MappedFVG {
   origin_time: number;
 }
 
-export function mapAndConsolidateFVGs(fvgs15m: any[], fvgs5m: any[]): MappedFVG[] {
+export function mapAndConsolidateFVGs(
+  fvgGroups: { fvgs: any[]; timeframe: string }[] | any[],
+  legacyFvgs5m?: any[]
+): MappedFVG[] {
   const mapFVG = (fvg: any, tf: string): MappedFVG => ({
     timeframe: tf,
     type: fvg.type === 'BISI' ? 'BULLISH' : 'BEARISH',
@@ -109,9 +112,14 @@ export function mapAndConsolidateFVGs(fvgs15m: any[], fvgs5m: any[]): MappedFVG[
     origin_time: fvg.origin_time
   });
 
-  return [
-    ...fvgs15m.map(f => mapFVG(f, '15m')),
-    ...fvgs5m.map(f => mapFVG(f, '5m'))
-  ];
+  if (legacyFvgs5m !== undefined && Array.isArray(fvgGroups)) {
+    return [
+      ...fvgGroups.map(f => mapFVG(f, '15m')),
+      ...legacyFvgs5m.map(f => mapFVG(f, '5m'))
+    ];
+  }
+
+  const groups = fvgGroups as { fvgs: any[]; timeframe: string }[];
+  return groups.flatMap(({ fvgs, timeframe }) => fvgs.map(f => mapFVG(f, timeframe)));
 }
 

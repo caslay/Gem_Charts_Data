@@ -41,7 +41,7 @@ export interface StrategyCondition {
   operator: OperatorKey;
   value?: string;
   temporal: TemporalMode;
-  timeframe?: 'ANY' | '5m' | '15m';
+  timeframe?: 'ANY' | '1m' | '5m' | '15m' | '30m' | '1h' | '4h';
   direction?: 'ANY' | 'BULLISH' | 'BEARISH';
   confirmation?: 'CONFIRMED' | 'UNCONFIRMED' | 'ANY';
   retracement?: 'OTE' | 'FIB_50' | 'FIB_60' | 'FIB_705' | 'FIB_79';
@@ -154,6 +154,7 @@ export default function EquationBuilder() {
   const [editStatisticalSensitivity, setEditStatisticalSensitivity] = useState<'STRICT' | 'RELAXED' | 'OFF'>('STRICT');
   const [editTargetEnvironment, setEditTargetEnvironment] = useState<'LIVE_ONLY' | 'BACKTEST_ONLY' | 'BOTH'>('BOTH');
   const [editMomentumOverride, setEditMomentumOverride] = useState<boolean>(false);
+  const [editTargetTimeframe, setEditTargetTimeframe] = useState<'ANY' | '1m' | '5m' | '15m' | '30m' | '1h' | '4h'>('ANY');
 
   // ── Fetch strategies from API on mount ────────────────────────────────────
   const fetchStrategies = useCallback(async () => {
@@ -222,6 +223,7 @@ export default function EquationBuilder() {
         setEditRiskPercent(isObj ? String(strategy.conditions.risk_percent ?? '1.0') : '1.0');
         setEditStatisticalSensitivity(isObj ? (strategy.conditions.statistical_sensitivity || 'STRICT') : 'STRICT');
         setEditMomentumOverride(isObj ? !!strategy.conditions.momentum_override : false);
+        setEditTargetTimeframe(isObj ? (strategy.conditions.target_timeframe || 'ANY') : 'ANY');
         return;
       }
     }
@@ -237,6 +239,7 @@ export default function EquationBuilder() {
     setEditStatisticalSensitivity('STRICT');
     setEditTargetEnvironment('BOTH');
     setEditMomentumOverride(false);
+    setEditTargetTimeframe('ANY');
   }, [selectedId, strategies]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -255,6 +258,7 @@ export default function EquationBuilder() {
         risk_percent: 1.0,
         statistical_sensitivity: 'STRICT',
         momentum_override: false,
+        target_timeframe: 'ANY',
       },
       is_active: true,
       target_environment: 'BOTH',
@@ -280,6 +284,7 @@ export default function EquationBuilder() {
         risk_percent: parseFloat(editRiskPercent) || 1.0,
         statistical_sensitivity: editStatisticalSensitivity,
         momentum_override: editMomentumOverride,
+        target_timeframe: editTargetTimeframe,
       };
 
       const payload = {
@@ -628,8 +633,12 @@ export default function EquationBuilder() {
                         className="bg-background/60 border border-card-border/60 focus:border-accent focus:outline-none px-2 py-2 text-xs font-sans text-foreground rounded-lg cursor-pointer w-[78px] shrink-0 transition-all shadow-sm"
                       >
                         <option value="ANY">ANY TF</option>
+                        <option value="1m">1m</option>
                         <option value="5m">5m</option>
                         <option value="15m">15m</option>
+                        <option value="30m">30m</option>
+                        <option value="1h">1h</option>
+                        <option value="4h">4h</option>
                       </select>
                     )}
 
@@ -769,6 +778,26 @@ export default function EquationBuilder() {
                       <option value="BOTH">BOTH (Live & Backtest)</option>
                       <option value="LIVE_ONLY">LIVE ONLY</option>
                       <option value="BACKTEST_ONLY">BACKTEST ONLY</option>
+                    </select>
+                  </div>
+
+                  {/* Target Timeframe */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted">
+                      Target Timeframe Lock
+                    </label>
+                    <select
+                      value={editTargetTimeframe}
+                      onChange={(e) => setEditTargetTimeframe(e.target.value as any)}
+                      className="bg-background/60 border border-card-border/80 hover:border-accent/40 focus:border-accent focus:outline-none px-3.5 py-2.5 text-xs font-sans text-foreground rounded-lg cursor-pointer w-full transition-all shadow-sm"
+                    >
+                      <option value="ANY">ANY (All Timeframes)</option>
+                      <option value="1m">1m</option>
+                      <option value="5m">5m</option>
+                      <option value="15m">15m</option>
+                      <option value="30m">30m</option>
+                      <option value="1h">1h</option>
+                      <option value="4h">4h</option>
                     </select>
                   </div>
 

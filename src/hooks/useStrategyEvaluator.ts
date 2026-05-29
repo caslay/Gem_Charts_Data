@@ -162,10 +162,10 @@ function resolveMetric(
         return false;
       };
 
-      if (tf === '5m') {
+      if (tf === '1m' || tf === '5m') {
         return isDivergenceMatch(smt.m5_divergence);
       }
-      if (tf === '15m') {
+      if (tf === '15m' || tf === '30m' || tf === '1h' || tf === '4h') {
         return isDivergenceMatch(smt.m15_divergence);
       }
 
@@ -500,6 +500,7 @@ export interface StrategyEvaluatorConfig {
   liveCandle?: LiveCandle | null;
   aiBias?: number | null;
   triggerSmartAlert?: (type: any, message: string, sound?: string) => void;
+  activeInterval?: '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '4h';
 }
 
 export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
@@ -513,6 +514,7 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
   const triggerSmartAlert = config?.triggerSmartAlert !== undefined ? config.triggerSmartAlert : context.triggerSmartAlert;
 
   const isBacktest = !!config?.isBacktest;
+  const activeInterval = config?.activeInterval !== undefined ? config.activeInterval : context.wsInterval;
   const tradesApiUrl = isBacktest ? '/api/backtest-trades' : '/api/trades';
 
   const [strategies, setStrategies] = useState<CustomStrategy[]>([]);
@@ -617,6 +619,12 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
       const settings = Array.isArray(strategy.conditions)
         ? {}
         : strategy.conditions;
+
+      // ── Strategy-Level Timeframe Locking Gate ──
+      const targetTf = settings.target_timeframe || 'ANY';
+      if (targetTf !== 'ANY' && activeInterval !== targetTf) {
+        continue; // Enforce zero-latency timeframe locking gate
+      }
 
       const direction = settings.direction || 'LONG';
 

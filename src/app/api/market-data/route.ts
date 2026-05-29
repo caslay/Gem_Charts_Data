@@ -799,8 +799,27 @@ export async function GET(req: Request) {
       ...pricing_context_addon
     };
 
-    const active_fvgs = mapAndConsolidateFVGs(detectActiveFVGs(candles15m, true), detectActiveFVGs(candles5m, true));
-    const all_fvgs = mapAndConsolidateFVGs(detectActiveFVGs(candles15m, false), detectActiveFVGs(candles5m, false));
+    const fvgGroups = [
+      { fvgs: detectActiveFVGs(candles5m, true), timeframe: '5m' },
+      { fvgs: detectActiveFVGs(candles15m, true), timeframe: '15m' },
+      { fvgs: detectActiveFVGs(candles1h, true), timeframe: '1h' },
+      { fvgs: detectActiveFVGs(candles4h, true), timeframe: '4h' },
+    ];
+
+    const allFvgGroups = [
+      { fvgs: detectActiveFVGs(candles5m, false), timeframe: '5m' },
+      { fvgs: detectActiveFVGs(candles15m, false), timeframe: '15m' },
+      { fvgs: detectActiveFVGs(candles1h, false), timeframe: '1h' },
+      { fvgs: detectActiveFVGs(candles4h, false), timeframe: '4h' },
+    ];
+
+    if (!isStandardInterval && dynamicVisualCandles && dynamicVisualCandles.length > 0) {
+      fvgGroups.push({ fvgs: detectActiveFVGs(dynamicVisualCandles, true), timeframe: visualInterval });
+      allFvgGroups.push({ fvgs: detectActiveFVGs(dynamicVisualCandles, false), timeframe: visualInterval });
+    }
+
+    const active_fvgs = mapAndConsolidateFVGs(fvgGroups);
+    const all_fvgs = mapAndConsolidateFVGs(allFvgGroups);
     const pending_fvgs = all_fvgs.filter(fvg => fvg.status === 'PENDING');
     
     const current_time_window = getCurrentKillzone();
