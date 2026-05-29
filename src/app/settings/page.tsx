@@ -1290,6 +1290,18 @@ export default function SettingsPage() {
                           <ColorPickerItem label="London Session Range" value={themeSettings.dark_chart_session_london} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_session_london: val }))} />
                           <ColorPickerItem label="Buy-Side Liquidity (BSL)" value={themeSettings.dark_chart_magnet_bsl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_magnet_bsl: val }))} />
                           <ColorPickerItem label="Sell-Side Liquidity (SSL)" value={themeSettings.dark_chart_magnet_ssl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_magnet_ssl: val }))} />
+                          
+                          {/* ATR Multiplier Volatility Gating Input */}
+                          <div className="flex items-center justify-between py-2 border-b border-card-border/30 px-1 font-sans">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">iSTR Volatility Filter (ATR Multiplier)</span>
+                            <input
+                              type="text"
+                              value={themeSettings.structure_istr_atr_multiplier || '1.5'}
+                              onChange={(e) => setThemeSettings((s: any) => ({ ...s, structure_istr_atr_multiplier: e.target.value }))}
+                              placeholder="1.5"
+                              className="bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-2.5 py-1 text-xs font-mono text-foreground rounded-lg w-[76px] shrink-0 text-center transition-all shadow-sm"
+                            />
+                          </div>
                         </div>
                       </details>
 

@@ -1,10 +1,90 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.33
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.37
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-29  
-> **Last Updated:** 2026-05-29 (V10.33 Global Structural Persistence Complete)  
+> **Last Updated:** 2026-05-29 (V10.37 Intraday Killzones & Volatility Gates Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.37 Changelog — Intraday Killzones & Volatility Gates (Completed)
+
+### 1. Cairo / London Session Boxes SVG Overlay (`sessionsLayer.ts`)
+- **UTC Candle Grouping & Extremes Extraction:** Coded a robust HTML-canvas rendering routine in `sessionsLayer.ts` that filters and clusters the active candle set into daily calendar brackets (UTC) and maps them into Asian/Cairo (`0-7 UTC`) and London (`7-12 UTC`) session zones.
+- **Low-Opacity Background Rectangle & Bounds Display:** Draws beautifully styled dashed background `<rect>` overlays with designated colors (Warm Amber for Asian, Cool Indigo/Blue for London) and overlays small monospace badges detailing bounds (`[low - high]`).
+- **Coordinate Spacing Clamping:** Dynamically expands the horizontal bounds of the SVG box using half of the timeScale's bar spacing (`fromX - barSpacing/2`, `toX + barSpacing/2`) to perfectly enclose the first and last candlesticks of each session.
+
+### 2. Dynamic Volatility Gating & Noise Filter (`structureLayer.ts`)
+- **ATR-Based Suppression Check:** Integrated a dynamic math filter in `structureLayer.ts` that compares the height (`high - low`) of the `internalDealingRange` against the visual candle series Average True Range (ATR) smoothed using Wilder's smoothing technique.
+- **Visual Level Gating:** Automatically hides/suppresses the rendering of internal structure ceilings/floors (`iMSS` and `iBOS`) and internal circles if the dealing range height falls below the customizable ATR multiplier (default `1.5x`), completely eliminating consolidation noise.
+- **Amber Warning badge:** Injected a sleek, responsive warning badge in the top-right corner of the SVG container (`⚠️ iSTR VOLATILITY: NOISE SUPPRESSED`) under suppressed conditions.
+
+### 3. Integrated Appearance Settings & Local Persistence (`useMarketData.ts` & `settings/page.tsx`)
+- **Customizer Volatility Multiplier Row:** Exposed `structure_istr_atr_multiplier` (default `'1.5'`) inside `ThemeSettings` and `DEFAULT_THEME_SETTINGS` in the market hook.
+- **Page Row Input:** Rendered a customized, responsive numeric text input row inside Tab 5 Section 3 (Chart Layout & Indicators) of the Appearance panel in `settings/page.tsx` to dynamically update the multiplier with local storage persistence.
+
+### 4. Interactive Live & Replay Sidebar readouts (`Sidebar.tsx` & `BacktestSidebar.tsx`)
+- **Volatility Gate Status Indicators:** Added a new `"Volatility Gate"` row in the Intraday Depth section of both `Sidebar.tsx` and `BacktestSidebar.tsx`.
+- **Parity Calculations:** Employs the exact same ATR and multiplier arithmetic on the active/replayed candle sets, rendering a glowing `🟢 AUTHORIZED` badge under normal volatility and a cautionary `⚠️ NOISE_SUPPRESSED` badge when noise is filtered.
+
+### 5. Strategy Builder High-Volume Session Gates (`EquationBuilder.tsx` & `useStrategyEvaluator.ts`)
+- **Key Registrations:** Registered `'HIGH_VOLUME_SESSION'` (Boolean) and `'CURRENT_SESSION'` (Enum) inside the custom strategy condition builders in `EquationBuilder.tsx`.
+- **Condition Resolvers:** Implemented custom evaluation cases in `useStrategyEvaluator.ts`:
+  - `HIGH_VOLUME_SESSION`: returns `true` if `ipda.current_time_window !== 'DEAD_ZONE'`.
+  - `CURRENT_SESSION`: returns `ipda.current_time_window || 'DEAD_ZONE'`.
+
+## 🆕 V10.36 Changelog — Nested Structural Hierarchy & Intraday Retracement HUD (Completed)
+
+### 1. Dual-Depth Dealing Range State Engine (`structureEngine.ts`)
+- **Internal Dealing Range calculation:** Expanded the core quant math engine to identify and isolate confirmed child swings (`structure_type === 'INTERNAL'`).
+- **Dynamic Anchoring:** Anchored the new `internalDealingRange` strictly to the latest confirmed internal swing high and low extremes, computing the internal equilibrium midline and local premium/discount status relative to the current tick price.
+- **Parity Fallbacks:** Coded a secure fallback range based on active local kline window boundaries in the event that no internal swings have been confirmed yet.
+
+### 2. Live API Serialization & transport (`route.ts`)
+- **Top-Level Context Injection:** Refactored the GET `/api/market-data` API handler to serialize the pre-computed `internalDealingRange` into a new `internal_context` block under `ipda_metrics` (`trend`, `high`, `low`, `equilibrium`, `pricing_status`), facilitating low-latency UI queries and offline strategy builders.
+- **Map Serialization:** Forwarded `internalDealingRange` in `ipda_metrics.full_structure_map` to maintain absolute model-to-view synchronization.
+
+### 3. Glassmorphic HUD & Store Controls (`store.ts` & `ChartLayerHud.tsx`)
+- **Toggle Rename Refactor:** Migrated the legacy `"structure_inn_mss"` visibility config inside the Zustand layer store to `"structure_istr"` (Internal Structure), ensuring full tracking of the cohesive internal visual layer.
+- **Sleek HUD button:** Replaced the floating `"INN_MSS"` toggle button with a premium glass button labeled **`iSTR`** to trigger the `"structure_istr"` layer visibility.
+
+### 4. Advanced SVG Visual Sub-routine (`structureLayer.ts`)
+- **Cohesive iMSS & iBOS Rendering:** Designed a robust visual sub-routine that draws both internal Market Structure Shifts (`iMSS`) and internal Breaks of Structure (`iBOS`) when `"structure_istr"` is active.
+- **Coordinate Clamping:** Programmed a coordinate clamping routine (`fromX = rawFromX !== null ? rawFromX : 0`) to keep scrolled-off horizontal breach levels beautifully anchored to the left border, eliminating visual clipping anomalies during deep chart panning.
+- **Hollow Monospace Badges:** Formatted miniature labels (`5.5` font) enclosed in fine dashed border rectangles, utilizing 50% color-mix opacities (Muted Emerald for Bullish MSS, Muted Rose for Bearish MSS, and Muted Violet/Indigo for iBOS breaks) to establish clear hierarchy without chart clutter.
+
+### 5. Dual-Depth Sidebar HUDs with Coherence Badges (`Sidebar.tsx` & `BacktestSidebar.tsx`)
+- **Two-Tier Nested Layout:** Redesigned the "Market Structure" card in both the live `Sidebar.tsx` and the backtest `BacktestSidebar.tsx` to display parallel segments:
+  - **Macro Depth** (1000-candle locked boundaries, macro trend bias, global equilibrium, and global premium/discount pricing).
+  - **Intraday Depth** (child dealing range boundaries, internal trend bias, internal equilibrium, and internal premium/discount pricing).
+- **Active Retracement Badge:** Injected a dynamic header badge (`🟢 ALIGNED` if macro trend matches internal trend; `⚪ DIVERGENT` if trends mismatch) to visually indicate that a counter-trend retracement or local intraday correction is currently underway.
+
+### 6. Pro-Retracement Strategy Builder Integration (`useStrategyEvaluator.ts`)
+- **Condition Resolver Expansion:** Registered and implemented the `INTERNAL_PRICING` metric resolver case. Resolves the active condition to `PREMIUM` or `DISCOUNT` based on child wave boundaries, empowering custom quantitative strategy logic to execute pro-retracement entries.
+
+## 🆕 V10.35 Changelog — Internal Structural Trend & iMSS Visualization (Completed)
+
+### 1. Internal MSS (iMSS) Visual Rendering Sub-routine
+- **Dashed Horizontals:** Coded a dedicated visual routine in `structureLayer.ts` to render iMSS levels as horizontal dashed lines (`strokeDasharray: '2,2'`) at the broken swing price level from the anchor to the breach candle.
+- **Micro Hollow Badges:** Designed small, high-fidelity hollow badges labeled `"iMSS"` utilizing a smaller monospace typography font (`5.5` size) and dashed borders (`strokeDasharray: '2,2'`).
+- **50% Color Opacities:** Embedded dynamic color mix ratios mapping 50% opacities of institutional variables: Muted Emerald for Bullish shifts (`color-mix(in srgb, var(--mssColor) 50%, transparent)`) and Muted Rose for Bearish shifts (`color-mix(in srgb, var(--swingHighColor) 50%, transparent)`).
+- **Zustand HUD Toggle:** Gated all lines and badges under the `showInnMss` state, which is reactive to the `"INN_MSS"` glass button toggle in `ChartLayerHud.tsx`.
+
+### 2. Strategy Evaluator & Logic Integration
+- **Retracement & Reversal Metrics:** Fully integrated `INTERNAL_TREND` and `INTERNAL_MSS` resolution in `useStrategyEvaluator.ts`, resolving structural parameters from both live SWR contexts and backtest replay hooks.
+- **Hierarchical Synchronization:** Verified the chronological trend reset mechanism that automatically resets internal swings and trends to `UNSET` whenever a Major MSS reversal occurs.
+
+## 🆕 V10.34 Changelog — Sub-Trend & Intraday Swing Shifts (Completed)
+
+### 1. 3-Bar Inner Swings Alternation & Trend Core
+- **Inner Wave Containment Bypass:** Updated the state machine inside `structureEngine.ts` to allow 3-bar (INNER) swings to bypass the containment filters during sub-wave processing.
+- **Short-Term Sub-Trend Tracking:** This allows the engine to compute short-term ZigZag segments and track the local intraday **Sub-Trend** (`subTrend` / `sub_trend`) on 3-bar structures, providing high-fidelity tracking of intraday retracements during dominant macro trends.
+
+### 2. Intraday BOS / MSS Visual Badges
+- **Tactical Subordinate Labels:** Added rendering support inside `structureLayer.ts` to draw breach badges for the `innerZigzag` segments.
+- **Visual Hierarchy Preserved:** These badges are labeled `"INT BOS"` and `"INT MSS"` (or `"INT MSS?"` if unconfirmed), designed with smaller dimensions, semi-transparent colors, and dashed borders (`strokeDasharray: '2,2'`) to keep the primary chart view clean and premium.
+
+### 3. Strategy Evaluator Sub-Trend Metric
+- **Retracement Sponsorship:** Injected the new `SUB_TREND` metric resolver in `useStrategyEvaluator.ts`, letting strategies evaluate and sponsor trades during local retracements within the parent range.
 
 ## 🆕 V10.33 Changelog — Global Structural Persistence (Completed)
 

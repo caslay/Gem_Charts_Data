@@ -2,6 +2,7 @@ import React from 'react';
 import type { ChartLayer } from '../types';
 import { useLayerStore } from '../store';
 import type { StructuralSwing, ZigZagSegment } from '@/lib/structureEngine';
+import { calculateATR } from '@/lib/riskEngine';
 
 interface MappedPoint extends StructuralSwing {
   x: number;
@@ -30,6 +31,7 @@ export const structureLayer: ChartLayer = {
     const showMajor = visibility.structure_major !== false;
     const showInner = visibility.structure_inner !== false;
     const showZigZag = visibility.structure_zigzag !== false; // Governs the Horizontal Price Levels
+    const showIstr = visibility.structure_istr !== false;
 
     // If the main layer is hidden, do not render any children
     if (!showParent) return null;
@@ -43,6 +45,13 @@ export const structureLayer: ChartLayer = {
     const lastCandle = activeCandles[activeCandles.length - 1];
     const rightX = timeScale.timeToCoordinate(Math.floor(lastCandle.t / 1000) as any);
     if (rightX === null) return null;
+
+    // Volatility suppression calculation
+    const atr = activeCandles ? calculateATR(activeCandles) : 0;
+    const internalRange = analysis.internalDealingRange;
+    const multiplier = parseFloat(themeSettings?.structure_istr_atr_multiplier || '1.5');
+    const rangeHeight = internalRange ? (internalRange.high - internalRange.low) : 0;
+    const isVolatilitySuppressed = showIstr && rangeHeight > 0 && atr > 0 && rangeHeight < atr * multiplier;
 
     // Resolve dynamic colors based on theme settings
     const swingHighColor = theme === 'dark'
@@ -145,6 +154,7 @@ export const structureLayer: ChartLayer = {
     // ─── 2. Implement BOS/MSS Horizontal Breach Badges ───
     const breachBadges: React.ReactElement[] = [];
     if (showZigZag) {
+      // 2a. Major Swings Breaks
       for (const seg of analysis.zigzag) {
         if (seg.label === 'BOS' || seg.label === 'MSS') {
           const toX = timeScale.timeToCoordinate(Math.floor(seg.to.t / 1000) as any);
@@ -199,6 +209,85 @@ export const structureLayer: ChartLayer = {
                 )
               )
             );
+          }
+        }
+      }
+
+      // 2b. Internal Structure Breaks (iMSS & iBOS) (governed by showIstr & volatility gate)
+      if (showIstr && !isVolatilitySuppressed && analysis.internalZigzag) {
+        for (const seg of analysis.internalZigzag) {
+          if (seg.label === 'MSS' || seg.label === 'BOS') {
+            const rawFromX = timeScale.timeToCoordinate(Math.floor(seg.from.t / 1000) as any);
+            const toX = timeScale.timeToCoordinate(Math.floor(seg.to.t / 1000) as any);
+            const levelY = series.priceToCoordinate(seg.from.price);
+
+            // Coordinate Clamping: clamp rawFromX to left edge (0) if scrolled off-screen
+            const fromX = rawFromX !== null ? rawFromX : 0;
+
+            if (toX !== null && levelY !== null) {
+              const isHighBreak = seg.to.type === 'HIGH'; // High broken = bullish shift
+              let color: string;
+              let label: string;
+
+              if (seg.label === 'MSS') {
+                color = isHighBreak
+                  ? `color-mix(in srgb, ${mssColor} 50%, transparent)` // Muted Emerald (50% opacity of mssColor)
+                  : `color-mix(in srgb, ${swingHighColor} 50%, transparent)`; // Muted Rose (50% opacity of swingHighColor)
+                label = 'iMSS';
+              } else {
+                // BOS
+                color = `color-mix(in srgb, ${bosColor} 50%, transparent)`; // Muted Purple/Indigo (50% opacity of bosColor)
+                label = 'iBOS';
+              }
+
+              // Render horizontal dashed line from fromX to toX
+              breachBadges.push(
+                React.createElement('line', {
+                  key: `istr-level-line-${seg.to.t}`,
+                  x1: fromX,
+                  y1: levelY,
+                  x2: toX,
+                  y2: levelY,
+                  stroke: color,
+                  strokeWidth: 1.0,
+                  strokeDasharray: '2,2',
+                })
+              );
+
+              // Render small hollow badge labeled "iMSS" or "iBOS"
+              const badgeY = isHighBreak ? levelY - 10 : levelY + 2;
+              breachBadges.push(
+                React.createElement(
+                  'g',
+                  { key: `istr-badge-${seg.to.t}` },
+                  React.createElement('rect', {
+                    x: toX - 16,
+                    y: badgeY,
+                    width: 32,
+                    height: 8,
+                    rx: 1.5,
+                    fill: 'var(--background, #020617)',
+                    stroke: color,
+                    strokeWidth: 0.5,
+                    strokeDasharray: '2,2',
+                    opacity: 0.9,
+                  }),
+                  React.createElement(
+                    'text',
+                    {
+                      x: toX,
+                      y: badgeY + 6,
+                      fill: color,
+                      fontSize: '5.5',
+                      fontFamily: 'monospace',
+                      fontWeight: 'bold',
+                      textAnchor: 'middle',
+                    },
+                    label
+                  )
+                )
+              );
+            }
           }
         }
       }
@@ -347,7 +436,7 @@ export const structureLayer: ChartLayer = {
         // B. Plot Major Swings (Hollow Circles at 5-Bar Fractals)
         showMajor &&
           mappedSwings
-            .filter((s) => s.grade === 'MAJOR')
+            .filter((s) => s.grade === 'MAJOR' && (!isVolatilitySuppressed || s.structure_type !== 'INTERNAL'))
             .map((pt, idx) => {
               const isConfirmed = pt.confirmed !== false;
               const isInternal = pt.structure_type === 'INTERNAL';
@@ -383,7 +472,39 @@ export const structureLayer: ChartLayer = {
                 stroke: accentColor,
                 strokeWidth: 1,
               });
-            })
+            }),
+
+        // D. Volatility Suppression Warning Badge (Amber, Top Right)
+        isVolatilitySuppressed && React.createElement(
+          'g',
+          { key: 'istr-vol-suppression-badge' },
+          React.createElement('rect', {
+            x: '98%',
+            y: 12,
+            width: 175,
+            height: 16,
+            rx: 4,
+            fill: 'rgba(251, 191, 36, 0.08)',
+            stroke: 'rgba(251, 191, 36, 0.45)',
+            strokeWidth: 0.8,
+            transform: 'translate(-175, 0)',
+            opacity: 0.95,
+          }),
+          React.createElement(
+            'text',
+            {
+              x: '98%',
+              y: 22,
+              fill: 'rgba(251, 191, 36, 0.95)',
+              fontSize: '6.5',
+              fontFamily: 'monospace',
+              fontWeight: 'bold',
+              textAnchor: 'end',
+              dx: -6,
+            },
+            '⚠️ iSTR VOLATILITY: NOISE SUPPRESSED'
+          )
+        )
       )
     );
   },

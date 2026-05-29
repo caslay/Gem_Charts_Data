@@ -98,6 +98,19 @@ export default function ChartLayerHud() {
                       >
                         ZIG
                       </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleVisibility('structure_istr');
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold transition-all cursor-pointer ${visibility.structure_istr !== false
+                          ? 'bg-rose-500/20 border border-rose-500/40 text-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.15)]'
+                          : 'text-muted hover:text-foreground bg-transparent border border-transparent'
+                          }`}
+                        title="Toggle Internal Structure (iSTR)"
+                      >
+                        iSTR
+                      </button>
                     </div>
                   )}
                 </div>

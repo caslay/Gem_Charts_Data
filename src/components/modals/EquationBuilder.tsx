@@ -29,7 +29,9 @@ export type MetricKey =
   | 'LIQUIDATION_STATUS'
   | 'SMART_MONEY_SYNC'
   | 'BTC_RELATIVE_STRENGTH'
-  | 'HTF_MAGNET_DIST';
+  | 'HTF_MAGNET_DIST'
+  | 'HIGH_VOLUME_SESSION'
+  | 'CURRENT_SESSION';
 export type OperatorKey = 'IS_TRUE' | 'IS_FALSE' | 'EQUALS' | 'NOT_EQUALS' | 'GREATER_THAN' | 'LESS_THAN';
 export type TemporalMode = 'INSTANT' | 'ON_CLOSE';
 
@@ -80,6 +82,8 @@ const METRICS: { key: MetricKey; label: string; type: 'boolean' | 'enum' | 'numb
   { key: 'SMART_MONEY_SYNC', label: 'Smart Money Sync', type: 'boolean' },
   { key: 'BTC_RELATIVE_STRENGTH', label: 'BTC Relative Strength', type: 'enum', options: ['LEADER', 'LAGGARD'] },
   { key: 'HTF_MAGNET_DIST', label: 'Distance to Nearest HTF Magnet ($)', type: 'number' },
+  { key: 'HIGH_VOLUME_SESSION', label: 'High-Volume Session Gate', type: 'boolean' },
+  { key: 'CURRENT_SESSION', label: 'Current Session Timeframe', type: 'enum', options: ['ASIAN_RANGE', 'LONDON_AM_KILLZONE', 'NY_AM_KILLZONE', 'NY_PM_KILLZONE', 'DEAD_ZONE'] },
 ];
 
 function getMetricDef(key: MetricKey) {
