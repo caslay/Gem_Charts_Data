@@ -1,10 +1,28 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.31
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.32
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-29  
-> **Last Updated:** 2026-05-29 (V10.31 Internal Swing Aesthetics Customizer Complete)  
+> **Last Updated:** 2026-05-29 (V10.32 Quant Engine Capability Map & Liquidity Audit Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.32 Changelog — Flow-State Quant Engine Capability Map (Completed)
+
+### 1. Capability Map Document Created
+- **File Reference:** Created `ENGINE_CAPABILITY_MAP.md` at the root directory.
+- **Volumetric Gravity Equation:** Mapped the 0.5% High-Frequency Trading (HFT) noise filter applied to depth arrays, and the "Draw on Liquidity" algorithm that reduces `BSL_Magnets` / `SSL_Magnets` distances to dynamically select the Primary Magnet.
+- **Structural Hierarchy:** Documented the Parent-Child wave logic separating Major (volMultiplier >= 2.0) and Internal swings (volMultiplier < 2.0) along with SMT Divergence tick-tolerance (`0.2 * ATR`).
+
+### 2. Shadow Metrics Identification
+- **Hidden Power:** Identified critical institutional metrics computed by the backend but omitted from UI/`EquationBuilder.tsx` gating logic:
+  - `Liquidation Proximity` (`liquidation_events.status == 'LIQUIDITY_SWEPT'`)
+  - `Smart Money Divergence` (Retail Funding Rate vs Top Trader Long/Short Ratio)
+  - `Cumulative Volume Delta (CVD)` (`volume_delta` from raw taker buy/sell differences)
+  - `OLS Confidence Level` (`statistical_validation.p_value`)
+  - `Runaway Velocity Override` (`expansion_mode`)
+
+### 3. Future Roadmap Proposal
+- **Institutional Veto Gates:** Proposed 3 new Veto Gates for future implementation based on the Shadow Metrics: `LIQUIDATION_FILTER`, `SMART_MONEY_SYNC`, and `OLS_CONFIDENCE_GATE` to eliminate algorithmic noise.
 
 ## 🆕 V10.31 Changelog — Internal Swing Aesthetics Customizer (Completed)
 
@@ -2495,6 +2513,29 @@ To enable visually auditing structural pivot detection and guarantee pristine al
 ### Token Reduction
 - Corpus: ~245,648 tokens → average query: ~1,378 tokens → **178x reduction**
 - Outputs: [`graphify-out/graph.html`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/graphify-out/graph.html) | [`graphify-out/GRAPH_REPORT.md`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/graphify-out/GRAPH_REPORT.md) | [`graphify-out/graph.json`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/graphify-out/graph.json)
+
+---
+
+## 15. Deep-Logic Verification & Audit Log (2026-05-29)
+
+To guarantee exact programmatic mathematical fidelity, a full deep-code logic verification audit was performed on **2026-05-29** across all quantitative pipelines. Key verifications include:
+1. **Cumulative Volume Delta (CVD) Validation:** Confirmed that raw volume delta matches exactly $taker\_buy\_vol - taker\_sell\_vol$ per candle, without any rolling accumulation windows in either Next.js or Python backend contexts.
+2. **Liquidation Status Checks:** Audited the $1,000,000 USD limit gate that triggers the `LIQUIDITY_SWEPT` status.
+3. **SMT Tick-Precision Verification:** Confirmed that the "Equal Highs/Lows" trap buffer dynamically scales at $0.2 \times \text{ATR}(15m)$ with a static fallback of $0.50$, and that SMT checks bypass classical correlation coefficient formulas in favor of pure price extreme logic gates.
+4. **OLS FastAPI Payload Audit:** Verified the exact $p$-value limits ($0.05$ and $0.15$) defining HIGH, MEDIUM, and LOW confidence states, and mapped out the backward compatible `confidence_interval_95` logic structure.
+5. **Runaway Momentum Gate Audit:** Verified the unmitigated FVG threshold condition ($\ge 2$ FVGs) required to trigger `RUNAWAY` expansion mode when `anomaly_multiplier > 4.0` is sponsored.
+6. **Dark Variable Registry:** Created a detailed mapping of calculating variables currently kept "Dark" from the strategy builder UI options (`EquationBuilder.tsx`), registering them as potential candidates for future visual toggles.
+
+The full mathematical extraction is documented in [deep_code_extraction.md](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/deep_code_extraction.md) in the workspace root.
+
+### 15.1 Integration of "Dark Metrics" (V10.25)
+Following the forensic audit, 4 critical "Dark Metrics" were fully wired from the backend pipelines to the front-end Strategy Architect builder UI and runtime evaluator hook, maintaining 100% type safety and backward compatibility:
+1. **`LIQUIDATION_STATUS` (Enum: `NORMAL` | `LIQUIDITY_SWEPT`):** Maps to `order_flow_engine.liquidation_events.status` to trigger setups upon sweeping of $1,000,000 USD futures positions.
+2. **`SMART_MONEY_SYNC` (Boolean: `IS_TRUE` | `IS_FALSE`):** Checks if `smart_money_divergence` is false—signaling that institutions/top-traders are aligned with retail sentiment.
+3. **`BTC_RELATIVE_STRENGTH` (Enum: `LEADER` | `LAGGARD`):** Exposes whether BTC is currently leading or lagging relative to True Day Open.
+4. **`HTF_MAGNET_DIST` (Number: `<` | `>` | `==` | `!=`):** Exposes the distance float to the closest Higher Timeframe liquidity magnet in USD.
+
+Verified build and compile stability using the strict TS compiler pipeline: `npx tsc --noEmit`. Passed with zero type or compile warnings.
 
 ---
 

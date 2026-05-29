@@ -25,7 +25,11 @@ export type MetricKey =
   | 'BOS'
   | 'PRICE_IN_OTE'
   | 'MARKET_VELOCITY'
-  | 'STRUCTURE_TYPE';
+  | 'STRUCTURE_TYPE'
+  | 'LIQUIDATION_STATUS'
+  | 'SMART_MONEY_SYNC'
+  | 'BTC_RELATIVE_STRENGTH'
+  | 'HTF_MAGNET_DIST';
 export type OperatorKey = 'IS_TRUE' | 'IS_FALSE' | 'EQUALS' | 'NOT_EQUALS' | 'GREATER_THAN' | 'LESS_THAN';
 export type TemporalMode = 'INSTANT' | 'ON_CLOSE';
 
@@ -72,6 +76,10 @@ const METRICS: { key: MetricKey; label: string; type: 'boolean' | 'enum' | 'numb
   { key: 'PRICE_IN_OTE', label: 'Price Retracement (Fib)', type: 'boolean' },
   { key: 'MARKET_VELOCITY', label: 'Market Velocity (FVGs)', type: 'number' },
   { key: 'STRUCTURE_TYPE', label: 'Structural Wave Type', type: 'enum', options: ['MAJOR', 'INTERNAL'] },
+  { key: 'LIQUIDATION_STATUS', label: 'Liquidation Status', type: 'enum', options: ['NORMAL', 'LIQUIDITY_SWEPT'] },
+  { key: 'SMART_MONEY_SYNC', label: 'Smart Money Sync', type: 'boolean' },
+  { key: 'BTC_RELATIVE_STRENGTH', label: 'BTC Relative Strength', type: 'enum', options: ['LEADER', 'LAGGARD'] },
+  { key: 'HTF_MAGNET_DIST', label: 'Distance to Nearest HTF Magnet ($)', type: 'number' },
 ];
 
 function getMetricDef(key: MetricKey) {

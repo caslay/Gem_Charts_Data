@@ -325,6 +325,28 @@ function resolveMetric(
       return latest.structure_type || 'MAJOR';
     }
 
+    case 'LIQUIDATION_STATUS': {
+      const status = orderFlow.liquidation_events?.status || 'NORMAL';
+      return status;
+    }
+
+    case 'SMART_MONEY_SYNC': {
+      const smartMoney = orderFlow.smart_money_sentiment || {};
+      const divergence = smartMoney.smart_money_divergence === true;
+      return !divergence;
+    }
+
+    case 'BTC_RELATIVE_STRENGTH': {
+      const smt = ipda.smt_context || {};
+      return smt.btc_relative_strength || 'LAGGARD';
+    }
+
+    case 'HTF_MAGNET_DIST': {
+      const pricing = ipda.pricing_context || {};
+      const magnet = pricing.nearest_htf_magnet || {};
+      return typeof magnet.distance === 'number' ? magnet.distance : 999999;
+    }
+
     default:
       return false;
   }
