@@ -233,11 +233,11 @@ export const structureLayer: ChartLayer = {
                 color = isHighBreak
                   ? `color-mix(in srgb, ${mssColor} 50%, transparent)` // Muted Emerald (50% opacity of mssColor)
                   : `color-mix(in srgb, ${swingHighColor} 50%, transparent)`; // Muted Rose (50% opacity of swingHighColor)
-                label = 'iMSS';
+                label = 'IMSS';
               } else {
                 // BOS
                 color = `color-mix(in srgb, ${bosColor} 50%, transparent)`; // Muted Purple/Indigo (50% opacity of bosColor)
-                label = 'iBOS';
+                label = 'IBOS';
               }
 
               // Render horizontal dashed line from fromX to toX
@@ -292,6 +292,78 @@ export const structureLayer: ChartLayer = {
         }
       }
     }
+
+    // ─── 2c. Implement Equal Highs & Equal Lows (SMT Traps) ───
+    const smtLevels: React.ReactElement[] = [];
+    const smtTraps = (context.data as any)?.ipda_metrics?.smt_traps || [];
+    smtTraps.forEach((trap: any, idx: number) => {
+      const x1 = timeScale.timeToCoordinate(Math.floor(trap.time1 / 1000) as any);
+      const x2 = timeScale.timeToCoordinate(Math.floor(trap.time2 / 1000) as any);
+      const y = series.priceToCoordinate(trap.price);
+
+      if (x1 !== null && x2 !== null && y !== null) {
+        const xStart = Math.min(x1, x2);
+        const color = theme === 'dark' ? '#fbbf24' : '#d97706'; // Vibrant Gold/Amber
+        const isHigh = trap.side !== 'low'; // Default to high (equal highs) if side not specified
+
+        // Draw solid line spanning from the first anchor to the right edge
+        smtLevels.push(
+          React.createElement('line', {
+            key: `smt-line-${idx}`,
+            x1: xStart,
+            y1: y,
+            x2: rightX,
+            y2: y,
+            stroke: color,
+            strokeWidth: 1.5,
+            opacity: 0.85,
+          })
+        );
+
+        // Draw anchor circle 1
+        smtLevels.push(
+          React.createElement('circle', {
+            key: `smt-anchor1-${idx}`,
+            cx: x1,
+            cy: y,
+            r: 3,
+            stroke: color,
+            strokeWidth: 1.5,
+            fill: 'none',
+          })
+        );
+
+        // Draw anchor circle 2
+        smtLevels.push(
+          React.createElement('circle', {
+            key: `smt-anchor2-${idx}`,
+            cx: x2,
+            cy: y,
+            r: 3,
+            stroke: color,
+            strokeWidth: 1.5,
+            fill: 'none',
+          })
+        );
+
+        // Draw monospace label showing "EQH" or "EQL"
+        smtLevels.push(
+          React.createElement(
+            'text',
+            {
+              key: `smt-label-${idx}`,
+              x: rightX - 90,
+              y: isHigh ? y - 4 : y + 9,
+              fill: color,
+              fontSize: '6.5',
+              fontFamily: 'monospace',
+              fontWeight: 'bold',
+            },
+            isHigh ? 'EQH (EQUAL HIGHS)' : 'EQL (EQUAL LOWS)'
+          )
+        );
+      }
+    });
 
     // ─── 3. Implement The Dealing Range Shadow Box & Equilibrium ───
     let drShadowBox: React.ReactElement | null = null;
@@ -432,6 +504,9 @@ export const structureLayer: ChartLayer = {
 
         // A6. Draw BOS/MSS badges horizontally
         breachBadges,
+
+        // A7. Draw Equal Highs & Equal Lows levels
+        smtLevels,
 
         // B. Plot Major Swings (Hollow Circles at 5-Bar Fractals)
         showMajor &&

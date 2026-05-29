@@ -383,19 +383,27 @@ export async function GET(req: Request) {
       }
     }
 
-    // 4. SMT/Equal Highs Detector
+    // 4. SMT/Equal Highs & Lows Detector
     const scanWindow = candles15m.slice(-20);
     const swingHighs: { index: number, price: number, time: number }[] = [];
+    const swingLows: { index: number, price: number, time: number }[] = [];
     for (let i = 1; i < scanWindow.length - 1; i++) {
       const prev = scanWindow[i - 1];
       const curr = scanWindow[i];
       const next = scanWindow[i + 1];
+      
       // Swing High Color Lock: peak candle 'curr' must be RED (close < open) preceded by a GREEN candle (close > open)
       const isFractalHigh = curr.h > prev.h && curr.h > next.h;
-      const isColorLocked = curr.c < curr.o && prev.c > prev.o;
-      
-      if (isFractalHigh && isColorLocked) {
+      const isHighColorLocked = curr.c < curr.o && prev.c > prev.o;
+      if (isFractalHigh && isHighColorLocked) {
         swingHighs.push({ index: i, price: curr.h, time: curr.t });
+      }
+
+      // Swing Low Color Lock: valley candle 'curr' must be GREEN (close > open) preceded by a RED candle (close < open)
+      const isFractalLow = curr.l < prev.l && curr.l < next.l;
+      const isLowColorLocked = curr.c > curr.o && prev.c < prev.o;
+      if (isFractalLow && isLowColorLocked) {
+        swingLows.push({ index: i, price: curr.l, time: curr.t });
       }
     }
 
@@ -403,14 +411,30 @@ export async function GET(req: Request) {
     const smtBuffer = smtAtr > 0 ? 0.2 * smtAtr : 0.50;
 
     const smt_traps = [];
+    // Equal Highs (Resistance Liquidity)
     for (let i = 0; i < swingHighs.length; i++) {
       for (let j = i + 1; j < swingHighs.length; j++) {
         if (Math.abs(swingHighs[i].price - swingHighs[j].price) <= smtBuffer) {
           smt_traps.push({
             type: "engineered_liquidity",
+            side: "high",
             price: parseFloat(((swingHighs[i].price + swingHighs[j].price) / 2).toFixed(2)),
             time1: swingHighs[i].time,
             time2: swingHighs[j].time,
+          });
+        }
+      }
+    }
+    // Equal Lows (Support Liquidity)
+    for (let i = 0; i < swingLows.length; i++) {
+      for (let j = i + 1; j < swingLows.length; j++) {
+        if (Math.abs(swingLows[i].price - swingLows[j].price) <= smtBuffer) {
+          smt_traps.push({
+            type: "engineered_liquidity",
+            side: "low",
+            price: parseFloat(((swingLows[i].price + swingLows[j].price) / 2).toFixed(2)),
+            time1: swingLows[i].time,
+            time2: swingLows[j].time,
           });
         }
       }

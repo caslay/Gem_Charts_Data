@@ -1,10 +1,24 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.43
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.44
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-05-30 (V10.43 Ancient / Local Swing Bleed Resolution Complete)  
+> **Last Updated:** 2026-05-30 (V10.44 Equal Highs/Lows Visualizer & Capitalized IMSS/IBOS Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.44 Changelog — Equal Highs/Lows Visualizer & Capitalized IMSS/IBOS Labels (Completed)
+
+### 1. Expanded SMT Scanner to Detect Equal Lows (`route.ts`)
+- **Action:** Upgraded the SMT scanner inside `/api/market-data/route.ts` to scan for both 5-bar swing highs (Equal Highs) and 5-bar swing lows (Equal Lows) centered on the 15m timeframe within the volatility-adjusted ATR buffer (`0.2 * ATR`).
+- **Rationale:** Supports programmatic and visual on-chart distinction between equal resistance and equal support liquidity pools, populating `smt_traps` with a `side: "high" | "low"` identifier.
+
+### 2. Premium Equal Highs & Equal Lows SVG Chart Overlay (`structureLayer.ts`)
+- **Action:** Integrated a beautiful Equal Highs and Equal Lows rendering routine that extracts SMT traps from the payload context and draws solid horizontal gold/amber lines (`#fbbf24` in dark theme) spanning from the first anchor swing to the right edge.
+- **Rationale:** Draws distinct hollow visual indicator circles at the two specific swing anchor points, accompanied by monospace tags (`EQH (EQUAL HIGHS)` / `EQL (EQUAL LOWS)`) at the right margin to represent active resting liquidity pools.
+
+### 3. Capitalization of Internal Structure Badges (`structureLayer.ts`)
+- **Action:** Upgraded lowercase `iMSS` and `iBOS` text strings and badges to capitalized bold **IMSS** and **IBOS** tags on the horizontal breach layers.
+- **Rationale:** Restores visual alignment with standard SMC professional charting paradigms.
 
 ## 🆕 V10.43 Changelog — Ancient / Local Swing Bleed Resolution (Completed)
 
