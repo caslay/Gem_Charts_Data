@@ -30,6 +30,11 @@ In [structureLayer.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/lib/ch
 In [structureLayer.ts](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/lib/chartLayers/plugins/structureLayer.ts#L236-L240), we upgraded our visual labels:
 - Replaced the lowercase text `"iMSS"` and `"iBOS"` assignments with professional, capitalized, bold **`IMSS`** and **`IBOS`** horizontal breach lines and badge structures, matching standard Smart Money Concepts (SMC) visual rules.
 
+### 4. Decoupled Pricing Crossover Alert & Timeframe Tagging
+In [Chart.tsx](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/components/Chart.tsx#L298-L312), we resolved the double pricing shift alert discrepancies:
+- **Decoupled from TDO:** Changed the `prevPricing` and `currPricing` indicators to check `pricing_context.local_dealing_range.current_status` (which tracks crossing of the active Dealing Range midline Equilibrium) instead of the daily True Day Open. This ensures absolute mathematical parity with the active visual dealing range discount/premium status.
+- **Interval Tagging:** Dynamically injected the chart interval `[${interval}]` into the alert notification toast and log text (e.g. `⚖️ PRICING CROSSOVER [15m]: Market shifted to DISCOUNT`) so that you always know precisely which timeframe has shifted.
+
 ---
 
 ## 🧪 Verification & Stability Results

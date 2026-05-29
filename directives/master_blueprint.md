@@ -20,6 +20,10 @@
 - **Action:** Upgraded lowercase `iMSS` and `iBOS` text strings and badges to capitalized bold **IMSS** and **IBOS** tags on the horizontal breach layers.
 - **Rationale:** Restores visual alignment with standard SMC professional charting paradigms.
 
+### 4. Pricing Crossover Alert Decoupling & Interval Tagging (`Chart.tsx`)
+- **Action:** Refactored the Pricing Shift Watcher inside `Chart.tsx` to monitor the timeframe-specific `pricing_context.local_dealing_range.current_status` instead of the global `current_pricing` (which is locked to the macro daily open). Additionally, appended the visual interval string (`[${interval}]`) dynamically to the trigger notification toast.
+- **Rationale:** Ensures that the Premium/Discount Crossing alerts align mathematically with the active chart timeframe's visual dealing range midline, and provides clear visual feedback on which timeframe triggered the alert.
+
 ## 🆕 V10.43 Changelog — Ancient / Local Swing Bleed Resolution (Completed)
 
 ### 1. Active Wave Range Isolation via `majorRangeStartTime` (`structureEngine.ts`)
