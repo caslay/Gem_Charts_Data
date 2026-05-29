@@ -188,13 +188,21 @@ function buildEnrichedPayload(
     else currentPricing = 'FAIR_VALUE';
   }
 
-  // ── Active FVGs from 15m and 5m visible slices using lib/fvgEngine ──────
+  // ── Active FVGs from 1h, 15m and 5m visible slices using lib/fvgEngine ──
   // Treat all historical candles as closed, and the very last visible candle as the active open candle
+  const candles_1h_with_closed = candles_1h.map((c, idx) => ({ ...c, isClosed: idx < candles_1h.length - 1 }));
   const candles_15m_with_closed = candles_15m.map((c, idx) => ({ ...c, isClosed: idx < candles_15m.length - 1 }));
   const candles_5m_with_closed = candles_5m.map((c, idx) => ({ ...c, isClosed: idx < candles_5m.length - 1 }));
+  
+  const fvgs1h = detectActiveFVGs(candles_1h_with_closed, true);
   const fvgs15m = detectActiveFVGs(candles_15m_with_closed, true);
   const fvgs5m = detectActiveFVGs(candles_5m_with_closed, true);
-  const activeFVGs = mapAndConsolidateFVGs(fvgs15m, fvgs5m);
+
+  const activeFVGs = mapAndConsolidateFVGs([
+    { fvgs: fvgs5m, timeframe: '5m' },
+    { fvgs: fvgs15m, timeframe: '15m' },
+    { fvgs: fvgs1h, timeframe: '1h' },
+  ]);
 
   // ── Session Ranges (Aligned with live HUD's UTC hour metrics) ─────────────
   const getSessionLiquidityUTC = (candles: BtCandle[], startHourUTC: number, endHourUTC: number) => {
@@ -344,6 +352,17 @@ function buildEnrichedPayload(
       market_structure_shift: structureAnalysis?.market_structure_shift ?? false,
       market_structure_shift_direction: structureAnalysis?.market_structure_shift_direction ?? null,
       current_trend: structureAnalysis?.currentTrend ?? 'UNSET',
+      internal_market_trend: structureAnalysis?.internalTrend || 'UNSET',
+      internal_structure_shift: structureAnalysis?.internal_market_structure_shift === true,
+      internal_context: {
+        trend: structureAnalysis?.internalTrend || 'UNSET',
+        high: structureAnalysis?.internalDealingRange?.high || 0,
+        low: structureAnalysis?.internalDealingRange?.low || 0,
+        equilibrium: structureAnalysis?.internalDealingRange?.equilibrium || 0,
+        pricing_status: structureAnalysis?.internalDealingRange?.current_status || 'UNKNOWN',
+        anchor_high_swing: structureAnalysis?.internalDealingRange?.anchor_high_swing || null,
+        anchor_low_swing: structureAnalysis?.internalDealingRange?.anchor_low_swing || null
+      },
       expansion_mode: structureAnalysis?.expansion_mode ?? 'NORMAL',
       market_velocity: structureAnalysis?.market_velocity ?? 0,
       runaway_origin_price: structureAnalysis?.runaway_origin_price ?? null,
@@ -353,7 +372,16 @@ function buildEnrichedPayload(
         innerSwings: structureAnalysis.innerSwings || [],
         innerZigzag: structureAnalysis.innerZigzag || [],
         currentTrend: structureAnalysis.currentTrend,
+        subTrend: structureAnalysis.subTrend || 'UNSET',
         dealingRange: structureAnalysis.dealingRange,
+        internalTrend: structureAnalysis.internalTrend || 'UNSET',
+        internalZigzag: structureAnalysis.internalZigzag || [],
+        latestInternalMSS: structureAnalysis.latestInternalMSS || null,
+        internal_market_structure_shift: structureAnalysis.internal_market_structure_shift === true,
+        internalDealingRange: structureAnalysis.internalDealingRange,
+        latestMSS: structureAnalysis.latestMSS || null,
+        market_structure_shift: structureAnalysis.market_structure_shift || false,
+        market_structure_shift_direction: structureAnalysis.market_structure_shift_direction || null
       } : null,
       active_fvgs: activeFVGs,
       macro_levels: {

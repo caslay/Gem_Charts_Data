@@ -383,19 +383,27 @@ export async function GET(req: Request) {
       }
     }
 
-    // 4. SMT/Equal Highs Detector
+    // 4. SMT/Equal Highs & Lows Detector
     const scanWindow = candles15m.slice(-20);
     const swingHighs: { index: number, price: number, time: number }[] = [];
+    const swingLows: { index: number, price: number, time: number }[] = [];
     for (let i = 1; i < scanWindow.length - 1; i++) {
       const prev = scanWindow[i - 1];
       const curr = scanWindow[i];
       const next = scanWindow[i + 1];
+      
       // Swing High Color Lock: peak candle 'curr' must be RED (close < open) preceded by a GREEN candle (close > open)
       const isFractalHigh = curr.h > prev.h && curr.h > next.h;
-      const isColorLocked = curr.c < curr.o && prev.c > prev.o;
-      
-      if (isFractalHigh && isColorLocked) {
+      const isHighColorLocked = curr.c < curr.o && prev.c > prev.o;
+      if (isFractalHigh && isHighColorLocked) {
         swingHighs.push({ index: i, price: curr.h, time: curr.t });
+      }
+
+      // Swing Low Color Lock: valley candle 'curr' must be GREEN (close > open) preceded by a RED candle (close < open)
+      const isFractalLow = curr.l < prev.l && curr.l < next.l;
+      const isLowColorLocked = curr.c > curr.o && prev.c < prev.o;
+      if (isFractalLow && isLowColorLocked) {
+        swingLows.push({ index: i, price: curr.l, time: curr.t });
       }
     }
 
@@ -403,14 +411,30 @@ export async function GET(req: Request) {
     const smtBuffer = smtAtr > 0 ? 0.2 * smtAtr : 0.50;
 
     const smt_traps = [];
+    // Equal Highs (Resistance Liquidity)
     for (let i = 0; i < swingHighs.length; i++) {
       for (let j = i + 1; j < swingHighs.length; j++) {
         if (Math.abs(swingHighs[i].price - swingHighs[j].price) <= smtBuffer) {
           smt_traps.push({
             type: "engineered_liquidity",
+            side: "high",
             price: parseFloat(((swingHighs[i].price + swingHighs[j].price) / 2).toFixed(2)),
             time1: swingHighs[i].time,
             time2: swingHighs[j].time,
+          });
+        }
+      }
+    }
+    // Equal Lows (Support Liquidity)
+    for (let i = 0; i < swingLows.length; i++) {
+      for (let j = i + 1; j < swingLows.length; j++) {
+        if (Math.abs(swingLows[i].price - swingLows[j].price) <= smtBuffer) {
+          smt_traps.push({
+            type: "engineered_liquidity",
+            side: "low",
+            price: parseFloat(((swingLows[i].price + swingLows[j].price) / 2).toFixed(2)),
+            time1: swingLows[i].time,
+            time2: swingLows[j].time,
           });
         }
       }
@@ -775,8 +799,27 @@ export async function GET(req: Request) {
       ...pricing_context_addon
     };
 
-    const active_fvgs = mapAndConsolidateFVGs(detectActiveFVGs(candles15m, true), detectActiveFVGs(candles5m, true));
-    const all_fvgs = mapAndConsolidateFVGs(detectActiveFVGs(candles15m, false), detectActiveFVGs(candles5m, false));
+    const fvgGroups = [
+      { fvgs: detectActiveFVGs(candles5m, true), timeframe: '5m' },
+      { fvgs: detectActiveFVGs(candles15m, true), timeframe: '15m' },
+      { fvgs: detectActiveFVGs(candles1h, true), timeframe: '1h' },
+      { fvgs: detectActiveFVGs(candles4h, true), timeframe: '4h' },
+    ];
+
+    const allFvgGroups = [
+      { fvgs: detectActiveFVGs(candles5m, false), timeframe: '5m' },
+      { fvgs: detectActiveFVGs(candles15m, false), timeframe: '15m' },
+      { fvgs: detectActiveFVGs(candles1h, false), timeframe: '1h' },
+      { fvgs: detectActiveFVGs(candles4h, false), timeframe: '4h' },
+    ];
+
+    if (!isStandardInterval && dynamicVisualCandles && dynamicVisualCandles.length > 0) {
+      fvgGroups.push({ fvgs: detectActiveFVGs(dynamicVisualCandles, true), timeframe: visualInterval });
+      allFvgGroups.push({ fvgs: detectActiveFVGs(dynamicVisualCandles, false), timeframe: visualInterval });
+    }
+
+    const active_fvgs = mapAndConsolidateFVGs(fvgGroups);
+    const all_fvgs = mapAndConsolidateFVGs(allFvgGroups);
     const pending_fvgs = all_fvgs.filter(fvg => fvg.status === 'PENDING');
     
     const current_time_window = getCurrentKillzone();
@@ -820,6 +863,8 @@ export async function GET(req: Request) {
       market_structure_shift: structureAnalysis.market_structure_shift,
       market_structure_shift_direction: structureAnalysis.market_structure_shift_direction,
       current_trend: structureAnalysis.currentTrend,
+      internal_market_trend: structureAnalysis.internalTrend || 'UNSET',
+      internal_structure_shift: structureAnalysis.internal_market_structure_shift === true,
       internal_context,
       expansion_mode: structureAnalysis.expansion_mode || 'NORMAL',
       market_velocity: structureAnalysis.market_velocity || 0,
@@ -832,7 +877,14 @@ export async function GET(req: Request) {
         currentTrend: structureAnalysis.currentTrend,
         subTrend: structureAnalysis.subTrend || 'UNSET',
         dealingRange: structureAnalysis.dealingRange,
+        internalTrend: structureAnalysis.internalTrend || 'UNSET',
+        internalZigzag: structureAnalysis.internalZigzag || [],
+        latestInternalMSS: structureAnalysis.latestInternalMSS || null,
+        internal_market_structure_shift: structureAnalysis.internal_market_structure_shift === true,
         internalDealingRange: internal_dealing_range,
+        latestMSS: structureAnalysis.latestMSS || null,
+        market_structure_shift: structureAnalysis.market_structure_shift || false,
+        market_structure_shift_direction: structureAnalysis.market_structure_shift_direction || null
       },
       global_anchors: {
         high: localDealingRange.high,

@@ -162,10 +162,10 @@ function resolveMetric(
         return false;
       };
 
-      if (tf === '5m') {
+      if (tf === '1m' || tf === '5m') {
         return isDivergenceMatch(smt.m5_divergence);
       }
-      if (tf === '15m') {
+      if (tf === '15m' || tf === '30m' || tf === '1h' || tf === '4h') {
         return isDivergenceMatch(smt.m15_divergence);
       }
 
@@ -224,16 +224,16 @@ function resolveMetric(
     }
 
     case 'INTERNAL_TREND': {
-      return ipda.global_anchors?.internal_market_trend || ipda.internal_market_trend || 'UNSET';
+      return ipda.internal_context?.trend || ipda.internal_market_trend || 'UNSET';
     }
 
     case 'INTERNAL_MSS': {
-      return ipda.global_anchors?.internal_structure_shift === true || ipda.internal_structure_shift === true;
+      return ipda.internal_context?.market_structure_shift === true || ipda.internal_structure_shift === true;
     }
 
     case 'INTERNAL_PRICING': {
       const internalRange = ipda.internal_context || ipda.full_structure_map?.internalDealingRange || {};
-      return internalRange.current_status || internalRange.pricing_status || 'UNKNOWN';
+      return internalRange.pricing_status || internalRange.current_status || 'UNKNOWN';
     }
 
     case 'LOCAL_PRICING': {
@@ -246,14 +246,8 @@ function resolveMetric(
         return stratDirection === 'LONG' ? 'DISCOUNT' : 'PREMIUM';
       }
 
-      if (ipda.global_anchors) {
-        return ipda.global_anchors.current_status || 'UNKNOWN';
-      }
-
-      const pricing = ipda.pricing_context || {};
-      const range = pricing.local_dealing_range || {};
-      const fullRange = ipda.full_structure_map?.dealingRange || {};
-      return fullRange.current_status || range.current_status || 'UNKNOWN';
+      const internalRange = ipda.internal_context || ipda.full_structure_map?.internalDealingRange || {};
+      return internalRange.pricing_status || internalRange.current_status || 'UNKNOWN';
     }
 
     case 'MSS_CONFIRMED': {
@@ -506,6 +500,7 @@ export interface StrategyEvaluatorConfig {
   liveCandle?: LiveCandle | null;
   aiBias?: number | null;
   triggerSmartAlert?: (type: any, message: string, sound?: string) => void;
+  activeInterval?: '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '4h';
 }
 
 export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
@@ -519,6 +514,7 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
   const triggerSmartAlert = config?.triggerSmartAlert !== undefined ? config.triggerSmartAlert : context.triggerSmartAlert;
 
   const isBacktest = !!config?.isBacktest;
+  const activeInterval = config?.activeInterval !== undefined ? config.activeInterval : context.wsInterval;
   const tradesApiUrl = isBacktest ? '/api/backtest-trades' : '/api/trades';
 
   const [strategies, setStrategies] = useState<CustomStrategy[]>([]);
@@ -623,6 +619,12 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
       const settings = Array.isArray(strategy.conditions)
         ? {}
         : strategy.conditions;
+
+      // ── Strategy-Level Timeframe Locking Gate ──
+      const targetTf = settings.target_timeframe || 'ANY';
+      if (targetTf !== 'ANY' && activeInterval !== targetTf) {
+        continue; // Enforce zero-latency timeframe locking gate
+      }
 
       const direction = settings.direction || 'LONG';
 

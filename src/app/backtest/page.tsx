@@ -173,7 +173,8 @@ export default function BacktestPage() {
     livePrice: lastPrice,
     liveCandle: liveCandle as unknown as LiveCandle,
     aiBias: aiBias,
-    triggerSmartAlert
+    triggerSmartAlert,
+    activeInterval: activeTimeframe as any
   });
 
   // Dynamic backtest statistics calculations

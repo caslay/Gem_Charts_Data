@@ -295,18 +295,18 @@ export default function Chart({
       }
 
       // 6. Pricing Shift Watcher
-      const prevPricing = prevMetrics.current_pricing;
-      const currPricing = currMetrics.current_pricing;
+      const prevPricing = prevMetrics.pricing_context?.local_dealing_range?.current_status;
+      const currPricing = currMetrics.pricing_context?.local_dealing_range?.current_status;
       const isPricingEnabled = signalAlertsEnabled ? signalAlertsEnabled.PRICING_SHIFT !== false : true;
       if (prevPricing && currPricing && prevPricing !== currPricing && isPricingEnabled) {
-        console.log(`[DiffEngine] Pricing context shifted from ${prevPricing} to ${currPricing}. Triggering PRICING_SHIFT sound.`);
+        console.log(`[DiffEngine] Pricing context shifted from ${prevPricing} to ${currPricing} on ${interval}. Triggering PRICING_SHIFT sound.`);
         if (signalAlerts.PRICING_SHIFT) {
           playFile(signalAlerts.PRICING_SHIFT);
         }
         if (triggerSmartAlert) {
           triggerSmartAlert(
             'PRICING_SHIFT',
-            `⚖️ PRICING CROSSOVER: Market shifted to ${currPricing}`
+            `⚖️ PRICING CROSSOVER [${interval}]: Market shifted to ${currPricing}`
           );
         }
       }

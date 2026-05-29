@@ -575,6 +575,12 @@ export function useMarketData(selectedInterval: string = '5m') {
   useEffect(() => {
     if (!data) return;
 
+    // Prefer the backend's fully computed, stateful structural map if available to ensure 100% stability and zero lookback truncation drift
+    if (data.ipda_metrics?.full_structure_map) {
+      setStructureState(data.ipda_metrics.full_structure_map as any);
+      return;
+    }
+
     const activeSeriesKey = `candles_${selectedInterval}`;
     const activeCandles = data.data_payload[activeSeriesKey] || data.data_payload.candles_15m || [];
     if (activeCandles.length === 0) return;
