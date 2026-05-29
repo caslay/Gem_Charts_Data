@@ -1,10 +1,65 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.37
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.43
 
 > **Classification:** Institutional Architecture Document  
-> **Generated:** 2026-05-29  
-> **Last Updated:** 2026-05-29 (V10.37 Intraday Killzones & Volatility Gates Complete)  
+> **Generated:** 2026-05-30  
+> **Last Updated:** 2026-05-30 (V10.43 Ancient / Local Swing Bleed Resolution Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.43 Changelog — Ancient / Local Swing Bleed Resolution (Completed)
+
+### 1. Active Wave Range Isolation via `majorRangeStartTime` (`structureEngine.ts`)
+- **Action:** Added dynamic filtering to `internalDealingRange` swing candidates by extracting the active Major Dealing Range's start time (`majorRangeStartTime = Math.min(anchor_high.t, anchor_low.t)`) and only considering internal swings that formed *at or after* this boundary (`activeInternalSwings`).
+- **Rationale:** Resolves the logic bleed where ancient internal swings from previous Major cycles (e.g. `2116.13 - 2134.97` from past rallies) were incorrectly selected as the active internal range. This locks the Layer 2 Intraday Depth to the active Layer 1 cycle context.
+
+### 2. Active iMSS Breakout Origin Anchoring (`structureEngine.ts`)
+- **Action:** Integrated a checks-and-balances condition looking for an `activeMSS` (iMSS) within the current Major Range boundary. If a valid iMSS exists, the boundaries of the internal range are locked to the breakout origin swing low/high (`MSS.from`) and the extreme high/low reached since that origin.
+- **Rationale:** Ensures that the active range follows the significant structural wave run (e.g. `1973.49 - 2043.43`) instead of snapping to local consolidation wicks on the right (e.g. `2002.12 - 2021.47`), fully achieving trend-aligned retracement levels.
+
+## 🆕 V10.42 Changelog — Chronological State Machine Restoration (Completed)
+
+### 1. Reversion of Global Extremes Initialization (`structureEngine.ts`)
+- **Action:** Reverted the global extremes pre-scan initialization for `currentMajorHigh` and `currentMajorLow`. The state machine now correctly runs its original, highly validated chronological pass starting with `-Infinity` / `Infinity` (or cached global anchors).
+- **Rationale:** Restoring the chronological state machine preserves the alternating peak-to-valley swing structures, trend tracking (resolving `MACRO TREND: UNSET`), and correct dealing ranges. By pairing this with `useMarketData.ts` direct map consumption, we successfully resolve both macro trend disruptions and client-side lookback truncation drift simultaneously.
+
+## 🆕 V10.41 Changelog — Client-Server Structural Parity & Containment Refinements (Completed)
+
+### 1. Two-Pass Range Containment & Global Extremes Initialization (`structureEngine.ts`)
+- **Root Cause Resolved:** Fixed the parent-child swing misclassification where chronological range expansions labeled intermediate swings (e.g. `1973.49` and `2043.43`) as `'MAJOR'` swings before the global absolute anchors were processed.
+- **Two-Pass Solution:** If `globalAnchors` is not provided (e.g. on first run), the state machine scans all alternating swings to find the absolute minimum and maximum price extremes and initializes `currentMajorLow` and `currentMajorHigh` to these boundaries. All intermediate 5-bar swings are now correctly and stably classified as `'INTERNAL'` structure type.
+
+### 2. Live Client-Side Hook Optimization (`useMarketData.ts`)
+- **Direct Backend Map Consumption:** Modified the client-side `useMarketData` hook to directly consume the backend's fully computed stateful `full_structure_map` as `structureState` when available. This completely bypasses redundant and highly unstable client-side recalculations on a truncated, visual candle slice, eliminating all client-side lookback truncation drift and achieving 100% stable client-server alignment.
+
+### 3. Backtest Engine Parity & Payload Enrichment (`useBacktestEngine.ts`)
+- **Complete Parity Enrichment:** Upgraded `buildEnrichedPayload` in the backtest engine to enrich `full_structure_map` and the main `ipda_metrics` block with all computed internal metrics (`internal_market_trend`, `internal_structure_shift`, `internal_context` containing pricing, trend and extremes) matching the exact live API route schema. This establishes complete visual and logical parity across both live and backtest Sidebars.
+
+### 4. API Serialization Enrichment (`route.ts`)
+- **All-Fields Serialization:** Enriched the GET `/api/market-data` API route's `full_structure_map` serialization with all internal and major trends, zigzags, and MSS shifts, ensuring full capability coverage in a single high-speed payload transfer.
+
+## 🆕 V10.40 Changelog — Decoupling Market Structure Hierarchy & Taxonomy Debt (Completed)
+
+### 1. Structural Swing Taxonomy & Isolated Layer Tags (`structureEngine.ts`)
+- **3-Bar Swing Separation:** Replaced the legacy tagging of 3-bar (Layer 3) micro-fractals from `structure_type: 'INTERNAL'` to `structure_type: 'INNER'`.
+- **Typing Expansion:** Updated the `StructuralSwing` interface definition to support `structure_type: 'MAJOR' | 'INTERNAL' | 'INNER'`. This ensures complete programmatic isolation between Layer 2 (Internal Structure, 5-bar weak fractals contained in bounds) and Layer 3 (Inner Swings, 3-bar micro-fractals).
+
+### 2. Resolution of Lookback Truncation Drift (`structureEngine.ts`)
+- **Stitched Structural Integrity:** Re-routed the returned quantitative metrics (`internalTrend`, `internalZigzag`, `latestInternalMSS`, `internal_market_structure_shift`, `internalDealingRange`) inside `analyzeMarketStructure` to be pulled directly from the full historical run `majorFull` instead of the truncated post-anchor run `majorPost`. This ensures 100% stable, repainting-free, and decay-immune calculations of local intraday structures.
+- **Backend Stateful Anchoring:** Implemented a new Map cache `globalAnchorsCache` inside `analyzeMarketStructureStateful` to cache the major dealing range anchors by symbol-interval. Seeding subsequent stateful evaluations automatically ensures consistent parent-child containment bounds.
+
+### 3. Active Wave Range Tracking (`structureEngine.ts`)
+- **Breakout Origin Anchoring:** Upgraded `internalDealingRange` to track the active structural wave instead of snapping to minor consolidation pivots. In a Bullish trend, the range anchors from the breakout origin swing low (e.g. 1972) to the highest expansion extreme (e.g. 2043), updating only on bullish expansions. In a Bearish trend, it anchors from the breakout origin swing high to the lowest expansion extreme, updating on bearish expansions. This provides mathematically precise, trend-aligned retracement levels.
+
+### 4. Browser Font Clamping Typography Repair (`structureLayer.ts`)
+- **SMC Badge Standardizations:** Upgraded `iMSS` and `iBOS` text elements to `fontSize: '6.5'` and increased container heights to `9px` to eliminate browser minimum font overrides (font clamping) that clipped or hid micro-labels. Dash borders and 50% color-mix opacities are beautifully preserved.
+
+### 5. API Serialization Upgrades & Parity (`route.ts`)
+- **Direct Serializations:** Configured the `/api/market-data` GET route to serialize the pre-computed `internal_market_trend` and `internal_structure_shift` at the top level of the `ipda_metrics` payload. This guarantees low-latency query access for automated strategies and backtest replay hooks.
+
+### 6. Strategy Evaluator Overhaul & Veto Gate Decoupled (`useStrategyEvaluator.ts`)
+- **Resolver Parameter Alignment:** Re-mapped `INTERNAL_TREND`, `INTERNAL_MSS`, and `INTERNAL_PRICING` resolvers to retrieve values from the correct serialized payload attributes (`ipda.internal_context`).
+- **`LOCAL_PRICING` Veto Decouple:** Completely deleted the short-circuiting veto shortcut `if (ipda.global_anchors)` that locked local pricing checks to the macro status. The evaluator now resolves strictly against the Layer 2 local range (`ipda.internal_context` or `internalDealingRange`), fully activating the Dual-Pricing Retracement Matrix.
+- **`STRUCTURE_TYPE` Parity:** Correctly resolves `'INNER'` for Layer 3 swings and `'INTERNAL'` for Layer 2.
 
 ## 🆕 V10.37 Changelog — Intraday Killzones & Volatility Gates (Completed)
 

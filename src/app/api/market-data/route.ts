@@ -820,6 +820,8 @@ export async function GET(req: Request) {
       market_structure_shift: structureAnalysis.market_structure_shift,
       market_structure_shift_direction: structureAnalysis.market_structure_shift_direction,
       current_trend: structureAnalysis.currentTrend,
+      internal_market_trend: structureAnalysis.internalTrend || 'UNSET',
+      internal_structure_shift: structureAnalysis.internal_market_structure_shift === true,
       internal_context,
       expansion_mode: structureAnalysis.expansion_mode || 'NORMAL',
       market_velocity: structureAnalysis.market_velocity || 0,
@@ -832,7 +834,14 @@ export async function GET(req: Request) {
         currentTrend: structureAnalysis.currentTrend,
         subTrend: structureAnalysis.subTrend || 'UNSET',
         dealingRange: structureAnalysis.dealingRange,
+        internalTrend: structureAnalysis.internalTrend || 'UNSET',
+        internalZigzag: structureAnalysis.internalZigzag || [],
+        latestInternalMSS: structureAnalysis.latestInternalMSS || null,
+        internal_market_structure_shift: structureAnalysis.internal_market_structure_shift === true,
         internalDealingRange: internal_dealing_range,
+        latestMSS: structureAnalysis.latestMSS || null,
+        market_structure_shift: structureAnalysis.market_structure_shift || false,
+        market_structure_shift_direction: structureAnalysis.market_structure_shift_direction || null
       },
       global_anchors: {
         high: localDealingRange.high,

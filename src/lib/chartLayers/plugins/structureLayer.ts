@@ -255,16 +255,16 @@ export const structureLayer: ChartLayer = {
               );
 
               // Render small hollow badge labeled "iMSS" or "iBOS"
-              const badgeY = isHighBreak ? levelY - 10 : levelY + 2;
+              const badgeY = isHighBreak ? levelY - 11 : levelY + 2;
               breachBadges.push(
                 React.createElement(
                   'g',
                   { key: `istr-badge-${seg.to.t}` },
                   React.createElement('rect', {
-                    x: toX - 16,
+                    x: toX - 14,
                     y: badgeY,
-                    width: 32,
-                    height: 8,
+                    width: 28,
+                    height: 9,
                     rx: 1.5,
                     fill: 'var(--background, #020617)',
                     stroke: color,
@@ -276,9 +276,9 @@ export const structureLayer: ChartLayer = {
                     'text',
                     {
                       x: toX,
-                      y: badgeY + 6,
+                      y: badgeY + 6.5,
                       fill: color,
-                      fontSize: '5.5',
+                      fontSize: '6.5',
                       fontFamily: 'monospace',
                       fontWeight: 'bold',
                       textAnchor: 'middle',

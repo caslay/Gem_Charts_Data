@@ -37,8 +37,8 @@ export interface StructuralSwing {
   candle_index?: number;
   /** ISO timestamp string of the swing candle. */
   timestamp?: string;
-  /** Structure hierarchy classification: MAJOR (Parent Range) vs INTERNAL (Child Wave) */
-  structure_type?: 'MAJOR' | 'INTERNAL';
+  /** Structure hierarchy classification: MAJOR (Parent Range) vs INTERNAL (Child Wave) vs INNER (Micro Wave) */
+  structure_type?: 'MAJOR' | 'INTERNAL' | 'INNER';
   /** Confirmation flag: TRUE only when the succeeding candles have fully closed */
   confirmed?: boolean;
 }
@@ -255,9 +255,9 @@ function runEquilibriumStateMachine(
   const markedConfirmedSwings = alternatingSwings.map((s) => {
     let structure_type: 'MAJOR' | 'INTERNAL' = 'MAJOR';
 
-    // For 3-bar (INNER) sub-waves, we treat all of them as INTERNAL to separate them cleanly.
+    // For 3-bar (INNER) sub-waves, we treat all of them as INNER to separate them cleanly.
     if (volMultiplier < 2.0) {
-      return { ...s, structure_type: 'INTERNAL' as const };
+      return { ...s, structure_type: 'INNER' as const };
     }
 
     let isAnchor = false;
@@ -523,12 +523,142 @@ function runEquilibriumStateMachine(
     };
   }
   
-  // Determine structural internal dealing range anchored strictly on confirmed internal structural pivots
+  // Determine structural internal dealing range anchored strictly on the active wave structure
   let internalDealingRange: StructuralDealingRange;
-  const internalHighs = internalSwingsOnly.filter(s => s.type === 'HIGH');
-  const internalLows = internalSwingsOnly.filter(s => s.type === 'LOW');
 
-  if (internalHighs.length > 0 && internalLows.length > 0) {
+  let majorRangeStartTime = 0;
+  if (dealingRange && dealingRange.anchor_high_swing && dealingRange.anchor_low_swing) {
+    majorRangeStartTime = Math.min(dealingRange.anchor_high_swing.t, dealingRange.anchor_low_swing.t);
+  }
+
+  // Filter internal swings to only those that formed within the active Major Dealing Range
+  const activeInternalSwings = majorRangeStartTime > 0
+    ? internalSwingsOnly.filter(s => s.t >= majorRangeStartTime)
+    : internalSwingsOnly;
+
+  const internalHighs = activeInternalSwings.filter(s => s.type === 'HIGH');
+  const internalLows = activeInternalSwings.filter(s => s.type === 'LOW');
+
+  // Check if we have an active internal Market Structure Shift (iMSS) within the current Major Range
+  const activeMSS = latestInternalMSS && latestInternalMSS.to.t >= majorRangeStartTime ? latestInternalMSS : null;
+
+  if (activeMSS) {
+    if (activeMSS.to.type === 'HIGH') {
+      // Bullish iMSS / Continuation: Lock Low to the breakout origin swing low
+      const activeLow = activeMSS.from;
+      const highsSinceLow = internalHighs.filter(s => s.t >= activeLow.t);
+      const activeHigh = highsSinceLow.length > 0
+        ? highsSinceLow.reduce((max, s) => s.price > max.price ? s : max, highsSinceLow[0])
+        : activeMSS.to;
+
+      const highVal = parseFloat(activeHigh.price.toFixed(2));
+      const lowVal = parseFloat(activeLow.price.toFixed(2));
+      const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
+
+      internalDealingRange = {
+        high: highVal,
+        low: lowVal,
+        equilibrium: eqVal,
+        current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
+        anchor_high_swing: activeHigh,
+        anchor_low_swing: activeLow
+      };
+    } else {
+      // Bearish iMSS / Continuation: Lock High to the breakout origin swing high
+      const activeHigh = activeMSS.from;
+      const lowsSinceHigh = internalLows.filter(s => s.t >= activeHigh.t);
+      const activeLow = lowsSinceHigh.length > 0
+        ? lowsSinceHigh.reduce((min, s) => s.price < min.price ? s : min, lowsSinceHigh[0])
+        : activeMSS.to;
+
+      const highVal = parseFloat(activeHigh.price.toFixed(2));
+      const lowVal = parseFloat(activeLow.price.toFixed(2));
+      const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
+
+      internalDealingRange = {
+        high: highVal,
+        low: lowVal,
+        equilibrium: eqVal,
+        current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
+        anchor_high_swing: activeHigh,
+        anchor_low_swing: activeLow
+      };
+    }
+  } else if (internalTrend === 'BULLISH' && internalHighs.length > 0) {
+    const activeHigh = internalHighs.reduce((max, s) => s.price > max.price ? s : max, internalHighs[0]);
+    const lowsBeforeHigh = internalLows.filter(s => s.t < activeHigh.t);
+    const activeLow = lowsBeforeHigh.length > 0
+      ? lowsBeforeHigh.reduce((min, s) => s.price < min.price ? s : min, lowsBeforeHigh[0])
+      : (internalLows.length > 0 ? internalLows[0] : null);
+
+    if (activeLow) {
+      const highVal = parseFloat(activeHigh.price.toFixed(2));
+      const lowVal = parseFloat(activeLow.price.toFixed(2));
+      const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
+
+      internalDealingRange = {
+        high: highVal,
+        low: lowVal,
+        equilibrium: eqVal,
+        current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
+        anchor_high_swing: activeHigh,
+        anchor_low_swing: activeLow
+      };
+    } else {
+      // Fallback to last pivots if no low before high
+      const lastHigh = internalHighs[internalHighs.length - 1];
+      const lastLow = internalLows[internalLows.length - 1];
+      const highVal = parseFloat(lastHigh.price.toFixed(2));
+      const lowVal = parseFloat(lastLow.price.toFixed(2));
+      const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
+
+      internalDealingRange = {
+        high: highVal,
+        low: lowVal,
+        equilibrium: eqVal,
+        current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
+        anchor_high_swing: lastHigh,
+        anchor_low_swing: lastLow
+      };
+    }
+  } else if (internalTrend === 'BEARISH' && internalLows.length > 0) {
+    const activeLow = internalLows.reduce((min, s) => s.price < min.price ? s : min, internalLows[0]);
+    const highsBeforeLow = internalHighs.filter(s => s.t < activeLow.t);
+    const activeHigh = highsBeforeLow.length > 0
+      ? highsBeforeLow.reduce((max, s) => s.price > max.price ? s : max, highsBeforeLow[0])
+      : (internalHighs.length > 0 ? internalHighs[0] : null);
+
+    if (activeHigh) {
+      const highVal = parseFloat(activeHigh.price.toFixed(2));
+      const lowVal = parseFloat(activeLow.price.toFixed(2));
+      const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
+
+      internalDealingRange = {
+        high: highVal,
+        low: lowVal,
+        equilibrium: eqVal,
+        current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
+        anchor_high_swing: activeHigh,
+        anchor_low_swing: activeLow
+      };
+    } else {
+      // Fallback to last pivots if no high before low
+      const lastHigh = internalHighs[internalHighs.length - 1];
+      const lastLow = internalLows[internalLows.length - 1];
+      const highVal = parseFloat(lastHigh.price.toFixed(2));
+      const lowVal = parseFloat(lastLow.price.toFixed(2));
+      const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
+
+      internalDealingRange = {
+        high: highVal,
+        low: lowVal,
+        equilibrium: eqVal,
+        current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
+        anchor_high_swing: lastHigh,
+        anchor_low_swing: lastLow
+      };
+    }
+  } else if (internalHighs.length > 0 && internalLows.length > 0) {
     const lastHigh = internalHighs[internalHighs.length - 1];
     const lastLow = internalLows[internalLows.length - 1];
     const highVal = parseFloat(lastHigh.price.toFixed(2));
@@ -563,9 +693,9 @@ function runEquilibriumStateMachine(
   // Stitch unconfirmed raw swings back into the returned swings array strictly for visualization/display
   const returnedSwings = [...markedConfirmedSwings];
   unconfirmedRawSwings.forEach(s => {
-    let structure_type: 'MAJOR' | 'INTERNAL' = 'MAJOR';
+    let structure_type: 'MAJOR' | 'INTERNAL' | 'INNER' = 'MAJOR';
     if (volMultiplier < 2.0) {
-      structure_type = 'INTERNAL';
+      structure_type = 'INNER';
     } else if (currentMajorHigh !== -Infinity && currentMajorLow !== Infinity) {
       if (s.price >= currentMajorLow && s.price <= currentMajorHigh) {
         structure_type = 'INTERNAL';
@@ -870,11 +1000,11 @@ export function analyzeMarketStructure(
     market_velocity,
     runaway_origin_price,
     // Mandate V10.34 additions:
-    internalTrend: majorPost.internalTrend,
-    internalZigzag: majorPost.internalZigzag,
-    latestInternalMSS: majorPost.latestInternalMSS,
-    internal_market_structure_shift: majorPost.internal_market_structure_shift,
-    internalDealingRange: majorPost.internalDealingRange
+    internalTrend: majorFull.internalTrend,
+    internalZigzag: majorFull.internalZigzag,
+    latestInternalMSS: majorFull.latestInternalMSS,
+    internal_market_structure_shift: majorFull.internal_market_structure_shift,
+    internalDealingRange: majorFull.internalDealingRange
   };
 }
 
@@ -883,6 +1013,7 @@ export function analyzeMarketStructure(
 // Persistent in-memory caches for accumulated candles, anchors, and calculations by symbol
 const accumulatedCandlesCache = new Map<string, Candle[]>();
 const contextAnchorCache = new Map<string, number>();
+const globalAnchorsCache = new Map<string, any>();
 
 /**
  * Stateful structural analysis that accumulates a persistent candle buffer
@@ -932,6 +1063,26 @@ export function analyzeMarketStructureStateful(
     console.log(`[StatefulQuant] Established stable lookback context anchor for ${cacheKey} at:`, new Date(anchor).toISOString());
   }
 
+  // Retrieve cached global anchors if available
+  const cachedAnchors = globalAnchorsCache.get(cacheKey) || null;
+  const anchorsToUse = globalAnchors || cachedAnchors;
+
   // Compute stabilized structure over full accumulated history
-  return analyzeMarketStructure(accumulated, currentPrice, displacementStatus, anchor, globalAnchors);
+  const analysis = analyzeMarketStructure(accumulated, currentPrice, displacementStatus, anchor, anchorsToUse);
+
+  // Cache the newly calculated dealingRange as global anchors for the next incremental tick!
+  if (analysis.dealingRange) {
+    globalAnchorsCache.set(cacheKey, {
+      high: analysis.dealingRange.high,
+      low: analysis.dealingRange.low,
+      equilibrium: analysis.dealingRange.equilibrium,
+      current_status: analysis.dealingRange.current_status,
+      anchor_high_swing: analysis.dealingRange.anchor_high_swing,
+      anchor_low_swing: analysis.dealingRange.anchor_low_swing,
+      current_trend: analysis.currentTrend,
+      sub_trend: analysis.subTrend || 'UNSET'
+    });
+  }
+
+  return analysis;
 }

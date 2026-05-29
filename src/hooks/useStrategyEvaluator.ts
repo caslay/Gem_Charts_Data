@@ -224,16 +224,16 @@ function resolveMetric(
     }
 
     case 'INTERNAL_TREND': {
-      return ipda.global_anchors?.internal_market_trend || ipda.internal_market_trend || 'UNSET';
+      return ipda.internal_context?.trend || ipda.internal_market_trend || 'UNSET';
     }
 
     case 'INTERNAL_MSS': {
-      return ipda.global_anchors?.internal_structure_shift === true || ipda.internal_structure_shift === true;
+      return ipda.internal_context?.market_structure_shift === true || ipda.internal_structure_shift === true;
     }
 
     case 'INTERNAL_PRICING': {
       const internalRange = ipda.internal_context || ipda.full_structure_map?.internalDealingRange || {};
-      return internalRange.current_status || internalRange.pricing_status || 'UNKNOWN';
+      return internalRange.pricing_status || internalRange.current_status || 'UNKNOWN';
     }
 
     case 'LOCAL_PRICING': {
@@ -246,14 +246,8 @@ function resolveMetric(
         return stratDirection === 'LONG' ? 'DISCOUNT' : 'PREMIUM';
       }
 
-      if (ipda.global_anchors) {
-        return ipda.global_anchors.current_status || 'UNKNOWN';
-      }
-
-      const pricing = ipda.pricing_context || {};
-      const range = pricing.local_dealing_range || {};
-      const fullRange = ipda.full_structure_map?.dealingRange || {};
-      return fullRange.current_status || range.current_status || 'UNKNOWN';
+      const internalRange = ipda.internal_context || ipda.full_structure_map?.internalDealingRange || {};
+      return internalRange.pricing_status || internalRange.current_status || 'UNKNOWN';
     }
 
     case 'MSS_CONFIRMED': {
