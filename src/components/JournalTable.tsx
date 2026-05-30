@@ -3,7 +3,6 @@
 import React, { useState, useCallback, memo, useRef, useEffect } from "react";
 import { Play, Pause, XCircle, Trash2, Loader2, RefreshCw, AlertTriangle } from "lucide-react";
 import { useMarketDataContext } from "@/context/MarketDataContext";
-import { SettingsPanel } from "./SettingsPanel";
 
 export interface TradeRecord {
   id: string;
@@ -736,8 +735,6 @@ export function JournalTable({ initialTrades, initialAccount, isBacktest = false
 
   return (
     <div className="w-full flex flex-col gap-4">
-      {/* ── Risk Engine Settings Panel (V10.0) ─────────────────────────── */}
-      <SettingsPanel account={account} onSave={setAccount} />
 
       {/* ── Risk Summary HUD (V10.0) ────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-2 animate-in fade-in duration-300">

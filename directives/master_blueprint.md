@@ -1,10 +1,30 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.50
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.51
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-05-30 (V10.50 Quant Lab Strategy Builder JSON Copy-Download Complete)  
+> **Last Updated:** 2026-05-30 (V10.51 Custom Candle Render Limit SQL Integration Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 65+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.51 Changelog — Custom Candle Render Limit & Command Center Consolidation (Completed)
+
+### 1. Neon SQL Dynamic Settings Integration (`route.ts` under `market-data`)
+- **Database Query:** Dynamically queries the `system_settings` table in Neon PostgreSQL for `'candles_limit'` at the start of each market data GET request.
+- **Graceful Fallbacks:** Defaults to **1,000 candles** if the setting is absent or on database connection failure.
+- **Fetch & Slice Constraints:** Dynamically configures the Binance REST API query `limit` and slices all frontend payload arrays (`candles_5m`, `candles_15m`, `candles_1h`, `candles_4h`) to the user's custom limit, up to a maximum cap of **1,500 candles** (Binance API limit).
+
+### 2. Command Center Settings UI Integration (`settings/page.tsx`)
+- **Tab Alignment:** Consolidated all dynamic settings into the main **System Command Center** page (located at `/settings`) inside the **ACCOUNT & RISK** tab, creating a unified settings hub.
+- **State & Rehydration:** Loads the current `candles_limit` from the Neon SQL database via `/api/settings` on client mount, alongside account parameters.
+- **Parallel Persistency:** Clicking **Commit Risk Config** executes parallel database writes (updating the risk parameters via `/api/account` and lookback limit via `/api/settings`) and immediately dispatches a window event to refresh all charts on the active edge.
+
+### 3. Redundant Panel Removal (`JournalTable.tsx` / `SettingsPanel.tsx`)
+- **UX Refactoring:** Completely removed the legacy collapsible settings panel (`SettingsPanel.tsx`) from the bottom of the Journal (`/journal`) and Backtest Replay (`/backtest`) pages.
+- **Visual Cleanup:** Deleted the orphaned file and removed all import statements, delivering a much cleaner, premium layout that guides the user exclusively through the top header Command Center.
+
+### 4. Dynamic Sidebar Legend & Typings (`Sidebar.tsx` / `useMarketData.ts`)
+- **Typography Readout:** Upgraded the hardcoded `(Locked 1000)` label under "Macro Depth" inside the live Sidebar to dynamically render `(Limit {limit})` from the live API response.
+- **Type Safety:** Extended the `MarketDataPayload` interface inside the quant hooks to strictly type the incoming database limit.
 
 ## 🆕 V10.50 Changelog — Quant Lab Strategy Builder JSON Copy-Download (Completed)
 

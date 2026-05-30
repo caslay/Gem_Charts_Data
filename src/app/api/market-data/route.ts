@@ -63,11 +63,27 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const symbol = url.searchParams.get('symbol') || 'ETHUSDC';
-    const limit5m = parseInt(url.searchParams.get('limit5m') || '1000', 10);
-    const limit15m = parseInt(url.searchParams.get('limit15m') || '1000', 10);
-    const limit1h = parseInt(url.searchParams.get('limit1h') || '1000', 10);
-    const limit4h = parseInt(url.searchParams.get('limit4h') || '1000', 10);
-    const limit = 1000;
+    
+    // Fetch custom candle limit from system_settings or fallback to 1000
+    let limit = 1000;
+    try {
+      const limitRes = await sql`
+        SELECT key_value FROM system_settings WHERE key_name = 'candles_limit' LIMIT 1
+      `;
+      if (limitRes.rows.length > 0) {
+        const val = parseInt(limitRes.rows[0].key_value, 10);
+        if (!isNaN(val) && val > 0) {
+          limit = val;
+        }
+      }
+    } catch (err) {
+      console.warn('[MarketData API] Failed to fetch candles_limit from database:', err);
+    }
+
+    const limit5m = parseInt(url.searchParams.get('limit5m') || String(limit), 10);
+    const limit15m = parseInt(url.searchParams.get('limit15m') || String(limit), 10);
+    const limit1h = parseInt(url.searchParams.get('limit1h') || String(limit), 10);
+    const limit4h = parseInt(url.searchParams.get('limit4h') || String(limit), 10);
 
     const visualInterval = url.searchParams.get('interval') || '5m';
     const isStandardInterval = ['5m', '15m', '1h', '4h'].includes(visualInterval);
@@ -111,6 +127,7 @@ export async function GET(req: Request) {
           ticker: `${symbol}.p`,
           timestamp: new Date().toISOString(),
           timezone: "UTC",
+          candles_limit: limit,
           data_payload: {
             [`candles_${visualInterval}`]: formatted
           }
@@ -936,6 +953,7 @@ export async function GET(req: Request) {
       ticker: "ETHUSDC.p",
       timestamp: new Date().toISOString(),
       timezone: "UTC",
+      candles_limit: limit,
       ipda_metrics,
       risk_management,
       open_interest: parseFloat(dataOi.openInterest),

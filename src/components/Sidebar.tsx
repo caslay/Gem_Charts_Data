@@ -299,7 +299,7 @@ export default function Sidebar({
                 <div className="space-y-2">
                   <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80">
                     <span>Macro Depth</span>
-                    <span className="text-[9px] font-mono text-muted">(Locked 1000)</span>
+                    <span className="text-[9px] font-mono text-muted">(Limit {data?.candles_limit ?? 1000})</span>
                   </div>
 
                   <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-2">

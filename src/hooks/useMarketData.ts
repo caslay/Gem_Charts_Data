@@ -301,6 +301,7 @@ export interface MarketDataPayload {
   timestamp?: string;
   timezone: string;
   open_interest: number;
+  candles_limit?: number; // Dynamic limit from Neon SQL
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ipda_metrics: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
