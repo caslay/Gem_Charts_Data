@@ -4,16 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useCallback, useEffect } from "react";
 import { useTheme } from "next-themes";
-import { 
-  RotateCcw, 
-  Loader2, 
-  CheckCircle2, 
-  AlertCircle, 
-  BookOpen, 
-  LayoutGrid, 
-  Settings, 
-  Sun, 
-  Moon 
+import {
+  RotateCcw,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  BookOpen,
+  LayoutGrid,
+  Settings,
+  Sun,
+  Moon
 } from "lucide-react";
 import MatrixConfigDrawer from "./MatrixConfigDrawer";
 import { useMarketDataContext } from "@/context/MarketDataContext";
@@ -25,7 +25,7 @@ export function NavigationHeader() {
   const pathname = usePathname();
   const { data, wsStatus } = useMarketDataContext();
   const { theme, setTheme } = useTheme();
-  
+
   const [isMatrixOpen, setIsMatrixOpen] = useState(false);
   const [resetStatus, setResetStatus] = useState<ResetStatus>('idle');
   const [cairoTime, setCairoTime] = useState<string | null>(null);
@@ -100,8 +100,8 @@ export function NavigationHeader() {
             <Link
               href="/"
               className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-wider uppercase transition-all duration-300 ${pathname === '/'
-                  ? 'bg-accent text-accent-foreground shadow-sm shadow-accent/25'
-                  : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
+                ? 'bg-accent text-accent-foreground shadow-sm shadow-accent/25'
+                : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
                 }`}
             >
               LIVE HUD
@@ -109,17 +109,25 @@ export function NavigationHeader() {
             <Link
               href="/backtest"
               className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-wider uppercase transition-all duration-300 ${pathname === '/backtest'
-                  ? 'bg-accent text-accent-foreground shadow-sm shadow-accent/25'
-                  : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
+                ? 'bg-accent text-accent-foreground shadow-sm shadow-accent/25'
+                : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
                 }`}
             >
               BACKTEST
             </Link>
             <Link
+              href="/quant-lab"
+              className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-wider uppercase transition-all duration-300 ${pathname === '/quant-lab'
+                ? 'bg-accent text-accent-foreground shadow-sm shadow-accent/25'
+                : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'}`}
+            >
+              QUANT LAB
+            </Link>
+            <Link
               href="/compounding"
               className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-wider uppercase transition-all duration-300 ${pathname === '/compounding'
-                  ? 'bg-accent text-accent-foreground shadow-sm shadow-accent/25'
-                  : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
+                ? 'bg-accent text-accent-foreground shadow-sm shadow-accent/25'
+                : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
                 }`}
             >
               COMPOUNDING
@@ -167,12 +175,12 @@ export function NavigationHeader() {
               onClick={handleForceReset}
               disabled={resetStatus === 'loading'}
               className={`p-1.5 border border-card-border rounded-full transition-all duration-300 cursor-pointer ${resetStatus === 'success'
-                  ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-500'
-                  : resetStatus === 'error'
-                    ? 'bg-rose-500/10 border-rose-500/50 text-rose-500'
-                    : resetStatus === 'loading'
-                      ? 'bg-accent/5 border-accent/30 text-accent/50 cursor-wait'
-                      : 'text-muted hover:text-rose-500 hover:bg-rose-500/5 hover:border-rose-500/30'
+                ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-500'
+                : resetStatus === 'error'
+                  ? 'bg-rose-500/10 border-rose-500/50 text-rose-500'
+                  : resetStatus === 'loading'
+                    ? 'bg-accent/5 border-accent/30 text-accent/50 cursor-wait'
+                    : 'text-muted hover:text-rose-500 hover:bg-rose-500/5 hover:border-rose-500/30'
                 }`}
               title="Force reset AI memory state to SEARCHING"
             >

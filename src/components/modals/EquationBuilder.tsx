@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Zap, Lock, Save, Power, PowerOff, Loader2, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Zap, Lock, Save, Power, PowerOff, Loader2, ChevronRight, Copy, Download } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -428,6 +428,54 @@ export default function EquationBuilder() {
           : c
       )
     );
+  };
+
+  const [copyFeedback, setCopyFeedback] = useState('Copy JSON');
+
+  const getStrategyJsonString = () => {
+    const conditionsPayload = {
+      conditions: editConditions.map(({ id, ...rest }) => rest),
+      temporal_mode: editTemporalMode,
+      sl_logic: editSlLogic,
+      tp_logic: editTpLogic,
+      direction: editDirection,
+      risk_percent: parseFloat(editRiskPercent) || 1.0,
+      statistical_sensitivity: editStatisticalSensitivity,
+      momentum_override: editMomentumOverride,
+      target_timeframe: editTargetTimeframe,
+    };
+
+    return JSON.stringify(
+      {
+        name: editName.trim() || 'Custom Strategy',
+        conditions: conditionsPayload,
+      },
+      null,
+      2
+    );
+  };
+
+  const handleCopyJson = async () => {
+    try {
+      await navigator.clipboard.writeText(getStrategyJsonString());
+      setCopyFeedback('Copied!');
+      setTimeout(() => setCopyFeedback('Copy JSON'), 2000);
+    } catch (err) {
+      console.error('Failed to copy JSON:', err);
+    }
+  };
+
+  const handleDownloadJson = () => {
+    const jsonStr = getStrategyJsonString();
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${editName.trim().replace(/\s+/g, '_') || 'custom_strategy'}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -927,6 +975,27 @@ export default function EquationBuilder() {
                 <Trash2 size={10} />
                 Delete
               </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCopyJson}
+                  disabled={!editName.trim() || editConditions.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-2 border border-slate-700 hover:border-slate-500 rounded bg-slate-900 text-[10px] font-bold uppercase transition disabled:opacity-40 disabled:hover:border-slate-700 cursor-pointer text-slate-300"
+                >
+                  <Copy size={10} />
+                  <span>{copyFeedback}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadJson}
+                  disabled={!editName.trim() || editConditions.length === 0}
+                  className="flex items-center gap-1.5 px-3 py-2 border border-slate-700 hover:border-slate-500 rounded bg-slate-900 text-[10px] font-bold uppercase transition disabled:opacity-40 disabled:hover:border-slate-700 cursor-pointer text-slate-300"
+                >
+                  <Download size={10} />
+                  <span>Download JSON</span>
+                </button>
+              </div>
 
               <button
                 onClick={handleSave}
