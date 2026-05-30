@@ -1,10 +1,28 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.51
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.52
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-05-30 (V10.51 Custom Candle Render Limit SQL Integration Complete)  
+> **Last Updated:** 2026-05-31 (V10.52 Layer Configuration INT & MAJ Decoupling Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 65+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.52 Changelog — Layer Configuration HUD INT & MAJ Decoupling (Completed)
+
+### 1. Renamed ZIG Button to INT (`ChartLayerHud.tsx`)
+- **Action:** Refined the floating Layer Configuration HUD button label from `ZIG` to `INT`.
+- **Description:** Updated the button tooltip from `"Toggle Zig-Zag Paths"` to `"Toggle Internal Swings (INT)"`.
+- **Backwards Compatibility:** Retained the Zustand store and `localStorage` key `'structure_zigzag'` to ensure zero configuration breakage or state migration needs for existing users.
+
+### 2. Decoupled Horizontal Ceilings & Floors Rendering (`structureLayer.ts`)
+- **Action:** Refined the horizontal structural level lines loop inside the visualizer layer plugin.
+- **Independent Controls:** Completely separated the horizontal price levels and text labels so that:
+  - **Major Swings** (solid lines + labels `MAJOR HIGH` / `MAJOR LOW`) are rendered based strictly on `showMajor` (controlled by the `MAJ` button).
+  - **Internal Swings** (dashed lines + labels `INT HIGH` / `INT LOW`) are rendered based strictly on `showInternalSwings` (formerly `showZigZag`, controlled by the `INT` button).
+- **Major BOS/MSS Breach Badges:** Directed the main trend structure break badges (`BOS` and `MSS`) to render based on `showMajor`, aligning their visibility perfectly with the macro market structure settings.
+
+### 3. Decoupled Swing Circle Indicators (`structureLayer.ts`)
+- **Action:** Refactored the hollow circle indicator filter plotted at structural pivot extremes.
+- **Targeted Visibility:** Decoupled the filter so that Major circles are toggled by the `MAJ` button state (`showMajor`), whereas Internal circles are toggled by the `INT` button state (`showInternalSwings` && not volatility suppressed), preventing internal markers from bleeding into the chart when internals are disabled.
 
 ## 🆕 V10.51 Changelog — Custom Candle Render Limit & Command Center Consolidation (Completed)
 

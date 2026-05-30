@@ -94,9 +94,9 @@ export default function ChartLayerHud() {
                           ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-500 shadow-[0_0_6px_rgba(6,182,212,0.15)]'
                           : 'text-muted hover:text-foreground bg-transparent border border-transparent'
                           }`}
-                        title="Toggle Zig-Zag Paths"
+                        title="Toggle Internal Swings (INT)"
                       >
-                        ZIG
+                        INT
                       </button>
                       <button
                         onClick={(e) => {
