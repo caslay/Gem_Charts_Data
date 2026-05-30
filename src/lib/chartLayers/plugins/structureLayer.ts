@@ -30,7 +30,7 @@ export const structureLayer: ChartLayer = {
     const showParent = visibility.structure !== false;
     const showMajor = visibility.structure_major !== false;
     const showInner = visibility.structure_inner !== false;
-    const showZigZag = visibility.structure_zigzag !== false; // Governs the Horizontal Price Levels
+    const showInternalSwings = visibility.structure_zigzag !== false; // Governs the Internal Swings and Horizontal Levels
     const showIstr = visibility.structure_istr !== false;
 
     // If the main layer is hidden, do not render any children
@@ -99,61 +99,65 @@ export const structureLayer: ChartLayer = {
 
     // ─── 1. Implement Horizontal Price Ceilings / Floors ───
     const horizontalLevels: React.ReactElement[] = [];
-    if (showZigZag && showMajor) {
-      confirmedMajor.forEach((S, idx) => {
-        // Find the first confirmed major swing after S that breaches S.price
-        const breachSwing = confirmedMajor
-          .slice(idx + 1)
-          .find((later) =>
-            S.type === 'HIGH' ? later.price > S.price : later.price < S.price
-          );
+    confirmedMajor.forEach((S, idx) => {
+      const isInternal = S.structure_type === 'INTERNAL';
+      
+      // Major Swings horizontal levels are controlled by showMajor.
+      // Internal Swings horizontal levels are controlled by showInternalSwings.
+      const shouldRender = isInternal ? showInternalSwings : showMajor;
+      if (!shouldRender) return;
 
-        const xEnd = breachSwing ? breachSwing.x : rightX;
-        
-        // ─── Visual Separation: Check if this 5-bar swing is a Parent range boundary or an Internal wave ───
-        const isInternal = S.structure_type === 'INTERNAL';
-        const color = isInternal
-          ? (S.type === 'HIGH' ? swingHighInternalColor : swingLowInternalColor)
-          : (S.type === 'HIGH' ? swingHighColor : swingLowColor);
-
-        // Draw structural price line
-        horizontalLevels.push(
-          React.createElement('line', {
-            key: `hz-level-line-${idx}`,
-            x1: S.x,
-            y1: S.y,
-            x2: xEnd,
-            y2: S.y,
-            stroke: color,
-            strokeWidth: isInternal ? 0.9 : 1.5,
-            strokeDasharray: isInternal ? '3,3' : undefined, // Dashed lines for internal swings
-          })
+      // Find the first confirmed major swing after S that breaches S.price
+      const breachSwing = confirmedMajor
+        .slice(idx + 1)
+        .find((later) =>
+          S.type === 'HIGH' ? later.price > S.price : later.price < S.price
         );
 
-        // Draw structural label
-        horizontalLevels.push(
-          React.createElement(
-            'text',
-            {
-              key: `hz-level-label-${idx}`,
-              x: S.x + 4,
-              y: S.type === 'HIGH' ? S.y - 4 : S.y + 10,
-              fill: color,
-              fontSize: '6.5',
-              fontFamily: 'monospace',
-              fontWeight: 'bold',
-            },
-            isInternal
-              ? (S.type === 'HIGH' ? 'INT HIGH' : 'INT LOW')
-              : (S.type === 'HIGH' ? 'MAJOR HIGH' : 'MAJOR LOW')
-          )
-        );
-      });
-    }
+      const xEnd = breachSwing ? breachSwing.x : rightX;
+      
+      // ─── Visual Separation: Check if this 5-bar swing is a Parent range boundary or an Internal wave ───
+      const color = isInternal
+        ? (S.type === 'HIGH' ? swingHighInternalColor : swingLowInternalColor)
+        : (S.type === 'HIGH' ? swingHighColor : swingLowColor);
+
+      // Draw structural price line
+      horizontalLevels.push(
+        React.createElement('line', {
+          key: `hz-level-line-${idx}`,
+          x1: S.x,
+          y1: S.y,
+          x2: xEnd,
+          y2: S.y,
+          stroke: color,
+          strokeWidth: isInternal ? 0.9 : 1.5,
+          strokeDasharray: isInternal ? '3,3' : undefined, // Dashed lines for internal swings
+        })
+      );
+
+      // Draw structural label
+      horizontalLevels.push(
+        React.createElement(
+          'text',
+          {
+            key: `hz-level-label-${idx}`,
+            x: S.x + 4,
+            y: S.type === 'HIGH' ? S.y - 4 : S.y + 10,
+            fill: color,
+            fontSize: '6.5',
+            fontFamily: 'monospace',
+            fontWeight: 'bold',
+          },
+          isInternal
+            ? (S.type === 'HIGH' ? 'INT HIGH' : 'INT LOW')
+            : (S.type === 'HIGH' ? 'MAJOR HIGH' : 'MAJOR LOW')
+        )
+      );
+    });
 
     // ─── 2. Implement BOS/MSS Horizontal Breach Badges ───
     const breachBadges: React.ReactElement[] = [];
-    if (showZigZag) {
+    if (showMajor) {
       // 2a. Major Swings Breaks
       for (const seg of analysis.zigzag) {
         if (seg.label === 'BOS' || seg.label === 'MSS') {
@@ -466,7 +470,7 @@ export const structureLayer: ChartLayer = {
         
         // A1. Draw Inner Sub-Wave Zig-Zag Path (Muted, Dashed)
         // Kept for inner sub-wave visual subordinate mapping if visible
-        showZigZag && showInner && analysis.innerZigzag &&
+        showInternalSwings && showInner && analysis.innerZigzag &&
           analysis.innerZigzag.map((seg: any, idx: number) => {
             const fromX = timeScale.timeToCoordinate(Math.floor(seg.from.t / 1000) as any);
             const fromY = series.priceToCoordinate(seg.from.price);
@@ -508,11 +512,18 @@ export const structureLayer: ChartLayer = {
         // A7. Draw Equal Highs & Equal Lows levels
         smtLevels,
 
-        // B. Plot Major Swings (Hollow Circles at 5-Bar Fractals)
-        showMajor &&
-          mappedSwings
-            .filter((s) => s.grade === 'MAJOR' && (!isVolatilitySuppressed || s.structure_type !== 'INTERNAL'))
-            .map((pt, idx) => {
+        // B. Plot Major/Internal Swings (Hollow Circles at 5-Bar Fractals)
+        mappedSwings
+          .filter((s) => {
+            if (s.grade !== 'MAJOR') return false;
+            const isInternal = s.structure_type === 'INTERNAL';
+            if (isInternal) {
+              return showInternalSwings && !isVolatilitySuppressed;
+            } else {
+              return showMajor;
+            }
+          })
+          .map((pt, idx) => {
               const isConfirmed = pt.confirmed !== false;
               const isInternal = pt.structure_type === 'INTERNAL';
               const color = isConfirmed

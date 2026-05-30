@@ -1,10 +1,102 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.45
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.52
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-05-30 (V10.45 Multi-Timeframe Strategy Customizer & Execution Locks Complete)  
+> **Last Updated:** 2026-05-31 (V10.52 Layer Configuration INT & MAJ Decoupling Complete)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
-> **Source Files Analyzed:** 60+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+> **Source Files Analyzed:** 65+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V10.52 Changelog — Layer Configuration HUD INT & MAJ Decoupling (Completed)
+
+### 1. Renamed ZIG Button to INT (`ChartLayerHud.tsx`)
+- **Action:** Refined the floating Layer Configuration HUD button label from `ZIG` to `INT`.
+- **Description:** Updated the button tooltip from `"Toggle Zig-Zag Paths"` to `"Toggle Internal Swings (INT)"`.
+- **Backwards Compatibility:** Retained the Zustand store and `localStorage` key `'structure_zigzag'` to ensure zero configuration breakage or state migration needs for existing users.
+
+### 2. Decoupled Horizontal Ceilings & Floors Rendering (`structureLayer.ts`)
+- **Action:** Refined the horizontal structural level lines loop inside the visualizer layer plugin.
+- **Independent Controls:** Completely separated the horizontal price levels and text labels so that:
+  - **Major Swings** (solid lines + labels `MAJOR HIGH` / `MAJOR LOW`) are rendered based strictly on `showMajor` (controlled by the `MAJ` button).
+  - **Internal Swings** (dashed lines + labels `INT HIGH` / `INT LOW`) are rendered based strictly on `showInternalSwings` (formerly `showZigZag`, controlled by the `INT` button).
+- **Major BOS/MSS Breach Badges:** Directed the main trend structure break badges (`BOS` and `MSS`) to render based on `showMajor`, aligning their visibility perfectly with the macro market structure settings.
+
+### 3. Decoupled Swing Circle Indicators (`structureLayer.ts`)
+- **Action:** Refactored the hollow circle indicator filter plotted at structural pivot extremes.
+- **Targeted Visibility:** Decoupled the filter so that Major circles are toggled by the `MAJ` button state (`showMajor`), whereas Internal circles are toggled by the `INT` button state (`showInternalSwings` && not volatility suppressed), preventing internal markers from bleeding into the chart when internals are disabled.
+
+## 🆕 V10.51 Changelog — Custom Candle Render Limit & Command Center Consolidation (Completed)
+
+### 1. Neon SQL Dynamic Settings Integration (`route.ts` under `market-data`)
+- **Database Query:** Dynamically queries the `system_settings` table in Neon PostgreSQL for `'candles_limit'` at the start of each market data GET request.
+- **Graceful Fallbacks:** Defaults to **1,000 candles** if the setting is absent or on database connection failure.
+- **Fetch & Slice Constraints:** Dynamically configures the Binance REST API query `limit` and slices all frontend payload arrays (`candles_5m`, `candles_15m`, `candles_1h`, `candles_4h`) to the user's custom limit, up to a maximum cap of **1,500 candles** (Binance API limit).
+
+### 2. Command Center Settings UI Integration (`settings/page.tsx`)
+- **Tab Alignment:** Consolidated all dynamic settings into the main **System Command Center** page (located at `/settings`) inside the **ACCOUNT & RISK** tab, creating a unified settings hub.
+- **State & Rehydration:** Loads the current `candles_limit` from the Neon SQL database via `/api/settings` on client mount, alongside account parameters.
+- **Parallel Persistency:** Clicking **Commit Risk Config** executes parallel database writes (updating the risk parameters via `/api/account` and lookback limit via `/api/settings`) and immediately dispatches a window event to refresh all charts on the active edge.
+
+### 3. Redundant Panel Removal (`JournalTable.tsx` / `SettingsPanel.tsx`)
+- **UX Refactoring:** Completely removed the legacy collapsible settings panel (`SettingsPanel.tsx`) from the bottom of the Journal (`/journal`) and Backtest Replay (`/backtest`) pages.
+- **Visual Cleanup:** Deleted the orphaned file and removed all import statements, delivering a much cleaner, premium layout that guides the user exclusively through the top header Command Center.
+
+### 4. Dynamic Sidebar Legend & Typings (`Sidebar.tsx` / `useMarketData.ts`)
+- **Typography Readout:** Upgraded the hardcoded `(Locked 1000)` label under "Macro Depth" inside the live Sidebar to dynamically render `(Limit {limit})` from the live API response.
+- **Type Safety:** Extended the `MarketDataPayload` interface inside the quant hooks to strictly type the incoming database limit.
+
+## 🆕 V10.50 Changelog — Quant Lab Strategy Builder JSON Copy-Download (Completed)
+
+### 1. JSON Export & Copy Controls (`EquationBuilder.tsx`)
+- **Action:** Integrated high-fidelity "Copy JSON" and "Download JSON" controllers inside the footer of the System Command Center > Strategy Builder workspace.
+- **Form-State Alignment:** Programmatically structures and serializes the active UI customizer fields (pivots, timeframes, risk sizes, OLS sensitivities, momentum overrides) into the exact backend/backtest-ready strategy JSON configuration layout.
+- **Usability:** Enables instant strategy exports to the user's local disk or clipboard, allowing immediate dropzone testing on the headless backtest workspace.
+
+## 🆕 V10.49 Changelog — Quant Lab UI Sub-header & Command Center Wiring (Completed)
+
+### 1. sub-header tag conversion (`page.tsx` under `quant-lab`)
+- **Action:** Changed the wrapper tag of the Quant Lab sub-header from `<header>` to `<div>`.
+- **Rationale:** The global CSS stylesheet has a high-priority cascade override selector `header { background-color: var(--header-bg) !important }` intended strictly for styling the main application top navbar. Because the local page title block was using `<header>`, it inherited this styling, causing a massive white background UI glitch in dark mode. Utilizing a `<div>` prevents this rule leakage and maintains premium Midnight-slate visual coherence.
+
+### 2. Command Center settings modal wiring (`page.tsx` under `quant-lab`)
+- **Action:** Wired up the `[ Command Center ]` button to trigger the global system modal on click.
+- **Rationale:** Imported the `SettingsModal` component, set up the `isSoundSettingsOpen` state trigger, passed all required signature props (`alert={null}`, `onSave`, `onDelete`), and connected the button click event to launch the modal seamlessly.
+
+## 🆕 V10.48 Changelog — Quant Lab Ultra Simple Test Strategy (Completed)
+
+### 1. Minimalist Test Strategy Templates (`ultra_simple_test_long.json` / `ultra_simple_test_short.json`)
+- **Action:** Created two ultra-low-friction strategy configurations featuring a single metric row condition `PRICE_VS_OPEN`.
+- **Rationale:** Since stateful trend structures (such as `MARKET_TREND`) require a stabilized series of major swings and structural breakouts before registering a trend direction (otherwise returning `'UNSET'`), highly structured strategies can result in zero active trades on initial historical slices. The new test templates use only the highly responsive price comparison against Cairo's daily open, guaranteeing high-frequency trade activations to thoroughly verify database entries, risk sizing, and stop loss invalidation routes.
+
+## 🆕 V10.47 Changelog — Quant Lab Safe Pivot Access & Fast Scalper Strategy (Completed)
+
+### 1. TypeError Crash Fix in Dealing Range Fallbacks (`structureEngine.ts`)
+- **Action:** Fixed a server-side `TypeError: Cannot read properties of undefined (reading 'price')` crash inside `internalDealingRange` calculations.
+- **Rationale:** When executing a headless backtest with very few initial candles, internal trends (`BULLISH` or `BEARISH`) can be active before both internal high and low pivots are fully formed. Added strict checks to verify that `lastHigh` and `lastLow` are defined before accessing `.price`. If they are not yet formed, the engine falls back gracefully to the overall candle extremes.
+
+### 2. High-Frequency FVG Scalper Strategies (`rapid_scalper_long.json` / `rapid_scalper_short.json`)
+- **Action:** Designed and created two high-frequency, FVG-mitigation scalping configurations optimized for active 5m charts.
+- **Design Parameters:** Locked to the highly responsive `5m` timeframe, executing trades in `INSTANT` (tick) mode to capture intra-candle taps, and setting OLS statistical sensitivity to `OFF` to bypass standard regression filters and guarantee a high frequency of setups (minimum of 2 trades per day).
+
+## 🆕 V10.46 Changelog — Quant Lab (Automated Backtest Suite) (Completed)
+
+### 1. New Database Schemas & Self-Healing Setup
+- **Action:** Created new tables `quant_lab_runs` and `quant_lab_trades` inside the Neon PostgreSQL database with a dynamic self-healing initialization schema routine on startup/query.
+- **Run Metadata:** `quant_lab_runs` stores backtest run properties (win rate, profit/loss counts, net P&L, strategy configuration JSONB payload, time range).
+- **Execution Ledger:** `quant_lab_trades` stores individual trade metrics linked by `run_id` with foreign key cascade deletion capability.
+
+### 2. Headless Quantitative Engine (`quantLabEngine.ts`)
+- **Action:** Extracted and created a pure, server-side quant engine for sequential processing, FVG mitigation scans, and Market Structure Shift analysis.
+- **Zero Look-Ahead Bias:** Slices visible candle histories dynamically up to the current loop timestamp and gates higher timeframe candles (`15m` and `1h`) to prevent future price leakage.
+
+### 3. Server-Sent Events (SSE) Progress Streaming (`run/route.ts`)
+- **Action:** Implemented dynamic chunked data streaming using `ReadableStream` to report daily backtesting progress (active tested date, current balance, active trade count) to the frontend Processing HUD without UI blocking or socket latency.
+- **Execution ledger persistence:** Batch posts the completed backtest run details and trades journal records into the database upon loop completion.
+
+### 4. Brutalist Glassmorphic Quant Lab Workspace (`page.tsx`)
+- **Action:** Developed an expensive-looking dashboard panel situated at `/quant-lab` that utilizes the Midnight-slate HSL variables.
+- **Dropzone Editor:** Integrated a file drag-and-drop dropzone featuring JSON syntax validation and raw editor binding.
+- **Flashing Progress HUD:** Built a monospace status layout responding in real-time to the SSE stream.
+- **AI-Ready Exporter:** Created a high-fidelity data extraction schema bundling entry snapshots of `ipda_metrics` (Trend, OLS p-value, Displacement, Premium/Discount status) and trade duration metadata optimized for Gemini analysis.
 
 ## 🆕 V10.45 Changelog — Multi-Timeframe Strategy Customizer & Target Timeframe Execution Lock (Completed)
 

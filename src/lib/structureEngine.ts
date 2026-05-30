@@ -608,18 +608,33 @@ function runEquilibriumStateMachine(
       // Fallback to last pivots if no low before high
       const lastHigh = internalHighs[internalHighs.length - 1];
       const lastLow = internalLows[internalLows.length - 1];
-      const highVal = parseFloat(lastHigh.price.toFixed(2));
-      const lowVal = parseFloat(lastLow.price.toFixed(2));
-      const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
+      if (lastHigh && lastLow) {
+        const highVal = parseFloat(lastHigh.price.toFixed(2));
+        const lowVal = parseFloat(lastLow.price.toFixed(2));
+        const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
 
-      internalDealingRange = {
-        high: highVal,
-        low: lowVal,
-        equilibrium: eqVal,
-        current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
-        anchor_high_swing: lastHigh,
-        anchor_low_swing: lastLow
-      };
+        internalDealingRange = {
+          high: highVal,
+          low: lowVal,
+          equilibrium: eqVal,
+          current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
+          anchor_high_swing: lastHigh,
+          anchor_low_swing: lastLow
+        };
+      } else {
+        const highVal = candles.length > 0 ? Math.max(...candles.map(c => c.h)) : 0;
+        const lowVal = candles.length > 0 ? Math.min(...candles.map(c => c.l)) : 0;
+        const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
+
+        internalDealingRange = {
+          high: highVal,
+          low: lowVal,
+          equilibrium: eqVal,
+          current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
+          anchor_high_swing: lastHigh || null,
+          anchor_low_swing: lastLow || null
+        };
+      }
     }
   } else if (internalTrend === 'BEARISH' && internalLows.length > 0) {
     const activeLow = internalLows.reduce((min, s) => s.price < min.price ? s : min, internalLows[0]);
@@ -645,18 +660,33 @@ function runEquilibriumStateMachine(
       // Fallback to last pivots if no high before low
       const lastHigh = internalHighs[internalHighs.length - 1];
       const lastLow = internalLows[internalLows.length - 1];
-      const highVal = parseFloat(lastHigh.price.toFixed(2));
-      const lowVal = parseFloat(lastLow.price.toFixed(2));
-      const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
+      if (lastHigh && lastLow) {
+        const highVal = parseFloat(lastHigh.price.toFixed(2));
+        const lowVal = parseFloat(lastLow.price.toFixed(2));
+        const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
 
-      internalDealingRange = {
-        high: highVal,
-        low: lowVal,
-        equilibrium: eqVal,
-        current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
-        anchor_high_swing: lastHigh,
-        anchor_low_swing: lastLow
-      };
+        internalDealingRange = {
+          high: highVal,
+          low: lowVal,
+          equilibrium: eqVal,
+          current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
+          anchor_high_swing: lastHigh,
+          anchor_low_swing: lastLow
+        };
+      } else {
+        const highVal = candles.length > 0 ? Math.max(...candles.map(c => c.h)) : 0;
+        const lowVal = candles.length > 0 ? Math.min(...candles.map(c => c.l)) : 0;
+        const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
+
+        internalDealingRange = {
+          high: highVal,
+          low: lowVal,
+          equilibrium: eqVal,
+          current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
+          anchor_high_swing: lastHigh || null,
+          anchor_low_swing: lastLow || null
+        };
+      }
     }
   } else if (internalHighs.length > 0 && internalLows.length > 0) {
     const lastHigh = internalHighs[internalHighs.length - 1];
