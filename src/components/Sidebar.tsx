@@ -152,8 +152,14 @@ export default function Sidebar({
     triggerAiAnalysisScan();
   };
 
-  const formatPrice = (price: number | null | undefined) =>
-    price != null ? price.toFixed(2) : '---';
+  const formatPrice = (price: any) => {
+    if (price === 'AWAITING_IDM_SWEEP') return 'AWAITING_IDM_SWEEP';
+    if (typeof price === 'string') return price;
+    if (price && typeof price === 'object') {
+      if (typeof price.price === 'number') return price.price.toFixed(2);
+    }
+    return price != null && typeof price === 'number' && !isNaN(price) ? price.toFixed(2) : '---';
+  };
 
   const handleCopyJson = async () => {
     if (!data) return;
@@ -302,53 +308,62 @@ export default function Sidebar({
                     <span className="text-[9px] font-mono text-muted">(Limit {data?.candles_limit ?? 1000})</span>
                   </div>
 
-                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] text-muted uppercase font-bold">Macro Trend</span>
-                      {(() => {
-                        const trend = structureState?.currentTrend || data?.ipda_metrics?.current_trend || 'UNSET';
-                        if (trend === 'BULLISH') return <span className="text-[11px] font-black text-emerald-500 uppercase">🟢 BULLISH</span>;
-                        if (trend === 'BEARISH') return <span className="text-[11px] font-black text-rose-500 uppercase">🔴 BEARISH</span>;
-                        return <span className="text-[11px] font-black text-muted uppercase">⚪ UNSET</span>;
-                      })()}
-                    </div>
-
-                    {(() => {
-                      const range = structureState?.dealingRange || data?.ipda_metrics?.full_structure_map?.dealingRange;
-                      if (!range) return null;
-                      const pricingStatus = range.current_status || 'UNKNOWN';
-                      const pricingColorClass = pricingStatus === 'DISCOUNT'
+                  {(() => {
+                    const range = structureState?.dealingRange || data?.ipda_metrics?.full_structure_map?.dealingRange;
+                    const isAwaiting = range?.low === 'AWAITING_IDM_SWEEP' || range?.current_status === 'AWAITING_IDM_SWEEP';
+                    const pricingStatus = isAwaiting ? 'AWAITING_IDM_SWEEP' : (range?.current_status || 'UNKNOWN');
+                    const pricingColorClass = isAwaiting
+                      ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
+                      : pricingStatus === 'DISCOUNT'
                         ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_6px_rgba(16,185,129,0.05)]'
                         : pricingStatus === 'PREMIUM'
                           ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
                           : 'text-muted bg-card-border/20 border-transparent';
 
-                      return (
-                        <div className="space-y-1.5 border-t border-card-border/30 pt-1.5">
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-muted font-bold uppercase tracking-wider">Dealing Range</span>
-                            <span className="font-mono font-bold text-foreground/90">
-                              {formatPrice(range.low)} - {formatPrice(range.high)}
-                            </span>
-                          </div>
-
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-muted font-bold uppercase tracking-wider">Equilibrium</span>
-                            <span className="font-mono font-bold text-accent">
-                              {formatPrice(range.equilibrium)}
-                            </span>
-                          </div>
-
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-muted font-bold uppercase tracking-wider">Pricing Context</span>
-                            <span className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase ${pricingColorClass}`}>
-                              {pricingStatus}
-                            </span>
-                          </div>
+                    return (
+                      <div className={`p-2.5 border rounded-lg space-y-2 transition-colors duration-300 ${
+                        isAwaiting
+                          ? 'bg-amber-500/5 border-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.03)]'
+                          : 'bg-background/40 border-card-border'
+                      }`}>
+                        <div className="flex justify-between items-center">
+                          <span className={`text-[10px] uppercase font-bold ${isAwaiting ? 'text-amber-500/70' : 'text-muted'}`}>Macro Trend</span>
+                          {(() => {
+                            const trend = structureState?.currentTrend || data?.ipda_metrics?.current_trend || 'UNSET';
+                            if (isAwaiting) return <span className="text-[11px] font-black text-amber-500 uppercase animate-pulse">AWAITING SWEEP</span>;
+                            if (trend === 'BULLISH') return <span className="text-[11px] font-black text-emerald-500 uppercase">🟢 BULLISH</span>;
+                            if (trend === 'BEARISH') return <span className="text-[11px] font-black text-rose-500 uppercase">🔴 BEARISH</span>;
+                            return <span className="text-[11px] font-black text-muted uppercase">⚪ UNSET</span>;
+                          })()}
                         </div>
-                      );
-                    })()}
-                  </div>
+
+                        {range && (
+                          <div className={`space-y-1.5 border-t pt-1.5 ${isAwaiting ? 'border-amber-500/10' : 'border-card-border/30'}`}>
+                            <div className="flex justify-between items-center text-[10px]">
+                              <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Dealing Range</span>
+                              <span className={`font-mono font-bold ${isAwaiting ? 'text-[#fbbf24] text-[10px]' : 'text-foreground/90'}`}>
+                                {isAwaiting ? 'AWAITING_IDM_SWEEP' : `${formatPrice(range.low)} - ${formatPrice(range.high)}`}
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between items-center text-[10px]">
+                              <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Equilibrium</span>
+                              <span className={`font-mono font-bold ${isAwaiting ? 'text-amber-500/80 text-[10px]' : 'text-accent'}`}>
+                                {isAwaiting ? 'AWAITING sweep confirmation' : formatPrice(range.equilibrium)}
+                              </span>
+                            </div>
+
+                            <div className="flex justify-between items-center text-[10px]">
+                              <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Pricing Context</span>
+                              <span className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase ${pricingColorClass}`}>
+                                {pricingStatus}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* ──────── BOTTOM SECTION: INTRADAY DEPTH ──────── */}
@@ -358,64 +373,80 @@ export default function Sidebar({
                     <span className="text-[9px] font-mono text-muted">(Dynamic Swings)</span>
                   </div>
 
-                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] text-muted uppercase font-bold">Internal Trend</span>
-                      {(() => {
-                        const trend = structureState?.internalTrend || data?.ipda_metrics?.internal_context?.trend || 'UNSET';
-                        if (trend === 'BULLISH') return <span className="text-[11px] font-black text-emerald-500 uppercase">🟢 BULLISH</span>;
-                        if (trend === 'BEARISH') return <span className="text-[11px] font-black text-rose-500 uppercase">🔴 BEARISH</span>;
-                        return <span className="text-[11px] font-black text-muted uppercase">⚪ UNSET</span>;
-                      })()}
-                    </div>
+                  {(() => {
+                    const internalRange = structureState?.internalDealingRange || data?.ipda_metrics?.internal_context || data?.ipda_metrics?.full_structure_map?.internalDealingRange;
+                    if (!internalRange || (!internalRange.high && !internalRange.low)) {
+                      return (
+                        <div className="bg-background/40 p-2.5 border border-card-border rounded-lg text-[10px] text-muted italic text-center py-4">
+                          No confirmed internal swings yet
+                        </div>
+                      );
+                    }
 
-                    {(() => {
-                      const internalRange = structureState?.internalDealingRange || data?.ipda_metrics?.internal_context || data?.ipda_metrics?.full_structure_map?.internalDealingRange;
-                      if (!internalRange || (!internalRange.high && !internalRange.low)) {
-                        return (
-                          <div className="text-[10px] text-muted italic text-center py-2 border-t border-card-border/30">
-                            No confirmed internal swings yet
-                          </div>
-                        );
-                      }
-                      const pricingStatus = internalRange.current_status || internalRange.pricing_status || 'UNKNOWN';
-                      const pricingColorClass = pricingStatus === 'DISCOUNT'
+                    const isAwaiting = internalRange.low === 'AWAITING_IDM_SWEEP' || internalRange.high === 'AWAITING_IDM_SWEEP' || internalRange.current_status === 'AWAITING_IDM_SWEEP' || internalRange.pricing_status === 'AWAITING_IDM_SWEEP';
+                    const pricingStatus = isAwaiting ? 'AWAITING_IDM_SWEEP' : (internalRange.current_status || internalRange.pricing_status || 'UNKNOWN');
+                    const pricingColorClass = isAwaiting
+                      ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
+                      : pricingStatus === 'DISCOUNT'
                         ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_6px_rgba(16,185,129,0.05)]'
                         : pricingStatus === 'PREMIUM'
                           ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
                           : 'text-muted bg-card-border/20 border-transparent';
 
-                      return (
-                        <div className="space-y-1.5 border-t border-card-border/30 pt-1.5">
+                    return (
+                      <div className={`p-2.5 border rounded-lg space-y-2 transition-colors duration-300 ${
+                        isAwaiting
+                          ? 'bg-amber-500/5 border-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.03)]'
+                          : 'bg-background/40 border-card-border'
+                      }`}>
+                        <div className="flex justify-between items-center">
+                          <span className={`text-[10px] uppercase font-bold ${isAwaiting ? 'text-amber-500/70' : 'text-muted'}`}>Internal Trend</span>
+                          {(() => {
+                            const trend = structureState?.internalTrend || data?.ipda_metrics?.internal_context?.trend || 'UNSET';
+                            if (isAwaiting) return <span className="text-[11px] font-black text-amber-500 uppercase animate-pulse">AWAITING SWEEP</span>;
+                            if (trend === 'BULLISH') return <span className="text-[11px] font-black text-emerald-500 uppercase">🟢 BULLISH</span>;
+                            if (trend === 'BEARISH') return <span className="text-[11px] font-black text-rose-500 uppercase">🔴 BEARISH</span>;
+                            return <span className="text-[11px] font-black text-muted uppercase">⚪ UNSET</span>;
+                          })()}
+                        </div>
+
+                        <div className={`space-y-1.5 border-t pt-1.5 ${isAwaiting ? 'border-amber-500/10' : 'border-card-border/30'}`}>
                           <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-muted font-bold uppercase tracking-wider">Internal Range</span>
-                            <span className="font-mono font-bold text-foreground/90">
-                              {formatPrice(internalRange.low)} - {formatPrice(internalRange.high)}
+                            <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Internal Range</span>
+                            <span className={`font-mono font-bold ${isAwaiting ? 'text-[#fbbf24] text-[10px]' : 'text-foreground/90'}`}>
+                              {isAwaiting ? 'AWAITING_IDM_SWEEP' : `${formatPrice(internalRange.low)} - ${formatPrice(internalRange.high)}`}
                             </span>
                           </div>
 
                           <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-muted font-bold uppercase tracking-wider">Equilibrium</span>
-                            <span className="font-mono font-bold text-accent">
-                              {formatPrice(internalRange.equilibrium)}
+                            <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Equilibrium</span>
+                            <span className={`font-mono font-bold ${isAwaiting ? 'text-amber-500/80 text-[10px]' : 'text-accent'}`}>
+                              {isAwaiting ? 'AWAITING sweep confirmation' : formatPrice(internalRange.equilibrium)}
                             </span>
                           </div>
 
                           <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-muted font-bold uppercase tracking-wider">Pricing Context</span>
+                            <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Pricing Context</span>
                             <span className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase ${pricingColorClass}`}>
                               {pricingStatus}
                             </span>
                           </div>
 
                           <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-muted font-bold uppercase tracking-wider">Volatility Gate</span>
+                            <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Volatility Gate</span>
                             {(() => {
                               const multiplier = parseFloat(themeSettings?.structure_istr_atr_multiplier || '1.5');
                               const activeCandles = data?.data_payload?.[`candles_${wsInterval}` as keyof typeof data.data_payload] || [];
                               const atr = activeCandles.length > 0 ? calculateATR(activeCandles) : 0;
-                              const rangeHeight = internalRange.high && internalRange.low ? (internalRange.high - internalRange.low) : 0;
+                              const rangeHeight = internalRange.high && internalRange.low && !isAwaiting ? (internalRange.high - internalRange.low) : 0;
                               const isSuppressed = rangeHeight > 0 && atr > 0 && rangeHeight < atr * multiplier;
+                              if (isAwaiting) {
+                                return (
+                                  <span className="text-[9px] font-black text-amber-500/70 bg-amber-500/5 border border-amber-500/10 px-1.5 py-0.5 rounded tracking-wider uppercase">
+                                    PENDING
+                                  </span>
+                                );
+                              }
                               if (isSuppressed) {
                                 return (
                                   <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded tracking-wider uppercase shadow-[0_0_6px_rgba(245,158,11,0.05)]">
@@ -431,9 +462,9 @@ export default function Sidebar({
                             })()}
                           </div>
                         </div>
-                      );
-                    })()}
-                  </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

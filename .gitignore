@@ -49,3 +49,6 @@ graphify_temp_cache.py
 graphify_temp_detect.py
 graphify_temp_merge.py
 graphify_temp_semantic.py
+
+# AI learning
+# learning/*

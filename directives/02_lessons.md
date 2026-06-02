@@ -103,6 +103,30 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
   3. The Strategy Evaluator was unable to filter by directional MSS conditions (Bullish vs Bearish shift).
 - **The Fix:** We created a centralized, pure-logic quant module `src/lib/structureEngine.ts` to govern all calculations. This engine enforces the **Directional Color Lock** on 5-Bar (MAJOR) fractals, tracks active trend states using a rigorous state machine (where breaks in trend direction are **BOS** and breaks against are **MSS**), gates MSS confirmation behind volume-based **displacement sponsorship**, and anchors the Structural Dealing Range strictly on color-validated major fractals. The visual layer, backend API route, backtest engine hook, and strategy evaluator were all refactored to consume this unified engine.
 
+### 18. The NaN Volatility Window Index Drift & Out-of-Bounds Crash (Resolved in V11.1)
+- **The Bug:** During live market data polling, server-side fetch updates returned `HTTP 500` status with the error: `TypeError: Cannot read properties of undefined (reading 'inside_bar')` at `MarketStructureEngine.detect_pivots` (line 240).
+- **The Cause:** When calculating the dynamic Volatility-Adjusted window size ($N_t$), if the rolling ATR or median calculations encountered a lack of volume/price variation or uninitialized data inputs, the result calculated as `NaN`. Since Javascript/TypeScript propagates `NaN` across mathematical operators:
+  1. The pivot check index `check_idx = t - N_t` evaluated to `NaN`.
+  2. The boundary gate `if (check_idx < N_t) return;` (`NaN < NaN`) evaluated to `false`, allowing the engine pipeline to proceed.
+  3. Evaluating `this.candles[NaN]` returned `undefined`, which immediately crashed when attempting to read the property `inside_bar`.
+- **The Fix:** We implemented strict defensive bounds and `NaN` guards throughout `src/lib/structureEngine.ts`:
+  1. Guarded `calculate_adaptive_n` to return the fallback `n_base = 5` if the dynamic window evaluates to `NaN`.
+  2. Added an explicit `isNaN(N_t)` and `isNaN(check_idx)` check at the start of `detect_pivots`, and validated that `check_idx` lies within the strict bounds of `[0, this.candles.length - 1]`.
+  3. Added existence guards (`!current || !mother`, `!left || !right`, `!candle_k`) in `is_inside_bar`, `compute_volume_sma`, and the pullback search loops (`locate_last_pullback_low`/`locate_last_pullback_high`) to guarantee that uninitialized index lookups fail silently rather than crashing the system.
 
+### 19. Stale LocalStorage Properties & Undefined Parameter Leakage (Resolved in V11.2)
+- **The Bug:** After introducing timeframe-specific lookback candle limits, the frontend failed with "Failed to fetch market data" console warnings, and backend routes returned `HTTP 500` server errors.
+- **The Cause:** When retrieving `engineSettings` on mount, the hook loaded the existing JSON record stored in the user's browser `localStorage` from a previous session. Because that object lacked the newly introduced keys (`candlesLimit1m`, `candlesLimit5m`, etc.), they evaluated to `undefined`. Interpolating them directly in the background fetch query parameter string yielded `&limit1m=undefined&limit5m=undefined...`. On the backend, `parseInt("undefined", 10)` returned `NaN`, forcing Binance REST calls to request `limit=NaN`, which rejected with `HTTP 400 Bad Request` and crashed the API handler.
+- **The Fix:** We implemented double-ended defensive synchronizations:
+  1. **Client-Side:** Refactored the `useState` initializer in `useMarketData.ts` to merge the parsed `localStorage` object on top of `DEFAULT_ENGINE_SETTINGS` using `{ ...DEFAULT_ENGINE_SETTINGS, ...JSON.parse(stored) }`, guaranteeing all new keys default properly.
+  2. **Server-Side:** Injected boundary checks and fallback gates in `/api/market-data/route.ts` for all timeframe query variables: `if (isNaN(limitX) || limitX < 100 || limitX > 1500) limitX = limit;` where `limit` acts as the stable global fallback.
+
+### 20. Severe Binance Rate-Limiting & Bulletproof Offline Simulation Fallback (Resolved in V11.3)
+- **The Bug:** During local development, the Next.js backend `/api/market-data` API suddenly throws a 500 error on page load, or a 400 error when scrolling back on the chart to load more history, showing `I'm a teapot (418)` inside the console.
+- **The Cause:** Binance Futures REST API has strict DDoS/rate limits and geographic locks. Sequential paginated fetches (e.g. `fetchLargeHistory` requesting 5760 candles) or parallel endpoints queried under residential/USA IPs can trigger rate limits or geoblocks, resulting in HTTP 418 bans. In older code, if *any* single parallel fetch or historical lazy-load (`endTime` fast path) failed, the route threw an error, crashing the entire dashboard or history load cycle with a 500/400 error.
+- **The Fix:** We implemented a bulletproof **Offline Simulation Mode** inside `/api/market-data/route.ts`:
+  1. Wrapped both the main parallel fetches and the `endTime` lazy-loading fast-path fetches inside try-catch blocks.
+  2. If any live Binance query fails or rate-limits, the API logs a warning, flags the state, and seamlessly shifts to **Offline Simulation Mode**.
+  3. Built a mathematical price-movement simulator `generateMockCandles` supporting arbitrary anchor timestamps (via `endTimestamp`) to dynamically generate realistic historical OHLCV candle streams ending exactly at the requested `endTime` scroll cursor, allowing infinite smooth scrolling in demo mode without throwing any browser errors.
 
 

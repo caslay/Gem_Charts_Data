@@ -294,6 +294,34 @@ export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   structure_istr_atr_multiplier: '1.5',
 };
 
+export interface EngineSettings {
+  atrPeriod: number;
+  adaptiveNMin: number;
+  adaptiveNMax: number;
+  mssBodyRatio: number;
+  displacementVef: number;
+  sharpDepartureMult: number;
+  candlesLimit1m: number;
+  candlesLimit5m: number;
+  candlesLimit15m: number;
+  candlesLimit1h: number;
+  candlesLimit4h: number;
+}
+
+export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
+  atrPeriod: 14,
+  adaptiveNMin: 3,
+  adaptiveNMax: 15,
+  mssBodyRatio: 0.70,
+  displacementVef: 1.50,
+  sharpDepartureMult: 1.50,
+  candlesLimit1m: 1000,
+  candlesLimit5m: 1000,
+  candlesLimit15m: 1000,
+  candlesLimit1h: 1000,
+  candlesLimit4h: 1000,
+};
+
 
 
 export interface MarketDataPayload {
@@ -360,12 +388,27 @@ export function useMarketData(selectedInterval: string = '5m') {
     }
   });
 
+  const [engineSettings, setEngineSettings] = useState<EngineSettings>(() => {
+    if (typeof window === 'undefined') return DEFAULT_ENGINE_SETTINGS;
+    try {
+      const stored = localStorage.getItem('gem_engine_settings');
+      return stored ? { ...DEFAULT_ENGINE_SETTINGS, ...JSON.parse(stored) } : DEFAULT_ENGINE_SETTINGS;
+    } catch {
+      return DEFAULT_ENGINE_SETTINGS;
+    }
+  });
+
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'saved' | 'error'>('idle');
 
   // Keep refs of latest values to avoid closure/dependency loop issues in the debounced sync call
   const signalAlertsRef = useRef(signalAlerts);
   const signalAlertsEnabledRef = useRef(signalAlertsEnabled);
+  const engineSettingsRef = useRef(engineSettings);
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    engineSettingsRef.current = engineSettings;
+  }, [engineSettings]);
 
   useEffect(() => {
     signalAlertsRef.current = signalAlerts;
@@ -433,7 +476,7 @@ export function useMarketData(selectedInterval: string = '5m') {
           }
 
           if (data.terminalSettings) {
-            const { signalSounds, enabledSignals } = data.terminalSettings;
+            const { signalSounds, enabledSignals, atrPeriod, adaptiveNMin, adaptiveNMax, mssBodyRatio, displacementVef, sharpDepartureMult, candlesLimit1m, candlesLimit5m, candlesLimit15m, candlesLimit1h, candlesLimit4h } = data.terminalSettings;
             if (signalSounds) {
               setSignalAlerts(signalSounds);
               if (typeof window !== 'undefined') {
@@ -445,6 +488,24 @@ export function useMarketData(selectedInterval: string = '5m') {
               if (typeof window !== 'undefined') {
                 localStorage.setItem('gem_signal_enabled', JSON.stringify(enabledSignals));
               }
+            }
+            
+            const loadedEngine = {
+              atrPeriod: atrPeriod ?? 14,
+              adaptiveNMin: adaptiveNMin ?? 3,
+              adaptiveNMax: adaptiveNMax ?? 15,
+              mssBodyRatio: mssBodyRatio ?? 0.70,
+              displacementVef: displacementVef ?? 1.50,
+              sharpDepartureMult: sharpDepartureMult ?? 1.50,
+              candlesLimit1m: candlesLimit1m ?? 1000,
+              candlesLimit5m: candlesLimit5m ?? 1000,
+              candlesLimit15m: candlesLimit15m ?? 1000,
+              candlesLimit1h: candlesLimit1h ?? 1000,
+              candlesLimit4h: candlesLimit4h ?? 1000,
+            };
+            setEngineSettings(loadedEngine);
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('gem_engine_settings', JSON.stringify(loadedEngine));
             }
           }
         }
@@ -470,6 +531,17 @@ export function useMarketData(selectedInterval: string = '5m') {
             terminalSettings: {
               signalSounds: signalAlertsRef.current,
               enabledSignals: signalAlertsEnabledRef.current,
+              atrPeriod: engineSettingsRef.current.atrPeriod,
+              adaptiveNMin: engineSettingsRef.current.adaptiveNMin,
+              adaptiveNMax: engineSettingsRef.current.adaptiveNMax,
+              mssBodyRatio: engineSettingsRef.current.mssBodyRatio,
+              displacementVef: engineSettingsRef.current.displacementVef,
+              sharpDepartureMult: engineSettingsRef.current.sharpDepartureMult,
+              candlesLimit1m: engineSettingsRef.current.candlesLimit1m,
+              candlesLimit5m: engineSettingsRef.current.candlesLimit5m,
+              candlesLimit15m: engineSettingsRef.current.candlesLimit15m,
+              candlesLimit1h: engineSettingsRef.current.candlesLimit1h,
+              candlesLimit4h: engineSettingsRef.current.candlesLimit4h,
             },
           }),
         });
@@ -483,6 +555,18 @@ export function useMarketData(selectedInterval: string = '5m') {
       }
     }, 1000); // 1-second debounce
   }, []);
+
+  const updateEngineSettings = useCallback((newSettings: Partial<EngineSettings>) => {
+    setEngineSettings((prev) => {
+      const updated = { ...prev, ...newSettings };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gem_engine_settings', JSON.stringify(updated));
+      }
+      engineSettingsRef.current = updated;
+      queueSettingsSync();
+      return updated;
+    });
+  }, [queueSettingsSync]);
 
   const updateSignalAlert = useCallback((event: keyof SignalAlerts, fileName: string) => {
     setSignalAlerts((prev) => {
@@ -523,7 +607,8 @@ export function useMarketData(selectedInterval: string = '5m') {
         setError(null);
       }
       const initParam = !isPolling ? '&init=true' : '';
-      const res = await fetch(`/api/market-data?interval=${selectedInterval}${initParam}`);
+      const limitParams = `&limit1m=${engineSettings.candlesLimit1m ?? 1000}&limit5m=${engineSettings.candlesLimit5m ?? 1000}&limit15m=${engineSettings.candlesLimit15m ?? 1000}&limit1h=${engineSettings.candlesLimit1h ?? 1000}&limit4h=${engineSettings.candlesLimit4h ?? 1000}`;
+      const res = await fetch(`/api/market-data?interval=${selectedInterval}${initParam}${limitParams}`);
       if (!res.ok) {
         throw new Error('Failed to fetch market data');
       }
@@ -531,11 +616,17 @@ export function useMarketData(selectedInterval: string = '5m') {
 
       setData((prev) => {
         if (!prev) return jsonData;
-        // Preserve data_payload reference during polling to prevent Chart remounting/flashing
-        return {
-          ...jsonData,
-          data_payload: isPolling ? prev.data_payload : jsonData.data_payload
-        };
+        // During polling, preserve both data_payload AND ipda_metrics to prevent the
+        // Dynamic Chart Layer Orchestrator from re-firing on every 5-second tick.
+        // Only replace these on real initial loads (isPolling = false) or timeframe switches.
+        if (isPolling) {
+          return {
+            ...jsonData,
+            data_payload: prev.data_payload,
+            ipda_metrics: prev.ipda_metrics,
+          };
+        }
+        return jsonData;
       });
 
       // Clear any pre-existing initial load error upon a successful poll
@@ -555,7 +646,7 @@ export function useMarketData(selectedInterval: string = '5m') {
         setIsLoading(false);
       }
     }
-  }, [selectedInterval]);
+  }, [selectedInterval, engineSettings]);
 
   useEffect(() => {
     // Wrap initial fetch in a macro-task to prevent synchronous cascading React state updates
@@ -598,10 +689,10 @@ export function useMarketData(selectedInterval: string = '5m') {
     const currentPrice = activeCandles[activeCandles.length - 1]?.c ?? 0;
     const displacementStatus = data.ipda_metrics?.institutional_sponsorship ?? null;
     const globalAnchors = data.ipda_metrics?.global_anchors ?? null;
-    const analysis = analyzeMarketStructure(activeCandles, currentPrice, displacementStatus, anchor, globalAnchors);
+    const analysis = analyzeMarketStructure(activeCandles, currentPrice, displacementStatus, anchor, globalAnchors, engineSettings);
 
     setStructureState(analysis);
-  }, [data, selectedInterval, contextAnchorTimestamp]);
+  }, [data, selectedInterval, contextAnchorTimestamp, engineSettings]);
 
   // Hook into live alerts: Triggers Binance WS, performs diffs, fires audio/push alerts
   const { activeAlerts, clearAlerts, dismissAlert, triggerAlert } = useLiveAlerts(data, fetchData);
@@ -658,12 +749,16 @@ export function useMarketData(selectedInterval: string = '5m') {
     const prevCandles = data.data_payload[activeSeriesKey] || data.data_payload.candles_15m || [];
     if (prevCandles.length === 0) return;
 
-    // Find the oldest candle timestamp in the active series
+    // Find the oldest candle timestamp and its close price.
+    // The close price is sent as `fallbackPrice` so that the offline simulation
+    // mock generator anchors its backward walk exactly at the chart's current left boundary,
+    // preventing vertical price jumps when lazy-loading history in offline mode.
     const oldestTimestamp = prevCandles[0].t;
+    const oldestPrice = prevCandles[0].c;
 
     setIsFetchingMore(true);
     try {
-      const res = await fetch(`/api/market-data?interval=${selectedInterval}&endTime=${oldestTimestamp}`);
+      const res = await fetch(`/api/market-data?interval=${selectedInterval}&endTime=${oldestTimestamp}&fallbackPrice=${oldestPrice}`);
       if (!res.ok) throw new Error('Failed to fetch more history');
 
       const newBatch: MarketDataPayload = await res.json();
@@ -734,7 +829,9 @@ export function useMarketData(selectedInterval: string = '5m') {
     isFetchingMore,
     loadMoreHistory,
     structureState,
-    contextAnchorTimestamp
+    contextAnchorTimestamp,
+    engineSettings,
+    updateEngineSettings
   };
 }
 

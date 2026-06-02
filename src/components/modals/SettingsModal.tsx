@@ -20,7 +20,7 @@ export interface Alert {
   soundSelection?: AlertSound;
 }
 
-type CommandCenterTab = 'strategy' | 'audio';
+type CommandCenterTab = 'strategy' | 'audio' | 'engine';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -45,7 +45,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     updateSignalAlert,
     signalAlertsEnabled,
     toggleSignalAlertEnabled,
-    syncStatus
+    syncStatus,
+    engineSettings,
+    updateEngineSettings
   } = useMarketDataContext();
 
   // ── Tabs State ────────────────────────────────────────────────────────────
@@ -152,6 +154,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const tabs: { id: CommandCenterTab; icon: React.ReactNode; label: string }[] = [
     { id: 'strategy', icon: <Crosshair size={14} />, label: 'STRATEGY' },
     { id: 'audio', icon: <Music size={14} />, label: 'AUDIO' },
+    { id: 'engine', icon: <Sparkles size={14} />, label: 'ENGINE CORE' },
   ];
 
   // If a price alert is active for configuration, render ONLY the Price Alert Config Modal
@@ -416,6 +419,288 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* TAB 4: ENGINE CORE TUNING PANEL ─────────────────────────── */}
+            {activeTab === 'engine' && (
+              <div className="p-6 space-y-6">
+                <div className="glass-panel bg-card/45 border border-card-border/80 p-4 rounded-xl text-xs text-muted uppercase tracking-wide leading-relaxed shadow-sm">
+                  Fine-tune the dynamic, hedge-fund grade Interbank Price Delivery Algorithm (IPDA) quantitative variables in real-time. Changes are auto-saved to Neon PG database.
+                </div>
+
+                <div className="space-y-6">
+                  {/* Group A: Fractal Sensitivity */}
+                  <div className="border border-card-border/60 bg-card/30 rounded-xl p-5 space-y-4">
+                    <h4 className="text-xs font-black uppercase text-accent tracking-widest border-b border-card-border/40 pb-2 flex items-center gap-2">
+                      <Sparkles size={12} />
+                      <span>Group A: Fractal Sensitivity</span>
+                    </h4>
+                    
+                    {/* ATR Period */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-foreground">ATR Period (Volatility Length)</span>
+                        <span className="text-xs font-mono font-bold text-accent">{engineSettings?.atrPeriod ?? 14}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="5"
+                        max="30"
+                        step="1"
+                        value={engineSettings?.atrPeriod ?? 14}
+                        onChange={(e) => updateEngineSettings && updateEngineSettings({ atrPeriod: parseInt(e.target.value, 10) })}
+                        className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-accent"
+                      />
+                      <span className="block text-[10px] text-muted italic">Defines the lookback length for the normalized Volatility measurement.</span>
+                    </div>
+
+                    {/* Adaptive N Range */}
+                    <div className="grid grid-cols-2 gap-4 pt-2">
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[11px] font-bold text-foreground">Min Window (N_min)</span>
+                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.adaptiveNMin ?? 3}</span>
+                        </div>
+                        <input
+                          type="number"
+                          min="2"
+                          max="8"
+                          value={engineSettings?.adaptiveNMin ?? 3}
+                          onChange={(e) => updateEngineSettings && updateEngineSettings({ adaptiveNMin: parseInt(e.target.value, 10) })}
+                          className="w-full bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-3 py-2 text-xs font-bold text-foreground rounded-lg font-mono"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[11px] font-bold text-foreground">Max Window (N_max)</span>
+                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.adaptiveNMax ?? 15}</span>
+                        </div>
+                        <input
+                          type="number"
+                          min="10"
+                          max="30"
+                          value={engineSettings?.adaptiveNMax ?? 15}
+                          onChange={(e) => updateEngineSettings && updateEngineSettings({ adaptiveNMax: parseInt(e.target.value, 10) })}
+                          className="w-full bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-3 py-2 text-xs font-bold text-foreground rounded-lg font-mono"
+                        />
+                      </div>
+                    </div>
+                    <span className="block text-[10px] text-muted italic">Determines the boundaries for volatility-based scaling.</span>
+                  </div>
+
+                  {/* Group B: Institutional Sponsorship */}
+                  <div className="border border-card-border/60 bg-card/30 rounded-xl p-5 space-y-4">
+                    <h4 className="text-xs font-black uppercase text-accent tracking-widest border-b border-card-border/40 pb-2 flex items-center gap-2">
+                      <Sparkles size={12} />
+                      <span>Group B: Institutional Sponsorship</span>
+                    </h4>
+
+                    {/* Body Ratio */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-foreground">Candle Body Ratio (BR_t)</span>
+                        <span className="text-xs font-mono font-bold text-accent">{(engineSettings?.mssBodyRatio ?? 0.70).toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.50"
+                        max="0.95"
+                        step="0.05"
+                        value={engineSettings?.mssBodyRatio ?? 0.70}
+                        onChange={(e) => updateEngineSettings && updateEngineSettings({ mssBodyRatio: parseFloat(e.target.value) })}
+                        className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-accent"
+                      />
+                      <span className="block text-[10px] text-muted italic">Required ratio of real body to total candle height for displacement verification.</span>
+                    </div>
+
+                    {/* VEF */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-foreground">Volume Expansion Factor (VEF_t)</span>
+                        <span className="text-xs font-mono font-bold text-accent">{(engineSettings?.displacementVef ?? 1.50).toFixed(2)}x</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1.00"
+                        max="3.00"
+                        step="0.10"
+                        value={engineSettings?.displacementVef ?? 1.50}
+                        onChange={(e) => updateEngineSettings && updateEngineSettings({ displacementVef: parseFloat(e.target.value) })}
+                        className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-accent"
+                      />
+                      <span className="block text-[10px] text-muted italic">Specifies the multiple of standard volume required to validate institutionally backed shifts.</span>
+                    </div>
+                  </div>
+
+                  {/* Group C: Hardening Gates */}
+                  <div className="border border-card-border/60 bg-card/30 rounded-xl p-5 space-y-4">
+                    <h4 className="text-xs font-black uppercase text-accent tracking-widest border-b border-card-border/40 pb-2 flex items-center gap-2">
+                      <Sparkles size={12} />
+                      <span>Group C: Hardening Gates</span>
+                    </h4>
+
+                    {/* Sharp Departure */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-foreground">Sharp Departure Multiplier (ATR)</span>
+                        <span className="text-xs font-mono font-bold text-accent">{(engineSettings?.sharpDepartureMult ?? 1.50).toFixed(2)}x</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="1.00"
+                        max="3.00"
+                        step="0.10"
+                        value={engineSettings?.sharpDepartureMult ?? 1.50}
+                        onChange={(e) => updateEngineSettings && updateEngineSettings({ sharpDepartureMult: parseFloat(e.target.value) })}
+                        className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-accent"
+                      />
+                      <span className="block text-[10px] text-muted italic">ATR multiplier required to confirm sharp price departure from breakout zones within 5 candles.</span>
+                    </div>
+                  </div>
+
+                  {/* Group D: Timeframe Candle Lookbacks */}
+                  <div className="border border-card-border/60 bg-card/30 rounded-xl p-5 space-y-4">
+                    <h4 className="text-xs font-black uppercase text-accent tracking-widest border-b border-card-border/40 pb-2 flex items-center gap-2">
+                      <Sparkles size={12} />
+                      <span>Group D: Timeframe Candle Lookbacks</span>
+                    </h4>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* 1m Limit */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[11px] font-bold text-foreground font-sans">1m Candle Limit</span>
+                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit1m ?? 1000}</span>
+                        </div>
+                        <input
+                          type="number"
+                          min="100"
+                          max="1500"
+                          value={engineSettings?.candlesLimit1m ?? 1000}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (!isNaN(val)) {
+                              updateEngineSettings && updateEngineSettings({ candlesLimit1m: val });
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            const clamped = isNaN(val) ? 1000 : Math.max(100, Math.min(1500, val));
+                            updateEngineSettings && updateEngineSettings({ candlesLimit1m: clamped });
+                          }}
+                          className="w-full bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-3 py-2 text-xs font-bold text-foreground rounded-lg font-mono shadow-sm"
+                        />
+                      </div>
+
+                      {/* 5m Limit */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[11px] font-bold text-foreground font-sans">5m Candle Limit</span>
+                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit5m ?? 1000}</span>
+                        </div>
+                        <input
+                          type="number"
+                          min="100"
+                          max="1500"
+                          value={engineSettings?.candlesLimit5m ?? 1000}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (!isNaN(val)) {
+                              updateEngineSettings && updateEngineSettings({ candlesLimit5m: val });
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            const clamped = isNaN(val) ? 1000 : Math.max(100, Math.min(1500, val));
+                            updateEngineSettings && updateEngineSettings({ candlesLimit5m: clamped });
+                          }}
+                          className="w-full bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-3 py-2 text-xs font-bold text-foreground rounded-lg font-mono shadow-sm"
+                        />
+                      </div>
+
+                      {/* 15m Limit */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[11px] font-bold text-foreground font-sans">15m Candle Limit</span>
+                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit15m ?? 1000}</span>
+                        </div>
+                        <input
+                          type="number"
+                          min="100"
+                          max="1500"
+                          value={engineSettings?.candlesLimit15m ?? 1000}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (!isNaN(val)) {
+                              updateEngineSettings && updateEngineSettings({ candlesLimit15m: val });
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            const clamped = isNaN(val) ? 1000 : Math.max(100, Math.min(1500, val));
+                            updateEngineSettings && updateEngineSettings({ candlesLimit15m: clamped });
+                          }}
+                          className="w-full bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-3 py-2 text-xs font-bold text-foreground rounded-lg font-mono shadow-sm"
+                        />
+                      </div>
+
+                      {/* 1h Limit */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[11px] font-bold text-foreground font-sans">1h Candle Limit</span>
+                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit1h ?? 1000}</span>
+                        </div>
+                        <input
+                          type="number"
+                          min="100"
+                          max="1500"
+                          value={engineSettings?.candlesLimit1h ?? 1000}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (!isNaN(val)) {
+                              updateEngineSettings && updateEngineSettings({ candlesLimit1h: val });
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            const clamped = isNaN(val) ? 1000 : Math.max(100, Math.min(1500, val));
+                            updateEngineSettings && updateEngineSettings({ candlesLimit1h: clamped });
+                          }}
+                          className="w-full bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-3 py-2 text-xs font-bold text-foreground rounded-lg font-mono shadow-sm"
+                        />
+                      </div>
+
+                      {/* 4h Limit */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[11px] font-bold text-foreground font-sans">4h Candle Limit</span>
+                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit4h ?? 1000}</span>
+                        </div>
+                        <input
+                          type="number"
+                          min="100"
+                          max="1500"
+                          value={engineSettings?.candlesLimit4h ?? 1000}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (!isNaN(val)) {
+                              updateEngineSettings && updateEngineSettings({ candlesLimit4h: val });
+                            }
+                          }}
+                          onBlur={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            const clamped = isNaN(val) ? 1000 : Math.max(100, Math.min(1500, val));
+                            updateEngineSettings && updateEngineSettings({ candlesLimit4h: clamped });
+                          }}
+                          className="w-full bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-3 py-2 text-xs font-bold text-foreground rounded-lg font-mono shadow-sm"
+                        />
+                      </div>
+                    </div>
+                    <span className="block text-[10px] text-muted italic font-sans leading-relaxed">Configure the historical lookback candle counts for each timeframe independently (min 100, max 1500).</span>
+                  </div>
+                </div>
               </div>
             )}
           </div>

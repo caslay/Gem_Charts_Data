@@ -114,32 +114,34 @@ function resolveMetric(
       const condDir = condition.direction || 'ANY';
       const condConf = (condition as any).confirmation || 'CONFIRMED';
 
-      const zigzag = ipda.full_structure_map?.zigzag || [];
-      const mssSegments = zigzag.filter((z: any) => z.label === 'MSS');
-      const latestMssSegment = mssSegments[mssSegments.length - 1] || null;
+      const events = ipda.full_structure_map?.structural_events || [];
+      const mssEvents = events.filter((e: any) => e.type === 'MSS' || e.type === 'CHoCH');
+      const latestMss = mssEvents[mssEvents.length - 1] || null;
 
-      // Fallback to top-level ipda metrics if zigzag is unavailable
-      if (!latestMssSegment) {
+      if (!latestMss) {
+        // Fallback to legacy top-level ipda metrics if events are unavailable
         const mssActive = ipda.market_structure_shift === true;
         const mssDir = ipda.market_structure_shift_direction;
         const isDirMatch = condDir === 'ANY' || mssDir === condDir;
-        if (condConf === 'UNCONFIRMED') return false; // top-level flag is only for confirmed
+        if (condConf === 'UNCONFIRMED') return false; 
         return mssActive && isDirMatch;
       }
 
-      // Check confirmation matching
+      // Invalidated breaks are ignored
+      if (latestMss.invalidated) return false;
+
+      // Check confirmation matching using the Sharp Departure Momentum filter
       let isConfMatch = false;
       if (condConf === 'CONFIRMED') {
-        isConfMatch = latestMssSegment.displacementConfirmed === true;
+        isConfMatch = latestMss.sharp_departure_confirmed === true;
       } else if (condConf === 'UNCONFIRMED') {
-        isConfMatch = latestMssSegment.displacementConfirmed === false;
+        isConfMatch = !latestMss.sharp_departure_confirmed && !latestMss.sharp_departure_failed;
       } else {
         isConfMatch = true; // ANY
       }
 
       // Check direction matching
-      const mssDir = latestMssSegment.trendAfter || ipda.market_structure_shift_direction;
-      const isDirMatch = condDir === 'ANY' || mssDir === condDir;
+      const isDirMatch = condDir === 'ANY' || latestMss.direction === condDir;
 
       return isConfMatch && isDirMatch;
     }

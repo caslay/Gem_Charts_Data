@@ -88,13 +88,13 @@ export default function ChartLayerHud() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          toggleVisibility('structure_zigzag');
+                          toggleVisibility('structure_int');
                         }}
-                        className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold transition-all cursor-pointer ${visibility.structure_zigzag !== false
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold transition-all cursor-pointer ${visibility.structure_int !== false
                           ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-500 shadow-[0_0_6px_rgba(6,182,212,0.15)]'
                           : 'text-muted hover:text-foreground bg-transparent border border-transparent'
                           }`}
-                        title="Toggle Internal Swings (INT)"
+                        title="Toggle Internal Breach Rays (INT — dashed horizontal levels from unconfirmed macro swings)"
                       >
                         INT
                       </button>

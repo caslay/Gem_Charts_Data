@@ -182,8 +182,6 @@ export default function SettingsPage() {
     max_risk_limit_pct: "3.00",
     current_balance: "10000.00",
   });
-  const [candlesLimit, setCandlesLimit] = useState("1000");
-
   // ── Terminal / Audio Alerts State ──────────────────────────────────────────
   const [signalAlerts, setSignalAlerts] = useState<SignalAlerts>(DEFAULT_SIGNAL_ALERTS);
   const [signalAlertsEnabled, setSignalAlertsEnabled] = useState<SignalAlertsEnabled>(DEFAULT_SIGNAL_ALERTS_ENABLED);
@@ -236,9 +234,6 @@ export default function SettingsPage() {
         SYSTEM_PROMPT: s.SYSTEM_PROMPT || "",
         GEMINI_LIVE_KEY: s.GEMINI_LIVE_KEY || "",
       });
-      if (s.candles_limit) {
-        setCandlesLimit(s.candles_limit);
-      }
 
       // Merge retrieved settings on top of default settings to guarantee all keys exist
       const mergedTheme = { ...DEFAULT_THEME_SETTINGS };
@@ -352,7 +347,6 @@ export default function SettingsPage() {
 
       const capital = parseFloat(account.initial_capital);
       const riskLimit = parseFloat(account.max_risk_limit_pct);
-      const limitVal = parseInt(candlesLimit, 10);
 
       if (isNaN(capital) || capital <= 0) {
         throw new Error("Initial Capital must be a positive number.");
@@ -362,34 +356,18 @@ export default function SettingsPage() {
         throw new Error("Max Risk Limit must be a percentage between 0% and 100%.");
       }
 
-      if (isNaN(limitVal) || limitVal < 100 || limitVal > 1500) {
-        throw new Error("Candle limit must be a positive integer between 100 and 1500.");
-      }
-
-      const [accountRes, settingsRes] = await Promise.all([
-        fetch("/api/account", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            initial_capital: capital,
-            max_risk_limit_pct: riskLimit,
-          }),
+      const accountRes = await fetch("/api/account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          initial_capital: capital,
+          max_risk_limit_pct: riskLimit,
         }),
-        fetch("/api/settings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            settings: {
-              candles_limit: String(limitVal),
-            },
-          }),
-        })
-      ]);
+      });
 
-      if (!accountRes.ok || !settingsRes.ok) {
-        const failedRes = !accountRes.ok ? accountRes : settingsRes;
-        const data = await failedRes.json();
-        throw new Error(data.error || "Failed to commit account risk or platform configurations.");
+      if (!accountRes.ok) {
+        const data = await accountRes.json();
+        throw new Error(data.error || "Failed to commit account risk configurations.");
       }
 
       const json = await accountRes.json();
@@ -766,22 +744,6 @@ export default function SettingsPage() {
                       />
                       <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 dark:text-zinc-500 text-[10px] font-bold">%</span>
                     </div>
-                  </div>
-
-                  {/* Candle Lookback Limit Input */}
-                  <div className="space-y-2">
-                    <label className="text-[9px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
-                      Candle Lookback Limit (Max 1500)
-                    </label>
-                    <input
-                      type="number"
-                      min="100"
-                      max="1500"
-                      value={candlesLimit}
-                      onChange={(e) => setCandlesLimit(e.target.value)}
-                      className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3.5 py-2.5 text-xs text-foreground rounded-lg transition-all shadow-sm font-mono"
-                      placeholder="1000"
-                    />
                   </div>
                 </div>
 

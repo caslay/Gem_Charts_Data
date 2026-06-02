@@ -130,8 +130,8 @@ export async function verifyDisplacement(recentCandles: Candle[], symbol: string
     } else {
       console.error('[verifyDisplacement] HTTP Error:', response.status, await response.text());
     }
-  } catch (error) {
-    console.error('[verifyDisplacement] Fetch Error:', error);
+  } catch (error: any) {
+    console.warn(`[verifyDisplacement] Fetch Error: ${error.message || error}`);
     // Silent fail back to local offline analytical engine
   }
  
