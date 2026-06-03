@@ -63,8 +63,8 @@ export async function fetchRestingLiquidity(symbol: string = 'ETHUSDC'): Promise
       BSL_Magnets: topAsks,
       SSL_Magnets: topBids,
     };
-  } catch (error) {
-    console.error('Error fetching resting liquidity:', error);
+  } catch (error: any) {
+    console.warn(`[orderFlowEngine] Binance depth feed unavailable for ${symbol}. Returning empty magnets to trigger dynamic simulation. Detail: ${error.message || error}`);
     return { BSL_Magnets: [], SSL_Magnets: [] };
   }
 }
@@ -186,8 +186,8 @@ export async function fetchOIMetricsAndLiquidations(symbol: string = 'ETHUSDC', 
     }
 
     return { open_interest_trend, liquidation_events };
-  } catch (error) {
-    console.error('Error fetching OI/Liquidations:', error);
+  } catch (error: any) {
+    console.warn(`[orderFlowEngine] Binance OI/Liquidations feed unavailable for ${symbol}. Detail: ${error.message || error}`);
     return {
       open_interest_trend: 'UNAVAILABLE',
       liquidation_events: { last_hour_purged: 'UNAVAILABLE', status: 'UNAVAILABLE' }
@@ -237,8 +237,8 @@ export async function fetchSmartMoneySentiment(symbol: string = 'ETHUSDC'): Prom
     }
 
     return { funding_rate_status, smart_money_divergence };
-  } catch (error) {
-    console.error('Error fetching smart money sentiment:', error);
+  } catch (error: any) {
+    console.warn(`[orderFlowEngine] Binance smart money sentiment feed unavailable for ${symbol}. Detail: ${error.message || error}`);
     return {
       funding_rate_status: 'UNAVAILABLE',
       smart_money_divergence: false

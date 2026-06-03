@@ -106,7 +106,7 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
         {/* Drawer Header */}
         <div className="flex items-center justify-between p-4 border-b border-card-border bg-card/50 backdrop-blur-md">
           <div className="flex items-center gap-2">
-            <h2 className="text-title text-xs font-bold tracking-[0.15em] uppercase">IPDA MATRIX BASIN (V10.0)</h2>
+            <h2 className="text-title text-xs font-bold tracking-[0.15em] uppercase">IPDA MATRIX BASIN (V12.0)</h2>
             <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20">
               <span className="w-1.5 h-1.5 bg-emerald-500 animate-pulse rounded-full" />
               <span className="text-[9px] text-emerald-500 font-mono font-bold tracking-tight">LIVE SYNC</span>
@@ -213,11 +213,11 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
                 return (
                   <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5">
                     <div className="flex justify-between items-center text-xs">
-                      <span className="text-muted font-medium">Major Swings (5-Bar Fractals)</span>
+                      <span className="text-muted font-medium">Major Swings (Level 2 Multi-Scale)</span>
                       <span className="font-mono font-bold text-foreground">{majorCount}</span>
                     </div>
                     <div className="flex justify-between items-center text-xs border-t border-card-border/30 pt-1.5">
-                      <span className="text-muted font-medium">Inner Swings (3-Bar Fractals)</span>
+                      <span className="text-muted font-medium">Inner Swings (Level 1 Multi-Scale)</span>
                       <span className="font-mono font-semibold text-accent">{innerCount}</span>
                     </div>
                   </div>
@@ -503,7 +503,7 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
         {/* Footer Stats Bar */}
         <div className="p-3.5 bg-card/50 border-t border-card-border flex justify-between items-center px-5">
           <div className="flex items-center gap-3">
-            <span className="text-[9px] text-muted font-mono uppercase tracking-widest font-semibold">V10.0 ENGINE</span>
+            <span className="text-[9px] text-muted font-mono uppercase tracking-widest font-semibold">V12.0 ENGINE</span>
             <span className="w-1 h-1 bg-card-border rounded-full" />
             <span className="text-[9px] text-muted font-mono font-semibold">STATUS: {data ? 'CONNECTED' : 'STANDBY'}</span>
           </div>

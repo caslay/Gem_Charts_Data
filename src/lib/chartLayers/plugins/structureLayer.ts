@@ -30,7 +30,7 @@ export const structureLayer: ChartLayer = {
     const showParent = visibility.structure !== false;
     const showMajor = visibility.structure_major !== false;
     const showInner = visibility.structure_inner !== false;
-    const showInternalSwings = visibility.structure_zigzag !== false; // Governs the Internal Swings and Horizontal Levels
+    const showInternalSwings = visibility.structure_int !== false; // Governs the Internal Swings and Horizontal Levels
     const showIstr = visibility.structure_istr !== false;
 
     // If the main layer is hidden, do not render any children
@@ -84,11 +84,21 @@ export const structureLayer: ChartLayer = {
 
     // 3. Pixel Coordinate Conversion — Map swings to SVG coordinates
     const mappedSwings: MappedPoint[] = [];
+    const lowRange = analysis.dealingRange?.low;
+    const highRange = analysis.dealingRange?.high;
+
     for (const pt of analysis.swings) {
       const x = timeScale.timeToCoordinate(Math.floor(pt.t / 1000) as any);
       const y = series.priceToCoordinate(pt.price);
       if (x !== null && y !== null) {
-        mappedSwings.push({ ...pt, x, y });
+        const isInternal = typeof lowRange === 'number' && typeof highRange === 'number' &&
+                           pt.price > lowRange && pt.price < highRange;
+        mappedSwings.push({
+          ...pt,
+          x,
+          y,
+          structure_type: isInternal ? 'INTERNAL' : 'MAJOR'
+        });
       }
     }
 
@@ -116,7 +126,7 @@ export const structureLayer: ChartLayer = {
 
       const xEnd = breachSwing ? breachSwing.x : rightX;
       
-      // ─── Visual Separation: Check if this 5-bar swing is a Parent range boundary or an Internal wave ───
+      // ─── Visual Separation: Check if this Level 2 swing is a Parent range boundary or an Internal wave ───
       const color = isInternal
         ? (S.type === 'HIGH' ? swingHighInternalColor : swingLowInternalColor)
         : (S.type === 'HIGH' ? swingHighColor : swingLowColor);
@@ -441,24 +451,6 @@ export const structureLayer: ChartLayer = {
 
     // ─── 4. Implement The Active Expansion Trace Ray (Unconfirmed Swings) ───
     const expansionRays: React.ReactElement[] = [];
-    if (showMajor) {
-      mappedSwings
-        .filter((s) => s.grade === 'MAJOR' && s.confirmed === false)
-        .forEach((pt, idx) => {
-          expansionRays.push(
-            React.createElement('line', {
-              key: `expansion-ray-${idx}`,
-              x1: pt.x,
-              y1: pt.y,
-              x2: rightX,
-              y2: pt.y,
-              stroke: theme === 'dark' ? 'rgba(251, 191, 36, 0.65)' : 'rgba(217, 119, 6, 0.65)',
-              strokeWidth: 1.0,
-              strokeDasharray: '2,3',
-            })
-          );
-        });
-    }
 
     // 5. Native SVG Canvas Assembly
     return React.createElement(
@@ -512,10 +504,11 @@ export const structureLayer: ChartLayer = {
         // A7. Draw Equal Highs & Equal Lows levels
         smtLevels,
 
-        // B. Plot Major/Internal Swings (Hollow Circles at 5-Bar Fractals)
+        // B. Plot Major/Internal Swings (Hollow Circles at Level 2 Multi-Scale Swings)
         mappedSwings
           .filter((s) => {
             if (s.grade !== 'MAJOR') return false;
+            if (s.confirmed === false) return false; // Hide candidate/unconfirmed circles
             const isInternal = s.structure_type === 'INTERNAL';
             if (isInternal) {
               return showInternalSwings && !isVolatilitySuppressed;
@@ -545,7 +538,7 @@ export const structureLayer: ChartLayer = {
               });
             }),
 
-        // C. Plot Inner Swings (Small Diamonds at 3-Bar Fractals)
+        // C. Plot Inner Swings (Small Diamonds at Level 1 Multi-Scale Swings)
         showInner &&
           mappedSwings
             .filter((s) => s.grade === 'INNER')

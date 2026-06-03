@@ -1,10 +1,258 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V10.52
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V11.0
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-05-31 (V10.52 Layer Configuration INT & MAJ Decoupling Complete)  
+> **Last Updated:** 2026-06-03 (V11.0.13 — Volumetric Sponsorship System Documentation)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 65+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V12.0.0 Changelog — Multi-Scale Directional Change Quant Engine Refactor (Completed)
+
+### 1. New Modular Architecture (`src/lib/quantEngine/`)
+- **Action:** Extracted the monolithic `structureEngine.ts` into a highly cohesive, object-oriented pipeline under `src/lib/quantEngine/`.
+- **Components:**
+  - `PivotEngine.ts`: Implemented Multi-Scale Directional Change Algorithm (Level 0, 1, 2) replacing the time-based window. Uses ATR-based threshold retracements and Institutional Color Validation.
+  - `SMCStateEngine.ts`: Stateful machine managing BOS, MSS, CHoCH, and Inducement Logic.
+  - `LiquidityEngine.ts`: Consolidates existing Wick-Mitigated FVG engine and introduces FIFO tracking for Volumetric Order Blocks.
+  - `MarketStructureAPI.ts`: Facade wrapper returning the legacy `full_structure_map` payload, completely abstracting the new mechanics from downstream consumers.
+
+### 2. Legacy Wrapper Adaptation (`src/lib/structureEngine.ts`)
+- **Action:** Retained `structureEngine.ts` as a passthrough adapter for stateful caching, seamlessly invoking `MarketStructureAPI` so that all visual layers (`structureLayer.ts`), APIs (`route.ts`), and the `quantLabEngine.ts` function perfectly without breaking changes.
+
+## 🆕 V11.0.13 Changelog — Volumetric Sponsorship System Documentation (Completed)
+
+
+### 1. New Directive: `directives/06_volumetric_sponsorship.md`
+- **Action:** Created comprehensive system documentation covering the full Volumetric Sponsorship subsystem — architecture, mathematics, visual rendering pipeline, and all downstream consumers.
+- **Contents:**
+  - **§1-2:** Conceptual overview and 4-layer architecture diagram (Detection → Statistical Validation → Visual Generation → Chart Rendering).
+  - **§3:** Displacement Engine deep-dive — offline algorithm (`verifyDisplacementOffline`), volume multiplier calibration (2.0× ETH, 2.5× non-ETH), consolidation gate (0.1% volatility threshold), and online fallback path with 1.2s abort timeout.
+  - **§4:** Volumetric Marker Generator — the 4-Gate classification pipeline (Structural Swing → Color Lock → Body-Weighted Volume → Marker). Documents the mathematical distinction between **Arrows** (institutional sponsorship via directional volume increase) and **Circles** (SMT trap/sweep via raw-only volume increase).
+  - **§5:** Displacement Layer rendering — theme-adaptive color resolution, neutral Arrow coloring rationale, and `lightweight-charts` SeriesMarkers integration.
+  - **§6:** Python OLS backend — statsmodels regression model specification (`y ~ anomaly_multiplier + volume_delta + is_dead_zone`), confidence thresholds (HIGH < 0.05, MEDIUM < 0.15, LOW ≥ 0.15), and consolidation short-circuit logic.
+  - **§7:** All downstream consumers documented — Risk Engine decision matrix, Structure Engine MSS confirmation, Strategy Evaluator OLS veto gate (STRICT/RELAXED/OFF), Live Alerts state transitions, and Strategy Condition Resolver metrics (DISPLACEMENT, DISPLACEMENT_VALUE).
+  - **§8:** Full sequence diagram tracing data from Binance WebSocket through every engine to final chart pixel.
+  - **§9:** Appendix of all 18 hardcoded constants, OLS regressor variables, and default fallback colors.
+
+### 2. Updated Directives Index (`AGENTS.md`)
+- **Action:** Registered `06_volumetric_sponsorship.md` as directive #6 in the agent protocol index with clear trigger conditions.
+- **Also registered:** `05_strategy_customizer.md` as directive #5 (was previously undocumented in the index).
+
+## 🆕 V11.0.12 Changelog — Robust Offline Telemetry, Quiet Logs & Dynamic Order Book Simulation (Completed)
+
+### 1. Silent Initialization Geoblock Fix (`route.ts` under `/api/market-data`)
+- **Action:** Refactored the sequential historical fetch helper (`fetchLargeHistory`) to bubble up API and HTTP errors directly to the parent request rather than silently swallowing them and returning an empty array `[]`.
+- **Resilience:** Guarantees that if the Binance API rate-limits or geoblocks (HTTP 418) the developer's IP on page load, Next.js catches it immediately, sets `isOffline = true`, and enters **Offline Simulation Mode** with a full `5760` candle historical series, completely avoiding empty kline crashes or blank charts.
+
+### 2. Quiet and Clean Console Logs (`orderFlowEngine.ts` & `displacementEngine.ts` under `src/lib` / `route.ts`)
+- **Action:** Replaced verbose `console.error` and raw multi-line stack trace outputs in catch blocks of `fetchRestingLiquidity`, `fetchOIMetricsAndLiquidations`, `fetchSmartMoneySentiment`, and `verifyDisplacement` with clean, single-line notifications.
+- **Next.js Dev Logger Interceptor Suppression:** Standardized all catch block logging in `route.ts`, `orderFlowEngine.ts`, and `displacementEngine.ts` to log templated message strings (`${err.message || err}`) rather than raw `Error` objects. This prevents Next.js's dev logger from intercepting log events and printing large multi-line visual code snippets and stack traces in your shell process, establishing a 100% clean and quiet terminal layout.
+- **Resilience:** Bypasses terminal output flooding inside the `dev` terminal process console during continuous 5-second market data polling and Python uvicorn service disconnects.
+
+### 3. Dynamic Scaled Order Book Mocks & Symmetric Backward Price Walking (`route.ts`)
+- **Action:** Upgraded simulated/offline resting liquidity calculation (`BSL_Magnets` / `SSL_Magnets`) to generate dynamic bands centered exactly around the active market close price (BSL: `+0.6%`, `+1.2%`, `+1.8%`; SSL: `-0.6%`, `-1.2%`, `-1.8%`) whenever the depth feed is offline or fails.
+- **Symmetric Backward Price Walking:** Redesigned the mathematical price generator `generateMockCandles` to perform a backward walk in time from `now` to the past starting at `basePrice`, with zero-drift symmetric fluctuations and realistic asset volatility. This guarantees that initial, polled, and scrolling historical candle series end at exactly the same stable price coordinates (e.g. 3300 for ETH), completely eliminating discontinuous price jumps, vertical empty gaps, or ghost wick rendering suppressions when zooming or dragging the chart.
+- **Dynamic Calibration:** Calibrated `generateMockCandles` to read the symbol asset, starting mock candle price structures dynamically (e.g. `67,000` for BTC, `3300` for ETH, `160` for SOL). This guarantees beautiful visual alignment of magnets and candles for any token on the chart.
+
+---
+
+## 🆕 V11.0.11 Changelog — High-Resilience Lazy-Load Simulation Mode Fallback Integration (Completed)
+
+### 1. Robust Historical Lazy-Load Fault Isolation (`route.ts` under `/api/market-data`)
+- **Action:** Wrapped the direct fast-path historical lazy-loading fetch (`endTime` query parameter handler) in a secure, server-side `try-catch` block.
+- **Resilience:** Intercepts external API failures (such as `HTTP 418 I'm a teapot` rate-limiting locks) when scrolling back in time, completely avoiding 400 bad request returns to the browser.
+
+### 2. Multi-Anchor Mock History Generation (`route.ts`)
+- **Action:** Upgraded the `generateMockCandles` helper to accept an optional `endTimestamp` parameter to serve as a customizable timeline anchor.
+- **Dynamic Scrolling Parity:** If the live historical fetch fails under rate-limiting locks, the API dynamically simulates a high-fidelity batch of 100 historical candles ending exactly at the requested `endTime` scroll cursor, allowing infinite smooth scrolling back in time with zero visual/console glitches.
+
+---
+
+## 🆕 V11.0.10 Changelog — High-Resilience Offline Simulation Mode Fallback Integration (Completed)
+
+### 1. Robust Server-Side Fetch Fault Isolation (`route.ts` under `/api/market-data`)
+- **Action:** Wrapped the entire Binance parallel REST fetching pipeline (standard and non-standard klines, open interest, and account metrics) inside a unified, silent-fail `try-catch` construct.
+- **Resilience:** Bypassed the fatal 500 API crash behaviour when any third-party request suffers rate limiting (`HTTP 418 I'm a teapot`), network drops, or geographic blocks (standard Futures restriction under residential USA IPs).
+
+### 2. High-Fidelity Mathematical Price Walk Generator (`route.ts`)
+- **Action:** Engineered a price-movement simulator `generateMockCandles` executing real-time brownian price walks with bullish drift calibrations to simulate realistic ETH/BTC OHLCV structures.
+- **Offline Parity:** When `isOffline` is triggered, the route seamlessly generates mock datasets matching the user's custom limits, populates resting liquidity order-book depth arrays, and creates neutral open-interest readouts, keeping 100% of frontend rendering layers fully functional.
+
+---
+
+## 🆕 V11.0.9 Changelog — Timeframe-Specific Candle Lookback Limits & Modal Command Center Integration (Completed)
+
+### 1. Multi-Timeframe Dynamic Lookback Configuration (`route.ts` / `useMarketData.ts`)
+- **Action:** Upgraded the lookback candle limit from a unified database fallback to five independent, timeframe-specific settings (`candlesLimit1m`, `candlesLimit5m`, `candlesLimit15m`, `candlesLimit1h`, `candlesLimit4h`).
+- **Integration:** Extended the `EngineSettings` model, storage sync pipelines, and API fetches to dynamically map and transmit separate limits on backend queries (`/api/market-data?interval=...&limit1m=X&limit5m=Y...`).
+- **Dynamic Fetching & Defensive Guards:** Updated the Binance API request strings on the backend to consume these discrete constraints for standard scales and visual/non-standard scales. Added robust server-side boundaries checks and `NaN` guards (`if (isNaN(limitX) || limitX < 100 || limitX > 1500) limitX = limit;`) alongside a client-side localStorage rehydration merge strategy (`{ ...DEFAULT_ENGINE_SETTINGS, ...JSON.parse(stored) }`) to neutralize any parameters leakage from older browser cache records.
+
+### 2. Command Center Settings Tab Visual Upgrades (`SettingsModal.tsx`)
+- **Action:** Created **Group D: Timeframe Candle Lookbacks** inside Tab 4 (`'engine'`) of the main settings command center.
+- **Controls:** Embedded five glassmorphic, monospace numeric inputs styled in sync with the institutional aesthetic.
+- **UX Clamping:** Implemented a robust `onChange` direct update with a post-edit `onBlur` clamping check to strictly constrain inputs to the stable `[100, 1500]` candle boundary without disrupting active user typing.
+
+### 3. Database Self-Healing Migration (`route.ts` under `/api/settings`)
+- **Action:** Expanded the `initTables()` routine inside the settings router to execute self-healing `ALTER TABLE` statements, appending the five new integer columns to the `terminal_settings` table automatically.
+- **Auto-Sync:** Wired the settings `GET` and `POST` handlers to retrieve and update these variables seamlessly under the unified user ID record.
+
+### 4. Legacy Settings Page Cleanups (`settings/page.tsx`)
+- **Action:** Completely removed the obsolete single Candle Lookback Limit input card, `candlesLimit` state, and its associated risk form save validations from the Account & Risk tab of the settings page to prevent redundant writes or UI state inconsistencies.
+
+---
+
+## 🆕 V11.0.8 Changelog — Sidebar Market Structure Decoupling & Dynamic Containment Isolation (Completed)
+
+### 1. Decoupled Intraday Depth & Layer 2 Structural Routing (`structureEngine.ts`)
+- **Action:** Refactored the `internalDealingRange`, `internalZigzag`, and `internalTrend` calculations inside `analyzeMarketStructure` to pull strictly from confirmed 5-bar intermediate `INTERNAL` swings (which are strictly inside the active macro dealing range bounds). This completely separates the Intraday Depth metrics from the 3-bar micro-engine (`alternatingInner`) fallback loops.
+- **Rationale:** The 3-bar engine on standard/HTF scales has no dynamically confirmed pivots (failing the ATR pullback gate) and always executed its absolute-extreme fallback logic, causing the Intraday Depth panel to mirror the Macro Depth panel exactly. Pulling from intermediate 5-bar `INTERNAL` swings yields beautifully isolated, decoupled, and localized retracement ranges.
+
+### 2. Timeframe-Decoupled Adaptive-N Dynamic Check (`structureEngine.ts`)
+- **Action:** Preserves custom lookback overrides (`1-3`) for the micro-engine while maintaining strict dynamic lookback bounds (`1m = 2-8`, `5m = 3-12`, `15m+ = 3-15`) for the macro engine, guaranteeing that macro structural pivots and sub-waves are isolated across all timeframes.
+
+### 3. V10.43 Context Context-Lock & Fallbacks (`structureEngine.ts`)
+- **Action:** Integrated dynamic filtering by extracting the active Major Dealing Range's start time (`majorRangeStartTime = Math.min(anchor_high.t, anchor_low.t)`) and only considering swings that formed *at or after* this boundary (`activeInternalSwings`) to lock the Layer 2 Intraday Depth to the active macro cycle. If no intermediate swings exist, we fall back gracefully to 3-bar micro swings inside the macro bounds.
+
+---
+
+## 🆕 V11.0.7 Changelog — Major Swing Solid Lines Restoration & Candidate Swing Truncation Reversion (Completed)
+
+### 1. Solid Major Ceilings & Floors Restoration (`structureLayer.ts`)
+- **Action:** Reverted the experimental `swingPoints` mapping in `structureLayer.ts` to restore the robust and stable `analysis.swings` data pipeline.
+- **Rationale:** The raw `swing_points` list lacks critical pre-classified, stateful grade classifications (like `grade: 'MAJOR'`), which caused all horizontal ceilings, floors, and labels to completely disappear from the live chart. Restoring `analysis.swings` instantly restores all verified Bloomberg-style horizontal ceilings, floors, and labels on the HUD.
+
+### 2. Candidate Swing & Expansion Ray Removal Re-Anchored (`structureLayer.ts`)
+- **Action:** Retained the clean, candidate-free visual look by leaving the `expansionRays` drawing array completely empty (hiding all unconfirmed yellow dashed lines) and updating the hollow circles filter to skip candidate swings (`if (s.confirmed === false) return false;`), successfully meeting the user's aesthetic mandate without breaking any confirmed solid lines.
+
+### 3. Zustand Layer Visibility Key Sync (`structureLayer.ts`)
+- **Action:** Aligned the `showInternalSwings` state check with `visibility.structure_int !== false` instead of the defunct `visibility.structure_zigzag` key.
+- **Rationale:** Ensures that toggling the `INT` button in the `ChartLayerHud` correctly hides/shows the internal dashed breach rays and internal swings without any silent state mismatches.
+
+### 4. Layer 2 (INT) Horizontal Dashed Levels Resolution (`structureLayer.ts`)
+- **Action:** Refactored the `mappedSwings` loop in `structureLayer.ts` to compute the `isInternal` property dynamically at runtime. If a confirmed major swing's price falls strictly within the active macro `dealingRange` boundaries (`S.price > lowRange && S.price < highRange`), it is classified as `'INTERNAL'`, otherwise as `'MAJOR'`.
+- **Rationale:** Confirmed swings inside the macro structure are pre-classified as `'MAJOR'` by the backend engine state to enforce high-level state stability, which left the client-side `isInternal` evaluation always `false`. By dynamically calculating the containment boundary on the client, internal swings correctly render as **dashed horizontal lines** and are visible **only** when `INT` is active, while parent boundaries render as **solid horizontal lines** under `MAJ`.
+
+---
+
+## 🆕 V11.0.6 Changelog — Multi-Timeframe Endpoint Separation, Visual Sync & Noise Cleanups (Completed)
+
+### 1. Dynamic Visual Timeframe Calculations in REST API (`route.ts` under `/api/market-data`)
+- **Root Cause:** When the visual chart requested non-standard scales like `1m` or `30m` (or standard `15m` which fell outside the explicit `'5m' | '1h' | '4h'` branches), `stat_payload` and `activeCandlesForStructure` defaulted back to `candles15m`. Consequently, the structural analysis parsed the `15m` candle series instead of the actual `1m` or `30m` candles, causing the sidebar's Market Structure block to display identical levels and trends across those timeframes.
+- **Fix:** Added explicit `15m` and dynamic visual interval mapping conditions. If `visualInterval === '15m'`, the route locks to `candles15m`. If `!isStandardInterval && dynamicVisualCandles && dynamicVisualCandles.length > 0`, it maps directly to `dynamicVisualCandles`, ensuring the stateful engine processes timeframe-native data.
+
+### 2. Missing Structural Payload Serialization in GET API (`route.ts`)
+- **Root Cause:** In the live workspace context, the `useMarketData` hook is optimized to directly consume the pre-computed `full_structure_map` object returned from the backend `/api/market-data` API to ensure 100% server-client structural alignment. However, `route.ts` was not serializing `swing_points` and `structural_events` inside `full_structure_map` (though they were present in backtest engine mock arrays). As a result, the visual layer plugin `structureLayer.ts` received empty arrays, causing it to draw zero ceilings, floors, horizontal lines, BOS/MSS breach labels, or indicators when toggling MAJ, INT, or iSTR buttons on the live chart.
+- **Fix:** Appended `swing_points: structureAnalysis.swing_points` and `structural_events: structureAnalysis.structural_events` directly to the `full_structure_map` serialization object in `route.ts`, immediately restoring full visual charting synchronization on the frontend.
+
+### 3. Decoupled Visual Swing Classification & Dashed Gating (`structureLayer.ts`)
+- **Root Cause:** To classify if a swing is `isInternal` or `isMajor`, the visual plugin `structureLayer.ts` mapped the `swingPoints` list using a check against `analysis.engine_state.active_swing_range` high and low values. However, `engine_state` is a local execution-only state of the `MarketStructureEngine` and is not serialized in `/api/market-data` API responses. This meant `analysis.engine_state` was `undefined` at runtime, causing `isInternal` to evaluate to `false` for **all** swings. Consequently, every single swing (including internal child waves) got labeled as a `'MAJOR'` swing, making them render as solid lines when `MAJ` was active, while rendering zero dashed lines when `INT` was active.
+- **Fix:** Refactored the `isInternal` swing classification in `structureLayer.ts` to derive boundaries dynamically and safely from the pre-computed `analysis.dealingRange.low` and `analysis.dealingRange.high` limits. Internal swings now correctly classify as `'INTERNAL'` and render as dashed horizontal lines (`strokeDasharray: '3,3'`), and they are visible **only** when `INT` is active in the Layer Configuration.
+
+### 4. Candidate Swing Cleanups & Trace Ray Removal (`structureLayer.ts`)
+- **Root Cause:** Unconfirmed "candidate" swings (which are in the process of waiting for sweep validation to confirm trend pivots) were being mapped into the `mappedSwings` arrays. This caused the chart to display extra yellow dashed horizontal rays (`expansionRays` representing unconfirmed swings) and hollow dashed yellow circles at candidate extremes. The user requested keeping the primary `MAJOR` view clean and restricted strictly to confirmed horizontal ceilings/floors and labels.
+- **Fix:** Completely emptied the `expansionRays` canvas draw loop, and updated the hollow circles filter in `structureLayer.ts` to strictly ignore unconfirmed swings (`if (!s.confirmed) return false;`), delivering an exceptionally clean, high-fidelity Bloomberg-style visual layout containing strictly verified, sweep-confirmed peaks and breach events.
+
+## 🆕 V11.0.5 Changelog — Forensic 3-Bug Fix: Lines Invisible, Intraday=Macro, 1m=15m (Completed)
+
+### Bug 1: Pivot Confirmation Deadlock → No Chart Lines (`structureEngine.ts`)
+- **Root Cause:** `detect_pivots` flagged a pivot as `confirmed: target_price === this.active_swing_high`. `active_swing_high` initializes as `null` and is set exclusively by the IDM gate (`update_inducement_gates`). The IDM gate requires `active_idm_level !== null` which requires `locate_last_pullback_low` to register a pullback ≥ 0.5 × ATR. On fresh or compressed windows this never fires → all pivots `confirmed: false` → `confirmedMajor` is empty → zero horizontal lines, zero BOS/MSS badges, zero dealing range on every timeframe.
+- **Fix:** Added **Fallback Anchor Confirmation** sweep at the end of the PASS 1 loop. If `swing_points.some(p => p.confirmed)` returns false, the absolute highest `SWING_HIGH` and lowest `SWING_LOW` in the window are force-confirmed as anchors. This implements the "degraded mode" from `quant_logic.md §5.4` without violating IPDA doctrine.
+
+### Bug 2: Intraday Depth Mirrors Macro Depth (`structureEngine.ts`)
+- **Root Cause:** The return block assigned `innerSwings: swings`, `innerZigzag: zigzag`, `internalZigzag: zigzag`, `internalDealingRange: dealingRange` — all identical references to the macro layer objects. No secondary engine pass existed.
+- **Fix:** Introduced **PASS 2: Inner-Wave Engine** — a completely independent `MarketStructureEngine` instance with `adaptiveNMin: 1, adaptiveNMax: 3` runs over the same normalized candles. Its confirmed pivots generate separate `innerSwingsRaw`, `innerZigzag`, and `internalDealingRange` objects that are never shared with the macro layer.
+
+### Bug 3: 1m/15m Depths Show Identical Values (`structureEngine.ts`)
+- **Root Cause:** Flowed directly from Bug 2 — both timeframes read the same `internalDealingRange` which was a direct reference copy of the macro dealing range. Timeframe difference had zero effect.
+- **Fix:** Resolved by Bug 2's fix. Each timeframe now runs its own PASS 2 inner engine over its specific candle window, producing truly independent `internalDealingRange` values.
+
+**Build Status:** `npx tsc --noEmit` → ✅ 0 errors, 0 warnings.
+
+
+### 1. `swings` Array Explicit Type Annotation (`structureEngine.ts`)
+- **Fix:** Changed `const swings = swing_points.map(...)` to `const swings: StructuralSwing[] = swing_points.map(...)`.
+- **Rationale:** TypeScript inferred the array element type as the narrow mapped literal shape (with `price: number`) rather than `StructuralSwing` (which allows `price: number | string`). Without the explicit annotation, the subsequent `.push()` of INTERNAL-tagged unconfirmed swings was rejected by the compiler with TS2345.
+
+### 2. `price` Comparison Casts (`structureEngine.ts`)
+- **Fix:** Cast `s.price` and `last.price` to `number` via `as number` before applying `>` and `<` comparison operators in the alternating-swings deduplication loop (lines 793, 797).
+- **Rationale:** The `StructuralSwing.price` field is typed `number | string` to support the AWAITING_IDM_SWEEP sentinel. TypeScript blocks arithmetic operators on union types — casts are safe here because the alternating swings are always confirmed pivots (numeric prices only).
+
+### 3. `trendAfter` Explicit Type Annotation (`structureEngine.ts`)
+- **Fix:** Annotated `let trendAfter: 'BULLISH' | 'BEARISH' | 'UNSET' = trend` (line 811).
+- **Rationale:** Without the annotation TypeScript inferred `trendAfter` as `any` because `trend` is a string union that the compiler couldn't narrow through the conditional branches, triggering TS7022 implicit-any.
+
+### 4. `local_dealing_range` Type Widening (`route.ts`)
+- **Fix:** Widened the `pricing_context.local_dealing_range` type to `{ high: number | string; low: number | string; equilibrium: number | string; current_status: string; anchor_high_swing?: any; anchor_low_swing?: any }`.
+- **Rationale:** The engine now returns `"AWAITING_IDM_SWEEP"` string values for `high/low/equilibrium` when no confirmed swing pairs exist. The original `high: number` narrow type caused TS2322 incompatibility with `StructuralDealingRange` assignments.
+
+**Build Status:** `npx tsc --noEmit` → ✅ 0 errors, 0 warnings.
+
+## 🆕 V11.0.3 Changelog — Absolute Indexing, SMC Containment & AWAITING_IDM_SWEEP Veto (Completed)
+
+### 1. Absolute Candle Indexing Fix (`structureEngine.ts` & `route.ts`)
+- **Action:** Assigned chronological `index: idx` to all formatted candles at the REST API data fetch layer (`route.ts`) and the stateful caching layer (`analyzeMarketStructureStateful` in `structureEngine.ts`). Configured all quant calculations inside `MarketStructureEngine` (pivots and state transition events) to utilize `candle.index` instead of relative array offsets.
+- **Rationale:** Guarantees absolute index consistency across visual candle slices, completely eliminating level-shifting and repainting errors during timeframe transitions.
+
+### 2. SMC Containment & Pullback Upgrade Algorithm (`structureEngine.ts`)
+- **Action:** Replaced the legacy cumulative highs/lows containment pre-scan with a dynamic SMC state machine. When a breakout (BOS) or reversal (MSS) is confirmed, the engine dynamically upgrades the precise pullback swing that sponsored the leg to `MAJOR`, updating the active dealing range boundaries. Candidate swings inside this active range are classified as `INTERNAL` to prevent logic bleed.
+- **Rationale:** Resolves the messy visual swing lines and frozen major structure boundaries, enabling correct and dynamic Layer 2 (internal) structures in trending markets.
+
+### 3. Awaiting IDM Sweep Veto (`structureEngine.ts` & `Sidebar.tsx`)
+- **Action:** Refactored `buildDealingRange` to return `"AWAITING_IDM_SWEEP"` for all fields (`low`, `high`, `equilibrium`, `current_status`) if no confirmed high/low swing pair exists yet. Updated the frontend `formatPrice` helper in `Sidebar.tsx` to safely handle strings and objects without crashing, and customized the UI to render a clean single placeholder for the range.
+- **Rationale:** Prevents duplicate macro range printouts and visual noise when intraday ranges are unconfirmed or waiting for sweep validation.
+
+## 🆕 V11.0.2 Changelog — Multi-Layer SMC Wave Separation & Intraday Retracement HUD Alignment (Completed)
+
+### 1. Multi-Engine Wave Separation & Decoupling (`structureEngine.ts`)
+- **Action:** Implemented a stateful dual-engine system. In addition to the primary volatility-adjusted adaptive-Nt engine, the wrapper now runs a secondary high-frequency engine (Nt constrained to 1-2, creating a 3-bar lookback) to compute inner sub-waves.
+- **Rationale:** Prevents duplicate values between the Macro, Intraday, and Sub-trend layers, enabling three distinct structural views.
+
+### 2. Parent-Child Wave Containment Tagging (`structureEngine.ts`)
+- **Action:** Re-implemented the wave containment math tagging. Active confirmed pivot swings are classified as `INTERNAL` if they are fully contained inside the bounds of the active parent `MAJOR` range, and `MAJOR` if they break/expand these boundaries.
+- **Rationale:** Ensures correct visual rendering of horizontal ceilings/floors and accurate breakout events on both Major and Intraday layers.
+
+### 3. Direction-Aware Alternating Swings Filter (`structureEngine.ts`)
+- **Action:** Fixed the alternating swings FSM filter to track pivot direction. When encountering consecutive swings of the same type, it correctly keeps the highest high or the lowest low, preventing range corruptions.
+
+### 4. Sidebar HUD Decoupling (`structureEngine.ts`)
+- **Action:** Decoupled the legacy returned compatibility fields. `internalDealingRange`, `internalZigzag`, and `internalTrend` now pull exclusively from the child `INTERNAL` structures, while `innerSwings` and `innerZigzag` are driven by the secondary 3-bar engine, eliminating duplicate sidebar readouts.
+
+## 🆕 V11.0.1 Changelog — Volatility-Adjusted Dynamic IPDA Engine Silent Confirmation Bug Fix (Completed)
+
+### 1. Resolved Double-Sided Candle Properties Naming Compatibility (`structureEngine.ts`)
+- **Action:** Injected a `Normalization Guard` mapping inside `analyzeMarketStructure()` to bridge the standard system Binance properties (`o, h, l, c, v`) with the engine's internal expected properties (`open, high, low, close, volume`).
+- **Rationale:** The `Candle` interface allows dynamic property lookup via index signatures (`[key: string]: any`), which masked the mismatch during compilation (producing zero type errors). At runtime, properties evaluated to `undefined`, which caused all pivot and pullback sweeps to bypass or fail, locking candidates as unconfirmed (`confirmed = false`) forever. Normalization resolves this deadlock, allowing full swing and event confirmation.
+
+### 2. Backtest Replay Synchronization (`quantLabEngine.ts`)
+- **Action:** Synchronized the headless backtest engine's `full_structure_map` payload with the stateful `swing_points` and `structural_events` properties returned by `structureEngine.ts`.
+- **Rationale:** Eliminates parity gaps, guaranteeing that backtest replays render with identical visual and mathematical precision as the live chart workspace.
+
+## 🆕 V11.0 Changelog — Volatility-Adjusted Dynamic IPDA Engine & Hardening Gates (Completed)
+
+### 1. Volatility-Adjusted Adaptive Pivot Window ($N_t$)
+- **Action:** Replaced the static 5-bar rolling fractal window with an adaptive, volatility-driven half-width $N_t$.
+- **Mathematical Scaling:** Scales window size dynamically between $N_{min}=3$ and $N_{max}=15$ based on the ratio of $14$-period ATR relative to its rolling $100$-period median.
+- **Dynamic Configuration:** Constructor options allow injecting the parameters dynamically based on database-stored user preferences.
+
+### 2. Inside Bar Mitigation Filter
+- **Action:** Implemented an absolute recursive filtering gate using `last_mother_bar_index` to prevent structural pivot calculations inside local market consolidations and inner bars.
+- **Mandate:** Price updates are frozen when a candle high is $\le$ mother high and candle low is $\ge$ mother low.
+
+### 3. Inducement (IDM) Confirmation Gate
+- **Action:** Swings are no longer confirmed by a static 2-candle lag. Swings are locked exclusively when subsequent price action sweeps the nearest valid pullback level (IDM level).
+- **Inducement Shift:** Automatically shifts the IDM level dynamically to the newest valid pullback extreme on trend expansion.
+
+### 4. Displacement Verification & V-Reversal overrides
+- **MSS Gating:** Strict mathematical verification for Market Structure Shifts (MSS) requiring Candle Body Ratio $BR_t \ge 0.70$ and Volume Expansion Factor $VEF_t \ge 1.50$.
+- **V-Reversal Override Gate:** Decisive reversal closes (volume $>200\%$ median, body ratio $\ge 0.85$, opposite direction) force-confirm candidate swings immediately to prevent stale states during liquidity sweeps.
+
+### 5. Algorithmic Hardening Filters
+- **Sharp Departure Filter:** Breakouts (BOS/MSS) are monitored for a strict consolidation window of 5 candles. Breakouts must move at least $1.5 \times ATR$ away from the reference level, or the breakout is invalidated as a consolidation trap.
+
+### 6. Dynamic Tuning CommandCenter Dashboard
+- **State & Schema:** Altered `terminal_settings` table in Neon PostgreSQL to persist `atr_period`, `adaptive_n_min`, `adaptive_n_max`, `mss_body_ratio`, `displacement_vef`, and `sharp_departure_mult`.
+- **Tuning Workspace:** Integrated a gorgeous glassmorphic "Engine Core" tab inside the global System Command Center (`SettingsModal.tsx`) with sliders and numeric controls.
+- **Visual Performance Pathing:** Refactored `structureLayer.ts` to render horizontal ceilings and floors using a single unified SVG `<path>` element for maximum visual performance.
 
 ## 🆕 V10.52 Changelog — Layer Configuration HUD INT & MAJ Decoupling (Completed)
 

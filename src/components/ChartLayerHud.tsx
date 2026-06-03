@@ -68,7 +68,7 @@ export default function ChartLayerHud() {
                           ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.15)]'
                           : 'text-muted hover:text-foreground bg-transparent border border-transparent'
                           }`}
-                        title="Toggle Major Swings (5-Bar Fractals)"
+                        title="Toggle Major Swings (Level 2 Multi-Scale)"
                       >
                         MAJ
                       </button>
@@ -81,20 +81,20 @@ export default function ChartLayerHud() {
                           ? 'bg-accent/20 border border-accent/40 text-accent shadow-[0_0_6px_rgba(168,85,247,0.15)]'
                           : 'text-muted hover:text-foreground bg-transparent border border-transparent'
                           }`}
-                        title="Toggle Inner Swings (3-Bar Fractals)"
+                        title="Toggle Inner Swings (Level 1 Multi-Scale)"
                       >
                         INN
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          toggleVisibility('structure_zigzag');
+                          toggleVisibility('structure_int');
                         }}
-                        className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold transition-all cursor-pointer ${visibility.structure_zigzag !== false
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold transition-all cursor-pointer ${visibility.structure_int !== false
                           ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-500 shadow-[0_0_6px_rgba(6,182,212,0.15)]'
                           : 'text-muted hover:text-foreground bg-transparent border border-transparent'
                           }`}
-                        title="Toggle Internal Swings (INT)"
+                        title="Toggle Internal Horizontal Levels (Level 2 Swings inside Dealing Range)"
                       >
                         INT
                       </button>
