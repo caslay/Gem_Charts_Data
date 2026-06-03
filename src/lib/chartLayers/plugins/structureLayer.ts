@@ -126,7 +126,7 @@ export const structureLayer: ChartLayer = {
 
       const xEnd = breachSwing ? breachSwing.x : rightX;
       
-      // ─── Visual Separation: Check if this 5-bar swing is a Parent range boundary or an Internal wave ───
+      // ─── Visual Separation: Check if this Level 2 swing is a Parent range boundary or an Internal wave ───
       const color = isInternal
         ? (S.type === 'HIGH' ? swingHighInternalColor : swingLowInternalColor)
         : (S.type === 'HIGH' ? swingHighColor : swingLowColor);
@@ -504,7 +504,7 @@ export const structureLayer: ChartLayer = {
         // A7. Draw Equal Highs & Equal Lows levels
         smtLevels,
 
-        // B. Plot Major/Internal Swings (Hollow Circles at 5-Bar Fractals)
+        // B. Plot Major/Internal Swings (Hollow Circles at Level 2 Multi-Scale Swings)
         mappedSwings
           .filter((s) => {
             if (s.grade !== 'MAJOR') return false;
@@ -538,7 +538,7 @@ export const structureLayer: ChartLayer = {
               });
             }),
 
-        // C. Plot Inner Swings (Small Diamonds at 3-Bar Fractals)
+        // C. Plot Inner Swings (Small Diamonds at Level 1 Multi-Scale Swings)
         showInner &&
           mappedSwings
             .filter((s) => s.grade === 'INNER')

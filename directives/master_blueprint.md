@@ -2,9 +2,41 @@
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-06-01 (V11.0.12 — Robust Offline Telemetry, Quiet Logs & Dynamic Order Book Simulation)  
+> **Last Updated:** 2026-06-03 (V11.0.13 — Volumetric Sponsorship System Documentation)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 65+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V12.0.0 Changelog — Multi-Scale Directional Change Quant Engine Refactor (Completed)
+
+### 1. New Modular Architecture (`src/lib/quantEngine/`)
+- **Action:** Extracted the monolithic `structureEngine.ts` into a highly cohesive, object-oriented pipeline under `src/lib/quantEngine/`.
+- **Components:**
+  - `PivotEngine.ts`: Implemented Multi-Scale Directional Change Algorithm (Level 0, 1, 2) replacing the time-based window. Uses ATR-based threshold retracements and Institutional Color Validation.
+  - `SMCStateEngine.ts`: Stateful machine managing BOS, MSS, CHoCH, and Inducement Logic.
+  - `LiquidityEngine.ts`: Consolidates existing Wick-Mitigated FVG engine and introduces FIFO tracking for Volumetric Order Blocks.
+  - `MarketStructureAPI.ts`: Facade wrapper returning the legacy `full_structure_map` payload, completely abstracting the new mechanics from downstream consumers.
+
+### 2. Legacy Wrapper Adaptation (`src/lib/structureEngine.ts`)
+- **Action:** Retained `structureEngine.ts` as a passthrough adapter for stateful caching, seamlessly invoking `MarketStructureAPI` so that all visual layers (`structureLayer.ts`), APIs (`route.ts`), and the `quantLabEngine.ts` function perfectly without breaking changes.
+
+## 🆕 V11.0.13 Changelog — Volumetric Sponsorship System Documentation (Completed)
+
+
+### 1. New Directive: `directives/06_volumetric_sponsorship.md`
+- **Action:** Created comprehensive system documentation covering the full Volumetric Sponsorship subsystem — architecture, mathematics, visual rendering pipeline, and all downstream consumers.
+- **Contents:**
+  - **§1-2:** Conceptual overview and 4-layer architecture diagram (Detection → Statistical Validation → Visual Generation → Chart Rendering).
+  - **§3:** Displacement Engine deep-dive — offline algorithm (`verifyDisplacementOffline`), volume multiplier calibration (2.0× ETH, 2.5× non-ETH), consolidation gate (0.1% volatility threshold), and online fallback path with 1.2s abort timeout.
+  - **§4:** Volumetric Marker Generator — the 4-Gate classification pipeline (Structural Swing → Color Lock → Body-Weighted Volume → Marker). Documents the mathematical distinction between **Arrows** (institutional sponsorship via directional volume increase) and **Circles** (SMT trap/sweep via raw-only volume increase).
+  - **§5:** Displacement Layer rendering — theme-adaptive color resolution, neutral Arrow coloring rationale, and `lightweight-charts` SeriesMarkers integration.
+  - **§6:** Python OLS backend — statsmodels regression model specification (`y ~ anomaly_multiplier + volume_delta + is_dead_zone`), confidence thresholds (HIGH < 0.05, MEDIUM < 0.15, LOW ≥ 0.15), and consolidation short-circuit logic.
+  - **§7:** All downstream consumers documented — Risk Engine decision matrix, Structure Engine MSS confirmation, Strategy Evaluator OLS veto gate (STRICT/RELAXED/OFF), Live Alerts state transitions, and Strategy Condition Resolver metrics (DISPLACEMENT, DISPLACEMENT_VALUE).
+  - **§8:** Full sequence diagram tracing data from Binance WebSocket through every engine to final chart pixel.
+  - **§9:** Appendix of all 18 hardcoded constants, OLS regressor variables, and default fallback colors.
+
+### 2. Updated Directives Index (`AGENTS.md`)
+- **Action:** Registered `06_volumetric_sponsorship.md` as directive #6 in the agent protocol index with clear trigger conditions.
+- **Also registered:** `05_strategy_customizer.md` as directive #5 (was previously undocumented in the index).
 
 ## 🆕 V11.0.12 Changelog — Robust Offline Telemetry, Quiet Logs & Dynamic Order Book Simulation (Completed)
 

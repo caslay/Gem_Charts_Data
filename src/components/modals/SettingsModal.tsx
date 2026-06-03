@@ -455,39 +455,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       <span className="block text-[10px] text-muted italic">Defines the lookback length for the normalized Volatility measurement.</span>
                     </div>
 
-                    {/* Adaptive N Range */}
-                    <div className="grid grid-cols-2 gap-4 pt-2">
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[11px] font-bold text-foreground">Min Window (N_min)</span>
-                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.adaptiveNMin ?? 3}</span>
-                        </div>
-                        <input
-                          type="number"
-                          min="2"
-                          max="8"
-                          value={engineSettings?.adaptiveNMin ?? 3}
-                          onChange={(e) => updateEngineSettings && updateEngineSettings({ adaptiveNMin: parseInt(e.target.value, 10) })}
-                          className="w-full bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-3 py-2 text-xs font-bold text-foreground rounded-lg font-mono"
-                        />
-                      </div>
 
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-[11px] font-bold text-foreground">Max Window (N_max)</span>
-                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.adaptiveNMax ?? 15}</span>
-                        </div>
-                        <input
-                          type="number"
-                          min="10"
-                          max="30"
-                          value={engineSettings?.adaptiveNMax ?? 15}
-                          onChange={(e) => updateEngineSettings && updateEngineSettings({ adaptiveNMax: parseInt(e.target.value, 10) })}
-                          className="w-full bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-3 py-2 text-xs font-bold text-foreground rounded-lg font-mono"
-                        />
-                      </div>
-                    </div>
-                    <span className="block text-[10px] text-muted italic">Determines the boundaries for volatility-based scaling.</span>
                   </div>
 
                   {/* Group B: Institutional Sponsorship */}

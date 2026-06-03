@@ -30,6 +30,14 @@ Do NOT guess the project architecture or past logic. To save the context window,
    - **When to read:** When creating new UI components or Server Actions. 
    - *Note: This version of Next.js has breaking changes. Heed deprecation notices.*
 
+5. **Strategy Customizer** 🎛️
+   - **File:** `directives/05_strategy_customizer.md`
+   - **When to read:** When modifying strategy conditions, the equation builder, or backtest evaluation logic.
+
+6. **Volumetric Sponsorship** 📊
+   - **File:** `directives/06_volumetric_sponsorship.md`
+   - **When to read:** When modifying the Displacement Engine, chart markers (Arrows/Circles), OLS statistical validation, or any system that consumes `InstitutionalSponsorship`. Contains full architecture, mathematics, and visual rendering documentation.
+
 ## ⚠️ Execution Mandate
 Before writing any code or answering, output an internal thought process indicating WHICH directive file you need to read to complete the task accurately.
 

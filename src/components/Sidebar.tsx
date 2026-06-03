@@ -8,7 +8,6 @@ import {
   X,
   Brain,
   Zap,
-  Target,
   Magnet,
   BarChart3,
   Terminal,
@@ -17,8 +16,7 @@ import {
   Download,
   Search,
   Database,
-  Clock,
-  ArrowRight
+  Clock
 } from 'lucide-react';
 import { useBinanceWS } from '@/hooks/useBinanceWS';
 import HudModal from './modals/HudModal';
@@ -54,7 +52,7 @@ export function slicePayloadByLookback(
 
 // ─── AI Prompt Prefix ────────────────────────────────────────────────────────
 const AI_PROMPT_PREFIX =
-  'Act as the Institutional Flow Synthesizer V8.2. Analyze the following quantitative data and provide a mechanical bias report: \n\n';
+  'Act as the Institutional Flow Synthesizer V12.0. Analyze the following quantitative data and provide a mechanical bias report: \n\n';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
@@ -825,10 +823,10 @@ export default function Sidebar({
                   onClick={() => onDownloadV7Sliced(counts)}
                   disabled={!data}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-background hover:bg-card border border-card-border text-muted hover:text-foreground rounded-full transition-all duration-300 cursor-pointer"
-                  title="Download Sliced V8.2 JSON"
+                  title="Download Sliced V12.0 JSON"
                 >
                   <Download size={12} />
-                  <span className="text-[9px] font-black uppercase tracking-wider">DL V8.2 JSON</span>
+                  <span className="text-[9px] font-black uppercase tracking-wider">DL V12.0 JSON</span>
                 </button>
               </div>
 
