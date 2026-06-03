@@ -39,17 +39,20 @@ export class MarketStructureAPI {
     pivotEngine.processCandles(normalizedCandles);
 
     // 2. State Engine (SMC Rules)
-    const stateEngine = new SMCStateEngine(this.config);
+    const stateEngine = new SMCStateEngine(this.config, 2);
+    const innerStateEngine = new SMCStateEngine(this.config, 1);
     for (let i = 0; i < normalizedCandles.length; i++) {
       const c = normalizedCandles[i];
       // Feed pivots that occur at this candle
       const currentPivots = pivotEngine.pivots.filter(p => p.index === i);
       for (const p of currentPivots) {
         stateEngine.processPivot(p, normalizedCandles);
+        innerStateEngine.processPivot(p, normalizedCandles);
       }
       // Compute pseudo-atr for sharp departures
       const atr = c.high - c.low; // Simple fallback
       stateEngine.processCandle(c, normalizedCandles, i, atr);
+      innerStateEngine.processCandle(c, normalizedCandles, i, atr);
     }
 
     // 3. Liquidity Engine (FVG & OB)
@@ -60,7 +63,7 @@ export class MarketStructureAPI {
 
     // Map MAJOR Swings (Level 2)
     const majorPivots = pivotEngine.pivots.filter(p => p.level === 2);
-    const swings: StructuralSwing[] = majorPivots.map(pt => ({
+    const majorSwings: StructuralSwing[] = majorPivots.map(pt => ({
       t: pt.timestamp,
       price: pt.price,
       type: pt.type === 'SWING_HIGH' ? 'HIGH' : 'LOW',
@@ -72,8 +75,22 @@ export class MarketStructureAPI {
       confirmed: pt.confirmed
     }));
 
-    // Map INNER Swings (Level 1)
-    const innerPivots = pivotEngine.pivots.filter(p => p.level === 1);
+    // Map INTERNAL Swings (Level 1)
+    const internalPivots = pivotEngine.pivots.filter(p => p.level === 1);
+    const internalSwings: StructuralSwing[] = internalPivots.map(pt => ({
+      t: pt.timestamp,
+      price: pt.price,
+      type: pt.type === 'SWING_HIGH' ? 'HIGH' : 'LOW',
+      grade: 'INTERNAL',
+      colorValidated: pt.colorValidated ?? false,
+      candle_index: pt.index,
+      timestamp: new Date(pt.timestamp).toISOString(),
+      structure_type: 'INTERNAL',
+      confirmed: pt.confirmed
+    }));
+
+    // Map INNER Swings (Level 0)
+    const innerPivots = pivotEngine.pivots.filter(p => p.level === 0);
     const innerSwingsRaw: StructuralSwing[] = innerPivots.map(pt => ({
       t: pt.timestamp,
       price: pt.price,
@@ -86,18 +103,22 @@ export class MarketStructureAPI {
       confirmed: pt.confirmed
     }));
 
+    // Pass all swings to the UI layer
+    const swings = [...majorSwings, ...internalSwings, ...innerSwingsRaw];
+
     // Build ZigZag Arrays
-    const zigzag = this.buildZigZag(swings, stateEngine);
-    const innerZigzag = this.buildZigZag(innerSwingsRaw, stateEngine, true);
+    const zigzag = this.buildZigZag(majorSwings, stateEngine);
+    const internalZigzag = this.buildZigZag(internalSwings, innerStateEngine, true);
+    const innerZigzag = this.buildZigZag(innerSwingsRaw, innerStateEngine, true);
 
     const latestMSS = zigzag.filter(z => z.label === 'MSS').slice(-1)[0] ?? null;
     const hasConfirmedMSS = latestMSS !== null && latestMSS.displacementConfirmed;
 
     // Macro Dealing Range
-    let dealingRange = this.buildDealingRange(swings, currentPrice);
+    const dealingRange = this.buildDealingRange(majorSwings, currentPrice, stateEngine, normalizedCandles);
 
     // Inner Dealing Range
-    let internalDealingRange = this.buildDealingRange(innerSwingsRaw, currentPrice);
+    const internalDealingRange = this.buildDealingRange(internalSwings, currentPrice, innerStateEngine, normalizedCandles);
 
     return {
       last_processed_index: normalizedCandles.length - 1,
@@ -128,7 +149,7 @@ export class MarketStructureAPI {
       subTrend: 'UNSET',
       innerSwings: innerSwingsRaw,
       innerZigzag,
-      internalTrend: 'UNSET',
+      internalTrend: innerStateEngine.current_trend_state === 'BULLISH_SWING' ? 'BULLISH' : 'BEARISH',
       internalZigzag: innerZigzag,
       latestInternalMSS: innerZigzag.filter(s => s.label === 'MSS').slice(-1)[0] ?? null,
       internal_market_structure_shift: innerZigzag.some(s => s.label === 'MSS' && s.displacementConfirmed),
@@ -146,16 +167,28 @@ export class MarketStructureAPI {
       const from = swings[i];
       const to = swings[i + 1];
 
-      // Avoid connecting HIGH to HIGH
+      // Avoid connecting HIGH to HIGH or LOW to LOW
       if (from.type === to.type) continue;
 
-      const ev = stateEngine.registered_events.find(e => e.index === to.candle_index && (e.type === 'BOS' || e.type === 'MSS' || e.type === 'CHoCH'));
+      // A segment runs from 'from' pivot to 'to' pivot.
+      // An event that breaks structure during this leg will occur AFTER 'from' and UP TO 'to' (or slightly after, but since segments connect pivots, the event is associated with the leg).
+      // Find any BOS/MSS/CHoCH event whose candle index falls between this segment's endpoints.
+      const fromIdx = from.candle_index ?? 0;
+      const toIdx = to.candle_index ?? Number.MAX_SAFE_INTEGER;
+      
+      const ev = stateEngine.registered_events.find(e => 
+        (e.type === 'BOS' || e.type === 'MSS' || e.type === 'CHoCH') &&
+        e.index > fromIdx && e.index <= toIdx
+      );
+
       let label: 'BOS' | 'MSS' | 'INTERNAL' = 'INTERNAL';
       let trendAfter: 'BULLISH' | 'BEARISH' | 'UNSET' = currentTrend;
+      let brokenLevel: number | undefined = undefined;
 
       if (ev) {
         label = ev.type === 'BOS' ? 'BOS' : 'MSS';
         trendAfter = ev.direction || 'UNSET';
+        brokenLevel = ev.level;
       }
 
       zigzag.push({
@@ -164,6 +197,7 @@ export class MarketStructureAPI {
         label,
         trendBefore: currentTrend,
         trendAfter,
+        brokenLevel,
         displacementConfirmed: label === 'MSS' && !ev?.sharp_departure_failed
       });
 
@@ -172,34 +206,58 @@ export class MarketStructureAPI {
     return zigzag;
   }
 
-  private buildDealingRange(swings: StructuralSwing[], currentPrice: number): StructuralDealingRange {
-    const highs = swings.filter(s => s.type === 'HIGH');
-    const lows = swings.filter(s => s.type === 'LOW');
-    
-    if (highs.length > 0 && lows.length > 0) {
-      const lastHigh = highs[highs.length - 1];
-      const lastLow = lows[lows.length - 1];
-      const highVal = parseFloat((lastHigh.price as number).toFixed(2));
-      const lowVal = parseFloat((lastLow.price as number).toFixed(2));
-      const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
+  private buildDealingRange(swings: StructuralSwing[], currentPrice: number, stateEngine: SMCStateEngine, normalizedCandles: Candle[]): StructuralDealingRange {
+    // The true macro dealing range is bounded by the state engine anchors
+    let highPrice: number = -Infinity;
+    let lowPrice: number = Infinity;
+
+    if (stateEngine.current_trend_state === 'BULLISH_SWING') {
+      highPrice = stateEngine.active_swing_high ?? Math.max(currentPrice, ...swings.filter(s => s.type === 'HIGH').map(s => Number(s.price)));
+      lowPrice = stateEngine.protected_low ?? Math.min(...swings.filter(s => s.type === 'LOW').map(s => Number(s.price)));
       
-      return {
-        high: highVal,
-        low: lowVal,
-        equilibrium: eqVal,
-        current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
-        anchor_high_swing: lastHigh,
-        anchor_low_swing: lastLow
-      };
+      // If we are discovering a new high, find the absolute highest high since the protected low
+      if (stateEngine.active_swing_high === null) {
+          const anchorSwing = [...swings].reverse().find(s => s.type === 'LOW' && s.price === lowPrice);
+          const anchorIdx = anchorSwing?.candle_index ?? 0;
+          const candlesSinceAnchor = normalizedCandles.slice(anchorIdx);
+          highPrice = candlesSinceAnchor.length > 0 ? Math.max(...candlesSinceAnchor.map(c => c.high)) : currentPrice;
+      }
+    } else {
+      highPrice = stateEngine.protected_high ?? Math.max(...swings.filter(s => s.type === 'HIGH').map(s => Number(s.price)));
+      lowPrice = stateEngine.active_swing_low ?? currentPrice;
+
+      // If we are discovering a new low, find the absolute lowest low since the protected high
+      if (stateEngine.active_swing_low === null) {
+          const anchorSwing = [...swings].reverse().find(s => s.type === 'HIGH' && s.price === highPrice);
+          const anchorIdx = anchorSwing?.candle_index ?? 0;
+          const candlesSinceAnchor = normalizedCandles.slice(anchorIdx);
+          lowPrice = candlesSinceAnchor.length > 0 ? Math.min(...candlesSinceAnchor.map(c => c.low)) : currentPrice;
+      }
     }
 
+    // Fallbacks if Math.max/min returns +/- Infinity (empty array)
+    if (highPrice === -Infinity || highPrice === null) {
+      highPrice = currentPrice;
+    }
+    if (lowPrice === Infinity || lowPrice === null) {
+      lowPrice = currentPrice;
+    }
+
+    // Find the latest swings that match these anchor prices
+    const anchor_high_swing = [...swings].reverse().find(s => s.type === 'HIGH' && s.price === highPrice) || null;
+    const anchor_low_swing = [...swings].reverse().find(s => s.type === 'LOW' && s.price === lowPrice) || null;
+    
+    const highVal = parseFloat(highPrice.toFixed(2));
+    const lowVal = parseFloat(lowPrice.toFixed(2));
+    const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
+
     return {
-      high: "AWAITING_IDM_SWEEP",
-      low: "AWAITING_IDM_SWEEP",
-      equilibrium: "AWAITING_IDM_SWEEP",
-      current_status: 'AWAITING_IDM_SWEEP',
-      anchor_high_swing: null,
-      anchor_low_swing: null
+      high: highVal,
+      low: lowVal,
+      equilibrium: eqVal,
+      current_status: currentPrice > eqVal ? 'PREMIUM' : 'DISCOUNT',
+      anchor_high_swing,
+      anchor_low_swing
     };
   }
 

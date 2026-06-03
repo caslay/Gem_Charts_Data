@@ -81,30 +81,29 @@ export const structureLayer: ChartLayer = {
     const accentColor = theme === 'dark'
       ? (themeSettings?.dark_accent || '#a855f7')
       : (themeSettings?.light_accent || '#4f46e5');
-
     // 3. Pixel Coordinate Conversion — Map swings to SVG coordinates
     const mappedSwings: MappedPoint[] = [];
-    const lowRange = analysis.dealingRange?.low;
-    const highRange = analysis.dealingRange?.high;
+    const swings = analysis.swings || [];
 
-    for (const pt of analysis.swings) {
+    for (let i = 0; i < swings.length; i++) {
+      const pt = swings[i];
+      if (pt.candle_index === undefined) continue;
+
       const x = timeScale.timeToCoordinate(Math.floor(pt.t / 1000) as any);
       const y = series.priceToCoordinate(pt.price);
+
       if (x !== null && y !== null) {
-        const isInternal = typeof lowRange === 'number' && typeof highRange === 'number' &&
-                           pt.price > lowRange && pt.price < highRange;
         mappedSwings.push({
           ...pt,
           x,
-          y,
-          structure_type: isInternal ? 'INTERNAL' : 'MAJOR'
+          y
         });
       }
     }
 
-    // Isolate confirmed major swings and sort chronologically
+    // Isolate confirmed major and internal swings and sort chronologically
     const confirmedMajor = mappedSwings
-      .filter((s) => s.grade === 'MAJOR' && s.confirmed !== false)
+      .filter((s) => (s.grade === 'MAJOR' || s.grade === 'INTERNAL') && s.confirmed !== false)
       .sort((a, b) => a.t - b.t);
 
     // ─── 1. Implement Horizontal Price Ceilings / Floors ───
@@ -126,7 +125,7 @@ export const structureLayer: ChartLayer = {
 
       const xEnd = breachSwing ? breachSwing.x : rightX;
       
-      // ─── Visual Separation: Check if this Level 2 swing is a Parent range boundary or an Internal wave ───
+      // Visual Separation: Check if this Level 2 swing is a Parent range boundary or an Internal wave
       const color = isInternal
         ? (S.type === 'HIGH' ? swingHighInternalColor : swingLowInternalColor)
         : (S.type === 'HIGH' ? swingHighColor : swingLowColor);
@@ -172,7 +171,10 @@ export const structureLayer: ChartLayer = {
       for (const seg of analysis.zigzag) {
         if (seg.label === 'BOS' || seg.label === 'MSS') {
           const toX = timeScale.timeToCoordinate(Math.floor(seg.to.t / 1000) as any);
-          const levelY = series.priceToCoordinate(seg.from.price);
+          
+          // Use the EXACT broken structural level for the badge, not the leg origin
+          const brokenPrice = seg.brokenLevel ?? seg.from.price;
+          const levelY = series.priceToCoordinate(brokenPrice);
 
           if (toX !== null && levelY !== null) {
             let badgeColor: string;
@@ -233,7 +235,8 @@ export const structureLayer: ChartLayer = {
           if (seg.label === 'MSS' || seg.label === 'BOS') {
             const rawFromX = timeScale.timeToCoordinate(Math.floor(seg.from.t / 1000) as any);
             const toX = timeScale.timeToCoordinate(Math.floor(seg.to.t / 1000) as any);
-            const levelY = series.priceToCoordinate(seg.from.price);
+            const brokenPrice = seg.brokenLevel ?? seg.from.price;
+            const levelY = series.priceToCoordinate(brokenPrice);
 
             // Coordinate Clamping: clamp rawFromX to left edge (0) if scrolled off-screen
             const fromX = rawFromX !== null ? rawFromX : 0;
@@ -381,7 +384,7 @@ export const structureLayer: ChartLayer = {
 
     // ─── 3. Implement The Dealing Range Shadow Box & Equilibrium ───
     let drShadowBox: React.ReactElement | null = null;
-    let drEqMidline: React.ReactElement[] = [];
+    const drEqMidline: React.ReactElement[] = [];
 
     const dr = analysis.dealingRange;
     if (dr && dr.anchor_high_swing && dr.anchor_low_swing) {

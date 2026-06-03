@@ -5,8 +5,8 @@ export interface StructuralSwing {
   price: number | string;
   /** Whether this swing marks a local HIGH or LOW. */
   type: 'HIGH' | 'LOW';
-  /** Grade: MAJOR = Level 2 Multi-Scale, INNER = Level 1 Multi-Scale. Keep for API parity. */
-  grade: 'MAJOR' | 'INNER';
+  /** Grade: MAJOR = Level 2, INTERNAL = Level 1, INNER = Level 0. */
+  grade: 'MAJOR' | 'INTERNAL' | 'INNER';
   /** Passes the Institutional Color Lock (API parity). */
   colorValidated: boolean;
   /** Index of this swing in the processed array. */
@@ -40,6 +40,8 @@ export interface ZigZagSegment {
    * sponsorship was active at the time of evaluation.
    */
   displacementConfirmed: boolean;
+  /** The price level that was broken (if BOS or MSS) */
+  brokenLevel?: number;
 }
 
 export interface StructuralDealingRange {
@@ -103,9 +105,9 @@ export interface MarketStructureAnalysis {
 
 export interface MarketStructureConfig {
   atrPeriod?: number;
-  retracementMultiplier0?: number;
-  retracementMultiplier1?: number;
-  retracementMultiplier2?: number;
+  lookbackMajor?: number;
+  lookbackInternal?: number;
+  lookbackMicro?: number;
   mssBodyRatio?: number;
   displacementVef?: number;
   sharpDepartureMult?: number;
