@@ -161,6 +161,17 @@ export default function Chart({
 
   // ── Difference Engine (Diff Engine) for Algorithmic Events ──────────────
   const prevDataRef = useRef<any>(null);
+  // Cooldown map to prevent alert bursts from the Diff Engine
+  const diffCooldownsRef = useRef<Record<string, number>>({});
+  const checkDiffCooldown = (key: string, cooldownMs: number): boolean => {
+    const now = Date.now();
+    const last = diffCooldownsRef.current[key] ?? 0;
+    if (now - last >= cooldownMs) {
+      diffCooldownsRef.current[key] = now;
+      return true;
+    }
+    return false;
+  };
 
   useEffect(() => {
     if (!marketContextData || !signalAlerts) return;
@@ -181,7 +192,7 @@ export default function Chart({
       const prevStatus = prevMetrics.target_status || '';
       const currStatus = currMetrics.target_status || '';
 
-      // 1. FVG Watcher
+      // 1. FVG Watcher — cooldown 2 min
       const prevFvgs = prevMetrics.active_fvgs || [];
       const currFvgs = currMetrics.active_fvgs || [];
 
@@ -194,43 +205,31 @@ export default function Chart({
 
       const isFvgEnabled = signalAlertsEnabled ? signalAlertsEnabled.FVG_DETECTION !== false : true;
 
-      if (hasNewFvg && isFvgEnabled) {
-        console.log('[DiffEngine] New FVG formation detected. Triggering FVG_DETECTION sound.');
-        if (signalAlerts.FVG_DETECTION) {
-          playFile(signalAlerts.FVG_DETECTION);
-        }
+      if (hasNewFvg && isFvgEnabled && checkDiffCooldown('FVG_DETECTION', 2 * 60 * 1000)) {
+        if (signalAlerts.FVG_DETECTION) playFile(signalAlerts.FVG_DETECTION);
         if (triggerSmartAlert) {
           const newFvgObj = currFvgs.find((fvg: any) => !prevFvgKeys.has(makeFvgKey(fvg)));
           const detail = newFvgObj
             ? `${newFvgObj.type} FVG on ${newFvgObj.timeframe} [${newFvgObj.bottom.toFixed(2)} - ${newFvgObj.top.toFixed(2)}]`
             : 'New Fair Value Gap formed';
-          triggerSmartAlert(
-            'FLOW_STATE',
-            `🚨 FVG DETECTION: ${detail}`
-          );
+          triggerSmartAlert('FLOW_STATE', `🚨 FVG DETECTION: ${detail}`);
         }
       }
 
-      // 2. Displacement Watcher
+      // 2. Displacement Watcher — cooldown 3 min
       const prevDisp = prevMetrics.order_flow_engine?.displacement_sponsorship === 'ACTIVE';
       const currDisp = currMetrics.order_flow_engine?.displacement_sponsorship === 'ACTIVE';
 
       const isDispEnabled = signalAlertsEnabled ? signalAlertsEnabled.DISPLACEMENT_CONFIRMED !== false : true;
 
-      if (!prevDisp && currDisp && isDispEnabled) {
-        console.log('[DiffEngine] Displacement confirmed. Triggering DISPLACEMENT_CONFIRMED sound.');
-        if (signalAlerts.DISPLACEMENT_CONFIRMED) {
-          playFile(signalAlerts.DISPLACEMENT_CONFIRMED);
-        }
+      if (!prevDisp && currDisp && isDispEnabled && checkDiffCooldown('DISPLACEMENT_CONFIRMED', 3 * 60 * 1000)) {
+        if (signalAlerts.DISPLACEMENT_CONFIRMED) playFile(signalAlerts.DISPLACEMENT_CONFIRMED);
         if (triggerSmartAlert) {
-          triggerSmartAlert(
-            'FLOW_STATE',
-            `🌊 FLOW STATE: Displacement Confirmed (Institutional Sponsorship Active)`
-          );
+          triggerSmartAlert('FLOW_STATE', `🌊 FLOW STATE: Displacement Confirmed (Institutional Sponsorship Active)`);
         }
       }
 
-      // 3. SMT Watcher
+      // 3. SMT Watcher — cooldown 5 min
       const prevSmts = prevMetrics.smt_traps || [];
       const currSmts = currMetrics.smt_traps || [];
 
@@ -243,122 +242,80 @@ export default function Chart({
 
       const isSmtEnabled = signalAlertsEnabled ? signalAlertsEnabled.SMT_TRAP_ACTIVE !== false : true;
 
-      if (hasNewSmt && isSmtEnabled) {
-        console.log('[DiffEngine] New SMT trap active. Triggering SMT_TRAP_ACTIVE sound.');
-        if (signalAlerts.SMT_TRAP_ACTIVE) {
-          playFile(signalAlerts.SMT_TRAP_ACTIVE);
-        }
+      if (hasNewSmt && isSmtEnabled && checkDiffCooldown('SMT_TRAP_ACTIVE', 5 * 60 * 1000)) {
+        if (signalAlerts.SMT_TRAP_ACTIVE) playFile(signalAlerts.SMT_TRAP_ACTIVE);
         if (triggerSmartAlert) {
           const newSmtObj = currSmts.find((smt: any) => !prevSmtKeys.has(makeSmtKey(smt)));
           const detail = newSmtObj
             ? `Equal Highs/Lows engineered near ${newSmtObj.price.toFixed(2)}`
             : 'Equal Highs/Lows engineered';
-          triggerSmartAlert(
-            'SMT_TRAP',
-            `📉 SMT TRAP ACTIVE: ${detail}`
-          );
+          triggerSmartAlert('SMT_TRAP', `📉 SMT TRAP ACTIVE: ${detail}`);
         }
       }
 
-      // 4. Target/DOL Exhaustion Watcher
+      // 4. Target/DOL Exhaustion Watcher — cooldown 15 min
       const prevExhausted = prevStatus.includes('EXHAUSTED');
       const currExhausted = currStatus.includes('EXHAUSTED');
 
       const isDolEnabled = signalAlertsEnabled ? signalAlertsEnabled.DOL_EXHAUSTED !== false : true;
 
-      if (!prevExhausted && currExhausted && isDolEnabled) {
-        console.log('[DiffEngine] DOL Exhausted / Target reached. Triggering DOL_EXHAUSTED sound.');
-        if (signalAlerts.DOL_EXHAUSTED) {
-          playFile(signalAlerts.DOL_EXHAUSTED);
-        }
+      if (!prevExhausted && currExhausted && isDolEnabled && checkDiffCooldown('DOL_EXHAUSTED', 15 * 60 * 1000)) {
+        if (signalAlerts.DOL_EXHAUSTED) playFile(signalAlerts.DOL_EXHAUSTED);
         if (triggerSmartAlert) {
-          triggerSmartAlert(
-            'OBJECTIVE_UPDATE',
-            `🎯 OBJECTIVE UPDATE: Daily Objective targets reached (Liquidity Swept)!`
-          );
+          triggerSmartAlert('OBJECTIVE_UPDATE', `🎯 OBJECTIVE UPDATE: Daily Objective targets reached (Liquidity Swept)!`);
         }
       }
 
-      // 5. Session Transition Watcher
+      // 5. Session Transition Watcher — cooldown 15 min
       const isSessionEnabled = signalAlertsEnabled ? signalAlertsEnabled.SESSION_TRANSITION !== false : true;
-      if (prevTimeWindow && currTimeWindow && prevTimeWindow !== currTimeWindow && isSessionEnabled) {
-        console.log(`[DiffEngine] Session shifted from ${prevTimeWindow} to ${currTimeWindow}. Triggering SESSION_TRANSITION sound.`);
-        if (signalAlerts.SESSION_TRANSITION) {
-          playFile(signalAlerts.SESSION_TRANSITION);
-        }
+      if (prevTimeWindow && currTimeWindow && prevTimeWindow !== currTimeWindow && isSessionEnabled && checkDiffCooldown(`SESSION_${currTimeWindow}`, 15 * 60 * 1000)) {
+        if (signalAlerts.SESSION_TRANSITION) playFile(signalAlerts.SESSION_TRANSITION);
         if (triggerSmartAlert) {
-          triggerSmartAlert(
-            'SESSION_TRANSITION',
-            `🕒 SESSION TRANSITION: Entering ${currTimeWindow}`
-          );
+          triggerSmartAlert('SESSION_TRANSITION', `🕒 SESSION TRANSITION: Entering ${currTimeWindow}`);
         }
       }
 
-      // 6. Pricing Shift Watcher
+      // 6. Pricing Shift Watcher — cooldown 5 min
       const prevPricing = prevMetrics.pricing_context?.local_dealing_range?.current_status;
       const currPricing = currMetrics.pricing_context?.local_dealing_range?.current_status;
       const isPricingEnabled = signalAlertsEnabled ? signalAlertsEnabled.PRICING_SHIFT !== false : true;
-      if (prevPricing && currPricing && prevPricing !== currPricing && isPricingEnabled) {
-        console.log(`[DiffEngine] Pricing context shifted from ${prevPricing} to ${currPricing} on ${interval}. Triggering PRICING_SHIFT sound.`);
-        if (signalAlerts.PRICING_SHIFT) {
-          playFile(signalAlerts.PRICING_SHIFT);
-        }
+      if (prevPricing && currPricing && prevPricing !== currPricing && isPricingEnabled && checkDiffCooldown('PRICING_SHIFT', 5 * 60 * 1000)) {
+        if (signalAlerts.PRICING_SHIFT) playFile(signalAlerts.PRICING_SHIFT);
         if (triggerSmartAlert) {
-          triggerSmartAlert(
-            'PRICING_SHIFT',
-            `⚖️ PRICING CROSSOVER [${interval}]: Market shifted to ${currPricing}`
-          );
+          triggerSmartAlert('PRICING_SHIFT', `⚖️ PRICING CROSSOVER [${interval}]: Market shifted to ${currPricing}`);
         }
       }
 
-      // 7. Liquidity Sweep Watcher
+      // 7. Liquidity Sweep Watcher — cooldown 5 min
       const sweepKeywords = ['ASIAN_HIGH_SWEPT', 'ASIAN_LOW_SWEPT', 'LONDON_HIGH_SWEPT', 'LONDON_LOW_SWEPT'];
       const newSweeps = sweepKeywords.filter(keyword =>
         currStatus.includes(keyword) && !prevStatus.includes(keyword)
       );
       const isSweepEnabled = signalAlertsEnabled ? signalAlertsEnabled.SWEEP_ALERT !== false : true;
-      if (newSweeps.length > 0 && isSweepEnabled) {
-        console.log(`[DiffEngine] Liquidity swept: ${newSweeps.join(', ')}. Triggering SWEEP_ALERT sound.`);
-        if (signalAlerts.SWEEP_ALERT) {
-          playFile(signalAlerts.SWEEP_ALERT);
-        }
+      if (newSweeps.length > 0 && isSweepEnabled && checkDiffCooldown('SWEEP_ALERT', 5 * 60 * 1000)) {
+        if (signalAlerts.SWEEP_ALERT) playFile(signalAlerts.SWEEP_ALERT);
         if (triggerSmartAlert) {
-          triggerSmartAlert(
-            'PURGE',
-            `🧹 SWEEP ALERT: Intraday range swept - ${newSweeps.join(', ')}`
-          );
+          triggerSmartAlert('PURGE', `🧹 SWEEP ALERT: Intraday range swept - ${newSweeps.join(', ')}`);
         }
       }
 
-      // 9. Flow State Trend Shift Watcher (OI momentum shift)
+      // 9. Flow State Trend Shift Watcher — cooldown 10 min
       const prevTrend = prevMetrics.order_flow_engine?.open_interest_trend;
       const currTrend = currMetrics.order_flow_engine?.open_interest_trend;
       const isFlowEnabled = signalAlertsEnabled ? signalAlertsEnabled.FLOW_STATE_CHANGE !== false : true;
-      if (prevTrend && currTrend && prevTrend !== currTrend && isFlowEnabled) {
-        console.log(`[DiffEngine] Flow State trend shifted from ${prevTrend} to ${currTrend}. Triggering FLOW_STATE_CHANGE sound.`);
-        if (signalAlerts.FLOW_STATE_CHANGE) {
-          playFile(signalAlerts.FLOW_STATE_CHANGE);
-        }
+      if (prevTrend && currTrend && prevTrend !== currTrend && isFlowEnabled && checkDiffCooldown('FLOW_STATE_CHANGE', 10 * 60 * 1000)) {
+        if (signalAlerts.FLOW_STATE_CHANGE) playFile(signalAlerts.FLOW_STATE_CHANGE);
         if (triggerSmartAlert) {
-          triggerSmartAlert(
-            'FLOW_STATE',
-            `🌊 FLOW STATE TREND: Open Interest momentum is now ${currTrend}`
-          );
+          triggerSmartAlert('FLOW_STATE', `🌊 FLOW STATE TREND: Open Interest momentum is now ${currTrend}`);
         }
       }
 
-      // 10. Dead Zone Restriction Watcher
+      // 10. Dead Zone Restriction Watcher — cooldown 60 min
       const isDeadZoneEnabled = signalAlertsEnabled ? signalAlertsEnabled.DEAD_ZONE_ENTER !== false : true;
-      if (currTimeWindow === 'DEAD_ZONE' && prevTimeWindow !== 'DEAD_ZONE' && isDeadZoneEnabled) {
-        console.log('[DiffEngine] Temporal DEAD_ZONE restrictions activated. Triggering DEAD_ZONE_ENTER sound.');
-        if (signalAlerts.DEAD_ZONE_ENTER) {
-          playFile(signalAlerts.DEAD_ZONE_ENTER);
-        }
+      if (currTimeWindow === 'DEAD_ZONE' && prevTimeWindow !== 'DEAD_ZONE' && isDeadZoneEnabled && checkDiffCooldown('DEAD_ZONE_ENTER', 60 * 60 * 1000)) {
+        if (signalAlerts.DEAD_ZONE_ENTER) playFile(signalAlerts.DEAD_ZONE_ENTER);
         if (triggerSmartAlert) {
-          triggerSmartAlert(
-            'DEAD_ZONE',
-            `🔕 DEAD ZONE: Entering NY mid-day pause. Structural alerts muted.`
-          );
+          triggerSmartAlert('DEAD_ZONE', `🔕 DEAD ZONE: Entering NY mid-day pause. Structural alerts muted.`);
         }
       }
     }
@@ -1022,7 +979,8 @@ export default function Chart({
           seriesRef.current.update(liveCandle as any);
           updateAlertPositions();
         } else {
-          console.warn('[Chart] Suppressed out-of-order live candle tick to prevent Ghost Wick:', liveCandle.time, 'last historical:', lastBarTimeSec);
+          // Suppressed: live candle is behind the last historical bar (expected in offline/sim mode).
+          // No log needed — this is benign and fires on every WS tick until the next real close.
         }
       } catch (error) {
         console.error('[Chart] Lightweight Charts Update Error:', error);
@@ -1032,7 +990,6 @@ export default function Chart({
 
   // ── Phase 3: The Execution Loop & Tick Crossovers ─────────────────────────
   const executeAlert = useCallback((alert: Alert) => {
-    console.log('[Chart Component] executeAlert entered for alert:', { id: alert.id, price: alert.price, label: alert.label });
 
     // 1. Instantly flip status in state to prevent double execution
     setAlerts((prevAlerts) =>

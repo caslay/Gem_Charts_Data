@@ -367,6 +367,8 @@ function buildEnrichedPayload(
       market_velocity: structureAnalysis?.market_velocity ?? 0,
       runaway_origin_price: structureAnalysis?.runaway_origin_price ?? null,
       full_structure_map: structureAnalysis ? {
+        swing_points: structureAnalysis.swing_points,
+        structural_events: structureAnalysis.structural_events,
         swings: structureAnalysis.swings,
         zigzag: structureAnalysis.zigzag,
         innerSwings: structureAnalysis.innerSwings || [],

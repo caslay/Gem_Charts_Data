@@ -19,10 +19,10 @@ export const useLayerStore = create<LayerState>()(
         sessions: true,
         displacement: true,
         structure: true,
-        structure_major: true,
-        structure_inner: true,
-        structure_zigzag: true,
-        structure_istr: true,
+        structure_major: true,   // Layer 1: MAJ — 5-bar fractal horizontal ceilings/floors
+        structure_int: true,     // Layer 2: INT — Internal dashed breach rays (from macro engine unconfirmed)
+        structure_inner: true,   // Layer 3: INN — Inner zigzag paths (from PASS 2 inner engine)
+        structure_istr: true,    // iSTR — Volatility suppression gate badge
       },
       toggleVisibility: (layerId) =>
         set((state) => ({
