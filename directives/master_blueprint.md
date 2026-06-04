@@ -43,6 +43,10 @@
 - **Action:** Resolved a discrepancy where the main "Range Context" metric card was showing day open pricing context (compared against Cairo's 00:00 UTC True Day Open) instead of the actual structural Dealing Range status.
 - **Wiring updates:** Re-routed the `pricing` prop in both the live dashboard (`page.tsx`) and backtest dashboard (`backtest/page.tsx`) to pull directly from the active structural dealing range status (`data?.ipda_metrics?.pricing_context?.local_dealing_range?.current_status`). The main metrics card now correctly reflects structural `PREMIUM` vs. `DISCOUNT` states.
 
+### 6. Fallback Anchor Swing Resolution for SAVP Coordinate Mapping
+- **Action:** Fixed an issue where the Swing-Anchored Volume Profile (SAVP) failed to render on `5m` and `1h` timeframes because the structural anchors were set to `null` while discovering new swing highs/lows.
+- **Logic:** Upgraded `buildDealingRange` inside `MarketStructureAPI.ts` to locate the closest candle by price when an exact pivot swing match is not found in the swings array. The system now dynamically constructs a candidate `StructuralSwing` object to serve as the anchor. This resolves the coordinate mapping for both the main and internal dealing ranges and ensures SAVP computes successfully across all timeframes without generating unnecessary network requests.
+
 ## 🆕 V12.0.0 Changelog — Multi-Scale Directional Change Quant Engine Refactor (Completed)
 
 ### 1. New Modular Architecture (`src/lib/quantEngine/`)
