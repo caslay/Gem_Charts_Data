@@ -2380,7 +2380,7 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 |---|---|---|---|
 | `ticker` | string | Hardcoded | Always `"ETHUSDC.p"` |
 | `timestamp` | ISO string | Server time | Snapshot moment |
-| `timezone` | string | Hardcoded | Always `"UTC+3"` |
+| `timezone` | string | Hardcoded | Always `"UTC"` |
 | `open_interest` | number | Binance `/openInterest` | Current aggregate OI value |
 | `data_payload` | object | Binance klines | Raw OHLCV: `candles_4h`, `candles_1h`, `candles_15m`, `candles_5m` |
 | `risk_management` | object | `calculateDynamicRisk()` | `mode` + `reason` |
@@ -2395,6 +2395,12 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 | `institutional_sponsorship` | object | Displacement engine result |
 | `current_pricing` | string | `PREMIUM` / `DISCOUNT` / `FAIR_VALUE` / `UNKNOWN` |
 | `target_status` | string | Sweep exhaustion status |
+| `macro_daily_bias` | string | Triple-Vector bias result (`CONFIRMED_BULLISH` \| `CONFIRMED_BEARISH` \| `NEUTRAL`) |
+| `market_structure_shift` | boolean | True if confirmed major structural break occurred |
+| `market_structure_shift_direction` | string \| null | MSS breakout direction |
+| `current_trend` | string | Major wave trend state (`BULLISH` \| `BEARISH`) |
+| `internal_market_trend` | string | Internal wave trend state |
+| `internal_structure_shift` | boolean | True if confirmed internal structural break occurred |
 | `macro_levels.pdh` | number | Previous day high |
 | `macro_levels.pdl` | number | Previous day low |
 | `macro_levels.asian_high` | number \| null | Asian session high |
@@ -2406,6 +2412,12 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 | `projected_targets` | object | Asian range standard deviations (1.5x, 2.0x, 2.5x) |
 | `smt_traps` | array | Detected equal highs within $0.50 |
 | `pricing_context` | object | `vs_daily_open` + `local_dealing_range` |
+| `pricing_context.local_dealing_range` | object | Structural Dealing Range boundary details (`high`, `low`, `equilibrium`, `profile_metrics`) |
+| `pricing_context.local_dealing_range.profile_metrics` | object \| null | Swing-Anchored Volume Profile metrics (`poc`, `vah`, `val`, `vsr`) |
+| `full_structure_map` | object | Mapped structural elements for chart and strategy use |
+| `full_structure_map.swings` | array | Level 0, 1, and 2 swings list |
+| `full_structure_map.zigzag` | array | Structural ZigZag segments list |
+| `full_structure_map.dealingRange` | object | Major Dealing Range matching `pricing_context.local_dealing_range` |
 | `order_flow_engine` | object | OI trend, liquidity pools, liquidations, sentiment |
 | `active_fvgs` | array | Consolidated 15m + 5m unmitigated FVGs |
 | `trade_execution_parameters` | object | Risk mode, closest FVG CE, invalidation levels |
