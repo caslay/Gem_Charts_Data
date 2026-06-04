@@ -15,6 +15,7 @@ import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
 import { verifyDisplacementOffline } from '@/lib/displacementEngine';
 import { generateTradeExecutionParameters } from '@/lib/riskEngine';
 import { analyzeMarketStructure } from '@/lib/structureEngine';
+import { resolveTripleVectorBias } from '@/lib/quantEngine/BiasEngine';
 
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -337,6 +338,31 @@ function buildEnrichedPayload(
     activeCandles
   );
 
+  const distance_to_PWH = pdh > 0 && livePrice !== null ? parseFloat(Math.abs(pdh - livePrice).toFixed(2)) : null;
+  const distance_to_PWL = pdl > 0 && livePrice !== null ? parseFloat(Math.abs(pdl - livePrice).toFixed(2)) : null;
+
+  const allHtfDistances = [
+    { label: 'PWH', val: distance_to_PWH },
+    { label: 'PWL', val: distance_to_PWL }
+  ].filter((d): d is { label: string; val: number } => d.val !== null);
+
+  const nearestHtfMagnet = allHtfDistances.length > 0
+    ? (() => {
+        const min = allHtfDistances.reduce((m, cur) => (cur.val! < m.val! ? cur : m), allHtfDistances[0]);
+        return { label: min.label, distance: min.val };
+      })()
+    : null;
+
+  const activeSwingPOC = structureAnalysis?.dealingRange?.profile_metrics?.poc ?? null;
+  const resolvedBias = resolveTripleVectorBias({
+    true_day_open_0700: trueDayOpen0700,
+    livePrice,
+    nearest_htf_magnet: nearestHtfMagnet,
+    activeSwingPOC,
+    liquidation_status: displacement.status.startsWith('ACTIVE') ? 'LIQUIDITY_SWEPT' : 'NORMAL',
+    target_status
+  });
+
   return {
     ticker: `${SYMBOL}.backtest`,
     timezone: 'UTC',
@@ -348,6 +374,7 @@ function buildEnrichedPayload(
       current_time_window,
       current_pricing: currentPricing,
       target_status,
+      macro_daily_bias: resolvedBias,
       // V10.13 — Market Structure Shift from centralized engine
       market_structure_shift: structureAnalysis?.market_structure_shift ?? false,
       market_structure_shift_direction: structureAnalysis?.market_structure_shift_direction ?? null,

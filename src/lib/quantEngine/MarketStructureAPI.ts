@@ -7,6 +7,7 @@ import {
   StructuralSwing, ZigZagSegment, StructuralDealingRange, Pivot 
 } from './types';
 import { InstitutionalSponsorship } from '../displacementEngine';
+import { calculateVolumeProfile } from './VolumeProfileEngine';
 
 export class MarketStructureAPI {
   private config?: MarketStructureConfig;
@@ -251,7 +252,7 @@ export class MarketStructureAPI {
     const lowVal = parseFloat(lowPrice.toFixed(2));
     const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
 
-    return {
+    const dr: StructuralDealingRange = {
       high: highVal,
       low: lowVal,
       equilibrium: eqVal,
@@ -259,6 +260,9 @@ export class MarketStructureAPI {
       anchor_high_swing,
       anchor_low_swing
     };
+
+    dr.profile_metrics = calculateVolumeProfile(dr, normalizedCandles);
+    return dr;
   }
 
   private createEmptyState(): MarketStructureAnalysis {

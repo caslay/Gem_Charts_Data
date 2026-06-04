@@ -7,6 +7,7 @@ import { getSmtContext } from '@/lib/smtEngine';
 import { analyzeMarketStructureStateful } from '@/lib/structureEngine';
 import { auth } from '@/auth';
 import { sql } from '@vercel/postgres';
+import { resolveTripleVectorBias } from '@/lib/quantEngine/BiasEngine';
 
 // NOTE: getStructuralDealingRange() removed — V10.13 Refactor.
 // All structural analysis is now centralized in src/lib/structureEngine.ts
@@ -994,6 +995,17 @@ export async function GET(req: Request) {
       ...pricing_context_addon
     };
 
+    // Resolve Triple-Vector Macro Daily Bias
+    const activeSwingPOC = structureAnalysis.dealingRange.profile_metrics?.poc ?? null;
+    const resolvedBias = resolveTripleVectorBias({
+      true_day_open_0700,
+      livePrice: currentLivePrice,
+      nearest_htf_magnet: pricing_context_addon.nearest_htf_magnet,
+      activeSwingPOC,
+      liquidation_status: liquidation_events.status,
+      target_status
+    });
+
     const fvgGroups = [
       { fvgs: detectActiveFVGs(candles5m, true), timeframe: '5m' },
       { fvgs: detectActiveFVGs(candles15m, true), timeframe: '15m' },
@@ -1054,6 +1066,7 @@ export async function GET(req: Request) {
       institutional_sponsorship,
       current_pricing,
       target_status,
+      macro_daily_bias: resolvedBias,
       // V10.13 — Market Structure Shift fields from centralized engine
       market_structure_shift: structureAnalysis.market_structure_shift,
       market_structure_shift_direction: structureAnalysis.market_structure_shift_direction,

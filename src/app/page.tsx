@@ -76,7 +76,7 @@ export default function Home() {
     }
   }
 
-  const pricing = data?.ipda_metrics?.current_pricing || 'SCANNING';
+  const pricing = data?.ipda_metrics?.pricing_context?.local_dealing_range?.current_status || 'SCANNING';
   const targetStatus = data?.ipda_metrics?.target_status || 'PENDING';
 
   return (
