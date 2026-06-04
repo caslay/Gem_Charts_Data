@@ -360,7 +360,7 @@ export default function BacktestPage() {
       {/* ── 3 Unified Visual HUD Cards (Parity with Live HUD) ────────── */}
       <DashboardMetrics
         masterBias={masterBias}
-        pricing={(engine.enrichedPayload?.ipda_metrics as any)?.current_pricing || 'SCANNING'}
+        pricing={(engine.enrichedPayload?.ipda_metrics as any)?.pricing_context?.local_dealing_range?.current_status || 'SCANNING'}
         targetStatus={(engine.enrichedPayload?.ipda_metrics as any)?.target_status || 'PENDING'}
       />
 

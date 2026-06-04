@@ -53,6 +53,12 @@ export interface StructuralDealingRange {
   anchor_high_swing: StructuralSwing | null;
   /** The swing that anchors the LOW boundary. */
   anchor_low_swing: StructuralSwing | null;
+  profile_metrics?: {
+    poc: number | null;
+    vah: number | null;
+    val: number | null;
+    vsr: number | null;
+  } | null;
 }
 
 export interface Pivot {

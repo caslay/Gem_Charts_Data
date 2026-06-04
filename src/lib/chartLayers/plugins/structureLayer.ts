@@ -385,6 +385,8 @@ export const structureLayer: ChartLayer = {
     // ─── 3. Implement The Dealing Range Shadow Box & Equilibrium ───
     let drShadowBox: React.ReactElement | null = null;
     const drEqMidline: React.ReactElement[] = [];
+    let savpValueArea: React.ReactElement | null = null;
+    let savpPocLine: React.ReactElement | null = null;
 
     const dr = analysis.dealingRange;
     if (dr && dr.anchor_high_swing && dr.anchor_low_swing) {
@@ -418,6 +420,38 @@ export const structureLayer: ChartLayer = {
           fill: fillStyle,
           stroke: 'none',
         });
+
+        // Draw SAVP Value Area and POC if metrics are available
+        if (dr.profile_metrics && dr.profile_metrics.poc !== null) {
+          const pm = dr.profile_metrics;
+          const pocY = series.priceToCoordinate(pm.poc);
+          const vahY = pm.vah !== null ? series.priceToCoordinate(pm.vah) : null;
+          const valY = pm.val !== null ? series.priceToCoordinate(pm.val) : null;
+
+          if (vahY !== null && valY !== null) {
+            savpValueArea = React.createElement('rect', {
+              key: 'dr-savp-va',
+              x: boxStartX,
+              y: Math.min(vahY, valY),
+              width: rightX - boxStartX,
+              height: Math.abs(valY - vahY),
+              fill: `color-mix(in srgb, ${accentColor} 8%, transparent)`,
+              stroke: 'none',
+            });
+          }
+
+          if (pocY !== null) {
+            savpPocLine = React.createElement('line', {
+              key: 'dr-savp-poc',
+              x1: boxStartX,
+              y1: pocY,
+              x2: rightX,
+              y2: pocY,
+              stroke: 'var(--accent, ' + accentColor + ')',
+              strokeWidth: 2.0,
+            });
+          }
+        }
 
         // Draw dashed midline at 50% Equilibrium
         drEqMidline.push(
@@ -491,9 +525,11 @@ export const structureLayer: ChartLayer = {
 
         // A2. Draw Shadow Box
         drShadowBox,
+        savpValueArea,
 
         // A3. Draw Equilibrium midline
         drEqMidline,
+        savpPocLine,
 
         // A4. Draw Horizontal price levels
         horizontalLevels,

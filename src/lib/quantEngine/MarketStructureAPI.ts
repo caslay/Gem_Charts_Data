@@ -7,6 +7,7 @@ import {
   StructuralSwing, ZigZagSegment, StructuralDealingRange, Pivot 
 } from './types';
 import { InstitutionalSponsorship } from '../displacementEngine';
+import { calculateVolumeProfile } from './VolumeProfileEngine';
 
 export class MarketStructureAPI {
   private config?: MarketStructureConfig;
@@ -244,14 +245,65 @@ export class MarketStructureAPI {
     }
 
     // Find the latest swings that match these anchor prices
-    const anchor_high_swing = [...swings].reverse().find(s => s.type === 'HIGH' && s.price === highPrice) || null;
-    const anchor_low_swing = [...swings].reverse().find(s => s.type === 'LOW' && s.price === lowPrice) || null;
+    let anchor_high_swing = [...swings].reverse().find(s => s.type === 'HIGH' && s.price === highPrice) || null;
+    if (anchor_high_swing === null && normalizedCandles.length > 0) {
+      let minDiff = Infinity;
+      let closestIdx = -1;
+      for (let i = 0; i < normalizedCandles.length; i++) {
+        const diff = Math.abs(normalizedCandles[i].high - highPrice);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestIdx = i;
+        }
+      }
+      if (closestIdx !== -1) {
+        const c = normalizedCandles[closestIdx];
+        anchor_high_swing = {
+          t: c.t,
+          price: c.high,
+          type: 'HIGH',
+          grade: swings[0]?.grade || 'MAJOR',
+          colorValidated: true,
+          candle_index: closestIdx,
+          timestamp: new Date(c.t).toISOString(),
+          structure_type: swings[0]?.structure_type || 'MAJOR',
+          confirmed: true
+        };
+      }
+    }
+
+    let anchor_low_swing = [...swings].reverse().find(s => s.type === 'LOW' && s.price === lowPrice) || null;
+    if (anchor_low_swing === null && normalizedCandles.length > 0) {
+      let minDiff = Infinity;
+      let closestIdx = -1;
+      for (let i = 0; i < normalizedCandles.length; i++) {
+        const diff = Math.abs(normalizedCandles[i].low - lowPrice);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closestIdx = i;
+        }
+      }
+      if (closestIdx !== -1) {
+        const c = normalizedCandles[closestIdx];
+        anchor_low_swing = {
+          t: c.t,
+          price: c.low,
+          type: 'LOW',
+          grade: swings[0]?.grade || 'MAJOR',
+          colorValidated: true,
+          candle_index: closestIdx,
+          timestamp: new Date(c.t).toISOString(),
+          structure_type: swings[0]?.structure_type || 'MAJOR',
+          confirmed: true
+        };
+      }
+    }
     
     const highVal = parseFloat(highPrice.toFixed(2));
     const lowVal = parseFloat(lowPrice.toFixed(2));
     const eqVal = parseFloat(((highVal + lowVal) / 2).toFixed(2));
 
-    return {
+    const dr: StructuralDealingRange = {
       high: highVal,
       low: lowVal,
       equilibrium: eqVal,
@@ -259,6 +311,9 @@ export class MarketStructureAPI {
       anchor_high_swing,
       anchor_low_swing
     };
+
+    dr.profile_metrics = calculateVolumeProfile(dr, normalizedCandles);
+    return dr;
   }
 
   private createEmptyState(): MarketStructureAnalysis {

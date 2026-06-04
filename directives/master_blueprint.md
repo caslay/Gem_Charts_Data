@@ -1,10 +1,51 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V11.0
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-06-03 (V11.0.13 — Volumetric Sponsorship System Documentation)  
+> **Last Updated:** 2026-06-04 (V12.0.1 — Swing-Anchored Volume Profiles & Triple-Vector Bias Upgrade)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 65+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V12.0.1 Changelog — Swing-Anchored Volume Profiles & Triple-Vector Bias Upgrade (Completed)
+
+### 1. Volumetric Calculation Engine (`src/lib/quantEngine/VolumeProfileEngine.ts` & `MarketStructureAPI.ts`)
+- **Action:** Implemented a high-performance utility `calculateVolumeProfile` for Swing-Anchored Volume Profile (SAVP) calculation, anchored to the timestamps of the major high/low swings of the current dealing range.
+- **Formulas & Logic:**
+  - Extracts the subset of candles corresponding to the duration of the major swing.
+  - Divides the range into 50 equal bins, distributing volume using a fractional overlap algorithm based on candle high/low overlaps.
+  - Computes the Point of Control (POC), Value Area High (VAH), and Value Area Low (VAL) at a 70% volume expansion threshold.
+  - Computes the Volumetric Sponsorship Ratio (VSR) by splitting the swing range into 4 quadrants and taking the ratio of origin-quadrant volume to termination-quadrant volume.
+- **Integration:** Integrated into `buildDealingRange` within `MarketStructureAPI.ts` to attach `profile_metrics` to each `StructuralDealingRange`.
+
+### 2. Triple-Vector Daily Bias Solver (`src/lib/quantEngine/BiasEngine.ts`)
+- **Action:** Created the state matrix solver `resolveTripleVectorBias` that computes daily macro bias (`'CONFIRMED_BULLISH' | 'CONFIRMED_BEARISH' | 'NEUTRAL'`) across three vectors:
+  - **Vector 1 (Time/AMD):** Price location relative to Cairo's True Day Open (`true_day_open_0700`).
+  - **Vector 2 (HTF Magnets):** Distance and direction of the nearest High Timeframe (HTF) magnet (e.g., PWH, DAILY_SIBI, PWL, DAILY_BISI).
+  - **Vector 3 (Volume/Liquidity):** Position relative to the active Swing POC and whether structural sweeps/liquidations have occurred.
+- **Integration:** 
+  - Integrated into `/api/market-data` REST endpoint (`route.ts`) to inject the resolved `macro_daily_bias` into `ipda_metrics`.
+  - Integrated into the headless Backtest Engine (`useBacktestEngine.ts`) with identical mathematical rules to maintain complete parity.
+
+### 3. High-Performance Visual Overlays (`src/lib/chartLayers/plugins/structureLayer.ts`)
+- **Action:** Upgraded the Lightweight Charts structural layer to render the SAVP Value Area and POC lines.
+- **Visual Styles:**
+  - Renders the Value Area (VAH to VAL) as a shaded transparent rectangle (8% opacity) spanning from the start of the dealing range to the right edge.
+  - Renders the Point of Control (POC) as a solid 2px line using the `--accent` theme color.
+
+### 4. Strategy Architect & Evaluator Integration (`EquationBuilder.tsx` & `useStrategyEvaluator.ts`)
+- **Action:** Exposed the new volumetric and bias metrics to the Strategy Builder UI.
+- **Metrics Registered:**
+  - `MACRO_BIAS` with option fields `['BULLISH', 'BEARISH', 'NEUTRAL']`.
+  - `PRICE_VS_POC` with option fields `['ABOVE_POC', 'BELOW_POC', 'INSIDE_VALUE_AREA']`.
+- **Evaluator Logic:** Wired the client-side strategy evaluation engine (`useStrategyEvaluator.ts`) to resolve these parameters in real-time on tick data updates.
+
+### 5. Layout & Pricing Context Alignment (`src/app/page.tsx` & `src/app/backtest/page.tsx`)
+- **Action:** Resolved a discrepancy where the main "Range Context" metric card was showing day open pricing context (compared against Cairo's 00:00 UTC True Day Open) instead of the actual structural Dealing Range status.
+- **Wiring updates:** Re-routed the `pricing` prop in both the live dashboard (`page.tsx`) and backtest dashboard (`backtest/page.tsx`) to pull directly from the active structural dealing range status (`data?.ipda_metrics?.pricing_context?.local_dealing_range?.current_status`). The main metrics card now correctly reflects structural `PREMIUM` vs. `DISCOUNT` states.
+
+### 6. Fallback Anchor Swing Resolution for SAVP Coordinate Mapping
+- **Action:** Fixed an issue where the Swing-Anchored Volume Profile (SAVP) failed to render on `5m` and `1h` timeframes because the structural anchors were set to `null` while discovering new swing highs/lows.
+- **Logic:** Upgraded `buildDealingRange` inside `MarketStructureAPI.ts` to locate the closest candle by price when an exact pivot swing match is not found in the swings array. The system now dynamically constructs a candidate `StructuralSwing` object to serve as the anchor. This resolves the coordinate mapping for both the main and internal dealing ranges and ensures SAVP computes successfully across all timeframes without generating unnecessary network requests.
 
 ## 🆕 V12.0.0 Changelog — Multi-Scale Directional Change Quant Engine Refactor (Completed)
 

@@ -36,6 +36,26 @@ function resolveMetric(
       return 'NEUTRAL';
     }
 
+    case 'MACRO_BIAS': {
+      return ipda.macro_daily_bias || 'NEUTRAL';
+    }
+
+    case 'PRICE_VS_POC': {
+      const price = livePrice || 0;
+      const dr = ipda.full_structure_map?.dealingRange || {};
+      const pm = dr.profile_metrics;
+      if (!pm || typeof pm.poc !== 'number' || price === 0) return 'INSIDE_VALUE_AREA';
+
+      const val = typeof pm.val === 'number' ? pm.val : null;
+      const vah = typeof pm.vah === 'number' ? pm.vah : null;
+
+      if (val !== null && vah !== null && price >= val && price <= vah) {
+        return 'INSIDE_VALUE_AREA';
+      }
+
+      return price > pm.poc ? 'ABOVE_POC' : 'BELOW_POC';
+    }
+
     case 'FVG': {
       let fvgs = ipda.active_fvgs || [];
       if (!Array.isArray(fvgs)) return false;
