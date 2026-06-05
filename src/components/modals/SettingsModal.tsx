@@ -668,6 +668,71 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                     <span className="block text-[10px] text-muted italic font-sans leading-relaxed">Configure the historical lookback candle counts for each timeframe independently (min 100, max 1500).</span>
                   </div>
+
+                  {/* Group E: Data Stream Features & Payloads */}
+                  <div className="border border-card-border/60 bg-card/30 rounded-xl p-5 space-y-4">
+                    <h4 className="text-xs font-black uppercase text-accent tracking-widest border-b border-card-border/40 pb-2 flex items-center gap-2">
+                      <Sparkles size={12} />
+                      <span>Group E: Data Stream Features & Payloads</span>
+                    </h4>
+
+                    <div className="space-y-3.5 pl-1">
+                      {/* BTC Correlation Toggle */}
+                      <label className="flex items-center gap-3.5 cursor-pointer group select-none">
+                        <input
+                          type="checkbox"
+                          checked={engineSettings?.includeBtcCorrelation !== false}
+                          onChange={(e) => updateEngineSettings && updateEngineSettings({ includeBtcCorrelation: e.target.checked })}
+                          className="rounded border border-card-border w-4 h-4 cursor-pointer accent-accent transition-all"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold uppercase text-foreground tracking-widest group-hover:text-accent transition-colors">
+                            Enable BTC Correlation Data
+                          </span>
+                          <span className="block text-[10px] text-muted italic font-sans leading-tight">
+                            Fetches and serializes BTCUSDT kline arrays for macro calculations.
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* Structure and Swings Toggle */}
+                      <label className="flex items-center gap-3.5 cursor-pointer group select-none">
+                        <input
+                          type="checkbox"
+                          checked={engineSettings?.includeStructureAnalysis !== false}
+                          onChange={(e) => updateEngineSettings && updateEngineSettings({ includeStructureAnalysis: e.target.checked })}
+                          className="rounded border border-card-border w-4 h-4 cursor-pointer accent-accent transition-all"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold uppercase text-foreground tracking-widest group-hover:text-accent transition-colors">
+                            Enable Structure & Swings Analysis
+                          </span>
+                          <span className="block text-[10px] text-muted italic font-sans leading-tight">
+                            Runs high-performance intermediate 5-bar pivot tracking, BOS/MSS maps, and SAVP.
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* FVG Detection Toggle */}
+                      <label className="flex items-center gap-3.5 cursor-pointer group select-none">
+                        <input
+                          type="checkbox"
+                          checked={engineSettings?.includeFvgDetection !== false}
+                          onChange={(e) => updateEngineSettings && updateEngineSettings({ includeFvgDetection: e.target.checked })}
+                          className="rounded border border-card-border w-4 h-4 cursor-pointer accent-accent transition-all"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold uppercase text-foreground tracking-widest group-hover:text-accent transition-colors">
+                            Enable Fair Value Gap (FVG) Detection
+                          </span>
+                          <span className="block text-[10px] text-muted italic font-sans leading-tight">
+                            Scans and consolidates active unmitigated/pending FVG zones.
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
                 </div>
               </div>
             )}

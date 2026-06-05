@@ -207,6 +207,7 @@ interface MarkerCandle {
   l: number;  // Low
   c: number;  // Close
   v: number;  // Total volume
+  volumetric_signal?: 'ARROW_UP' | 'ARROW_DOWN' | 'CIRCLE_UP' | 'CIRCLE_DOWN' | null; // Pre-calculated signal
 }
 
 interface MarkerColors {
@@ -215,6 +216,10 @@ interface MarkerColors {
   bearishSweepColor: string;    // Bearish circle color
 }
 ```
+
+> [!NOTE]
+> The `volumetric_signal` key is pre-calculated on the backend API handler (`/api/market-data`) and within the Backtest Replay day-loader (`useBacktestEngine.ts`) via the generic annotator `annotateCandlesWithVolumetricSignals()`. This allows downstream consumers (like backtest snapshot exports and external scripts) to read the active marker state directly from the candle JSON without repeating the sliding-window geometry math.
+
 
 ### 4.2 The 4-Gate Classification Pipeline
 

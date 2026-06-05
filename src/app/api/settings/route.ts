@@ -43,6 +43,9 @@ async function initTables() {
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS candles_limit_15m INTEGER DEFAULT 1000;`;
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS candles_limit_1h INTEGER DEFAULT 1000;`;
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS candles_limit_4h INTEGER DEFAULT 1000;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS include_btc_correlation BOOLEAN DEFAULT true;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS include_structure_analysis BOOLEAN DEFAULT true;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS include_fvg_detection BOOLEAN DEFAULT true;`;
   } catch (err) {
     console.error("[SETTINGS API] Failed to alter table terminal_settings:", err);
   }
@@ -93,7 +96,8 @@ export async function GET() {
     const userEmail = session.user.email;
     const { rows: termRows } = await sql`
       SELECT signal_sounds, enabled_signals, atr_period, adaptive_n_min, adaptive_n_max, mss_body_ratio, displacement_vef, sharp_departure_mult,
-             candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h FROM terminal_settings
+             candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
+             include_btc_correlation, include_structure_analysis, include_fvg_detection FROM terminal_settings
       WHERE user_id = ${userEmail}
       LIMIT 1
     `;
@@ -112,6 +116,9 @@ export async function GET() {
       candlesLimit15m: termRows[0].candles_limit_15m ?? 1000,
       candlesLimit1h: termRows[0].candles_limit_1h ?? 1000,
       candlesLimit4h: termRows[0].candles_limit_4h ?? 1000,
+      includeBtcCorrelation: termRows[0].include_btc_correlation !== false,
+      includeStructureAnalysis: termRows[0].include_structure_analysis !== false,
+      includeFvgDetection: termRows[0].include_fvg_detection !== false,
     } : null;
 
     return NextResponse.json({ settings, terminalSettings });
@@ -142,7 +149,24 @@ export async function POST(req: Request) {
 
     // 1. Handle terminalSettings payload if provided
     if (body.terminalSettings) {
-      const { signalSounds, enabledSignals, atrPeriod, adaptiveNMin, adaptiveNMax, mssBodyRatio, displacementVef, sharpDepartureMult, candlesLimit1m, candlesLimit5m, candlesLimit15m, candlesLimit1h, candlesLimit4h } = body.terminalSettings as {
+      const {
+        signalSounds,
+        enabledSignals,
+        atrPeriod,
+        adaptiveNMin,
+        adaptiveNMax,
+        mssBodyRatio,
+        displacementVef,
+        sharpDepartureMult,
+        candlesLimit1m,
+        candlesLimit5m,
+        candlesLimit15m,
+        candlesLimit1h,
+        candlesLimit4h,
+        includeBtcCorrelation,
+        includeStructureAnalysis,
+        includeFvgDetection
+      } = body.terminalSettings as {
         signalSounds: Record<string, string>;
         enabledSignals: Record<string, boolean>;
         atrPeriod?: number;
@@ -156,6 +180,9 @@ export async function POST(req: Request) {
         candlesLimit15m?: number;
         candlesLimit1h?: number;
         candlesLimit4h?: number;
+        includeBtcCorrelation?: boolean;
+        includeStructureAnalysis?: boolean;
+        includeFvgDetection?: boolean;
       };
 
       if (!signalSounds || !enabledSignals) {
@@ -177,6 +204,9 @@ export async function POST(req: Request) {
       const candles_limit_15m = candlesLimit15m ?? 1000;
       const candles_limit_1h = candlesLimit1h ?? 1000;
       const candles_limit_4h = candlesLimit4h ?? 1000;
+      const include_btc_correlation = includeBtcCorrelation !== false;
+      const include_structure_analysis = includeStructureAnalysis !== false;
+      const include_fvg_detection = includeFvgDetection !== false;
 
       await sql`
         INSERT INTO terminal_settings (
@@ -184,6 +214,7 @@ export async function POST(req: Request) {
           atr_period, adaptive_n_min, adaptive_n_max, 
           mss_body_ratio, displacement_vef, sharp_departure_mult, 
           candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
+          include_btc_correlation, include_structure_analysis, include_fvg_detection,
           updated_at
         )
         VALUES (
@@ -191,6 +222,7 @@ export async function POST(req: Request) {
           ${atr_period}, ${adaptive_n_min}, ${adaptive_n_max},
           ${mss_body_ratio}, ${displacement_vef}, ${sharp_departure_mult},
           ${candles_limit_1m}, ${candles_limit_5m}, ${candles_limit_15m}, ${candles_limit_1h}, ${candles_limit_4h},
+          ${include_btc_correlation}, ${include_structure_analysis}, ${include_fvg_detection},
           NOW()
         )
         ON CONFLICT (user_id)
@@ -208,6 +240,9 @@ export async function POST(req: Request) {
           candles_limit_15m = EXCLUDED.candles_limit_15m,
           candles_limit_1h = EXCLUDED.candles_limit_1h,
           candles_limit_4h = EXCLUDED.candles_limit_4h,
+          include_btc_correlation = EXCLUDED.include_btc_correlation,
+          include_structure_analysis = EXCLUDED.include_structure_analysis,
+          include_fvg_detection = EXCLUDED.include_fvg_detection,
           updated_at = NOW()
       `;
 

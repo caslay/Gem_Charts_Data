@@ -306,6 +306,9 @@ export interface EngineSettings {
   candlesLimit15m: number;
   candlesLimit1h: number;
   candlesLimit4h: number;
+  includeBtcCorrelation: boolean;
+  includeStructureAnalysis: boolean;
+  includeFvgDetection: boolean;
 }
 
 export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
@@ -320,6 +323,9 @@ export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
   candlesLimit15m: 1000,
   candlesLimit1h: 1000,
   candlesLimit4h: 1000,
+  includeBtcCorrelation: true,
+  includeStructureAnalysis: true,
+  includeFvgDetection: true,
 };
 
 
@@ -476,7 +482,7 @@ export function useMarketData(selectedInterval: string = '5m') {
           }
 
           if (data.terminalSettings) {
-            const { signalSounds, enabledSignals, atrPeriod, adaptiveNMin, adaptiveNMax, mssBodyRatio, displacementVef, sharpDepartureMult, candlesLimit1m, candlesLimit5m, candlesLimit15m, candlesLimit1h, candlesLimit4h } = data.terminalSettings;
+            const { signalSounds, enabledSignals, atrPeriod, adaptiveNMin, adaptiveNMax, mssBodyRatio, displacementVef, sharpDepartureMult, candlesLimit1m, candlesLimit5m, candlesLimit15m, candlesLimit1h, candlesLimit4h, includeBtcCorrelation, includeStructureAnalysis, includeFvgDetection } = data.terminalSettings;
             if (signalSounds) {
               setSignalAlerts(signalSounds);
               if (typeof window !== 'undefined') {
@@ -502,6 +508,9 @@ export function useMarketData(selectedInterval: string = '5m') {
               candlesLimit15m: candlesLimit15m ?? 1000,
               candlesLimit1h: candlesLimit1h ?? 1000,
               candlesLimit4h: candlesLimit4h ?? 1000,
+              includeBtcCorrelation: includeBtcCorrelation !== false,
+              includeStructureAnalysis: includeStructureAnalysis !== false,
+              includeFvgDetection: includeFvgDetection !== false,
             };
             setEngineSettings(loadedEngine);
             if (typeof window !== 'undefined') {
@@ -542,6 +551,9 @@ export function useMarketData(selectedInterval: string = '5m') {
               candlesLimit15m: engineSettingsRef.current.candlesLimit15m,
               candlesLimit1h: engineSettingsRef.current.candlesLimit1h,
               candlesLimit4h: engineSettingsRef.current.candlesLimit4h,
+              includeBtcCorrelation: engineSettingsRef.current.includeBtcCorrelation !== false,
+              includeStructureAnalysis: engineSettingsRef.current.includeStructureAnalysis !== false,
+              includeFvgDetection: engineSettingsRef.current.includeFvgDetection !== false,
             },
           }),
         });
@@ -608,7 +620,8 @@ export function useMarketData(selectedInterval: string = '5m') {
       }
       const initParam = !isPolling ? '&init=true' : '';
       const limitParams = `&limit1m=${engineSettings.candlesLimit1m ?? 1000}&limit5m=${engineSettings.candlesLimit5m ?? 1000}&limit15m=${engineSettings.candlesLimit15m ?? 1000}&limit1h=${engineSettings.candlesLimit1h ?? 1000}&limit4h=${engineSettings.candlesLimit4h ?? 1000}`;
-      const res = await fetch(`/api/market-data?interval=${selectedInterval}${initParam}${limitParams}`);
+      const featureParams = `&includeBtc=${engineSettings.includeBtcCorrelation !== false}&includeStructure=${engineSettings.includeStructureAnalysis !== false}&includeFvg=${engineSettings.includeFvgDetection !== false}`;
+      const res = await fetch(`/api/market-data?interval=${selectedInterval}${initParam}${limitParams}${featureParams}`);
       if (!res.ok) {
         throw new Error('Failed to fetch market data');
       }

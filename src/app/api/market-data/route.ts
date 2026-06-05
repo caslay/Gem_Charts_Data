@@ -8,6 +8,7 @@ import { analyzeMarketStructureStateful } from '@/lib/structureEngine';
 import { auth } from '@/auth';
 import { sql } from '@vercel/postgres';
 import { resolveTripleVectorBias } from '@/lib/quantEngine/BiasEngine';
+import { annotateCandlesWithVolumetricSignals } from '@/utils/generateChartMarkers';
 
 // NOTE: getStructuralDealingRange() removed — V10.13 Refactor.
 // All structural analysis is now centralized in src/lib/structureEngine.ts
@@ -173,6 +174,10 @@ export async function GET(req: Request) {
     const visualInterval = url.searchParams.get('interval') || '5m';
     const isStandardInterval = ['5m', '15m', '1h', '4h'].includes(visualInterval);
 
+    const includeBtc = url.searchParams.get('includeBtc') !== 'false';
+    const includeStructure = url.searchParams.get('includeStructure') !== 'false';
+    const includeFvg = url.searchParams.get('includeFvg') !== 'false';
+
     const visualLimit = visualInterval === '1m' ? limit1m :
                         visualInterval === '5m' ? limit5m :
                         visualInterval === '15m' ? limit15m :
@@ -218,6 +223,8 @@ export async function GET(req: Request) {
           };
         });
         
+        annotateCandlesWithVolumetricSignals(formatted);
+
         const payload = {
           ticker: `${symbol}.p`,
           timestamp: new Date().toISOString(),
@@ -235,6 +242,8 @@ export async function GET(req: Request) {
         // Pass fallbackPrice so the backward walk starts exactly at the client's oldest
         // candle close — preventing vertical price jumps at the lazy-load boundary.
         const mockHist = generateMockCandles(visualInterval, 100, Number(endTime), symbol, fallbackPrice);
+        annotateCandlesWithVolumetricSignals(mockHist);
+
         const payload = {
           ticker: `${symbol}.p`,
           timestamp: new Date().toISOString(),
@@ -313,9 +322,9 @@ export async function GET(req: Request) {
         fetchJson(urls['1w']),
         fetchJson(urls['1M']),
         fetchJson(urls['openInterest']),
-        fetchJson(urls['btc_5m']),
-        fetchJson(urls['btc_15m']),
-        fetchJson(urls['btc_1h']),
+        includeBtc ? fetchJson(urls['btc_5m']).catch(() => []) : Promise.resolve([]),
+        includeBtc ? fetchJson(urls['btc_15m']).catch(() => []) : Promise.resolve([]),
+        includeBtc ? fetchJson(urls['btc_1h']).catch(() => []) : Promise.resolve([]),
         visualFetchPromise,
         restingLiquidityPromise,
         smartMoneyPromise,
@@ -965,7 +974,34 @@ export async function GET(req: Request) {
     const institutional_sponsorship = await verifyDisplacement(stat_payload, symbol);
 
     // V10.19 — Centralized Stateful Market Structure Analysis via structureEngine (Fully Isolated per timeframe)
-    const structureAnalysis = analyzeMarketStructureStateful(symbol, visualInterval, activeCandlesForStructure, currentLivePrice, institutional_sponsorship, isInit);
+    let structureAnalysis: any = {
+      market_structure_shift: false,
+      market_structure_shift_direction: null,
+      currentTrend: 'UNSET',
+      internalTrend: 'UNSET',
+      internal_market_structure_shift: false,
+      expansion_mode: 'NORMAL',
+      market_velocity: 0,
+      runaway_origin_price: null,
+      dealingRange: {
+        high: 0,
+        low: 0,
+        equilibrium: 0,
+        current_status: 'UNKNOWN',
+        anchor_high_swing: null,
+        anchor_low_swing: null,
+        profile_metrics: null
+      },
+      internalDealingRange: null,
+      swing_points: [],
+      structural_events: [],
+      swings: [],
+      zigzag: []
+    };
+
+    if (includeStructure) {
+      structureAnalysis = analyzeMarketStructureStateful(symbol, visualInterval, activeCandlesForStructure, currentLivePrice, institutional_sponsorship, isInit);
+    }
     const localDealingRange = structureAnalysis.dealingRange;
 
     const internal_dealing_range = structureAnalysis.internalDealingRange || {
@@ -1006,27 +1042,27 @@ export async function GET(req: Request) {
       target_status
     });
 
-    const fvgGroups = [
+    const fvgGroups = includeFvg ? [
       { fvgs: detectActiveFVGs(candles5m, true), timeframe: '5m' },
       { fvgs: detectActiveFVGs(candles15m, true), timeframe: '15m' },
       { fvgs: detectActiveFVGs(candles1h, true), timeframe: '1h' },
       { fvgs: detectActiveFVGs(candles4h, true), timeframe: '4h' },
-    ];
+    ] : [];
 
-    const allFvgGroups = [
+    const allFvgGroups = includeFvg ? [
       { fvgs: detectActiveFVGs(candles5m, false), timeframe: '5m' },
       { fvgs: detectActiveFVGs(candles15m, false), timeframe: '15m' },
       { fvgs: detectActiveFVGs(candles1h, false), timeframe: '1h' },
       { fvgs: detectActiveFVGs(candles4h, false), timeframe: '4h' },
-    ];
+    ] : [];
 
-    if (!isStandardInterval && dynamicVisualCandles && dynamicVisualCandles.length > 0) {
+    if (includeFvg && !isStandardInterval && dynamicVisualCandles && dynamicVisualCandles.length > 0) {
       fvgGroups.push({ fvgs: detectActiveFVGs(dynamicVisualCandles, true), timeframe: visualInterval });
       allFvgGroups.push({ fvgs: detectActiveFVGs(dynamicVisualCandles, false), timeframe: visualInterval });
     }
 
-    const active_fvgs = mapAndConsolidateFVGs(fvgGroups);
-    const all_fvgs = mapAndConsolidateFVGs(allFvgGroups);
+    const active_fvgs = includeFvg ? mapAndConsolidateFVGs(fvgGroups) : [];
+    const all_fvgs = includeFvg ? mapAndConsolidateFVGs(allFvgGroups) : [];
     const pending_fvgs = all_fvgs.filter(fvg => fvg.status === 'PENDING');
     
     const current_time_window = getCurrentKillzone();
@@ -1141,6 +1177,15 @@ export async function GET(req: Request) {
       pdl,
       liquidation_events.status
     );
+
+    // Annotate historical candle arrays with volumetric signal highlights before slicing
+    annotateCandlesWithVolumetricSignals(candles4h);
+    annotateCandlesWithVolumetricSignals(candles1h);
+    annotateCandlesWithVolumetricSignals(candles15m);
+    annotateCandlesWithVolumetricSignals(candles5m);
+    if (!isStandardInterval && dynamicVisualCandles && dynamicVisualCandles.length > 0) {
+      annotateCandlesWithVolumetricSignals(dynamicVisualCandles);
+    }
 
     const payload = {
       ticker: "ETHUSDC.p",

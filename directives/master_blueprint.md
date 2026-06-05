@@ -2,9 +2,49 @@
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-06-04 (V12.0.1 — Swing-Anchored Volume Profiles & Triple-Vector Bias Upgrade)  
+> **Last Updated:** 2026-06-05 (V12.0.3 — Data Stream Payload Customization & Settings APIs)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 65+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V12.0.3 Changelog — Data Stream Payload Customization & Settings APIs (Completed)
+
+### 1. Database Schema Migration & Settings APIs (`src/app/api/settings/route.ts`)
+- Added SQL migration columns `include_btc_correlation`, `include_structure_analysis`, and `include_fvg_detection` to `terminal_settings` database schema.
+- Updated `GET` handler to retrieve and serve the new settings with fallback values.
+- Updated `POST` handler to parse and upsert the new settings properties.
+
+### 2. SWR React Context Hook & Polling Integration (`src/hooks/useMarketData.ts`)
+- Added settings fields to `EngineSettings` interface and `DEFAULT_ENGINE_SETTINGS`.
+- Hydrated state from backend `terminalSettings` and synchronized local updates back to `/api/settings`.
+- Enriched `/api/market-data` query variables with features flags: `&includeBtc`, `&includeStructure`, and `&includeFvg`.
+
+### 3. Conditional Backend Core Pipelines (`src/app/api/market-data/route.ts`)
+- Parsed parameter options `includeBtc`, `includeStructure`, and `includeFvg` in GET handler.
+- Conditionalized Binance parallel fetches: dynamically bypasses BTCUSDT endpoints to avoid rate-limiting issues if `includeBtc` is false.
+- Conditionalized stateful market structure analyzer `analyzeMarketStructureStateful` (sets empty default bounds if disabled).
+- Conditionalized Fair Value Gap scanner: bypasses `detectActiveFVGs` and consolidation if disabled.
+
+### 4. Interactive settings Panel Controls (`src/components/modals/SettingsModal.tsx`)
+- Added Group E: Data Stream Features & Payloads in the Settings Modal.
+- Rendered UI checkboxes with theme-adaptive styling to toggle settings.
+
+## 🆕 V12.0.2 Changelog — Volumetric Signal Pre-Calculation & Candle Schema Enrichment (Completed)
+
+### 1. Volumetric Signal Annotation Engine (`src/utils/generateChartMarkers.ts`)
+- **Action:** Created `annotateCandlesWithVolumetricSignals` to execute the 3-candle sliding window volumetric check in a single pass.
+- **Annotated Field:** Attaches `'ARROW_UP' | 'ARROW_DOWN' | 'CIRCLE_UP' | 'CIRCLE_DOWN' | null` directly to the `volumetric_signal` property of each candle object.
+- **Refactoring:** Refactored `generateVolumetricMarkers` to consume this pre-calculated state directly, simplifying the rendering loop and ensuring 100% computational alignment between the API payload, backtests, and visual markers.
+
+### 2. REST API Payload Enrichment (`src/app/api/market-data/route.ts`)
+- **Action:** Integrated the annotator into standard parallel fetches, lazy-load historical branches, and the offline simulation mock generators.
+- **Impact:** All returned candle arrays in the JSON response payload (`candles_5m`, `candles_15m`, etc.) now contain the pre-calculated `volumetric_signal` highlights.
+
+### 3. Backtest Replay Parity (`src/hooks/useBacktestEngine.ts`)
+- **Action:** Applied the annotator to `raw1h`, `raw15m`, and `raw5m` candle series inside the day-loader.
+- **Impact:** Backtest snapshot exports (copying or downloading payloads) automatically contain the `volumetric_signal` fields for all timeframes, enabling external AI scripts and spreadsheets to read these annotations directly.
+
+### 4. Type Definitions (`src/lib/fvgEngine.ts` & `src/hooks/useBacktestEngine.ts`)
+- **Action:** Extended `Candle` and `BtCandle` interface declarations to explicitly define `volumetric_signal`.
 
 ## 🆕 V12.0.1 Changelog — Swing-Anchored Volume Profiles & Triple-Vector Bias Upgrade (Completed)
 
@@ -2243,10 +2283,36 @@ To maintain Flow-State visual aesthetics and avoid nested UI clutter, the compon
 | Table | Key Column | Purpose |
 |---|---|---|
 | `system_settings` | `key_name` (UNIQUE) | Stores `GEMINI_LIVE_KEY`, `ACTIVE_MODEL`, `SYSTEM_PROMPT` |
+| `terminal_settings` | `user_id` (UNIQUE) | Stores audio alerts mapping, lookback candle counts, and stream features toggles |
 | `ai_trade_state` | `id = 1` (singleton) | Stores the AI's `state_json` and `updated_at` |
 | `custom_strategies` | `id` (UUID PRIMARY KEY) | Stores user custom strategy equations and logic rules |
 | `paper_trades` | `id` (UUID PRIMARY KEY) | Stores active and completed paper trade execution logs |
 | `trading_account` | `id` (UUID PRIMARY KEY) | Stores persistent user capital balance, initial capital, and risk limit (V8.4) |
+
+#### Table: `terminal_settings`
+```sql
+CREATE TABLE IF NOT EXISTS terminal_settings (
+  id SERIAL PRIMARY KEY,
+  user_id VARCHAR(255) UNIQUE NOT NULL,
+  signal_sounds JSONB NOT NULL,
+  enabled_signals JSONB NOT NULL,
+  atr_period INTEGER DEFAULT 14,
+  adaptive_n_min INTEGER DEFAULT 3,
+  adaptive_n_max INTEGER DEFAULT 15,
+  mss_body_ratio DOUBLE PRECISION DEFAULT 0.70,
+  displacement_vef DOUBLE PRECISION DEFAULT 1.50,
+  sharp_departure_mult DOUBLE PRECISION DEFAULT 1.50,
+  candles_limit_1m INTEGER DEFAULT 1000,
+  candles_limit_5m INTEGER DEFAULT 1000,
+  candles_limit_15m INTEGER DEFAULT 1000,
+  candles_limit_1h INTEGER DEFAULT 1000,
+  candles_limit_4h INTEGER DEFAULT 1000,
+  include_btc_correlation BOOLEAN DEFAULT true,
+  include_structure_analysis BOOLEAN DEFAULT true,
+  include_fvg_detection BOOLEAN DEFAULT true,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
 
 #### Table: `trading_account`
 ```sql
