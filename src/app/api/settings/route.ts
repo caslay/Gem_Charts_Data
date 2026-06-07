@@ -46,6 +46,13 @@ async function initTables() {
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS include_btc_correlation BOOLEAN DEFAULT true;`;
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS include_structure_analysis BOOLEAN DEFAULT true;`;
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS include_fvg_detection BOOLEAN DEFAULT true;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS visualize_perfect_movement_only BOOLEAN DEFAULT false;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS pm_atr_multiplier DOUBLE PRECISION DEFAULT 1.5;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS pm_volume_sma_period INTEGER DEFAULT 10;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS pm_min_body_ratio DOUBLE PRECISION DEFAULT 0.6;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS pm_max_wick_ratio DOUBLE PRECISION DEFAULT 0.15;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS pm_max_retracement_limit DOUBLE PRECISION DEFAULT 0.5;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS pm_sweep_lookback INTEGER DEFAULT 5;`;
   } catch (err) {
     console.error("[SETTINGS API] Failed to alter table terminal_settings:", err);
   }
@@ -97,7 +104,8 @@ export async function GET() {
     const { rows: termRows } = await sql`
       SELECT signal_sounds, enabled_signals, atr_period, adaptive_n_min, adaptive_n_max, mss_body_ratio, displacement_vef, sharp_departure_mult,
              candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
-             include_btc_correlation, include_structure_analysis, include_fvg_detection FROM terminal_settings
+             include_btc_correlation, include_structure_analysis, include_fvg_detection,
+             visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback FROM terminal_settings
       WHERE user_id = ${userEmail}
       LIMIT 1
     `;
@@ -119,6 +127,13 @@ export async function GET() {
       includeBtcCorrelation: termRows[0].include_btc_correlation !== false,
       includeStructureAnalysis: termRows[0].include_structure_analysis !== false,
       includeFvgDetection: termRows[0].include_fvg_detection !== false,
+      visualizePerfectMovementOnly: !!termRows[0].visualize_perfect_movement_only,
+      pmAtrMultiplier: termRows[0].pm_atr_multiplier ?? 0.5,
+      pmVolumeSmaPeriod: termRows[0].pm_volume_sma_period ?? 10,
+      pmMinBodyRatio: termRows[0].pm_min_body_ratio ?? 0.3,
+      pmMaxWickRatio: termRows[0].pm_max_wick_ratio ?? 0.5,
+      pmMaxRetracementLimit: termRows[0].pm_max_retracement_limit ?? 0.7,
+      pmSweepLookback: termRows[0].pm_sweep_lookback ?? 5,
     } : null;
 
     return NextResponse.json({ settings, terminalSettings });
@@ -165,7 +180,14 @@ export async function POST(req: Request) {
         candlesLimit4h,
         includeBtcCorrelation,
         includeStructureAnalysis,
-        includeFvgDetection
+        includeFvgDetection,
+        visualizePerfectMovementOnly,
+        pmAtrMultiplier,
+        pmVolumeSmaPeriod,
+        pmMinBodyRatio,
+        pmMaxWickRatio,
+        pmMaxRetracementLimit,
+        pmSweepLookback
       } = body.terminalSettings as {
         signalSounds: Record<string, string>;
         enabledSignals: Record<string, boolean>;
@@ -183,6 +205,13 @@ export async function POST(req: Request) {
         includeBtcCorrelation?: boolean;
         includeStructureAnalysis?: boolean;
         includeFvgDetection?: boolean;
+        visualizePerfectMovementOnly?: boolean;
+        pmAtrMultiplier?: number;
+        pmVolumeSmaPeriod?: number;
+        pmMinBodyRatio?: number;
+        pmMaxWickRatio?: number;
+        pmMaxRetracementLimit?: number;
+        pmSweepLookback?: number;
       };
 
       if (!signalSounds || !enabledSignals) {
@@ -207,6 +236,13 @@ export async function POST(req: Request) {
       const include_btc_correlation = includeBtcCorrelation !== false;
       const include_structure_analysis = includeStructureAnalysis !== false;
       const include_fvg_detection = includeFvgDetection !== false;
+      const visualize_perfect_movement_only = !!visualizePerfectMovementOnly;
+      const pm_atr_multiplier = pmAtrMultiplier ?? 0.5;
+      const pm_volume_sma_period = pmVolumeSmaPeriod ?? 10;
+      const pm_min_body_ratio = pmMinBodyRatio ?? 0.3;
+      const pm_max_wick_ratio = pmMaxWickRatio ?? 0.5;
+      const pm_max_retracement_limit = pmMaxRetracementLimit ?? 0.7;
+      const pm_sweep_lookback = pmSweepLookback ?? 5;
 
       await sql`
         INSERT INTO terminal_settings (
@@ -215,6 +251,7 @@ export async function POST(req: Request) {
           mss_body_ratio, displacement_vef, sharp_departure_mult, 
           candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
           include_btc_correlation, include_structure_analysis, include_fvg_detection,
+          visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback,
           updated_at
         )
         VALUES (
@@ -223,6 +260,7 @@ export async function POST(req: Request) {
           ${mss_body_ratio}, ${displacement_vef}, ${sharp_departure_mult},
           ${candles_limit_1m}, ${candles_limit_5m}, ${candles_limit_15m}, ${candles_limit_1h}, ${candles_limit_4h},
           ${include_btc_correlation}, ${include_structure_analysis}, ${include_fvg_detection},
+          ${visualize_perfect_movement_only}, ${pm_atr_multiplier}, ${pm_volume_sma_period}, ${pm_min_body_ratio}, ${pm_max_wick_ratio}, ${pm_max_retracement_limit}, ${pm_sweep_lookback},
           NOW()
         )
         ON CONFLICT (user_id)
@@ -243,6 +281,13 @@ export async function POST(req: Request) {
           include_btc_correlation = EXCLUDED.include_btc_correlation,
           include_structure_analysis = EXCLUDED.include_structure_analysis,
           include_fvg_detection = EXCLUDED.include_fvg_detection,
+          visualize_perfect_movement_only = EXCLUDED.visualize_perfect_movement_only,
+          pm_atr_multiplier = EXCLUDED.pm_atr_multiplier,
+          pm_volume_sma_period = EXCLUDED.pm_volume_sma_period,
+          pm_min_body_ratio = EXCLUDED.pm_min_body_ratio,
+          pm_max_wick_ratio = EXCLUDED.pm_max_wick_ratio,
+          pm_max_retracement_limit = EXCLUDED.pm_max_retracement_limit,
+          pm_sweep_lookback = EXCLUDED.pm_sweep_lookback,
           updated_at = NOW()
       `;
 

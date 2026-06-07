@@ -7,7 +7,7 @@ export const displacementLayer: ChartLayer = {
   description: 'MSS, Institutional Sponsorship, and SMT divergence markers',
   icon: 'TrendingUp',
   renderChart(context) {
-    const { seriesMarkers, activeCandles, theme, themeSettings, storage } = context;
+    const { seriesMarkers, activeCandles, theme, themeSettings, storage, engineSettings, data } = context;
 
     if (seriesMarkers) {
       // Resolve dynamic customizer colors
@@ -23,13 +23,31 @@ export const displacementLayer: ChartLayer = {
         ? (themeSettings?.dark_chart_swing_high || '#ffb4ab')
         : (themeSettings?.light_chart_swing_high || '#e11d48');
 
+      const volumetricStrongArrowColor = theme === 'dark'
+        ? (themeSettings?.dark_chart_volumetric_strong_arrow || '#ff007f')
+        : (themeSettings?.light_chart_volumetric_strong_arrow || '#e11d48');
+
       // Draw markers using the volumetric generator
       const sortedData = [...activeCandles].sort((a, b) => a.t - b.t);
-      const markers = generateVolumetricMarkers(sortedData, {
-        sponsorshipColor,
-        bullishSweepColor,
-        bearishSweepColor,
-      });
+      const markers = generateVolumetricMarkers(
+        sortedData,
+        {
+          sponsorshipColor,
+          bullishSweepColor,
+          bearishSweepColor,
+          volumetricStrongArrowColor,
+          theme,
+          visualizePerfectMovementOnly: engineSettings?.visualizePerfectMovementOnly ?? false,
+          marketData: data,
+          structureState: context.structureState,
+          pmAtrMultiplier: engineSettings?.pmAtrMultiplier,
+          pmVolumeSmaPeriod: engineSettings?.pmVolumeSmaPeriod,
+          pmMinBodyRatio: engineSettings?.pmMinBodyRatio,
+          pmMaxWickRatio: engineSettings?.pmMaxWickRatio,
+          pmMaxRetracementLimit: engineSettings?.pmMaxRetracementLimit,
+          pmSweepLookback: engineSettings?.pmSweepLookback,
+        }
+      );
 
       // Set markers on the series
       seriesMarkers.setMarkers(markers);

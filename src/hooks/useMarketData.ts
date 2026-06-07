@@ -99,6 +99,7 @@ export interface ThemeSettings {
   dark_chart_session_london: string;
   dark_chart_magnet_bsl: string;
   dark_chart_magnet_ssl: string;
+  dark_chart_volumetric_strong_arrow: string;
 
   // UI Button Variations
   dark_btn_solid_bg: string;
@@ -158,6 +159,7 @@ export interface ThemeSettings {
   light_chart_session_london: string;
   light_chart_magnet_bsl: string;
   light_chart_magnet_ssl: string;
+  light_chart_volumetric_strong_arrow: string;
 
   // UI Button Variations
   light_btn_solid_bg: string;
@@ -219,6 +221,7 @@ export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   dark_chart_session_london: 'rgba(59, 130, 246, 0.5)',
   dark_chart_magnet_bsl: 'rgba(255, 180, 171, 0.45)',
   dark_chart_magnet_ssl: 'rgba(80, 255, 175, 0.45)',
+  dark_chart_volumetric_strong_arrow: '#ff007f',
 
   // UI Button Variations (Midnight)
   dark_btn_solid_bg: '#a855f7',
@@ -277,6 +280,7 @@ export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   light_chart_session_london: 'rgba(37, 99, 235, 0.5)',
   light_chart_magnet_bsl: 'rgba(225, 29, 72, 0.45)',
   light_chart_magnet_ssl: 'rgba(5, 150, 105, 0.45)',
+  light_chart_volumetric_strong_arrow: '#e11d48',
 
   // UI Button Variations (Daylight)
   light_btn_solid_bg: '#4f46e5',
@@ -309,6 +313,13 @@ export interface EngineSettings {
   includeBtcCorrelation: boolean;
   includeStructureAnalysis: boolean;
   includeFvgDetection: boolean;
+  visualizePerfectMovementOnly: boolean;
+  pmAtrMultiplier: number;
+  pmVolumeSmaPeriod: number;
+  pmMinBodyRatio: number;
+  pmMaxWickRatio: number;
+  pmMaxRetracementLimit: number;
+  pmSweepLookback: number;
 }
 
 export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
@@ -326,6 +337,13 @@ export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
   includeBtcCorrelation: true,
   includeStructureAnalysis: true,
   includeFvgDetection: true,
+  visualizePerfectMovementOnly: false,
+  pmAtrMultiplier: 0.5,
+  pmVolumeSmaPeriod: 10,
+  pmMinBodyRatio: 0.3,
+  pmMaxWickRatio: 0.5,
+  pmMaxRetracementLimit: 0.7,
+  pmSweepLookback: 5,
 };
 
 
@@ -482,7 +500,7 @@ export function useMarketData(selectedInterval: string = '5m') {
           }
 
           if (data.terminalSettings) {
-            const { signalSounds, enabledSignals, atrPeriod, adaptiveNMin, adaptiveNMax, mssBodyRatio, displacementVef, sharpDepartureMult, candlesLimit1m, candlesLimit5m, candlesLimit15m, candlesLimit1h, candlesLimit4h, includeBtcCorrelation, includeStructureAnalysis, includeFvgDetection } = data.terminalSettings;
+            const { signalSounds, enabledSignals, atrPeriod, adaptiveNMin, adaptiveNMax, mssBodyRatio, displacementVef, sharpDepartureMult, candlesLimit1m, candlesLimit5m, candlesLimit15m, candlesLimit1h, candlesLimit4h, includeBtcCorrelation, includeStructureAnalysis, includeFvgDetection, visualizePerfectMovementOnly, pmAtrMultiplier, pmVolumeSmaPeriod, pmMinBodyRatio, pmMaxWickRatio, pmMaxRetracementLimit, pmSweepLookback } = data.terminalSettings;
             if (signalSounds) {
               setSignalAlerts(signalSounds);
               if (typeof window !== 'undefined') {
@@ -511,6 +529,13 @@ export function useMarketData(selectedInterval: string = '5m') {
               includeBtcCorrelation: includeBtcCorrelation !== false,
               includeStructureAnalysis: includeStructureAnalysis !== false,
               includeFvgDetection: includeFvgDetection !== false,
+              visualizePerfectMovementOnly: !!visualizePerfectMovementOnly,
+              pmAtrMultiplier: pmAtrMultiplier ?? 0.5,
+              pmVolumeSmaPeriod: pmVolumeSmaPeriod ?? 10,
+              pmMinBodyRatio: pmMinBodyRatio ?? 0.3,
+              pmMaxWickRatio: pmMaxWickRatio ?? 0.5,
+              pmMaxRetracementLimit: pmMaxRetracementLimit ?? 0.7,
+              pmSweepLookback: pmSweepLookback ?? 5,
             };
             setEngineSettings(loadedEngine);
             if (typeof window !== 'undefined') {
@@ -554,6 +579,13 @@ export function useMarketData(selectedInterval: string = '5m') {
               includeBtcCorrelation: engineSettingsRef.current.includeBtcCorrelation !== false,
               includeStructureAnalysis: engineSettingsRef.current.includeStructureAnalysis !== false,
               includeFvgDetection: engineSettingsRef.current.includeFvgDetection !== false,
+              visualizePerfectMovementOnly: engineSettingsRef.current.visualizePerfectMovementOnly,
+              pmAtrMultiplier: engineSettingsRef.current.pmAtrMultiplier,
+              pmVolumeSmaPeriod: engineSettingsRef.current.pmVolumeSmaPeriod,
+              pmMinBodyRatio: engineSettingsRef.current.pmMinBodyRatio,
+              pmMaxWickRatio: engineSettingsRef.current.pmMaxWickRatio,
+              pmMaxRetracementLimit: engineSettingsRef.current.pmMaxRetracementLimit,
+              pmSweepLookback: engineSettingsRef.current.pmSweepLookback,
             },
           }),
         });

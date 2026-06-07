@@ -2,9 +2,122 @@
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-06-05 (V12.0.3 — Data Stream Payload Customization & Settings APIs)  
+> **Last Updated:** 2026-06-07 (V12.0.10 — PM Settings Neon SQL SELECT Bug Fix)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 65+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V12.0.10 Changelog — PM Settings Neon SQL `pm_sweep_lookback` SELECT Bug Fix (Completed)
+
+### Root Cause: `pm_sweep_lookback` Never Read From Neon (`src/app/api/settings/route.ts`)
+- **Bug:** The `GET /api/settings` handler was missing `pm_sweep_lookback` from the SQL `SELECT` column list. The column was correctly created by `initTables()`, written by the POST upsert, and referenced in the GET response builder — but never fetched from Neon. Result: `termRows[0].pm_sweep_lookback` always evaluated to `undefined`, forcing the `?? 5` fallback on every page load and silently discarding all user customizations to the "Sweep Lookback" slider.
+- **Fix:** Added `pm_sweep_lookback` to the `SELECT` clause in the GET handler (`route.ts` line 108).
+- **Impact:** All 7 Global Setup Formula Parameters now correctly round-trip through Neon SQL.
+
+### Full PM Parameter Audit Result (All ✅ After Fix)
+
+| Parameter | initTables | GET SELECT | GET Response | POST Upsert | Hook Sync | SettingsModal |
+|---|---|---|---|---|---|---|
+| `visualize_perfect_movement_only` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `pm_atr_multiplier` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `pm_volume_sma_period` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `pm_min_body_ratio` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `pm_max_wick_ratio` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `pm_max_retracement_limit` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `pm_sweep_lookback` | ✅ | **🔴→✅ FIXED** | ✅ | ✅ | ✅ | ✅ |
+
+## 🆕 V12.0.9 Changelog — Perfect Movement Swing Relaxation & Multi-Swing Sweep Check (Completed)
+
+### 1. Multi-Swing Sweep Check (`src/utils/generateChartMarkers.ts`)
+- Upgraded the Phase 1 sweep check in `checkPerfectMovementSetup` to scan the last 5 swing levels instead of just the single absolute most recent swing. This enables robust detection of sweeps on older key structural levels (such as equal lows, equal highs, and double bottoms/tops).
+
+### 2. Swing Grade Expansion (`src/utils/generateChartMarkers.ts`)
+- Expanded the swing query filter inside `checkPerfectMovementSetup` to include both `MAJOR` and `INTERNAL` swing grades. This allows valid setups to be identified when price wicks past significant intraday structural levels while avoiding the noise of minor 3-bar pullbacks (`INNER` swings).
+
+## 🆕 V12.0.8 Changelog — Circle Sweep Color Retention & Swings Client-Side Synchronization (Completed)
+
+### 1. Circle Sweep Color Retention (`src/utils/generateChartMarkers.ts`)
+- Fixed a visual bug where check box toggle "Filter Chart Volumetrics" forced all `CIRCLE_UP` and `CIRCLE_DOWN` sweep traps to render in a faded grey color. Circles now retain their bright theme-accented colors (`bullishSweepColor` and `bearishSweepColor`) under all filter configurations.
+
+### 2. Client-Side Swings Sync (`src/utils/generateChartMarkers.ts`)
+- Re-routed the swing lookup query inside `checkPerfectMovementSetup` to consume client-side calculated `structureState.swings` instead of the empty `full_structure_map.swings` array returned by the API server. This enables correct, real-time historical liquidity sweep evaluations (Phase 1).
+
+### 3. Swing Price Numeric Coercion (`src/utils/generateChartMarkers.ts`)
+- Safeguarded comparisons by explicitly coercing pivot price values to numbers (`Number(s.price)`), avoiding dynamic string/number comparison bugs.
+
+### 4. 100% Strategy Parity (`src/hooks/useStrategyEvaluator.ts` & `displacementLayer.ts`)
+- Passed the client-side calculated `structureState` down to the `checkPerfectMovementSetup` utility in both the chart visual layer (`displacementLayer.ts`) and the strategy builder's auto-dealing execution hook (`useStrategyEvaluator.ts`), guaranteeing absolute parity between rendered setups and automated trade entries.
+
+## 🆕 V12.0.7 Changelog — Shared Math Parity, Brutalist Control Sliders & Reactive Visual repainting (Completed)
+
+### 1. Shared Math Parity Decoupling (`src/utils/generateChartMarkers.ts`)
+- Ensured absolute logical parity between trade executions and visual signals by verifying that both the hook (`useStrategyEvaluator.ts`) and the visual layer (`displacementLayer.ts`) query the identical pure mathematical utility function `checkPerfectMovementSetup`.
+
+### 2. Sleek Dark Brutalist Control Sliders (`src/components/modals/SettingsModal.tsx` & `EquationBuilder.tsx`)
+- Upgraded sliders and adjacent numeric precision inputs inside Group F of the System Command Center and the strategy builder to adhere to the rigid "Dark Brutalist" aesthetic:
+  - Solid deep-carbon `#09090b` backdrops with thick zinc-800 borders and zero corner rounding.
+  - Custom flat slider rails and sharp text boxes using monospace fonts for parameter display.
+
+### 3. Faded Overlay Visual Feedback Strategy (`src/utils/generateChartMarkers.ts`)
+- Programmed the volumetric signal generator to render failed setup arrows and circles as faded, 20% opacity gray markers (`rgba(128, 128, 128, 0.20)`). This provides instant visual backtesting and rejection validation on the canvas.
+- Highlighted verified setup arrows in neon cyan (`#00f0ff` for LONG) and neon pink (`#ff007f` for SHORT) alongside a "PM" setup indicator.
+
+### 4. Fully Reactive Rendering Layer (`src/components/Chart.tsx`)
+- Expanded the rendering context to pass `engineSettings: context.engineSettings` into all active visual layers.
+- Added `context.engineSettings` to the Orchestrator's `useEffect` dependency array, triggering immediate, lag-free visual marker repainting on the chart immediately when the user changes settings, without needing a full browser refresh.
+
+## 🆕 V12.0.6 Changelog — Perfect Movement Setup Formula Filter & Live Rendering Reactivity (Completed)
+
+### 1. Unified Real-Time Visual Reactivity (`src/components/Chart.tsx`)
+- Upgraded the HTML overlay rendering loop (`renderHtml`) to consume dynamic reactive variables (`dynamicMarketContextData`, `localCandles`, and `dynamicStructureState`) instead of raw parent props.
+- Refactored the live candle WebSocket sync hook (`useEffect` on `liveCandle`) to use a clean mapping state update. The system now seamlessly updates ticking ticks and appends newly closed candles to `localCandles` state instantly with the correct `isClosed` status, triggering immediate FVG and marker redraws without page reloads.
+
+### 2. Strategy Settings UI Collapsible Sub-Pane (`src/components/modals/EquationBuilder.tsx`)
+- Declared state hooks for the Perfect Movement settings (`editPerfectMovementFilter`, `editPmAtrMultiplier`, `editPmVolumeSmaPeriod`, `editPmMinBodyRatio`, `editPmMaxWickRatio`, `editPmMaxRetracementLimit`, and `isPmPaneOpen`).
+- Added a collapsible sub-pane titled **"Perfect Movement Filter (Smart Money Sweet Spot)"** styled inside the Strategy Settings & Trade Execution Parameters grid.
+- Bound all parameters (ATR Multiplier, Volume SMA Period, Min Body Ratio, Max Wick Ratio, Max Retracement Limit) to sleek UI Sliders paired with Number Inputs for precise quantitative tuning.
+- Updated strategy load (`useEffect` on `selectedId`), create (`handleCreateNew`), and save (`handleSave`) operations to retrieve, initialize, and serialize these parameters inside the strategy JSON logic.
+
+### 3. Quantitative Composite Gate Evaluator (`src/hooks/useStrategyEvaluator.ts`)
+- Imported `calculateATR` from `riskEngine.ts` and `annotateCandlesWithVolumetricSignals` from `generateChartMarkers.ts`.
+- Implemented `checkPerfectMovementSetup` to enforce the 3-Phase quantitative entry gate:
+  - **Phase 1 (Setup Sweep):** Wick of P1 or P2 (`lastClosedIdx - 2` / `lastClosedIdx - 3`) must sweep PDH/PDL, Asian High/Low, London High/Low, or a Major Swing boundary and close back inside.
+  - **Phase 2 (Catalyst Confirmation):** Signal candle S (`lastClosedIdx - 1`) must have range $\ge$ multiplier $\times$ ATR, volume $>$ Volume SMA, close with high body conviction (Min Body Ratio / Max Wick Ratio), and taker volume delta aligned with trade direction.
+  - **Phase 3 (Delayed Gate):** Confirmation candle C (`lastClosedIdx` which is the last fully closed candle) must close in trade direction, not retrace past the Max Retracement Limit relative to S, and contain no opposing volumetric signals.
+- Integrated the Perfect Movement Setup check directly into the strategy execution evaluator `evaluateStrategy` by slicing and annotating active timeframe candles.
+- Updated the evaluation debounce lock key check to include `settings.perfect_movement_filter` in the `hasOnClose` check, safely gating the entry to the open of the ticking live candle (`lastClosedIdx + 1`) and preventing duplicate executions.
+
+## 🆕 V12.0.5 Changelog — Order Flow Volumetric Arrow Heuristics (Completed)
+
+### 1. Marker Candle Schema Enrichment (`src/utils/generateChartMarkers.ts`)
+- Added optional fields `taker_buy_vol` and `taker_sell_vol` to the `MarkerCandle` interface.
+
+### 2. Localized Order Flow Heuristic Generator (`src/utils/generateChartMarkers.ts`)
+- Pivoted arrow strength classification from the backend OLS statistical gate to a localized Order Flow check.
+- **Upward Arrows (`ARROW_UP`):** Colored as **Strong** if `taker_buy_vol > taker_sell_vol`.
+- **Downward Arrows (`ARROW_DOWN`):** Colored as **Strong** if `taker_sell_vol > taker_buy_vol`.
+- **Fallback:** Defaults to **Weak** if taker volume data is missing.
+- Muted weak arrows to a semi-transparent theme default (`rgba(255, 255, 255, 0.15)` for dark, `rgba(0, 0, 0, 0.15)` for light).
+- Reverted signature of `generateVolumetricMarkers` to remove backend `sponsorship` dependency, enabling historical strong/weak arrow validation directly on the client.
+
+### 3. Layer Plugin Cleanup (`src/lib/chartLayers/plugins/displacementLayer.ts`)
+- Removed OLS/sponsorship context variables and cleaned up the `generateVolumetricMarkers` rendering invocation.
+
+## 🆕 V12.0.4 Changelog — Volumetric Strong Arrows Customization in Theme Engine (Completed)
+
+### 1. Theme Configuration & Settings Hook (`src/hooks/useMarketData.ts`)
+- Registered `dark_chart_volumetric_strong_arrow` and `light_chart_volumetric_strong_arrow` settings inside `ThemeSettings` interface.
+- Set dynamic default values inside `DEFAULT_THEME_SETTINGS` (neon pink `#ff007f` for dark, high-contrast red `#e11d48` for light).
+
+### 2. CSS Custom Properties Synchronization (`src/components/ThemeSync.tsx`)
+- Bound light and dark strong arrow colors to the unified `--volumetric-strong-arrow` CSS variable.
+
+### 3. Appearance Customization UI Studio (`src/app/settings/page.tsx`)
+- Embedded `ColorPickerItem` selectors under "Section 3: Chart Layout & Indicators" for both Midnight (dark) and Daylight (light) customizers.
+
+### 4. Mathematical Conditional Marker Rendering (`src/utils/generateChartMarkers.ts` & `displacementLayer.ts`)
+- Upgraded `generateVolumetricMarkers` to consume active `sponsorship` (`InstitutionalSponsorship`) and identify the latest closed candle.
+- Implemented logic gates to flag strong vs. weak arrows: an arrow is classified as **Strong** if it corresponds to the latest closed candle, matches the backend direction (`ACTIVE_BULLISH`/`ACTIVE_BEARISH`), and passes OLS regression validation ($t \ge 1.96$ and $p < 0.05$).
+- Programmed weak/unconfirmed historical arrows to use a muted, semi-transparent default color (`rgba(255, 255, 255, 0.15)` for dark mode, `rgba(0, 0, 0, 0.15)` for light mode).
 
 ## 🆕 V12.0.3 Changelog — Data Stream Payload Customization & Settings APIs (Completed)
 

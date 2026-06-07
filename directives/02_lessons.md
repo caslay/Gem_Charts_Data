@@ -129,4 +129,13 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
   2. If any live Binance query fails or rate-limits, the API logs a warning, flags the state, and seamlessly shifts to **Offline Simulation Mode**.
   3. Built a mathematical price-movement simulator `generateMockCandles` supporting arbitrary anchor timestamps (via `endTimestamp`) to dynamically generate realistic historical OHLCV candle streams ending exactly at the requested `endTime` scroll cursor, allowing infinite smooth scrolling in demo mode without throwing any browser errors.
 
+### 21. Perfect Movement Setup Phase 1 Sweep Bottleneck (Resolved in V11.1)
+- **The Bug:** When the "Filter Chart Volumetrics (Perfect setups only)" toggle was enabled, **all** arrows turned grey (20% opacity faded). No arrow ever passed the Perfect Movement 3-Phase filter.
+- **The Cause:** Phase 1 (Structural Proximity & Liquidity Sweep) was the critical bottleneck, rejecting **74% of all signals**. Three compounding issues:
+  1. The sweep lookback only checked the **2 candles directly before the signal** (`P1` and `P2`). On 5-minute candles, the sweep event often occurs 3-5 candles before the displacement signal — outside this 2-candle window.
+  2. The sweep required an **exact wick pierce** through a structural level (candle low ≤ level AND close > level). In practice, price often approaches within 1-2 ticks of a level without piercing it exactly — still a valid "proximity sweep" but rejected by exact-match logic.
+  3. The swing level filter only considered `MAJOR` and `INTERNAL` grade swings, ignoring `INNER` swings that are valid liquidity targets on lower timeframes.
+  4. Phase 2 defaults were also over-restrictive: ATR multiplier 1.5× filtered out normal displacement candles; body ratio 0.6 and wick ratio 0.15 rejected most real-world candle shapes.
+- **The Fix:** Implemented a configurable `pmSweepLookback` parameter (default: 5 candles), added **ATR proximity tolerance** (0.3 × ATR) for near-sweep matching, expanded swing grade search to all grades, and recalibrated all Phase 2 defaults via a 320-configuration parameter grid sweep against live ETHUSDT data. Added a new UI slider "Sweep Lookback (Candles Before Signal)" to the Smart Money Sweet Spot drawer.
+
 

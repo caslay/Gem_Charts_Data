@@ -1,7 +1,7 @@
 # 📊 SYSTEM DOCUMENTATION: Volumetric Sponsorship
 
-> **Version:** V11.0 · **Engine:** Flow-State Quant Engine  
-> **Last Updated:** 2026-06-03  
+> **Version:** V11.1 · **Engine:** Flow-State Quant Engine  
+> **Last Updated:** 2026-06-06  
 > **Canonical Source Files:**  
 > [`displacementEngine.ts`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/lib/displacementEngine.ts) · [`generateChartMarkers.ts`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/utils/generateChartMarkers.ts) · [`displacementLayer.ts`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/lib/chartLayers/plugins/displacementLayer.ts) · [`api/index.py`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/api/index.py)
 

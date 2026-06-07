@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, SeriesMarker, createSeriesMarkers, ISeriesMarkersPluginApi, LineStyle } from 'lightweight-charts';
 import { Candle, MarketDataPayload } from '@/hooks/useMarketData';
 import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
@@ -13,6 +13,8 @@ import { useTheme } from 'next-themes';
 import { registry } from '@/lib/chartLayers/registry';
 import { useLayerStore } from '@/lib/chartLayers/store';
 import ChartLayerHud from './ChartLayerHud';
+import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
+import { analyzeMarketStructure } from '@/lib/structureEngine';
 
 interface ChartProps {
   data: Candle[];
@@ -57,6 +59,8 @@ export default function Chart({
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const seriesMarkersRef = useRef<ISeriesMarkersPluginApi<any> | null>(null);
   const isInitialLoad = useRef(true);
+  const [localCandles, setLocalCandles] = useState<Candle[]>(data);
+  const localCandlesRef = useRef(localCandles);
   const dataRef = useRef(data);
 
   // Zustand persistent chart layer store visibility states
@@ -70,10 +74,16 @@ export default function Chart({
     return layerStorageRef.current.get(layerId)!;
   }, []);
 
-  // Sync data to ref to avoid stale closures in crosshair listeners
+  // Sync data prop to local state
   useEffect(() => {
-    dataRef.current = data;
+    setLocalCandles(data);
   }, [data]);
+
+  // Sync local state to refs
+  useEffect(() => {
+    localCandlesRef.current = localCandles;
+    dataRef.current = localCandles;
+  }, [localCandles]);
 
   // Reset initial load zoom anchor on timeframe/interval switches
   useEffect(() => {
@@ -794,11 +804,68 @@ export default function Chart({
     }
   }, [data, theme, isBacktest]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
+  // ── Dynamic Recalculations for Real-Time WebSocket Reactivity ──────────────
+  const computedFvgs = useMemo(() => {
+    if (!localCandles || localCandles.length === 0) return [];
+    // For FVG calculation, we treat all candles as closed since they are historical.
+    const candlesWithClosed = localCandles.map((c, idx) => ({ ...c, isClosed: idx < localCandles.length - 1 }));
+    const fvgs = detectActiveFVGs(candlesWithClosed, true);
+    return mapAndConsolidateFVGs([{ fvgs, timeframe: interval }]);
+  }, [localCandles, interval]);
+
+  const dynamicMarketContextData = useMemo(() => {
+    if (!marketContextData) return null;
+    return {
+      ...marketContextData,
+      ipda_metrics: {
+        ...marketContextData.ipda_metrics,
+        active_fvgs: computedFvgs, // Override with dynamically calculated FVGs!
+      }
+    };
+  }, [marketContextData, computedFvgs]);
+
+  const dynamicStructureState = useMemo(() => {
+    if (!localCandles || localCandles.length === 0) return null;
+    const currentPrice = localCandles[localCandles.length - 1]?.c ?? 0;
+    const displacementStatus = marketContextData?.ipda_metrics?.institutional_sponsorship ?? null;
+    const globalAnchors = marketContextData?.ipda_metrics?.global_anchors ?? null;
+    
+    // Slice to match standard 350-candle lookback limit
+    const candlesWithClosed = localCandles.map((c, idx) => ({ ...c, isClosed: idx < localCandles.length - 1 }));
+    const structureCandles = candlesWithClosed.slice(-350);
+
+    const anchor = contextAnchorTimestamp || structureCandles[0]?.t || null;
+    
+    const configSettings = context?.engineSettings || {
+      atrPeriod: 14,
+      adaptiveNMin: 3,
+      adaptiveNMax: 15,
+      mssBodyRatio: 0.70,
+      displacementVef: 1.50,
+      sharpDepartureMult: 1.50,
+    };
+
+    try {
+      return analyzeMarketStructure(
+        structureCandles,
+        currentPrice,
+        displacementStatus,
+        anchor,
+        globalAnchors,
+        configSettings
+      );
+    } catch (err) {
+      console.error('[Chart] Failed to calculate dynamic structureState:', err);
+      return structureState;
+    }
+  }, [localCandles, marketContextData, contextAnchorTimestamp, context?.engineSettings, structureState]);
+
   // ── Dynamic Chart Layer Orchestrator ─────────────────────────────────────
   useEffect(() => {
     const chart = chartRef.current;
     const series = seriesRef.current;
-    if (!chart || !series || !data || data.length === 0 || !marketContextData) return;
+    const activeData = dynamicMarketContextData || marketContextData;
+    if (!chart || !series || !localCandles || localCandles.length === 0 || !activeData) return;
 
     const activeTheme = theme === 'dark' ? 'dark' : 'light';
     const layers = registry.getAll();
@@ -807,23 +874,24 @@ export default function Chart({
       const isEnabled = visibility[layer.id] !== false;
       const storage = getLayerStorage(layer.id);
 
-      const context = {
+      const renderContext = {
         chart,
         series,
         seriesMarkers: seriesMarkersRef.current,
-        data: marketContextData,
-        activeCandles: data,
+        data: activeData,
+        activeCandles: localCandles,
         theme: activeTheme as 'dark' | 'light',
         themeSettings,
         storage,
-        structureState,
+        structureState: dynamicStructureState || structureState,
         contextAnchorTimestamp,
+        engineSettings: context.engineSettings,
       };
 
       if (isEnabled) {
         if (layer.renderChart) {
           try {
-            layer.renderChart(context);
+            layer.renderChart(renderContext);
           } catch (err) {
             console.error(`[LayerOrchestrator] Failed to render chart layer ${layer.id}:`, err);
           }
@@ -831,14 +899,14 @@ export default function Chart({
       } else {
         if (layer.clearChart) {
           try {
-            layer.clearChart(context);
+            layer.clearChart(renderContext);
           } catch (err) {
             console.error(`[LayerOrchestrator] Failed to clear chart layer ${layer.id}:`, err);
           }
         }
       }
     });
-  }, [data, marketContextData, visibility, theme, themeSettings, getLayerStorage, structureState, contextAnchorTimestamp]);
+  }, [localCandles, dynamicMarketContextData, marketContextData, visibility, theme, themeSettings, getLayerStorage, dynamicStructureState, structureState, contextAnchorTimestamp, context.engineSettings]);
 
   // ── Sync Active Alerts with Price Lines ───────────────────────────────────
   useEffect(() => {
@@ -916,7 +984,7 @@ export default function Chart({
   const computeFvgOverlay = useCallback(() => {
     const chart = chartRef.current;
     const series = seriesRef.current;
-    if (!chart || !series || !activeFvgs || activeFvgs.length === 0) {
+    if (!chart || !series || !computedFvgs || computedFvgs.length === 0) {
       setFvgOverlayBoxes([]);
       return;
     }
@@ -928,7 +996,7 @@ export default function Chart({
 
     const boxes: { key: string; top: number; height: number; left: number; width: number; isBullish: boolean }[] = [];
 
-    for (const fvg of activeFvgs) {
+    for (const fvg of computedFvgs) {
       // Only render strictly UNMITIGATED zones
       if (fvg.status !== 'UNMITIGATED') continue;
 
@@ -960,33 +1028,61 @@ export default function Chart({
     }
 
     setFvgOverlayBoxes(boxes);
-  }, [activeFvgs]);
+  }, [computedFvgs]);
 
-  // Recompute FVG overlay whenever activeFvgs or historical data updates
+  // Recompute FVG overlay whenever computedFvgs or localCandles updates
   useEffect(() => {
     computeFvgOverlay();
-  }, [activeFvgs, data, computeFvgOverlay]);
+  }, [computedFvgs, localCandles, computeFvgOverlay]);
 
   // ── Phase 2: Live Candle Injection & Snapping Update ─────────────────────
   useEffect(() => {
-    if (seriesRef.current && liveCandle && data && data.length > 0) {
+    const candles = localCandlesRef.current;
+    if (seriesRef.current && liveCandle && candles && candles.length > 0) {
       try {
-        const lastBar = data[data.length - 1];
+        const lastBar = candles[candles.length - 1];
         const lastBarTimeSec = Math.floor(lastBar.t / 1000);
 
-        // Ensure liveCandle time is >= lastBarTimeSec to avoid out-of-order errors / overlapping / ghost wicks
         if (liveCandle.time >= lastBarTimeSec) {
+          // Update the lightweight chart series
           seriesRef.current.update(liveCandle as any);
           updateAlertPositions();
-        } else {
-          // Suppressed: live candle is behind the last historical bar (expected in offline/sim mode).
-          // No log needed — this is benign and fires on every WS tick until the next real close.
+
+          // Sync into localCandles state
+          setLocalCandles(prev => {
+            if (prev.length === 0) return prev;
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            const lastCandle = updated[lastIdx];
+            const lastTimeSec = Math.floor(lastCandle.t / 1000);
+
+            const mappedCandle: Candle = {
+              t: liveCandle.time * 1000,
+              o: liveCandle.open,
+              h: liveCandle.high,
+              l: liveCandle.low,
+              c: liveCandle.close,
+              v: liveCandle.volume,
+              taker_buy_vol: (liveCandle as any).taker_buy_vol ?? liveCandle.volume / 2,
+              taker_sell_vol: (liveCandle as any).taker_sell_vol ?? liveCandle.volume / 2,
+              isClosed: liveCandle.isClosed === true
+            };
+
+            if (liveCandle.time === lastTimeSec) {
+              // Overwrite or update the last candle
+              updated[lastIdx] = mappedCandle;
+            } else if (liveCandle.time > lastTimeSec) {
+              // Append a new candle
+              updated.push(mappedCandle);
+            }
+            return updated;
+          });
         }
       } catch (error) {
         console.error('[Chart] Lightweight Charts Update Error:', error);
       }
     }
-  }, [liveCandle, data, updateAlertPositions]);
+  }, [liveCandle, updateAlertPositions]);
 
   // ── Phase 3: The Execution Loop & Tick Crossovers ─────────────────────────
   const executeAlert = useCallback((alert: Alert) => {
@@ -1194,19 +1290,20 @@ export default function Chart({
       {/* Dynamic Layer Orchestrator HTML Overlays */}
       {registry.getAll().map((layer) => {
         const isEnabled = visibility[layer.id] !== false;
-        if (!isEnabled || !layer.renderHtml || !chartRef.current || !seriesRef.current || !marketContextData) return null;
+        const activeData = dynamicMarketContextData || marketContextData;
+        if (!isEnabled || !layer.renderHtml || !chartRef.current || !seriesRef.current || !activeData) return null;
 
         const storage = getLayerStorage(layer.id);
         const context = {
           chart: chartRef.current,
           series: seriesRef.current,
           seriesMarkers: seriesMarkersRef.current,
-          data: marketContextData,
-          activeCandles: data,
+          data: activeData,
+          activeCandles: localCandles,
           theme: (theme === 'dark' ? 'dark' : 'light') as 'dark' | 'light',
           themeSettings,
           storage,
-          structureState,
+          structureState: dynamicStructureState || structureState,
           contextAnchorTimestamp,
         };
 
