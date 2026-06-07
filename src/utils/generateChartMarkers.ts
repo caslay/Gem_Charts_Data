@@ -255,11 +255,9 @@ export function checkPerfectMovementSetup(
 
 
 export function generateVolumetricMarkers(candles: MarkerCandle[], colors: MarkerColors) {
-  // Check if signals are pre-calculated; if not, annotate now
-  const hasPrecalculatedSignals = candles.some(c => c.volumetric_signal !== undefined);
-  if (!hasPrecalculatedSignals) {
-    annotateCandlesWithVolumetricSignals(candles);
-  }
+  // Always annotate to ensure live candles (which lack pre-calculated signals from the backend)
+  // are properly annotated on every tick. This operation is O(N) and takes < 1ms.
+  annotateCandlesWithVolumetricSignals(candles);
 
   const markers: SeriesMarker<any>[] = [];
 

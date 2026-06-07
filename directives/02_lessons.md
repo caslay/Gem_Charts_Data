@@ -138,4 +138,8 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
   4. Phase 2 defaults were also over-restrictive: ATR multiplier 1.5× filtered out normal displacement candles; body ratio 0.6 and wick ratio 0.15 rejected most real-world candle shapes.
 - **The Fix:** Implemented a configurable `pmSweepLookback` parameter (default: 5 candles), added **ATR proximity tolerance** (0.3 × ATR) for near-sweep matching, expanded swing grade search to all grades, and recalibrated all Phase 2 defaults via a 320-configuration parameter grid sweep against live ETHUSDT data. Added a new UI slider "Sweep Lookback (Candles Before Signal)" to the Smart Money Sweet Spot drawer.
 
+### 22. Volumetric Markers Failing to Render on Live Ticks (Resolved in V11.2)
+- **The Bug:** Volumetric arrows and SMT circles were appearing correctly on initial load or timeframe switch, but failed to render on new, real-time live candles as they closed.
+- **The Cause:** The `generateVolumetricMarkers` rendering function bypassed calculation if it detected pre-calculated `volumetric_signal` fields on historical candles. Live candles arriving via WebSocket did not have this field pre-calculated by the Python backend. Because the function exited early due to the historical candles, the live candles were completely skipped.
+- **The Fix:** Removed the `if (!hasPrecalculatedSignals)` short-circuit block in `src/utils/generateChartMarkers.ts`. We now unconditionally run `annotateCandlesWithVolumetricSignals(candles)` on every tick, which iterates efficiently (O(N)) and correctly calculates the markers for both historical and newly formed live candles.
 

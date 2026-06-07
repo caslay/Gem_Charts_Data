@@ -2,9 +2,15 @@
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-06-07 (V12.0.10 — PM Settings Neon SQL SELECT Bug Fix)  
+> **Last Updated:** 2026-06-07 (V12.0.11 — Volumetric Markers Live Rendering Fix)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
 > **Source Files Analyzed:** 65+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V12.0.11 Changelog — Volumetric Markers Live Rendering Fix (Completed)
+
+### 1. Unconditional Local Marker Generation (`src/utils/generateChartMarkers.ts`)
+- **Bug:** Volumetric Arrows and SMT Circles (from the Volumetric Sponsorship engine) were properly attached to historical data fetched from the API, but failed to calculate and render for active live candles closing via the WebSocket stream.
+- **Fix:** Removed the `hasPrecalculatedSignals` early return short-circuit inside `generateVolumetricMarkers`. The volumetric annotator now iterates unconditionally (O(N) loop) on every tick rendering pass, ensuring all newly formed/pushed live candles are dynamically evaluated and correctly annotated without waiting for a full page refresh.
 
 ## 🆕 V12.0.10 Changelog — PM Settings Neon SQL `pm_sweep_lookback` SELECT Bug Fix (Completed)
 
