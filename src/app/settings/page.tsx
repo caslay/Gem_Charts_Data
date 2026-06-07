@@ -1294,6 +1294,7 @@ export default function SettingsPage() {
                           <ColorPickerItem label="London Session Range" value={themeSettings.dark_chart_session_london} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_session_london: val }))} />
                           <ColorPickerItem label="Buy-Side Liquidity (BSL)" value={themeSettings.dark_chart_magnet_bsl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_magnet_bsl: val }))} />
                           <ColorPickerItem label="Sell-Side Liquidity (SSL)" value={themeSettings.dark_chart_magnet_ssl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_magnet_ssl: val }))} />
+                          <ColorPickerItem label="Strong Volumetric Arrow" value={themeSettings.dark_chart_volumetric_strong_arrow} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_volumetric_strong_arrow: val }))} />
                           
                           {/* ATR Multiplier Volatility Gating Input */}
                           <div className="flex items-center justify-between py-2 border-b border-card-border/30 px-1 font-sans">
@@ -1570,6 +1571,7 @@ export default function SettingsPage() {
                           <ColorPickerItem label="London Session Range" value={themeSettings.light_chart_session_london} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_session_london: val }))} />
                           <ColorPickerItem label="Buy-Side Liquidity (BSL)" value={themeSettings.light_chart_magnet_bsl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_magnet_bsl: val }))} />
                           <ColorPickerItem label="Sell-Side Liquidity (SSL)" value={themeSettings.light_chart_magnet_ssl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_magnet_ssl: val }))} />
+                          <ColorPickerItem label="Strong Volumetric Arrow" value={themeSettings.light_chart_volumetric_strong_arrow} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_volumetric_strong_arrow: val }))} />
                         </div>
                       </details>
 

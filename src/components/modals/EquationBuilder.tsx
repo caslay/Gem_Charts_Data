@@ -160,6 +160,15 @@ export default function EquationBuilder() {
   const [editMomentumOverride, setEditMomentumOverride] = useState<boolean>(false);
   const [editTargetTimeframe, setEditTargetTimeframe] = useState<'ANY' | '1m' | '5m' | '15m' | '30m' | '1h' | '4h'>('ANY');
 
+  // Perfect Movement Filter parameters
+  const [editPerfectMovementFilter, setEditPerfectMovementFilter] = useState<boolean>(false);
+  const [editPmAtrMultiplier, setEditPmAtrMultiplier] = useState<string>('1.5');
+  const [editPmVolumeSmaPeriod, setEditPmVolumeSmaPeriod] = useState<string>('10');
+  const [editPmMinBodyRatio, setEditPmMinBodyRatio] = useState<string>('0.6');
+  const [editPmMaxWickRatio, setEditPmMaxWickRatio] = useState<string>('0.15');
+  const [editPmMaxRetracementLimit, setEditPmMaxRetracementLimit] = useState<string>('0.5');
+  const [isPmPaneOpen, setIsPmPaneOpen] = useState(false);
+
   // ── Fetch strategies from API on mount ────────────────────────────────────
   const fetchStrategies = useCallback(async () => {
     try {
@@ -228,6 +237,12 @@ export default function EquationBuilder() {
         setEditStatisticalSensitivity(isObj ? (strategy.conditions.statistical_sensitivity || 'STRICT') : 'STRICT');
         setEditMomentumOverride(isObj ? !!strategy.conditions.momentum_override : false);
         setEditTargetTimeframe(isObj ? (strategy.conditions.target_timeframe || 'ANY') : 'ANY');
+        setEditPerfectMovementFilter(isObj ? !!strategy.conditions.perfect_movement_filter : false);
+        setEditPmAtrMultiplier(isObj ? String(strategy.conditions.pm_atr_multiplier ?? '1.5') : '1.5');
+        setEditPmVolumeSmaPeriod(isObj ? String(strategy.conditions.pm_volume_sma_period ?? '10') : '10');
+        setEditPmMinBodyRatio(isObj ? String(strategy.conditions.pm_min_body_ratio ?? '0.6') : '0.6');
+        setEditPmMaxWickRatio(isObj ? String(strategy.conditions.pm_max_wick_ratio ?? '0.15') : '0.15');
+        setEditPmMaxRetracementLimit(isObj ? String(strategy.conditions.pm_max_retracement_limit ?? '0.5') : '0.5');
         return;
       }
     }
@@ -244,6 +259,12 @@ export default function EquationBuilder() {
     setEditTargetEnvironment('BOTH');
     setEditMomentumOverride(false);
     setEditTargetTimeframe('ANY');
+    setEditPerfectMovementFilter(false);
+    setEditPmAtrMultiplier('1.5');
+    setEditPmVolumeSmaPeriod('10');
+    setEditPmMinBodyRatio('0.6');
+    setEditPmMaxWickRatio('0.15');
+    setEditPmMaxRetracementLimit('0.5');
   }, [selectedId, strategies]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -263,6 +284,12 @@ export default function EquationBuilder() {
         statistical_sensitivity: 'STRICT',
         momentum_override: false,
         target_timeframe: 'ANY',
+        perfect_movement_filter: false,
+        pm_atr_multiplier: 1.5,
+        pm_volume_sma_period: 10,
+        pm_min_body_ratio: 0.6,
+        pm_max_wick_ratio: 0.15,
+        pm_max_retracement_limit: 0.5,
       },
       is_active: true,
       target_environment: 'BOTH',
@@ -289,6 +316,12 @@ export default function EquationBuilder() {
         statistical_sensitivity: editStatisticalSensitivity,
         momentum_override: editMomentumOverride,
         target_timeframe: editTargetTimeframe,
+        perfect_movement_filter: editPerfectMovementFilter,
+        pm_atr_multiplier: isNaN(parseFloat(editPmAtrMultiplier)) ? 1.5 : parseFloat(editPmAtrMultiplier),
+        pm_volume_sma_period: isNaN(parseInt(editPmVolumeSmaPeriod)) ? 10 : parseInt(editPmVolumeSmaPeriod),
+        pm_min_body_ratio: isNaN(parseFloat(editPmMinBodyRatio)) ? 0.6 : parseFloat(editPmMinBodyRatio),
+        pm_max_wick_ratio: isNaN(parseFloat(editPmMaxWickRatio)) ? 0.15 : parseFloat(editPmMaxWickRatio),
+        pm_max_retracement_limit: isNaN(parseFloat(editPmMaxRetracementLimit)) ? 0.5 : parseFloat(editPmMaxRetracementLimit),
       };
 
       const payload = {
@@ -447,6 +480,12 @@ export default function EquationBuilder() {
       statistical_sensitivity: editStatisticalSensitivity,
       momentum_override: editMomentumOverride,
       target_timeframe: editTargetTimeframe,
+      perfect_movement_filter: editPerfectMovementFilter,
+      pm_atr_multiplier: isNaN(parseFloat(editPmAtrMultiplier)) ? 1.5 : parseFloat(editPmAtrMultiplier),
+      pm_volume_sma_period: isNaN(parseInt(editPmVolumeSmaPeriod)) ? 10 : parseInt(editPmVolumeSmaPeriod),
+      pm_min_body_ratio: isNaN(parseFloat(editPmMinBodyRatio)) ? 0.6 : parseFloat(editPmMinBodyRatio),
+      pm_max_wick_ratio: isNaN(parseFloat(editPmMaxWickRatio)) ? 0.15 : parseFloat(editPmMaxWickRatio),
+      pm_max_retracement_limit: isNaN(parseFloat(editPmMaxRetracementLimit)) ? 0.5 : parseFloat(editPmMaxRetracementLimit),
     };
 
     return JSON.stringify(
@@ -965,6 +1004,201 @@ export default function EquationBuilder() {
                       onChange={(e) => setEditMomentumOverride(e.target.checked)}
                       className="w-4 h-4 rounded border-card-border bg-background/50 text-accent focus:ring-accent accent-accent cursor-pointer"
                     />
+                  </div>
+
+                  {/* Perfect Movement Filter (Smart Money Sweet Spot) Collapsible Sub-Pane */}
+                  <div className="col-span-2 border-t border-card-border/30 pt-3.5 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsPmPaneOpen(!isPmPaneOpen)}
+                      className="w-full flex items-center justify-between py-2 px-3 bg-[#18181b]/60 border border-card-border/85 hover:border-accent/40 rounded-xl transition-all cursor-pointer shadow-sm focus:outline-none"
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={editPerfectMovementFilter}
+                          onClick={(e) => e.stopPropagation()} // Prevent collapse toggle when checking
+                          onChange={(e) => setEditPerfectMovementFilter(e.target.checked)}
+                          className="w-3.5 h-3.5 rounded border-card-border bg-background/50 text-accent focus:ring-accent accent-accent cursor-pointer"
+                        />
+                        <span className="text-[10px] font-black uppercase tracking-wider text-[#e5e2e3] flex items-center gap-1.5 font-sans">
+                          Perfect Movement Filter (Smart Money Sweet Spot)
+                        </span>
+                      </div>
+                      <span className="text-[9px] text-accent/80 font-black tracking-wider">
+                        {isPmPaneOpen ? '▲ COLLAPSE' : '▼ EXPAND'}
+                      </span>
+                    </button>
+
+                    {isPmPaneOpen && (
+                      <div className="mt-3.5 p-4.5 bg-[#09090b] border-2 border-zinc-800 rounded-none flex flex-col gap-4.5 animate-[fadeIn_0.2s_ease-out]">
+                        <span className="text-[8.5px] font-bold text-muted uppercase tracking-[0.08em] block leading-relaxed border-b border-card-border/40 pb-2 font-sans">
+                          High-probability execution filter requiring structural sweep (Phase 1), volumetric catalyst (Phase 2), and follow-through confirmation close (Phase 3).
+                        </span>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
+                          {/* ATR Multiplier Slider & Input */}
+                          <div className="flex flex-col gap-2">
+                            <div className="flex justify-between items-center">
+                              <label className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-muted font-sans">
+                                ATR Multiplier (Setup Range)
+                              </label>
+                              <span className="text-[10px] font-mono font-bold text-accent">
+                                {editPmAtrMultiplier}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="range"
+                                min="0.5"
+                                max="5.0"
+                                step="0.1"
+                                value={editPmAtrMultiplier}
+                                onChange={(e) => setEditPmAtrMultiplier(e.target.value)}
+                                className="flex-1 accent-accent cursor-pointer h-1.5 bg-zinc-900 border border-zinc-800 rounded-none appearance-none"
+                              />
+                              <input
+                                type="number"
+                                step="0.1"
+                                min="0.1"
+                                max="10.0"
+                                value={editPmAtrMultiplier}
+                                onChange={(e) => setEditPmAtrMultiplier(e.target.value)}
+                                className="bg-zinc-950 border-2 border-zinc-800 focus:border-accent focus:outline-none px-2 py-1 text-[10px] font-mono text-center text-foreground font-bold rounded-none w-16 shadow-none transition-colors"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Volume SMA Period Slider & Input */}
+                          <div className="flex flex-col gap-2">
+                            <div className="flex justify-between items-center">
+                              <label className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-muted font-sans">
+                                Volume SMA Period
+                              </label>
+                              <span className="text-[10px] font-mono font-bold text-accent">
+                                {editPmVolumeSmaPeriod}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="range"
+                                min="5"
+                                max="50"
+                                step="1"
+                                value={editPmVolumeSmaPeriod}
+                                onChange={(e) => setEditPmVolumeSmaPeriod(e.target.value)}
+                                className="flex-1 accent-accent cursor-pointer h-1.5 bg-zinc-900 border border-zinc-800 rounded-none appearance-none"
+                              />
+                              <input
+                                type="number"
+                                step="1"
+                                min="2"
+                                max="100"
+                                value={editPmVolumeSmaPeriod}
+                                onChange={(e) => setEditPmVolumeSmaPeriod(e.target.value)}
+                                className="bg-zinc-950 border-2 border-zinc-800 focus:border-accent focus:outline-none px-2 py-1 text-[10px] font-mono text-center text-foreground font-bold rounded-none w-16 shadow-none transition-colors"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Min Body Ratio Slider & Input */}
+                          <div className="flex flex-col gap-2">
+                            <div className="flex justify-between items-center">
+                              <label className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-muted font-sans">
+                                Min Body Ratio (Conviction)
+                              </label>
+                              <span className="text-[10px] font-mono font-bold text-accent">
+                                {editPmMinBodyRatio}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="range"
+                                min="0.1"
+                                max="1.0"
+                                step="0.05"
+                                value={editPmMinBodyRatio}
+                                onChange={(e) => setEditPmMinBodyRatio(e.target.value)}
+                                className="flex-1 accent-accent cursor-pointer h-1.5 bg-zinc-900 border border-zinc-800 rounded-none appearance-none"
+                              />
+                              <input
+                                type="number"
+                                step="0.05"
+                                min="0.0"
+                                max="1.0"
+                                value={editPmMinBodyRatio}
+                                onChange={(e) => setEditPmMinBodyRatio(e.target.value)}
+                                className="bg-zinc-950 border-2 border-zinc-800 focus:border-accent focus:outline-none px-2 py-1 text-[10px] font-mono text-center text-foreground font-bold rounded-none w-16 shadow-none transition-colors"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Max Wick Ratio Slider & Input */}
+                          <div className="flex flex-col gap-2">
+                            <div className="flex justify-between items-center">
+                              <label className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-muted font-sans">
+                                Max Wick Ratio (Rejection)
+                              </label>
+                              <span className="text-[10px] font-mono font-bold text-accent">
+                                {editPmMaxWickRatio}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="range"
+                                min="0.05"
+                                max="0.5"
+                                step="0.01"
+                                value={editPmMaxWickRatio}
+                                onChange={(e) => setEditPmMaxWickRatio(e.target.value)}
+                                className="flex-1 accent-accent cursor-pointer h-1.5 bg-zinc-900 border border-zinc-800 rounded-none appearance-none"
+                              />
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0.0"
+                                max="1.0"
+                                value={editPmMaxWickRatio}
+                                onChange={(e) => setEditPmMaxWickRatio(e.target.value)}
+                                className="bg-zinc-950 border-2 border-zinc-800 focus:border-accent focus:outline-none px-2 py-1 text-[10px] font-mono text-center text-foreground font-bold rounded-none w-16 shadow-none transition-colors"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Max Retracement Limit Slider & Input */}
+                          <div className="flex flex-col gap-2 col-span-2">
+                            <div className="flex justify-between items-center">
+                              <label className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-muted font-sans">
+                                Max Retracement Limit (Phase 3 Confirm Rule)
+                              </label>
+                              <span className="text-[10px] font-mono font-bold text-accent">
+                                {editPmMaxRetracementLimit}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="range"
+                                min="0.1"
+                                max="1.0"
+                                step="0.05"
+                                value={editPmMaxRetracementLimit}
+                                onChange={(e) => setEditPmMaxRetracementLimit(e.target.value)}
+                                className="flex-1 accent-accent cursor-pointer h-1.5 bg-zinc-900 border border-zinc-800 rounded-none appearance-none"
+                              />
+                              <input
+                                type="number"
+                                step="0.05"
+                                min="0.0"
+                                max="2.0"
+                                value={editPmMaxRetracementLimit}
+                                onChange={(e) => setEditPmMaxRetracementLimit(e.target.value)}
+                                className="bg-zinc-950 border-2 border-zinc-800 focus:border-accent focus:outline-none px-2 py-1 text-[10px] font-mono text-center text-foreground font-bold rounded-none w-16 shadow-none transition-colors"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

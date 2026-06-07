@@ -99,6 +99,7 @@ export interface ThemeSettings {
   dark_chart_session_london: string;
   dark_chart_magnet_bsl: string;
   dark_chart_magnet_ssl: string;
+  dark_chart_volumetric_strong_arrow: string;
 
   // UI Button Variations
   dark_btn_solid_bg: string;
@@ -158,6 +159,7 @@ export interface ThemeSettings {
   light_chart_session_london: string;
   light_chart_magnet_bsl: string;
   light_chart_magnet_ssl: string;
+  light_chart_volumetric_strong_arrow: string;
 
   // UI Button Variations
   light_btn_solid_bg: string;
@@ -219,6 +221,7 @@ export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   dark_chart_session_london: 'rgba(59, 130, 246, 0.5)',
   dark_chart_magnet_bsl: 'rgba(255, 180, 171, 0.45)',
   dark_chart_magnet_ssl: 'rgba(80, 255, 175, 0.45)',
+  dark_chart_volumetric_strong_arrow: '#ff007f',
 
   // UI Button Variations (Midnight)
   dark_btn_solid_bg: '#a855f7',
@@ -277,6 +280,7 @@ export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   light_chart_session_london: 'rgba(37, 99, 235, 0.5)',
   light_chart_magnet_bsl: 'rgba(225, 29, 72, 0.45)',
   light_chart_magnet_ssl: 'rgba(5, 150, 105, 0.45)',
+  light_chart_volumetric_strong_arrow: '#e11d48',
 
   // UI Button Variations (Daylight)
   light_btn_solid_bg: '#4f46e5',
@@ -306,6 +310,16 @@ export interface EngineSettings {
   candlesLimit15m: number;
   candlesLimit1h: number;
   candlesLimit4h: number;
+  includeBtcCorrelation: boolean;
+  includeStructureAnalysis: boolean;
+  includeFvgDetection: boolean;
+  visualizePerfectMovementOnly: boolean;
+  pmAtrMultiplier: number;
+  pmVolumeSmaPeriod: number;
+  pmMinBodyRatio: number;
+  pmMaxWickRatio: number;
+  pmMaxRetracementLimit: number;
+  pmSweepLookback: number;
 }
 
 export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
@@ -320,6 +334,16 @@ export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
   candlesLimit15m: 1000,
   candlesLimit1h: 1000,
   candlesLimit4h: 1000,
+  includeBtcCorrelation: true,
+  includeStructureAnalysis: true,
+  includeFvgDetection: true,
+  visualizePerfectMovementOnly: false,
+  pmAtrMultiplier: 0.5,
+  pmVolumeSmaPeriod: 10,
+  pmMinBodyRatio: 0.3,
+  pmMaxWickRatio: 0.5,
+  pmMaxRetracementLimit: 0.7,
+  pmSweepLookback: 5,
 };
 
 
@@ -476,7 +500,7 @@ export function useMarketData(selectedInterval: string = '5m') {
           }
 
           if (data.terminalSettings) {
-            const { signalSounds, enabledSignals, atrPeriod, adaptiveNMin, adaptiveNMax, mssBodyRatio, displacementVef, sharpDepartureMult, candlesLimit1m, candlesLimit5m, candlesLimit15m, candlesLimit1h, candlesLimit4h } = data.terminalSettings;
+            const { signalSounds, enabledSignals, atrPeriod, adaptiveNMin, adaptiveNMax, mssBodyRatio, displacementVef, sharpDepartureMult, candlesLimit1m, candlesLimit5m, candlesLimit15m, candlesLimit1h, candlesLimit4h, includeBtcCorrelation, includeStructureAnalysis, includeFvgDetection, visualizePerfectMovementOnly, pmAtrMultiplier, pmVolumeSmaPeriod, pmMinBodyRatio, pmMaxWickRatio, pmMaxRetracementLimit, pmSweepLookback } = data.terminalSettings;
             if (signalSounds) {
               setSignalAlerts(signalSounds);
               if (typeof window !== 'undefined') {
@@ -502,6 +526,16 @@ export function useMarketData(selectedInterval: string = '5m') {
               candlesLimit15m: candlesLimit15m ?? 1000,
               candlesLimit1h: candlesLimit1h ?? 1000,
               candlesLimit4h: candlesLimit4h ?? 1000,
+              includeBtcCorrelation: includeBtcCorrelation !== false,
+              includeStructureAnalysis: includeStructureAnalysis !== false,
+              includeFvgDetection: includeFvgDetection !== false,
+              visualizePerfectMovementOnly: !!visualizePerfectMovementOnly,
+              pmAtrMultiplier: pmAtrMultiplier ?? 0.5,
+              pmVolumeSmaPeriod: pmVolumeSmaPeriod ?? 10,
+              pmMinBodyRatio: pmMinBodyRatio ?? 0.3,
+              pmMaxWickRatio: pmMaxWickRatio ?? 0.5,
+              pmMaxRetracementLimit: pmMaxRetracementLimit ?? 0.7,
+              pmSweepLookback: pmSweepLookback ?? 5,
             };
             setEngineSettings(loadedEngine);
             if (typeof window !== 'undefined') {
@@ -542,6 +576,16 @@ export function useMarketData(selectedInterval: string = '5m') {
               candlesLimit15m: engineSettingsRef.current.candlesLimit15m,
               candlesLimit1h: engineSettingsRef.current.candlesLimit1h,
               candlesLimit4h: engineSettingsRef.current.candlesLimit4h,
+              includeBtcCorrelation: engineSettingsRef.current.includeBtcCorrelation !== false,
+              includeStructureAnalysis: engineSettingsRef.current.includeStructureAnalysis !== false,
+              includeFvgDetection: engineSettingsRef.current.includeFvgDetection !== false,
+              visualizePerfectMovementOnly: engineSettingsRef.current.visualizePerfectMovementOnly,
+              pmAtrMultiplier: engineSettingsRef.current.pmAtrMultiplier,
+              pmVolumeSmaPeriod: engineSettingsRef.current.pmVolumeSmaPeriod,
+              pmMinBodyRatio: engineSettingsRef.current.pmMinBodyRatio,
+              pmMaxWickRatio: engineSettingsRef.current.pmMaxWickRatio,
+              pmMaxRetracementLimit: engineSettingsRef.current.pmMaxRetracementLimit,
+              pmSweepLookback: engineSettingsRef.current.pmSweepLookback,
             },
           }),
         });
@@ -608,7 +652,8 @@ export function useMarketData(selectedInterval: string = '5m') {
       }
       const initParam = !isPolling ? '&init=true' : '';
       const limitParams = `&limit1m=${engineSettings.candlesLimit1m ?? 1000}&limit5m=${engineSettings.candlesLimit5m ?? 1000}&limit15m=${engineSettings.candlesLimit15m ?? 1000}&limit1h=${engineSettings.candlesLimit1h ?? 1000}&limit4h=${engineSettings.candlesLimit4h ?? 1000}`;
-      const res = await fetch(`/api/market-data?interval=${selectedInterval}${initParam}${limitParams}`);
+      const featureParams = `&includeBtc=${engineSettings.includeBtcCorrelation !== false}&includeStructure=${engineSettings.includeStructureAnalysis !== false}&includeFvg=${engineSettings.includeFvgDetection !== false}`;
+      const res = await fetch(`/api/market-data?interval=${selectedInterval}${initParam}${limitParams}${featureParams}`);
       if (!res.ok) {
         throw new Error('Failed to fetch market data');
       }

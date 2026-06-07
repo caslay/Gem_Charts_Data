@@ -8,6 +8,7 @@ export interface Candle {
   taker_buy_vol: number;
   taker_sell_vol: number;
   isClosed?: boolean;
+  volumetric_signal?: 'ARROW_UP' | 'ARROW_DOWN' | 'CIRCLE_UP' | 'CIRCLE_DOWN' | null;
   [key: string]: any;
 }
 

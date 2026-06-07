@@ -63,6 +63,7 @@ export default function ThemeSync() {
           --chart-session-london: ${themeSettings.light_chart_session_london} !important;
           --chart-magnet-bsl: ${themeSettings.light_chart_magnet_bsl} !important;
           --chart-magnet-ssl: ${themeSettings.light_chart_magnet_ssl} !important;
+          --volumetric-strong-arrow: ${themeSettings.light_chart_volumetric_strong_arrow} !important;
 
           /* UI Button Variations */
           --btn-solid-bg: ${themeSettings.light_btn_solid_bg} !important;
@@ -125,6 +126,7 @@ export default function ThemeSync() {
           --chart-session-london: ${themeSettings.dark_chart_session_london} !important;
           --chart-magnet-bsl: ${themeSettings.dark_chart_magnet_bsl} !important;
           --chart-magnet-ssl: ${themeSettings.dark_chart_magnet_ssl} !important;
+          --volumetric-strong-arrow: ${themeSettings.dark_chart_volumetric_strong_arrow} !important;
 
           /* UI Button Variations */
           --btn-solid-bg: ${themeSettings.dark_btn_solid_bg} !important;

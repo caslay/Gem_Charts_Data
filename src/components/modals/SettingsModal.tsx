@@ -668,6 +668,320 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                     <span className="block text-[10px] text-muted italic font-sans leading-relaxed">Configure the historical lookback candle counts for each timeframe independently (min 100, max 1500).</span>
                   </div>
+
+                  {/* Group E: Data Stream Features & Payloads */}
+                  <div className="border border-card-border/60 bg-card/30 rounded-xl p-5 space-y-4">
+                    <h4 className="text-xs font-black uppercase text-accent tracking-widest border-b border-card-border/40 pb-2 flex items-center gap-2">
+                      <Sparkles size={12} />
+                      <span>Group E: Data Stream Features & Payloads</span>
+                    </h4>
+
+                    <div className="space-y-3.5 pl-1">
+                      {/* BTC Correlation Toggle */}
+                      <label className="flex items-center gap-3.5 cursor-pointer group select-none">
+                        <input
+                          type="checkbox"
+                          checked={engineSettings?.includeBtcCorrelation !== false}
+                          onChange={(e) => updateEngineSettings && updateEngineSettings({ includeBtcCorrelation: e.target.checked })}
+                          className="rounded border border-card-border w-4 h-4 cursor-pointer accent-accent transition-all"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold uppercase text-foreground tracking-widest group-hover:text-accent transition-colors">
+                            Enable BTC Correlation Data
+                          </span>
+                          <span className="block text-[10px] text-muted italic font-sans leading-tight">
+                            Fetches and serializes BTCUSDT kline arrays for macro calculations.
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* Structure and Swings Toggle */}
+                      <label className="flex items-center gap-3.5 cursor-pointer group select-none">
+                        <input
+                          type="checkbox"
+                          checked={engineSettings?.includeStructureAnalysis !== false}
+                          onChange={(e) => updateEngineSettings && updateEngineSettings({ includeStructureAnalysis: e.target.checked })}
+                          className="rounded border border-card-border w-4 h-4 cursor-pointer accent-accent transition-all"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold uppercase text-foreground tracking-widest group-hover:text-accent transition-colors">
+                            Enable Structure & Swings Analysis
+                          </span>
+                          <span className="block text-[10px] text-muted italic font-sans leading-tight">
+                            Runs high-performance intermediate 5-bar pivot tracking, BOS/MSS maps, and SAVP.
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* FVG Detection Toggle */}
+                      <label className="flex items-center gap-3.5 cursor-pointer group select-none">
+                        <input
+                          type="checkbox"
+                          checked={engineSettings?.includeFvgDetection !== false}
+                          onChange={(e) => updateEngineSettings && updateEngineSettings({ includeFvgDetection: e.target.checked })}
+                          className="rounded border border-card-border w-4 h-4 cursor-pointer accent-accent transition-all"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold uppercase text-foreground tracking-widest group-hover:text-accent transition-colors">
+                            Enable Fair Value Gap (FVG) Detection
+                          </span>
+                          <span className="block text-[10px] text-muted italic font-sans leading-tight">
+                            Scans and consolidates active unmitigated/pending FVG zones.
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Group F: Volumetric Visual Filters */}
+                  <div className="border border-card-border/60 bg-card/30 rounded-xl p-5 space-y-4">
+                    <h4 className="text-xs font-black uppercase text-accent tracking-widest border-b border-card-border/40 pb-2 flex items-center gap-2">
+                      <Sparkles size={12} />
+                      <span>Group F: Volumetric Visual Filters</span>
+                    </h4>
+
+                    <div className="space-y-4 pl-1">
+                      {/* Toggle */}
+                      <label className="flex items-center gap-3.5 cursor-pointer group select-none">
+                        <input
+                          type="checkbox"
+                          checked={engineSettings?.visualizePerfectMovementOnly === true}
+                          onChange={(e) => updateEngineSettings && updateEngineSettings({ visualizePerfectMovementOnly: e.target.checked })}
+                          className="rounded border border-card-border w-4 h-4 cursor-pointer accent-accent transition-all"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold uppercase text-foreground tracking-widest group-hover:text-accent transition-colors">
+                            Filter Chart Volumetrics (Perfect setups only)
+                          </span>
+                          <span className="block text-[10px] text-muted italic font-sans leading-tight">
+                            Filter volumetric signals to display only setups that satisfy the 3-Phase Perfect Movement Setup Formula. Failed signals render at 20% opacity.
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* Slider parameters under collapsible visualization options */}
+                      {engineSettings?.visualizePerfectMovementOnly && (
+                        <div className="mt-3 p-4 bg-[#09090b] border-2 border-zinc-800 rounded-none flex flex-col gap-4.5 animate-[fadeIn_0.2s_ease-out]">
+                          <span className="text-[9px] font-black uppercase tracking-wider text-accent block border-b border-card-border/40 pb-1.5 font-sans">
+                            Global Setup Formula Parameters (Smart Money Sweet Spot)
+                          </span>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
+                            {/* ATR Multiplier Slider & Input */}
+                            <div className="flex flex-col gap-2">
+                              <div className="flex justify-between items-center">
+                                <label className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-muted font-sans">
+                                  ATR Multiplier (Setup Range)
+                                </label>
+                                <span className="text-[10px] font-mono font-bold text-accent">
+                                  {(engineSettings?.pmAtrMultiplier ?? 0.5).toFixed(1)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="range"
+                                  min="0.5"
+                                  max="5.0"
+                                  step="0.1"
+                                  value={engineSettings?.pmAtrMultiplier ?? 0.5}
+                                  onChange={(e) => updateEngineSettings && updateEngineSettings({ pmAtrMultiplier: parseFloat(e.target.value) })}
+                                  className="flex-1 accent-accent cursor-pointer h-1.5 bg-zinc-900 border border-zinc-800 rounded-none appearance-none"
+                                />
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min="0.1"
+                                  max="10.0"
+                                  value={engineSettings?.pmAtrMultiplier ?? 0.5}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    if (!isNaN(val)) updateEngineSettings && updateEngineSettings({ pmAtrMultiplier: val });
+                                  }}
+                                  className="bg-zinc-950 border-2 border-zinc-800 focus:border-accent focus:outline-none px-2 py-1 text-[10px] font-mono text-center text-foreground font-bold rounded-none w-16 shadow-none transition-colors"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Volume SMA Period Slider & Input */}
+                            <div className="flex flex-col gap-2">
+                              <div className="flex justify-between items-center">
+                                <label className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-muted font-sans">
+                                  Volume SMA Period
+                                </label>
+                                <span className="text-[10px] font-mono font-bold text-accent">
+                                  {engineSettings?.pmVolumeSmaPeriod ?? 10}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="range"
+                                  min="5"
+                                  max="50"
+                                  step="1"
+                                  value={engineSettings?.pmVolumeSmaPeriod ?? 10}
+                                  onChange={(e) => updateEngineSettings && updateEngineSettings({ pmVolumeSmaPeriod: parseInt(e.target.value, 10) })}
+                                  className="flex-1 accent-accent cursor-pointer h-1.5 bg-zinc-900 border border-zinc-800 rounded-none appearance-none"
+                                />
+                                <input
+                                  type="number"
+                                  step="1"
+                                  min="2"
+                                  max="100"
+                                  value={engineSettings?.pmVolumeSmaPeriod ?? 10}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10);
+                                    if (!isNaN(val)) updateEngineSettings && updateEngineSettings({ pmVolumeSmaPeriod: val });
+                                  }}
+                                  className="bg-zinc-950 border-2 border-zinc-800 focus:border-accent focus:outline-none px-2 py-1 text-[10px] font-mono text-center text-foreground font-bold rounded-none w-16 shadow-none transition-colors"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Min Body Ratio Slider & Input */}
+                            <div className="flex flex-col gap-2">
+                              <div className="flex justify-between items-center">
+                                <label className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-muted font-sans">
+                                  Min Body Ratio (Conviction)
+                                </label>
+                                <span className="text-[10px] font-mono font-bold text-accent">
+                                  {(engineSettings?.pmMinBodyRatio ?? 0.3).toFixed(2)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="range"
+                                  min="0.1"
+                                  max="1.0"
+                                  step="0.05"
+                                  value={engineSettings?.pmMinBodyRatio ?? 0.3}
+                                  onChange={(e) => updateEngineSettings && updateEngineSettings({ pmMinBodyRatio: parseFloat(e.target.value) })}
+                                  className="flex-1 accent-accent cursor-pointer h-1.5 bg-zinc-900 border border-zinc-800 rounded-none appearance-none"
+                                />
+                                <input
+                                  type="number"
+                                  step="0.05"
+                                  min="0.0"
+                                  max="1.0"
+                                  value={engineSettings?.pmMinBodyRatio ?? 0.3}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    if (!isNaN(val)) updateEngineSettings && updateEngineSettings({ pmMinBodyRatio: val });
+                                  }}
+                                  className="bg-zinc-950 border-2 border-zinc-800 focus:border-accent focus:outline-none px-2 py-1 text-[10px] font-mono text-center text-foreground font-bold rounded-none w-16 shadow-none transition-colors"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Max Wick Ratio Slider & Input */}
+                            <div className="flex flex-col gap-2">
+                              <div className="flex justify-between items-center">
+                                <label className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-muted font-sans">
+                                  Max Wick Ratio (Rejection)
+                                </label>
+                                <span className="text-[10px] font-mono font-bold text-accent">
+                                  {(engineSettings?.pmMaxWickRatio ?? 0.5).toFixed(2)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="range"
+                                  min="0.05"
+                                  max="0.5"
+                                  step="0.01"
+                                  value={engineSettings?.pmMaxWickRatio ?? 0.5}
+                                  onChange={(e) => updateEngineSettings && updateEngineSettings({ pmMaxWickRatio: parseFloat(e.target.value) })}
+                                  className="flex-1 accent-accent cursor-pointer h-1.5 bg-zinc-900 border border-zinc-800 rounded-none appearance-none"
+                                />
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0.0"
+                                  max="1.0"
+                                  value={engineSettings?.pmMaxWickRatio ?? 0.5}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    if (!isNaN(val)) updateEngineSettings && updateEngineSettings({ pmMaxWickRatio: val });
+                                  }}
+                                  className="bg-zinc-950 border-2 border-zinc-800 focus:border-accent focus:outline-none px-2 py-1 text-[10px] font-mono text-center text-foreground font-bold rounded-none w-16 shadow-none transition-colors"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Max Retracement Limit Slider & Input */}
+                            <div className="flex flex-col gap-2 col-span-2">
+                              <div className="flex justify-between items-center">
+                                <label className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-muted font-sans">
+                                  Max Retracement Limit (Phase 3 Confirm Rule)
+                                </label>
+                                <span className="text-[10px] font-mono font-bold text-accent">
+                                  {(engineSettings?.pmMaxRetracementLimit ?? 0.7).toFixed(2)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="range"
+                                  min="0.1"
+                                  max="1.0"
+                                  step="0.05"
+                                  value={engineSettings?.pmMaxRetracementLimit ?? 0.7}
+                                  onChange={(e) => updateEngineSettings && updateEngineSettings({ pmMaxRetracementLimit: parseFloat(e.target.value) })}
+                                  className="flex-1 accent-accent cursor-pointer h-1.5 bg-zinc-900 border border-zinc-800 rounded-none appearance-none"
+                                />
+                                <input
+                                  type="number"
+                                  step="0.05"
+                                  min="0.0"
+                                  max="2.0"
+                                  value={engineSettings?.pmMaxRetracementLimit ?? 0.7}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    if (!isNaN(val)) updateEngineSettings && updateEngineSettings({ pmMaxRetracementLimit: val });
+                                  }}
+                                  className="bg-zinc-950 border-2 border-zinc-800 focus:border-accent focus:outline-none px-2 py-1 text-[10px] font-mono text-center text-foreground font-bold rounded-none w-16 shadow-none transition-colors"
+                                />
+                              </div>
+                            </div>
+
+                            {/* Sweep Lookback Slider & Input */}
+                            <div className="flex flex-col gap-2 col-span-2">
+                              <div className="flex justify-between items-center">
+                                <label className="text-[8.5px] font-bold uppercase tracking-[0.1em] text-muted font-sans">
+                                  Sweep Lookback (Candles Before Signal)
+                                </label>
+                                <span className="text-[10px] font-mono font-bold text-accent">
+                                  {engineSettings?.pmSweepLookback ?? 5}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="range"
+                                  min="2"
+                                  max="15"
+                                  step="1"
+                                  value={engineSettings?.pmSweepLookback ?? 5}
+                                  onChange={(e) => updateEngineSettings && updateEngineSettings({ pmSweepLookback: parseInt(e.target.value, 10) })}
+                                  className="flex-1 accent-accent cursor-pointer h-1.5 bg-zinc-900 border border-zinc-800 rounded-none appearance-none"
+                                />
+                                <input
+                                  type="number"
+                                  step="1"
+                                  min="1"
+                                  max="30"
+                                  value={engineSettings?.pmSweepLookback ?? 5}
+                                  onChange={(e) => {
+                                    const val = parseInt(e.target.value, 10);
+                                    if (!isNaN(val)) updateEngineSettings && updateEngineSettings({ pmSweepLookback: val });
+                                  }}
+                                  className="bg-zinc-950 border-2 border-zinc-800 focus:border-accent focus:outline-none px-2 py-1 text-[10px] font-mono text-center text-foreground font-bold rounded-none w-16 shadow-none transition-colors"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
                 </div>
               </div>
             )}

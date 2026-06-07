@@ -328,7 +328,7 @@ aside .text-muted, aside .text-slate-500, aside .text-zinc-500, aside .text-slat
 aside .text-foreground, aside .text-zinc-100, aside .text-slate-200 {
   color: var(--text-sidebar-value) !important;
 }
-aside .text-\[8px\], aside .text-\[9px\], aside .text-[10px], aside .text-zinc-500.block {
+aside .text-\[8px\], aside .text-\[9px\], aside .text-\[10px\], aside .text-zinc-500.block {
   color: var(--text-sidebar-notes) !important;
 }
 

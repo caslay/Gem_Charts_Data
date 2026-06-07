@@ -24,6 +24,8 @@ export interface RenderContext {
   structureState?: any;
   /** The stable lookback context anchor timestamp */
   contextAnchorTimestamp?: number | null;
+  /** The global engine core configuration settings */
+  engineSettings?: any;
 }
 
 export interface ChartLayer {

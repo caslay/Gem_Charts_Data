@@ -1,7 +1,7 @@
 # 📊 SYSTEM DOCUMENTATION: Volumetric Sponsorship
 
-> **Version:** V11.0 · **Engine:** Flow-State Quant Engine  
-> **Last Updated:** 2026-06-03  
+> **Version:** V11.1 · **Engine:** Flow-State Quant Engine  
+> **Last Updated:** 2026-06-06  
 > **Canonical Source Files:**  
 > [`displacementEngine.ts`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/lib/displacementEngine.ts) · [`generateChartMarkers.ts`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/utils/generateChartMarkers.ts) · [`displacementLayer.ts`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/lib/chartLayers/plugins/displacementLayer.ts) · [`api/index.py`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/api/index.py)
 
@@ -207,6 +207,7 @@ interface MarkerCandle {
   l: number;  // Low
   c: number;  // Close
   v: number;  // Total volume
+  volumetric_signal?: 'ARROW_UP' | 'ARROW_DOWN' | 'CIRCLE_UP' | 'CIRCLE_DOWN' | null; // Pre-calculated signal
 }
 
 interface MarkerColors {
@@ -215,6 +216,10 @@ interface MarkerColors {
   bearishSweepColor: string;    // Bearish circle color
 }
 ```
+
+> [!NOTE]
+> The `volumetric_signal` key is pre-calculated on the backend API handler (`/api/market-data`) and within the Backtest Replay day-loader (`useBacktestEngine.ts`) via the generic annotator `annotateCandlesWithVolumetricSignals()`. This allows downstream consumers (like backtest snapshot exports and external scripts) to read the active marker state directly from the candle JSON without repeating the sliding-window geometry math.
+
 
 ### 4.2 The 4-Gate Classification Pipeline
 

@@ -16,6 +16,7 @@ import { verifyDisplacementOffline } from '@/lib/displacementEngine';
 import { generateTradeExecutionParameters } from '@/lib/riskEngine';
 import { analyzeMarketStructure } from '@/lib/structureEngine';
 import { resolveTripleVectorBias } from '@/lib/quantEngine/BiasEngine';
+import { annotateCandlesWithVolumetricSignals } from '@/utils/generateChartMarkers';
 
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -29,6 +30,7 @@ export interface BtCandle {
   v: number;
   taker_buy_vol: number;
   taker_sell_vol: number;
+  volumetric_signal?: 'ARROW_UP' | 'ARROW_DOWN' | 'CIRCLE_UP' | 'CIRCLE_DOWN' | null;
 }
 
 export interface BtMasterArrays {
@@ -549,6 +551,11 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
         fetchLookbackKlines('15m', startMs, endMs),
         fetchLookbackKlines('5m', startMs, endMs),
       ]);
+
+      // Annotate raw arrays with volumetric signals before initializing masterArrays
+      annotateCandlesWithVolumetricSignals(raw1h);
+      annotateCandlesWithVolumetricSignals(raw15m);
+      annotateCandlesWithVolumetricSignals(raw5m);
 
       const arrays: BtMasterArrays = {
         candles_1h: raw1h,

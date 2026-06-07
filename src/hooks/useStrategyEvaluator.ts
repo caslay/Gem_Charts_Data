@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useMarketDataContext } from '@/context/MarketDataContext';
-import type { MarketDataPayload } from '@/hooks/useMarketData';
+import type { MarketDataPayload, Candle } from '@/hooks/useMarketData';
 import type { LiveCandle } from '@/hooks/useBinanceWS';
 import type { MetricKey, OperatorKey, TemporalMode, CustomStrategy, StrategyCondition } from '@/components/modals/EquationBuilder';
+import { annotateCandlesWithVolumetricSignals, checkPerfectMovementSetup, PerfectMovementSettings } from '@/utils/generateChartMarkers';
 
 // ─── Metric Evaluation Engine ─────────────────────────────────────────────────
 
@@ -452,12 +453,25 @@ function evaluateCondition(
  * - Pure INSTANT strategies can fire mid-candle.
  * - ALL conditions must be TRUE simultaneously.
  */
+
+
+/**
+ * Evaluates all conditions for a strategy, respecting temporal modes.
+ *
+ * TEMPORAL RULES:
+ * - If ANY condition has temporal === 'ON_CLOSE', the entire strategy can ONLY
+ *   trigger when a candle close event occurs (liveCandle.isClosed === true).
+ * - Pure INSTANT strategies can fire mid-candle.
+ * - ALL conditions must be TRUE simultaneously.
+ */
 function evaluateStrategy(
   strategy: CustomStrategy,
   data: MarketDataPayload | null,
   livePrice: number | null,
   liveCandle: LiveCandle | null,
-  aiBias: number | null
+  aiBias: number | null,
+  activeInterval: string = '5m',
+  structureState?: any
 ): boolean {
   const conditions = Array.isArray(strategy.conditions)
     ? strategy.conditions
@@ -483,6 +497,47 @@ function evaluateStrategy(
       if (tStat < 1.65 || pVal >= 0.15) {
         return false; // Vetoed!
       }
+    }
+  }
+
+  // ── Perfect Movement setup gate check ──
+  if (isObj && strategy.conditions.perfect_movement_filter) {
+    const tf = strategy.conditions.target_timeframe || activeInterval || '5m';
+    const tfKey = `candles_${tf === 'ANY' ? '5m' : tf}`;
+    const rawCandles = data?.data_payload?.[tfKey] || [];
+    
+    if (rawCandles.length < 20) {
+      return false; // Not enough history
+    }
+
+    // Clone and annotate candles with volumetric signals
+    const clonedCandles = rawCandles.map((c: any) => ({ ...c }));
+    annotateCandlesWithVolumetricSignals(clonedCandles);
+
+    // Find last fully closed candle index
+    let lastClosedIdx = -1;
+    for (let i = clonedCandles.length - 1; i >= 0; i--) {
+      if (clonedCandles[i].isClosed === true) {
+        lastClosedIdx = i;
+        break;
+      }
+    }
+
+    if (lastClosedIdx < 5) return false;
+
+    const pmSettings: PerfectMovementSettings = {
+      pmAtrMultiplier: strategy.conditions.pm_atr_multiplier,
+      pmVolumeSmaPeriod: strategy.conditions.pm_volume_sma_period,
+      pmMinBodyRatio: strategy.conditions.pm_min_body_ratio,
+      pmMaxWickRatio: strategy.conditions.pm_max_wick_ratio,
+      pmMaxRetracementLimit: strategy.conditions.pm_max_retracement_limit,
+      pmSweepLookback: strategy.conditions.pm_sweep_lookback,
+      direction: strategy.conditions.direction || 'LONG',
+    };
+
+    const isPmValid = checkPerfectMovementSetup(clonedCandles, data, pmSettings, lastClosedIdx - 1, structureState);
+    if (!isPmValid) {
+      return false; // Perfect Movement Setup filter failed!
     }
   }
 
@@ -633,6 +688,10 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
     const hasOpenShort = trades.some(t => t.status === 'OPEN' && t.direction === 'SHORT');
     const hasOpenLong = trades.some(t => t.status === 'OPEN' && t.direction === 'LONG');
 
+    const structureState = isBacktest
+      ? data?.ipda_metrics?.full_structure_map
+      : context.structureState;
+
     for (const strategy of strategies) {
       const conditions = Array.isArray(strategy.conditions)
         ? strategy.conditions
@@ -675,14 +734,14 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
         backtestPrice = direction === 'SHORT' ? liveCandle.high : liveCandle.low;
       }
 
-      const isMatch = evaluateStrategy(strategy, data, backtestPrice, liveCandle, aiBias);
+      const isMatch = evaluateStrategy(strategy, data, backtestPrice, liveCandle, aiBias, activeInterval, structureState);
 
       if (!isMatch) continue;
 
       const temporalMode = settings.temporal_mode || 'INSTANT';
 
       // Determine debounce lock key based on close-gated logic
-      const hasOnClose = temporalMode === 'ON_CLOSE' || conditions.some((c: any) => c.temporal === 'ON_CLOSE');
+      const hasOnClose = temporalMode === 'ON_CLOSE' || settings.perfect_movement_filter || conditions.some((c: any) => c.temporal === 'ON_CLOSE');
       const candleKey = hasOnClose
         ? (liveCandle ? Number(liveCandle.time) : Math.floor(Date.now() / 5000))
         : Math.floor(Date.now() / 1000);
