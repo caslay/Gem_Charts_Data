@@ -1295,6 +1295,9 @@ export default function SettingsPage() {
                           <ColorPickerItem label="Buy-Side Liquidity (BSL)" value={themeSettings.dark_chart_magnet_bsl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_magnet_bsl: val }))} />
                           <ColorPickerItem label="Sell-Side Liquidity (SSL)" value={themeSettings.dark_chart_magnet_ssl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_magnet_ssl: val }))} />
                           <ColorPickerItem label="Strong Volumetric Arrow" value={themeSettings.dark_chart_volumetric_strong_arrow} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_volumetric_strong_arrow: val }))} />
+                          <ColorPickerItem label="Manual Entry Line" value={themeSettings.theme_manual_entry_line} onChange={(val) => setThemeSettings((s: any) => ({ ...s, theme_manual_entry_line: val }))} />
+                          <ColorPickerItem label="Manual Take Profit Line" value={themeSettings.theme_manual_tp_line} onChange={(val) => setThemeSettings((s: any) => ({ ...s, theme_manual_tp_line: val }))} />
+                          <ColorPickerItem label="Manual Stop Loss Line" value={themeSettings.theme_manual_sl_line} onChange={(val) => setThemeSettings((s: any) => ({ ...s, theme_manual_sl_line: val }))} />
                           
                           {/* ATR Multiplier Volatility Gating Input */}
                           <div className="flex items-center justify-between py-2 border-b border-card-border/30 px-1 font-sans">
@@ -1572,6 +1575,9 @@ export default function SettingsPage() {
                           <ColorPickerItem label="Buy-Side Liquidity (BSL)" value={themeSettings.light_chart_magnet_bsl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_magnet_bsl: val }))} />
                           <ColorPickerItem label="Sell-Side Liquidity (SSL)" value={themeSettings.light_chart_magnet_ssl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_magnet_ssl: val }))} />
                           <ColorPickerItem label="Strong Volumetric Arrow" value={themeSettings.light_chart_volumetric_strong_arrow} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_volumetric_strong_arrow: val }))} />
+                          <ColorPickerItem label="Manual Entry Line" value={themeSettings.theme_manual_entry_line} onChange={(val) => setThemeSettings((s: any) => ({ ...s, theme_manual_entry_line: val }))} />
+                          <ColorPickerItem label="Manual Take Profit Line" value={themeSettings.theme_manual_tp_line} onChange={(val) => setThemeSettings((s: any) => ({ ...s, theme_manual_tp_line: val }))} />
+                          <ColorPickerItem label="Manual Stop Loss Line" value={themeSettings.theme_manual_sl_line} onChange={(val) => setThemeSettings((s: any) => ({ ...s, theme_manual_sl_line: val }))} />
                         </div>
                       </details>
 

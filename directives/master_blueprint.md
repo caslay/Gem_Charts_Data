@@ -2,9 +2,69 @@
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-06-07 (V12.0.11 — Volumetric Markers Live Rendering Fix)  
+> **Last Updated:** 2026-06-09 (V12.0.15 — Active Trade Closure Cleanup & Replay Auto-Closure)  
 > **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
-> **Source Files Analyzed:** 65+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+> **Source Files Analyzed:** 66+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+
+## 🆕 V12.0.15 Changelog — Active Trade Closure Cleanup & Replay Auto-Closure (Completed)
+
+### 1. Journal Action Event Propagation (`src/components/JournalTable.tsx`)
+- Configured manual trade toggles, closures, and hard deletions (`handleToggleStatus`, `handleClosePosition`, and `handleDeleteTrade`) to dispatch appropriate window events (`trades-refresh` or `backtest-trades-refresh` based on `isBacktest` context).
+- This ensures parent dashboard page states (`openTrades` / `backtestTrades`) immediately fetch the latest ledger, updating the chart and removing closed trade entries.
+
+### 2. Replay Auto-Closure Engine (`src/app/backtest/page.tsx`)
+- Developed a client-side execution monitoring loop (`useEffect` dependency on step advancing / candle updates) to check active `OPEN` backtest positions against replayed candle highs/lows.
+- Automatically executes and closes positions when price wicks breach target Stop Loss or Take Profit levels, submitting PATCH updates to `/api/backtest-trades` and dispatching the refresh event to wipe associated visual chart lines immediately.
+
+## 🆕 V12.0.14 Changelog — Draggable Active Trade SL/TP Modifiers (Completed)
+
+### 1. Active Trade Price Lines sync (`src/components/Chart.tsx`)
+- Rendered price lines for all open trades dynamically on the chart (Dotted entry line in grey, dashed take-profit line in green, dashed stop-loss line in red).
+- Configured drag pointer listeners to allow vertical adjustments of active TP and SL lines.
+- Updated the dragging coordinate move handler to slide the target lines smoothly in real-time, providing immediate visual feedback before committing updates to the backend.
+
+### 2. Trade Levels Modification API Endpoint (`src/app/api/trades/route.ts` & `src/app/api/backtest-trades/route.ts`)
+- Augmented the `PATCH` handlers and in-memory fallbacks of both paper trades and backtest trades routes to accept optional updates of `take_profit` and `stop_loss` levels without requiring a status change.
+
+### 3. Parent Propagation Linkage (`src/app/page.tsx` & `src/app/backtest/page.tsx`)
+- Sourced and tracked active open trades lists, piping them down to `<Chart>`.
+- Bound callback update handlers (`handleUpdateTradeLevels` and `handleUpdateBacktestTradeLevels`) to dispatch PATCH requests to the respective trade APIs on drag release, triggering state/ledger refreshes.
+
+## 🆕 V12.0.13 Changelog — Interactive Price Inputs & Keyboard Hotkey (Completed)
+
+### 1. Interactive Coordinates Inputs (`src/components/ManualOrderPanel.tsx`)
+- Converted the static coordinates price displays (Entry, TP, SL) into Brutalist-styled numeric input fields (using `type="number"` and `step="0.05"`).
+- Enabled full dynamic two-way data-binding, allowing users to type precise prices or adjust them manually, with `entryPrice` inputs automatically disabled when `MARKET` type is active.
+
+### 2. Global Hotkey Toggle (`src/app/page.tsx` & `src/app/backtest/page.tsx`)
+- Assigned the key `t` / `T` (Trading) to globally toggle manual trading mode on and off in both live and replay contexts.
+- Wrapped key handling inside input typing guards (`document.activeElement` check) to prevent toggles and step-advances when a user is typing coordinates or other input fields.
+
+## 🆕 V12.0.12 Changelog — Interactive Manual/Paper Trading Order Entry Layer (Completed)
+
+### 1. Appearance Customization & Theme Sync
+- **Parameters:** Added three settings variables (`theme_manual_entry_line`, `theme_manual_tp_line`, `theme_manual_sl_line`) representing colors of active entry reference, target/take-profit, and stop-loss lines.
+- **Theme Sync (`src/components/ThemeSync.tsx`):** Injected these customization parameters into dynamic style tags as CSS variables (`--manual-entry-line`, `--manual-tp-line`, `--manual-sl-line`).
+- **Settings Studio (`src/app/settings/page.tsx`):** Implemented ColorPickerItem inputs under Section 3 (Midnight & Daylight modes) mapping directly to the DB key-value format in `system_settings` table.
+
+### 2. Floating Brutalist HUD Panel (`src/components/ManualOrderPanel.tsx`)
+- Designed a glassmorphic floating order customization and metrics widget featuring:
+  - Toggle selectors for Order Types (`MARKET`, `LIMIT`, `STOP`) and Order Directions (`LONG`, `SHORT`).
+  - Risk allocation selector (adjacent constraints from 0.1% to 100%) with quick 0.5%, 1.0%, 2.5% presets.
+  - Live calculations of Position Size, Risk-to-Reward Ratio (RR), and Capital Exposure.
+  - Active visual warnings (amber alert box) if calculated metrics breach the efficiency floor ($RR < 2.0$).
+  - Confirm Execution submittal button with loading states.
+
+### 3. Interactive Chart Drag & Drop Mechanics (`src/components/Chart.tsx`)
+- Placed 3 price reference lines corresponding to the order settings.
+- Locked the entry line to follow ticking mark prices when `MARKET` type is active.
+- Configured dragging listeners (`onPointerDown`, `onPointerMove`, `onPointerUp`) to dynamically capture Y-coordinates, convert them to asset prices snapped to `0.05` tick offsets, and bubble the updates up to parent components.
+- Temporarily disabled page scrolling and chart scaling during pointer drags to maintain focus.
+
+### 4. Dual-Mode Execution & Trade Journal Linkage (`src/app/page.tsx` & `src/app/backtest/page.tsx`)
+- **Live Mode:** Dispatches `MARKET` orders instantly to `/api/trades`, and holds resting orders in client memory to match against ticking prices before triggering executions.
+- **Replay Mode:** Symmetrically queues resting orders inside localized mock memory, executing them candle-by-candle against the high/low bounds of replay candles. Successful executions post to `/api/backtest-trades` to populate the ledger.
+- **POST API Adapters (`src/app/api/trades/route.ts` & `src/app/api/backtest-trades/route.ts`):** Enriched parameters checking to allow manual overrides of `stop_loss` and bypass automated risk-gating controls when explicit bounds are supplied.
 
 ## 🆕 V12.0.11 Changelog — Volumetric Markers Live Rendering Fix (Completed)
 

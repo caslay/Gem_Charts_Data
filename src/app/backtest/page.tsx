@@ -16,12 +16,13 @@ import {
   ChevronLeft, ChevronRight, Eye, Download, Copy,
   Calendar, Clock, BarChart2, Loader2, AlertTriangle,
   ArrowLeft, Zap, CheckCheck, Brain, TrendingUp, Percent, AlertCircle,
-  Settings, Activity
+  Settings, Activity, Shield
 } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
 import SettingsModal from '@/components/modals/SettingsModal';
 import BacktestSidebar from './BacktestSidebar';
+import ManualOrderPanel from '@/components/ManualOrderPanel';
 
 
 // ─── Stat badge ──────────────────────────────────────────────────────────────
@@ -95,6 +96,17 @@ export default function BacktestPage() {
   const [backtestAccount, setBacktestAccount] = useState<any>(null);
   const [isLoadingTrades, setIsLoadingTrades] = useState(true);
 
+  // ── Manual Trading States ──────────────────────────────────────────────────
+  const [isManualTradingActive, setIsManualTradingActive] = useState(false);
+  const [manualOrderType, setManualOrderType] = useState<'MARKET' | 'LIMIT' | 'STOP'>('MARKET');
+  const [manualDirection, setManualDirection] = useState<'LONG' | 'SHORT'>('LONG');
+  const [manualRiskPct, setManualRiskPct] = useState(1.0);
+  const [manualEntryPrice, setManualEntryPrice] = useState<number | null>(null);
+  const [manualTakeProfit, setManualTakeProfit] = useState<number | null>(null);
+  const [manualStopLoss, setManualStopLoss] = useState<number | null>(null);
+  const [backtestPendingOrders, setBacktestPendingOrders] = useState<any[]>([]);
+  const [isSubmittingManual, setIsSubmittingManual] = useState(false);
+
   const fetchBacktestTrades = useCallback(async () => {
     try {
       const res = await fetch('/api/backtest-trades');
@@ -143,6 +155,247 @@ export default function BacktestPage() {
       isClosed: true,
     }
     : null;
+
+  // ── Manual Trading Hook Effects & Submission Handler ───────────────────────
+  // Initialize manual prices
+  useEffect(() => {
+    if (isManualTradingActive) {
+      const currentEntry = lastPrice || (engine.visibleArrays ? (activeTimeframe === '1h' ? engine.visibleArrays.candles_1h : activeTimeframe === '15m' ? engine.visibleArrays.candles_15m : engine.visibleArrays.candles_5m) : []).slice(-1)[0]?.c || 0;
+      setManualEntryPrice((prev) => (prev === null || manualOrderType === 'MARKET') ? currentEntry : prev);
+      
+      setManualTakeProfit((prev) => {
+        if (prev !== null) return prev;
+        return manualDirection === 'LONG' ? currentEntry * 1.02 : currentEntry * 0.98;
+      });
+      setManualStopLoss((prev) => {
+        if (prev !== null) return prev;
+        return manualDirection === 'LONG' ? currentEntry * 0.99 : currentEntry * 1.01;
+      });
+    } else {
+      setManualEntryPrice(null);
+      setManualTakeProfit(null);
+      setManualStopLoss(null);
+    }
+  }, [isManualTradingActive, manualDirection]);
+
+  // Lock entry price to last price if MARKET is active
+  useEffect(() => {
+    if (isManualTradingActive && manualOrderType === 'MARKET' && lastPrice) {
+      setManualEntryPrice(lastPrice);
+    }
+  }, [isManualTradingActive, manualOrderType, lastPrice]);
+
+  // Backtest pending resting orders execution logic
+  useEffect(() => {
+    if (backtestPendingOrders.length === 0) return;
+    if (!lastCandle) return;
+
+    const triggered = backtestPendingOrders.filter((order) => {
+      if (order.orderType === 'LIMIT') {
+        return order.direction === 'LONG' 
+          ? lastCandle.l <= order.entryPrice 
+          : lastCandle.h >= order.entryPrice;
+      } else { // STOP order
+        return order.direction === 'LONG' 
+          ? lastCandle.h >= order.entryPrice 
+          : lastCandle.l <= order.entryPrice;
+      }
+    });
+
+    if (triggered.length === 0) return;
+
+    triggered.forEach(async (order) => {
+      try {
+        const res = await fetch('/api/backtest-trades', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            symbol: 'ETHUSDC',
+            direction: order.direction,
+            entry_price: order.entryPrice,
+            stop_loss: order.stopLoss,
+            take_profit: order.takeProfit,
+            risk_percent: order.riskPct,
+            strategy_name: `Manual Replay ${order.orderType} Order`,
+            current_price: order.entryPrice,
+            ipda_metrics: engine.enrichedPayload,
+          }),
+        });
+
+        if (res.ok) {
+          if (typeof window !== 'undefined') {
+            const audio = new Audio('/sounds/flow_state.wav');
+            audio.play().catch(() => {});
+          }
+          window.dispatchEvent(new Event('backtest-trades-refresh'));
+          fetchBacktestTrades();
+        } else {
+          console.error('[Manual Trading] Failed to execute pending backtest order:', res.statusText);
+        }
+      } catch (e) {
+        console.error('[Manual Trading] Error executing pending backtest order:', e);
+      }
+    });
+
+    // Remove the triggered orders from the pending list
+    setBacktestPendingOrders((prev) => 
+      prev.filter((order) => !triggered.some((t) => t.id === order.id))
+    );
+  }, [engine.currentIndex, backtestPendingOrders, lastCandle]);
+
+  // Backtest active open trades SL/TP hit logic (Replay Auto-Closure)
+  useEffect(() => {
+    const openTrades = backtestTrades.filter((t) => t.status === 'OPEN');
+    if (openTrades.length === 0) return;
+    if (!lastCandle) return;
+
+    openTrades.forEach(async (trade) => {
+      const entryPrice = parseFloat(String(trade.entry_price));
+      const stopLoss = parseFloat(String(trade.stop_loss));
+      const takeProfit = parseFloat(String(trade.take_profit));
+      const direction = trade.direction;
+
+      let isBreached = false;
+      let exitPrice = entryPrice;
+
+      if (direction === 'LONG') {
+        if (lastCandle.l <= stopLoss) {
+          isBreached = true;
+          exitPrice = stopLoss;
+        } else if (lastCandle.h >= takeProfit) {
+          isBreached = true;
+          exitPrice = takeProfit;
+        }
+      } else if (direction === 'SHORT') {
+        if (lastCandle.h >= stopLoss) {
+          isBreached = true;
+          exitPrice = stopLoss;
+        } else if (lastCandle.l <= takeProfit) {
+          isBreached = true;
+          exitPrice = takeProfit;
+        }
+      }
+
+      if (isBreached) {
+        try {
+          const res = await fetch('/api/backtest-trades', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              trade_id: trade.id,
+              status: 'CLOSED',
+              exit_price: exitPrice,
+            }),
+          });
+
+          if (res.ok) {
+            if (typeof window !== 'undefined') {
+              const isProfit = direction === 'LONG' ? exitPrice >= entryPrice : exitPrice <= entryPrice;
+              const audio = new Audio(isProfit ? '/sounds/pricing_shift.wav' : '/sounds/dead_zone.wav');
+              audio.play().catch(() => {});
+            }
+            window.dispatchEvent(new Event('backtest-trades-refresh'));
+            fetchBacktestTrades();
+          } else {
+            console.error('[Manual Trading] Failed to auto-close backtest trade:', res.statusText);
+          }
+        } catch (e) {
+          console.error('[Manual Trading] Error auto-closing backtest trade:', e);
+        }
+      }
+    });
+  }, [engine.currentIndex, backtestTrades, lastCandle, fetchBacktestTrades]);
+
+  const handleSubmitManualOrder = async () => {
+    if (manualEntryPrice === null || manualStopLoss === null || manualTakeProfit === null) return;
+
+    if (manualOrderType === 'MARKET') {
+      setIsSubmittingManual(true);
+      try {
+        const res = await fetch('/api/backtest-trades', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            symbol: 'ETHUSDC',
+            direction: manualDirection,
+            entry_price: manualEntryPrice,
+            stop_loss: manualStopLoss,
+            take_profit: manualTakeProfit,
+            risk_percent: manualRiskPct,
+            strategy_name: 'Manual Replay Market Order',
+            current_price: manualEntryPrice,
+            ipda_metrics: engine.enrichedPayload,
+          }),
+        });
+
+        if (res.ok) {
+          if (typeof window !== 'undefined') {
+            const audio = new Audio('/sounds/flow_state.wav');
+            audio.play().catch(() => {});
+          }
+          window.dispatchEvent(new Event('backtest-trades-refresh'));
+          fetchBacktestTrades();
+          setIsManualTradingActive(false);
+        } else {
+          const json = await res.json();
+          alert(`Order execution failed: ${json.error}`);
+        }
+      } catch (e) {
+        console.error('[Manual Trading] Submit error:', e);
+        alert('Failed to send order.');
+      } finally {
+        setIsSubmittingManual(false);
+      }
+    } else {
+      const newPending = {
+        id: `pending-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        orderType: manualOrderType,
+        direction: manualDirection,
+        entryPrice: manualEntryPrice,
+        takeProfit: manualTakeProfit,
+        stopLoss: manualStopLoss,
+        riskPct: manualRiskPct,
+      };
+
+      setBacktestPendingOrders((prev) => [...prev, newPending]);
+
+      if (typeof window !== 'undefined') {
+        const audio = new Audio('/sounds/pricing_shift.wav');
+        audio.play().catch(() => {});
+        alert(`[${manualOrderType} PLACED] ${manualDirection} order at $${manualEntryPrice.toFixed(2)} is now queued in local backtest memory.`);
+      }
+
+      setIsManualTradingActive(false);
+    }
+  };
+
+  const handleUpdateBacktestTradeLevels = async (tradeId: string, tp: number | null, sl: number | null) => {
+    try {
+      const res = await fetch('/api/backtest-trades', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trade_id: tradeId,
+          take_profit: tp,
+          stop_loss: sl,
+        }),
+      });
+
+      if (res.ok) {
+        if (typeof window !== 'undefined') {
+          const audio = new Audio('/sounds/pricing_shift.wav');
+          audio.play().catch(() => {});
+        }
+        window.dispatchEvent(new Event('backtest-trades-refresh'));
+        fetchBacktestTrades();
+      } else {
+        const json = await res.json();
+        console.error('[Manual Trading] Failed to update backtest trade levels:', json.error);
+      }
+    } catch (e) {
+      console.error('[Manual Trading] Error updating backtest trade levels:', e);
+    }
+  };
 
   // ── Parse AI analysis response for the HUD Bar ──────────────────────────────
   let parsedAiResponse: any = null;
@@ -216,6 +469,21 @@ export default function BacktestPage() {
 
   // keyboard shortcuts
   const handleKey = useCallback((e: KeyboardEvent) => {
+    const activeEl = document.activeElement;
+    if (
+      activeEl &&
+      (activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.getAttribute('contenteditable') === 'true')
+    ) {
+      return; // Ignore key bindings if user is typing
+    }
+
+    if (e.key === 't' || e.key === 'T') {
+      setIsManualTradingActive((prev) => !prev);
+      return;
+    }
+
     if (engine.status !== 'ready') return;
     if (e.key === 'ArrowRight') engine.nextCandle();
     if (e.key === 'ArrowLeft') engine.prevCandle();
@@ -299,6 +567,19 @@ export default function BacktestPage() {
           >
             <Settings className="w-3.5 h-3.5 text-accent" />
             <span className="hidden sm:inline">[ COMMAND CENTER ]</span>
+          </button>
+
+          {/* Manual Trading Toggle */}
+          <button
+            onClick={() => setIsManualTradingActive((prev) => !prev)}
+            className={`border px-3.5 py-2 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm ${
+              isManualTradingActive
+                ? 'bg-accent text-accent-foreground border-accent shadow-[0_0_12px_rgba(168,85,247,0.2)]'
+                : 'bg-card border-card-border text-slate-500 dark:text-zinc-400 hover:text-foreground hover:border-accent'
+            }`}
+          >
+            <Shield size={12} className={isManualTradingActive ? 'animate-pulse' : ''} />
+            <span>[ MANUAL TRADING ]</span>
           </button>
 
           {/* Timeframe dropdown */}
@@ -596,6 +877,19 @@ export default function BacktestPage() {
                       livePrice={lastPrice}
                       interval={activeTimeframe as any}
                       triggerSmartAlert={triggerSmartAlert}
+                      isManualTradingActive={isManualTradingActive}
+                      manualOrderType={manualOrderType}
+                      manualDirection={manualDirection}
+                      manualEntryPrice={manualEntryPrice}
+                      manualTakeProfit={manualTakeProfit}
+                      manualStopLoss={manualStopLoss}
+                      onManualPricesChange={(entry, tp, sl) => {
+                        setManualEntryPrice(entry);
+                        setManualTakeProfit(tp);
+                        setManualStopLoss(sl);
+                      }}
+                      openTrades={backtestTrades.filter((t) => t.status === 'OPEN')}
+                      onUpdateTradeLevels={handleUpdateBacktestTradeLevels}
                     />
                   )
                   : (
@@ -604,6 +898,26 @@ export default function BacktestPage() {
                     </div>
                   )
                 }
+                {isManualTradingActive && (
+                  <ManualOrderPanel
+                    onClose={() => setIsManualTradingActive(false)}
+                    orderType={manualOrderType}
+                    setOrderType={setManualOrderType}
+                    direction={manualDirection}
+                    setDirection={setManualDirection}
+                    riskPct={manualRiskPct}
+                    setRiskPct={setManualRiskPct}
+                    entryPrice={manualEntryPrice}
+                    setEntryPrice={setManualEntryPrice}
+                    takeProfit={manualTakeProfit}
+                    setTakeProfit={setManualTakeProfit}
+                    stopLoss={manualStopLoss}
+                    setStopLoss={setManualStopLoss}
+                    balance={backtestAccount ? parseFloat(String(backtestAccount.current_balance)) : 10000}
+                    onSubmit={handleSubmitManualOrder}
+                    isSubmitting={isSubmittingManual}
+                  />
+                )}
 
                 {/* Sleek Floating Glass Replay Controls (Centered Bottom Overlay) */}
                 {engine.status === 'ready' && (

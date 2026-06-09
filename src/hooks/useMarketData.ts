@@ -175,6 +175,9 @@ export interface ThemeSettings {
   light_text_sidebar_value: string;
   light_text_sidebar_notes: string;
   structure_istr_atr_multiplier: string;
+  theme_manual_entry_line: string;
+  theme_manual_tp_line: string;
+  theme_manual_sl_line: string;
 }
 
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
@@ -296,6 +299,9 @@ export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   light_text_sidebar_value: '#334155',
   light_text_sidebar_notes: '#94a3b8',
   structure_istr_atr_multiplier: '1.5',
+  theme_manual_entry_line: '#eab308',
+  theme_manual_tp_line: '#10b981',
+  theme_manual_sl_line: '#ef4444',
 };
 
 export interface EngineSettings {

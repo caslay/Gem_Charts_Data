@@ -78,6 +78,11 @@ export default function ThemeSync() {
           --text-sidebar-label: ${themeSettings.light_text_sidebar_label} !important;
           --text-sidebar-value: ${themeSettings.light_text_sidebar_value} !important;
           --text-sidebar-notes: ${themeSettings.light_text_sidebar_notes} !important;
+
+          /* Manual Trading Entry Lines */
+          --manual-entry-line: ${themeSettings.theme_manual_entry_line} !important;
+          --manual-tp-line: ${themeSettings.theme_manual_tp_line} !important;
+          --manual-sl-line: ${themeSettings.theme_manual_sl_line} !important;
         }
         .dark {
           --background: ${themeSettings.dark_bg} !important;
@@ -141,6 +146,11 @@ export default function ThemeSync() {
           --text-sidebar-label: ${themeSettings.dark_text_sidebar_label} !important;
           --text-sidebar-value: ${themeSettings.dark_text_sidebar_value} !important;
           --text-sidebar-notes: ${themeSettings.dark_text_sidebar_notes} !important;
+
+          /* Manual Trading Entry Lines */
+          --manual-entry-line: ${themeSettings.theme_manual_entry_line} !important;
+          --manual-tp-line: ${themeSettings.theme_manual_tp_line} !important;
+          --manual-sl-line: ${themeSettings.theme_manual_sl_line} !important;
         }
       `
     }} />
