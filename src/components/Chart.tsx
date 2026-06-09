@@ -36,6 +36,15 @@ interface ChartProps {
   triggerSmartAlert?: (type: any, message: string, sound?: string) => void;
   loadMoreHistory?: () => Promise<void>;
   isFetchingMore?: boolean;
+  isManualTradingActive?: boolean;
+  manualOrderType?: 'MARKET' | 'LIMIT' | 'STOP';
+  manualDirection?: 'LONG' | 'SHORT';
+  manualEntryPrice?: number | null;
+  manualTakeProfit?: number | null;
+  manualStopLoss?: number | null;
+  onManualPricesChange?: (entry: number, tp: number, sl: number) => void;
+  openTrades?: any[];
+  onUpdateTradeLevels?: (tradeId: string, tp: number | null, sl: number | null) => Promise<void>;
 }
 
 export default function Chart({
@@ -52,6 +61,15 @@ export default function Chart({
   triggerSmartAlert: propsTriggerSmartAlert,
   loadMoreHistory: propsLoadMoreHistory,
   isFetchingMore: propsIsFetchingMore,
+  isManualTradingActive = false,
+  manualOrderType = 'MARKET',
+  manualDirection = 'LONG',
+  manualEntryPrice = null,
+  manualTakeProfit = null,
+  manualStopLoss = null,
+  onManualPricesChange,
+  openTrades = [],
+  onUpdateTradeLevels,
 }: ChartProps) {
   const { theme } = useTheme();
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -62,6 +80,18 @@ export default function Chart({
   const [localCandles, setLocalCandles] = useState<Candle[]>(data);
   const localCandlesRef = useRef(localCandles);
   const dataRef = useRef(data);
+
+  // Manual Trading Price Line Refs
+  const manualEntryLineRef = useRef<any | null>(null);
+  const manualTpLineRef = useRef<any | null>(null);
+  const manualSlLineRef = useRef<any | null>(null);
+  const [activeDragLine, setActiveDragLine] = useState<'entry' | 'tp' | 'sl' | null>(null);
+  const activeDragLineRef = useRef<'entry' | 'tp' | 'sl' | null>(null);
+
+  // Open Trades Price Line Refs mapping tradeId -> { entryLine, tpLine, slLine }
+  const openTradesLinesRef = useRef<Map<string, { entry: any; tp: any; sl: any }>>(new Map());
+  const [activeDragTradeLine, setActiveDragTradeLine] = useState<{ tradeId: string; type: 'tp' | 'sl' } | null>(null);
+  const activeDragTradeLineRef = useRef<{ tradeId: string; type: 'tp' | 'sl' } | null>(null);
 
   // Zustand persistent chart layer store visibility states
   const { visibility } = useLayerStore();
@@ -448,6 +478,7 @@ export default function Chart({
   // ── Event Handlers ────────────────────────────────────────────────────────
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!chartRef.current || !seriesRef.current) return;
+    if (activeDragLineRef.current) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const offsetX = e.clientX - rect.left;
     const offsetY = e.clientY - rect.top;
@@ -547,6 +578,331 @@ export default function Chart({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [clearGhostLine]);
+
+  // ── Sync Manual Trading Lines ──────────────────────────────────────────────
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+
+    // Remove existing lines if they exist
+    if (manualEntryLineRef.current) {
+      series.removePriceLine(manualEntryLineRef.current);
+      manualEntryLineRef.current = null;
+    }
+    if (manualTpLineRef.current) {
+      series.removePriceLine(manualTpLineRef.current);
+      manualTpLineRef.current = null;
+    }
+    if (manualSlLineRef.current) {
+      series.removePriceLine(manualSlLineRef.current);
+      manualSlLineRef.current = null;
+    }
+
+    if (!isManualTradingActive) return;
+
+    const entryColor = themeSettings?.theme_manual_entry_line || '#eab308';
+    const tpColor = themeSettings?.theme_manual_tp_line || '#10b981';
+    const slColor = themeSettings?.theme_manual_sl_line || '#ef4444';
+
+    if (manualEntryPrice !== null && !isNaN(manualEntryPrice)) {
+      manualEntryLineRef.current = series.createPriceLine({
+        price: manualEntryPrice,
+        color: entryColor,
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        axisLabelVisible: true,
+        title: `ENTRY (${manualOrderType})`,
+      });
+    }
+
+    if (manualTakeProfit !== null && !isNaN(manualTakeProfit)) {
+      manualTpLineRef.current = series.createPriceLine({
+        price: manualTakeProfit,
+        color: tpColor,
+        lineWidth: 2,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: 'TAKE PROFIT (TP)',
+      });
+    }
+
+    if (manualStopLoss !== null && !isNaN(manualStopLoss)) {
+      manualSlLineRef.current = series.createPriceLine({
+        price: manualStopLoss,
+        color: slColor,
+        lineWidth: 2,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: 'STOP LOSS (SL)',
+      });
+    }
+
+    return () => {
+      if (seriesRef.current) {
+        if (manualEntryLineRef.current) {
+          seriesRef.current.removePriceLine(manualEntryLineRef.current);
+          manualEntryLineRef.current = null;
+        }
+        if (manualTpLineRef.current) {
+          seriesRef.current.removePriceLine(manualTpLineRef.current);
+          manualTpLineRef.current = null;
+        }
+        if (manualSlLineRef.current) {
+          seriesRef.current.removePriceLine(manualSlLineRef.current);
+          manualSlLineRef.current = null;
+        }
+      }
+    };
+  }, [
+    isManualTradingActive,
+    manualOrderType,
+    manualEntryPrice,
+    manualTakeProfit,
+    manualStopLoss,
+    themeSettings,
+    theme
+  ]);
+
+  // ── Sync Open Trades Price Lines ───────────────────────────────────────────
+  useEffect(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+
+    // Remove all existing open trade lines
+    openTradesLinesRef.current.forEach((lines) => {
+      if (lines.entry) series.removePriceLine(lines.entry);
+      if (lines.tp) series.removePriceLine(lines.tp);
+      if (lines.sl) series.removePriceLine(lines.sl);
+    });
+    openTradesLinesRef.current.clear();
+
+    if (!openTrades || openTrades.length === 0) return;
+
+    const tpColor = themeSettings?.theme_manual_tp_line || '#10b981';
+    const slColor = themeSettings?.theme_manual_sl_line || '#ef4444';
+
+    openTrades.forEach((trade) => {
+      const tradeId = trade.id;
+      const entryPriceVal = parseFloat(String(trade.entry_price));
+      const tpPriceVal = parseFloat(String(trade.take_profit));
+      const slPriceVal = parseFloat(String(trade.stop_loss));
+
+      const entryLine = series.createPriceLine({
+        price: entryPriceVal,
+        color: '#71717a', // Muted zinc-500
+        lineWidth: 1,
+        lineStyle: LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: `OPEN ENTRY (${trade.direction})`,
+      });
+
+      let tpLine = null;
+      if (tpPriceVal > 0 && !isNaN(tpPriceVal)) {
+        tpLine = series.createPriceLine({
+          price: tpPriceVal,
+          color: tpColor,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: `OPEN TP (${trade.direction})`,
+        });
+      }
+
+      let slLine = null;
+      if (slPriceVal > 0 && !isNaN(slPriceVal)) {
+        slLine = series.createPriceLine({
+          price: slPriceVal,
+          color: slColor,
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: `OPEN SL (${trade.direction})`,
+        });
+      }
+
+      openTradesLinesRef.current.set(tradeId, { entry: entryLine, tp: tpLine, sl: slLine });
+    });
+
+    return () => {
+      if (seriesRef.current) {
+        openTradesLinesRef.current.forEach((lines) => {
+          if (lines.entry) seriesRef.current?.removePriceLine(lines.entry);
+          if (lines.tp) seriesRef.current?.removePriceLine(lines.tp);
+          if (lines.sl) seriesRef.current?.removePriceLine(lines.sl);
+        });
+        openTradesLinesRef.current.clear();
+      }
+    };
+  }, [openTrades, themeSettings, theme]);
+
+  // ── Drag & Drop Pointer Event Handlers ─────────────────────────────────────
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!chartRef.current || !seriesRef.current) return;
+    if (e.button !== 0) return; // Only left-click
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pointerY = e.clientY - rect.top;
+    
+    const series = seriesRef.current;
+    
+    const clickThreshold = 12;
+    let target: 'entry' | 'tp' | 'sl' | 'open-tp' | 'open-sl' | null = null;
+    let minDistance = clickThreshold;
+    
+    // 1. Check manual order entry layout lines (if active)
+    if (isManualTradingActive) {
+      const entryY = manualEntryPrice !== null ? series.priceToCoordinate(manualEntryPrice) : null;
+      const tpY = manualTakeProfit !== null ? series.priceToCoordinate(manualTakeProfit) : null;
+      const slY = manualStopLoss !== null ? series.priceToCoordinate(manualStopLoss) : null;
+      
+      if (entryY !== null && manualOrderType !== 'MARKET') {
+        const dist = Math.abs(pointerY - entryY);
+        if (dist < minDistance) {
+          minDistance = dist;
+          target = 'entry';
+        }
+      }
+      if (tpY !== null) {
+        const dist = Math.abs(pointerY - tpY);
+        if (dist < minDistance) {
+          minDistance = dist;
+          target = 'tp';
+        }
+      }
+      if (slY !== null) {
+        const dist = Math.abs(pointerY - slY);
+        if (dist < minDistance) {
+          minDistance = dist;
+          target = 'sl';
+        }
+      }
+    }
+    
+    // 2. Check open trades lines
+    if (openTrades && openTrades.length > 0) {
+      for (const trade of openTrades) {
+        const lines = openTradesLinesRef.current.get(trade.id);
+        if (!lines) continue;
+        
+        const tpPriceVal = parseFloat(trade.take_profit);
+        const slPriceVal = parseFloat(trade.stop_loss);
+        
+        const tpY = lines.tp && tpPriceVal > 0 ? series.priceToCoordinate(tpPriceVal) : null;
+        const slY = lines.sl && slPriceVal > 0 ? series.priceToCoordinate(slPriceVal) : null;
+        
+        if (tpY !== null) {
+          const dist = Math.abs(pointerY - tpY);
+          if (dist < minDistance) {
+            minDistance = dist;
+            target = 'open-tp';
+            activeDragTradeLineRef.current = { tradeId: trade.id, type: 'tp' };
+          }
+        }
+        if (slY !== null) {
+          const dist = Math.abs(pointerY - slY);
+          if (dist < minDistance) {
+            minDistance = dist;
+            target = 'open-sl';
+            activeDragTradeLineRef.current = { tradeId: trade.id, type: 'sl' };
+          }
+        }
+      }
+    }
+    
+    if (target) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      if (target === 'entry' || target === 'tp' || target === 'sl') {
+        activeDragLineRef.current = target;
+        setActiveDragLine(target);
+      } else {
+        setActiveDragTradeLine(activeDragTradeLineRef.current);
+      }
+      
+      chartRef.current.applyOptions({
+        handleScroll: false,
+        handleScale: false,
+      });
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!seriesRef.current) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pointerY = e.clientY - rect.top;
+    const rawPrice = seriesRef.current.coordinateToPrice(pointerY);
+    if (rawPrice === null || isNaN(rawPrice)) return;
+    
+    const snappedPrice = Math.round(rawPrice / 0.05) * 0.05;
+    
+    // A. Handle manual layout lines
+    if (activeDragLineRef.current && onManualPricesChange) {
+      let nextEntry = manualEntryPrice ?? 0;
+      let nextTp = manualTakeProfit ?? 0;
+      let nextSl = manualStopLoss ?? 0;
+      
+      if (activeDragLineRef.current === 'entry' && manualOrderType !== 'MARKET') {
+        nextEntry = snappedPrice;
+      } else if (activeDragLineRef.current === 'tp') {
+        nextTp = snappedPrice;
+      } else if (activeDragLineRef.current === 'sl') {
+        nextSl = snappedPrice;
+      }
+      
+      onManualPricesChange(nextEntry, nextTp, nextSl);
+    }
+    
+    // B. Handle open trades lines (smooth sliding feedback)
+    if (activeDragTradeLineRef.current) {
+      const { tradeId, type } = activeDragTradeLineRef.current;
+      const lines = openTradesLinesRef.current.get(tradeId);
+      if (lines) {
+        const lineToUpdate = type === 'tp' ? lines.tp : lines.sl;
+        if (lineToUpdate) {
+          lineToUpdate.applyOptions({ price: snappedPrice });
+        }
+      }
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    // 1. Finish manual layout drag
+    if (activeDragLineRef.current) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      activeDragLineRef.current = null;
+      setActiveDragLine(null);
+    }
+    
+    // 2. Finish open trade drag and submit update
+    if (activeDragTradeLineRef.current) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+      const { tradeId, type } = activeDragTradeLineRef.current;
+      
+      const trade = openTrades?.find((t) => t.id === tradeId);
+      if (trade && onUpdateTradeLevels) {
+        const lines = openTradesLinesRef.current.get(tradeId);
+        const finalPrice = type === 'tp' ? lines?.tp?.options().price : lines?.sl?.options().price;
+        if (finalPrice !== undefined && finalPrice !== null) {
+          const nextTp = type === 'tp' ? finalPrice : parseFloat(trade.take_profit);
+          const nextSl = type === 'sl' ? finalPrice : parseFloat(trade.stop_loss);
+          onUpdateTradeLevels(tradeId, nextTp, nextSl);
+        }
+      }
+      activeDragTradeLineRef.current = null;
+      setActiveDragTradeLine(null);
+    }
+    
+    // 3. Restore scroll/scale options
+    if (chartRef.current) {
+      chartRef.current.applyOptions({
+        handleScroll: true,
+        handleScale: true
+      });
+    }
+  };
 
   // ── Main Chart Initialization ─────────────────────────────────────────────
   useEffect(() => {
@@ -1281,10 +1637,16 @@ export default function Chart({
       {/* The Chart Canvas container */}
       <div
         ref={chartContainerRef}
-        className="w-full h-full absolute inset-0 cursor-crosshair"
+        className="w-full h-full absolute inset-0"
+        style={{
+          cursor: activeDragLine || activeDragTradeLine ? 'ns-resize' : isManualTradingActive ? 'crosshair' : 'default'
+        }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         onClick={handleChartClick}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
       />
 
       {/* Dynamic Layer Orchestrator HTML Overlays */}

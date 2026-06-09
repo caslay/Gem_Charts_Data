@@ -639,6 +639,9 @@ export function JournalTable({ initialTrades, initialAccount, isBacktest = false
         if (json.account) {
           setAccount(json.account);
         }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event(isBacktest ? 'backtest-trades-refresh' : 'trades-refresh'));
+        }
       } else {
         const json = await res.json();
         alert(`Failed to toggle position: ${json.error}`);
@@ -648,7 +651,7 @@ export function JournalTable({ initialTrades, initialAccount, isBacktest = false
     } finally {
       setActionLoadingId(null);
     }
-  }, [tradesApiUrl]);
+  }, [tradesApiUrl, isBacktest]);
 
   // ── 3. PATCH: Manually close active trade ──────────────────────────────
   const handleClosePosition = useCallback(async (tradeId: string) => {
@@ -674,6 +677,9 @@ export function JournalTable({ initialTrades, initialAccount, isBacktest = false
         if (json.account) {
           setAccount(json.account);
         }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event(isBacktest ? 'backtest-trades-refresh' : 'trades-refresh'));
+        }
       } else {
         const json = await res.json();
         alert(`Failed to close position: ${json.error}`);
@@ -683,7 +689,7 @@ export function JournalTable({ initialTrades, initialAccount, isBacktest = false
     } finally {
       setActionLoadingId(null);
     }
-  }, [livePrice, tradesApiUrl]);
+  }, [livePrice, tradesApiUrl, isBacktest]);
 
   // ── 4. DELETE: Surgical hard row deletion ──────────────────────────────
   const handleDeleteTrade = useCallback(async (tradeId: string) => {
@@ -703,6 +709,9 @@ export function JournalTable({ initialTrades, initialAccount, isBacktest = false
         if (json.account) {
           setAccount(json.account);
         }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event(isBacktest ? 'backtest-trades-refresh' : 'trades-refresh'));
+        }
       } else {
         const json = await res.json();
         alert(`Failed to delete trade record: ${json.error}`);
@@ -712,7 +721,7 @@ export function JournalTable({ initialTrades, initialAccount, isBacktest = false
     } finally {
       setActionLoadingId(null);
     }
-  }, []);
+  }, [tradesApiUrl, isBacktest]);
 
   const formatDate = (dateString: string) => {
     try {

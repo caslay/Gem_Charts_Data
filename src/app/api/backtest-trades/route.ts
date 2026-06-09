@@ -105,60 +105,64 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
     // Stop loss calculation based on sl_logic
     const tickIncrement = 0.05;
     let stop_loss: number | null = null;
-    const slMode = sl_logic || 'Structural Swing';
+    if (body.stop_loss !== undefined && body.stop_loss !== null) {
+      stop_loss = parseFloat(body.stop_loss);
+    } else {
+      const slMode = sl_logic || 'Structural Swing';
 
-    if (slMode === 'Manual Pips') {
-      if (direction === 'LONG') {
-        stop_loss = parseFloat((entry_price - 10.00).toFixed(4));
-      } else {
-        stop_loss = parseFloat((entry_price + 10.00).toFixed(4));
-      }
-    } else if (slMode === 'Last Candle High/Low') {
-      const candles = ipda_metrics?.data_payload?.candles_5m || body.data_payload?.candles_5m || [];
-      const lastCandle = candles.length >= 2 ? candles[candles.length - 2] : null;
-
-      if (lastCandle) {
+      if (slMode === 'Manual Pips') {
         if (direction === 'LONG') {
-          stop_loss = parseFloat((lastCandle.l - tickIncrement).toFixed(4));
+          stop_loss = parseFloat((entry_price - 10.00).toFixed(4));
         } else {
-          stop_loss = parseFloat((lastCandle.h + tickIncrement).toFixed(4));
+          stop_loss = parseFloat((entry_price + 10.00).toFixed(4));
         }
-      } else {
-        const hardInvalidation = ipda_metrics?.trade_execution_parameters?.hard_invalidation_levels;
-        if (direction === 'LONG') {
-          const bullish_invalidation = hardInvalidation?.bullish_invalidation;
-          if (bullish_invalidation !== undefined && bullish_invalidation !== null) {
-            stop_loss = parseFloat((bullish_invalidation - tickIncrement).toFixed(4));
+      } else if (slMode === 'Last Candle High/Low') {
+        const candles = ipda_metrics?.data_payload?.candles_5m || body.data_payload?.candles_5m || [];
+        const lastCandle = candles.length >= 2 ? candles[candles.length - 2] : null;
+
+        if (lastCandle) {
+          if (direction === 'LONG') {
+            stop_loss = parseFloat((lastCandle.l - tickIncrement).toFixed(4));
+          } else {
+            stop_loss = parseFloat((lastCandle.h + tickIncrement).toFixed(4));
           }
+        } else {
+          const hardInvalidation = ipda_metrics?.trade_execution_parameters?.hard_invalidation_levels;
+          if (direction === 'LONG') {
+            const bullish_invalidation = hardInvalidation?.bullish_invalidation;
+            if (bullish_invalidation !== undefined && bullish_invalidation !== null) {
+              stop_loss = parseFloat((bullish_invalidation - tickIncrement).toFixed(4));
+            }
+          } else {
+            const bearish_invalidation = hardInvalidation?.bearish_invalidation;
+            if (bearish_invalidation !== undefined && bearish_invalidation !== null) {
+              stop_loss = parseFloat((bearish_invalidation + tickIncrement).toFixed(4));
+            }
+          }
+        }
+      }
+
+      if (stop_loss === null) {
+        const hardInvalidation = ipda_metrics?.trade_execution_parameters?.hard_invalidation_levels;
+        if (direction === "LONG") {
+          const bullish_invalidation = hardInvalidation?.bullish_invalidation;
+          if (bullish_invalidation === undefined || bullish_invalidation === null) {
+            return NextResponse.json(
+              { error: "Missing hard invalidation level (bullish_invalidation) required for LONG trade SL." },
+              { status: 400 }
+            );
+          }
+          stop_loss = parseFloat((bullish_invalidation - tickIncrement).toFixed(4));
         } else {
           const bearish_invalidation = hardInvalidation?.bearish_invalidation;
-          if (bearish_invalidation !== undefined && bearish_invalidation !== null) {
-            stop_loss = parseFloat((bearish_invalidation + tickIncrement).toFixed(4));
+          if (bearish_invalidation === undefined || bearish_invalidation === null) {
+            return NextResponse.json(
+              { error: "Missing hard invalidation level (bearish_invalidation) required for SHORT trade SL." },
+              { status: 400 }
+            );
           }
+          stop_loss = parseFloat((bearish_invalidation + tickIncrement).toFixed(4));
         }
-      }
-    }
-
-    if (stop_loss === null) {
-      const hardInvalidation = ipda_metrics?.trade_execution_parameters?.hard_invalidation_levels;
-      if (direction === "LONG") {
-        const bullish_invalidation = hardInvalidation?.bullish_invalidation;
-        if (bullish_invalidation === undefined || bullish_invalidation === null) {
-          return NextResponse.json(
-            { error: "Missing hard invalidation level (bullish_invalidation) required for LONG trade SL." },
-            { status: 400 }
-          );
-        }
-        stop_loss = parseFloat((bullish_invalidation - tickIncrement).toFixed(4));
-      } else {
-        const bearish_invalidation = hardInvalidation?.bearish_invalidation;
-        if (bearish_invalidation === undefined || bearish_invalidation === null) {
-          return NextResponse.json(
-            { error: "Missing hard invalidation level (bearish_invalidation) required for SHORT trade SL." },
-            { status: 400 }
-          );
-        }
-        stop_loss = parseFloat((bearish_invalidation + tickIncrement).toFixed(4));
       }
     }
 
@@ -243,7 +247,7 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
     }
 
     let rrRatio = parseFloat((reward / risk).toFixed(4));
-    if (rrRatio < 2.0) {
+    if (body.stop_loss === undefined && rrRatio < 2.0) {
       if (direction === 'LONG') {
         take_profit = parseFloat((entry_price + 2.0 * risk).toFixed(4));
       } else {
@@ -339,11 +343,38 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
 async function handlePatchFallback(req: Request, parsedBody?: any) {
   try {
     const body = parsedBody || await req.json();
-    const { trade_id, status } = body;
+    const { trade_id, status, stop_loss, take_profit } = body;
 
-    if (!trade_id || !status) {
+    if (!trade_id) {
       return NextResponse.json(
-        { error: "Missing required fields: 'trade_id' and 'status' must be provided." },
+        { error: "Missing required fields: 'trade_id' must be provided." },
+        { status: 400 }
+      );
+    }
+
+    if (!status && (stop_loss !== undefined || take_profit !== undefined)) {
+      const tradeIndex = inMemoryTrades.findIndex(t => t.id === trade_id);
+      if (tradeIndex === -1) {
+        return NextResponse.json({ error: `Trade with ID ${trade_id} not found.` }, { status: 404 });
+      }
+      const trade = inMemoryTrades[tradeIndex];
+      if (stop_loss !== undefined) {
+        trade.stop_loss = stop_loss === null ? null : parseFloat(stop_loss);
+      }
+      if (take_profit !== undefined) {
+        trade.take_profit = take_profit === null ? null : parseFloat(take_profit);
+      }
+      return NextResponse.json({
+        success: true,
+        message: "Trade levels updated.",
+        trade,
+        account: inMemoryAccount
+      });
+    }
+
+    if (!status) {
+      return NextResponse.json(
+        { error: "Missing required fields: 'status' must be provided if not updating levels." },
         { status: 400 }
       );
     }
@@ -644,7 +675,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!ipda_metrics) {
+    if (!ipda_metrics && body.stop_loss === undefined) {
       return NextResponse.json(
         { error: "Missing required 'ipda_metrics' JSON payload." },
         { status: 400 }
@@ -654,8 +685,8 @@ export async function POST(req: Request) {
     // Resolve current market price
     const current_market_price = body.current_price
       || body.currentPrice
-      || ipda_metrics.pricing_context?.local_dealing_range?.currentLivePrice
-      || (Array.isArray(ipda_metrics.data_payload?.candles_5m) && ipda_metrics.data_payload.candles_5m.length > 0
+      || ipda_metrics?.pricing_context?.local_dealing_range?.currentLivePrice
+      || (Array.isArray(ipda_metrics?.data_payload?.candles_5m) && ipda_metrics.data_payload.candles_5m.length > 0
           ? ipda_metrics.data_payload.candles_5m[ipda_metrics.data_payload.candles_5m.length - 1].c
           : null);
 
@@ -663,7 +694,7 @@ export async function POST(req: Request) {
     let entry_price = body.entry_price !== undefined && body.entry_price !== null ? body.entry_price : body.price;
 
     if (entry_price === undefined || entry_price === null) {
-      const fvg_ce = ipda_metrics.trade_execution_parameters?.closest_active_fvg_ce;
+      const fvg_ce = ipda_metrics?.trade_execution_parameters?.closest_active_fvg_ce;
       if (fvg_ce !== undefined && fvg_ce !== null && !isNaN(fvg_ce)) {
         entry_price = fvg_ce;
       } else if (current_market_price !== undefined && current_market_price !== null && !isNaN(current_market_price)) {
@@ -684,60 +715,64 @@ export async function POST(req: Request) {
     const tickIncrement = 0.05;
     let stop_loss: number | null = null;
 
-    const slMode = sl_logic || 'Structural Swing';
+    if (body.stop_loss !== undefined && body.stop_loss !== null) {
+      stop_loss = parseFloat(body.stop_loss);
+    } else {
+      const slMode = sl_logic || 'Structural Swing';
 
-    if (slMode === 'Manual Pips') {
-      if (direction === 'LONG') {
-        stop_loss = parseFloat((entry_price - 10.00).toFixed(4));
-      } else {
-        stop_loss = parseFloat((entry_price + 10.00).toFixed(4));
-      }
-    } else if (slMode === 'Last Candle High/Low') {
-      const candles = ipda_metrics.data_payload?.candles_5m || [];
-      const lastCandle = candles.length >= 2 ? candles[candles.length - 2] : null;
-
-      if (lastCandle) {
+      if (slMode === 'Manual Pips') {
         if (direction === 'LONG') {
-          stop_loss = parseFloat((lastCandle.l - tickIncrement).toFixed(4));
+          stop_loss = parseFloat((entry_price - 10.00).toFixed(4));
         } else {
-          stop_loss = parseFloat((lastCandle.h + tickIncrement).toFixed(4));
+          stop_loss = parseFloat((entry_price + 10.00).toFixed(4));
         }
-      } else {
-        const hardInvalidation = ipda_metrics.trade_execution_parameters?.hard_invalidation_levels;
-        if (direction === 'LONG') {
-          const bullish_invalidation = hardInvalidation?.bullish_invalidation;
-          if (bullish_invalidation !== undefined && bullish_invalidation !== null) {
-            stop_loss = parseFloat((bullish_invalidation - tickIncrement).toFixed(4));
+      } else if (slMode === 'Last Candle High/Low') {
+        const candles = ipda_metrics?.data_payload?.candles_5m || [];
+        const lastCandle = candles.length >= 2 ? candles[candles.length - 2] : null;
+
+        if (lastCandle) {
+          if (direction === 'LONG') {
+            stop_loss = parseFloat((lastCandle.l - tickIncrement).toFixed(4));
+          } else {
+            stop_loss = parseFloat((lastCandle.h + tickIncrement).toFixed(4));
           }
+        } else {
+          const hardInvalidation = ipda_metrics?.trade_execution_parameters?.hard_invalidation_levels;
+          if (direction === 'LONG') {
+            const bullish_invalidation = hardInvalidation?.bullish_invalidation;
+            if (bullish_invalidation !== undefined && bullish_invalidation !== null) {
+              stop_loss = parseFloat((bullish_invalidation - tickIncrement).toFixed(4));
+            }
+          } else {
+            const bearish_invalidation = hardInvalidation?.bearish_invalidation;
+            if (bearish_invalidation !== undefined && bearish_invalidation !== null) {
+              stop_loss = parseFloat((bearish_invalidation + tickIncrement).toFixed(4));
+            }
+          }
+        }
+      }
+
+      if (stop_loss === null) {
+        const hardInvalidation = ipda_metrics?.trade_execution_parameters?.hard_invalidation_levels;
+        if (direction === "LONG") {
+          const bullish_invalidation = hardInvalidation?.bullish_invalidation;
+          if (bullish_invalidation === undefined || bullish_invalidation === null) {
+            return NextResponse.json(
+              { error: "Missing hard invalidation level (bullish_invalidation) required for LONG trade SL." },
+              { status: 400 }
+            );
+          }
+          stop_loss = parseFloat((bullish_invalidation - tickIncrement).toFixed(4));
         } else {
           const bearish_invalidation = hardInvalidation?.bearish_invalidation;
-          if (bearish_invalidation !== undefined && bearish_invalidation !== null) {
-            stop_loss = parseFloat((bearish_invalidation + tickIncrement).toFixed(4));
+          if (bearish_invalidation === undefined || bearish_invalidation === null) {
+            return NextResponse.json(
+              { error: "Missing hard invalidation level (bearish_invalidation) required for SHORT trade SL." },
+              { status: 400 }
+            );
           }
+          stop_loss = parseFloat((bearish_invalidation + tickIncrement).toFixed(4));
         }
-      }
-    }
-
-    if (stop_loss === null) {
-      const hardInvalidation = ipda_metrics.trade_execution_parameters?.hard_invalidation_levels;
-      if (direction === "LONG") {
-        const bullish_invalidation = hardInvalidation?.bullish_invalidation;
-        if (bullish_invalidation === undefined || bullish_invalidation === null) {
-          return NextResponse.json(
-            { error: "Missing hard invalidation level (bullish_invalidation) required for LONG trade SL." },
-            { status: 400 }
-          );
-        }
-        stop_loss = parseFloat((bullish_invalidation - tickIncrement).toFixed(4));
-      } else {
-        const bearish_invalidation = hardInvalidation?.bearish_invalidation;
-        if (bearish_invalidation === undefined || bearish_invalidation === null) {
-          return NextResponse.json(
-            { error: "Missing hard invalidation level (bearish_invalidation) required for SHORT trade SL." },
-            { status: 400 }
-          );
-        }
-        stop_loss = parseFloat((bearish_invalidation + tickIncrement).toFixed(4));
       }
     }
 
@@ -761,9 +796,9 @@ export async function POST(req: Request) {
           take_profit = parseFloat((entry_price - 2 * risk).toFixed(4));
         }
       } else if (tpMode === 'PDH/PDL Target') {
-        const macro = ipda_metrics.macro_levels || {};
-        const pdh = macro.pdh || ipda_metrics.pdh || 0;
-        const pdl = macro.pdl || ipda_metrics.pdl || 0;
+        const macro = ipda_metrics?.macro_levels || {};
+        const pdh = macro.pdh || ipda_metrics?.pdh || 0;
+        const pdl = macro.pdl || ipda_metrics?.pdl || 0;
 
         if (direction === 'LONG' && pdh > 0) {
           take_profit = parseFloat(pdh.toFixed(4));
@@ -773,7 +808,7 @@ export async function POST(req: Request) {
       }
 
       if (take_profit === undefined || take_profit === null) {
-        const orderFlow = ipda_metrics.order_flow_engine;
+        const orderFlow = ipda_metrics?.order_flow_engine;
         const restingLiquidity = orderFlow?.resting_liquidity_pools;
         const magnets = direction === "LONG"
           ? (restingLiquidity?.BSL_Magnets || [])
@@ -822,7 +857,7 @@ export async function POST(req: Request) {
     }
 
     let rrRatio = parseFloat((reward / risk).toFixed(4));
-    if (rrRatio < 2.0) {
+    if (body.stop_loss === undefined && rrRatio < 2.0) {
       if (direction === 'LONG') {
         take_profit = parseFloat((entry_price + 2.0 * risk).toFixed(4));
       } else {
@@ -1024,11 +1059,63 @@ export async function PATCH(req: Request) {
 
   try {
     const body = parsedBody;
-    const { trade_id, status } = body;
+    const { trade_id, status, stop_loss, take_profit } = body;
 
-    if (!trade_id || !status) {
+    if (!trade_id) {
       return NextResponse.json(
-        { error: "Missing required fields: 'trade_id' and 'status' must be provided." },
+        { error: "Missing required fields: 'trade_id' must be provided." },
+        { status: 400 }
+      );
+    }
+
+    if (!status && (stop_loss !== undefined || take_profit !== undefined)) {
+      await initTradesTable();
+      const userEmail = session.user.email || "default_user";
+      let updateResult;
+
+      if (stop_loss !== undefined && take_profit !== undefined) {
+        updateResult = await sql`
+          UPDATE backtest_trades
+          SET stop_loss = ${stop_loss === null ? null : parseFloat(stop_loss)},
+              take_profit = ${take_profit === null ? null : parseFloat(take_profit)}
+          WHERE id = ${trade_id}
+          RETURNING *;
+        `;
+      } else if (stop_loss !== undefined) {
+        updateResult = await sql`
+          UPDATE backtest_trades
+          SET stop_loss = ${stop_loss === null ? null : parseFloat(stop_loss)}
+          WHERE id = ${trade_id}
+          RETURNING *;
+        `;
+      } else {
+        updateResult = await sql`
+          UPDATE backtest_trades
+          SET take_profit = ${take_profit === null ? null : parseFloat(take_profit)}
+          WHERE id = ${trade_id}
+          RETURNING *;
+        `;
+      }
+
+      if (updateResult.rows.length === 0) {
+        return NextResponse.json(
+          { error: `Trade with ID ${trade_id} not found.` },
+          { status: 404 }
+        );
+      }
+
+      const updatedAccount = await getOrCreateAccount(userEmail);
+      return NextResponse.json({
+        success: true,
+        message: "Trade levels updated.",
+        trade: updateResult.rows[0],
+        account: updatedAccount
+      });
+    }
+
+    if (!status) {
+      return NextResponse.json(
+        { error: "Missing required fields: 'status' must be provided if not updating levels." },
         { status: 400 }
       );
     }
