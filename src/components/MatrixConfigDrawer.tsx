@@ -1,7 +1,6 @@
 import React from 'react';
 import { X, Activity, ChevronRight, Magnet, Target, Clock, History, TrendingUp } from 'lucide-react';
-import { useBinanceWS } from '@/hooks/useBinanceWS';
-import { useMarketDataContext } from '@/context/MarketDataContext';
+import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 
 export interface MatrixDataPayload {
   ipda_metrics?: {
@@ -64,7 +63,7 @@ interface MatrixConfigDrawerProps {
  * Wired to the V8.2 Ultimate Matrix List payload.
  */
 const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose, data }) => {
-  const { livePrice } = useBinanceWS();
+  const { livePrice } = useMarketDataLiveContext();
   const { wsInterval, structureState } = useMarketDataContext();
 
   if (!isOpen) return null;

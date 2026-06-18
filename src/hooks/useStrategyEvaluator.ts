@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { useMarketDataContext } from '@/context/MarketDataContext';
+import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 import type { MarketDataPayload, Candle } from '@/hooks/useMarketData';
 import type { LiveCandle } from '@/hooks/useBinanceWS';
 import type { MetricKey, OperatorKey, TemporalMode, CustomStrategy, StrategyCondition } from '@/components/modals/EquationBuilder';
@@ -582,11 +582,12 @@ export interface StrategyEvaluatorConfig {
 
 export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
   const context = useMarketDataContext();
+  const liveContext = useMarketDataLiveContext();
 
   // Pivot configuration values: use config first, fall back to Live HUD Context
   const data = config?.data !== undefined ? config.data : context.data;
-  const livePrice = config?.livePrice !== undefined ? config.livePrice : context.livePrice;
-  const liveCandle = config?.liveCandle !== undefined ? config.liveCandle : context.liveCandle;
+  const livePrice = config?.livePrice !== undefined ? config.livePrice : liveContext.livePrice;
+  const liveCandle = config?.liveCandle !== undefined ? config.liveCandle : liveContext.liveCandle;
   const aiBias = config?.aiBias !== undefined ? config.aiBias : context.aiBias;
   const triggerSmartAlert = config?.triggerSmartAlert !== undefined ? config.triggerSmartAlert : context.triggerSmartAlert;
 

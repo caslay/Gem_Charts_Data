@@ -14,7 +14,7 @@
  */
 
 import { useRef, useEffect, useState } from 'react';
-import { useBinanceWS } from '@/hooks/useBinanceWS';
+import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ type TickDirection = 'up' | 'down' | 'neutral';
 
 // ─── Status Dot ──────────────────────────────────────────────────────────────
 
-function StatusDot({ status }: { status: ReturnType<typeof useBinanceWS>['status'] }) {
+function StatusDot({ status }: { status: ReturnType<typeof useMarketDataContext>['wsStatus'] }) {
   if (status === 'OPEN') {
     return (
       <span className="relative flex h-2 w-2" title="WebSocket: Connected">
@@ -55,7 +55,8 @@ function StatusDot({ status }: { status: ReturnType<typeof useBinanceWS>['status
 // ─── LiveTicker ───────────────────────────────────────────────────────────────
 
 export function LiveTicker({ variant = 'default' }: { variant?: 'default' | 'large' }) {
-  const { livePrice, status } = useBinanceWS({ symbol: 'ethusdc', interval: '1m' });
+  const { livePrice } = useMarketDataLiveContext();
+  const { wsStatus: status } = useMarketDataContext();
 
   // Track previous price to determine tick direction
   const prevPriceRef = useRef<number | null>(null);

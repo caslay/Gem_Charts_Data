@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, memo, useRef, useEffect } from "react";
 import { Play, Pause, XCircle, Trash2, Loader2, RefreshCw, AlertTriangle } from "lucide-react";
-import { useMarketDataContext } from "@/context/MarketDataContext";
+import { useMarketDataContext, useMarketDataLiveContext } from "@/context/MarketDataContext";
 
 export interface TradeRecord {
   id: string;
@@ -272,19 +272,23 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
   setDeleteConfirmId,
   handleDeleteTrade,
   formatDate,
-  livePrice
+  isBacktest = false,
+  backtestLivePrice
 }: {
   trade: TradeRecord;
   isLoading: boolean;
   actionLoadingId: string | null;
   isDeletingConfirm: boolean;
   handleToggleStatus: (trade: TradeRecord) => void;
-  handleClosePosition: (id: string) => void;
+  handleClosePosition: (id: string, exitPrice?: number | null) => void;
   setDeleteConfirmId: (id: string | null) => void;
   handleDeleteTrade: (id: string) => void;
   formatDate: (date: string) => string;
-  livePrice: number | null;
+  isBacktest?: boolean;
+  backtestLivePrice?: number | null;
 }) {
+  const liveContext = useMarketDataLiveContext();
+  const livePrice = isBacktest ? (backtestLivePrice ?? null) : liveContext.livePrice;
 
   // Resolve position multiplier
   const positionSize = trade.position_size !== undefined && trade.position_size !== null
@@ -462,7 +466,7 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
           actionLoadingId={actionLoadingId}
           isDeletingConfirm={isDeletingConfirm}
           handleToggleStatus={handleToggleStatus}
-          handleClosePosition={handleClosePosition}
+          handleClosePosition={(id) => handleClosePosition(id, livePrice)}
           setDeleteConfirmId={setDeleteConfirmId}
           handleDeleteTrade={handleDeleteTrade}
         />
@@ -482,18 +486,20 @@ const JournalTableRow = memo(function JournalTableRow({
   setDeleteConfirmId,
   handleDeleteTrade,
   formatDate,
-  livePrice
+  isBacktest,
+  backtestLivePrice
 }: {
   trade: TradeRecord;
   isLoading: boolean;
   actionLoadingId: string | null;
   isDeletingConfirm: boolean;
   handleToggleStatus: (trade: TradeRecord) => void;
-  handleClosePosition: (id: string) => void;
+  handleClosePosition: (id: string, exitPrice?: number | null) => void;
   setDeleteConfirmId: (id: string | null) => void;
   handleDeleteTrade: (id: string) => void;
   formatDate: (date: string) => string;
-  livePrice: number | null;
+  isBacktest?: boolean;
+  backtestLivePrice?: number | null;
 }) {
   if (trade.status === "CLOSED") {
     return (
@@ -522,14 +528,14 @@ const JournalTableRow = memo(function JournalTableRow({
       setDeleteConfirmId={setDeleteConfirmId}
       handleDeleteTrade={handleDeleteTrade}
       formatDate={formatDate}
-      livePrice={livePrice}
+      isBacktest={isBacktest}
+      backtestLivePrice={backtestLivePrice}
     />
   );
 });
 
-export function JournalTable({ initialTrades, initialAccount, isBacktest = false, backtestLivePrice }: JournalTableProps) {
+export const JournalTable = memo(function JournalTable({ initialTrades, initialAccount, isBacktest = false, backtestLivePrice }: JournalTableProps) {
   const context = useMarketDataContext();
-  const livePrice = isBacktest ? (backtestLivePrice ?? null) : context.livePrice;
   const tradesApiUrl = isBacktest ? "/api/backtest-trades" : "/api/trades";
 
   const [trades, setTrades] = useState<TradeRecord[]>(initialTrades);
@@ -654,7 +660,7 @@ export function JournalTable({ initialTrades, initialAccount, isBacktest = false
   }, [tradesApiUrl, isBacktest]);
 
   // ── 3. PATCH: Manually close active trade ──────────────────────────────
-  const handleClosePosition = useCallback(async (tradeId: string) => {
+  const handleClosePosition = useCallback(async (tradeId: string, exitPrice?: number | null) => {
     setActionLoadingId(`${tradeId}-close`);
 
     try {
@@ -664,7 +670,7 @@ export function JournalTable({ initialTrades, initialAccount, isBacktest = false
         body: JSON.stringify({ 
           trade_id: tradeId, 
           status: "CLOSED",
-          exit_price: livePrice
+          exit_price: exitPrice !== undefined ? exitPrice : null
         })
       });
 
@@ -689,7 +695,7 @@ export function JournalTable({ initialTrades, initialAccount, isBacktest = false
     } finally {
       setActionLoadingId(null);
     }
-  }, [livePrice, tradesApiUrl, isBacktest]);
+  }, [tradesApiUrl, isBacktest]);
 
   // ── 4. DELETE: Surgical hard row deletion ──────────────────────────────
   const handleDeleteTrade = useCallback(async (tradeId: string) => {
@@ -911,7 +917,8 @@ export function JournalTable({ initialTrades, initialAccount, isBacktest = false
                     setDeleteConfirmId={setDeleteConfirmId}
                     handleDeleteTrade={handleDeleteTrade}
                     formatDate={formatDate}
-                    livePrice={livePrice}
+                    isBacktest={isBacktest}
+                    backtestLivePrice={backtestLivePrice}
                   />
                 ))
               )}
@@ -921,4 +928,4 @@ export function JournalTable({ initialTrades, initialAccount, isBacktest = false
       </div>
     </div>
   );
-}
+});

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useMarketDataContext } from '@/context/MarketDataContext';
+import { useState, useEffect, memo } from 'react';
+import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 import Chart from '@/components/Chart';
 import Sidebar from '@/components/Sidebar';
 import SmartAlertsToast from '@/components/SmartAlertsToast';
@@ -24,7 +24,6 @@ export default function Home() {
     activeAlerts,
     dismissAlert,
     setWsInterval,
-    livePrice,
     aiAnalysis
   } = useMarketDataContext();
 
@@ -151,7 +150,7 @@ export default function Home() {
   // Initialize manual prices
   useEffect(() => {
     if (isManualTradingActive) {
-      const currentEntry = livePrice || getChartData().slice(-1)[0]?.c || 0;
+      const currentEntry = getChartData().slice(-1)[0]?.c || 0;
       setManualEntryPrice((prev) => (prev === null || manualOrderType === 'MARKET') ? currentEntry : prev);
       
       setManualTakeProfit((prev) => {
@@ -169,63 +168,9 @@ export default function Home() {
     }
   }, [isManualTradingActive, manualDirection]);
 
-  // Lock entry price to live price if MARKET is active
-  useEffect(() => {
-    if (isManualTradingActive && manualOrderType === 'MARKET' && livePrice) {
-      setManualEntryPrice(livePrice);
-    }
-  }, [isManualTradingActive, manualOrderType, livePrice]);
-
-  // Live ticking price execution gate for pending resting orders
-  useEffect(() => {
-    if (!livePrice || pendingOrders.length === 0) return;
-
-    const triggered = pendingOrders.filter((order) => {
-      if (order.orderType === 'LIMIT') {
-        return order.direction === 'LONG' ? livePrice <= order.entryPrice : livePrice >= order.entryPrice;
-      } else {
-        return order.direction === 'LONG' ? livePrice >= order.entryPrice : livePrice <= order.entryPrice;
-      }
-    });
-
-    if (triggered.length === 0) return;
-
-    triggered.forEach(async (order) => {
-      try {
-        const res = await fetch('/api/trades', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            symbol: 'ETHUSDC',
-            direction: order.direction,
-            entry_price: order.entryPrice,
-            stop_loss: order.stopLoss,
-            take_profit: order.takeProfit,
-            risk_percent: order.riskPct,
-            strategy_name: `Manual ${order.orderType} Order`,
-          }),
-        });
-
-        if (res.ok) {
-          if (typeof window !== 'undefined') {
-            const audio = new Audio('/sounds/flow_state.wav');
-            audio.play().catch(() => {});
-          }
-          window.dispatchEvent(new Event('trades-refresh'));
-          fetchBalance();
-        } else {
-          console.error('[Manual Trading] Failed to execute resting order:', res.statusText);
-        }
-      } catch (e) {
-        console.error('[Manual Trading] Error executing resting order:', e);
-      }
-    });
-
-    setPendingOrders((prev) => prev.filter((order) => !triggered.some((t) => t.id === order.id)));
-  }, [livePrice, pendingOrders]);
-
-  const handleSubmitManualOrder = async () => {
-    if (manualEntryPrice === null || manualStopLoss === null || manualTakeProfit === null) return;
+  const handleSubmitManualOrder = async (livePrice: number | null) => {
+    const entry = manualOrderType === 'MARKET' ? livePrice : manualEntryPrice;
+    if (entry === null || manualStopLoss === null || manualTakeProfit === null) return;
 
     if (manualOrderType === 'MARKET') {
       setIsSubmittingManual(true);
@@ -236,7 +181,7 @@ export default function Home() {
           body: JSON.stringify({
             symbol: 'ETHUSDC',
             direction: manualDirection,
-            entry_price: manualEntryPrice,
+            entry_price: entry,
             stop_loss: manualStopLoss,
             take_profit: manualTakeProfit,
             risk_percent: manualRiskPct,
@@ -278,7 +223,7 @@ export default function Home() {
       if (typeof window !== 'undefined') {
         const audio = new Audio('/sounds/pricing_shift.wav');
         audio.play().catch(() => {});
-        alert(`[${manualOrderType} PLACED] ${manualDirection} order at $${manualEntryPrice.toFixed(2)} is now queued in local memory.`);
+        alert(`[${manualOrderType} PLACED] ${manualDirection} order at $${(manualEntryPrice as number).toFixed(2)} is now queued in local memory.`);
       }
 
       setIsManualTradingActive(false);
@@ -286,7 +231,6 @@ export default function Home() {
   };
 
   // Strategy Execution Engine — runs silently in the background
-  useStrategyEvaluator();
 
   // Sync localized selection with global WebSocket context interval
   useEffect(() => {
@@ -298,11 +242,11 @@ export default function Home() {
     refetch();
   }, [selectedInterval, refetch]);
 
-  const getChartData = () => {
+  function getChartData() {
     if (!data) return [];
     const key = `candles_${selectedInterval}`;
     return data.data_payload[key] ?? [];
-  };
+  }
 
   const currentPrice = data?.data_payload?.candles_5m?.slice(-1)[0]?.c ?? null;
 
@@ -395,7 +339,7 @@ export default function Home() {
         </div>
 
         {/* ── 3 Large Visual HUD Cards ─────────────────────────────────────── */}
-        <DashboardMetrics masterBias={masterBias} pricing={pricing} targetStatus={targetStatus} />
+        <DashboardMetrics masterBias={masterBias} pricing={pricing} targetStatus={targetStatus} isLive={true} />
 
         {/* ── Chart Area ─────────────────────────────────────────────────── */}
         <div className="flex-1 relative px-4 lg:px-6 pb-4 z-10 flex flex-col min-h-0">
@@ -495,7 +439,82 @@ export default function Home() {
         onSave={() => { }}
         onDelete={() => { }}
       />
+      {/* Decoupled Leaf Runners */}
+      <StrategyEvaluatorRunner />
+      <PendingOrdersManager
+        pendingOrders={pendingOrders}
+        setPendingOrders={setPendingOrders}
+        fetchBalance={fetchBalance}
+      />
     </main>
   );
+}
+
+// Dedicated leaf component to run strategy evaluator in isolation, avoiding parent re-renders on price ticks
+function StrategyEvaluatorRunner() {
+  useStrategyEvaluator();
+  return null;
+}
+
+// Dedicated leaf component to manage pending resting orders in isolation, avoiding parent re-renders on price ticks
+function PendingOrdersManager({
+  pendingOrders,
+  setPendingOrders,
+  fetchBalance
+}: {
+  pendingOrders: any[];
+  setPendingOrders: React.Dispatch<React.SetStateAction<any[]>>;
+  fetchBalance: () => Promise<void>;
+}) {
+  const { livePrice } = useMarketDataLiveContext();
+
+  useEffect(() => {
+    if (!livePrice || pendingOrders.length === 0) return;
+
+    const triggered = pendingOrders.filter((order) => {
+      if (order.orderType === 'LIMIT') {
+        return order.direction === 'LONG' ? livePrice <= order.entryPrice : livePrice >= order.entryPrice;
+      } else {
+        return order.direction === 'LONG' ? livePrice >= order.entryPrice : livePrice <= order.entryPrice;
+      }
+    });
+
+    if (triggered.length === 0) return;
+
+    triggered.forEach(async (order) => {
+      try {
+        const res = await fetch('/api/trades', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            symbol: 'ETHUSDC',
+            direction: order.direction,
+            entry_price: order.entryPrice,
+            stop_loss: order.stopLoss,
+            take_profit: order.takeProfit,
+            risk_percent: order.riskPct,
+            strategy_name: `Manual ${order.orderType} Order`,
+          }),
+        });
+
+        if (res.ok) {
+          if (typeof window !== 'undefined') {
+            const audio = new Audio('/sounds/flow_state.wav');
+            audio.play().catch(() => {});
+          }
+          window.dispatchEvent(new Event('trades-refresh'));
+          fetchBalance();
+        } else {
+          console.error('[Manual Trading] Failed to execute resting order:', res.statusText);
+        }
+      } catch (e) {
+        console.error('[Manual Trading] Error executing resting order:', e);
+      }
+    });
+
+    setPendingOrders((prev) => prev.filter((order) => !triggered.some((t) => t.id === order.id)));
+  }, [livePrice, pendingOrders, setPendingOrders, fetchBalance]);
+
+  return null;
 }
 

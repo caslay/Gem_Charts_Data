@@ -1,7 +1,6 @@
-'use client';
-
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, memo } from 'react';
 import { Shield, TrendingUp, AlertTriangle, X, CheckCircle2 } from 'lucide-react';
+import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 
 interface ManualOrderPanelProps {
   onClose: () => void;
@@ -18,11 +17,11 @@ interface ManualOrderPanelProps {
   stopLoss: number | null;
   setStopLoss: (p: number | null) => void;
   balance: number;
-  onSubmit: () => void;
+  onSubmit: (livePrice: number | null) => void;
   isSubmitting?: boolean;
 }
 
-export default function ManualOrderPanel({
+function ManualOrderPanel({
   onClose,
   orderType,
   setOrderType,
@@ -40,6 +39,34 @@ export default function ManualOrderPanel({
   onSubmit,
   isSubmitting = false
 }: ManualOrderPanelProps) {
+  const { livePrice } = useMarketDataLiveContext();
+
+  // 1. Determine the effective entry price (live price for MARKET orders, custom entry for LIMIT/STOP)
+  const effectiveEntryPrice = useMemo(() => {
+    return orderType === 'MARKET' ? livePrice : entryPrice;
+  }, [orderType, livePrice, entryPrice]);
+
+  // 2. Initialize entry price when switching to LIMIT or STOP
+  useEffect(() => {
+    if (orderType !== 'MARKET' && entryPrice === null && livePrice) {
+      setEntryPrice(livePrice);
+    }
+  }, [orderType, entryPrice, livePrice, setEntryPrice]);
+
+  // 3. Initialize manual takeProfit/stopLoss levels on mount and direction changes
+  useEffect(() => {
+    const currentEntry = entryPrice || livePrice || 0;
+    if (currentEntry === 0) return;
+    
+    if (takeProfit === null) {
+      setTakeProfit(direction === 'LONG' ? currentEntry * 1.02 : currentEntry * 0.98);
+    }
+    
+    if (stopLoss === null) {
+      setStopLoss(direction === 'LONG' ? currentEntry * 0.99 : currentEntry * 1.01);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [direction]);
   
   // Calculate Risk USD
   const riskUsd = useMemo(() => {
@@ -48,9 +75,9 @@ export default function ManualOrderPanel({
 
   // Calculate SL Distance
   const slDistance = useMemo(() => {
-    if (entryPrice === null || stopLoss === null) return 0;
-    return Math.abs(entryPrice - stopLoss);
-  }, [entryPrice, stopLoss]);
+    if (effectiveEntryPrice === null || stopLoss === null) return 0;
+    return Math.abs(effectiveEntryPrice - stopLoss);
+  }, [effectiveEntryPrice, stopLoss]);
 
   // Calculate Position Size
   const positionSize = useMemo(() => {
@@ -60,9 +87,9 @@ export default function ManualOrderPanel({
 
   // Calculate Reward Distance
   const rewardDistance = useMemo(() => {
-    if (entryPrice === null || takeProfit === null) return 0;
-    return Math.abs(takeProfit - entryPrice);
-  }, [entryPrice, takeProfit]);
+    if (effectiveEntryPrice === null || takeProfit === null) return 0;
+    return Math.abs(takeProfit - effectiveEntryPrice);
+  }, [effectiveEntryPrice, takeProfit]);
 
   // Calculate Risk-to-Reward Ratio (RR)
   const riskRewardRatio = useMemo(() => {
@@ -72,9 +99,9 @@ export default function ManualOrderPanel({
 
   // Check if warning banner is needed
   const isRrTooLow = useMemo(() => {
-    if (entryPrice === null || stopLoss === null || takeProfit === null) return false;
+    if (effectiveEntryPrice === null || stopLoss === null || takeProfit === null) return false;
     return riskRewardRatio < 2.0;
-  }, [entryPrice, stopLoss, takeProfit, riskRewardRatio]);
+  }, [effectiveEntryPrice, stopLoss, takeProfit, riskRewardRatio]);
 
   const handleRiskChange = (valStr: string) => {
     const val = parseFloat(valStr);
@@ -263,8 +290,8 @@ export default function ManualOrderPanel({
 
         {/* Submission Button */}
         <button
-          onClick={onSubmit}
-          disabled={isSubmitting || entryPrice === null || stopLoss === null || takeProfit === null}
+          onClick={() => onSubmit(livePrice)}
+          disabled={isSubmitting || effectiveEntryPrice === null || stopLoss === null || takeProfit === null}
           className="w-full py-2.5 bg-accent hover:bg-accent disabled:opacity-50 disabled:bg-card-border text-accent-foreground text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md rounded-xl"
         >
           {isSubmitting ? (
@@ -287,3 +314,5 @@ export default function ManualOrderPanel({
     </div>
   );
 }
+
+export default memo(ManualOrderPanel);
