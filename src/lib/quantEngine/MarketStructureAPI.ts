@@ -334,9 +334,17 @@ export class MarketStructureAPI {
       swings: [],
       zigzag: [],
       dealingRange: {
-        high: "AWAITING_IDM_SWEEP",
-        low: "AWAITING_IDM_SWEEP",
-        equilibrium: "AWAITING_IDM_SWEEP",
+        high: null,
+        low: null,
+        equilibrium: null,
+        current_status: 'AWAITING_IDM_SWEEP',
+        anchor_high_swing: null,
+        anchor_low_swing: null
+      },
+      internalDealingRange: {
+        high: null,
+        low: null,
+        equilibrium: null,
         current_status: 'AWAITING_IDM_SWEEP',
         anchor_high_swing: null,
         anchor_low_swing: null

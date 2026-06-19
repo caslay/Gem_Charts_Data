@@ -1195,12 +1195,16 @@ export default function Chart({
     // Perform lightweight update on dealing range status (O(1) complexity)
     const updatedDealingRange = structureState.dealingRange ? {
       ...structureState.dealingRange,
-      current_status: currentPrice > Number(structureState.dealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const
+      current_status: structureState.dealingRange.equilibrium === null
+        ? 'AWAITING_IDM_SWEEP' as const
+        : (currentPrice > Number(structureState.dealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const)
     } : null;
 
     const updatedInternalDealingRange = structureState.internalDealingRange ? {
       ...structureState.internalDealingRange,
-      current_status: currentPrice > Number(structureState.internalDealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const
+      current_status: structureState.internalDealingRange.equilibrium === null
+        ? 'AWAITING_IDM_SWEEP' as const
+        : (currentPrice > Number(structureState.internalDealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const)
     } : null;
 
     return {

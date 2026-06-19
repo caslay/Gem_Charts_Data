@@ -354,7 +354,7 @@ const Sidebar = memo(function Sidebar({
 
                   {(() => {
                     const range = structureState?.dealingRange || data?.ipda_metrics?.full_structure_map?.dealingRange;
-                    const isAwaiting = range?.low === 'AWAITING_IDM_SWEEP' || range?.current_status === 'AWAITING_IDM_SWEEP';
+                    const isAwaiting = !range || range.low === null || range.current_status === 'AWAITING_IDM_SWEEP';
                     const pricingStatus = isAwaiting ? 'AWAITING_IDM_SWEEP' : (range?.current_status || 'UNKNOWN');
                     const pricingColorClass = isAwaiting
                       ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
@@ -419,7 +419,7 @@ const Sidebar = memo(function Sidebar({
 
                   {(() => {
                     const internalRange = structureState?.internalDealingRange || data?.ipda_metrics?.internal_context || data?.ipda_metrics?.full_structure_map?.internalDealingRange;
-                    if (!internalRange || (!internalRange.high && !internalRange.low)) {
+                    if (!internalRange || (internalRange.high === null && internalRange.low === null)) {
                       return (
                         <div className="bg-background/40 p-2.5 border border-card-border rounded-lg text-[10px] text-muted italic text-center py-4">
                           No confirmed internal swings yet
@@ -427,7 +427,7 @@ const Sidebar = memo(function Sidebar({
                       );
                     }
 
-                    const isAwaiting = internalRange.low === 'AWAITING_IDM_SWEEP' || internalRange.high === 'AWAITING_IDM_SWEEP' || internalRange.current_status === 'AWAITING_IDM_SWEEP' || internalRange.pricing_status === 'AWAITING_IDM_SWEEP';
+                    const isAwaiting = internalRange.low === null || internalRange.high === null || internalRange.current_status === 'AWAITING_IDM_SWEEP' || internalRange.pricing_status === 'AWAITING_IDM_SWEEP';
                     const pricingStatus = isAwaiting ? 'AWAITING_IDM_SWEEP' : (internalRange.current_status || internalRange.pricing_status || 'UNKNOWN');
                     const pricingColorClass = isAwaiting
                       ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
@@ -609,10 +609,10 @@ const Sidebar = memo(function Sidebar({
                     <div className="flex justify-between text-[10px] items-center">
                       <span className="text-muted">OLS VALIDATION</span>
                       <span className={`font-black uppercase text-[9px] tracking-wider ${metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'text-emerald-500' :
-                        metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === 'CONSOLIDATION' ? 'text-accent' : 'text-rose-500'
+                        metrics.institutional_sponsorship.status === 'CONSOLIDATION' ? 'text-accent' : 'text-rose-500'
                         }`}>
                         {metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'CONFIRMED' :
-                          metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === 'CONSOLIDATION' ? 'CONSOLIDATION' : 'REJECTED'}
+                          metrics.institutional_sponsorship.status === 'CONSOLIDATION' ? 'CONSOLIDATION' : 'REJECTED'}
                       </span>
                     </div>
                   </div>

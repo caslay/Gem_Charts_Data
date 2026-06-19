@@ -933,12 +933,16 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
         // Update price-dependent dealing range properties
         const updatedDealingRange = prev.dealingRange ? {
           ...prev.dealingRange,
-          current_status: currentPrice > Number(prev.dealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const
+          current_status: prev.dealingRange.equilibrium === null
+            ? 'AWAITING_IDM_SWEEP' as const
+            : (currentPrice > Number(prev.dealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const)
         } : null;
 
         const updatedInternalDealingRange = prev.internalDealingRange ? {
           ...prev.internalDealingRange,
-          current_status: currentPrice > Number(prev.internalDealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const
+          current_status: prev.internalDealingRange.equilibrium === null
+            ? 'AWAITING_IDM_SWEEP' as const
+            : (currentPrice > Number(prev.internalDealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const)
         } : null;
 
         return {

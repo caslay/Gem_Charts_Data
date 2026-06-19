@@ -108,8 +108,8 @@ async def calculate_displacement(candles: List[CandleInput], symbol: Optional[st
     
     t_statistic = 0.0
     p_value = 1.0
-    confidence_interval_95 = "CONSOLIDATION" if is_consolidation else False
-    confidence_interval_95_strict = "CONSOLIDATION" if is_consolidation else False
+    confidence_interval_95 = False
+    confidence_interval_95_strict = False
     confidence_level = "LOW"
 
     if is_consolidation:

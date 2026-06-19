@@ -45,9 +45,9 @@ export interface ZigZagSegment {
 }
 
 export interface StructuralDealingRange {
-  high: number | string;
-  low: number | string;
-  equilibrium: number | string;
+  high: number | null;
+  low: number | null;
+  equilibrium: number | null;
   current_status: 'PREMIUM' | 'DISCOUNT' | 'AWAITING_IDM_SWEEP';
   /** The swing that anchors the HIGH boundary. */
   anchor_high_swing: StructuralSwing | null;

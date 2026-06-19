@@ -2,7 +2,25 @@
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-06-18 (V12.0.21 — Market Data Gating Fallbacks & Crash Guard Completed)  
+> **Last Updated:** 2026-06-19 (V12.0.22 — Type Hardening & OLS Regression Parity Completed)  
+ 
+## 🆕 V12.0.22 Changelog — Type Hardening & OLS Regression Parity (Completed)
+
+### 1. Structural Dealing Range Type Hardening
+- Refactored `StructuralDealingRange` in `types.ts` to strictly type the pricing properties `high`, `low`, and `equilibrium` as `number | null`, replacing the sentinel string `"AWAITING_IDM_SWEEP"`.
+- Updated `createEmptyState()` in `MarketStructureAPI.ts` to populate boundaries and equilibrium as `null`.
+- Updated downstream rendering code in `Sidebar.tsx`, `BacktestSidebar.tsx`, and `MatrixConfigDrawer.tsx` to handle the `null` bounds and format/display the fallback string `"AWAITING_IDM_SWEEP"` at the presentation layer.
+- Safeguarded `VolumeProfileEngine.ts` and `structureLayer.ts` to gracefully bypass calculation and rendering loops when range anchors or values evaluate to `null` (including safeguarding `rangeHeight` subtraction inside `structureLayer.ts` to avoid NaN propagation).
+- Safeguarded lightweight tick/telemetry updates in `Chart.tsx` and `useMarketData.ts` to handle `null` equilibrium values without crashing or throwing type errors.
+
+### 2. Elimination of OLS Truthy String Leak
+- Strictly typed the confidence flags `confidence_interval_95` and `confidence_interval_95_strict` as `boolean` in `displacementEngine.ts` and downstream interfaces.
+- Modified FastAPI Python backend code in `quant_engine_api.py` and `api/index.py` to return binary `False` boolean values instead of the truthy string `"CONSOLIDATION"` during a consolidation regime.
+- Audited and corrected layout presentation layer in `Sidebar.tsx` and `BacktestSidebar.tsx` to read the institutional status flag `status === 'CONSOLIDATION'` for displaying the 'CONSOLIDATION' status message, matching the strictly-typed boolean API contracts.
+
+### 3. TypeScript OLS Regression Solver Parity
+- Implemented a complete TypeScript OLS regression solver inside the offline displacement engine `verifyDisplacementOffline` in `src/lib/displacementEngine.ts`.
+- The solver performs matrix operations including Gauss-Jordan inversion of the $4 \times 4$ design matrix, normal CDF calculation using the error function (`erf`), and outputs identical coefficients, t-statistics, p-values, and strict confidence intervals, achieving exact parity with the Python statsmodels library without network dependencies.
  
 ## 🆕 V12.0.21 Changelog — Market Data Gating Fallbacks & Crash Guard (Completed)
 
