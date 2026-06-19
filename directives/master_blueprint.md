@@ -49,6 +49,7 @@
 - Enhanced the chart visual rendering orchestrator with a timestamp-based "Closed-Candle Memoization Barrier" comparing `lastClosedT`. Normal ticking flows bypass global O(N) coordinate updates and vector canvas rebuilds for static historical layers (swings, mitigated FVGs, session frames).
 - Separated active price lines and draggable alert limit modifier vectors from the static drawings pool, updating only dynamic targets on intermediate price ticks.
 - Configured a pointer interaction override checking coordinate moves, pointer drags, and hover intersection events to selectively bypass the memoization barrier, guaranteeing lag-free chart drag-manipulation.
+- Added a configuration change detector using tracking refs (`prevVisibilityRef`, `prevThemeRef`, `prevThemeSettingsRef`, and `prevEngineSettingsRef`) to bypass the "Closed-Candle Memoization Barrier" when layer visibility toggles, theme adjustments, or engine setting updates occur, ensuring the chart layers update instantly without delay.
 - Cached visual drawing outputs in a local `htmlLayerCacheRef` to prevent React DOM rebuilding overhead during active ticking.
 
 ### 3. Timescale Index Offset Buffer & Left-Edge Jitter Prevention (`src/components/Chart.tsx`)
@@ -2176,7 +2177,7 @@ Tier 1 (TypeScript — offline):  verifyDisplacementOffline()   → instant, no 
 Tier 2 (Python — online):      FastAPI OLS endpoint           → statsmodels validation
 ```
 
-The TypeScript [verifyDisplacement()](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/lib/displacementEngine.ts#L77-L126) calls the Python service with a **1.2-second timeout**. On failure, it silently falls back to the offline result (which has `t_statistic: 0, p_value: 1, confidence_level: LOW`).
+The TypeScript [verifyDisplacement()](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/lib/displacementEngine.ts#L77-L126) calls the Python service with a **1.2-second timeout**. If the input array `recentCandles` has fewer than 16 elements, `verifyDisplacement()` bypasses the HTTP request to the Python backend entirely to avoid triggering `400 Bad Request` validation errors and immediately returns the offline fallback `localResult`. On other fetch failures or timeouts, it silently falls back to the offline result (which has `t_statistic: 0, p_value: 1, confidence_level: LOW`).
 
 ### 4.2 The Anomaly Multiplier (2.5x Threshold)
 

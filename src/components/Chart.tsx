@@ -95,6 +95,12 @@ export default function Chart({
   // Zustand persistent chart layer store visibility states
   const { visibility } = useLayerStore();
   const layerStorageRef = useRef<Map<string, Map<string, any>>>(new Map());
+  
+  // Tracking refs to detect configuration and theme changes to trigger layer re-renders
+  const prevVisibilityRef = useRef<Record<string, boolean> | null>(null);
+  const prevThemeRef = useRef<string | undefined>(undefined);
+  const prevThemeSettingsRef = useRef<any>(null);
+  const prevEngineSettingsRef = useRef<any>(null);
 
   // Refs for Closed-Candle Memoization Barrier, HTML layer caching, and prepend tracking
   const lastClosedTRef = useRef<number | null>(null);
@@ -1235,7 +1241,32 @@ export default function Chart({
       isHotkeyAlertModeActive || 
       hoveredCandle !== null;
 
-    if (!isNewCandle && !isViewportChanged && !isInteracting && lastClosedTRef.current !== null) {
+    // Check if configuration has changed
+    const prevVisibility = prevVisibilityRef.current;
+    let isConfigChanged = false;
+    if (prevVisibility) {
+      const keys = new Set([...Object.keys(prevVisibility), ...Object.keys(visibility)]);
+      for (const key of keys) {
+        if (prevVisibility[key] !== visibility[key]) {
+          isConfigChanged = true;
+          break;
+        }
+      }
+    } else {
+      isConfigChanged = true;
+    }
+
+    if (prevThemeRef.current !== theme) isConfigChanged = true;
+    if (JSON.stringify(prevThemeSettingsRef.current) !== JSON.stringify(themeSettings)) isConfigChanged = true;
+    if (JSON.stringify(prevEngineSettingsRef.current) !== JSON.stringify(context.engineSettings)) isConfigChanged = true;
+
+    // Update tracking refs for next run
+    prevVisibilityRef.current = visibility;
+    prevThemeRef.current = theme;
+    prevThemeSettingsRef.current = themeSettings;
+    prevEngineSettingsRef.current = context.engineSettings;
+
+    if (!isNewCandle && !isViewportChanged && !isInteracting && !isConfigChanged && lastClosedTRef.current !== null) {
       return;
     }
 

@@ -181,9 +181,10 @@ The online path wraps the offline engine with a fallback to the Python OLS backe
 
 ```
 1. Compute offline result (instant, always available)
-2. POST candles to /api/py/calculate-displacement (1.2s timeout)
-3. IF Python response OK → return OLS-validated result
-4. ELSE → return offline result (graceful degradation)
+2. IF candles length < 16 → return offline result immediately (bypassing online fetch to prevent 400 Bad Request)
+3. POST candles to /api/py/calculate-displacement (1.2s timeout)
+4. IF Python response OK → return OLS-validated result
+5. ELSE → return offline result (graceful degradation)
 ```
 
 > [!TIP]
