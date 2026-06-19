@@ -321,6 +321,9 @@ export function verifyDisplacementOffline(recentCandles: Candle[], symbol: strin
  
 export async function verifyDisplacement(recentCandles: Candle[], symbol: string = 'ETHUSDC'): Promise<InstitutionalSponsorship> {
   const localResult = verifyDisplacementOffline(recentCandles, symbol);
+  if (recentCandles.length < 16) {
+    return localResult;
+  }
   try {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), 1200); // 1.2s rapid response threshold

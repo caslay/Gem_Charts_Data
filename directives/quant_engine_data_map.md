@@ -172,7 +172,24 @@ Step 11: Classification
 Step 12: volume_delta = latest_buy - latest_sell  (signed)
 ```
 
-### 3.3 Four-Gate Classification Pipeline (Visual Markers)
+### 3.3 Online Displacements Wrapper (`verifyDisplacement`)
+
+**Source:** `displacementEngine.ts`
+
+The online pipeline wraps the offline calculation, running an asynchronous query against the statsmodels OLS FastAPI endpoint:
+
+```
+1. Compute offline result (instant, always available)
+2. IF candles length < 16 → return offline result immediately (bypassing online fetch to prevent 400 Bad Request)
+3. POST candles to /api/py/calculate-displacement (1.2s timeout)
+4. IF Python response OK → return OLS-validated result
+5. ELSE → return offline result (graceful degradation)
+```
+
+> [!TIP]
+> **Performance & Stability:** The 1.2-second timeout and `< 16` candle check guard prevent UI freeze/blocking on cold starts and eliminate unnecessary HTTP 400 bad requests in the python logs when candle data is initially loading.
+
+### 3.4 Four-Gate Classification Pipeline (Visual Markers)
 
 The displacement engine also feeds the **4-gate volumetric annotation system** documented in Section 9. The gates are:
 
@@ -285,8 +302,8 @@ The OLS output flows into the **Strategy Evaluator** as a veto gate:
 
 | Sensitivity | t-stat Threshold | p-value Threshold | Effect |
 |---|---|---|---|
-| `STRICT` | `\|t\| >= 1.96` | `p < 0.05` | Strategy vetoed if either fails |
-| `RELAXED` | `\|t\| >= 1.65` | `p < 0.15` | Strategy vetoed if either fails |
+| `STRICT` | `|t| >= 1.96` | `p < 0.05` | Strategy vetoed if either fails |
+| `RELAXED` | `|t| >= 1.65` | `p < 0.15` | Strategy vetoed if either fails |
 | `OFF` | — | — | OLS validation bypassed entirely |
 
 > **Source:** [useStrategyEvaluator.ts L484-L501](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/hooks/useStrategyEvaluator.ts#L484-L501)
@@ -903,7 +920,7 @@ Supported Zones: OTE, FIB_50, FIB_60, FIB_705, FIB_79
 
 | # | Area | Edge Case | Impact | Mitigation |
 |---|------|-----------|--------|------------|
-| **EC-1** | OLS Backend | Python microservice timeout (>1.2s) | Falls back to `verifyDisplacementOffline` (TS) which produces NO OLS stats | `statistical_validation` returns default `{t: 0, p: 1.0, level: LOW}`. Strategies with `STRICT` sensitivity will be vetoed. |
+| **EC-1** | OLS Backend | Insufficient candle history (< 16 candles) or Python microservice timeout (>1.2s) | Bypasses Python fetch entirely if candles < 16, or falls back to `verifyDisplacementOffline` (TS) on timeout | Returns offline result immediately with default validation `{t: 0, p: 1.0, level: LOW}` to avoid unnecessary HTTP 400 validation errors. |
 | **EC-2** | OLS Backend | `NaN`/`Inf` from singular matrix (collinear predictors) | t-stat and p-value become unreliable | Explicit `isnan`/`isinf` guards zero them out → `confidence_level = LOW` |
 | **EC-3** | Displacement | Consolidation regime (`volatility < 0.001`) | All sponsorship detection is bypassed | Status forced to `CONSOLIDATION`. CI flags set to string `'CONSOLIDATION'` instead of boolean. |
 | **EC-4** | PivotEngine | Insufficient history | Level-2 pivots need 15+15=30 candles minimum | Fewer than 30 candles → no MAJOR pivots → empty dealing range → `AWAITING_IDM_SWEEP` |
@@ -913,6 +930,7 @@ Supported Zones: OTE, FIB_50, FIB_60, FIB_705, FIB_79
 | **EC-8** | Sharp Departure | 5-candle window expiry | Break events that don't depart within 5 candles are invalidated | `sharp_departure_failed = true`, `invalidated = true` |
 | **EC-9** | BiasEngine | Any null input parameter | Forces NEUTRAL regardless of other vectors | Early return guard at [BiasEngine.ts L34-L42](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/src/lib/quantEngine/BiasEngine.ts#L34-L42) |
 | **EC-10** | Strategy Evaluator | MSS lookup dual-path | Client uses `structural_events[]`, server uses `zigzag[]` for MSS | Different confirmation semantics: client checks `sharp_departure_confirmed`, server checks `displacementConfirmed` |
+| **EC-11** | Chart Rendering / UI Toggles | Closed-Candle Memoization Barrier blocks layer toggles/theme settings | Clicking Displacement (or other layers) or toggling theme in Layer Configuration doesn't update the chart immediately | Implemented tracking refs (`prevVisibilityRef`, `prevThemeRef`, `prevThemeSettingsRef`, `prevEngineSettingsRef`) to detect configuration/theme changes and force a bypass of the memoization barrier. |
 
 ### 13.2 Live vs Backtest Asymmetries
 
