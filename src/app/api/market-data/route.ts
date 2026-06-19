@@ -156,23 +156,53 @@ export async function GET(req: Request) {
       console.warn('[MarketData API] Failed to fetch candles_limit from database:', err);
     }
 
-    let limit1m = parseInt(url.searchParams.get('limit1m') || String(limit), 10);
-    if (isNaN(limit1m) || limit1m < 100 || limit1m > 1500) limit1m = limit;
+    const isPoll = url.searchParams.get('poll') === 'true';
+    const timeframeGated = url.searchParams.get('timeframeGated') === 'true';
+    const isInit = url.searchParams.get('init') === 'true';
 
-    let limit5m = parseInt(url.searchParams.get('limit5m') || String(limit), 10);
-    if (isNaN(limit5m) || limit5m < 100 || limit5m > 1500) limit5m = limit;
-
-    let limit15m = parseInt(url.searchParams.get('limit15m') || String(limit), 10);
-    if (isNaN(limit15m) || limit15m < 100 || limit15m > 1500) limit15m = limit;
-
-    let limit1h = parseInt(url.searchParams.get('limit1h') || String(limit), 10);
-    if (isNaN(limit1h) || limit1h < 100 || limit1h > 1500) limit1h = limit;
-
-    let limit4h = parseInt(url.searchParams.get('limit4h') || String(limit), 10);
-    if (isNaN(limit4h) || limit4h < 100 || limit4h > 1500) limit4h = limit;
+    let limit1m = 0;
+    let limit5m = 0;
+    let limit15m = 0;
+    let limit1h = 0;
+    let limit4h = 0;
 
     const visualInterval = url.searchParams.get('interval') || '5m';
     const isStandardInterval = ['5m', '15m', '1h', '4h'].includes(visualInterval);
+
+    if (isPoll) {
+      // Polling mode: only fetch 5 candles of the active interval
+      if (visualInterval === '1m') limit1m = 5;
+      else if (visualInterval === '5m') limit5m = 5;
+      else if (visualInterval === '15m') limit15m = 5;
+      else if (visualInterval === '1h') limit1h = 5;
+      else if (visualInterval === '4h') limit4h = 5;
+    } else if (timeframeGated && !isInit) {
+      // Gated mode: fetch full limit only for active interval
+      const activeLimit = visualInterval === '1m' ? parseInt(url.searchParams.get('limit1m') || String(limit), 10) :
+                          visualInterval === '5m' ? parseInt(url.searchParams.get('limit5m') || String(limit), 10) :
+                          visualInterval === '15m' ? parseInt(url.searchParams.get('limit15m') || String(limit), 10) :
+                          visualInterval === '1h' ? parseInt(url.searchParams.get('limit1h') || String(limit), 10) :
+                          visualInterval === '4h' ? parseInt(url.searchParams.get('limit4h') || String(limit), 10) : limit;
+
+      if (visualInterval === '1m') limit1m = activeLimit;
+      else if (visualInterval === '5m') limit5m = activeLimit;
+      else if (visualInterval === '15m') limit15m = activeLimit;
+      else if (visualInterval === '1h') limit1h = activeLimit;
+      else if (visualInterval === '4h') limit4h = activeLimit;
+    } else {
+      // Full load: fetch all timeframes
+      limit1m = parseInt(url.searchParams.get('limit1m') || String(limit), 10);
+      limit5m = parseInt(url.searchParams.get('limit5m') || String(limit), 10);
+      limit15m = parseInt(url.searchParams.get('limit15m') || String(limit), 10);
+      limit1h = parseInt(url.searchParams.get('limit1h') || String(limit), 10);
+      limit4h = parseInt(url.searchParams.get('limit4h') || String(limit), 10);
+    }
+
+    if (isNaN(limit1m) || limit1m < 0 || limit1m > 1500) limit1m = limit;
+    if (isNaN(limit5m) || limit5m < 0 || limit5m > 1500) limit5m = limit;
+    if (isNaN(limit15m) || limit15m < 0 || limit15m > 1500) limit15m = limit;
+    if (isNaN(limit1h) || limit1h < 0 || limit1h > 1500) limit1h = limit;
+    if (isNaN(limit4h) || limit4h < 0 || limit4h > 1500) limit4h = limit;
 
     const includeBtc = url.searchParams.get('includeBtc') !== 'false';
     const includeStructure = url.searchParams.get('includeStructure') !== 'false';
@@ -259,7 +289,6 @@ export async function GET(req: Request) {
     }
 
     const endTimeSuffix = endTime ? `&endTime=${endTime}` : '';
-    const isInit = url.searchParams.get('init') === 'true';
 
     const urls = {
       '5m': `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=5m&limit=${limit5m}${endTimeSuffix}`,
@@ -300,31 +329,39 @@ export async function GET(req: Request) {
         return res.json();
       };
 
+      const fetchJsonOrEmpty = async (url: string, limitVal: number) => {
+        if (limitVal <= 0) return [];
+        return fetchJson(url);
+      };
+
+      const fetchHtf = !(isPoll || (timeframeGated && !isInit));
+      const fetchBtcHtf = includeBtc && !(isPoll || (timeframeGated && !isInit));
+
       const restingLiquidityPromise = fetchRestingLiquidity(symbol).catch(() => ({ BSL_Magnets: [], SSL_Magnets: [] }));
       const smartMoneyPromise = fetchSmartMoneySentiment(symbol).catch(() => ({ funding_rate_status: 'NEUTRAL', smart_money_divergence: false }));
 
       // If init parameter is passed, fetch a minimum of 60 days of 15m candles (5760 candles)
       const res15mPromise = isInit
         ? fetchLargeHistory(symbol, '15m', 5760, endTime)
-        : fetchJson(urls['15m']);
+        : fetchJsonOrEmpty(urls['15m'], limit15m);
 
       let visualFetchPromise = Promise.resolve(null as any);
       if (!isStandardInterval) {
         const visualUrl = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${visualInterval}&limit=${visualLimit}${endTimeSuffix}`;
-        visualFetchPromise = fetchJson(visualUrl);
+        visualFetchPromise = isPoll ? fetchJsonOrEmpty(visualUrl, 5) : fetchJsonOrEmpty(visualUrl, visualLimit);
       }
 
       const [r5m, r1h, r4h, r1d, r1w, r1M, rOi, rBtc5m, rBtc15m, rBtc1h, rVisual, rResting, rSmart, r15m] = await Promise.all([
-        fetchJson(urls['5m']),
-        fetchJson(urls['1h']),
-        fetchJson(urls['4h']),
-        fetchJson(urls['1d']),
-        fetchJson(urls['1w']),
-        fetchJson(urls['1M']),
+        fetchJsonOrEmpty(urls['5m'], limit5m),
+        fetchJsonOrEmpty(urls['1h'], limit1h),
+        fetchJsonOrEmpty(urls['4h'], limit4h),
+        fetchHtf ? fetchJson(urls['1d']) : Promise.resolve([]),
+        fetchHtf ? fetchJson(urls['1w']) : Promise.resolve([]),
+        fetchHtf ? fetchJson(urls['1M']) : Promise.resolve([]),
         fetchJson(urls['openInterest']),
         includeBtc ? fetchJson(urls['btc_5m']).catch(() => []) : Promise.resolve([]),
-        includeBtc ? fetchJson(urls['btc_15m']).catch(() => []) : Promise.resolve([]),
-        includeBtc ? fetchJson(urls['btc_1h']).catch(() => []) : Promise.resolve([]),
+        fetchBtcHtf ? fetchJson(urls['btc_15m']).catch(() => []) : Promise.resolve([]),
+        fetchBtcHtf ? fetchJson(urls['btc_1h']).catch(() => []) : Promise.resolve([]),
         visualFetchPromise,
         restingLiquidityPromise,
         smartMoneyPromise,
@@ -412,6 +449,29 @@ export async function GET(req: Request) {
       candlesBtc1h = formatCandles(dataBtc1h);
     }
 
+    // Find the latest valid candle across any non-empty candle arrays to act as a robust fallback
+    let latestCandleFromAny: any = null;
+    const allCandleArrays = [
+      dynamicVisualCandles,
+      candles5m,
+      candles15m,
+      candles1h,
+      candles4h,
+      candles1d,
+      candles1w,
+      candles1M
+    ];
+    for (const arr of allCandleArrays) {
+      if (arr && arr.length > 0) {
+        const last = arr[arr.length - 1];
+        if (!latestCandleFromAny || last.t > latestCandleFromAny.t) {
+          latestCandleFromAny = last;
+        }
+      }
+    }
+
+    const currentLivePrice = latestCandleFromAny ? latestCandleFromAny.c : 0;
+
     // BTC PDH and PDL solvers (based on last 24h of 1h klines)
     let btcPdh = 0;
     let btcPdl = Infinity;
@@ -446,7 +506,9 @@ export async function GET(req: Request) {
     const getUtcDate = (t: number) => new Date(t);
 
     // 1. Macro Context
-    const lastCandle = candles1h[candles1h.length - 1];
+    const lastCandle = (candles1h && candles1h.length > 0)
+      ? candles1h[candles1h.length - 1]
+      : (latestCandleFromAny || { t: Date.now(), c: 0 });
     const lastDateUtc = getUtcDate(lastCandle.t);
     const currentYear = lastDateUtc.getUTCFullYear();
     const currentMonth = lastDateUtc.getUTCMonth();
@@ -501,19 +563,21 @@ export async function GET(req: Request) {
     const sweeps: string[] = [];
 
     // Check PDH/PDL Exhaustion across all today's candles
-    for (const c of todayCandles) {
-      if (c.h >= pdh || c.l <= pdl) {
-        sweeps.push("EXHAUSTED");
+    if (pdh > 0 && pdl > 0 && pdl !== Infinity) {
+      for (const c of todayCandles) {
+        if (c.h >= pdh || c.l <= pdl) {
+          sweeps.push("EXHAUSTED");
+        }
       }
     }
 
     // Check Asian sweeps (only candles at or after 07:00 UTC)
     const afterAsianCandles = todayCandles.filter(c => getUtcDate(c.t).getUTCHours() >= 7);
     for (const c of afterAsianCandles) {
-      if (asianLiquidity.high && c.h >= asianLiquidity.high && c.h < pdh) {
+      if (asianLiquidity.high && c.h >= asianLiquidity.high && (pdh > 0 ? c.h < pdh : true)) {
         sweeps.push("ASIAN_HIGH_SWEPT");
       }
-      if (asianLiquidity.low && c.l <= asianLiquidity.low && c.l > pdl) {
+      if (asianLiquidity.low && c.l <= asianLiquidity.low && (pdl > 0 ? c.l > pdl : true)) {
         sweeps.push("ASIAN_LOW_SWEPT");
       }
     }
@@ -521,10 +585,10 @@ export async function GET(req: Request) {
     // Check London sweeps (only candles at or after 12:00 UTC)
     const afterLondonCandles = todayCandles.filter(c => getUtcDate(c.t).getUTCHours() >= 12);
     for (const c of afterLondonCandles) {
-      if (londonLiquidity.high && c.h >= londonLiquidity.high && c.h < pdh) {
+      if (londonLiquidity.high && c.h >= londonLiquidity.high && (pdh > 0 ? c.h < pdh : true)) {
         sweeps.push("LONDON_HIGH_SWEPT");
       }
-      if (londonLiquidity.low && c.l <= londonLiquidity.low && c.l > pdl) {
+      if (londonLiquidity.low && c.l <= londonLiquidity.low && (pdl > 0 ? c.l > pdl : true)) {
         sweeps.push("LONDON_LOW_SWEPT");
       }
     }
@@ -547,8 +611,8 @@ export async function GET(req: Request) {
     }
 
     let current_pricing = "UNKNOWN";
-    if (true_day_open_0700 !== null && candles5m.length > 0) {
-      const livePrice = candles5m[candles5m.length - 1].c;
+    if (true_day_open_0700 !== null && currentLivePrice > 0) {
+      const livePrice = currentLivePrice;
       if (livePrice > true_day_open_0700) {
         current_pricing = "PREMIUM";
       } else if (livePrice < true_day_open_0700) {
@@ -616,7 +680,7 @@ export async function GET(req: Request) {
     }
 
     // 7. Historical Magnets Scanner (HTF — 1w / 1d)
-    const livePrice = candles5m[candles5m.length - 1].c;
+    const livePrice = currentLivePrice;
 
     // Previous Week High / Low (exclude current open week)
     const prevWeeklyCandle = candles1w.length > 1 ? candles1w[candles1w.length - 2] : null;
@@ -781,7 +845,7 @@ export async function GET(req: Request) {
       } | null;
     };
 
-    const currentLivePrice = candles5m[candles5m.length - 1].c;
+
 
     // Ensure resting_liquidity_pools are dynamically populated and scaled if empty/failed
     if (!resting_liquidity_pools || !resting_liquidity_pools.BSL_Magnets || resting_liquidity_pools.BSL_Magnets.length === 0) {
@@ -842,112 +906,114 @@ export async function GET(req: Request) {
     };
 
     // ── Server-Side "Lazy Exit" Logic (Phase 3) ─────────────────────────────
-    try {
-      const openTradesRes = await sql`
-        SELECT * FROM paper_trades WHERE status = 'OPEN'
-      `;
-      
-      if (openTradesRes.rows.length > 0) {
-        let userEmail = "default_user";
-        try {
-          const session = await auth();
-          if (session?.user?.email) {
-            userEmail = session.user.email;
-          }
-        } catch (sessErr) {
-          console.warn("[LAZY EXIT] Auth session lookup skipped/failed:", sessErr);
-        }
-
-        for (const trade of openTradesRes.rows) {
-          const entryPrice = parseFloat(trade.entry_price);
-          const stopLoss = parseFloat(trade.stop_loss);
-          const takeProfit = parseFloat(trade.take_profit);
-          const direction = trade.direction;
-          const positionSize = parseFloat(trade.position_size ?? 1.0);
-          const rawRiskAmountUsd = trade.risk_amount_usd !== null && trade.risk_amount_usd !== undefined ? parseFloat(trade.risk_amount_usd) : 0;
-          const riskAmountUsd = rawRiskAmountUsd > 0 ? rawRiskAmountUsd : Math.abs(entryPrice - stopLoss) * positionSize;
-
-          let isBreached = false;
-          let exitPrice = entryPrice;
-
-          if (direction === "LONG") {
-            if (currentLivePrice >= takeProfit) {
-              isBreached = true;
-              exitPrice = takeProfit;
-            } else if (currentLivePrice <= stopLoss) {
-              isBreached = true;
-              exitPrice = stopLoss;
+    if (!isPoll) {
+      try {
+        const openTradesRes = await sql`
+          SELECT * FROM paper_trades WHERE status = 'OPEN'
+        `;
+        
+        if (openTradesRes.rows.length > 0) {
+          let userEmail = "default_user";
+          try {
+            const session = await auth();
+            if (session?.user?.email) {
+              userEmail = session.user.email;
             }
-          } else if (direction === "SHORT") {
-            if (currentLivePrice <= takeProfit) {
-              isBreached = true;
-              exitPrice = takeProfit;
-            } else if (currentLivePrice >= stopLoss) {
-              isBreached = true;
-              exitPrice = stopLoss;
-            }
+          } catch (sessErr) {
+            console.warn("[LAZY EXIT] Auth session lookup skipped/failed:", sessErr);
           }
 
-          if (isBreached) {
-            // Calculate Realized P&L and ROI
-            let realized_pnl = direction === "LONG"
-              ? (exitPrice - entryPrice) * positionSize
-              : (entryPrice - exitPrice) * positionSize;
+          for (const trade of openTradesRes.rows) {
+            const entryPrice = parseFloat(trade.entry_price);
+            const stopLoss = parseFloat(trade.stop_loss);
+            const takeProfit = parseFloat(trade.take_profit);
+            const direction = trade.direction;
+            const positionSize = parseFloat(trade.position_size ?? 1.0);
+            const rawRiskAmountUsd = trade.risk_amount_usd !== null && trade.risk_amount_usd !== undefined ? parseFloat(trade.risk_amount_usd) : 0;
+            const riskAmountUsd = rawRiskAmountUsd > 0 ? rawRiskAmountUsd : Math.abs(entryPrice - stopLoss) * positionSize;
 
-            let roi = riskAmountUsd > 0
-              ? (realized_pnl / riskAmountUsd) * 100
-              : 0;
+            let isBreached = false;
+            let exitPrice = entryPrice;
 
-            exitPrice = parseFloat(exitPrice.toFixed(4));
-            realized_pnl = parseFloat(realized_pnl.toFixed(4));
-            roi = parseFloat(roi.toFixed(4));
+            if (direction === "LONG") {
+              if (currentLivePrice >= takeProfit) {
+                isBreached = true;
+                exitPrice = takeProfit;
+              } else if (currentLivePrice <= stopLoss) {
+                isBreached = true;
+                exitPrice = stopLoss;
+              }
+            } else if (direction === "SHORT") {
+              if (currentLivePrice <= takeProfit) {
+                isBreached = true;
+                exitPrice = takeProfit;
+              } else if (currentLivePrice >= stopLoss) {
+                isBreached = true;
+                exitPrice = stopLoss;
+              }
+            }
 
-            console.log(`[LAZY EXIT] Breach detected for trade ${trade.id} (${direction}). Auto-closing at ${exitPrice}. Realized P&L: $${realized_pnl}`);
+            if (isBreached) {
+              // Calculate Realized P&L and ROI
+              let realized_pnl = direction === "LONG"
+                ? (exitPrice - entryPrice) * positionSize
+                : (entryPrice - exitPrice) * positionSize;
 
-            // Update trade status to CLOSED in the database
-            await sql`
-              UPDATE paper_trades
-              SET status = 'CLOSED',
-                  exit_price = ${exitPrice},
-                  realized_pnl = ${realized_pnl},
-                  roi = ${roi}
-              WHERE id = ${trade.id}
-            `;
+              let roi = riskAmountUsd > 0
+                ? (realized_pnl / riskAmountUsd) * 100
+                : 0;
 
-            // Recalculate account balance from scratch to prevent ghost PnL drift
-            let initialCapital = 10000.0000;
-            const accountCapRes = await sql`
-              SELECT initial_capital FROM trading_account WHERE user_id = ${userEmail}
-            `;
-            if (accountCapRes.rows.length === 0) {
-              // Seed the account with $10,000 if it does not exist yet
+              exitPrice = parseFloat(exitPrice.toFixed(4));
+              realized_pnl = parseFloat(realized_pnl.toFixed(4));
+              roi = parseFloat(roi.toFixed(4));
+
+              console.log(`[LAZY EXIT] Breach detected for trade ${trade.id} (${direction}). Auto-closing at ${exitPrice}. Realized P&L: $${realized_pnl}`);
+
+              // Update trade status to CLOSED in the database
               await sql`
-                INSERT INTO trading_account (user_id, current_balance, initial_capital, max_risk_limit_pct)
-                VALUES (${userEmail}, 10000.0000, 10000.0000, 3.00)
+                UPDATE paper_trades
+                SET status = 'CLOSED',
+                    exit_price = ${exitPrice},
+                    realized_pnl = ${realized_pnl},
+                    roi = ${roi}
+                WHERE id = ${trade.id}
               `;
-            } else {
-              initialCapital = parseFloat(String(accountCapRes.rows[0].initial_capital));
+
+              // Recalculate account balance from scratch to prevent ghost PnL drift
+              let initialCapital = 10000.0000;
+              const accountCapRes = await sql`
+                SELECT initial_capital FROM trading_account WHERE user_id = ${userEmail}
+              `;
+              if (accountCapRes.rows.length === 0) {
+                // Seed the account with $10,000 if it does not exist yet
+                await sql`
+                  INSERT INTO trading_account (user_id, current_balance, initial_capital, max_risk_limit_pct)
+                  VALUES (${userEmail}, 10000.0000, 10000.0000, 3.00)
+                `;
+              } else {
+                initialCapital = parseFloat(String(accountCapRes.rows[0].initial_capital));
+              }
+
+              const pnlSumRes = await sql`
+                SELECT COALESCE(SUM(realized_pnl), 0) AS total_realized_pnl
+                FROM paper_trades
+                WHERE status = 'CLOSED'
+              `;
+              const totalRealizedPnl = parseFloat(String(pnlSumRes.rows[0].total_realized_pnl));
+              const newBalance = parseFloat((initialCapital + totalRealizedPnl).toFixed(4));
+
+              await sql`
+                UPDATE trading_account
+                SET current_balance = ${newBalance}, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ${userEmail}
+              `;
+              console.log(`[LAZY EXIT] Account balance updated for ${userEmail}: $${newBalance}`);
             }
-
-            const pnlSumRes = await sql`
-              SELECT COALESCE(SUM(realized_pnl), 0) AS total_realized_pnl
-              FROM paper_trades
-              WHERE status = 'CLOSED'
-            `;
-            const totalRealizedPnl = parseFloat(String(pnlSumRes.rows[0].total_realized_pnl));
-            const newBalance = parseFloat((initialCapital + totalRealizedPnl).toFixed(4));
-
-            await sql`
-              UPDATE trading_account
-              SET current_balance = ${newBalance}, updated_at = CURRENT_TIMESTAMP
-              WHERE user_id = ${userEmail}
-            `;
-            console.log(`[LAZY EXIT] Account balance updated for ${userEmail}: $${newBalance}`);
           }
         }
+      } catch (lazyExitError: any) {
+        console.error(`[LAZY EXIT ERROR] Failed to execute server-side trade monitoring: ${lazyExitError.message || lazyExitError}`);
       }
-    } catch (lazyExitError: any) {
-      console.error(`[LAZY EXIT ERROR] Failed to execute server-side trade monitoring: ${lazyExitError.message || lazyExitError}`);
     }
 
     // Explicitly define stat_payload with at least 200 candles matching the requested visual interval to ensure OLS significance and prevent multi-timeframe leak
@@ -1177,6 +1243,36 @@ export async function GET(req: Request) {
       pdl,
       liquidation_events.status
     );
+
+    if (isPoll) {
+      const activeKey = `candles_${visualInterval}`;
+      const activeCandles = activeKey === 'candles_5m' ? candles5m :
+                            activeKey === 'candles_15m' ? candles15m :
+                            activeKey === 'candles_1h' ? candles1h :
+                            activeKey === 'candles_4h' ? candles4h : dynamicVisualCandles;
+
+      // Annotate delta candles before slicing
+      annotateCandlesWithVolumetricSignals(activeCandles);
+
+      const deltaPayload = {
+        isDelta: true,
+        timestamp: new Date().toISOString(),
+        open_interest: parseFloat(dataOi.openInterest),
+        risk_management: null, // Bypassed for delta tick to let client preserve risk settings
+        correlation_data: {
+          btc_live_price: btcPrice,
+        },
+        delta_candles: activeCandles.slice(-5), // Only the last 5 active timeframe candles
+        order_flow_engine: {
+          open_interest_trend,
+          resting_liquidity_pools,
+          liquidation_events,
+          smart_money_sentiment,
+        },
+      };
+
+      return NextResponse.json(deltaPayload);
+    }
 
     // Annotate historical candle arrays with volumetric signal highlights before slicing
     annotateCandlesWithVolumetricSignals(candles4h);

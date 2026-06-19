@@ -269,26 +269,29 @@ export default function BacktestSidebar({
                     {(() => {
                       const range = dealingRange;
                       if (!range) return null;
-                      const pricingStatus = range.current_status || 'UNKNOWN';
-                      const pricingColorClass = pricingStatus === 'DISCOUNT'
-                        ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_6px_rgba(16,185,129,0.05)]'
-                        : pricingStatus === 'PREMIUM'
-                          ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
-                          : 'text-muted bg-card-border/20 border-transparent';
+                      const isAwaiting = range.low === null || range.high === null || range.current_status === 'AWAITING_IDM_SWEEP';
+                      const pricingStatus = isAwaiting ? 'AWAITING_IDM_SWEEP' : (range.current_status || 'UNKNOWN');
+                      const pricingColorClass = isAwaiting
+                        ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
+                        : pricingStatus === 'DISCOUNT'
+                          ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_6px_rgba(16,185,129,0.05)]'
+                          : pricingStatus === 'PREMIUM'
+                            ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
+                            : 'text-muted bg-card-border/20 border-transparent';
 
                       return (
                         <div className="space-y-1.5 border-t border-card-border/30 pt-1.5">
                           <div className="flex justify-between items-center text-[10px]">
                             <span className="text-muted font-bold uppercase tracking-wider">Dealing Range</span>
                             <span className="font-mono font-bold text-foreground/90">
-                              {formatPrice(range.low)} - {formatPrice(range.high)}
+                              {isAwaiting ? 'AWAITING_IDM_SWEEP' : `${formatPrice(range.low)} - ${formatPrice(range.high)}`}
                             </span>
                           </div>
 
                           <div className="flex justify-between items-center text-[10px]">
                             <span className="text-muted font-bold uppercase tracking-wider">Equilibrium</span>
                             <span className="font-mono font-bold text-accent">
-                              {formatPrice(range.equilibrium)}
+                              {isAwaiting ? 'AWAITING sweep confirmation' : formatPrice(range.equilibrium)}
                             </span>
                           </div>
 
@@ -324,33 +327,36 @@ export default function BacktestSidebar({
 
                     {(() => {
                       const internalRange = metrics?.internal_context || structureMap?.internalDealingRange;
-                      if (!internalRange || (!internalRange.high && !internalRange.low)) {
+                      if (!internalRange || (internalRange.high === null && internalRange.low === null)) {
                         return (
                           <div className="text-[10px] text-muted italic text-center py-2 border-t border-card-border/30">
                             No confirmed internal swings yet
                           </div>
                         );
                       }
-                      const pricingStatus = internalRange.current_status || internalRange.pricing_status || 'UNKNOWN';
-                      const pricingColorClass = pricingStatus === 'DISCOUNT'
-                        ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_6px_rgba(16,185,129,0.05)]'
-                        : pricingStatus === 'PREMIUM'
-                          ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
-                          : 'text-muted bg-card-border/20 border-transparent';
+                      const isAwaiting = internalRange.low === null || internalRange.high === null || internalRange.current_status === 'AWAITING_IDM_SWEEP' || internalRange.pricing_status === 'AWAITING_IDM_SWEEP';
+                      const pricingStatus = isAwaiting ? 'AWAITING_IDM_SWEEP' : (internalRange.current_status || internalRange.pricing_status || 'UNKNOWN');
+                      const pricingColorClass = isAwaiting
+                        ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
+                        : pricingStatus === 'DISCOUNT'
+                          ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_6px_rgba(16,185,129,0.05)]'
+                          : pricingStatus === 'PREMIUM'
+                            ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
+                            : 'text-muted bg-card-border/20 border-transparent';
 
                       return (
                         <div className="space-y-1.5 border-t border-card-border/30 pt-1.5">
                           <div className="flex justify-between items-center text-[10px]">
                             <span className="text-muted font-bold uppercase tracking-wider">Internal Range</span>
                             <span className="font-mono font-bold text-foreground/90">
-                              {formatPrice(internalRange.low)} - {formatPrice(internalRange.high)}
+                              {isAwaiting ? 'AWAITING_IDM_SWEEP' : `${formatPrice(internalRange.low)} - ${formatPrice(internalRange.high)}`}
                             </span>
                           </div>
 
                           <div className="flex justify-between items-center text-[10px]">
                             <span className="text-muted font-bold uppercase tracking-wider">Equilibrium</span>
                             <span className="font-mono font-bold text-accent">
-                              {formatPrice(internalRange.equilibrium)}
+                              {isAwaiting ? 'AWAITING sweep confirmation' : formatPrice(internalRange.equilibrium)}
                             </span>
                           </div>
 
@@ -367,8 +373,15 @@ export default function BacktestSidebar({
                               const multiplier = parseFloat(themeSettings?.structure_istr_atr_multiplier || '1.5');
                               const activeCandles = enrichedPayload?.data_payload?.[`candles_${activeTimeframe}` as keyof typeof enrichedPayload.data_payload] || [];
                               const atr = activeCandles.length > 0 ? calculateATR(activeCandles) : 0;
-                              const rangeHeight = internalRange.high && internalRange.low ? (internalRange.high - internalRange.low) : 0;
+                              const rangeHeight = internalRange.high && internalRange.low && !isAwaiting ? (internalRange.high - internalRange.low) : 0;
                               const isSuppressed = rangeHeight > 0 && atr > 0 && rangeHeight < atr * multiplier;
+                              if (isAwaiting) {
+                                return (
+                                  <span className="text-[9px] font-black text-amber-500/70 bg-amber-500/5 border border-amber-500/10 px-1.5 py-0.5 rounded tracking-wider uppercase">
+                                    PENDING
+                                  </span>
+                                );
+                              }
                               if (isSuppressed) {
                                 return (
                                   <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded tracking-wider uppercase shadow-[0_0_6px_rgba(245,158,11,0.05)]">
@@ -488,13 +501,13 @@ export default function BacktestSidebar({
                       <span className={`font-black uppercase text-[9px] tracking-wider ${
                         metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true
                           ? 'text-emerald-500'
-                          : metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === 'CONSOLIDATION'
+                          : metrics.institutional_sponsorship.status === 'CONSOLIDATION'
                           ? 'text-accent'
                           : 'text-rose-500'
                       }`}>
                         {metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true
                           ? 'CONFIRMED'
-                          : metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === 'CONSOLIDATION'
+                          : metrics.institutional_sponsorship.status === 'CONSOLIDATION'
                           ? 'CONSOLIDATION'
                           : 'REJECTED'}
                       </span>

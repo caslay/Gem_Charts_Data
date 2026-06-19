@@ -23,8 +23,8 @@ export function calculateVolumeProfile(
     !dr ||
     dr.anchor_high_swing === null ||
     dr.anchor_low_swing === null ||
-    dr.high === 'AWAITING_IDM_SWEEP' ||
-    dr.low === 'AWAITING_IDM_SWEEP'
+    dr.high === null ||
+    dr.low === null
   ) {
     return null;
   }

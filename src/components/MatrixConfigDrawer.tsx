@@ -1,7 +1,6 @@
 import React from 'react';
 import { X, Activity, ChevronRight, Magnet, Target, Clock, History, TrendingUp } from 'lucide-react';
-import { useBinanceWS } from '@/hooks/useBinanceWS';
-import { useMarketDataContext } from '@/context/MarketDataContext';
+import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 
 export interface MatrixDataPayload {
   ipda_metrics?: {
@@ -64,7 +63,7 @@ interface MatrixConfigDrawerProps {
  * Wired to the V8.2 Ultimate Matrix List payload.
  */
 const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose, data }) => {
-  const { livePrice } = useBinanceWS();
+  const { livePrice } = useMarketDataLiveContext();
   const { wsInterval, structureState } = useMarketDataContext();
 
   if (!isOpen) return null;
@@ -247,7 +246,9 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
                       <div className="flex flex-col gap-0.5 text-xs">
                         <div className="flex justify-between items-center">
                           <span className="text-muted font-semibold uppercase text-[10px]">Anchor High</span>
-                          <span className="font-mono font-bold text-foreground">{formatPrice(range.high)}</span>
+                          <span className="font-mono font-bold text-foreground">
+                            {range.high !== null ? formatPrice(range.high) : 'AWAITING_IDM_SWEEP'}
+                          </span>
                         </div>
                         <span className="text-[9.5px] text-muted/70 font-mono text-right">
                           {range.anchor_high_swing?.t ? formatCairoTime(range.anchor_high_swing.t) : 'N/A'}
@@ -257,7 +258,9 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
                       <div className="flex flex-col gap-0.5 text-xs border-t border-card-border/30 pt-2">
                         <div className="flex justify-between items-center">
                           <span className="text-muted font-semibold uppercase text-[10px]">Anchor Low</span>
-                          <span className="font-mono font-bold text-foreground">{formatPrice(range.low)}</span>
+                          <span className="font-mono font-bold text-foreground">
+                            {range.low !== null ? formatPrice(range.low) : 'AWAITING_IDM_SWEEP'}
+                          </span>
                         </div>
                         <span className="text-[9.5px] text-muted/70 font-mono text-right">
                           {range.anchor_low_swing?.t ? formatCairoTime(range.anchor_low_swing.t) : 'N/A'}

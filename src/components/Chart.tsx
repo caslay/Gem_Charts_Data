@@ -7,14 +7,13 @@ import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
 import type { LiveCandle } from '@/hooks/useBinanceWS';
 import SettingsModal, { Alert } from './modals/SettingsModal';
 import { AlertSound, useAlertSounds } from '@/hooks/useAlertSounds';
-import { useMarketDataContext } from '@/context/MarketDataContext';
+import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 import { Volume2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { registry } from '@/lib/chartLayers/registry';
 import { useLayerStore } from '@/lib/chartLayers/store';
 import ChartLayerHud from './ChartLayerHud';
-import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
-import { analyzeMarketStructure } from '@/lib/structureEngine';
+// Imports of detectActiveFVGs, mapAndConsolidateFVGs, and analyzeMarketStructure removed to prevent main-thread blocking calculations
 
 interface ChartProps {
   data: Candle[];
@@ -97,6 +96,13 @@ export default function Chart({
   const { visibility } = useLayerStore();
   const layerStorageRef = useRef<Map<string, Map<string, any>>>(new Map());
 
+  // Refs for Closed-Candle Memoization Barrier, HTML layer caching, and prepend tracking
+  const lastClosedTRef = useRef<number | null>(null);
+  const lastVisibleRangeRef = useRef<{ from: number; to: number } | null>(null);
+  const htmlLayerCacheRef = useRef<Record<string, React.ReactNode>>({});
+  const prevFirstCandleTimeRef = useRef<number | null>(null);
+  const lastDataPayloadRef = useRef<any>(null);
+
   const getLayerStorage = useCallback((layerId: string) => {
     if (!layerStorageRef.current.has(layerId)) {
       layerStorageRef.current.set(layerId, new Map());
@@ -149,10 +155,11 @@ export default function Chart({
 
   const { playSound, playFile } = useAlertSounds();
   const context = useMarketDataContext();
+  const liveContext = useMarketDataLiveContext();
 
   const marketContextData = propsMarketContextData !== undefined ? propsMarketContextData : context.data;
-  const livePrice = propsLivePrice !== undefined ? propsLivePrice : context.livePrice;
-  const liveCandle = propsLiveCandle !== undefined ? propsLiveCandle : context.liveCandle;
+  const livePrice = propsLivePrice !== undefined ? propsLivePrice : liveContext.livePrice;
+  const liveCandle = propsLiveCandle !== undefined ? propsLiveCandle : liveContext.liveCandle;
   const themeSettings = propsThemeSettings !== undefined ? propsThemeSettings : context.themeSettings;
   const { triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert: contextTriggerSmartAlert, setWsInterval, loadMoreHistory: contextLoadMoreHistory, isFetchingMore: contextIsFetchingMore, structureState: liveStructureState, contextAnchorTimestamp: liveContextAnchorTimestamp } = context;
   const triggerSmartAlert = propsTriggerSmartAlert !== undefined ? propsTriggerSmartAlert : contextTriggerSmartAlert;
@@ -1135,6 +1142,13 @@ export default function Chart({
       }));
 
       formattedData.sort((a, b) => a.time - b.time);
+
+      // Calculate shift count for left-edge prepends
+      let prependedCount = 0;
+      if (prevFirstCandleTimeRef.current !== null && !isInitialLoad.current) {
+        prependedCount = data.filter((c) => c.t < prevFirstCandleTimeRef.current!).length;
+      }
+
       seriesRef.current.setData(formattedData);
 
       if (isInitialLoad.current) {
@@ -1153,7 +1167,20 @@ export default function Chart({
           chartRef.current?.timeScale().fitContent();
         }
         isInitialLoad.current = false;
+      } else if (prependedCount > 0 && chartRef.current) {
+        // Adjust visible logical range to avoid left-edge jump
+        const timeScale = chartRef.current.timeScale();
+        const logicalRange = timeScale.getVisibleLogicalRange();
+        if (logicalRange) {
+          timeScale.setVisibleLogicalRange({
+            from: logicalRange.from + prependedCount,
+            to: logicalRange.to + prependedCount,
+          });
+        }
       }
+
+      // Store the first candle timestamp for tracking prepends
+      prevFirstCandleTimeRef.current = data[0].t;
 
       // Update coordinates
       updateAlertPositions();
@@ -1161,67 +1188,65 @@ export default function Chart({
   }, [data, theme, isBacktest]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // ── Dynamic Recalculations for Real-Time WebSocket Reactivity ──────────────
-  const computedFvgs = useMemo(() => {
-    if (!localCandles || localCandles.length === 0) return [];
-    // For FVG calculation, we treat all candles as closed since they are historical.
-    const candlesWithClosed = localCandles.map((c, idx) => ({ ...c, isClosed: idx < localCandles.length - 1 }));
-    const fvgs = detectActiveFVGs(candlesWithClosed, true);
-    return mapAndConsolidateFVGs([{ fvgs, timeframe: interval }]);
-  }, [localCandles, interval]);
+  const activeStructureState = useMemo(() => {
+    if (!structureState) return null;
+    const currentPrice = livePrice ?? (localCandles[localCandles.length - 1]?.c ?? 0);
 
-  const dynamicMarketContextData = useMemo(() => {
-    if (!marketContextData) return null;
+    // Perform lightweight update on dealing range status (O(1) complexity)
+    const updatedDealingRange = structureState.dealingRange ? {
+      ...structureState.dealingRange,
+      current_status: structureState.dealingRange.equilibrium === null
+        ? 'AWAITING_IDM_SWEEP' as const
+        : (currentPrice > Number(structureState.dealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const)
+    } : null;
+
+    const updatedInternalDealingRange = structureState.internalDealingRange ? {
+      ...structureState.internalDealingRange,
+      current_status: structureState.internalDealingRange.equilibrium === null
+        ? 'AWAITING_IDM_SWEEP' as const
+        : (currentPrice > Number(structureState.internalDealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const)
+    } : null;
+
     return {
-      ...marketContextData,
-      ipda_metrics: {
-        ...marketContextData.ipda_metrics,
-        active_fvgs: computedFvgs, // Override with dynamically calculated FVGs!
-      }
-    };
-  }, [marketContextData, computedFvgs]);
-
-  const dynamicStructureState = useMemo(() => {
-    if (!localCandles || localCandles.length === 0) return null;
-    const currentPrice = localCandles[localCandles.length - 1]?.c ?? 0;
-    const displacementStatus = marketContextData?.ipda_metrics?.institutional_sponsorship ?? null;
-    const globalAnchors = marketContextData?.ipda_metrics?.global_anchors ?? null;
-    
-    // Slice to match standard 350-candle lookback limit
-    const candlesWithClosed = localCandles.map((c, idx) => ({ ...c, isClosed: idx < localCandles.length - 1 }));
-    const structureCandles = candlesWithClosed.slice(-350);
-
-    const anchor = contextAnchorTimestamp || structureCandles[0]?.t || null;
-    
-    const configSettings = context?.engineSettings || {
-      atrPeriod: 14,
-      adaptiveNMin: 3,
-      adaptiveNMax: 15,
-      mssBodyRatio: 0.70,
-      displacementVef: 1.50,
-      sharpDepartureMult: 1.50,
-    };
-
-    try {
-      return analyzeMarketStructure(
-        structureCandles,
-        currentPrice,
-        displacementStatus,
-        anchor,
-        globalAnchors,
-        configSettings
-      );
-    } catch (err) {
-      console.error('[Chart] Failed to calculate dynamic structureState:', err);
-      return structureState;
-    }
-  }, [localCandles, marketContextData, contextAnchorTimestamp, context?.engineSettings, structureState]);
+      ...structureState,
+      dealingRange: updatedDealingRange,
+      internalDealingRange: updatedInternalDealingRange
+    } as any;
+  }, [structureState, livePrice, localCandles]);
 
   // ── Dynamic Chart Layer Orchestrator ─────────────────────────────────────
   useEffect(() => {
     const chart = chartRef.current;
     const series = seriesRef.current;
-    const activeData = dynamicMarketContextData || marketContextData;
+    const activeData = marketContextData;
     if (!chart || !series || !localCandles || localCandles.length === 0 || !activeData) return;
+
+    const lastClosedT = localCandles[localCandles.length - 2]?.t;
+    const isNewCandle = lastClosedTRef.current !== lastClosedT;
+
+    const visibleRange = chart.timeScale().getVisibleLogicalRange();
+    const isViewportChanged = !lastVisibleRangeRef.current || 
+      lastVisibleRangeRef.current.from !== visibleRange?.from || 
+      lastVisibleRangeRef.current.to !== visibleRange?.to;
+
+    // Interactivity bypass checks
+    const isInteracting = activeDragLine !== null || 
+      activeDragTradeLine !== null || 
+      isHotkeyAlertModeActive || 
+      hoveredCandle !== null;
+
+    if (!isNewCandle && !isViewportChanged && !isInteracting && lastClosedTRef.current !== null) {
+      return;
+    }
+
+    // Keep track of parameters
+    if (lastClosedT) {
+      lastClosedTRef.current = lastClosedT;
+    }
+    if (visibleRange) {
+      lastVisibleRangeRef.current = { from: visibleRange.from, to: visibleRange.to };
+    }
+    lastDataPayloadRef.current = activeData;
 
     const activeTheme = theme === 'dark' ? 'dark' : 'light';
     const layers = registry.getAll();
@@ -1239,7 +1264,7 @@ export default function Chart({
         theme: activeTheme as 'dark' | 'light',
         themeSettings,
         storage,
-        structureState: dynamicStructureState || structureState,
+        structureState: activeStructureState || structureState,
         contextAnchorTimestamp,
         engineSettings: context.engineSettings,
       };
@@ -1262,7 +1287,7 @@ export default function Chart({
         }
       }
     });
-  }, [localCandles, dynamicMarketContextData, marketContextData, visibility, theme, themeSettings, getLayerStorage, dynamicStructureState, structureState, contextAnchorTimestamp, context.engineSettings]);
+  }, [localCandles, marketContextData, visibility, theme, themeSettings, getLayerStorage, activeStructureState, structureState, contextAnchorTimestamp, context.engineSettings, activeDragLine, activeDragTradeLine, isHotkeyAlertModeActive, hoveredCandle]);
 
   // ── Sync Active Alerts with Price Lines ───────────────────────────────────
   useEffect(() => {
@@ -1340,7 +1365,7 @@ export default function Chart({
   const computeFvgOverlay = useCallback(() => {
     const chart = chartRef.current;
     const series = seriesRef.current;
-    if (!chart || !series || !computedFvgs || computedFvgs.length === 0) {
+    if (!chart || !series || !activeFvgs || activeFvgs.length === 0) {
       setFvgOverlayBoxes([]);
       return;
     }
@@ -1352,7 +1377,7 @@ export default function Chart({
 
     const boxes: { key: string; top: number; height: number; left: number; width: number; isBullish: boolean }[] = [];
 
-    for (const fvg of computedFvgs) {
+    for (const fvg of activeFvgs) {
       // Only render strictly UNMITIGATED zones
       if (fvg.status !== 'UNMITIGATED') continue;
 
@@ -1384,12 +1409,12 @@ export default function Chart({
     }
 
     setFvgOverlayBoxes(boxes);
-  }, [computedFvgs]);
+  }, [activeFvgs]);
 
-  // Recompute FVG overlay whenever computedFvgs or localCandles updates
+  // Recompute FVG overlay whenever activeFvgs or localCandles updates
   useEffect(() => {
     computeFvgOverlay();
-  }, [computedFvgs, localCandles, computeFvgOverlay]);
+  }, [activeFvgs, localCandles, computeFvgOverlay]);
 
   // ── Phase 2: Live Candle Injection & Snapping Update ─────────────────────
   useEffect(() => {
@@ -1652,8 +1677,30 @@ export default function Chart({
       {/* Dynamic Layer Orchestrator HTML Overlays */}
       {registry.getAll().map((layer) => {
         const isEnabled = visibility[layer.id] !== false;
-        const activeData = dynamicMarketContextData || marketContextData;
-        if (!isEnabled || !layer.renderHtml || !chartRef.current || !seriesRef.current || !activeData) return null;
+        const activeData = marketContextData;
+        if (!isEnabled || !layer.renderHtml || !chartRef.current || !seriesRef.current || !activeData) {
+          if (htmlLayerCacheRef.current[layer.id]) {
+            delete htmlLayerCacheRef.current[layer.id];
+          }
+          return null;
+        }
+
+        const lastClosedT = localCandles[localCandles.length - 2]?.t;
+        const isNewCandle = lastClosedTRef.current !== lastClosedT;
+
+        const visibleRange = chartRef.current.timeScale().getVisibleLogicalRange();
+        const isViewportChanged = !lastVisibleRangeRef.current || 
+          lastVisibleRangeRef.current.from !== visibleRange?.from || 
+          lastVisibleRangeRef.current.to !== visibleRange?.to;
+
+        const isDataChanged = lastDataPayloadRef.current !== activeData;
+
+        // Force rebuild HTML nodes only if candle closed, viewport changed, data changed, or cache is missing
+        const shouldRecalculate = isNewCandle || isViewportChanged || isDataChanged || !htmlLayerCacheRef.current[layer.id];
+
+        if (!shouldRecalculate && htmlLayerCacheRef.current[layer.id]) {
+          return htmlLayerCacheRef.current[layer.id];
+        }
 
         const storage = getLayerStorage(layer.id);
         const context = {
@@ -1665,16 +1712,18 @@ export default function Chart({
           theme: (theme === 'dark' ? 'dark' : 'light') as 'dark' | 'light',
           themeSettings,
           storage,
-          structureState: dynamicStructureState || structureState,
+          structureState: activeStructureState || structureState,
           contextAnchorTimestamp,
         };
 
         try {
-          return (
+          const rendered = (
             <React.Fragment key={layer.id}>
               {layer.renderHtml(context)}
             </React.Fragment>
           );
+          htmlLayerCacheRef.current[layer.id] = rendered;
+          return rendered;
         } catch (err) {
           console.error(`[LayerOrchestrator] Failed to render HTML layer ${layer.id}:`, err);
           return null;

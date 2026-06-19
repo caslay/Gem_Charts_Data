@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import {
   DownloadCloud,
   TrendingUp,
@@ -18,10 +18,9 @@ import {
   Database,
   Clock
 } from 'lucide-react';
-import { useBinanceWS } from '@/hooks/useBinanceWS';
 import HudModal from './modals/HudModal';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
-import { useMarketDataContext } from '@/context/MarketDataContext';
+import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 import { calculateATR } from '@/lib/riskEngine';
 
 // ─── Slicing Helper ──────────────────────────────────────────────────────────
@@ -54,6 +53,54 @@ export function slicePayloadByLookback(
 const AI_PROMPT_PREFIX =
   'Act as the Institutional Flow Synthesizer V12.0. Analyze the following quantitative data and provide a mechanical bias report: \n\n';
 
+// ─── Resting Magnets Card ───────────────────────────────────────────────────
+const RestingMagnetsCard = memo(function RestingMagnetsCard({ orderFlow }: { orderFlow: any }) {
+  const { livePrice } = useMarketDataLiveContext();
+
+  return (
+    <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
+      <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
+        <Activity size={12} className="text-accent" />
+        <span>Resting Magnets</span>
+      </div>
+      <div className="space-y-3.5">
+        <div className="space-y-1.5">
+          <span className="text-[10px] font-black text-emerald-500 dark:text-emerald-400 uppercase tracking-wider">BSL Targets</span>
+          <div className="flex flex-col gap-1">
+            {orderFlow?.resting_liquidity_pools?.BSL_Magnets?.length ? orderFlow.resting_liquidity_pools.BSL_Magnets.map((p: number, idx: number) => {
+              const isPurged = livePrice !== null && livePrice >= p;
+              return (
+                <div key={idx} className="flex justify-between items-center text-[13px] font-mono">
+                  <span className={`${isPurged ? 'text-emerald-500 line-through opacity-60' : 'text-foreground font-bold'}`}>
+                    {p.toFixed(2)}
+                  </span>
+                  {isPurged && <span className="text-[8px] text-emerald-500 font-black tracking-wider bg-emerald-500/10 px-1 py-0.5 rounded-sm border border-emerald-500/20">PURGED 🧹</span>}
+                </div>
+              );
+            }) : <span className="text-[13px] font-mono text-muted">N/A</span>}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <span className="text-[10px] font-black text-rose-500 dark:text-rose-400 uppercase tracking-wider">SSL Targets</span>
+          <div className="flex flex-col gap-1">
+            {orderFlow?.resting_liquidity_pools?.SSL_Magnets?.length ? orderFlow.resting_liquidity_pools.SSL_Magnets.map((p: number, idx: number) => {
+              const isPurged = livePrice !== null && livePrice <= p;
+              return (
+                <div key={idx} className="flex justify-between items-center text-[13px] font-mono">
+                  <span className={`${isPurged ? 'text-rose-500 line-through opacity-60' : 'text-foreground font-bold'}`}>
+                    {p.toFixed(2)}
+                  </span>
+                  {isPurged && <span className="text-[8px] text-rose-500 font-black tracking-wider bg-rose-500/10 px-1 py-0.5 rounded-sm border border-rose-500/20">PURGED 🧹</span>}
+                </div>
+              );
+            }) : <span className="text-[13px] font-mono text-muted">N/A</span>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 // ─── Props ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
   data: MarketDataPayload | null;
@@ -66,7 +113,7 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-export default function Sidebar({
+const Sidebar = memo(function Sidebar({
   data,
   counts,
   onCountChange,
@@ -76,7 +123,6 @@ export default function Sidebar({
   isOpen,
   onClose,
 }: SidebarProps) {
-  const { livePrice } = useBinanceWS();
   const { isAnalyzing, aiAnalysis, triggerAiAnalysisScan, wsInterval, structureState, themeSettings } = useMarketDataContext();
   const [isJsonDrawerOpen, setIsJsonDrawerOpen] = useState(false);
   const [isHudModalOpen, setIsHudModalOpen] = useState(false);
@@ -308,7 +354,7 @@ export default function Sidebar({
 
                   {(() => {
                     const range = structureState?.dealingRange || data?.ipda_metrics?.full_structure_map?.dealingRange;
-                    const isAwaiting = range?.low === 'AWAITING_IDM_SWEEP' || range?.current_status === 'AWAITING_IDM_SWEEP';
+                    const isAwaiting = !range || range.low === null || range.current_status === 'AWAITING_IDM_SWEEP';
                     const pricingStatus = isAwaiting ? 'AWAITING_IDM_SWEEP' : (range?.current_status || 'UNKNOWN');
                     const pricingColorClass = isAwaiting
                       ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
@@ -373,7 +419,7 @@ export default function Sidebar({
 
                   {(() => {
                     const internalRange = structureState?.internalDealingRange || data?.ipda_metrics?.internal_context || data?.ipda_metrics?.full_structure_map?.internalDealingRange;
-                    if (!internalRange || (!internalRange.high && !internalRange.low)) {
+                    if (!internalRange || (internalRange.high === null && internalRange.low === null)) {
                       return (
                         <div className="bg-background/40 p-2.5 border border-card-border rounded-lg text-[10px] text-muted italic text-center py-4">
                           No confirmed internal swings yet
@@ -381,7 +427,7 @@ export default function Sidebar({
                       );
                     }
 
-                    const isAwaiting = internalRange.low === 'AWAITING_IDM_SWEEP' || internalRange.high === 'AWAITING_IDM_SWEEP' || internalRange.current_status === 'AWAITING_IDM_SWEEP' || internalRange.pricing_status === 'AWAITING_IDM_SWEEP';
+                    const isAwaiting = internalRange.low === null || internalRange.high === null || internalRange.current_status === 'AWAITING_IDM_SWEEP' || internalRange.pricing_status === 'AWAITING_IDM_SWEEP';
                     const pricingStatus = isAwaiting ? 'AWAITING_IDM_SWEEP' : (internalRange.current_status || internalRange.pricing_status || 'UNKNOWN');
                     const pricingColorClass = isAwaiting
                       ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
@@ -563,10 +609,10 @@ export default function Sidebar({
                     <div className="flex justify-between text-[10px] items-center">
                       <span className="text-muted">OLS VALIDATION</span>
                       <span className={`font-black uppercase text-[9px] tracking-wider ${metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'text-emerald-500' :
-                        metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === 'CONSOLIDATION' ? 'text-accent' : 'text-rose-500'
+                        metrics.institutional_sponsorship.status === 'CONSOLIDATION' ? 'text-accent' : 'text-rose-500'
                         }`}>
                         {metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'CONFIRMED' :
-                          metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === 'CONSOLIDATION' ? 'CONSOLIDATION' : 'REJECTED'}
+                          metrics.institutional_sponsorship.status === 'CONSOLIDATION' ? 'CONSOLIDATION' : 'REJECTED'}
                       </span>
                     </div>
                   </div>
@@ -581,46 +627,7 @@ export default function Sidebar({
             </div>
 
             {/* Card 4: Resting Magnets */}
-            <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
-              <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
-                <Activity size={12} className="text-accent" />
-                <span>Resting Magnets</span>
-              </div>
-              <div className="space-y-3.5">
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-black text-emerald-500 dark:text-emerald-400 uppercase tracking-wider">BSL Targets</span>
-                  <div className="flex flex-col gap-1">
-                    {orderFlow?.resting_liquidity_pools?.BSL_Magnets?.length ? orderFlow.resting_liquidity_pools.BSL_Magnets.map((p: number, idx: number) => {
-                      const isPurged = livePrice !== null && livePrice >= p;
-                      return (
-                        <div key={idx} className="flex justify-between items-center text-[13px] font-mono">
-                          <span className={`${isPurged ? 'text-emerald-500 line-through opacity-60' : 'text-foreground font-bold'}`}>
-                            {p.toFixed(2)}
-                          </span>
-                          {isPurged && <span className="text-[8px] text-emerald-500 font-black tracking-wider bg-emerald-500/10 px-1 py-0.5 rounded-sm border border-emerald-500/20">PURGED 🧹</span>}
-                        </div>
-                      );
-                    }) : <span className="text-[13px] font-mono text-muted">N/A</span>}
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-black text-rose-500 dark:text-rose-400 uppercase tracking-wider">SSL Targets</span>
-                  <div className="flex flex-col gap-1">
-                    {orderFlow?.resting_liquidity_pools?.SSL_Magnets?.length ? orderFlow.resting_liquidity_pools.SSL_Magnets.map((p: number, idx: number) => {
-                      const isPurged = livePrice !== null && livePrice <= p;
-                      return (
-                        <div key={idx} className="flex justify-between items-center text-[13px] font-mono">
-                          <span className={`${isPurged ? 'text-rose-500 line-through opacity-60' : 'text-foreground font-bold'}`}>
-                            {p.toFixed(2)}
-                          </span>
-                          {isPurged && <span className="text-[8px] text-rose-500 font-black tracking-wider bg-rose-500/10 px-1 py-0.5 rounded-sm border border-rose-500/20">PURGED 🧹</span>}
-                        </div>
-                      );
-                    }) : <span className="text-[13px] font-mono text-muted">N/A</span>}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <RestingMagnetsCard orderFlow={orderFlow} />
 
             {/* Card 5: AI Synthesis Console */}
             <div className="glass-panel flex flex-col h-[380px] overflow-hidden">
@@ -857,4 +864,6 @@ export default function Sidebar({
       />
     </>
   );
-}
+});
+
+export default Sidebar;

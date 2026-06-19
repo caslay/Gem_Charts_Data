@@ -4,6 +4,7 @@ import { useLiveAlerts } from './useLiveAlerts';
 import { useAIAnalysis } from './useAIAnalysis';
 import { Candle } from '@/lib/fvgEngine';
 import { analyzeMarketStructure, MarketStructureAnalysis } from '@/lib/structureEngine';
+import type { LiveCandle } from './useBinanceWS';
 export type { Candle };
 
 export interface SignalAlerts {
@@ -362,6 +363,7 @@ export interface MarketDataPayload {
   candles_limit?: number; // Dynamic limit from Neon SQL
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ipda_metrics: any;
+  risk_management?: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   active_arrays: any;
   correlation_data?: any; // V8.7 Correlation Data
@@ -374,7 +376,79 @@ export interface MarketDataPayload {
   };
 }
 
-export function useMarketData(selectedInterval: string = '5m') {
+export interface MarketDataDeltaPayload {
+  isDelta: true;
+  timestamp: string;
+  open_interest: number;
+  risk_management?: any;
+  correlation_data: {
+    btc_live_price: number;
+  };
+  delta_candles: Candle[];
+  order_flow_engine: {
+    open_interest_trend: string;
+    resting_liquidity_pools: { BSL_Magnets: number[]; SSL_Magnets: number[] };
+    liquidation_events: any;
+    smart_money_sentiment: any;
+  };
+  delta_structure?: {
+    latestMSS: any;
+    latestInternalMSS: any;
+    currentTrend: string;
+    dealingRange: any;
+  };
+}
+
+export function mergeDeltaPayload(
+  prev: MarketDataPayload,
+  delta: MarketDataDeltaPayload,
+  activeInterval: string
+): MarketDataPayload {
+  const activeKey = `candles_${activeInterval}`;
+  const prevCandles = prev.data_payload[activeKey] || [];
+  
+  // Merge only the last few candles, matching by timestamp
+  const candleMap = new Map(prevCandles.map(c => [c.t, c]));
+  delta.delta_candles.forEach(c => candleMap.set(c.t, c));
+  const mergedCandles = Array.from(candleMap.values()).sort((a, b) => a.t - b.t);
+
+  return {
+    ...prev,
+    open_interest: delta.open_interest,
+    risk_management: delta.risk_management || prev.risk_management,
+    correlation_data: {
+      ...prev.correlation_data,
+      btc_live_price: delta.correlation_data?.btc_live_price ?? prev.correlation_data?.btc_live_price,
+    },
+    ipda_metrics: {
+      ...prev.ipda_metrics,
+      order_flow_engine: {
+        ...prev.ipda_metrics?.order_flow_engine,
+        ...delta.order_flow_engine,
+        // Preserve displacement_sponsorship from prev state during delta ticks
+        displacement_sponsorship: prev.ipda_metrics?.order_flow_engine?.displacement_sponsorship,
+      },
+      // Update structural delta components if available
+      ...(delta.delta_structure ? {
+        market_structure_shift: delta.delta_structure.currentTrend !== prev.ipda_metrics?.current_trend,
+        current_trend: delta.delta_structure.currentTrend,
+        full_structure_map: {
+          ...prev.ipda_metrics?.full_structure_map,
+          latestMSS: delta.delta_structure.latestMSS,
+          latestInternalMSS: delta.delta_structure.latestInternalMSS,
+          currentTrend: delta.delta_structure.currentTrend,
+          dealingRange: delta.delta_structure.dealingRange,
+        }
+      } : {})
+    },
+    data_payload: {
+      ...prev.data_payload,
+      [activeKey]: mergedCandles,
+    },
+  };
+}
+
+export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveCandle | null = null) {
   const [data, setData] = useState<MarketDataPayload | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -386,6 +460,36 @@ export function useMarketData(selectedInterval: string = '5m') {
   useEffect(() => {
     setContextAnchorTimestamp(null);
     setStructureState(null);
+  }, [selectedInterval]);
+
+  const workerRef = useRef<Worker | null>(null);
+  const lastProcessedClosedTimestampRef = useRef<number | null>(null);
+  const lastProcessedIntervalRef = useRef<string | null>(null);
+
+  // Web Worker lifecycle management
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        workerRef.current = new Worker(new URL('../workers/quantEngine.worker.ts', import.meta.url));
+        
+        workerRef.current.onmessage = (event) => {
+          const { type, payload, error } = event.data;
+          if (type === 'STRUCTURE_RESULT') {
+            setStructureState(payload.analysis);
+          } else if (type === 'ERROR') {
+            console.error('[QuantWorker] Error:', error);
+          }
+        };
+      } catch (workerError) {
+        console.warn('[QuantWorker] Web Worker initialization failed. Falling back to main-thread execution.', workerError);
+        workerRef.current = null;
+      }
+    }
+
+    return () => {
+      workerRef.current?.terminate();
+      workerRef.current = null;
+    };
   }, [selectedInterval]);
 
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => {
@@ -650,16 +754,22 @@ export function useMarketData(selectedInterval: string = '5m') {
     });
   }, [queueSettingsSync]);
 
+  const fetchDataRef = useRef<((isPolling?: boolean) => Promise<void>) | null>(null);
+
   const fetchData = useCallback(async (isPolling = false) => {
     try {
       if (!isPolling) {
         setIsLoading(true);
         setError(null);
       }
+      const pollParam = isPolling ? '&poll=true' : '';
+      const timeframeGatedParam = '&timeframeGated=true';
+      const activeIntervalParam = `&activeInterval=${selectedInterval}`;
       const initParam = !isPolling ? '&init=true' : '';
       const limitParams = `&limit1m=${engineSettings.candlesLimit1m ?? 1000}&limit5m=${engineSettings.candlesLimit5m ?? 1000}&limit15m=${engineSettings.candlesLimit15m ?? 1000}&limit1h=${engineSettings.candlesLimit1h ?? 1000}&limit4h=${engineSettings.candlesLimit4h ?? 1000}`;
       const featureParams = `&includeBtc=${engineSettings.includeBtcCorrelation !== false}&includeStructure=${engineSettings.includeStructureAnalysis !== false}&includeFvg=${engineSettings.includeFvgDetection !== false}`;
-      const res = await fetch(`/api/market-data?interval=${selectedInterval}${initParam}${limitParams}${featureParams}`);
+      
+      const res = await fetch(`/api/market-data?interval=${selectedInterval}${pollParam}${timeframeGatedParam}${activeIntervalParam}${initParam}${limitParams}${featureParams}`);
       if (!res.ok) {
         throw new Error('Failed to fetch market data');
       }
@@ -667,16 +777,28 @@ export function useMarketData(selectedInterval: string = '5m') {
 
       setData((prev) => {
         if (!prev) return jsonData;
-        // During polling, preserve both data_payload AND ipda_metrics to prevent the
-        // Dynamic Chart Layer Orchestrator from re-firing on every 5-second tick.
-        // Only replace these on real initial loads (isPolling = false) or timeframe switches.
-        if (isPolling) {
-          return {
-            ...jsonData,
-            data_payload: prev.data_payload,
-            ipda_metrics: prev.ipda_metrics,
-          };
+
+        // Check if the incoming payload is a delta structure
+        if ('isDelta' in jsonData && (jsonData as any).isDelta) {
+          const delta = jsonData as any as MarketDataDeltaPayload;
+          const activeKey = `candles_${selectedInterval}`;
+          const prevCandles = prev.data_payload[activeKey] || [];
+          
+          if (prevCandles.length > 0 && delta.delta_candles && delta.delta_candles.length > 1) {
+            const prevLastClosedT = prevCandles[prevCandles.length - 2]?.t;
+            const deltaLastClosedT = delta.delta_candles[delta.delta_candles.length - 2]?.t;
+            
+            if (prevLastClosedT && deltaLastClosedT && deltaLastClosedT > prevLastClosedT) {
+              console.log('[MarketData] New candle close detected in delta, triggering full structure and OLS recalculation.');
+              // Trigger a full fetch asynchronously using ref
+              setTimeout(() => {
+                fetchDataRef.current?.(false);
+              }, 100);
+            }
+          }
+          return mergeDeltaPayload(prev, delta, selectedInterval);
         }
+
         return jsonData;
       });
 
@@ -700,6 +822,10 @@ export function useMarketData(selectedInterval: string = '5m') {
   }, [selectedInterval, engineSettings]);
 
   useEffect(() => {
+    fetchDataRef.current = fetchData;
+  }, [fetchData]);
+
+  useEffect(() => {
     // Wrap initial fetch in a macro-task to prevent synchronous cascading React state updates
     const initialTimer = setTimeout(() => {
       fetchData();
@@ -713,6 +839,59 @@ export function useMarketData(selectedInterval: string = '5m') {
       clearInterval(interval);
     };
   }, [fetchData]);
+
+  // Synchronize WebSocket live candle updates into the main data payload
+  useEffect(() => {
+    if (!liveCandle || !data) return;
+
+    const activeSeriesKey = `candles_${selectedInterval}`;
+    const prevCandles = data.data_payload[activeSeriesKey] || [];
+    if (prevCandles.length === 0) return;
+
+    const lastCandle = prevCandles[prevCandles.length - 1];
+    const lastTimeSec = Math.floor(lastCandle.t / 1000);
+
+    const isSameTime = liveCandle.time === lastTimeSec;
+    const isNewerTime = liveCandle.time > lastTimeSec;
+
+    if (!isSameTime && !isNewerTime) return;
+
+    setData((prev) => {
+      if (!prev) return null;
+      const candles = prev.data_payload[activeSeriesKey] || [];
+      if (candles.length === 0) return prev;
+
+      const updatedCandles = [...candles];
+      const lastIdx = updatedCandles.length - 1;
+      const mappedCandle: Candle = {
+        t: liveCandle.time * 1000,
+        o: liveCandle.open,
+        h: liveCandle.high,
+        l: liveCandle.low,
+        c: liveCandle.close,
+        v: liveCandle.volume,
+        taker_buy_vol: (liveCandle as any).taker_buy_vol ?? liveCandle.volume / 2,
+        taker_sell_vol: (liveCandle as any).taker_sell_vol ?? liveCandle.volume / 2,
+        isClosed: liveCandle.isClosed === true
+      };
+
+      if (isSameTime) {
+        // Perform a lightweight mutation on the live-edge candle preview properties
+        updatedCandles[lastIdx] = mappedCandle;
+      } else {
+        // Append a new candle frame (candle officially closed and a new one started)
+        updatedCandles.push(mappedCandle);
+      }
+
+      return {
+        ...prev,
+        data_payload: {
+          ...prev.data_payload,
+          [activeSeriesKey]: updatedCandles
+        }
+      };
+    });
+  }, [liveCandle, selectedInterval]);
 
   // Synchronize and update the stabilized structural state
   useEffect(() => {
@@ -736,13 +915,72 @@ export function useMarketData(selectedInterval: string = '5m') {
       console.log('[MarketData] Established stable lookback context anchor at:', new Date(anchor).toISOString());
     }
 
+    // --- Closed-Candle Memoization Barrier ---
+    // The second-to-last candle represents the last completed/closed candle.
+    const lastClosedCandle = activeCandles[activeCandles.length - 2];
+    const lastClosedT = lastClosedCandle ? lastClosedCandle.t : null;
+
+    const isIntervalChanged = lastProcessedIntervalRef.current !== selectedInterval;
+    const isNewCandleClosed = lastProcessedClosedTimestampRef.current !== lastClosedT;
+
+    if (!isIntervalChanged && !isNewCandleClosed) {
+      // TELEMETRY UPDATE MODE: Bypassing worker execution for intermediate ticks.
+      // Perform a lightweight mutation on the live-edge candle preview properties
+      const currentPrice = activeCandles[activeCandles.length - 1]?.c ?? 0;
+      setStructureState((prev) => {
+        if (!prev) return null;
+        
+        // Update price-dependent dealing range properties
+        const updatedDealingRange = prev.dealingRange ? {
+          ...prev.dealingRange,
+          current_status: prev.dealingRange.equilibrium === null
+            ? 'AWAITING_IDM_SWEEP' as const
+            : (currentPrice > Number(prev.dealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const)
+        } : null;
+
+        const updatedInternalDealingRange = prev.internalDealingRange ? {
+          ...prev.internalDealingRange,
+          current_status: prev.internalDealingRange.equilibrium === null
+            ? 'AWAITING_IDM_SWEEP' as const
+            : (currentPrice > Number(prev.internalDealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const)
+        } : null;
+
+        return {
+          ...prev,
+          dealingRange: updatedDealingRange,
+          internalDealingRange: updatedInternalDealingRange
+        } as any;
+      });
+      return;
+    }
+
+    // Update cache refs
+    lastProcessedClosedTimestampRef.current = lastClosedT;
+    lastProcessedIntervalRef.current = selectedInterval;
+
     // 2. Compute structural analysis using the stable lookback anchor
     const currentPrice = activeCandles[activeCandles.length - 1]?.c ?? 0;
     const displacementStatus = data.ipda_metrics?.institutional_sponsorship ?? null;
     const globalAnchors = data.ipda_metrics?.global_anchors ?? null;
-    const analysis = analyzeMarketStructure(activeCandles, currentPrice, displacementStatus, anchor, globalAnchors, engineSettings);
 
-    setStructureState(analysis);
+    if (workerRef.current) {
+      // Background worker path: offload heavy calculations to background thread
+      workerRef.current.postMessage({
+        type: 'ANALYZE_STRUCTURE',
+        payload: {
+          candles: activeCandles,
+          currentPrice,
+          displacementStatus,
+          contextAnchorTimestamp: anchor,
+          globalAnchors,
+          config: engineSettings
+        }
+      });
+    } else {
+      // Synchronous fallback (if Web Worker initialization failed or during SSR)
+      const analysis = analyzeMarketStructure(activeCandles, currentPrice, displacementStatus, anchor, globalAnchors, engineSettings);
+      setStructureState(analysis);
+    }
   }, [data, selectedInterval, contextAnchorTimestamp, engineSettings]);
 
   // Hook into live alerts: Triggers Binance WS, performs diffs, fires audio/push alerts

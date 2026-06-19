@@ -50,7 +50,7 @@ export const structureLayer: ChartLayer = {
     const atr = activeCandles ? calculateATR(activeCandles) : 0;
     const internalRange = analysis.internalDealingRange;
     const multiplier = parseFloat(themeSettings?.structure_istr_atr_multiplier || '1.5');
-    const rangeHeight = internalRange ? (internalRange.high - internalRange.low) : 0;
+    const rangeHeight = (internalRange && internalRange.high !== null && internalRange.low !== null) ? (internalRange.high - internalRange.low) : 0;
     const isVolatilitySuppressed = showIstr && rangeHeight > 0 && atr > 0 && rangeHeight < atr * multiplier;
 
     // Resolve dynamic colors based on theme settings
@@ -389,7 +389,7 @@ export const structureLayer: ChartLayer = {
     let savpPocLine: React.ReactElement | null = null;
 
     const dr = analysis.dealingRange;
-    if (dr && dr.anchor_high_swing && dr.anchor_low_swing) {
+    if (dr && dr.anchor_high_swing && dr.anchor_low_swing && dr.high !== null && dr.low !== null && dr.equilibrium !== null) {
       const rawHighX = timeScale.timeToCoordinate(Math.floor(dr.anchor_high_swing.t / 1000) as any);
       const rawLowX = timeScale.timeToCoordinate(Math.floor(dr.anchor_low_swing.t / 1000) as any);
       const boxTopY = series.priceToCoordinate(dr.high);

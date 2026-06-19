@@ -2,11 +2,104 @@
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-06-09 (V12.0.15 — Active Trade Closure Cleanup & Replay Auto-Closure)  
-> **Scope:** Full System Deconstruction — Satellite Scan + Microscopic Audit  
-> **Source Files Analyzed:** 66+ across TypeScript (Next.js 16), Python (FastAPI), Markdown directives, and MCP configurations.
+> **Last Updated:** 2026-06-19 (V12.0.22 — Type Hardening & OLS Regression Parity Completed)  
+ 
+## 🆕 V12.0.22 Changelog — Type Hardening & OLS Regression Parity (Completed)
 
-## 🆕 V12.0.15 Changelog — Active Trade Closure Cleanup & Replay Auto-Closure (Completed)
+### 1. Structural Dealing Range Type Hardening
+- Refactored `StructuralDealingRange` in `types.ts` to strictly type the pricing properties `high`, `low`, and `equilibrium` as `number | null`, replacing the sentinel string `"AWAITING_IDM_SWEEP"`.
+- Updated `createEmptyState()` in `MarketStructureAPI.ts` to populate boundaries and equilibrium as `null`.
+- Updated downstream rendering code in `Sidebar.tsx`, `BacktestSidebar.tsx`, and `MatrixConfigDrawer.tsx` to handle the `null` bounds and format/display the fallback string `"AWAITING_IDM_SWEEP"` at the presentation layer.
+- Safeguarded `VolumeProfileEngine.ts` and `structureLayer.ts` to gracefully bypass calculation and rendering loops when range anchors or values evaluate to `null` (including safeguarding `rangeHeight` subtraction inside `structureLayer.ts` to avoid NaN propagation).
+- Safeguarded lightweight tick/telemetry updates in `Chart.tsx` and `useMarketData.ts` to handle `null` equilibrium values without crashing or throwing type errors.
+
+### 2. Elimination of OLS Truthy String Leak
+- Strictly typed the confidence flags `confidence_interval_95` and `confidence_interval_95_strict` as `boolean` in `displacementEngine.ts` and downstream interfaces.
+- Modified FastAPI Python backend code in `quant_engine_api.py` and `api/index.py` to return binary `False` boolean values instead of the truthy string `"CONSOLIDATION"` during a consolidation regime.
+- Audited and corrected layout presentation layer in `Sidebar.tsx` and `BacktestSidebar.tsx` to read the institutional status flag `status === 'CONSOLIDATION'` for displaying the 'CONSOLIDATION' status message, matching the strictly-typed boolean API contracts.
+
+### 3. TypeScript OLS Regression Solver Parity
+- Implemented a complete TypeScript OLS regression solver inside the offline displacement engine `verifyDisplacementOffline` in `src/lib/displacementEngine.ts`.
+- The solver performs matrix operations including Gauss-Jordan inversion of the $4 \times 4$ design matrix, normal CDF calculation using the error function (`erf`), and outputs identical coefficients, t-statistics, p-values, and strict confidence intervals, achieving exact parity with the Python statsmodels library without network dependencies.
+ 
+## 🆕 V12.0.21 Changelog — Market Data Gating Fallbacks & Crash Guard (Completed)
+
+### 1. Robust Timeframe Gating Fallbacks (`src/app/api/market-data/route.ts`)
+- Implemented `latestCandleFromAny` resolution checking across all fetched interval arrays to act as a fallback for the macro context search, resolving the server-side `TypeError: Cannot read properties of undefined (reading 't')` crash.
+- Defensively guarded the daily sweep checks (`pdh > 0 && pdl > 0 && pdl !== Infinity`) to prevent division/comparison errors and false-positive target exhaustion (`EXHAUSTED` status) triggers when background HTF scales are not fetched.
+- Safely relaxed Asian and London sweep checks to conditionally bypass daily boundaries ceiling if `pdh` or `pdl` is zero, maintaining consistent intraday sweep detection.
+- Unified live price resolution using `currentLivePrice` derived from the latest active timeframe edge, replacing direct `candles5m` array-index lookups to ensure error-free operations under all active timeframe settings.
+
+## 🆕 V12.0.20 Changelog — Performance Optimization Phase 3: Single WebSocket Enforcement (Completed)
+
+### 1. Global Socket Sharing & Duplicate Connection Removal (`src/components/LiveTicker.tsx` & `src/components/MatrixConfigDrawer.tsx`)
+- Refactored `LiveTicker.tsx` to consume the global WebSocket states (`livePrice` from `useMarketDataLiveContext` and WebSocket `wsStatus` from `useMarketDataContext`), removing the duplicate Binance WebSocket instantiation.
+- Refactored `MatrixConfigDrawer.tsx` to read the active tick price from `useMarketDataLiveContext`, saving computational overhead and preventing parallel WebSocket stream connections to Binance.
+- Ensured `MarketDataContext.tsx` acts as the single, authoritative owner of the Binance WebSocket hook call (`useBinanceWS()`), guaranteeing 100% compliance with Lesson #7.
+
+## 🆕 V12.0.19 Changelog — Performance Optimization Phase 3: Render Decoupling & SVG Optimization (Completed)
+
+### 1. Atomic State Isolation & Parent Layout Decoupling (`src/app/page.tsx`, `src/components/DashboardMetrics.tsx`, `src/components/JournalTable.tsx`, `src/components/Sidebar.tsx`)
+- Decoupled the root trading dashboard layout (`src/app/page.tsx`) by removing high-frequency WebSocket state subscriptions (`livePrice`, `liveCandle`), ensuring the parent layout remains immune to tick-induced render cascades.
+- Hoisted background strategy execution (`StrategyEvaluatorRunner`) and resting orders triggers (`PendingOrdersManager`) into static leaf components to run price checks in complete isolation.
+- Isolated telemetry card paints in `DashboardMetrics.tsx` and `JournalTable.tsx` by introducing specialized, memoized leaf rows and sub-cards that hook directly into the lightweight `MarketDataLiveContext` for live price updates.
+- Refactored `Sidebar.tsx` to remove duplicate WebSocket connections (`useBinanceWS()`), correcting the Lesson #7 violation. Extracted the `Resting Magnets` BSL/SSL targets section into a memoized `<RestingMagnetsCard>` component subscribing directly to the live context.
+
+### 2. Closed-Candle SVG Memoization Barrier & HTML Render Cache (`src/components/Chart.tsx`)
+- Enhanced the chart visual rendering orchestrator with a timestamp-based "Closed-Candle Memoization Barrier" comparing `lastClosedT`. Normal ticking flows bypass global O(N) coordinate updates and vector canvas rebuilds for static historical layers (swings, mitigated FVGs, session frames).
+- Separated active price lines and draggable alert limit modifier vectors from the static drawings pool, updating only dynamic targets on intermediate price ticks.
+- Configured a pointer interaction override checking coordinate moves, pointer drags, and hover intersection events to selectively bypass the memoization barrier, guaranteeing lag-free chart drag-manipulation.
+- Cached visual drawing outputs in a local `htmlLayerCacheRef` to prevent React DOM rebuilding overhead during active ticking.
+
+### 3. Timescale Index Offset Buffer & Left-Edge Jitter Prevention (`src/components/Chart.tsx`)
+- Implemented relative timestamp anchoring and coordinate translation offsets in the lazy-loading history effect.
+- Shifted internal coordinates of cached drawing vectors dynamically by the count of prepended historical candles (`prevFirstCandleTimeRef.current` tracking), preventing coordinate level shifts and visual left-edge scale jumping.
+
+## 🆕 V12.0.18 Changelog — Closed-Candle WebSocket Ingestion & Main-Thread Scan Deletion (Completed)
+
+### 1. WebSocket Live Tick Pipeline Integration (`src/hooks/useMarketData.ts` & `src/context/MarketDataContext.tsx`)
+- Refactored the context state pipeline to feed WebSocket live price ticks directly into `useMarketData`.
+- Created a live-edge candle preview merger to sync incoming candle states into the main payload in real-time.
+
+### 2. Main-Thread O(N) Scan Deletion (`src/components/Chart.tsx`)
+- Removed the CPU-heavy synchronous O(N) structural pivot calculations (`analyzeMarketStructure`) and FVG scans (`detectActiveFVGs` & `mapAndConsolidateFVGs`) from the React render thread.
+- The chart now relies entirely on the background Web Worker's cached outputs (`structureState` and `activeFvgs`).
+
+### 3. Lightweight O(1) Telemetry Mutations
+- Implemented lightweight, O(1) Premium/Discount dealing range status updates on intermediate ticks inside both the hook state barrier and chart presentation layout.
+
+## 🆕 V12.0.17 Changelog — Performance Optimization Phase 2: Main-Thread Memoization & Worker Spawning (Completed)
+
+### 1. Closed-Candle Memoization Barrier (`src/hooks/useMarketData.ts`)
+- Implemented a timestamp-based caching barrier checking `activeCandles[activeCandles.length - 2].t`.
+- Ticks inside the same candle timeframe bypass heavy structural scans, restricting calculations to run only on actual candle closures.
+
+### 2. Web Worker Decoupling (`src/workers/quantEngine.worker.ts`)
+- Spawns a background Web Worker thread to asynchronously execute all structural swing pivots, dealing ranges, and volumetric marker annotations.
+- Declared strict type-safe message passing boundaries, offloading CPU-intensive iterations from the React render thread.
+- Embedded an SSR safety wrapper (`typeof window !== 'undefined'`) and a clean synchronous fallback path in case Worker initialization fails.
+
+## 🆕 V12.0.16 Changelog — Performance Optimization Phase 1: Ingest & Payload Pruning (Completed)
+
+### 1. Dynamic REST Timeframe Gating & Active Interval Gating (`src/app/api/market-data/route.ts`)
+- Implemented parsing of query parameters `poll=true`, `timeframeGated=true`, `activeInterval=<interval>`, and `init=true` in GET route handler.
+- Gated inactive background timeframe fetches, reducing sequential/parallel Binance Futures REST queries from 11 down to 3 during polling.
+- Preserved computed scalar indicator structures (magnets, trends, OLS values) in client-side state mapping by utilizing selective properties spreading.
+
+### 2. Client-Server Delta Compression Protocol (`src/app/api/market-data/route.ts` & `src/hooks/useMarketData.ts`)
+- Engineered a lightweight JSON response structure `MarketDataDeltaPayload` containing only the last 5 active interval candles, correlation ticker price, open interest, and order flow metrics.
+- Coded client-side `mergeDeltaPayload` utility to dynamically stitch incoming delta tick packets into state arrays, updating targets without triggering lightweight-charts viewport flashes.
+- Added a client-side candle boundary close checker to trigger full API calls (polling = false) on new candle closures, refreshing structural pivots and uvicorn OLS statistics.
+
+### 3. Database & Statistical Validation Performance Optimization
+- Gated PostgreSQL Serverless Open Trades check (Lazy Exit) to run only on full updates, reducing DB connections and transaction overhead.
+- Bypassed FastAPI OLS Python statistics validation on delta ticks, eliminating 1.2s cold start and network roundtrip bottleneck, while preserving the validated OLS confidence state in local state.
+
+### 4. Downstream Compatibility & Safety Gates
+- Enforced complete TypeScript interface parity by adding `risk_management` definitions to the payload interface, ensuring `npx tsc --noEmit` compiles cleanly.
+- Preserved existing data structures for `useStrategyEvaluator.ts` and `useBacktestEngine.ts` to maintain 100% backward compatibility.
+
+## 🆕 V12.0.15 Changelog — Active Trade Closure Cleanup & Replay Auto-Closure (Completed)o-Closure (Completed)
 
 ### 1. Journal Action Event Propagation (`src/components/JournalTable.tsx`)
 - Configured manual trade toggles, closures, and hard deletions (`handleToggleStatus`, `handleClosePosition`, and `handleDeleteTrade`) to dispatch appropriate window events (`trades-refresh` or `backtest-trades-refresh` based on `isBacktest` context).
