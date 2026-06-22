@@ -2,8 +2,21 @@
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-06-19 (V12.0.22 — Type Hardening & OLS Regression Parity Completed)  
+> **Last Updated:** 2026-06-21 (V12.0.24 — Chrome DevTools MCP Configuration)  
  
+## 🆕 V12.0.24 Changelog — Chrome DevTools MCP Configuration (Completed)
+
+### 1. Chrome DevTools MCP Installation
+- Added `chrome-devtools` configuration to the IDE's local MCP config file `C:\Users\pc\.gemini\antigravity-ide\mcp_config.json`.
+- Set command to `npx` with args `["chrome-devtools-mcp@latest", "--browser-url=http://127.0.0.1:9222", "-y"]`.
+
+## 🆕 V12.0.23 Changelog — Custom Installed Skills Clean-up (Completed)
+
+### 1. IDE Configuration Clean-up
+- Identified all custom installed skills folders under `C:\Users\pc\.gemini\config\skills`, `C:\Users\pc\.gemini\antigravity-ide\skills`, and `C:\Users\pc\.gemini\skills`.
+- Safely removed all custom skill directories and deleted the associated install manifest files (`.antigravity-install-manifest.json`) from both config paths.
+- Verified that all skills directories are fully emptied so the IDE settings and agent system no longer register or load them.
+
 ## 🆕 V12.0.22 Changelog — Type Hardening & OLS Regression Parity (Completed)
 
 ### 1. Structural Dealing Range Type Hardening
@@ -359,6 +372,27 @@
 ### 6. Fallback Anchor Swing Resolution for SAVP Coordinate Mapping
 - **Action:** Fixed an issue where the Swing-Anchored Volume Profile (SAVP) failed to render on `5m` and `1h` timeframes because the structural anchors were set to `null` while discovering new swing highs/lows.
 - **Logic:** Upgraded `buildDealingRange` inside `MarketStructureAPI.ts` to locate the closest candle by price when an exact pivot swing match is not found in the swings array. The system now dynamically constructs a candidate `StructuralSwing` object to serve as the anchor. This resolves the coordinate mapping for both the main and internal dealing ranges and ensures SAVP computes successfully across all timeframes without generating unnecessary network requests.
+
+## 🆕 V12.0.1 Changelog — Structural Boundary Containment Rectification (Completed)
+
+### 1. Active Wave Range Isolation (`MarketStructureAPI.ts`)
+- **Action:** Extracted the active Major Dealing Range's start time (`majorRangeStartTime = Math.min(anchor_high.t, anchor_low.t)`) and filtered candidate internal swings strictly to exclude previous-cycle internal swings (`activeInternalSwings`).
+- **Rationale:** Prevents ancient internal swings from corrupting the active intraday cycle, establishing mathematical parent-child containment.
+
+### 2. Lookforward Candle Confirmation Guards (`PivotEngine.ts`)
+- **Action:** Refactored pivot registration to explicitly check if the confirmation candle `i + lb` exists and is closed (`isClosed !== false`).
+- **Rationale:** Ensures that unclosed live-edge peaks or wicks remain isolated from the confirmed structure state.
+
+### 3. Core SMC State Engine Closed-Candle Gating (`SMCStateEngine.ts`)
+- **Action:** Gated BOS, MSS, and CHoCH structural transitions behind `candle.isClosed !== false` validation checks.
+- **Rationale:** Prevents unclosed live-edge candles from updating trend states or resetting active dealing range boundaries prematurely, while allowing sweeps to continue executing on live ticks.
+
+### 4. Double-Defensive Payload Clamping (`MarketStructureAPI.ts` & `/api/market-data/route.ts`)
+- **Action:** Implemented a strict safety clamp in both the core API context engine and the outbound serialization layer:
+  - If Intraday Low < Macro Low, it clamps to Macro Low.
+  - If Intraday High > Macro High, it clamps to Macro High.
+  - Recalculates local range equilibrium and pricing status (PREMIUM/DISCOUNT) immediately upon clamping.
+- **Rationale:** Establishes a bulletproof anti-corruption boundary barrier before telemetry is shipped down to the UI HUD sidebar cards and chart layers.
 
 ## 🆕 V12.0.0 Changelog — Multi-Scale Directional Change Quant Engine Refactor (Completed)
 

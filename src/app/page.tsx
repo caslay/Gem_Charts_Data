@@ -243,7 +243,7 @@ export default function Home() {
   }, [selectedInterval, refetch]);
 
   function getChartData() {
-    if (!data) return [];
+    if (!data || !data.data_payload) return [];
     const key = `candles_${selectedInterval}`;
     return data.data_payload[key] ?? [];
   }

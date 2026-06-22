@@ -1079,6 +1079,31 @@ export async function GET(req: Request) {
       anchor_low_swing: null
     };
 
+    // Anti-corruption safety clamps inside the serialization routing layer
+    if (
+      typeof internal_dealing_range.low === 'number' &&
+      typeof localDealingRange.low === 'number' &&
+      internal_dealing_range.low < localDealingRange.low
+    ) {
+      internal_dealing_range.low = localDealingRange.low;
+      internal_dealing_range.anchor_low_swing = localDealingRange.anchor_low_swing;
+    }
+    if (
+      typeof internal_dealing_range.high === 'number' &&
+      typeof localDealingRange.high === 'number' &&
+      internal_dealing_range.high > localDealingRange.high
+    ) {
+      internal_dealing_range.high = localDealingRange.high;
+      internal_dealing_range.anchor_high_swing = localDealingRange.anchor_high_swing;
+    }
+    if (
+      typeof internal_dealing_range.high === 'number' &&
+      typeof internal_dealing_range.low === 'number'
+    ) {
+      internal_dealing_range.equilibrium = parseFloat(((internal_dealing_range.high + internal_dealing_range.low) / 2).toFixed(2));
+      internal_dealing_range.current_status = currentLivePrice > internal_dealing_range.equilibrium ? 'PREMIUM' : 'DISCOUNT';
+    }
+
     const internal_context = {
       trend: structureAnalysis.internalTrend || 'UNSET',
       high: internal_dealing_range.high,
