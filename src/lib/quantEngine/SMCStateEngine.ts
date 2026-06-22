@@ -49,6 +49,8 @@ export class SMCStateEngine {
     // Since Directional Change confirms pivots immediately based on price retracement,
     // we use Level 2 pivots directly as major swings, but we can annotate when they sweep Level 1.
     
+    if (!pivot.confirmed) return;
+
     if (pivot.level === this.target_level) {
       if (pivot.type === 'SWING_HIGH') {
         this.active_swing_high = pivot.price;
@@ -64,7 +66,7 @@ export class SMCStateEngine {
     if (this.current_trend_state === 'BULLISH_SWING') {
       // BOS Evaluation
       if (this.active_swing_high !== null) {
-        if (candle.close > this.active_swing_high) {
+        if (candle.isClosed !== false && candle.close > this.active_swing_high) {
           this.registered_events.push({
             type: 'BOS', direction: 'BULLISH', level: this.active_swing_high, index: idx, timestamp: candle.t
           });
@@ -80,7 +82,7 @@ export class SMCStateEngine {
       
       // MSS / CHoCH Evaluation
       if (this.protected_low !== null) {
-        if (candle.close < this.protected_low) {
+        if (candle.isClosed !== false && candle.close < this.protected_low) {
           const body_ratio = Math.abs(candle.close - candle.open) / (candle.high - candle.low || 1);
           const volume_sma = this.compute_volume_sma(candles, idx, 20);
           const volume_expansion = volume_sma > 0 ? (candle.volume / volume_sma) : 1.0;
@@ -104,7 +106,7 @@ export class SMCStateEngine {
     } else {
       // BOS Evaluation
       if (this.active_swing_low !== null) {
-        if (candle.close < this.active_swing_low) {
+        if (candle.isClosed !== false && candle.close < this.active_swing_low) {
           this.registered_events.push({
             type: 'BOS', direction: 'BEARISH', level: this.active_swing_low, index: idx, timestamp: candle.t
           });
@@ -119,7 +121,7 @@ export class SMCStateEngine {
       
       // MSS / CHoCH Evaluation
       if (this.protected_high !== null) {
-        if (candle.close > this.protected_high) {
+        if (candle.isClosed !== false && candle.close > this.protected_high) {
           const body_ratio = Math.abs(candle.close - candle.open) / (candle.high - candle.low || 1);
           const volume_sma = this.compute_volume_sma(candles, idx, 20);
           const volume_expansion = volume_sma > 0 ? (candle.volume / volume_sma) : 1.0;

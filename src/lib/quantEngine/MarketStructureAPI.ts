@@ -44,8 +44,8 @@ export class MarketStructureAPI {
     const innerStateEngine = new SMCStateEngine(this.config, 1);
     for (let i = 0; i < normalizedCandles.length; i++) {
       const c = normalizedCandles[i];
-      // Feed pivots that occur at this candle
-      const currentPivots = pivotEngine.pivots.filter(p => p.index === i);
+      // Feed pivots that occur at this candle (only confirmed pivots)
+      const currentPivots = pivotEngine.pivots.filter(p => p.index === i && p.confirmed);
       for (const p of currentPivots) {
         stateEngine.processPivot(p, normalizedCandles);
         innerStateEngine.processPivot(p, normalizedCandles);
@@ -107,19 +107,44 @@ export class MarketStructureAPI {
     // Pass all swings to the UI layer
     const swings = [...majorSwings, ...internalSwings, ...innerSwingsRaw];
 
+    // Macro Dealing Range
+    const dealingRange = this.buildDealingRange(majorSwings, currentPrice, stateEngine, normalizedCandles);
+
+    // Dynamic macro start time based on the active confirmed Macro High or Macro Low anchors
+    const majorRangeStartTime = Math.min(
+      dealingRange.anchor_high_swing?.t ?? Infinity,
+      dealingRange.anchor_low_swing?.t ?? Infinity
+    );
+
+    // Filter candidate internal swings strictly to exclude previous-cycle internal swings
+    const activeInternalSwings = majorRangeStartTime !== Infinity
+      ? internalSwings.filter(s => s.t >= majorRangeStartTime)
+      : internalSwings;
+
     // Build ZigZag Arrays
     const zigzag = this.buildZigZag(majorSwings, stateEngine);
-    const internalZigzag = this.buildZigZag(internalSwings, innerStateEngine, true);
+    const internalZigzag = this.buildZigZag(activeInternalSwings, innerStateEngine, true);
     const innerZigzag = this.buildZigZag(innerSwingsRaw, innerStateEngine, true);
 
     const latestMSS = zigzag.filter(z => z.label === 'MSS').slice(-1)[0] ?? null;
     const hasConfirmedMSS = latestMSS !== null && latestMSS.displacementConfirmed;
 
-    // Macro Dealing Range
-    const dealingRange = this.buildDealingRange(majorSwings, currentPrice, stateEngine, normalizedCandles);
-
     // Inner Dealing Range
-    const internalDealingRange = this.buildDealingRange(internalSwings, currentPrice, innerStateEngine, normalizedCandles);
+    const internalDealingRange = this.buildDealingRange(activeInternalSwings, currentPrice, innerStateEngine, normalizedCandles);
+
+    // Anti-corruption safety clamps: prevent child range boundaries from bleeding outside parent bounds
+    if (internalDealingRange.low !== null && dealingRange.low !== null && internalDealingRange.low < dealingRange.low) {
+      internalDealingRange.low = dealingRange.low;
+      internalDealingRange.anchor_low_swing = dealingRange.anchor_low_swing;
+    }
+    if (internalDealingRange.high !== null && dealingRange.high !== null && internalDealingRange.high > dealingRange.high) {
+      internalDealingRange.high = dealingRange.high;
+      internalDealingRange.anchor_high_swing = dealingRange.anchor_high_swing;
+    }
+    if (internalDealingRange.high !== null && internalDealingRange.low !== null) {
+      internalDealingRange.equilibrium = parseFloat(((internalDealingRange.high + internalDealingRange.low) / 2).toFixed(2));
+      internalDealingRange.current_status = currentPrice > internalDealingRange.equilibrium ? 'PREMIUM' : 'DISCOUNT';
+    }
 
     return {
       last_processed_index: normalizedCandles.length - 1,

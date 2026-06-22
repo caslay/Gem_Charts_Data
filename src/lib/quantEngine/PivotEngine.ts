@@ -44,13 +44,15 @@ export class PivotEngine {
           if (!isPH && !isPL) break;
         }
 
+        const isConfirmed = (candles[i + lb] !== undefined) && (candles[i + lb].isClosed !== false);
+
         if (isPH) {
           const pIdx = c.index ?? i;
           this.pivots.push({
             type: 'SWING_HIGH',
             index: pIdx,
             price: c.high,
-            confirmed: true,
+            confirmed: isConfirmed,
             timestamp: c.t,
             level: lvl.level,
             colorValidated: true // Automatically valid in standard SMC
@@ -63,7 +65,7 @@ export class PivotEngine {
             type: 'SWING_LOW',
             index: pIdx,
             price: c.low,
-            confirmed: true,
+            confirmed: isConfirmed,
             timestamp: c.t,
             level: lvl.level,
             colorValidated: true // Automatically valid in standard SMC
