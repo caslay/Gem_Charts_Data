@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { SYSTEM_VERSION } from "@/lib/version";
 import {
   LineChart,
   Play,
@@ -373,7 +374,7 @@ export default function QuantLabPage() {
             <span className="text-[10px] text-slate-500 uppercase">Server Engine</span>
             <span className="text-xs text-emerald-400 font-bold flex items-center gap-1.5 justify-end">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              ONLINE [V10.48]
+              ONLINE [V{SYSTEM_VERSION}]
             </span>
           </div>
           <button

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { SYSTEM_VERSION } from "@/lib/version";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -13,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Flow-State Quant Engine V9.0",
-  description: "Flow-State Quant Engine V9.0",
+  title: `Flow-State Quant Engine V${SYSTEM_VERSION}`,
+  description: `Flow-State Quant Engine V${SYSTEM_VERSION}`,
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/icon-192.png",

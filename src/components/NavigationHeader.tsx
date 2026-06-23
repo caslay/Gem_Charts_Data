@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useCallback, useEffect } from "react";
 import { useTheme } from "next-themes";
+import { SYSTEM_VERSION } from "@/lib/version";
 import {
   RotateCcw,
   Loader2,
@@ -91,7 +92,7 @@ export function NavigationHeader() {
               <span className="text-white text-xs font-black tracking-tighter">FS</span>
             </div>
             <span className="px-1.5 py-0.5 bg-accent/10 text-[8px] font-black text-accent border border-accent/20 leading-none rounded-sm">
-              V9.0
+              V{SYSTEM_VERSION}
             </span>
           </div>
 

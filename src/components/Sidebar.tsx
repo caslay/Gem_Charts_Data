@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, memo } from 'react';
+import { SYSTEM_VERSION } from '@/lib/version';
 import {
   DownloadCloud,
   TrendingUp,
@@ -760,7 +761,7 @@ const Sidebar = memo(function Sidebar({
           {/* Collapsible Data Export Panel — RELOCATED TO DRAWER */}
           <div className="p-3 border-t border-card-border bg-card/45 shrink-0 select-none text-center">
             <span className="text-[8px] font-black text-muted-foreground tracking-widest uppercase">
-              Flow-State Quant Dashboard V9.0
+              Flow-State Quant Dashboard V{SYSTEM_VERSION}
             </span>
           </div>
 

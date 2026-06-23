@@ -3,6 +3,7 @@
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { SYSTEM_VERSION } from "@/lib/version";
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -116,7 +117,7 @@ function LoginContent() {
 
         {/* Footer */}
         <p className="text-center text-xs text-zinc-700 mt-6">
-          Flow-State Quant Engine V8.2 · Secure Access
+          Flow-State Quant Engine V{SYSTEM_VERSION} · Secure Access
         </p>
       </div>
     </div>
