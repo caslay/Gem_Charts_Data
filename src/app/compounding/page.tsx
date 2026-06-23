@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import { SYSTEM_VERSION } from '@/lib/version';
 import {
   TrendingUp,
   Activity,
@@ -174,7 +175,7 @@ export default function CompoundingMatrixPage() {
                 Flow-State Compounding Engine
               </h1>
               <p className="text-[10px] text-slate-500 dark:text-zinc-400 tracking-widest font-black uppercase mt-0.5">
-                Quantitative Risk & Growth Matrix (V8.2)
+                Quantitative Risk & Growth Matrix (V{SYSTEM_VERSION})
               </p>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { slicePayloadByLookback } from '@/components/Sidebar';
+import { SYSTEM_VERSION } from '@/lib/version';
 import { useLiveAlerts } from './useLiveAlerts';
 import { useAIAnalysis } from './useAIAnalysis';
 import { Candle } from '@/lib/fvgEngine';
@@ -1024,7 +1025,7 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
       hours = hours % 12;
       hours = hours ? hours : 12; // تحويل الصفر لـ 12
 
-      triggerDownload(v7Data, `V8.2_Enriched_Data_${data.ticker}.json`);
+      triggerDownload(v7Data, `V${SYSTEM_VERSION}_Enriched_Data_${data.ticker}.json`);
     },
     [data]
   );

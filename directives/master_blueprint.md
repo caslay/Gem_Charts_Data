@@ -1,9 +1,22 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.25
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-06-21 (V12.0.24 — Chrome DevTools MCP Configuration)  
- 
+> **Last Updated:** 2026-06-23 (V12.0.25 — Dynamic Versioning Overhaul)  
+
+## 🆕 V12.0.25 Changelog — Dynamic Versioning Overhaul (Completed)
+
+### 1. Centralized Version Definition
+- Created a single source of truth version module `src/lib/version.ts` exporting `SYSTEM_VERSION = "12.0.24"`.
+
+### 2. Dynamic UI & Metadata Rendering
+- Refactored `NavigationHeader.tsx` and `Sidebar.tsx` to dynamically import `SYSTEM_VERSION` and render version badges.
+- Refactored `layout.tsx` and `manifest.ts` to dynamically use `SYSTEM_VERSION` in page titles, page descriptions, and manifest metadata, avoiding static text drift.
+- Refactored `login/page.tsx`, `compounding/page.tsx`, and `quant-lab/page.tsx` to display the dynamic version at their respective headers/footers.
+
+### 3. Dynamic JSON Download Naming
+- Refactored `useMarketData.ts` to use `SYSTEM_VERSION` inside the `downloadV7Sliced` helper, dynamically naming downloaded JSON files as `V<version>_Enriched_Data_<ticker>_<timestamp>.json` instead of utilizing static text strings.
+
 ## 🆕 V12.0.24 Changelog — Chrome DevTools MCP Configuration (Completed)
 
 ### 1. Chrome DevTools MCP Installation
