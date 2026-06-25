@@ -231,18 +231,20 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
     }
 
     if (direction === "LONG") {
-      if (stop_loss >= entry_price) {
-        return NextResponse.json({ error: "Invalid LONG parameters: Stop Loss must be below Entry Price." }, { status: 400 });
-      }
-      if (take_profit <= entry_price) {
-        return NextResponse.json({ error: "Invalid LONG parameters: Take Profit must be above Entry Price." }, { status: 400 });
+      if (stop_loss >= entry_price || take_profit <= entry_price) {
+        return NextResponse.json({
+          error: "VALIDATION_FAILED",
+          message: `Invalid LONG parameters: Stop Loss ($${stop_loss.toFixed(4)}) must be below Entry Price ($${entry_price.toFixed(4)}), and Take Profit ($${take_profit.toFixed(4)}) must be above Entry Price ($${entry_price.toFixed(4)}).`,
+          details: { direction, entry_price, stop_loss, take_profit, sl_valid: stop_loss < entry_price, tp_valid: take_profit > entry_price }
+        }, { status: 400 });
       }
     } else {
-      if (stop_loss <= entry_price) {
-        return NextResponse.json({ error: "Invalid SHORT parameters: Stop Loss must be above Entry Price." }, { status: 400 });
-      }
-      if (take_profit >= entry_price) {
-        return NextResponse.json({ error: "Invalid SHORT parameters: Take Profit must be below Entry Price." }, { status: 400 });
+      if (stop_loss <= entry_price || take_profit >= entry_price) {
+        return NextResponse.json({
+          error: "VALIDATION_FAILED",
+          message: `Invalid SHORT parameters: Stop Loss ($${stop_loss.toFixed(4)}) must be above Entry Price ($${entry_price.toFixed(4)}), and Take Profit ($${take_profit.toFixed(4)}) must be below Entry Price ($${entry_price.toFixed(4)}).`,
+          details: { direction, entry_price, stop_loss, take_profit, sl_valid: stop_loss > entry_price, tp_valid: take_profit < entry_price }
+        }, { status: 400 });
       }
     }
 
@@ -290,9 +292,19 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
       );
     }
 
+    const candles5m = ipda_metrics?.data_payload?.candles_5m;
+    if (!candles5m || !Array.isArray(candles5m) || candles5m.length === 0) {
+      return NextResponse.json(
+        { error: "Missing historical kline stream payload in backtest mode." },
+        { status: 400 }
+      );
+    }
+    const candleTime = candles5m[candles5m.length - 1].t;
+    const opened_at_str = new Date(candleTime).toISOString();
+
     const savedTrade = {
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15) + '-' + Math.random().toString(36).substring(2, 15),
-      timestamp: new Date().toISOString(),
+      timestamp: opened_at_str,
       symbol,
       direction,
       entry_price: parseFloat(entry_price.toFixed(4)),
@@ -306,7 +318,9 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
       realized_pnl: null,
       roi: null,
       risk_amount_usd,
-      created_at: new Date().toISOString()
+      opened_at: opened_at_str,
+      closed_at: null,
+      created_at: opened_at_str
     };
 
     inMemoryTrades.push(savedTrade);
@@ -358,6 +372,37 @@ async function handlePatchFallback(req: Request, parsedBody?: any) {
         return NextResponse.json({ error: `Trade with ID ${trade_id} not found.` }, { status: 404 });
       }
       const trade = inMemoryTrades[tradeIndex];
+      const entry_price = parseFloat(trade.entry_price);
+      const direction = trade.direction;
+
+      const final_sl = stop_loss !== undefined 
+        ? (stop_loss === null ? null : parseFloat(stop_loss))
+        : (trade.stop_loss !== null ? parseFloat(trade.stop_loss) : null);
+        
+      const final_tp = take_profit !== undefined
+        ? (take_profit === null ? null : parseFloat(take_profit))
+        : (trade.take_profit !== null ? parseFloat(trade.take_profit) : null);
+
+      if (final_sl !== null && final_tp !== null) {
+        if (direction === "LONG") {
+          if (final_sl >= entry_price || final_tp <= entry_price) {
+            return NextResponse.json({
+              error: "VALIDATION_FAILED",
+              message: `Invalid LONG level update: Stop Loss ($${final_sl.toFixed(4)}) must be below Entry Price ($${entry_price.toFixed(4)}), and Take Profit ($${final_tp.toFixed(4)}) must be above Entry Price ($${entry_price.toFixed(4)}).`,
+              details: { direction, entry_price, stop_loss: final_sl, take_profit: final_tp }
+            }, { status: 400 });
+          }
+        } else {
+          if (final_sl <= entry_price || final_tp >= entry_price) {
+            return NextResponse.json({
+              error: "VALIDATION_FAILED",
+              message: `Invalid SHORT level update: Stop Loss ($${final_sl.toFixed(4)}) must be above Entry Price ($${entry_price.toFixed(4)}), and Take Profit ($${final_tp.toFixed(4)}) must be below Entry Price ($${entry_price.toFixed(4)}).`,
+              details: { direction, entry_price, stop_loss: final_sl, take_profit: final_tp }
+            }, { status: 400 });
+          }
+        }
+      }
+
       if (stop_loss !== undefined) {
         trade.stop_loss = stop_loss === null ? null : parseFloat(stop_loss);
       }
@@ -424,6 +469,9 @@ async function handlePatchFallback(req: Request, parsedBody?: any) {
       trade.realized_pnl = parseFloat(realized_pnl.toFixed(4));
       trade.roi = parseFloat(roi.toFixed(4));
       trade.status = "CLOSED";
+      trade.closed_at = body.closed_at 
+        ? new Date(body.closed_at).toISOString() 
+        : (trade.opened_at ? new Date(trade.opened_at).toISOString() : new Date(trade.created_at || trade.timestamp).toISOString());
 
       const initialCapital = parseFloat(inMemoryAccount.initial_capital);
       const totalRealizedPnl = inMemoryTrades
@@ -431,7 +479,7 @@ async function handlePatchFallback(req: Request, parsedBody?: any) {
         .reduce((sum, t) => sum + parseFloat(t.realized_pnl || 0), 0);
       
       inMemoryAccount.current_balance = parseFloat((initialCapital + totalRealizedPnl).toFixed(4));
-      inMemoryAccount.updated_at = new Date().toISOString();
+      inMemoryAccount.updated_at = trade.closed_at;
     } else {
       trade.status = uppercaseStatus;
     }
@@ -565,6 +613,8 @@ async function initTradesTable() {
     await sql`ALTER TABLE backtest_trades ADD COLUMN IF NOT EXISTS realized_pnl DECIMAL(18, 4);`;
     await sql`ALTER TABLE backtest_trades ADD COLUMN IF NOT EXISTS roi DECIMAL(18, 4);`;
     await sql`ALTER TABLE backtest_trades ADD COLUMN IF NOT EXISTS risk_amount_usd DECIMAL(18, 2);`;
+    await sql`ALTER TABLE backtest_trades ADD COLUMN IF NOT EXISTS opened_at TIMESTAMP WITH TIME ZONE;`;
+    await sql`ALTER TABLE backtest_trades ADD COLUMN IF NOT EXISTS closed_at TIMESTAMP WITH TIME ZONE;`;
   } catch (error) {
     console.error("[BACKTEST TRADES API] Self-healing table initialization failed:", error);
     throw error;
@@ -840,19 +890,22 @@ export async function POST(req: Request) {
       );
     }
 
+    // Validate directional sanity
     if (direction === "LONG") {
-      if (stop_loss >= entry_price) {
-        return NextResponse.json({ error: "Invalid LONG parameters: Stop Loss must be below Entry Price." }, { status: 400 });
-      }
-      if (take_profit <= entry_price) {
-        return NextResponse.json({ error: "Invalid LONG parameters: Take Profit must be above Entry Price." }, { status: 400 });
+      if (stop_loss >= entry_price || take_profit <= entry_price) {
+        return NextResponse.json({
+          error: "VALIDATION_FAILED",
+          message: `Invalid LONG parameters: Stop Loss ($${stop_loss.toFixed(4)}) must be below Entry Price ($${entry_price.toFixed(4)}), and Take Profit ($${take_profit.toFixed(4)}) must be above Entry Price ($${entry_price.toFixed(4)}).`,
+          details: { direction, entry_price, stop_loss, take_profit, sl_valid: stop_loss < entry_price, tp_valid: take_profit > entry_price }
+        }, { status: 400 });
       }
     } else {
-      if (stop_loss <= entry_price) {
-        return NextResponse.json({ error: "Invalid SHORT parameters: Stop Loss must be above Entry Price." }, { status: 400 });
-      }
-      if (take_profit >= entry_price) {
-        return NextResponse.json({ error: "Invalid SHORT parameters: Take Profit must be below Entry Price." }, { status: 400 });
+      if (stop_loss <= entry_price || take_profit >= entry_price) {
+        return NextResponse.json({
+          error: "VALIDATION_FAILED",
+          message: `Invalid SHORT parameters: Stop Loss ($${stop_loss.toFixed(4)}) must be above Entry Price ($${entry_price.toFixed(4)}), and Take Profit ($${take_profit.toFixed(4)}) must be below Entry Price ($${entry_price.toFixed(4)}).`,
+          details: { direction, entry_price, stop_loss, take_profit, sl_valid: stop_loss > entry_price, tp_valid: take_profit < entry_price }
+        }, { status: 400 });
       }
     }
 
@@ -942,6 +995,17 @@ export async function POST(req: Request) {
       );
     }
 
+    // Resolve chronological backtest opened_at timestamp from visible kline stream
+    const candles5m = ipda_metrics?.data_payload?.candles_5m;
+    if (!candles5m || !Array.isArray(candles5m) || candles5m.length === 0) {
+      return NextResponse.json(
+        { error: "Missing historical kline stream payload in backtest mode." },
+        { status: 400 }
+      );
+    }
+    const candleTime = candles5m[candles5m.length - 1].t;
+    const opened_at_val = new Date(candleTime).toISOString();
+
     // Insert
     const status = "OPEN";
     const dbResult = await sql`
@@ -955,7 +1019,10 @@ export async function POST(req: Request) {
         strategy_name,
         ai_narrative_summary,
         position_size,
-        risk_amount_usd
+        risk_amount_usd,
+        opened_at,
+        timestamp,
+        created_at
       ) VALUES (
         ${symbol},
         ${direction},
@@ -966,7 +1033,10 @@ export async function POST(req: Request) {
         ${strategy_name},
         ${ai_narrative_summary || null},
         ${position_size},
-        ${risk_amount_usd}
+        ${risk_amount_usd},
+        ${opened_at_val},
+        ${opened_at_val},
+        ${opened_at_val}
       ) RETURNING id, timestamp;
     `;
 
@@ -1071,6 +1141,48 @@ export async function PATCH(req: Request) {
     if (!status && (stop_loss !== undefined || take_profit !== undefined)) {
       await initTradesTable();
       const userEmail = session.user.email || "default_user";
+
+      // Fetch existing trade parameters for directional validation
+      const tradeRes = await sql`
+        SELECT entry_price, direction, stop_loss, take_profit FROM backtest_trades WHERE id = ${trade_id} LIMIT 1
+      `;
+      if (tradeRes.rows.length === 0) {
+        return NextResponse.json({ error: `Trade with ID ${trade_id} not found.` }, { status: 404 });
+      }
+      const trade = tradeRes.rows[0];
+      const entry_price = parseFloat(trade.entry_price);
+      const direction = trade.direction;
+
+      // Resolve final target levels (use updated values if provided, otherwise fallback to existing values)
+      const final_sl = stop_loss !== undefined 
+        ? (stop_loss === null ? null : parseFloat(stop_loss))
+        : (trade.stop_loss !== null ? parseFloat(trade.stop_loss) : null);
+        
+      const final_tp = take_profit !== undefined
+        ? (take_profit === null ? null : parseFloat(take_profit))
+        : (trade.take_profit !== null ? parseFloat(trade.take_profit) : null);
+
+      // Perform validation check
+      if (final_sl !== null && final_tp !== null) {
+        if (direction === "LONG") {
+          if (final_sl >= entry_price || final_tp <= entry_price) {
+            return NextResponse.json({
+              error: "VALIDATION_FAILED",
+              message: `Invalid LONG level update: Stop Loss ($${final_sl.toFixed(4)}) must be below Entry Price ($${entry_price.toFixed(4)}), and Take Profit ($${final_tp.toFixed(4)}) must be above Entry Price ($${entry_price.toFixed(4)}).`,
+              details: { direction, entry_price, stop_loss: final_sl, take_profit: final_tp }
+            }, { status: 400 });
+          }
+        } else {
+          if (final_sl <= entry_price || final_tp >= entry_price) {
+            return NextResponse.json({
+              error: "VALIDATION_FAILED",
+              message: `Invalid SHORT level update: Stop Loss ($${final_sl.toFixed(4)}) must be above Entry Price ($${entry_price.toFixed(4)}), and Take Profit ($${final_tp.toFixed(4)}) must be below Entry Price ($${entry_price.toFixed(4)}).`,
+              details: { direction, entry_price, stop_loss: final_sl, take_profit: final_tp }
+            }, { status: 400 });
+          }
+        }
+      }
+
       let updateResult;
 
       if (stop_loss !== undefined && take_profit !== undefined) {
@@ -1179,12 +1291,17 @@ export async function PATCH(req: Request) {
         realized_pnl = parseFloat(realized_pnl.toFixed(4));
         roi = parseFloat(roi.toFixed(4));
 
+        const closed_at_val = body.closed_at 
+          ? new Date(body.closed_at).toISOString() 
+          : (trade.opened_at ? new Date(trade.opened_at).toISOString() : new Date(trade.created_at || trade.timestamp).toISOString());
+
         updateResult = await sql`
           UPDATE backtest_trades
           SET status = ${uppercaseStatus},
               exit_price = ${exit_price},
               realized_pnl = ${realized_pnl},
-              roi = ${roi}
+              roi = ${roi},
+              closed_at = ${closed_at_val}
           WHERE id = ${trade_id}
           RETURNING *;
         `;

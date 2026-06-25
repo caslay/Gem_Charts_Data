@@ -12,6 +12,7 @@ import TimeframeSwitcher, { Timeframe } from '@/components/TimeframeSwitcher';
 import { LiveTicker } from '@/components/LiveTicker';
 import DashboardMetrics from '@/components/DashboardMetrics';
 import ManualOrderPanel from '@/components/ManualOrderPanel';
+import { calculateATR } from '@/lib/riskEngine';
 
 export default function Home() {
   const {
@@ -26,6 +27,8 @@ export default function Home() {
     setWsInterval,
     aiAnalysis
   } = useMarketDataContext();
+
+  const { livePrice } = useMarketDataLiveContext();
 
   const [selectedInterval, setSelectedInterval] = useState<Timeframe>('5m');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -147,30 +150,70 @@ export default function Home() {
     };
   }, []);
 
-  // Initialize manual prices
+  const handleSetDirection = (d: 'LONG' | 'SHORT') => {
+    setManualDirection(d);
+    setManualTakeProfit(null);
+    setManualStopLoss(null);
+  };
+
+  // Initialize manual prices with ATR and snap to livePrice
   useEffect(() => {
     if (isManualTradingActive) {
-      const currentEntry = getChartData().slice(-1)[0]?.c || 0;
+      const chartCandles = getChartData();
+      const currentEntry = livePrice || (chartCandles.length > 0 ? chartCandles[chartCandles.length - 1].c : 0);
+      
       setManualEntryPrice((prev) => (prev === null || manualOrderType === 'MARKET') ? currentEntry : prev);
+      
+      const atr = calculateATR(chartCandles) || (currentEntry * 0.01);
       
       setManualTakeProfit((prev) => {
         if (prev !== null) return prev;
-        return manualDirection === 'LONG' ? currentEntry * 1.02 : currentEntry * 0.98;
+        return manualDirection === 'LONG' ? currentEntry + (3.0 * atr) : currentEntry - (3.0 * atr);
       });
+      
       setManualStopLoss((prev) => {
         if (prev !== null) return prev;
-        return manualDirection === 'LONG' ? currentEntry * 0.99 : currentEntry * 1.01;
+        return manualDirection === 'LONG' ? currentEntry - (1.5 * atr) : currentEntry + (1.5 * atr);
       });
     } else {
       setManualEntryPrice(null);
       setManualTakeProfit(null);
       setManualStopLoss(null);
     }
-  }, [isManualTradingActive, manualDirection]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isManualTradingActive, manualDirection, manualOrderType]);
+
+  // Lock entry price to live price if MARKET is active
+  useEffect(() => {
+    if (isManualTradingActive && manualOrderType === 'MARKET' && livePrice) {
+      setManualEntryPrice(livePrice);
+    }
+  }, [isManualTradingActive, manualOrderType, livePrice]);
 
   const handleSubmitManualOrder = async (livePrice: number | null) => {
     const entry = manualOrderType === 'MARKET' ? livePrice : manualEntryPrice;
     if (entry === null || manualStopLoss === null || manualTakeProfit === null) return;
+
+    // Strict directional checks
+    if (manualDirection === 'LONG') {
+      if (manualTakeProfit <= entry) {
+        alert('Validation failed: LONG Order Take Profit (TP) must be greater than Entry Price.');
+        return;
+      }
+      if (manualStopLoss >= entry) {
+        alert('Validation failed: LONG Order Stop Loss (SL) must be less than Entry Price.');
+        return;
+      }
+    } else if (manualDirection === 'SHORT') {
+      if (manualTakeProfit >= entry) {
+        alert('Validation failed: SHORT Order Take Profit (TP) must be less than Entry Price.');
+        return;
+      }
+      if (manualStopLoss <= entry) {
+        alert('Validation failed: SHORT Order Stop Loss (SL) must be greater than Entry Price.');
+        return;
+      }
+    }
 
     if (manualOrderType === 'MARKET') {
       setIsSubmittingManual(true);
@@ -387,7 +430,7 @@ export default function Home() {
                   orderType={manualOrderType}
                   setOrderType={setManualOrderType}
                   direction={manualDirection}
-                  setDirection={setManualDirection}
+                  setDirection={handleSetDirection}
                   riskPct={manualRiskPct}
                   setRiskPct={setManualRiskPct}
                   entryPrice={manualEntryPrice}

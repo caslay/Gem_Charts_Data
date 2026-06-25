@@ -20,6 +20,8 @@ export interface TradeRecord {
   realized_pnl?: string | number;
   roi?: string | number;
   risk_amount_usd?: string | number;
+  opened_at?: string;
+  closed_at?: string;
 }
 
 interface JournalTableProps {
@@ -31,6 +33,7 @@ interface JournalTableProps {
   };
   isBacktest?: boolean;
   backtestLivePrice?: number | null;
+  backtestCandleTime?: number | null;
 }
 
 // ── ACTIONS CELL SUB-COMPONENT (Memoized Shared UI) ──────────────────────
@@ -187,8 +190,9 @@ const ClosedTradeRow = memo(function ClosedTradeRow({
 
   return (
     <tr className="border-b border-card-border/50 hover:bg-card/25 transition-colors">
-      <td className="py-4 px-4 md:px-6 font-mono text-[11px] text-muted">
-        {formatDate(trade.created_at || trade.timestamp)}
+      <td className="py-4 px-4 md:px-6 font-mono text-[11px] text-muted leading-relaxed">
+        <div>O: {formatDate(trade.opened_at || trade.created_at || trade.timestamp)}</div>
+        {trade.closed_at && <div className="text-[9px] text-[#ffb4ab]">C: {formatDate(trade.closed_at)}</div>}
       </td>
 
       <td className="py-4 px-4 font-sans font-bold text-title">
@@ -286,6 +290,7 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
   formatDate: (date: string) => string;
   isBacktest?: boolean;
   backtestLivePrice?: number | null;
+  backtestCandleTime?: number | null;
 }) {
   const liveContext = useMarketDataLiveContext();
   const livePrice = isBacktest ? (backtestLivePrice ?? null) : liveContext.livePrice;
@@ -346,15 +351,17 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
   // The hasAutoClosedRef prevents double-firing after the state update re-render.
   const hasAutoClosedRef = useRef(false);
   useEffect(() => {
+    if (isBacktest) return; // Guardrail 2: The Backtest replay engine page handles its own auto-closure
     if (hasAutoClosedRef.current) return;
     if (trade.status !== "OPEN") return;
     if (!livePrice) return;
 
     if (isTpHit || isSlHit) {
       hasAutoClosedRef.current = true;
-      handleClosePosition(trade.id);
+      const finalExitPrice = isTpHit ? takeProfit : stopLoss;
+      handleClosePosition(trade.id, finalExitPrice);
     }
-  }, [isTpHit, isSlHit, livePrice, trade.id, trade.status, handleClosePosition]);
+  }, [isTpHit, isSlHit, livePrice, trade.id, trade.status, handleClosePosition, takeProfit, stopLoss, isBacktest]);
 
   const pnlSign = unrealizedPnL > 0 ? "+" : "";
   const roiSign = roiPercentage > 0 ? "+" : "";
@@ -380,8 +387,9 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
 
   return (
     <tr className={`border-b border-card-border/50 transition-colors ${rowHighlightClass} relative`}>
-      <td className="py-4 px-4 md:px-6 font-mono text-[11px] text-muted">
-        {formatDate(trade.created_at || trade.timestamp)}
+      <td className="py-4 px-4 md:px-6 font-mono text-[11px] text-muted leading-relaxed">
+        <div>O: {formatDate(trade.opened_at || trade.created_at || trade.timestamp)}</div>
+        <div className="text-[9px] text-[#50ffaf]/80">C: RUNNING</div>
       </td>
 
       <td className="py-4 px-4 font-sans font-bold text-title">
@@ -487,7 +495,8 @@ const JournalTableRow = memo(function JournalTableRow({
   handleDeleteTrade,
   formatDate,
   isBacktest,
-  backtestLivePrice
+  backtestLivePrice,
+  backtestCandleTime
 }: {
   trade: TradeRecord;
   isLoading: boolean;
@@ -500,6 +509,7 @@ const JournalTableRow = memo(function JournalTableRow({
   formatDate: (date: string) => string;
   isBacktest?: boolean;
   backtestLivePrice?: number | null;
+  backtestCandleTime?: number | null;
 }) {
   if (trade.status === "CLOSED") {
     return (
@@ -530,11 +540,12 @@ const JournalTableRow = memo(function JournalTableRow({
       formatDate={formatDate}
       isBacktest={isBacktest}
       backtestLivePrice={backtestLivePrice}
+      backtestCandleTime={backtestCandleTime}
     />
   );
 });
 
-export const JournalTable = memo(function JournalTable({ initialTrades, initialAccount, isBacktest = false, backtestLivePrice }: JournalTableProps) {
+export const JournalTable = memo(function JournalTable({ initialTrades, initialAccount, isBacktest = false, backtestLivePrice, backtestCandleTime }: JournalTableProps) {
   const context = useMarketDataContext();
   const tradesApiUrl = isBacktest ? "/api/backtest-trades" : "/api/trades";
 
@@ -663,6 +674,10 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
   const handleClosePosition = useCallback(async (tradeId: string, exitPrice?: number | null) => {
     setActionLoadingId(`${tradeId}-close`);
 
+    const closedAt = isBacktest && backtestCandleTime 
+      ? new Date(backtestCandleTime).toISOString() 
+      : new Date().toISOString();
+
     try {
       const res = await fetch(tradesApiUrl, {
         method: "PATCH",
@@ -670,7 +685,8 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
         body: JSON.stringify({ 
           trade_id: tradeId, 
           status: "CLOSED",
-          exit_price: exitPrice !== undefined ? exitPrice : null
+          exit_price: exitPrice !== undefined ? exitPrice : null,
+          closed_at: closedAt
         })
       });
 
@@ -919,6 +935,7 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
                     formatDate={formatDate}
                     isBacktest={isBacktest}
                     backtestLivePrice={backtestLivePrice}
+                    backtestCandleTime={backtestCandleTime}
                   />
                 ))
               )}

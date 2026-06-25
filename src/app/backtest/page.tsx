@@ -23,6 +23,7 @@ import { useTheme } from 'next-themes';
 import SettingsModal from '@/components/modals/SettingsModal';
 import BacktestSidebar from './BacktestSidebar';
 import ManualOrderPanel from '@/components/ManualOrderPanel';
+import { calculateATR } from '@/lib/riskEngine';
 
 
 // ─── Stat badge ──────────────────────────────────────────────────────────────
@@ -106,6 +107,7 @@ export default function BacktestPage() {
   const [manualStopLoss, setManualStopLoss] = useState<number | null>(null);
   const [backtestPendingOrders, setBacktestPendingOrders] = useState<any[]>([]);
   const [isSubmittingManual, setIsSubmittingManual] = useState(false);
+  const closingBacktestTradesRef = useRef<Set<string>>(new Set());
 
   const fetchBacktestTrades = useCallback(async () => {
     try {
@@ -157,26 +159,43 @@ export default function BacktestPage() {
     : null;
 
   // ── Manual Trading Hook Effects & Submission Handler ───────────────────────
-  // Initialize manual prices
+  const handleSetDirection = (d: 'LONG' | 'SHORT') => {
+    setManualDirection(d);
+    setManualTakeProfit(null);
+    setManualStopLoss(null);
+  };
+
+  // Initialize manual prices with ATR and snap to active replay candle
   useEffect(() => {
     if (isManualTradingActive) {
-      const currentEntry = lastPrice || (engine.visibleArrays ? (activeTimeframe === '1h' ? engine.visibleArrays.candles_1h : activeTimeframe === '15m' ? engine.visibleArrays.candles_15m : engine.visibleArrays.candles_5m) : []).slice(-1)[0]?.c || 0;
+      const chartCandles = (() => {
+        if (!engine.visibleArrays) return [];
+        if (activeTimeframe === '1h') return engine.visibleArrays.candles_1h;
+        if (activeTimeframe === '15m') return engine.visibleArrays.candles_15m;
+        return engine.visibleArrays.candles_5m;
+      })();
+      const currentEntry = lastPrice || (chartCandles.length > 0 ? chartCandles[chartCandles.length - 1].c : 0);
+      
       setManualEntryPrice((prev) => (prev === null || manualOrderType === 'MARKET') ? currentEntry : prev);
+      
+      const atr = calculateATR(chartCandles) || (currentEntry * 0.01);
       
       setManualTakeProfit((prev) => {
         if (prev !== null) return prev;
-        return manualDirection === 'LONG' ? currentEntry * 1.02 : currentEntry * 0.98;
+        return manualDirection === 'LONG' ? currentEntry + (3.0 * atr) : currentEntry - (3.0 * atr);
       });
+      
       setManualStopLoss((prev) => {
         if (prev !== null) return prev;
-        return manualDirection === 'LONG' ? currentEntry * 0.99 : currentEntry * 1.01;
+        return manualDirection === 'LONG' ? currentEntry - (1.5 * atr) : currentEntry + (1.5 * atr);
       });
     } else {
       setManualEntryPrice(null);
       setManualTakeProfit(null);
       setManualStopLoss(null);
     }
-  }, [isManualTradingActive, manualDirection]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isManualTradingActive, manualDirection, manualOrderType]);
 
   // Lock entry price to last price if MARKET is active
   useEffect(() => {
@@ -246,10 +265,23 @@ export default function BacktestPage() {
   // Backtest active open trades SL/TP hit logic (Replay Auto-Closure)
   useEffect(() => {
     const openTrades = backtestTrades.filter((t) => t.status === 'OPEN');
+
+    // Clean up locking ref for any trades that are no longer open in state
+    closingBacktestTradesRef.current.forEach((id) => {
+      if (!openTrades.some((t) => t.id === id)) {
+        closingBacktestTradesRef.current.delete(id);
+      }
+    });
+
     if (openTrades.length === 0) return;
     if (!lastCandle) return;
 
     openTrades.forEach(async (trade) => {
+      // Gate against duplicate pending closure requests
+      if (closingBacktestTradesRef.current.has(trade.id)) {
+        return;
+      }
+
       const entryPrice = parseFloat(String(trade.entry_price));
       const stopLoss = parseFloat(String(trade.stop_loss));
       const takeProfit = parseFloat(String(trade.take_profit));
@@ -277,6 +309,9 @@ export default function BacktestPage() {
       }
 
       if (isBreached) {
+        // Lock this trade ID
+        closingBacktestTradesRef.current.add(trade.id);
+
         try {
           const res = await fetch('/api/backtest-trades', {
             method: 'PATCH',
@@ -285,6 +320,7 @@ export default function BacktestPage() {
               trade_id: trade.id,
               status: 'CLOSED',
               exit_price: exitPrice,
+              closed_at: new Date(lastCandle.t).toISOString(),
             }),
           });
 
@@ -298,9 +334,13 @@ export default function BacktestPage() {
             fetchBacktestTrades();
           } else {
             console.error('[Manual Trading] Failed to auto-close backtest trade:', res.statusText);
+            // Unlock on failure to allow retry
+            closingBacktestTradesRef.current.delete(trade.id);
           }
         } catch (e) {
           console.error('[Manual Trading] Error auto-closing backtest trade:', e);
+          // Unlock on error to allow retry
+          closingBacktestTradesRef.current.delete(trade.id);
         }
       }
     });
@@ -308,6 +348,27 @@ export default function BacktestPage() {
 
   const handleSubmitManualOrder = async () => {
     if (manualEntryPrice === null || manualStopLoss === null || manualTakeProfit === null) return;
+
+    // Strict directional checks
+    if (manualDirection === 'LONG') {
+      if (manualTakeProfit <= manualEntryPrice) {
+        alert('Validation failed: LONG Order Take Profit (TP) must be greater than Entry Price.');
+        return;
+      }
+      if (manualStopLoss >= manualEntryPrice) {
+        alert('Validation failed: LONG Order Stop Loss (SL) must be less than Entry Price.');
+        return;
+      }
+    } else if (manualDirection === 'SHORT') {
+      if (manualTakeProfit >= manualEntryPrice) {
+        alert('Validation failed: SHORT Order Take Profit (TP) must be less than Entry Price.');
+        return;
+      }
+      if (manualStopLoss <= manualEntryPrice) {
+        alert('Validation failed: SHORT Order Stop Loss (SL) must be greater than Entry Price.');
+        return;
+      }
+    }
 
     if (manualOrderType === 'MARKET') {
       setIsSubmittingManual(true);
@@ -904,7 +965,7 @@ export default function BacktestPage() {
                     orderType={manualOrderType}
                     setOrderType={setManualOrderType}
                     direction={manualDirection}
-                    setDirection={setManualDirection}
+                    setDirection={handleSetDirection}
                     riskPct={manualRiskPct}
                     setRiskPct={setManualRiskPct}
                     entryPrice={manualEntryPrice}
@@ -1029,6 +1090,7 @@ export default function BacktestPage() {
                   initialAccount={backtestAccount}
                   isBacktest={true}
                   backtestLivePrice={lastPrice}
+                  backtestCandleTime={lastCandle?.t}
                 />
               )}
             </div>

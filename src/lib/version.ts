@@ -1,1 +1,1 @@
-export const SYSTEM_VERSION = "12.0.24";
+export const SYSTEM_VERSION = "12.0.28";
