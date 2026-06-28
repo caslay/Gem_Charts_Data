@@ -87,8 +87,8 @@ export default function Chart({
   const [activeDragLine, setActiveDragLine] = useState<'entry' | 'tp' | 'sl' | null>(null);
   const activeDragLineRef = useRef<'entry' | 'tp' | 'sl' | null>(null);
 
-  // Open Trades Price Line Refs mapping tradeId -> { entryLine, tpLine, slLine }
-  const openTradesLinesRef = useRef<Map<string, { entry: any; tp: any; sl: any }>>(new Map());
+  // Dynamic price tracking for SVG line drag-and-drop
+  const lastSnappedPriceRef = useRef<number | null>(null);
   const [activeDragTradeLine, setActiveDragTradeLine] = useState<{ tradeId: string; type: 'tp' | 'sl' } | null>(null);
   const activeDragTradeLineRef = useRef<{ tradeId: string; type: 'tp' | 'sl' } | null>(null);
 
@@ -676,77 +676,108 @@ export default function Chart({
     theme
   ]);
 
-  // ── Sync Open Trades Price Lines ───────────────────────────────────────────
-  useEffect(() => {
-    const series = seriesRef.current;
-    if (!series) return;
+  // ── SVG Overlay Pointer Capture & Rendering Handlers ───────────────────────
+  const handleSvgPointerDown = useCallback((e: React.PointerEvent<SVGElement>, tradeId: string, type: 'tp' | 'sl') => {
+    if (!chartRef.current || !seriesRef.current || !chartContainerRef.current) return;
+    if (e.button !== 0) return; // Only left-click
+    e.preventDefault();
+    e.stopPropagation();
 
-    // Remove all existing open trade lines
-    openTradesLinesRef.current.forEach((lines) => {
-      if (lines.entry) series.removePriceLine(lines.entry);
-      if (lines.tp) series.removePriceLine(lines.tp);
-      if (lines.sl) series.removePriceLine(lines.sl);
+    activeDragTradeLineRef.current = { tradeId, type };
+    setActiveDragTradeLine({ tradeId, type });
+
+    chartRef.current.applyOptions({
+      handleScroll: false,
+      handleScale: false,
     });
-    openTradesLinesRef.current.clear();
 
-    if (!openTrades || openTrades.length === 0) return;
+    // Capture pointer on the chart container to track movements smoothly outside SVG boundaries
+    chartContainerRef.current.setPointerCapture(e.pointerId);
+  }, []);
 
-    const tpColor = themeSettings?.theme_manual_tp_line || '#10b981';
-    const slColor = themeSettings?.theme_manual_sl_line || '#ef4444';
+  // Update SVG line and label coordinates directly in DOM styles to target 120 FPS
+  const updateSvgCoordinates = useCallback(() => {
+    const series = seriesRef.current;
+    if (!series || !openTrades) return;
 
     openTrades.forEach((trade) => {
-      const tradeId = trade.id;
-      const entryPriceVal = parseFloat(String(trade.entry_price));
-      const tpPriceVal = parseFloat(String(trade.take_profit));
-      const slPriceVal = parseFloat(String(trade.stop_loss));
+      const entryPrice = parseFloat(trade.entry_price);
+      const tpPrice = parseFloat(trade.take_profit);
+      const slPrice = parseFloat(trade.stop_loss);
 
-      const entryLine = series.createPriceLine({
-        price: entryPriceVal,
-        color: '#71717a', // Muted zinc-500
-        lineWidth: 1,
-        lineStyle: LineStyle.Dotted,
-        axisLabelVisible: true,
-        title: `OPEN ENTRY (${trade.direction})`,
-      });
+      const entryY = series.priceToCoordinate(entryPrice);
+      const tpY = tpPrice > 0 ? series.priceToCoordinate(tpPrice) : null;
+      const slY = slPrice > 0 ? series.priceToCoordinate(slPrice) : null;
 
-      let tpLine = null;
-      if (tpPriceVal > 0 && !isNaN(tpPriceVal)) {
-        tpLine = series.createPriceLine({
-          price: tpPriceVal,
-          color: tpColor,
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
-          axisLabelVisible: true,
-          title: `OPEN TP (${trade.direction})`,
-        });
+      // Update Entry DOM
+      const entryLineEl = document.getElementById(`svg-line-${trade.id}-entry`);
+      if (entryLineEl) {
+        if (entryY !== null && !isNaN(entryY)) {
+          entryLineEl.setAttribute('y1', String(entryY));
+          entryLineEl.setAttribute('y2', String(entryY));
+        } else {
+          entryLineEl.setAttribute('y1', '-1000');
+          entryLineEl.setAttribute('y2', '-1000');
+        }
+      }
+      const entryLabelEl = document.getElementById(`svg-label-${trade.id}-entry`);
+      if (entryLabelEl) {
+        if (entryY !== null && !isNaN(entryY)) {
+          entryLabelEl.setAttribute('transform', `translate(10, ${entryY})`);
+        } else {
+          entryLabelEl.setAttribute('transform', 'translate(10, -1000)');
+        }
       }
 
-      let slLine = null;
-      if (slPriceVal > 0 && !isNaN(slPriceVal)) {
-        slLine = series.createPriceLine({
-          price: slPriceVal,
-          color: slColor,
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
-          axisLabelVisible: true,
-          title: `OPEN SL (${trade.direction})`,
-        });
+      // Update TP DOM
+      const tpLineEl = document.getElementById(`svg-line-${trade.id}-tp`);
+      if (tpLineEl) {
+        if (tpY !== null && !isNaN(tpY)) {
+          tpLineEl.setAttribute('y1', String(tpY));
+          tpLineEl.setAttribute('y2', String(tpY));
+        } else {
+          tpLineEl.setAttribute('y1', '-1000');
+          tpLineEl.setAttribute('y2', '-1000');
+        }
+      }
+      const tpLabelEl = document.getElementById(`svg-label-${trade.id}-tp`);
+      if (tpLabelEl) {
+        if (tpY !== null && !isNaN(tpY)) {
+          tpLabelEl.setAttribute('transform', `translate(10, ${tpY})`);
+        } else {
+          tpLabelEl.setAttribute('transform', 'translate(10, -1000)');
+        }
       }
 
-      openTradesLinesRef.current.set(tradeId, { entry: entryLine, tp: tpLine, sl: slLine });
+      // Update SL DOM
+      const slLineEl = document.getElementById(`svg-line-${trade.id}-sl`);
+      if (slLineEl) {
+        if (slY !== null && !isNaN(slY)) {
+          slLineEl.setAttribute('y1', String(slY));
+          slLineEl.setAttribute('y2', String(slY));
+        } else {
+          slLineEl.setAttribute('y1', '-1000');
+          slLineEl.setAttribute('y2', '-1000');
+        }
+      }
+      const slLabelEl = document.getElementById(`svg-label-${trade.id}-sl`);
+      if (slLabelEl) {
+        if (slY !== null && !isNaN(slY)) {
+          slLabelEl.setAttribute('transform', `translate(10, ${slY})`);
+        } else {
+          slLabelEl.setAttribute('transform', 'translate(10, -1000)');
+        }
+      }
     });
+  }, [openTrades]);
 
-    return () => {
-      if (seriesRef.current) {
-        openTradesLinesRef.current.forEach((lines) => {
-          if (lines.entry) seriesRef.current?.removePriceLine(lines.entry);
-          if (lines.tp) seriesRef.current?.removePriceLine(lines.tp);
-          if (lines.sl) seriesRef.current?.removePriceLine(lines.sl);
-        });
-        openTradesLinesRef.current.clear();
-      }
-    };
-  }, [openTrades, themeSettings, theme]);
+  // Sync coordinates when openTrades or data changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      updateSvgCoordinates();
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [openTrades, data, updateSvgCoordinates]);
 
   // ── Drag & Drop Pointer Event Handlers ─────────────────────────────────────
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -759,10 +790,10 @@ export default function Chart({
     const series = seriesRef.current;
     
     const clickThreshold = 12;
-    let target: 'entry' | 'tp' | 'sl' | 'open-tp' | 'open-sl' | null = null;
+    let target: 'entry' | 'tp' | 'sl' | null = null;
     let minDistance = clickThreshold;
     
-    // 1. Check manual order entry layout lines (if active)
+    // Check manual order entry layout lines (if active)
     if (isManualTradingActive) {
       const entryY = manualEntryPrice !== null ? series.priceToCoordinate(manualEntryPrice) : null;
       const tpY = manualTakeProfit !== null ? series.priceToCoordinate(manualTakeProfit) : null;
@@ -791,47 +822,12 @@ export default function Chart({
       }
     }
     
-    // 2. Check open trades lines
-    if (openTrades && openTrades.length > 0) {
-      for (const trade of openTrades) {
-        const lines = openTradesLinesRef.current.get(trade.id);
-        if (!lines) continue;
-        
-        const tpPriceVal = parseFloat(trade.take_profit);
-        const slPriceVal = parseFloat(trade.stop_loss);
-        
-        const tpY = lines.tp && tpPriceVal > 0 ? series.priceToCoordinate(tpPriceVal) : null;
-        const slY = lines.sl && slPriceVal > 0 ? series.priceToCoordinate(slPriceVal) : null;
-        
-        if (tpY !== null) {
-          const dist = Math.abs(pointerY - tpY);
-          if (dist < minDistance) {
-            minDistance = dist;
-            target = 'open-tp';
-            activeDragTradeLineRef.current = { tradeId: trade.id, type: 'tp' };
-          }
-        }
-        if (slY !== null) {
-          const dist = Math.abs(pointerY - slY);
-          if (dist < minDistance) {
-            minDistance = dist;
-            target = 'open-sl';
-            activeDragTradeLineRef.current = { tradeId: trade.id, type: 'sl' };
-          }
-        }
-      }
-    }
-    
     if (target) {
       e.preventDefault();
       e.stopPropagation();
       
-      if (target === 'entry' || target === 'tp' || target === 'sl') {
-        activeDragLineRef.current = target;
-        setActiveDragLine(target);
-      } else {
-        setActiveDragTradeLine(activeDragTradeLineRef.current);
-      }
+      activeDragLineRef.current = target;
+      setActiveDragLine(target);
       
       chartRef.current.applyOptions({
         handleScroll: false,
@@ -868,14 +864,29 @@ export default function Chart({
       onManualPricesChange(nextEntry, nextTp, nextSl);
     }
     
-    // B. Handle open trades lines (smooth sliding feedback)
+    // B. Handle open trades SVG lines (smooth sliding direct-DOM feedback)
     if (activeDragTradeLineRef.current) {
       const { tradeId, type } = activeDragTradeLineRef.current;
-      const lines = openTradesLinesRef.current.get(tradeId);
-      if (lines) {
-        const lineToUpdate = type === 'tp' ? lines.tp : lines.sl;
-        if (lineToUpdate) {
-          lineToUpdate.applyOptions({ price: snappedPrice });
+      const trade = openTrades?.find((t) => t.id === tradeId);
+      if (trade) {
+        lastSnappedPriceRef.current = snappedPrice;
+
+        // Update SVG line directly in DOM
+        const lineEl = document.getElementById(`svg-line-${tradeId}-${type}`);
+        if (lineEl) {
+          lineEl.setAttribute('y1', String(pointerY));
+          lineEl.setAttribute('y2', String(pointerY));
+        }
+        // Update SVG label coordinates directly in DOM
+        const labelEl = document.getElementById(`svg-label-${tradeId}-${type}`);
+        if (labelEl) {
+          labelEl.setAttribute('transform', `translate(10, ${pointerY})`);
+        }
+        // Update SVG text contents directly in DOM
+        const textEl = document.getElementById(`svg-text-${tradeId}-${type}`);
+        if (textEl) {
+          const suffix = type.toUpperCase();
+          textEl.textContent = `${suffix} (${trade.direction}): ${snappedPrice.toFixed(2)}`;
         }
       }
     }
@@ -895,17 +906,45 @@ export default function Chart({
       const { tradeId, type } = activeDragTradeLineRef.current;
       
       const trade = openTrades?.find((t) => t.id === tradeId);
-      if (trade && onUpdateTradeLevels) {
-        const lines = openTradesLinesRef.current.get(tradeId);
-        const finalPrice = type === 'tp' ? lines?.tp?.options().price : lines?.sl?.options().price;
-        if (finalPrice !== undefined && finalPrice !== null) {
+      const finalPrice = lastSnappedPriceRef.current;
+      
+      if (trade && onUpdateTradeLevels && finalPrice !== null && !isNaN(finalPrice)) {
+        // Local validation logic matching backend gates
+        let isValid = true;
+        if (trade.direction === 'LONG') {
+          if (type === 'tp' && finalPrice <= parseFloat(trade.entry_price)) {
+            alert('LONG Take Profit must be greater than Entry Price.');
+            isValid = false;
+          }
+          if (type === 'sl' && finalPrice >= parseFloat(trade.entry_price)) {
+            alert('LONG Stop Loss must be less than Entry Price.');
+            isValid = false;
+          }
+        } else if (trade.direction === 'SHORT') {
+          if (type === 'tp' && finalPrice >= parseFloat(trade.entry_price)) {
+            alert('SHORT Take Profit must be less than Entry Price.');
+            isValid = false;
+          }
+          if (type === 'sl' && finalPrice <= parseFloat(trade.entry_price)) {
+            alert('SHORT Stop Loss must be greater than Entry Price.');
+            isValid = false;
+          }
+        }
+
+        if (isValid) {
           const nextTp = type === 'tp' ? finalPrice : parseFloat(trade.take_profit);
           const nextSl = type === 'sl' ? finalPrice : parseFloat(trade.stop_loss);
           onUpdateTradeLevels(tradeId, nextTp, nextSl);
+        } else {
+          // Revert visual coordinates to stored values
+          updateSvgCoordinates();
         }
+      } else {
+        updateSvgCoordinates();
       }
       activeDragTradeLineRef.current = null;
       setActiveDragTradeLine(null);
+      lastSnappedPriceRef.current = null;
     }
     
     // 3. Restore scroll/scale options
@@ -1361,7 +1400,6 @@ export default function Chart({
     updateAlertPositions();
   }, [alerts, upColor, downColor, updateAlertPositions]);
 
-  // ── Zoom/Scroll Synchronization ───────────────────────────────────────────
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -1369,6 +1407,7 @@ export default function Chart({
     const handleChartUpdate = (logicalRange?: any) => {
       updateAlertPositions();
       computeFvgOverlay();
+      updateSvgCoordinates();
 
       if (logicalRange && logicalRange.from < 15 && loadMoreHistory && !isFetchingMore) {
         loadMoreHistory();
@@ -1390,7 +1429,7 @@ export default function Chart({
         priceScaleApi.unsubscribeVisiblePriceRangeChange(handleChartUpdate);
       }
     };
-  }, [alerts, updateAlertPositions, loadMoreHistory, isFetchingMore]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alerts, updateAlertPositions, updateSvgCoordinates, loadMoreHistory, isFetchingMore]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // ── V8.6: FVG Overlay Pixel Calculator (Finite & Anchored) ───────────────
   const computeFvgOverlay = useCallback(() => {
@@ -1704,6 +1743,111 @@ export default function Chart({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
       />
+
+      {/* SVG Overlay Container for Open Trades */}
+      <svg className="absolute inset-0 pointer-events-none w-full h-full z-15 select-none">
+        {openTrades && openTrades.map((trade) => {
+          const entryPrice = parseFloat(trade.entry_price);
+          const tpPrice = parseFloat(trade.take_profit);
+          const slPrice = parseFloat(trade.stop_loss);
+
+          return (
+            <g key={trade.id} id={`svg-trade-group-${trade.id}`}>
+              {/* Entry Line */}
+              <line
+                id={`svg-line-${trade.id}-entry`}
+                x1="0"
+                x2="100%"
+                y1="-1000"
+                y2="-1000"
+                stroke="#958da3"
+                strokeDasharray="4 4"
+                strokeWidth="1.5"
+              />
+              <g id={`svg-label-${trade.id}-entry`} transform="translate(10, -1000)">
+                <rect x="5" y="-8" width="165" height="16" fill="#141416" rx="2" stroke="#958da3" strokeWidth="1" />
+                <text x="10" y="4" fill="#958da3" fontSize="9" fontFamily="monospace" fontWeight="bold">
+                  {`ENTRY (${trade.direction}): ${entryPrice.toFixed(2)}`}
+                </text>
+              </g>
+
+              {/* TP Line */}
+              {tpPrice > 0 && !isNaN(tpPrice) && (
+                <>
+                  <line
+                    id={`svg-line-${trade.id}-tp`}
+                    x1="0"
+                    x2="100%"
+                    y1="-1000"
+                    y2="-1000"
+                    stroke="#10b981"
+                    strokeDasharray="4 2"
+                    strokeWidth="1.5"
+                  />
+                  {/* TP Label & Draggable Handle Group */}
+                  <g
+                    id={`svg-label-${trade.id}-tp`}
+                    transform="translate(10, -1000)"
+                    className="pointer-events-auto cursor-ns-resize"
+                    onPointerDown={(e) => handleSvgPointerDown(e, trade.id, 'tp')}
+                  >
+                    <rect x="5" y="-8" width="165" height="16" fill="#141416" rx="2" stroke="#10b981" strokeWidth="1" />
+                    <text
+                      id={`svg-text-${trade.id}-tp`}
+                      x="10"
+                      y="4"
+                      fill="#10b981"
+                      fontSize="9"
+                      fontFamily="monospace"
+                      fontWeight="bold"
+                    >
+                      {`TP (${trade.direction}): ${tpPrice.toFixed(2)}`}
+                    </text>
+                    <circle cx="155" cy="0" r="3" fill="#10b981" />
+                  </g>
+                </>
+              )}
+
+              {/* SL Line */}
+              {slPrice > 0 && !isNaN(slPrice) && (
+                <>
+                  <line
+                    id={`svg-line-${trade.id}-sl`}
+                    x1="0"
+                    x2="100%"
+                    y1="-1000"
+                    y2="-1000"
+                    stroke="#ef4444"
+                    strokeDasharray="4 2"
+                    strokeWidth="1.5"
+                  />
+                  {/* SL Label & Draggable Handle Group */}
+                  <g
+                    id={`svg-label-${trade.id}-sl`}
+                    transform="translate(10, -1000)"
+                    className="pointer-events-auto cursor-ns-resize"
+                    onPointerDown={(e) => handleSvgPointerDown(e, trade.id, 'sl')}
+                  >
+                    <rect x="5" y="-8" width="165" height="16" fill="#141416" rx="2" stroke="#ef4444" strokeWidth="1" />
+                    <text
+                      id={`svg-text-${trade.id}-sl`}
+                      x="10"
+                      y="4"
+                      fill="#ef4444"
+                      fontSize="9"
+                      fontFamily="monospace"
+                      fontWeight="bold"
+                    >
+                      {`SL (${trade.direction}): ${slPrice.toFixed(2)}`}
+                    </text>
+                    <circle cx="155" cy="0" r="3" fill="#ef4444" />
+                  </g>
+                </>
+              )}
+            </g>
+          );
+        })}
+      </svg>
 
       {/* Dynamic Layer Orchestrator HTML Overlays */}
       {registry.getAll().map((layer) => {

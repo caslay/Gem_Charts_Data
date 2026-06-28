@@ -46,27 +46,7 @@ function ManualOrderPanel({
     return orderType === 'MARKET' ? livePrice : entryPrice;
   }, [orderType, livePrice, entryPrice]);
 
-  // 2. Initialize entry price when switching to LIMIT or STOP
-  useEffect(() => {
-    if (orderType !== 'MARKET' && entryPrice === null && livePrice) {
-      setEntryPrice(livePrice);
-    }
-  }, [orderType, entryPrice, livePrice, setEntryPrice]);
 
-  // 3. Initialize manual takeProfit/stopLoss levels on mount and direction changes
-  useEffect(() => {
-    const currentEntry = entryPrice || livePrice || 0;
-    if (currentEntry === 0) return;
-    
-    if (takeProfit === null) {
-      setTakeProfit(direction === 'LONG' ? currentEntry * 1.02 : currentEntry * 0.98);
-    }
-    
-    if (stopLoss === null) {
-      setStopLoss(direction === 'LONG' ? currentEntry * 0.99 : currentEntry * 1.01);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [direction]);
   
   // Calculate Risk USD
   const riskUsd = useMemo(() => {

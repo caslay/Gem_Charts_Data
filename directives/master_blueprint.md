@@ -1,8 +1,43 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.25
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.28
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-06-23 (V12.0.25 — Dynamic Versioning Overhaul)  
+> **Last Updated:** 2026-06-23 (V12.0.28 — Backtest Auto-Closure Race Condition Resolution)  
+
+## 🆕 V12.0.28 Changelog — Backtest Auto-Closure Race Condition Resolution (Completed)
+
+### 1. Locked Backtest Auto-Closure Pipeline
+- **Race Condition Mitigated:** Fixed the bug where the backtest auto-closure hook fired duplicate concurrent close requests (PATCH `/api/backtest-trades`) for the same trade because client-side state did not update instantly.
+- **Stateful Lock Ref:** Implemented `closingBacktestTradesRef` (`useRef<Set<string>>`) to block duplicate requests for active open trades undergoing status closure transitions.
+- **Self-Healing Lock Registry Cleanup:** Cleans up locked trade IDs automatically from the set as soon as the client-side state catching up renders them as no longer `OPEN`, preventing memory leakages.
+
+## 🆕 V12.0.27 Changelog — Viewport-Snapping & ATR-Scaled Default Levels (Completed)
+
+### 1. Viewport-Snapping and Context-Aware Entry Price Snapping
+- **Live Mode:** Snapped default entry price dynamically to the active WebSocket live streaming ticker value (`livePrice`).
+- **Backtest Mode:** Snapped default entry price to the close of the historical candle at the active replay step index (`lastCandle.c`).
+- Locked entry price updates to `livePrice` (Live) / `lastPrice` (Backtest) when `manualOrderType === 'MARKET'` is active.
+
+### 2. Volatility-Proportional Default SL/TP Targets
+- Replaced hardcoded default offsets (e.g. 2% TP, 1% SL) with Average True Range (ATR) scaled visual boundaries on open/direction-swaps.
+- Computes default targets to project a 1:2 Risk-Reward ratio: `Default SL = Entry Price ± 1.5 * ATR`, `Default TP = Entry Price ∓ 3.0 * ATR` matching the active trade direction.
+- Wipes and recalculates these offsets on direction swaps (`LONG` <-> `SHORT`) to guarantee correct side boundaries.
+- Removed child-side duplicate initialization hooks inside `ManualOrderPanel.tsx` to prevent mathematical race conditions.
+
+## 🆕 V12.0.26 Changelog — Manual Trading Sub-system Overhaul (Completed)
+
+### 1. Direct-DOM SVG Overlay Rendering Pipeline
+- Swapped out canvas price lines for active open trades in `Chart.tsx` for a hardware-accelerated SVG container (`pointer-events-none z-15`) rendering entry (grey), TP (neon green), and SL (neon red) lines with custom label nodes.
+- Intercepted visible logical range and price range changes inside the `handleChartUpdate` listener to recalculate absolute coordinates and update SVG line positions directly in DOM attributes, maintaining a 120 FPS target without triggering React state changes.
+
+### 2. Throttled Pointer Dropping & Drag Validation Gate
+- Bound pointer events capture on the chart container upon handle selection, updating dynamic label text and price wicks smoothly on movement.
+- Throttled API database PATCH updates strictly to the final pointer release (`onPointerUp`/`onMouseUp`).
+- Embedded client-side directional checks on submit in both Live Dashboard (`page.tsx`) and Backtest Replay (`backtest/page.tsx`) and added visual reverts in `Chart.tsx` if a dragged level violates validation constraints.
+
+### 3. Chronological Historical Replay Timestamp Parity
+- Decoupled `opened_at` and `closed_at` timestamp context. Live trades write standard UTC-0 database server times.
+- Backtest trades extract the chronological replayed candle timestamp (`lastCandle.t`) directly from the visible kline array during creation and automatic/manual exits, guaranteeing zero live server stamps enter historical test records.
 
 ## 🆕 V12.0.25 Changelog — Dynamic Versioning Overhaul (Completed)
 
