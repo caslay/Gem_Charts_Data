@@ -712,43 +712,80 @@ export default function BacktestPage() {
         {/* ── Left control panel ──────────────────────────────────────────── */}
         <aside className="w-72 shrink-0 border-r border-card-border bg-card/25 backdrop-blur-sm flex flex-col gap-4 p-5 overflow-y-auto transition-colors">
 
-          {/* Section: Date & Cutoff ───────────────────── */}
+          {/* Section: Date & Range Configuration ───────────────────── */}
           <div className="flex flex-col gap-3">
-            <p className="text-[11px] font-black text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Configuration</p>
+            <p className="text-[11px] font-black text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Replay Range Configuration</p>
 
-            {/* Date picker */}
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="bt-date" className="flex items-center gap-1.5 text-xs font-black text-slate-500 dark:text-zinc-400">
-                <Calendar className="w-3.5 h-3.5 text-accent" />
-                Replay Date
-              </label>
-              <input
-                id="bt-date"
-                type="date"
-                value={engine.selectedDate}
-                onChange={(e) => engine.setSelectedDate(e.target.value)}
-                max={new Date(Date.now() - 86400000).toISOString().slice(0, 10)}
-                className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3.5 py-2.5 text-xs text-foreground rounded-lg transition-all shadow-sm [color-scheme:dark]"
-              />
+            {/* From Date & Time */}
+            <div className="p-2.5 rounded-xl border border-card-border bg-card/40 space-y-2">
+              <span className="text-[10px] font-black text-accent uppercase tracking-wider block">Start Anchor (From)</span>
+              
+              <div className="flex flex-col gap-1">
+                <label htmlFor="bt-start-date" className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
+                  <Calendar className="w-3 h-3 text-accent" />
+                  Start Date
+                </label>
+                <input
+                  id="bt-start-date"
+                  type="date"
+                  value={engine.startDate}
+                  onChange={(e) => engine.setStartDate(e.target.value)}
+                  max={new Date().toISOString().slice(0, 10)}
+                  className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3 py-1.5 text-xs text-foreground rounded-lg transition-all shadow-sm [color-scheme:dark]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label htmlFor="bt-start-time" className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
+                  <Clock className="w-3 h-3 text-accent" />
+                  Start Time (Cairo)
+                </label>
+                <input
+                  id="bt-start-time"
+                  type="time"
+                  value={engine.startTime}
+                  onChange={(e) => engine.setStartTime(e.target.value)}
+                  className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3 py-1.5 text-xs text-foreground rounded-lg transition-all shadow-sm [color-scheme:dark]"
+                />
+              </div>
             </div>
 
-            {/* Cutoff time */}
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="bt-cutoff" className="flex items-center gap-1.5 text-xs font-black text-slate-500 dark:text-zinc-400">
-                <Clock className="w-3.5 h-3.5 text-accent" />
-                Cut-off Time (Cairo)
-              </label>
-              <input
-                id="bt-cutoff"
-                type="time"
-                value={engine.cutoffTime}
-                onChange={(e) => engine.setCutoffTime(e.target.value)}
-                className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3.5 py-2.5 text-xs text-foreground rounded-lg transition-all shadow-sm [color-scheme:dark]"
-              />
-              <p className="text-[10px] text-slate-500 dark:text-zinc-500 font-bold uppercase">Chart starts hidden before this time</p>
+            {/* To Date & Time */}
+            <div className="p-2.5 rounded-xl border border-card-border bg-card/40 space-y-2">
+              <span className="text-[10px] font-black text-accent uppercase tracking-wider block">End Target (To)</span>
+              
+              <div className="flex flex-col gap-1">
+                <label htmlFor="bt-end-date" className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
+                  <Calendar className="w-3 h-3 text-accent" />
+                  End Date
+                </label>
+                <input
+                  id="bt-end-date"
+                  type="date"
+                  value={engine.endDate}
+                  onChange={(e) => engine.setEndDate(e.target.value)}
+                  min={engine.startDate}
+                  max={new Date().toISOString().slice(0, 10)}
+                  className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3 py-1.5 text-xs text-foreground rounded-lg transition-all shadow-sm [color-scheme:dark]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label htmlFor="bt-end-time" className="flex items-center gap-1.5 text-[11px] font-bold text-slate-400">
+                  <Clock className="w-3 h-3 text-accent" />
+                  End Time (Cairo)
+                </label>
+                <input
+                  id="bt-end-time"
+                  type="time"
+                  value={engine.endTime}
+                  onChange={(e) => engine.setEndTime(e.target.value)}
+                  className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3 py-1.5 text-xs text-foreground rounded-lg transition-all shadow-sm [color-scheme:dark]"
+                />
+              </div>
             </div>
 
-            {/* Load Day button */}
+            {/* Load Range button */}
             <button
               id="bt-load-day"
               onClick={engine.loadDay}
@@ -760,9 +797,9 @@ export default function BacktestPage() {
                          shadow-sm"
             >
               {engine.status === 'fetching' ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Fetching Binance…</>
+                <><Loader2 className="w-4 h-4 animate-spin" /> Fetching Range…</>
               ) : (
-                <><BarChart2 className="w-4 h-4" /> Load Day</>
+                <><BarChart2 className="w-4 h-4" /> Load Replay Range</>
               )}
             </button>
           </div>
@@ -772,6 +809,7 @@ export default function BacktestPage() {
             <div className="flex flex-col gap-2">
               <p className="text-[11px] font-black text-slate-500 dark:text-zinc-400 uppercase tracking-widest">Session</p>
               <StatBadge label="Cairo Time" value={cairoTime} accent />
+              <StatBadge label="Replay Range" value={engine.startDate === engine.endDate ? engine.startDate : `${engine.startDate} → ${engine.endDate}`} />
               <StatBadge label="Last Price" value={lastPrice !== null ? `$${lastPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '---'} />
               <StatBadge label="Candle" value={`${engine.currentIndex} / ${engine.totalCandles}`} />
               <StatBadge label="Progress" value={`${progressPct}%`} />
@@ -786,7 +824,7 @@ export default function BacktestPage() {
 
               {engine.isDayRevealed && (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs font-semibold">
-                  <Eye className="w-3.5 h-3.5" /> Full day revealed
+                  <Eye className="w-3.5 h-3.5" /> Full range revealed
                 </div>
               )}
             </div>

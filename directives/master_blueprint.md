@@ -1,10 +1,18 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.28
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.29
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-06-23 (V12.0.28 — Backtest Auto-Closure Race Condition Resolution)  
+> **Last Updated:** 2026-07-25 (V12.0.29 — Multi-Day Replay & From-To Date Range Selection)  
 
-## 🆕 V12.0.28 Changelog — Backtest Auto-Closure Race Condition Resolution (Completed)
+## 🆕 V12.0.29 Changelog — Multi-Day Replay & From-To Date Range Selection (Completed)
+
+### 1. From-To Date & Time Range Selection Architecture
+- **Eliminated 24-Hour Next-Day Lock:** Fixed the limitation where selecting a backtest date locked the market replay session to end 24 hours later on the next day.
+- **From-To Date & Time Controls:** Implemented `startDate`, `startTime`, `endDate`, and `endTime` controls in `useBacktestEngine.ts` and rendered matching high-fidelity input cards in `src/app/backtest/page.tsx`.
+
+### 2. Paginated Kline Fetching & Infinite Date Range Support
+- **Paginated Binance Fetching:** Upgraded `fetchLookbackKlines` in `useBacktestEngine.ts` to iterate asynchronously over Binance REST requests (`limit=1500`) with candle timestamp deduplication until `endUtcMs` is reached.
+- **HTF Indicator Warm-up:** Preserved the 4-day lookback window prior to `startDate` for accurate Market Structure, FVG detection, and True Day Open anchors while allowing step-by-step replay across multi-day ranges.
 
 ### 1. Locked Backtest Auto-Closure Pipeline
 - **Race Condition Mitigated:** Fixed the bug where the backtest auto-closure hook fired duplicate concurrent close requests (PATCH `/api/backtest-trades`) for the same trade because client-side state did not update instantly.
