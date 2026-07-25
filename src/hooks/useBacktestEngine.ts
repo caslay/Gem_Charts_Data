@@ -81,50 +81,74 @@ function parseBinanceKlines(raw: unknown[][]): BtCandle[] {
 }
 
 /**
- * Fetch klines for a given interval.
- * Limit set to 1500 to accommodate 5 days of 5m candles (5 * 24 * 12 = 1440).
+ * Fetch klines for a given interval using pagination to support arbitrary date ranges.
  */
 async function fetchLookbackKlines(
   intervalLabel: '1h' | '15m' | '5m',
-  startMs: number,   // UTC start (4 days ago)
-  endMs: number      // UTC end (midnight after target date)
+  startMs: number,   // UTC start
+  endMs: number      // UTC end
 ): Promise<BtCandle[]> {
-  const url =
-    `${BINANCE_REST}?symbol=${SYMBOL}` +
-    `&interval=${intervalLabel}` +
-    `&startTime=${startMs}` +
-    `&endTime=${endMs - 1}` +   // Binance endTime is inclusive, subtract 1 ms
-    `&limit=1500`;
+  const allKlines: BtCandle[] = [];
+  let currentStart = startMs;
 
-  const res = await fetch(url);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Binance klines error [${intervalLabel}]: ${res.status} — ${text}`);
+  while (currentStart < endMs) {
+    const url =
+      `${BINANCE_REST}?symbol=${SYMBOL}` +
+      `&interval=${intervalLabel}` +
+      `&startTime=${currentStart}` +
+      `&endTime=${endMs - 1}` +   // Binance endTime is inclusive, subtract 1 ms
+      `&limit=1500`;
+
+    const res = await fetch(url);
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Binance klines error [${intervalLabel}]: ${res.status} — ${text}`);
+    }
+    const raw: unknown[][] = await res.json();
+    if (!raw || raw.length === 0) break;
+
+    const parsed = parseBinanceKlines(raw);
+    allKlines.push(...parsed);
+
+    const lastTime = parsed[parsed.length - 1].t;
+    if (lastTime <= currentStart) break;
+    currentStart = lastTime + 1;
+
+    if (raw.length < 1500 || currentStart >= endMs) {
+      break;
+    }
   }
-  const raw: unknown[][] = await res.json();
-  return parseBinanceKlines(raw);
+
+  // Deduplicate and sort chronologically
+  const map = new Map<number, BtCandle>();
+  for (const k of allKlines) {
+    map.set(k.t, k);
+  }
+  return Array.from(map.values()).sort((a, b) => a.t - b.t);
 }
 
 /**
- * Given a date string "YYYY-MM-DD", returns [startMs, endMs] as UTC ms
- * covering the full UTC day (00:00:00.000 → 23:59:59.999).
+ * Converts a date string "YYYY-MM-DD" and time string "HH:MM" (Cairo UTC+3)
+ * into absolute UTC milliseconds.
  */
-function utcDayRange(dateStr: string): [number, number] {
-  const startMs = Date.parse(`${dateStr}T00:00:00.000Z`);
-  const endMs = startMs + 24 * 60 * 60 * 1000;
-  return [startMs, endMs];
+function getUtcMs(dateStr: string, timeStr: string, defaultTime: string, isEnd = false): number {
+  const [hStr, mStr] = (timeStr || defaultTime).split(':');
+  const hour = parseInt(hStr ?? (isEnd ? '23' : '0'), 10);
+  const minute = parseInt(mStr ?? (isEnd ? '59' : '0'), 10);
+
+  const baseMs = Date.parse(`${dateStr}T00:00:00.000Z`);
+  if (isNaN(baseMs)) return Date.now();
+
+  // Cairo is UTC+3 (subtract 180 minutes)
+  return baseMs + (hour * 60 + minute - 180) * 60 * 1000 + (isEnd ? 59999 : 0);
 }
 
 /**
- * Find the index in a SORTED BtCandle[] array where the target date's Cairo time
- * reaches or exceeds cutoffHour:cutoffMinute.
+ * Find the index in a SORTED BtCandle[] array matching or exceeding target start timestamp.
  */
-function findCutoffIndex(candles: BtCandle[], dateStr: string, cutoffHour: number, cutoffMinute: number): number {
-  // cutoff time in UTC milliseconds (Cairo is UTC+3, so we subtract 3 hours in minutes = 180 minutes)
-  const exactCutoffMs = Date.parse(`${dateStr}T00:00:00.000Z`) + (cutoffHour * 60 + cutoffMinute - 180) * 60 * 1000;
-
+function findCutoffIndex(candles: BtCandle[], startUtcMs: number): number {
   for (let i = 0; i < candles.length; i++) {
-    if (candles[i].t >= exactCutoffMs) {
+    if (candles[i].t >= startUtcMs) {
       return i;
     }
   }
@@ -467,13 +491,29 @@ export interface UseBacktestEngineReturn {
   currentIndex: number;
   totalCandles: number;
   timeframe: BacktestTimeframe;
+
+  // Date Range Controls
+  startDate: string;
+  startTime: string;
+  endDate: string;
+  endTime: string;
+
+  // Legacy aliases for backward compatibility
   selectedDate: string;
   cutoffTime: string;
+
   enrichedPayload: Record<string, unknown> | null;
   isDayRevealed: boolean;
 
+  setStartDate: (date: string) => void;
+  setStartTime: (time: string) => void;
+  setEndDate: (date: string) => void;
+  setEndTime: (time: string) => void;
+
+  // Legacy setters
   setSelectedDate: (date: string) => void;
   setCutoffTime: (time: string) => void;
+
   setTimeframe: (tf: BacktestTimeframe) => void;
   loadDay: () => Promise<void>;
   nextCandle: () => void;
@@ -492,18 +532,14 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
 
   const todayUtc = new Date();
   const todayStr = todayUtc.toISOString().slice(0, 10);
+  const threeDaysAgoUtc = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+  const threeDaysAgoStr = threeDaysAgoUtc.toISOString().slice(0, 10);
 
-  const [selectedDate, setSelectedDate] = useState<string>(todayStr);
-  const [cutoffTime, setCutoffTime] = useState<string>('09:00');
+  const [startDate, setStartDate] = useState<string>(threeDaysAgoStr);
+  const [startTime, setStartTime] = useState<string>('09:00');
+  const [endDate, setEndDate] = useState<string>(todayStr);
+  const [endTime, setEndTime] = useState<string>('23:59');
   const [timeframe, setTimeframe] = useState<BacktestTimeframe>('5m');
-
-  const { cutoffHour, cutoffMinute } = useMemo(() => {
-    const [hStr, mStr] = cutoffTime.split(':');
-    return {
-      cutoffHour: parseInt(hStr ?? '9', 10),
-      cutoffMinute: parseInt(mStr ?? '0', 10),
-    };
-  }, [cutoffTime]);
 
   const totalCandles = masterArrays?.candles_5m.length ?? 0;
 
@@ -529,8 +565,8 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
 
   const enrichedPayload = useMemo<Record<string, unknown> | null>(() => {
     if (!visibleArrays) return null;
-    return buildEnrichedPayload(visibleArrays, selectedDate, timeframe);
-  }, [visibleArrays, selectedDate, timeframe]);
+    return buildEnrichedPayload(visibleArrays, startDate === endDate ? startDate : `${startDate} -> ${endDate}`, timeframe);
+  }, [visibleArrays, startDate, endDate, timeframe]);
 
   const loadDay = useCallback(async () => {
     setStatus('fetching');
@@ -540,16 +576,21 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     setIsDayRevealed(false);
 
     try {
-      const [targetStartMs, targetEndMs] = utcDayRange(selectedDate);
+      const startUtcMs = getUtcMs(startDate, startTime, '09:00', false);
+      let endUtcMs = getUtcMs(endDate, endTime, '23:59', true);
 
-      // Lookback exactly 4 days before target date
-      const startMs = targetStartMs - (4 * 24 * 60 * 60 * 1000);
-      const endMs = targetEndMs;
+      // Sanity check: Ensure endUtcMs is at least 1 day after startUtcMs if user picked end < start
+      if (endUtcMs <= startUtcMs) {
+        endUtcMs = startUtcMs + 24 * 60 * 60 * 1000;
+      }
+
+      // Lookback 4 days before target start date to warm up HTF structural indicators
+      const lookbackStartMs = startUtcMs - (4 * 24 * 60 * 60 * 1000);
 
       const [raw1h, raw15m, raw5m] = await Promise.all([
-        fetchLookbackKlines('1h', startMs, endMs),
-        fetchLookbackKlines('15m', startMs, endMs),
-        fetchLookbackKlines('5m', startMs, endMs),
+        fetchLookbackKlines('1h', lookbackStartMs, endUtcMs),
+        fetchLookbackKlines('15m', lookbackStartMs, endUtcMs),
+        fetchLookbackKlines('5m', lookbackStartMs, endUtcMs),
       ]);
 
       // Annotate raw arrays with volumetric signals before initializing masterArrays
@@ -565,7 +606,7 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
 
       setMasterArrays(arrays);
 
-      const ci = findCutoffIndex(raw5m, selectedDate, cutoffHour, cutoffMinute);
+      const ci = findCutoffIndex(raw5m, startUtcMs);
       setCurrentIndex(Math.max(1, ci));
       setStatus('ready');
     } catch (err: unknown) {
@@ -573,7 +614,7 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
       setError(msg);
       setStatus('error');
     }
-  }, [selectedDate, cutoffHour, cutoffMinute]);
+  }, [startDate, startTime, endDate, endTime]);
 
   const nextCandle = useCallback(() => {
     if (!masterArrays) return;
@@ -623,7 +664,8 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     const minutesStr = minutes < 10 ? '0' + minutes : minutes.toString();
     const timeString = `${hoursStr}-${minutesStr}-${ampm}`;
 
-    const filename = `BT_Enriched_${SYMBOL}_${selectedDate}_@${ts}_${timeString}.json`;
+    const rangeTag = startDate === endDate ? startDate : `${startDate}_to_${endDate}`;
+    const filename = `BT_Enriched_${SYMBOL}_${rangeTag}_@${ts}_${timeString}.json`;
     const blob = new Blob([JSON.stringify(payloadToExport, null, 2)], {
       type: 'application/json',
     });
@@ -635,7 +677,7 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }, [enrichedPayload, visibleArrays, selectedDate]);
+  }, [enrichedPayload, visibleArrays, startDate, endDate]);
 
   const copyPayload = useCallback(async (counts: { '5m': number, '15m': number, '1h': number, '4h': number }) => {
     if (!enrichedPayload) return;
@@ -681,12 +723,20 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     currentIndex,
     totalCandles,
     timeframe,
-    selectedDate,
-    cutoffTime,
+    startDate,
+    startTime,
+    endDate,
+    endTime,
+    selectedDate: startDate,
+    cutoffTime: startTime,
     enrichedPayload,
     isDayRevealed,
-    setSelectedDate,
-    setCutoffTime,
+    setStartDate,
+    setStartTime,
+    setEndDate,
+    setEndTime,
+    setSelectedDate: setStartDate,
+    setCutoffTime: setStartTime,
     setTimeframe,
     loadDay,
     nextCandle,
