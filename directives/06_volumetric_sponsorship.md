@@ -338,23 +338,35 @@ These two booleans create the **2×2 classification matrix** that determines the
 
 ---
 
-#### GATE 4 — Marker Generation
+#### GATE 4 — Marker Generation & Taker Volume Delta Coloring
 
 ```
 markerTime = mid.t > 10 digits ? floor(mid.t / 1000) : mid.t  // ms→s normalization
 
 IF isDirVolIncrease:
-  → Arrow marker:
+  → Arrow Marker (ARROW_UP | ARROW_DOWN):
     shape:    'arrowUp' (bullish) | 'arrowDown' (bearish)
     position: 'belowBar' (bullish) | 'aboveBar' (bearish)
-    color:    sponsorshipColor (theme-adaptive neutral)
+    
+    // Taker Volume Delta Order Flow Strength Check:
+    isStrongBullish = (mid.taker_buy_vol > mid.taker_sell_vol)
+    isStrongBearish = (mid.taker_sell_vol > mid.taker_buy_vol)
+    
+    IF isStrong:
+      color: volumetricStrongArrowColor (Neon Pink #ff007f [dark] / Rose #e11d48 [light])
+    ELSE (Weak Arrow):
+      color: semi-transparent muted tint (rgba(255,255,255,0.15) [dark] / rgba(0,0,0,0.15) [light])
 
 ELSE IF isRawVolIncrease:
-  → Circle marker:
+  → Circle Marker (CIRCLE_UP | CIRCLE_DOWN) [SMT Trap / Liquidity Sweep]:
     shape:    'circle'
     position: 'belowBar' (bullish) | 'aboveBar' (bearish)
-    color:    bullishSweepColor (green tint) | bearishSweepColor (red tint)
+    color:    bullishSweepColor (#50ffaf [dark] / #059669 [light]) | bearishSweepColor (#ffb4ab [dark] / #e11d48 [light])
 ```
+
+> [!TIP]
+> **Perfect Movement (PM) Mode Overrides:**  
+> When `visualizePerfectMovementOnly` is toggled ON, the visual layer filters markers through `checkPerfectMovementSetup()`. Verified PM setups render in Neon Cyan (`#00f0ff` for LONG) / Neon Magenta (`#ff007f` for SHORT) with a `'PM'` text badge, while non-PM arrows fade to 90% opacity grey (`rgba(128,128,128,0.90)`). Sweeps (Circles) retain their bright theme accent colors (`bullishSweepColor` and `bearishSweepColor`).
 
 ### 4.3 The Mathematical Intuition — Why Body-Weighting Matters
 

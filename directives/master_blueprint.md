@@ -1,10 +1,25 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.29
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.30
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-07-25 (V12.0.29 — Multi-Day Replay & From-To Date Range Selection)  
+> **Last Updated:** 2026-07-26 (V12.0.30 — Volumetric Sponsorship Markers & TradingView PineScript Indicator)  
 
-## 🆕 V12.0.29 Changelog — Multi-Day Replay & From-To Date Range Selection (Completed)
+## 🆕 V12.0.30 Changelog — Volumetric Sponsorship Markers & TradingView PineScript Indicator (Completed)
+
+### 1. Volumetric Sponsorship Markers Documentation Alignment
+- **Canonical Synchronization:** Updated `directives/06_volumetric_sponsorship.md` to document the full 4-gate marker classification pipeline (Swing Check, Institutional Color Lock, Body-Weighted Directional Volume vs Raw Volume, and Marker Generation).
+- **Strong Special Colored Arrows:** Documented Order Flow Taker Delta heuristics (`isStrong` when `taker_buy_vol > taker_sell_vol` for Bullish / `taker_sell_vol > taker_buy_vol` for Bearish), which highlights strong institutional arrows in vibrant Neon Pink (`#ff007f`) / Rose (`#e11d48`) while fading unconfirmed arrows (`rgba(255,255,255,0.15)`).
+- **Circles (SMT Traps / Sweeps):** Documented raw volume expansion without directional volume expansion (`dirVolMid <= dirVolPrev` AND `mid.v > prev.v`), rendered as Mint Green (`#50ffaf`) / Salmon (`#ffb4ab`) circles at swing lows/highs.
+- **Perfect Movement (PM) Filter:** Documented the 3-phase PM setup filter and visual overrides (Neon Cyan `#00f0ff` / Magenta `#ff007f` with 'PM' badge).
+
+### 2. TradingView PineScript v6 Volumetric Sponsorship Indicator
+- **Indicator File:** Saved the production-ready TradingView PineScript v6 script to [`indicators/Volumetric_Sponsorship_Indicator.pine`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/indicators/Volumetric_Sponsorship_Indicator.pine).
+- **PineScript v6 Conversion:** Created the latest version PineScript indicator matching the exact mathematical rules of `generateChartMarkers.ts`:
+  - 3-bar fractal swing identification on confirmed historical bars (`[1]`).
+  - Institutional Color Lock (Red-to-Green at Swing Lows, Green-to-Red at Swing Highs).
+  - Body-weighted directional volume ($V_{dir} = V_{raw} \times \frac{|C - O|}{H - L}$).
+- **Compile-Time Constant Fix:** Replaced `input string` variables with `const string` literals (`size.small` and `size.tiny`) in `plotshape()` calls, completely resolving TradingView PineScript CE10123 compiler error.
+- **Structural Swing Tracking & Offset Parity:** Fixed Phase 1 lookback index in PineScript (`k` starting at bar `[2]` strictly targeting bars preceding signal bar `mid`), and integrated confirmed structural pivot tracking (`last_swing_low` and `last_swing_high`), achieving 1:1 mathematical alignment with the Live HUD Terminal.
 
 ### 1. From-To Date & Time Range Selection Architecture
 - **Eliminated 24-Hour Next-Day Lock:** Fixed the limitation where selecting a backtest date locked the market replay session to end 24 hours later on the next day.
