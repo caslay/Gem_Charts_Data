@@ -57,6 +57,8 @@ export default function BacktestPage() {
   const [commandCenterTab, setCommandCenterTab] = useState<'strategy' | 'audio'>('strategy');
   const [isTfDropdownOpen, setIsTfDropdownOpen] = useState(false);
 
+  const { signalAlertsEnabled } = useMarketDataContext();
+
   // Sync page activeTimeframe scale with backtest engine scale
   useEffect(() => {
     engine.setTimeframe(activeTimeframe);
@@ -70,6 +72,24 @@ export default function BacktestPage() {
   }, []);
 
   const triggerSmartAlert = useCallback((type: any, message: string, soundPath?: string) => {
+    // Audit gate: check if signal type is enabled
+    if (signalAlertsEnabled) {
+      const isTypeEnabled = (type === 'PURGE' && signalAlertsEnabled.SWEEP_ALERT !== false) ||
+        (type === 'DEAD_ZONE' && signalAlertsEnabled.DEAD_ZONE_ENTER !== false) ||
+        (type === 'RISK_OVERRIDE' && signalAlertsEnabled.FVG_DETECTION !== false) ||
+        (type === 'SMT_TRAP' && signalAlertsEnabled.SMT_TRAP_ACTIVE !== false) ||
+        (type === 'PRICING_SHIFT' && signalAlertsEnabled.PRICING_SHIFT !== false) ||
+        (type === 'OBJECTIVE_UPDATE' && signalAlertsEnabled.DOL_EXHAUSTED !== false) ||
+        (type === 'FLOW_STATE' && signalAlertsEnabled.DISPLACEMENT_CONFIRMED !== false) ||
+        (type === 'SESSION_TRANSITION' && signalAlertsEnabled.SESSION_TRANSITION !== false) ||
+        (type === 'STRATEGY_MATCHED' && signalAlertsEnabled.DISPLACEMENT_CONFIRMED !== false);
+
+      if (!isTypeEnabled) {
+        console.log(`[Backtest] Alert '${type}' suppressed per user settings.`);
+        return;
+      }
+    }
+
     setActiveAlerts((prev) => {
       const newAlert: SmartAlert = {
         id: `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -90,7 +110,7 @@ export default function BacktestPage() {
         }
       });
     }
-  }, []);
+  }, [signalAlertsEnabled]);
 
   // ── Backtest Trades & Account State ───────────────────────────────────────
   const [backtestTrades, setBacktestTrades] = useState<TradeRecord[]>([]);

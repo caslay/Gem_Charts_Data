@@ -1,10 +1,185 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.30
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.43
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-07-26 (V12.0.30 — Volumetric Sponsorship Markers & TradingView PineScript Indicator)  
+> **Last Updated:** 2026-07-27 (V12.0.43 — Fixed JSX Syntax Error in Macro Liquidity Card)  
 
-## 🆕 V12.0.30 Changelog — Volumetric Sponsorship Markers & TradingView PineScript Indicator (Completed)
+## 🆕 V12.0.43 Changelog — Fixed JSX Syntax Error in Macro Liquidity Card (Completed)
+
+### 1. JSX Build Error Resolution (`src/app/quant-sandbox/page.tsx`)
+- **Fixed Stray Syntax Attribute:** Removed duplicate `font-bold` string outside the `className` template literal on lines 932 and 936, resolving Next.js Webpack compilation error `Expected '</', got 'ident'`.
+
+---
+
+## 🆕 V12.0.42 Changelog — Cloned AI Area & Full Live Engine HUD Boxes in Sandbox (Completed)
+
+### 1. AI Area & Synthesis Console Integration (`src/app/quant-sandbox/page.tsx`)
+- **AI Synthesis Console & LLM Assistant Box:** Integrated the full AI Synthesis Console into the right sidebar:
+  - **Live AI Structural Analysis Table**: BIAS (`BULLISH`), BIAS_STRENGTH (`STRONG_INSTITUTIONAL`), ACTIONABLE_SETUPS (`LONG_DISPLACEMENT_FVG`), DOL_TARGET (`$3,520.00 (BSL Pool)`), CONFIDENCE_SCORE (`94.2%`).
+  - **Institutional Flow Synthesizer Note**: Key structural observation text.
+  - **Interactive Trigger & Copy Controls**: `Synthesize Live AI Analysis` button with loading animation, and `Copy AI Prompt Prefix` button.
+- **Order Flow Pulse & OLS Statistical Engine Card:** Cloned OI Trend (`BULLISH (+4.1%)`), Institutional Sponsorship Status (`DISPLACEMENT_BULLISH`), and OLS Validation Stats ($t$-stat $+3.842$, $p$-val $0.00018$, result `CONFIRMED`).
+- **Macro Liquidity Ranges & Sweeps Card:** Cloned PDH ($3,485.50), PDL ($3,395.00), Asian Session High ($3,465.50 — `SWEPT 🧹`), and Asian Session Low ($3,398.20 — `SWEPT 🧹`).
+- **JSON Data Stream Drawer:** Added an interactive slide-out drawer button to copy/inspect raw payload JSON streams.
+
+---
+
+## 🆕 V12.0.41 Changelog — Defeated Global CSS !important with Scoped Sandbox Light Mode Styles (Completed)
+
+### 1. Root-Cause Defeat of Global CSS `!important` Rules (`src/app/quant-sandbox/page.tsx`)
+- **Identified Root Cause:** Global `globals.css` forced `.dark h1`, `.dark .text-slate-900`, `.dark select`, etc. to white text (`color: var(--text-title) !important`) whenever `html` had class `dark`.
+- **Scoped Style Injection:** Injected a scoped `.sandbox-light-theme` style block in `src/app/quant-sandbox/page.tsx` when Daylight Studio is active.
+- **Forced High-Contrast Color Mapping:**
+  - Dropdown `<select>` and `<option>`: Explicit `background-color: #ffffff !important; color: #0f172a !important; font-weight: 800 !important;`.
+  - Titles & Headings: Forced `#0f172a !important` (black/slate-950).
+  - Labels & Subheaders: Forced `#334155 !important` (slate-700).
+  - Inputs: Forced `background-color: #ffffff !important; color: #0f172a !important; font-weight: 800 !important;`.
+
+---
+
+## 🆕 V12.0.40 Changelog — 100% Light Mode Titles, Dropdowns & Header QA Fix (Completed)
+
+### 1. Light Mode QA & Text Contrast Overhaul (`src/app/quant-sandbox/page.tsx`)
+- **Fixed Invisible Dropdowns:** Configured Font and Theme `<select>` dropdown controls and child `<option>` elements with explicit high-contrast text styling (`text-slate-900 font-bold bg-white` in light mode), resolving invisible white-on-white dropdown text.
+- **Header & Title Visibility:** Transformed all card titles, telemetry headers, sub-panel titles, and section headers to deep bold slate (`text-slate-900 font-black` in light mode and `text-slate-100 font-bold` in dark mode).
+- **Label & Data Clarity:** Enforced high-contrast `text-slate-700 font-bold` for all label fields (IPDA levels, Liquidity depth, Strategy Confluence gates, Matrix weights) and `text-slate-900 font-black` for all values.
+- **Button & Badge High-Contrast Tints:** Updated control buttons, layer toggles, and status badges to feature saturated high-contrast background tints with bold dark text (`emerald-950 font-black`, `purple-950 font-black`) in light mode.
+
+---
+
+## 🆕 V12.0.39 Changelog — Daylight Studio Light Mode Contrast Audit & Dynamic Palette Sub-boxes (Completed)
+
+### 1. Daylight Studio Light Mode Contrast Audit (`src/app/quant-sandbox/page.tsx`)
+- **Resolved Low-Contrast Text & Mismatched Boxes:** Eliminated all hardcoded dark-mode utility classes (`text-slate-100`, `bg-slate-900`, `bg-slate-950`) from child components.
+- **Dynamic Palette Token Scheme:** Enforced full design system inheritance via `PaletteDefinition`:
+  - Card & Container backgrounds: `currentTheme.cardBg` / `currentTheme.boxBg` / `currentTheme.boxBgSubtle`.
+  - Text colors: `currentTheme.textPrimary` (high contrast slate-900 in light mode, slate-100 in dark mode) and `currentTheme.textSecondary` (slate-600 in light mode, slate-400 in dark mode).
+  - Status Badges: Dynamic theme badges (`currentTheme.accentUpBg`, `currentTheme.accentDownBg`, `currentTheme.accentPrimaryBg`) with high-contrast text and border tints.
+- **SVG Chart Light Mode Adaptation:** SVG chart rect, grid lines, price labels, and volume delta bars dynamically adapt to `currentTheme.chartBg` (`#ffffff`), `currentTheme.chartGrid` (`#e2e8f0`), and `currentTheme.chartText` (`#475569`).
+
+---
+
+## 🆕 V12.0.38 Changelog — Phase 1 Expanded Fonts, Eye-Friendly Color Palettes & Realistic SVG Chart (Completed)
+
+### 1. Expanded Font Selection (`src/app/quant-sandbox/page.tsx`)
+- **9 Quant & Institutional Typefaces:** Added font family options: `Geist Mono`, `Geist Sans`, `JetBrains Mono`, `Fira Code (Ligatures)`, `Space Mono (Brutalist)`, `Roboto Mono`, `Inter Sans`, `SF Pro System`, and `System Monospace`.
+
+### 2. Eye-Friendly Color Palette Studio
+- **6 Curated Financial Theme Palettes:** Added instant theme switching between:
+  - **Obsidian Dark (Default)**: Deep `#020617` obsidian background with slate borders and vibrant HSL accents.
+  - **Midnight Slate (Soft Eye)**: Low-contrast `#0f172a` background to reduce fatigue during long trading sessions.
+  - **Bloomberg Gold Terminal**: Classic financial dark `#0a0a0c` theme with warm amber/gold accents (`#f59e0b`).
+  - **Nordic Cold Navy**: Soft cold navy-grey `#131924` background with cool cyan (`#38bdf8`) and emerald accents.
+  - **Solarized Midnight (Teal)**: Warm solarized dark `#002b36` background with teal (`#2aa198`) and soft green accents.
+  - **Daylight Studio (Light Mode)**: Crisp slate-100 light mode for daytime viewing.
+
+### 3. Highly Detailed Realistic Financial SVG Chart
+- **24 Detailed OHLC Candlestick Series:** Rendered real candle wicks, green/red bodies, and volume delta histogram bars.
+- **Interactive Layer Overlay Toggles:** Toggle buttons for `[FVG Overlay]`, `[BOS/MSS Lines]`, and `[BSL/SSL Pools]`.
+- **Institutional Level Annotations:** Rendered FVG shaded zone ($3,440.00–$3,448.50), BOS confirmation line ($3,450.00), True Day Open anchor ($3,412.00), BSL Liquidity Target ($3,520.00), SSL Target ($3,380.00), and volumetric markers (▲ VOL, ● SWEEP).
+
+---
+
+## 🆕 V12.0.37 Changelog — Phase 1 Comprehensive Live Engine Data Clone in Sandbox (Completed)
+
+### 1. Comprehensive Engine Snapshot (`src/app/quant-sandbox/page.tsx`)
+- **Expanded Live Data Representations:** Cloned all major live engine data structures into the Phase 1 static sandbox:
+  - **Header & Awareness Bar**: WebSocket status (`WS ONLINE`), session window (`[NY AM KILLZONE]`), Cairo clock (`UTC+3`), True Day Open anchor ($3,412.00).
+  - **Metrics HUD Cards**: Master Bias (BULLISH), Range Context (DISCOUNT 48.2% to EQ), Target DOL (EXHAUSTED), Volumetric Sponsorship (+4.25x ATR, OLS $R^2=0.892$, $t=+3.842$, $p=0.00018$).
+  - **Left Telemetry Sidebar**: IPDA reference levels, BSL/SSL liquidity magnet pools, Market Structure state machine (5-bar MAJOR high/low, 3-bar INNER pullback, BOS confirmation), Active FVG inspector (5m Bullish FVG, 1h Bearish FVG).
+  - **Center Chart & Interactive Order HUD**: Ticker header with Open Interest ($892M +4.1%), order type selector (`MARKET`/`LIMIT`/`STOP`), direction (`LONG`/`SHORT`), risk % presets (0.5%, 1.0%, 2.5%), interactive entry/SL/TP coordinates inputs.
+  - **Right Strategy Inspector & Alerts Log**: Confluence gates (87% PASS), matrix equation weights, live alert log feed preview (`STRATEGY_MATCHED`, `BOS_CONFIRMED`, `SESSION_TRANSITION`).
+  - **Execution Journal & Account Ledger**: Account performance summary bar (Total Trades 42, Win Rate 71.4%, Profit Factor 2.84, Realized PnL +$14,850.00, Max DD -4.2%, Avg R:R 1:3.42) and full execution table.
+
+---
+
+## 🆕 V12.0.36 Changelog — Phase 1 Global Typography & Full-Page Font Cascading (Completed)
+
+### 1. 100% Page-Wide Typography Cascade (`src/app/quant-sandbox/page.tsx`)
+- **Direct Style Inheritance:** Removed hardcoded internal font utility overrides (`font-mono`/`font-sans`) from child cards, tables, badges, metrics, and labels.
+- **Dynamic Font Propagation:** Applied root `fontFamily` inline style mapping (`fontStyleMap`) to the parent container div. Changing font families in the top toolbar now dynamically transforms **100% of all text elements across the page** (headers, labels, body text, badges, status indicators, and numeric tables).
+- **Tabular Numerics Preservation:** Preserved `tabular-nums` formatting across all price numbers and table cells to guarantee vertical numeric alignment under both Sans-Serif and Monospace font selections.
+
+---
+
+## 🆕 V12.0.35 Changelog — Phase 1 Fluid Layout & Collapsible Sidebars/Boxes (Completed)
+
+### 1. 100% Fluid Viewport Utilization (`src/app/quant-sandbox/page.tsx`)
+- **Fluid Screen Width:** Replaced fixed `max-w-[1700px]` constraints with 100% fluid edge-to-edge layout (`w-full px-3 lg:px-6`), utilizing all available display width.
+
+### 2. Collapsible Left & Right Sidebars for Maximum Chart Width
+- **Left & Right Toggle Arrows:** Added dedicated `ChevronLeft` / `ChevronRight` expand/collapse buttons on the Left Quantitative Sidebar and Right Strategy Inspector Sidebar.
+- **Dynamic 12-Column Grid Scaling:** Collapsing the left sidebar expands the center chart section from 6 to 9 columns. Collapsing both sidebars expands the chart to **100% full width (12 columns)**.
+- **Quick Expand Edge Handles:** Rendered floating `EXPAND LEFT SIDEBAR` / `EXPAND RIGHT SIDEBAR` trigger handles when sidebars are collapsed.
+
+### 3. Individual Container/Box Collapse Toggles
+- **Per-Box Toggle Arrows:** Added header toggle buttons (`ChevronUp` / `ChevronDown`) across every card and panel container (Metrics HUD, IPDA Reference Levels, Liquidity Magnets, Chart Canvas, Strategy Confluence, Matrix Weights, and Execution Journal Table) to hide unneeded data blocks.
+
+---
+
+## 🆕 V12.0.34 Changelog — Phase 1 Isolated Quant UI/UX Minimalism & Typography Sandbox (Completed)
+
+### 1. Isolated Route Sandbox (`src/app/quant-sandbox/page.tsx`)
+- **Decoupled Architecture:** Created a completely static, isolated preview sandbox page at `/quant-sandbox` populated with static institutional mock data snapshots.
+- **Production Isolation:** Guaranteed zero modifications to active production data hooks, live WebSockets, or database schemas.
+
+### 2. Interactive Typography & Layout Playground
+- **Font Family Controls:** Built a real-time font switcher supporting Geist Sans, Geist Mono (Tabular Numerics), JetBrains Mono, System Monospace, and Inter Sans.
+- **Dynamic Density Presets:** Built density controls for Compact (tight padding, high numeric density), Medium, and Relaxed layouts.
+- **Line-Height & Tracking Variations:** Integrated real-time controls for Line-Height (Tight, Normal, Relaxed) and Letter-Spacing / Tracking (Tight, Normal, Wide).
+
+### 3. Minimalist Quant Mode vs Legacy Style Toggle
+- **Visual Clutter Audit:** Stripped away heavy card inset shadows, background radial blur circles, container hover scaling, and overly bright border glows.
+- **Ultra-Muted Low-Contrast Borders:** Implemented razor-thin low-contrast slate borders (`#1e293b`), reserving high-contrast HSL accents strictly for quantitative metric values and trade status tags.
+- **Tabular Numerics Optimization:** Standardized numeric tables and sidebar metrics with `font-mono tabular-nums` for maximum legibility.
+
+### 4. Header Navigation Link (`src/components/NavigationHeader.tsx`)
+- Added a dedicated `UI SANDBOX` navigation pill tab linking directly to `/quant-sandbox`.
+
+---
+
+## 🆕 V12.0.33 Changelog — 100% Chart Resize Observer & Middle-Left Edge Toggle Tab (Completed)
+
+### 1. 100% Container-Bound Chart ResizeObserver (`src/components/Chart.tsx`)
+- **Direct Container Observer:** Added a native `ResizeObserver` directly attached to `chartContainerRef.current` inside `Chart.tsx`.
+- **Dynamic Real-Time Canvas Scaling:** Instantly calls `chart.applyOptions({ width, height })` and re-calculates SVG trade level coordinates whenever the sidebar collapses or expands, guaranteeing the Lightweight Charts canvas fills 100% of the screen width smoothly without static size freezing.
+
+### 2. Vertically Centered Middle-Left Edge Toggle Tab (`src/components/Sidebar.tsx`, `src/app/page.tsx`)
+- **Eliminated Button Overlap:** Removed the top-right text button (`[ EXPAND HUD ]`) from `app/page.tsx`, completely resolving button collisions with chart layer controls and top price labels.
+- **Edge Tab Handle:** Positioned a sleek vertical drawer handle button (`w-5 h-14 rounded-l-xl`) vertically centered on the middle-left edge of the sidebar panel (`top-1/2 -translate-y-1/2`).
+- **Seamless Drawer Docking:** When collapsed, the tab handle docks at `right-0` (middle-right screen border) with a subtle neon pulse indicator; when expanded, it sits gracefully at `right-80` on the chart/sidebar boundary.
+
+## 🆕 V12.0.32 Changelog — Live HUD Full-Width Chart Expansion & Collapsible Inner Cards (Completed)
+
+### 1. Expand/Collapse Desktop Sidebar for Full-Width Live HUD Chart (`src/components/Sidebar.tsx`, `src/app/page.tsx`)
+- **Desktop Collapse Toggle Button:** Added a small toggle arrow button (`ChevronRight`/`ChevronLeft`) on the desktop sidebar header next to the JSON Data Drawer trigger.
+- **Full-Width Chart Extension:** When collapsed, the sidebar transitions smoothly to zero width (`lg:w-0 lg:border-l-0 lg:overflow-hidden`), allowing `<Chart />` to flex-fill **100% of the screen width**.
+- **Floating Expand Trigger:** Rendered a sleek floating `[ EXPAND HUD ]` button at the top-right of the chart container when the sidebar is collapsed, enabling 1-click restoration.
+- **State Persistence & Resize Observer:** Persisted `isSidebarCollapsed` state in `localStorage` (`gem_sidebar_collapsed`) and dispatched a global `resize` event upon toggling to trigger immediate chart canvas re-scaling.
+
+### 2. Collapsible Inner Cards in Sidebar (`src/components/Sidebar.tsx`)
+- **Card Header Toggles:** Added smooth interactive collapse/expand headers with dynamic `ChevronDown` / `ChevronRight` icons across all inner institutional cards in `Sidebar.tsx`:
+  - Time Killzones Card (`Clock` icon)
+  - Market Structure Card (`TrendingUp` icon with alignment status)
+  - Liquidity Pool Context Card (`Magnet` icon)
+  - Order Flow Pulse Card (`BarChart3` icon)
+  - Resting Magnets Card (`RestingMagnetsCard` with BSL/SSL targets)
+  - Synthesis Console Panel (`Terminal` icon with AI narrative & HUD table)
+- **Fluid Layout Space Management:** Enabled users to collapse individual unused cards to conserve vertical space while keeping key metrics visible.
+
+## 🆕 V12.0.31 Changelog — Project-Wide Audio & Alert Toggle Gating Audit (Completed)
+
+### 1. Central Live Alert Gating Protocol (`useLiveAlerts.ts`)
+- **Signal Toggle Audit:** Updated `useLiveAlerts` hook to receive `signalAlertsEnabled` and `signalAlerts`. Mapped each alert event type (`PURGE`, `DEAD_ZONE`, `RISK_OVERRIDE`, `SMT_TRAP`, `PRICING_SHIFT`, `OBJECTIVE_UPDATE`, `FLOW_STATE`, `SESSION_TRANSITION`, `STRATEGY_MATCHED`) to user settings.
+- **Suppression Gate:** `triggerAlert` checks `signalAlertsEnabled[key] !== false` before generating toast notifications (`activeAlerts`) or playing browser notifications/audio. If a signal is disabled in user settings, all toasts and audio alerts for that category are strictly suppressed.
+- **Custom Audio File Resolution:** Resolved custom audio filenames per signal category from `signalAlerts` setting map (loaded from Neon PostgreSQL/localStorage) for playback.
+
+### 2. Market Data Context Linkage (`useMarketData.ts`)
+- **Singleton Hook Pass-Through:** Passed `signalAlertsEnabled` and `signalAlerts` directly from `useMarketData` into `useLiveAlerts`, ensuring settings changes take effect instantly across all application components.
+
+### 3. Audio Call Audit Across Application Components (`app/page.tsx`, `app/backtest/page.tsx`)
+- **Manual & Order Flow Audio Protection:** Guarded raw `new Audio(...)` invocations in trade executions, order placements, level adjustments, and backtest replay triggers against `signalAlertsEnabled` toggles.
+- **PendingOrdersManager Scope Fix:** Consumed `useMarketDataContext` inside `PendingOrdersManager` to provide typed `signalAlertsEnabled` access.
 
 ### 1. Volumetric Sponsorship Markers Documentation Alignment
 - **Canonical Synchronization:** Updated `directives/06_volumetric_sponsorship.md` to document the full 4-gate marker classification pipeline (Swing Check, Institutional Color Lock, Body-Weighted Directional Volume vs Raw Volume, and Marker Generation).
