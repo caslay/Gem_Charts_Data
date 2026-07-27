@@ -1087,12 +1087,30 @@ export default function Chart({
           width: chartContainerRef.current.clientWidth,
           height: chartContainerRef.current.clientHeight,
         });
+        updateSvgCoordinates();
       }
     };
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (!entries || entries.length === 0) return;
+      const entry = entries[0];
+      if (chartRef.current && entry.contentRect) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          chartRef.current.applyOptions({ width, height });
+          updateSvgCoordinates();
+        }
+      }
+    });
+
+    if (chartContainerRef.current) {
+      resizeObserver.observe(chartContainerRef.current);
+    }
 
     window.addEventListener('resize', handleResize);
 
     return () => {
+      resizeObserver.disconnect();
       window.removeEventListener('resize', handleResize);
       chart.unsubscribeCrosshairMove(handleCrosshairMove);
       chart.remove();

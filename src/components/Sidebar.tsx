@@ -17,7 +17,10 @@ import {
   Download,
   Search,
   Database,
-  Clock
+  Clock,
+  ChevronDown,
+  ChevronRight,
+  ChevronLeft
 } from 'lucide-react';
 import HudModal from './modals/HudModal';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
@@ -56,48 +59,59 @@ const AI_PROMPT_PREFIX =
 
 // ─── Resting Magnets Card ───────────────────────────────────────────────────
 const RestingMagnetsCard = memo(function RestingMagnetsCard({ orderFlow }: { orderFlow: any }) {
+  const [isOpen, setIsOpen] = useState(true);
   const { livePrice } = useMarketDataLiveContext();
 
   return (
     <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
-      <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
-        <Activity size={12} className="text-accent" />
-        <span>Resting Magnets</span>
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center justify-between cursor-pointer select-none group-hover:text-accent transition-colors"
+      >
+        <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
+          <Activity size={12} className="text-accent" />
+          <span>Resting Magnets</span>
+        </div>
+        <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
+          {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
       </div>
-      <div className="space-y-3.5">
-        <div className="space-y-1.5">
-          <span className="text-[10px] font-black text-emerald-500 dark:text-emerald-400 uppercase tracking-wider">BSL Targets</span>
-          <div className="flex flex-col gap-1">
-            {orderFlow?.resting_liquidity_pools?.BSL_Magnets?.length ? orderFlow.resting_liquidity_pools.BSL_Magnets.map((p: number, idx: number) => {
-              const isPurged = livePrice !== null && livePrice >= p;
-              return (
-                <div key={idx} className="flex justify-between items-center text-[13px] font-mono">
-                  <span className={`${isPurged ? 'text-emerald-500 line-through opacity-60' : 'text-foreground font-bold'}`}>
-                    {p.toFixed(2)}
-                  </span>
-                  {isPurged && <span className="text-[8px] text-emerald-500 font-black tracking-wider bg-emerald-500/10 px-1 py-0.5 rounded-sm border border-emerald-500/20">PURGED 🧹</span>}
-                </div>
-              );
-            }) : <span className="text-[13px] font-mono text-muted">N/A</span>}
+      {isOpen && (
+        <div className="space-y-3.5 animate-[fade-in_0.15s_ease-out]">
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-black text-emerald-500 dark:text-emerald-400 uppercase tracking-wider">BSL Targets</span>
+            <div className="flex flex-col gap-1">
+              {orderFlow?.resting_liquidity_pools?.BSL_Magnets?.length ? orderFlow.resting_liquidity_pools.BSL_Magnets.map((p: number, idx: number) => {
+                const isPurged = livePrice !== null && livePrice >= p;
+                return (
+                  <div key={idx} className="flex justify-between items-center text-[13px] font-mono">
+                    <span className={`${isPurged ? 'text-emerald-500 line-through opacity-60' : 'text-foreground font-bold'}`}>
+                      {p.toFixed(2)}
+                    </span>
+                    {isPurged && <span className="text-[8px] text-emerald-500 font-black tracking-wider bg-emerald-500/10 px-1 py-0.5 rounded-sm border border-emerald-500/20">PURGED 🧹</span>}
+                  </div>
+                );
+              }) : <span className="text-[13px] font-mono text-muted">N/A</span>}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-black text-rose-500 dark:text-rose-400 uppercase tracking-wider">SSL Targets</span>
+            <div className="flex flex-col gap-1">
+              {orderFlow?.resting_liquidity_pools?.SSL_Magnets?.length ? orderFlow.resting_liquidity_pools.SSL_Magnets.map((p: number, idx: number) => {
+                const isPurged = livePrice !== null && livePrice <= p;
+                return (
+                  <div key={idx} className="flex justify-between items-center text-[13px] font-mono">
+                    <span className={`${isPurged ? 'text-rose-500 line-through opacity-60' : 'text-foreground font-bold'}`}>
+                      {p.toFixed(2)}
+                    </span>
+                    {isPurged && <span className="text-[8px] text-rose-500 font-black tracking-wider bg-rose-500/10 px-1 py-0.5 rounded-sm border border-rose-500/20">PURGED 🧹</span>}
+                  </div>
+                );
+              }) : <span className="text-[13px] font-mono text-muted">N/A</span>}
+            </div>
           </div>
         </div>
-        <div className="space-y-1.5">
-          <span className="text-[10px] font-black text-rose-500 dark:text-rose-400 uppercase tracking-wider">SSL Targets</span>
-          <div className="flex flex-col gap-1">
-            {orderFlow?.resting_liquidity_pools?.SSL_Magnets?.length ? orderFlow.resting_liquidity_pools.SSL_Magnets.map((p: number, idx: number) => {
-              const isPurged = livePrice !== null && livePrice <= p;
-              return (
-                <div key={idx} className="flex justify-between items-center text-[13px] font-mono">
-                  <span className={`${isPurged ? 'text-rose-500 line-through opacity-60' : 'text-foreground font-bold'}`}>
-                    {p.toFixed(2)}
-                  </span>
-                  {isPurged && <span className="text-[8px] text-rose-500 font-black tracking-wider bg-rose-500/10 px-1 py-0.5 rounded-sm border border-rose-500/20">PURGED 🧹</span>}
-                </div>
-              );
-            }) : <span className="text-[13px] font-mono text-muted">N/A</span>}
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 });
@@ -112,6 +126,8 @@ interface SidebarProps {
   isLoading?: boolean;
   isOpen: boolean;
   onClose: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 const Sidebar = memo(function Sidebar({
@@ -123,11 +139,26 @@ const Sidebar = memo(function Sidebar({
   isLoading,
   isOpen,
   onClose,
+  isCollapsed = false,
+  onToggleCollapse,
 }: SidebarProps) {
   const { isAnalyzing, aiAnalysis, triggerAiAnalysisScan, wsInterval, structureState, themeSettings } = useMarketDataContext();
   const [isJsonDrawerOpen, setIsJsonDrawerOpen] = useState(false);
   const [isHudModalOpen, setIsHudModalOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
+
+  // Inner cards collapsible states (all open by default)
+  const [cardOpenState, setCardOpenState] = useState({
+    time: true,
+    structure: true,
+    liquidity: true,
+    orderFlow: true,
+    synthesis: true,
+  });
+
+  const toggleCard = (card: keyof typeof cardOpenState) => {
+    setCardOpenState((prev) => ({ ...prev, [card]: !prev[card] }));
+  };
 
   const metrics = data?.ipda_metrics;
   const targetStatus = metrics?.target_status || '';
@@ -245,14 +276,37 @@ const Sidebar = memo(function Sidebar({
         className={`fixed inset-0 z-30 bg-background/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
       />
 
+      {/* Vertically Centered Desktop Sidebar Toggle Tab Handle */}
+      {onToggleCollapse && (
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className={`
+            hidden lg:flex fixed top-1/2 -translate-y-1/2 z-30
+            bg-card/90 backdrop-blur-md border border-card-border hover:border-accent text-muted hover:text-accent
+            w-5 h-14 rounded-l-xl shadow-[0_0_20px_rgba(0,0,0,0.5)] transition-all duration-300 cursor-pointer
+            items-center justify-center group select-none
+            ${isCollapsed ? 'right-0 border-r-0 shadow-[0_0_15px_rgba(168,85,247,0.25)]' : 'right-80 border-r-0'}
+          `}
+          title={isCollapsed ? 'Expand Sidebar (Live HUD)' : 'Collapse Sidebar (Full Width Chart)'}
+        >
+          {isCollapsed ? (
+            <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform text-accent animate-pulse" />
+          ) : (
+            <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+          )}
+        </button>
+      )}
+
       {/* Sidebar panel */}
       <aside
         className={`
-          fixed top-0 right-0 z-40 h-full w-80 max-w-[90vw]
+          fixed top-0 right-0 z-20 h-full w-80 max-w-[90vw]
           bg-card/90 border-l border-card-border flex flex-col lg:relative shadow-2xl backdrop-blur-md
-          transition-transform duration-300 ease-in-out
+          transition-all duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : 'translate-x-full'}
-          lg:static lg:translate-x-0 lg:flex lg:w-80 lg:shrink-0 lg:z-10
+          lg:static lg:translate-x-0 lg:flex lg:shrink-0
+          ${isCollapsed ? 'lg:w-0 lg:border-l-0 lg:overflow-hidden lg:pointer-events-none' : 'lg:w-80 lg:opacity-100'}
         `}
       >
         <div className="flex flex-col h-full overflow-hidden relative">
@@ -265,6 +319,18 @@ const Sidebar = memo(function Sidebar({
             </div>
 
             <div className="flex items-center gap-1.5">
+              {/* Desktop Sidebar Collapse Arrow Button */}
+              {onToggleCollapse && (
+                <button
+                  type="button"
+                  onClick={onToggleCollapse}
+                  className="hidden lg:flex p-1.5 rounded-full text-muted hover:text-foreground hover:bg-card border border-card-border hover:border-accent transition-all cursor-pointer items-center justify-center shrink-0"
+                  title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar (Full Width Chart)'}
+                >
+                  <ChevronRight size={14} />
+                </button>
+              )}
+
               {/* Database Drawer Trigger Icon */}
               <button
                 onClick={() => setIsJsonDrawerOpen(!isJsonDrawerOpen)}
@@ -286,115 +352,207 @@ const Sidebar = memo(function Sidebar({
 
             {/* Time Card: Killzone Context */}
             <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
-              <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
-                <Clock size={12} className="text-accent animate-pulse" />
-                <span>Time Killzones</span>
+              <div
+                onClick={() => toggleCard('time')}
+                className="flex items-center justify-between cursor-pointer select-none group-hover:text-accent transition-colors"
+              >
+                <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
+                  <Clock size={12} className="text-accent animate-pulse" />
+                  <span>Time Killzones</span>
+                </div>
+                <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
+                  {cardOpenState.time ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </button>
               </div>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] lg:text-xs text-muted uppercase font-bold">Active Window</span>
-                  <span className="text-sm font-black text-accent uppercase">{metrics?.current_time_window || 'WAITING'}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] lg:text-xs text-muted uppercase font-bold">NY Day Open</span>
-                  <span className="text-sm font-mono font-bold text-foreground">{formatPrice(metrics?.true_day_open)}</span>
-                </div>
 
-                {/* Killzone Timings Reference */}
-                <div className="bg-background/40 border border-card-border p-2 mt-2 space-y-1.5 rounded-lg select-none">
-                  <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
-                    <span className="text-muted font-bold uppercase tracking-wider">ASIAN RANGE</span>
-                    <span className="text-foreground font-mono font-bold">00:00 - 07:00 UTC</span>
+              {cardOpenState.time && (
+                <div className="space-y-2 animate-[fade-in_0.15s_ease-out]">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] lg:text-xs text-muted uppercase font-bold">Active Window</span>
+                    <span className="text-sm font-black text-accent uppercase">{metrics?.current_time_window || 'WAITING'}</span>
                   </div>
-                  <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
-                    <span className="text-muted font-bold uppercase tracking-wider">LONDON OPEN</span>
-                    <span className="text-foreground font-mono font-bold">07:00 - 10:00 UTC</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] lg:text-xs text-muted uppercase font-bold">NY Day Open</span>
+                    <span className="text-sm font-mono font-bold text-foreground">{formatPrice(metrics?.true_day_open)}</span>
                   </div>
-                  <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
-                    <span className="text-muted font-bold uppercase tracking-wider">NY OPEN</span>
-                    <span className="text-foreground font-mono font-bold">12:00 - 15:00 UTC</span>
+
+                  {/* Killzone Timings Reference */}
+                  <div className="bg-background/40 border border-card-border p-2 mt-2 space-y-1.5 rounded-lg select-none">
+                    <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
+                      <span className="text-muted font-bold uppercase tracking-wider">ASIAN RANGE</span>
+                      <span className="text-foreground font-mono font-bold">00:00 - 07:00 UTC</span>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
+                      <span className="text-muted font-bold uppercase tracking-wider">LONDON OPEN</span>
+                      <span className="text-foreground font-mono font-bold">07:00 - 10:00 UTC</span>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
+                      <span className="text-muted font-bold uppercase tracking-wider">NY OPEN</span>
+                      <span className="text-foreground font-mono font-bold">12:00 - 15:00 UTC</span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Market Structure Card (Nested Hierarchy View) */}
             <div className="glass-panel p-4 space-y-3.5 relative overflow-hidden group">
               {/* Header with Title and Alignment Status */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
+              <div
+                onClick={() => toggleCard('structure')}
+                className="flex items-center justify-between cursor-pointer select-none group-hover:text-accent transition-colors"
+              >
+                <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
                   <TrendingUp size={12} className="text-accent" />
                   <span>Market Structure ({wsInterval || '---'})</span>
                 </div>
-                {(() => {
-                  const majorTrend = structureState?.currentTrend || data?.ipda_metrics?.current_trend || 'UNSET';
-                  const internalTrend = structureState?.internalTrend || data?.ipda_metrics?.internal_context?.trend || 'UNSET';
-                  if (majorTrend === 'UNSET' || internalTrend === 'UNSET') return null;
-                  const isAligned = majorTrend === internalTrend;
-                  return (
-                    <span
-                      className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase transition-all duration-300 ${isAligned
-                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.08)]'
-                        : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.08)]'
-                        }`}
-                      title={isAligned ? 'Major and Internal trends are synchronized' : 'Retracement in progress (Intraday trend is running counter to Macro)'}
-                    >
-                      {isAligned ? '🟢 ALIGNED' : '⚪ DIVERGENT'}
-                    </span>
-                  );
-                })()}
+                <div className="flex items-center gap-2">
+                  {(() => {
+                    const majorTrend = structureState?.currentTrend || data?.ipda_metrics?.current_trend || 'UNSET';
+                    const internalTrend = structureState?.internalTrend || data?.ipda_metrics?.internal_context?.trend || 'UNSET';
+                    if (majorTrend === 'UNSET' || internalTrend === 'UNSET') return null;
+                    const isAligned = majorTrend === internalTrend;
+                    return (
+                      <span
+                        className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase transition-all duration-300 ${isAligned
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.08)]'
+                          : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.08)]'
+                          }`}
+                        title={isAligned ? 'Major and Internal trends are synchronized' : 'Retracement in progress (Intraday trend is running counter to Macro)'}
+                      >
+                        {isAligned ? '🟢 ALIGNED' : '⚪ DIVERGENT'}
+                      </span>
+                    );
+                  })()}
+                  <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
+                    {cardOpenState.structure ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-3">
-                {/* ──────── TOP SECTION: MACRO DEPTH ──────── */}
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80">
-                    <span>Macro Depth</span>
-                    <span className="text-[9px] font-mono text-muted">(Limit {data?.candles_limit ?? 1000})</span>
+              {cardOpenState.structure && (
+                <div className="space-y-3 animate-[fade-in_0.15s_ease-out]">
+                  {/* ──────── TOP SECTION: MACRO DEPTH ──────── */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80">
+                      <span>Macro Depth</span>
+                      <span className="text-[9px] font-mono text-muted">(Limit {data?.candles_limit ?? 1000})</span>
+                    </div>
+
+                    {(() => {
+                      const range = structureState?.dealingRange || data?.ipda_metrics?.full_structure_map?.dealingRange;
+                      const isAwaiting = !range || range.low === null || range.current_status === 'AWAITING_IDM_SWEEP';
+                      const pricingStatus = isAwaiting ? 'AWAITING_IDM_SWEEP' : (range?.current_status || 'UNKNOWN');
+                      const pricingColorClass = isAwaiting
+                        ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
+                        : pricingStatus === 'DISCOUNT'
+                          ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_6px_rgba(16,185,129,0.05)]'
+                          : pricingStatus === 'PREMIUM'
+                            ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
+                            : 'text-muted bg-card-border/20 border-transparent';
+
+                      return (
+                        <div className={`p-2.5 border rounded-lg space-y-2 transition-colors duration-300 ${
+                          isAwaiting
+                            ? 'bg-amber-500/5 border-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.03)]'
+                            : 'bg-background/40 border-card-border'
+                        }`}>
+                          <div className="flex justify-between items-center">
+                            <span className={`text-[10px] uppercase font-bold ${isAwaiting ? 'text-amber-500/70' : 'text-muted'}`}>Macro Trend</span>
+                            {(() => {
+                              const trend = structureState?.currentTrend || data?.ipda_metrics?.current_trend || 'UNSET';
+                              if (isAwaiting) return <span className="text-[11px] font-black text-amber-500 uppercase animate-pulse">AWAITING SWEEP</span>;
+                              if (trend === 'BULLISH') return <span className="text-[11px] font-black text-emerald-500 uppercase">🟢 BULLISH</span>;
+                              if (trend === 'BEARISH') return <span className="text-[11px] font-black text-rose-500 uppercase">🔴 BEARISH</span>;
+                              return <span className="text-[11px] font-black text-muted uppercase">⚪ UNSET</span>;
+                            })()}
+                          </div>
+
+                          {range && (
+                            <div className={`space-y-1.5 border-t pt-1.5 ${isAwaiting ? 'border-amber-500/10' : 'border-card-border/30'}`}>
+                              <div className="flex justify-between items-center text-[10px]">
+                                <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Dealing Range</span>
+                                <span className={`font-mono font-bold ${isAwaiting ? 'text-[#fbbf24] text-[10px]' : 'text-foreground/90'}`}>
+                                  {isAwaiting ? 'AWAITING_IDM_SWEEP' : `${formatPrice(range.low)} - ${formatPrice(range.high)}`}
+                                </span>
+                              </div>
+
+                              <div className="flex justify-between items-center text-[10px]">
+                                <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Equilibrium</span>
+                                <span className={`font-mono font-bold ${isAwaiting ? 'text-amber-500/80 text-[10px]' : 'text-accent'}`}>
+                                  {isAwaiting ? 'AWAITING sweep confirmation' : formatPrice(range.equilibrium)}
+                                </span>
+                              </div>
+
+                              <div className="flex justify-between items-center text-[10px]">
+                                <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Pricing Context</span>
+                                <span className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase ${pricingColorClass}`}>
+                                  {pricingStatus}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
 
-                  {(() => {
-                    const range = structureState?.dealingRange || data?.ipda_metrics?.full_structure_map?.dealingRange;
-                    const isAwaiting = !range || range.low === null || range.current_status === 'AWAITING_IDM_SWEEP';
-                    const pricingStatus = isAwaiting ? 'AWAITING_IDM_SWEEP' : (range?.current_status || 'UNKNOWN');
-                    const pricingColorClass = isAwaiting
-                      ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
-                      : pricingStatus === 'DISCOUNT'
-                        ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_6px_rgba(16,185,129,0.05)]'
-                        : pricingStatus === 'PREMIUM'
-                          ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
-                          : 'text-muted bg-card-border/20 border-transparent';
+                  {/* ──────── BOTTOM SECTION: INTRADAY DEPTH ──────── */}
+                  <div className="space-y-2 border-t border-card-border/30 pt-3">
+                    <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80">
+                      <span>Intraday Depth</span>
+                      <span className="text-[9px] font-mono text-muted">(Dynamic Swings)</span>
+                    </div>
 
-                    return (
-                      <div className={`p-2.5 border rounded-lg space-y-2 transition-colors duration-300 ${
-                        isAwaiting
-                          ? 'bg-amber-500/5 border-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.03)]'
-                          : 'bg-background/40 border-card-border'
-                      }`}>
-                        <div className="flex justify-between items-center">
-                          <span className={`text-[10px] uppercase font-bold ${isAwaiting ? 'text-amber-500/70' : 'text-muted'}`}>Macro Trend</span>
-                          {(() => {
-                            const trend = structureState?.currentTrend || data?.ipda_metrics?.current_trend || 'UNSET';
-                            if (isAwaiting) return <span className="text-[11px] font-black text-amber-500 uppercase animate-pulse">AWAITING SWEEP</span>;
-                            if (trend === 'BULLISH') return <span className="text-[11px] font-black text-emerald-500 uppercase">🟢 BULLISH</span>;
-                            if (trend === 'BEARISH') return <span className="text-[11px] font-black text-rose-500 uppercase">🔴 BEARISH</span>;
-                            return <span className="text-[11px] font-black text-muted uppercase">⚪ UNSET</span>;
-                          })()}
-                        </div>
+                    {(() => {
+                      const internalRange = structureState?.internalDealingRange || data?.ipda_metrics?.internal_context || data?.ipda_metrics?.full_structure_map?.internalDealingRange;
+                      if (!internalRange || (internalRange.high === null && internalRange.low === null)) {
+                        return (
+                          <div className="bg-background/40 p-2.5 border border-card-border rounded-lg text-[10px] text-muted italic text-center py-4">
+                            No confirmed internal swings yet
+                          </div>
+                        );
+                      }
 
-                        {range && (
+                      const isAwaiting = internalRange.low === null || internalRange.high === null || internalRange.current_status === 'AWAITING_IDM_SWEEP' || internalRange.pricing_status === 'AWAITING_IDM_SWEEP';
+                      const pricingStatus = isAwaiting ? 'AWAITING_IDM_SWEEP' : (internalRange.current_status || internalRange.pricing_status || 'UNKNOWN');
+                      const pricingColorClass = isAwaiting
+                        ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
+                        : pricingStatus === 'DISCOUNT'
+                          ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_6px_rgba(16,185,129,0.05)]'
+                          : pricingStatus === 'PREMIUM'
+                            ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
+                            : 'text-muted bg-card-border/20 border-transparent';
+
+                      return (
+                        <div className={`p-2.5 border rounded-lg space-y-2 transition-colors duration-300 ${
+                          isAwaiting
+                            ? 'bg-amber-500/5 border-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.03)]'
+                            : 'bg-background/40 border-card-border'
+                        }`}>
+                          <div className="flex justify-between items-center">
+                            <span className={`text-[10px] uppercase font-bold ${isAwaiting ? 'text-amber-500/70' : 'text-muted'}`}>Internal Trend</span>
+                            {(() => {
+                              const trend = structureState?.internalTrend || data?.ipda_metrics?.internal_context?.trend || 'UNSET';
+                              if (isAwaiting) return <span className="text-[11px] font-black text-amber-500 uppercase animate-pulse">AWAITING SWEEP</span>;
+                              if (trend === 'BULLISH') return <span className="text-[11px] font-black text-emerald-500 uppercase">🟢 BULLISH</span>;
+                              if (trend === 'BEARISH') return <span className="text-[11px] font-black text-rose-500 uppercase">🔴 BEARISH</span>;
+                              return <span className="text-[11px] font-black text-muted uppercase">⚪ UNSET</span>;
+                            })()}
+                          </div>
+
                           <div className={`space-y-1.5 border-t pt-1.5 ${isAwaiting ? 'border-amber-500/10' : 'border-card-border/30'}`}>
                             <div className="flex justify-between items-center text-[10px]">
-                              <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Dealing Range</span>
+                              <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Internal Range</span>
                               <span className={`font-mono font-bold ${isAwaiting ? 'text-[#fbbf24] text-[10px]' : 'text-foreground/90'}`}>
-                                {isAwaiting ? 'AWAITING_IDM_SWEEP' : `${formatPrice(range.low)} - ${formatPrice(range.high)}`}
+                                {isAwaiting ? 'AWAITING_IDM_SWEEP' : `${formatPrice(internalRange.low)} - ${formatPrice(internalRange.high)}`}
                               </span>
                             </div>
 
                             <div className="flex justify-between items-center text-[10px]">
                               <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Equilibrium</span>
                               <span className={`font-mono font-bold ${isAwaiting ? 'text-amber-500/80 text-[10px]' : 'text-accent'}`}>
-                                {isAwaiting ? 'AWAITING sweep confirmation' : formatPrice(range.equilibrium)}
+                                {isAwaiting ? 'AWAITING sweep confirmation' : formatPrice(internalRange.equilibrium)}
                               </span>
                             </div>
 
@@ -404,356 +562,317 @@ const Sidebar = memo(function Sidebar({
                                 {pricingStatus}
                               </span>
                             </div>
+
+                            <div className="flex justify-between items-center text-[10px]">
+                              <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Volatility Gate</span>
+                              {(() => {
+                                const multiplier = parseFloat(themeSettings?.structure_istr_atr_multiplier || '1.5');
+                                const activeCandles = data?.data_payload?.[`candles_${wsInterval}` as keyof typeof data.data_payload] || [];
+                                const atr = activeCandles.length > 0 ? calculateATR(activeCandles) : 0;
+                                const rangeHeight = internalRange.high && internalRange.low && !isAwaiting ? (internalRange.high - internalRange.low) : 0;
+                                const isSuppressed = rangeHeight > 0 && atr > 0 && rangeHeight < atr * multiplier;
+                                if (isAwaiting) {
+                                  return (
+                                    <span className="text-[9px] font-black text-amber-500/70 bg-amber-500/5 border border-amber-500/10 px-1.5 py-0.5 rounded tracking-wider uppercase">
+                                      PENDING
+                                    </span>
+                                  );
+                                }
+                                if (isSuppressed) {
+                                  return (
+                                    <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded tracking-wider uppercase shadow-[0_0_6px_rgba(245,158,11,0.05)]">
+                                      ⚠️ NOISE_SUPPRESSED
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <span className="text-[9px] font-black text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded tracking-wider uppercase shadow-[0_0_6px_rgba(16,185,129,0.05)]">
+                                    🟢 AUTHORIZED
+                                  </span>
+                                );
+                              })()}
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                {/* ──────── BOTTOM SECTION: INTRADAY DEPTH ──────── */}
-                <div className="space-y-2 border-t border-card-border/30 pt-3">
-                  <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80">
-                    <span>Intraday Depth</span>
-                    <span className="text-[9px] font-mono text-muted">(Dynamic Swings)</span>
-                  </div>
-
-                  {(() => {
-                    const internalRange = structureState?.internalDealingRange || data?.ipda_metrics?.internal_context || data?.ipda_metrics?.full_structure_map?.internalDealingRange;
-                    if (!internalRange || (internalRange.high === null && internalRange.low === null)) {
-                      return (
-                        <div className="bg-background/40 p-2.5 border border-card-border rounded-lg text-[10px] text-muted italic text-center py-4">
-                          No confirmed internal swings yet
                         </div>
                       );
-                    }
-
-                    const isAwaiting = internalRange.low === null || internalRange.high === null || internalRange.current_status === 'AWAITING_IDM_SWEEP' || internalRange.pricing_status === 'AWAITING_IDM_SWEEP';
-                    const pricingStatus = isAwaiting ? 'AWAITING_IDM_SWEEP' : (internalRange.current_status || internalRange.pricing_status || 'UNKNOWN');
-                    const pricingColorClass = isAwaiting
-                      ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
-                      : pricingStatus === 'DISCOUNT'
-                        ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_6px_rgba(16,185,129,0.05)]'
-                        : pricingStatus === 'PREMIUM'
-                          ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
-                          : 'text-muted bg-card-border/20 border-transparent';
-
-                    return (
-                      <div className={`p-2.5 border rounded-lg space-y-2 transition-colors duration-300 ${
-                        isAwaiting
-                          ? 'bg-amber-500/5 border-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.03)]'
-                          : 'bg-background/40 border-card-border'
-                      }`}>
-                        <div className="flex justify-between items-center">
-                          <span className={`text-[10px] uppercase font-bold ${isAwaiting ? 'text-amber-500/70' : 'text-muted'}`}>Internal Trend</span>
-                          {(() => {
-                            const trend = structureState?.internalTrend || data?.ipda_metrics?.internal_context?.trend || 'UNSET';
-                            if (isAwaiting) return <span className="text-[11px] font-black text-amber-500 uppercase animate-pulse">AWAITING SWEEP</span>;
-                            if (trend === 'BULLISH') return <span className="text-[11px] font-black text-emerald-500 uppercase">🟢 BULLISH</span>;
-                            if (trend === 'BEARISH') return <span className="text-[11px] font-black text-rose-500 uppercase">🔴 BEARISH</span>;
-                            return <span className="text-[11px] font-black text-muted uppercase">⚪ UNSET</span>;
-                          })()}
-                        </div>
-
-                        <div className={`space-y-1.5 border-t pt-1.5 ${isAwaiting ? 'border-amber-500/10' : 'border-card-border/30'}`}>
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Internal Range</span>
-                            <span className={`font-mono font-bold ${isAwaiting ? 'text-[#fbbf24] text-[10px]' : 'text-foreground/90'}`}>
-                              {isAwaiting ? 'AWAITING_IDM_SWEEP' : `${formatPrice(internalRange.low)} - ${formatPrice(internalRange.high)}`}
-                            </span>
-                          </div>
-
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Equilibrium</span>
-                            <span className={`font-mono font-bold ${isAwaiting ? 'text-amber-500/80 text-[10px]' : 'text-accent'}`}>
-                              {isAwaiting ? 'AWAITING sweep confirmation' : formatPrice(internalRange.equilibrium)}
-                            </span>
-                          </div>
-
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Pricing Context</span>
-                            <span className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase ${pricingColorClass}`}>
-                              {pricingStatus}
-                            </span>
-                          </div>
-
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Volatility Gate</span>
-                            {(() => {
-                              const multiplier = parseFloat(themeSettings?.structure_istr_atr_multiplier || '1.5');
-                              const activeCandles = data?.data_payload?.[`candles_${wsInterval}` as keyof typeof data.data_payload] || [];
-                              const atr = activeCandles.length > 0 ? calculateATR(activeCandles) : 0;
-                              const rangeHeight = internalRange.high && internalRange.low && !isAwaiting ? (internalRange.high - internalRange.low) : 0;
-                              const isSuppressed = rangeHeight > 0 && atr > 0 && rangeHeight < atr * multiplier;
-                              if (isAwaiting) {
-                                return (
-                                  <span className="text-[9px] font-black text-amber-500/70 bg-amber-500/5 border border-amber-500/10 px-1.5 py-0.5 rounded tracking-wider uppercase">
-                                    PENDING
-                                  </span>
-                                );
-                              }
-                              if (isSuppressed) {
-                                return (
-                                  <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded tracking-wider uppercase shadow-[0_0_6px_rgba(245,158,11,0.05)]">
-                                    ⚠️ NOISE_SUPPRESSED
-                                  </span>
-                                );
-                              }
-                              return (
-                                <span className="text-[9px] font-black text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded tracking-wider uppercase shadow-[0_0_6px_rgba(16,185,129,0.05)]">
-                                  🟢 AUTHORIZED
-                                </span>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
+                    })()}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
-
 
             {/* Liquidity Card: Macro Ranges */}
             <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
-              <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
-                <Magnet size={12} className="text-accent" />
-                <span>Liquidity Pool context</span>
-              </div>
-
-              <div className="space-y-2.5">
-                {/* PDH / PDL */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg relative">
-                    <span className="text-[10px] text-muted block mb-0.5 uppercase font-bold tracking-wider">Prev Day High (PDH)</span>
-                    <span className="text-sm font-mono font-bold text-foreground">{formatPrice(metrics?.macro_levels?.pdh)}</span>
-                  </div>
-                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg relative">
-                    <span className="text-[10px] text-muted block mb-0.5 uppercase font-bold tracking-wider">Prev Day Low (PDL)</span>
-                    <span className="text-sm font-mono font-bold text-foreground">{formatPrice(metrics?.macro_levels?.pdl)}</span>
-                  </div>
+              <div
+                onClick={() => toggleCard('liquidity')}
+                className="flex items-center justify-between cursor-pointer select-none group-hover:text-accent transition-colors"
+              >
+                <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
+                  <Magnet size={12} className="text-accent" />
+                  <span>Liquidity Pool context</span>
                 </div>
+                <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
+                  {cardOpenState.liquidity ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </button>
+              </div>
 
-                {/* Asian Range High / Low Sweeps */}
-                {asianHigh && (
-                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5">
-                    <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
-                      <span className="text-muted uppercase font-bold tracking-wider">Asian High</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className={`font-mono text-xs lg:text-sm font-bold ${isAsianHighSwept ? 'text-rose-500 line-through opacity-60' : 'text-foreground'}`}>
-                          {formatPrice(asianHigh)}
-                        </span>
-                        {isAsianHighSwept && (
-                          <span className="px-1 py-0.5 bg-rose-500/10 text-rose-500 text-[8px] font-black rounded-sm border border-rose-500/20">
-                            SWEPT 🧹
-                          </span>
-                        )}
-                      </div>
+              {cardOpenState.liquidity && (
+                <div className="space-y-2.5 animate-[fade-in_0.15s_ease-out]">
+                  {/* PDH / PDL */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-background/40 p-2.5 border border-card-border rounded-lg relative">
+                      <span className="text-[10px] text-muted block mb-0.5 uppercase font-bold tracking-wider">Prev Day High (PDH)</span>
+                      <span className="text-sm font-mono font-bold text-foreground">{formatPrice(metrics?.macro_levels?.pdh)}</span>
                     </div>
-                    <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
-                      <span className="text-muted uppercase font-bold tracking-wider">Asian Low</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className={`font-mono text-xs lg:text-sm font-bold ${isAsianLowSwept ? 'text-emerald-500 line-through opacity-60' : 'text-foreground'}`}>
-                          {formatPrice(asianLow)}
-                        </span>
-                        {isAsianLowSwept && (
-                          <span className="px-1 py-0.5 bg-emerald-500/10 text-emerald-500 text-[8px] font-black rounded-sm border border-emerald-500/20">
-                            SWEPT 🧹
-                          </span>
-                        )}
-                      </div>
+                    <div className="bg-background/40 p-2.5 border border-card-border rounded-lg relative">
+                      <span className="text-[10px] text-muted block mb-0.5 uppercase font-bold tracking-wider">Prev Day Low (PDL)</span>
+                      <span className="text-sm font-mono font-bold text-foreground">{formatPrice(metrics?.macro_levels?.pdl)}</span>
                     </div>
                   </div>
-                )}
-              </div>
+
+                  {/* Asian Range High / Low Sweeps */}
+                  {asianHigh && (
+                    <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5">
+                      <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
+                        <span className="text-muted uppercase font-bold tracking-wider">Asian High</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`font-mono text-xs lg:text-sm font-bold ${isAsianHighSwept ? 'text-rose-500 line-through opacity-60' : 'text-foreground'}`}>
+                            {formatPrice(asianHigh)}
+                          </span>
+                          {isAsianHighSwept && (
+                            <span className="px-1 py-0.5 bg-rose-500/10 text-rose-500 text-[8px] font-black rounded-sm border border-rose-500/20">
+                              SWEPT 🧹
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
+                        <span className="text-muted uppercase font-bold tracking-wider">Asian Low</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`font-mono text-xs lg:text-sm font-bold ${isAsianLowSwept ? 'text-emerald-500 line-through opacity-60' : 'text-foreground'}`}>
+                            {formatPrice(asianLow)}
+                          </span>
+                          {isAsianLowSwept && (
+                            <span className="px-1 py-0.5 bg-emerald-500/10 text-emerald-500 text-[8px] font-black rounded-sm border border-emerald-500/20">
+                              SWEPT 🧹
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Card 3: Order Flow Pulse */}
             <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
-              <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest">
-                <BarChart3 size={12} className="text-accent" />
-                <span>Order Flow Pulse</span>
+              <div
+                onClick={() => toggleCard('orderFlow')}
+                className="flex items-center justify-between cursor-pointer select-none group-hover:text-accent transition-colors"
+              >
+                <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
+                  <BarChart3 size={12} className="text-accent" />
+                  <span>Order Flow Pulse</span>
+                </div>
+                <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
+                  {cardOpenState.orderFlow ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </button>
               </div>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] lg:text-xs text-muted font-bold">OI Trend</span>
-                  <span className={`text-[11px] lg:text-xs font-black uppercase tracking-wider ${orderFlow?.open_interest_trend === 'BULLISH' ? 'text-emerald-500' :
-                    orderFlow?.open_interest_trend === 'BEARISH' ? 'text-rose-500' : 'text-muted'
-                    }`}>
-                    {orderFlow?.open_interest_trend || 'NEUTRAL'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] lg:text-xs text-muted font-bold">Displacement</span>
-                  <span className={`text-[11px] lg:text-xs font-black uppercase tracking-wider ${metrics?.institutional_sponsorship?.status?.includes('BULLISH') ? 'text-emerald-500' :
-                    metrics?.institutional_sponsorship?.status?.includes('BEARISH') ? 'text-rose-500' :
-                      metrics?.institutional_sponsorship?.status === 'CONSOLIDATION' ? 'text-accent' : 'text-muted'
-                    }`}>
-                    {metrics?.institutional_sponsorship?.status || 'INACTIVE'}
-                  </span>
-                </div>
-                {metrics?.institutional_sponsorship?.statistical_validation && (
-                  <div className="bg-background/40 p-2 border border-card-border rounded-lg space-y-1">
-                    <div className="flex justify-between text-[10px] items-center">
-                      <span className="text-muted">t-STAT</span>
-                      <span className="font-mono font-bold text-foreground">
-                        {metrics.institutional_sponsorship.statistical_validation.t_statistic?.toFixed(4) ?? '0.0000'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-[10px] items-center">
-                      <span className="text-muted">p-VALUE</span>
-                      <span className="font-mono font-bold text-foreground">
-                        {metrics.institutional_sponsorship.statistical_validation.p_value?.toFixed(4) ?? '0.0000'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-[10px] items-center">
-                      <span className="text-muted">OLS VALIDATION</span>
-                      <span className={`font-black uppercase text-[9px] tracking-wider ${metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'text-emerald-500' :
-                        metrics.institutional_sponsorship.status === 'CONSOLIDATION' ? 'text-accent' : 'text-rose-500'
-                        }`}>
-                        {metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'CONFIRMED' :
-                          metrics.institutional_sponsorship.status === 'CONSOLIDATION' ? 'CONSOLIDATION' : 'REJECTED'}
-                      </span>
-                    </div>
+
+              {cardOpenState.orderFlow && (
+                <div className="space-y-3 animate-[fade-in_0.15s_ease-out]">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] lg:text-xs text-muted font-bold">OI Trend</span>
+                    <span className={`text-[11px] lg:text-xs font-black uppercase tracking-wider ${orderFlow?.open_interest_trend === 'BULLISH' ? 'text-emerald-500' :
+                      orderFlow?.open_interest_trend === 'BEARISH' ? 'text-rose-500' : 'text-muted'
+                      }`}>
+                      {orderFlow?.open_interest_trend || 'NEUTRAL'}
+                    </span>
                   </div>
-                )}
-                <div className="bg-background/40 p-2.5 border border-card-border rounded-lg">
-                  <span className="text-[10px] text-muted block mb-1 uppercase tracking-wider font-bold">Smart Money Divergence</span>
-                  <p className="text-[10px] text-muted italic leading-normal select-text">
-                    {orderFlow?.smart_money_sentiment?.smart_money_divergence || 'No divergence detected in HTF/LTF pairing.'}
-                  </p>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[11px] lg:text-xs text-muted font-bold">Displacement</span>
+                    <span className={`text-[11px] lg:text-xs font-black uppercase tracking-wider ${metrics?.institutional_sponsorship?.status?.includes('BULLISH') ? 'text-emerald-500' :
+                      metrics?.institutional_sponsorship?.status?.includes('BEARISH') ? 'text-rose-500' :
+                        metrics?.institutional_sponsorship?.status === 'CONSOLIDATION' ? 'text-accent' : 'text-muted'
+                      }`}>
+                      {metrics?.institutional_sponsorship?.status || 'INACTIVE'}
+                    </span>
+                  </div>
+                  {metrics?.institutional_sponsorship?.statistical_validation && (
+                    <div className="bg-background/40 p-2 border border-card-border rounded-lg space-y-1">
+                      <div className="flex justify-between text-[10px] items-center">
+                        <span className="text-muted">t-STAT</span>
+                        <span className="font-mono font-bold text-foreground">
+                          {metrics.institutional_sponsorship.statistical_validation.t_statistic?.toFixed(4) ?? '0.0000'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[10px] items-center">
+                        <span className="text-muted">p-VALUE</span>
+                        <span className="font-mono font-bold text-foreground">
+                          {metrics.institutional_sponsorship.statistical_validation.p_value?.toFixed(4) ?? '0.0000'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[10px] items-center">
+                        <span className="text-muted">OLS VALIDATION</span>
+                        <span className={`font-black uppercase text-[9px] tracking-wider ${metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'text-emerald-500' :
+                          metrics.institutional_sponsorship.status === 'CONSOLIDATION' ? 'text-accent' : 'text-rose-500'
+                          }`}>
+                          {metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'CONFIRMED' :
+                            metrics.institutional_sponsorship.status === 'CONSOLIDATION' ? 'CONSOLIDATION' : 'REJECTED'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg">
+                    <span className="text-[10px] text-muted block mb-1 uppercase tracking-wider font-bold">Smart Money Divergence</span>
+                    <p className="text-[10px] text-muted italic leading-normal select-text">
+                      {orderFlow?.smart_money_sentiment?.smart_money_divergence || 'No divergence detected in HTF/LTF pairing.'}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Card 4: Resting Magnets */}
             <RestingMagnetsCard orderFlow={orderFlow} />
 
             {/* Card 5: AI Synthesis Console */}
-            <div className="glass-panel flex flex-col h-[380px] overflow-hidden">
-              <div className="p-3 border-b border-card-border bg-card/45 flex flex-col gap-2 shrink-0">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Terminal size={12} className="text-accent" />
-                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Synthesis Console</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setIsHudModalOpen(true)}
-                      className="text-muted hover:text-foreground transition-colors p-1 rounded-full hover:bg-card cursor-pointer"
-                      title="Expand Synthesis HUD Console"
-                    >
-                      <Search size={12} />
-                    </button>
-                    {isAnalyzing && <Loader2 size={12} className="text-accent animate-spin" />}
-                  </div>
+            <div className={`glass-panel flex flex-col transition-all duration-200 overflow-hidden ${cardOpenState.synthesis ? 'h-[380px]' : 'h-auto'}`}>
+              <div
+                onClick={() => toggleCard('synthesis')}
+                className="p-3 border-b border-card-border bg-card/45 flex items-center justify-between shrink-0 cursor-pointer select-none hover:bg-card-hover/20 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Terminal size={12} className="text-accent" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Synthesis Console</span>
+                </div>
+                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => setIsHudModalOpen(true)}
+                    className="text-muted hover:text-foreground transition-colors p-1 rounded-full hover:bg-card cursor-pointer"
+                    title="Expand Synthesis HUD Console"
+                  >
+                    <Search size={12} />
+                  </button>
+                  {isAnalyzing && <Loader2 size={12} className="text-accent animate-spin" />}
+                  <button
+                    type="button"
+                    onClick={() => toggleCard('synthesis')}
+                    className="text-muted hover:text-foreground transition-colors p-0.5 cursor-pointer"
+                  >
+                    {cardOpenState.synthesis ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </button>
                 </div>
               </div>
 
-              <div className="flex-1 p-3 overflow-y-auto bg-background/25 font-mono scrollbar-thin scrollbar-thumb-card-border">
-                {aiAnalysis ? (
-                  hudData ? (
-                    <div className="space-y-4">
-                      {/* HUD Table */}
-                      <div className="border border-card-border rounded-lg overflow-hidden">
-                        <table className="w-full text-left border-collapse">
-                          <tbody>
-                            {Object.entries(hudData).map(([key, value]) => {
-                              let colorClass = 'text-foreground font-semibold';
-                              const vStr = Array.isArray(value) ? value.join(', ') : String(value).toUpperCase();
+              {cardOpenState.synthesis && (
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden animate-[fade-in_0.15s_ease-out]">
+                  <div className="flex-1 p-3 overflow-y-auto bg-background/25 font-mono scrollbar-thin scrollbar-thumb-card-border">
+                    {aiAnalysis ? (
+                      hudData ? (
+                        <div className="space-y-4">
+                          {/* HUD Table */}
+                          <div className="border border-card-border rounded-lg overflow-hidden">
+                            <table className="w-full text-left border-collapse">
+                              <tbody>
+                                {Object.entries(hudData).map(([key, value]) => {
+                                  let colorClass = 'text-foreground font-semibold';
+                                  const vStr = Array.isArray(value) ? value.join(', ') : String(value).toUpperCase();
 
-                              if (vStr.includes('BUY') || vStr.includes('LONG') || vStr.includes('BULLISH') || vStr.includes('STRONG') || vStr.includes('FULL_RISK')) colorClass = 'text-emerald-600 dark:text-emerald-400 font-bold';
-                              else if (vStr.includes('SELL') || vStr.includes('SHORT') || vStr.includes('BEARISH') || vStr.includes('WEAK') || vStr.includes('ABORT')) colorClass = 'text-rose-600 dark:text-rose-400 font-bold';
-                              else if (vStr.includes('STAND DOWN') || vStr.includes('NEUTRAL') || vStr.includes('NONE') || vStr.includes('WAIT')) colorClass = 'text-muted font-semibold';
+                                  if (vStr.includes('BUY') || vStr.includes('LONG') || vStr.includes('BULLISH') || vStr.includes('STRONG') || vStr.includes('FULL_RISK')) colorClass = 'text-emerald-600 dark:text-emerald-400 font-bold';
+                                  else if (vStr.includes('SELL') || vStr.includes('SHORT') || vStr.includes('BEARISH') || vStr.includes('WEAK') || vStr.includes('ABORT')) colorClass = 'text-rose-600 dark:text-rose-400 font-bold';
+                                  else if (vStr.includes('STAND DOWN') || vStr.includes('NEUTRAL') || vStr.includes('NONE') || vStr.includes('WAIT')) colorClass = 'text-muted font-semibold';
 
-                              const displayKey = key.replace(/_/g, ' ').toUpperCase();
-                              return (
-                                <tr key={key} className="border-b border-card-border last:border-0 bg-background/25">
-                                  <td className="p-2 text-[10.5px] font-black uppercase tracking-wider text-muted border-r border-card-border w-1/3">
-                                    {displayKey}
-                                  </td>
-                                  <td className={`p-2 text-xs font-mono font-medium ${colorClass}`}>
-                                    {Array.isArray(value) ? value.join(', ') : String(value)}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* AI Note */}
-                      {aiNote && (
-                        <div className="bg-card p-3.5 border border-card-border rounded-lg shadow-sm">
-                          <span className="text-[10px] font-black text-accent uppercase tracking-widest block mb-1">
-                            {aiNote.title}
-                          </span>
-                          <p className="text-[11.5px] text-foreground italic leading-relaxed font-sans select-text">
-                            {aiNote.text}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* TradingView Alerts */}
-                      {tvAlerts.length > 0 && (
-                        <div className="space-y-1.5">
-                          <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">
-                            TradingView Alerts
-                          </span>
-                          <div className="flex flex-col gap-1.5">
-                            {tvAlerts.map((alert: unknown, i: number) => {
-                              const displayAlert = typeof alert === 'object' && alert !== null && 'price' in alert && 'reason' in alert
-                                ? `${(alert as Record<string, unknown>).price} - ${(alert as Record<string, unknown>).reason}`
-                                : typeof alert === 'string'
-                                  ? alert
-                                  : JSON.stringify(alert);
-
-                              return (
-                                <div key={i} className="bg-card p-2 border border-card-border flex items-start gap-2 rounded-lg">
-                                  <Zap size={10} className="text-accent mt-0.5 shrink-0" />
-                                  <span className="text-[9px] text-foreground font-sans font-medium uppercase tracking-wide">
-                                    {displayAlert}
-                                  </span>
-                                </div>
-                              );
-                            })}
+                                  const displayKey = key.replace(/_/g, ' ').toUpperCase();
+                                  return (
+                                    <tr key={key} className="border-b border-card-border last:border-0 bg-background/25">
+                                      <td className="p-2 text-[10.5px] font-black uppercase tracking-wider text-muted border-r border-card-border w-1/3">
+                                        {displayKey}
+                                      </td>
+                                      <td className={`p-2 text-xs font-mono font-medium ${colorClass}`}>
+                                        {Array.isArray(value) ? value.join(', ') : String(value)}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <pre className="text-[10px] text-emerald-500 leading-relaxed whitespace-pre-wrap bg-card p-3 rounded-lg border border-card-border overflow-x-auto select-text">
-                      <code>{aiAnalysis}</code>
-                    </pre>
-                  )
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-4">
-                    <Brain size={24} className="text-card-border mb-2 animate-pulse" />
-                    <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">System Ready. Awaiting Live Payload Injection.</p>
-                  </div>
-                )}
-              </div>
 
-              <div className="p-3 bg-card/45 border-t border-card-border shrink-0">
-                <button
-                  onClick={handleLiveSynthesis}
-                  disabled={isAnalyzing || !data}
-                  className="w-full py-2 bg-accent hover:bg-accent disabled:opacity-50 disabled:bg-card-border text-accent-foreground text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm rounded-full"
-                >
-                  {isAnalyzing ? (
-                    <>
-                      <Loader2 size={12} className="animate-spin" />
-                      <span>Synthesizing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap size={12} fill="currentColor" />
-                      <span>Synthesize Live Data</span>
-                    </>
-                  )}
-                </button>
-              </div>
+                          {/* AI Note */}
+                          {aiNote && (
+                            <div className="bg-card p-3.5 border border-card-border rounded-lg shadow-sm">
+                              <span className="text-[10px] font-black text-accent uppercase tracking-widest block mb-1">
+                                {aiNote.title}
+                              </span>
+                              <p className="text-[11.5px] text-foreground italic leading-relaxed font-sans select-text">
+                                {aiNote.text}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* TradingView Alerts */}
+                          {tvAlerts.length > 0 && (
+                            <div className="space-y-1.5">
+                              <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest block">
+                                TradingView Alerts
+                              </span>
+                              <div className="flex flex-col gap-1.5">
+                                {tvAlerts.map((alert: unknown, i: number) => {
+                                  const displayAlert = typeof alert === 'object' && alert !== null && 'price' in alert && 'reason' in alert
+                                    ? `${(alert as Record<string, unknown>).price} - ${(alert as Record<string, unknown>).reason}`
+                                    : typeof alert === 'string'
+                                      ? alert
+                                      : JSON.stringify(alert);
+
+                                  return (
+                                    <div key={i} className="bg-card p-2 border border-card-border flex items-start gap-2 rounded-lg">
+                                      <Zap size={10} className="text-accent mt-0.5 shrink-0" />
+                                      <span className="text-[9px] text-foreground font-sans font-medium uppercase tracking-wide">
+                                        {displayAlert}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <pre className="text-[10px] text-emerald-500 leading-relaxed whitespace-pre-wrap bg-card p-3 rounded-lg border border-card-border overflow-x-auto select-text">
+                          <code>{aiAnalysis}</code>
+                        </pre>
+                      )
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center text-center p-4">
+                        <Brain size={24} className="text-card-border mb-2 animate-pulse" />
+                        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">System Ready. Awaiting Live Payload Injection.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3 bg-card/45 border-t border-card-border shrink-0">
+                    <button
+                      onClick={handleLiveSynthesis}
+                      disabled={isAnalyzing || !data}
+                      className="w-full py-2 bg-accent hover:bg-accent disabled:opacity-50 disabled:bg-card-border text-accent-foreground text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm rounded-full"
+                    >
+                      {isAnalyzing ? (
+                        <>
+                          <Loader2 size={12} className="animate-spin" />
+                          <span>Synthesizing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap size={12} fill="currentColor" />
+                          <span>Synthesize Live Data</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
           </div>

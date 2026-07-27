@@ -8,14 +8,54 @@ export interface SmartAlert {
   timestamp: number;
 }
 
+export interface SignalAlertsEnabled {
+  FVG_DETECTION: boolean;
+  DISPLACEMENT_CONFIRMED: boolean;
+  SMT_TRAP_ACTIVE: boolean;
+  DOL_EXHAUSTED: boolean;
+  SESSION_TRANSITION: boolean;
+  PRICING_SHIFT: boolean;
+  SWEEP_ALERT: boolean;
+  FLOW_STATE_CHANGE: boolean;
+  DEAD_ZONE_ENTER: boolean;
+}
+
+export interface SignalAlerts {
+  FVG_DETECTION: string;
+  DISPLACEMENT_CONFIRMED: string;
+  SMT_TRAP_ACTIVE: string;
+  DOL_EXHAUSTED: string;
+  SESSION_TRANSITION: string;
+  PRICING_SHIFT: string;
+  SWEEP_ALERT: string;
+  FLOW_STATE_CHANGE: string;
+  DEAD_ZONE_ENTER: string;
+}
+
+const ALERT_TYPE_TO_SIGNAL_KEY: Record<SmartAlert['type'], keyof SignalAlertsEnabled> = {
+  PURGE: 'SWEEP_ALERT',
+  DEAD_ZONE: 'DEAD_ZONE_ENTER',
+  RISK_OVERRIDE: 'FVG_DETECTION',
+  SMT_TRAP: 'SMT_TRAP_ACTIVE',
+  PRICING_SHIFT: 'PRICING_SHIFT',
+  OBJECTIVE_UPDATE: 'DOL_EXHAUSTED',
+  FLOW_STATE: 'DISPLACEMENT_CONFIRMED',
+  SESSION_TRANSITION: 'SESSION_TRANSITION',
+  STRATEGY_MATCHED: 'DISPLACEMENT_CONFIRMED',
+};
+
 export function useLiveAlerts(
   data: any,
-  refetch?: () => Promise<void>
+  refetch?: () => Promise<void>,
+  signalAlertsEnabled?: SignalAlertsEnabled,
+  signalAlerts?: SignalAlerts
 ) {
   const [activeAlerts, setActiveAlerts] = useState<SmartAlert[]>([]);
   const prevDataRef = useRef<any>(null);
   const cooldownsRef = useRef<Record<string, number>>({});
   const refetchRef = useRef(refetch);
+  const signalAlertsEnabledRef = useRef(signalAlertsEnabled);
+  const signalAlertsRef = useRef(signalAlerts);
 
   // Transition Tracking Refs (V8.2 Protocol)
   const prevPricingRef = useRef<string | null>(null);
@@ -23,10 +63,15 @@ export function useLiveAlerts(
   const prevSponsorshipRef = useRef<string | null>(null);
   const prevTimeWindowRef = useRef<string | null>(null);
 
-  // Keep refetch ref updated
+  // Keep refs updated for effects/callbacks
   useEffect(() => {
     refetchRef.current = refetch;
   }, [refetch]);
+
+  useEffect(() => {
+    signalAlertsEnabledRef.current = signalAlertsEnabled;
+    signalAlertsRef.current = signalAlerts;
+  }, [signalAlertsEnabled, signalAlerts]);
 
   // Request Notification permission
   useEffect(() => {
@@ -48,6 +93,14 @@ export function useLiveAlerts(
   }, []);
 
   const triggerAlert = useCallback((type: SmartAlert['type'], message: string, soundPath?: string) => {
+    // 🛑 AUDIT GATE: Check if alert type is enabled in user settings
+    const signalKey = ALERT_TYPE_TO_SIGNAL_KEY[type];
+    const enabledMap = signalAlertsEnabledRef.current;
+    if (enabledMap && signalKey && enabledMap[signalKey] === false) {
+      console.log(`[useLiveAlerts] Alert suppressed because '${signalKey}' is disabled in settings.`);
+      return;
+    }
+
     setActiveAlerts((prev) => {
       const newAlert: SmartAlert = {
         id: `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
@@ -63,8 +116,13 @@ export function useLiveAlerts(
       if ('Notification' in window && Notification.permission === 'granted') {
         new Notification("Flow-State Alert", { body: message });
       }
-      if (soundPath) {
-        const audio = new Audio(soundPath);
+      
+      // Resolve custom sound file from signalAlerts map if available
+      const mappedSoundFile = signalAlertsRef.current && signalKey ? signalAlertsRef.current[signalKey] : null;
+      const finalSoundPath = mappedSoundFile ? `/audio/${mappedSoundFile}` : soundPath;
+
+      if (finalSoundPath) {
+        const audio = new Audio(finalSoundPath);
         audio.play().catch(e => {
           if (e.name === 'NotAllowedError') {
             console.log('[Audio] Playback blocked by browser autoplay policy until user interacts.');

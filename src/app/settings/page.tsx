@@ -73,7 +73,9 @@ type SaveStatus = "idle" | "saving" | "success" | "error";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const AVAILABLE_MODELS = [
+  { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
   { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
+  { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite" },
   { value: "gemini-3-flash-preview", label: "Gemini 3 Flash (Preview)" },
   { value: "gemini-2.5-flash-preview-05-20", label: "Gemini 2.5 Flash (Preview)" },
   { value: "gemini-2.5-pro-preview-05-06", label: "Gemini 2.5 Pro (Preview)" },
@@ -1111,11 +1113,11 @@ export default function SettingsPage() {
                         }}
                       >
                         {/* Mini Header */}
-                        <div 
-                          className="flex justify-between items-center w-full px-2 py-1.5 border-b rounded-t-lg transition-all animate-[fade-in_0.3s_ease-out]" 
-                          style={{ 
-                            backgroundColor: themeSettings.dark_header_bg, 
-                            borderColor: themeSettings.dark_header_border 
+                        <div
+                          className="flex justify-between items-center w-full px-2 py-1.5 border-b rounded-t-lg transition-all animate-[fade-in_0.3s_ease-out]"
+                          style={{
+                            backgroundColor: themeSettings.dark_header_bg,
+                            borderColor: themeSettings.dark_header_border
                           }}
                         >
                           <div className="flex items-center gap-1">
@@ -1132,10 +1134,10 @@ export default function SettingsPage() {
                         {/* Mid Section: Chart and Sidebar */}
                         <div className="flex-1 flex gap-2 w-full pt-1.5 overflow-hidden">
                           {/* Mini Chart Area */}
-                          <div 
-                            className="flex-1 rounded-lg border p-1.5 flex flex-col justify-between relative transition-all" 
-                            style={{ 
-                              backgroundColor: themeSettings.dark_bg, 
+                          <div
+                            className="flex-1 rounded-lg border p-1.5 flex flex-col justify-between relative transition-all"
+                            style={{
+                              backgroundColor: themeSettings.dark_bg,
                               borderColor: themeSettings.dark_chart_border,
                               backgroundImage: `radial-gradient(${themeSettings.dark_chart_grid} 1px, transparent 1px)`,
                               backgroundSize: '8px 8px'
@@ -1145,16 +1147,16 @@ export default function SettingsPage() {
                               <span style={{ color: themeSettings.dark_chart_text }}>07:00 TDO</span>
                               <span style={{ color: themeSettings.dark_chart_swing_high }} className="font-bold">▲ HIGH</span>
                             </div>
-                            
+
                             {/* Candles and FVG Box */}
                             <div className="flex-1 flex items-center justify-center gap-2 relative">
                               {/* FVG Box */}
-                              <div className="absolute inset-x-2 h-3 border" style={{ 
+                              <div className="absolute inset-x-2 h-3 border" style={{
                                 backgroundColor: `color-mix(in srgb, ${themeSettings.dark_chart_fvg_bullish} 15%, transparent)`,
                                 borderColor: themeSettings.dark_chart_fvg_bullish,
                                 borderStyle: 'dashed'
                               }} />
-                              
+
                               {/* Candle 1 */}
                               <div className="flex flex-col items-center w-1.5 h-full justify-center z-10">
                                 <div className="w-0.5 h-2" style={{ backgroundColor: themeSettings.dark_up_candle }} />
@@ -1168,7 +1170,7 @@ export default function SettingsPage() {
                                 <div className="w-0.5 h-3" style={{ backgroundColor: themeSettings.dark_down_candle }} />
                               </div>
                             </div>
-                            
+
                             <div className="flex justify-between items-center text-[5px]">
                               <span className="px-1 rounded-[2px] text-[5px] font-black" style={{ backgroundColor: `color-mix(in srgb, ${themeSettings.dark_chart_bos} 15%, transparent)`, color: themeSettings.dark_chart_bos }}>BOS</span>
                               <span style={{ color: themeSettings.dark_chart_swing_low }} className="font-bold">▼ LOW</span>
@@ -1176,11 +1178,11 @@ export default function SettingsPage() {
                           </div>
 
                           {/* Mini Sidebar Area */}
-                          <div 
-                            className="w-20 rounded-lg p-1.5 flex flex-col justify-between border transition-all" 
-                            style={{ 
-                              backgroundColor: `color-mix(in srgb, ${themeSettings.dark_card} ${themeSettings.dark_card_opacity}%, transparent)`, 
-                              borderColor: themeSettings.dark_chart_border 
+                          <div
+                            className="w-20 rounded-lg p-1.5 flex flex-col justify-between border transition-all"
+                            style={{
+                              backgroundColor: `color-mix(in srgb, ${themeSettings.dark_card} ${themeSettings.dark_card_opacity}%, transparent)`,
+                              borderColor: themeSettings.dark_chart_border
                             }}
                           >
                             <div className="flex flex-col gap-0.5">
@@ -1200,20 +1202,20 @@ export default function SettingsPage() {
                         {/* Bottom Buttons Mock */}
                         <div className="flex gap-2 pt-1.5 w-full">
                           {/* Solid Button */}
-                          <div 
-                            className="flex-1 py-1 rounded-[3px] text-center font-black text-[6px] uppercase tracking-wider transition-all" 
-                            style={{ 
-                              backgroundColor: themeSettings.dark_btn_solid_bg, 
-                              color: themeSettings.dark_btn_solid_text 
+                          <div
+                            className="flex-1 py-1 rounded-[3px] text-center font-black text-[6px] uppercase tracking-wider transition-all"
+                            style={{
+                              backgroundColor: themeSettings.dark_btn_solid_bg,
+                              color: themeSettings.dark_btn_solid_text
                             }}
                           >
                             SOLID BTN
                           </div>
                           {/* Transparent Button */}
-                          <div 
-                            className="flex-1 py-1 rounded-[3px] text-center font-black text-[6px] uppercase tracking-wider border transition-all" 
-                            style={{ 
-                              borderColor: themeSettings.dark_btn_trans_border, 
+                          <div
+                            className="flex-1 py-1 rounded-[3px] text-center font-black text-[6px] uppercase tracking-wider border transition-all"
+                            style={{
+                              borderColor: themeSettings.dark_btn_trans_border,
                               color: themeSettings.dark_btn_trans_text,
                               backgroundColor: 'transparent'
                             }}
@@ -1298,7 +1300,7 @@ export default function SettingsPage() {
                           <ColorPickerItem label="Manual Entry Line" value={themeSettings.theme_manual_entry_line} onChange={(val) => setThemeSettings((s: any) => ({ ...s, theme_manual_entry_line: val }))} />
                           <ColorPickerItem label="Manual Take Profit Line" value={themeSettings.theme_manual_tp_line} onChange={(val) => setThemeSettings((s: any) => ({ ...s, theme_manual_tp_line: val }))} />
                           <ColorPickerItem label="Manual Stop Loss Line" value={themeSettings.theme_manual_sl_line} onChange={(val) => setThemeSettings((s: any) => ({ ...s, theme_manual_sl_line: val }))} />
-                          
+
                           {/* ATR Multiplier Volatility Gating Input */}
                           <div className="flex items-center justify-between py-2 border-b border-card-border/30 px-1 font-sans">
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">iSTR Volatility Filter (ATR Multiplier)</span>
@@ -1391,11 +1393,11 @@ export default function SettingsPage() {
                         }}
                       >
                         {/* Mini Header */}
-                        <div 
-                          className="flex justify-between items-center w-full px-2 py-1.5 border-b rounded-t-lg transition-all animate-[fade-in_0.3s_ease-out]" 
-                          style={{ 
-                            backgroundColor: themeSettings.light_header_bg, 
-                            borderColor: themeSettings.light_header_border 
+                        <div
+                          className="flex justify-between items-center w-full px-2 py-1.5 border-b rounded-t-lg transition-all animate-[fade-in_0.3s_ease-out]"
+                          style={{
+                            backgroundColor: themeSettings.light_header_bg,
+                            borderColor: themeSettings.light_header_border
                           }}
                         >
                           <div className="flex items-center gap-1">
@@ -1412,10 +1414,10 @@ export default function SettingsPage() {
                         {/* Mid Section: Chart and Sidebar */}
                         <div className="flex-1 flex gap-2 w-full pt-1.5 overflow-hidden">
                           {/* Mini Chart Area */}
-                          <div 
-                            className="flex-1 rounded-lg border p-1.5 flex flex-col justify-between relative transition-all" 
-                            style={{ 
-                              backgroundColor: themeSettings.light_bg, 
+                          <div
+                            className="flex-1 rounded-lg border p-1.5 flex flex-col justify-between relative transition-all"
+                            style={{
+                              backgroundColor: themeSettings.light_bg,
                               borderColor: themeSettings.light_chart_border,
                               backgroundImage: `radial-gradient(${themeSettings.light_chart_grid} 1px, transparent 1px)`,
                               backgroundSize: '8px 8px'
@@ -1425,16 +1427,16 @@ export default function SettingsPage() {
                               <span style={{ color: themeSettings.light_chart_text }}>07:00 TDO</span>
                               <span style={{ color: themeSettings.light_chart_swing_high }} className="font-bold">▲ HIGH</span>
                             </div>
-                            
+
                             {/* Candles and FVG Box */}
                             <div className="flex-1 flex items-center justify-center gap-2 relative">
                               {/* FVG Box */}
-                              <div className="absolute inset-x-2 h-3 border" style={{ 
+                              <div className="absolute inset-x-2 h-3 border" style={{
                                 backgroundColor: `color-mix(in srgb, ${themeSettings.light_chart_fvg_bullish} 15%, transparent)`,
                                 borderColor: themeSettings.light_chart_fvg_bullish,
                                 borderStyle: 'dashed'
                               }} />
-                              
+
                               {/* Candle 1 */}
                               <div className="flex flex-col items-center w-1.5 h-full justify-center z-10">
                                 <div className="w-0.5 h-2" style={{ backgroundColor: themeSettings.light_up_candle }} />
@@ -1448,7 +1450,7 @@ export default function SettingsPage() {
                                 <div className="w-0.5 h-3" style={{ backgroundColor: themeSettings.light_down_candle }} />
                               </div>
                             </div>
-                            
+
                             <div className="flex justify-between items-center text-[5px]">
                               <span className="px-1 rounded-[2px] text-[5px] font-black" style={{ backgroundColor: `color-mix(in srgb, ${themeSettings.light_chart_bos} 15%, transparent)`, color: themeSettings.light_chart_bos }}>BOS</span>
                               <span style={{ color: themeSettings.light_chart_swing_low }} className="font-bold">▼ LOW</span>
@@ -1456,11 +1458,11 @@ export default function SettingsPage() {
                           </div>
 
                           {/* Mini Sidebar Area */}
-                          <div 
-                            className="w-20 rounded-lg p-1.5 flex flex-col justify-between border transition-all" 
-                            style={{ 
-                              backgroundColor: `color-mix(in srgb, ${themeSettings.light_card} ${themeSettings.light_card_opacity}%, transparent)`, 
-                              borderColor: themeSettings.light_chart_border 
+                          <div
+                            className="w-20 rounded-lg p-1.5 flex flex-col justify-between border transition-all"
+                            style={{
+                              backgroundColor: `color-mix(in srgb, ${themeSettings.light_card} ${themeSettings.light_card_opacity}%, transparent)`,
+                              borderColor: themeSettings.light_chart_border
                             }}
                           >
                             <div className="flex flex-col gap-0.5">
@@ -1480,20 +1482,20 @@ export default function SettingsPage() {
                         {/* Bottom Buttons Mock */}
                         <div className="flex gap-2 pt-1.5 w-full">
                           {/* Solid Button */}
-                          <div 
-                            className="flex-1 py-1 rounded-[3px] text-center font-black text-[6px] uppercase tracking-wider transition-all" 
-                            style={{ 
-                              backgroundColor: themeSettings.light_btn_solid_bg, 
-                              color: themeSettings.light_btn_solid_text 
+                          <div
+                            className="flex-1 py-1 rounded-[3px] text-center font-black text-[6px] uppercase tracking-wider transition-all"
+                            style={{
+                              backgroundColor: themeSettings.light_btn_solid_bg,
+                              color: themeSettings.light_btn_solid_text
                             }}
                           >
                             SOLID BTN
                           </div>
                           {/* Transparent Button */}
-                          <div 
-                            className="flex-1 py-1 rounded-[3px] text-center font-black text-[6px] uppercase tracking-wider border transition-all" 
-                            style={{ 
-                              borderColor: themeSettings.light_btn_trans_border, 
+                          <div
+                            className="flex-1 py-1 rounded-[3px] text-center font-black text-[6px] uppercase tracking-wider border transition-all"
+                            style={{
+                              borderColor: themeSettings.light_btn_trans_border,
                               color: themeSettings.light_btn_trans_text,
                               backgroundColor: 'transparent'
                             }}

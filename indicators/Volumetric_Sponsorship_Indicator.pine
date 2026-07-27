@@ -1,0 +1,231 @@
+//@version=6
+indicator("Flow-State Volumetric Sponsorship [Arrows & Circles]", overlay=true, max_labels_count=500)
+
+// ==========================================
+// 1. INPUT PARAMETERS & STYLING
+// ==========================================
+group_markers     = "Volumetric Signal Styling"
+color_pm_bull     = input.color(#00F0FF, "Bullish PM Arrow (Neon Cyan)", group=group_markers)
+color_pm_bear     = input.color(#FF007F, "Bearish PM Arrow (Neon Pink)", group=group_markers)
+color_strong_bull = input.color(#00F0FF, "Strong Bullish Arrow Color", group=group_markers)
+color_strong_bear = input.color(#FF007F, "Strong Bearish Arrow Color", group=group_markers)
+color_weak_arrow  = input.color(color.new(#808080, 80), "Weak Arrow (Muted Translucent)", group=group_markers)
+
+color_bull_circle = input.color(#50FFAF, "Bullish Sweep Circle (Mint Green)", group=group_markers)
+color_bear_circle = input.color(#FFB4AB, "Bearish Sweep Circle (Salmon Red)", group=group_markers)
+
+group_settings    = "Perfect Movement (PM) & Order Flow Filters"
+visualize_pm_only = input.bool(true, "Visualize Perfect Movement (PM) Only", group=group_settings)
+pm_atr_mult       = input.float(0.5, "PM Min ATR Multiplier", minval=0.1, step=0.1, group=group_settings)
+pm_vol_sma_period = input.int(10, "PM Volume SMA Period", minval=1, group=group_settings)
+pm_min_body_ratio = input.float(0.30, "PM Min Body Ratio", minval=0.1, maxval=1.0, step=0.05, group=group_settings)
+pm_max_wick_ratio = input.float(0.50, "PM Max Wick Ratio", minval=0.1, maxval=1.0, step=0.05, group=group_settings)
+pm_max_retrace    = input.float(0.70, "PM Max Retracement Limit", minval=0.1, maxval=1.0, step=0.05, group=group_settings)
+pm_sweep_lookback = input.int(5, "PM Liquidity Sweep Lookback", minval=1, maxval=20, group=group_settings)
+
+// ==========================================
+// 2. MACRO LEVELS & STRUCTURAL SWINGS
+// ==========================================
+// Daily High / Low
+pdh = request.security(syminfo.tickerid, "D", high[1], lookahead=barmerge.lookahead_on)
+pdl = request.security(syminfo.tickerid, "D", low[1], lookahead=barmerge.lookahead_on)
+
+// Session Tracking (UTC)
+in_asian  = not na(time(timeframe.period, "0000-0800:1234567", "UTC"))
+in_london = not na(time(timeframe.period, "0700-1500:1234567", "UTC"))
+
+var float cur_asian_h = na, var float cur_asian_l = na
+var float asian_h = na, var float asian_l = na
+
+if in_asian
+    if not in_asian[1]
+        cur_asian_h := high
+        cur_asian_l := low
+    else
+        cur_asian_h := math.max(cur_asian_h, high)
+        cur_asian_l := math.min(cur_asian_l, low)
+else if in_asian[1]
+    asian_h := cur_asian_h
+    asian_l := cur_asian_l
+
+var float cur_london_h = na, var float cur_london_l = na
+var float london_h = na, var float london_l = na
+
+if in_london
+    if not in_london[1]
+        cur_london_h := high
+        cur_london_l := low
+    else
+        cur_london_h := math.max(cur_london_h, high)
+        cur_london_l := math.min(cur_london_l, low)
+else if in_london[1]
+    london_h := cur_london_h
+    london_l := cur_london_l
+
+// Confirmed Structural Swings (Pivots matching structureEngine)
+pl = ta.pivotlow(low, 3, 3)
+ph = ta.pivothigh(high, 3, 3)
+
+var float last_swing_low = na
+var float last_swing_high = na
+
+if not na(pl)
+    last_swing_low := pl
+
+if not na(ph)
+    last_swing_high := ph
+
+// Pre-calculate series at top level
+atr_val       = ta.atr(14)
+vol_sma_prior = ta.sma(volume, pm_vol_sma_period)[2]
+
+// ==========================================
+// 3. SLIDING WINDOW & GEOMETRY (Evaluating Bar [1])
+// ==========================================
+prev_close = close[2]
+prev_open  = open[2]
+prev_high  = high[2]
+prev_low   = low[2]
+prev_vol   = volume[2]
+
+mid_close  = close[1]
+mid_open   = open[1]
+mid_high   = high[1]
+mid_low    = low[1]
+mid_vol    = volume[1]
+
+curr_close = close[0]
+curr_open  = open[0]
+curr_high  = high[0]
+curr_low   = low[0]
+
+// Gate 1: Structural 3-Bar Swing Check
+is_swing_low  = mid_low < prev_low and mid_low < curr_low
+is_swing_high = mid_high > prev_high and mid_high > curr_high
+
+// Gate 2: Institutional Color Lock
+is_mid_bullish  = mid_close > mid_open
+is_mid_bearish  = mid_close < mid_open
+is_prev_bullish = prev_close > prev_open
+is_prev_bearish = prev_close < prev_open
+
+valid_bull_shift = is_swing_low and is_mid_bullish and is_prev_bearish
+valid_bear_shift = is_swing_high and is_mid_bearish and is_prev_bullish
+
+// Gate 3: Volumetric Calculations (Body-Weighting)
+range_mid  = mid_high - mid_low
+body_mid   = math.abs(mid_close - mid_open)
+body_ratio_mid = range_mid > 0 ? body_mid / range_mid : 0.0
+
+range_prev = prev_high - prev_low
+body_prev  = math.abs(prev_close - prev_open)
+body_ratio_prev = range_prev > 0 ? body_prev / range_prev : 0.0
+
+dir_vol_mid  = mid_vol * body_ratio_mid
+dir_vol_prev = prev_vol * body_ratio_prev
+
+is_raw_vol_increase = mid_vol > prev_vol
+is_dir_vol_increase = dir_vol_mid > dir_vol_prev
+
+// Signals
+is_arrow_up   = valid_bull_shift and is_dir_vol_increase
+is_arrow_down = valid_bear_shift and is_dir_vol_increase
+
+is_circle_up   = valid_bull_shift and not is_dir_vol_increase and is_raw_vol_increase
+is_circle_down = valid_bear_shift and not is_dir_vol_increase and is_raw_vol_increase
+
+// ==========================================
+// 4. PERFECT MOVEMENT (PM) SETUP AUDIT & EVALUATION
+// ==========================================
+sweep_tolerance = 0.3 * atr_val[1]
+
+bool phase1_bull_sweep = false
+bool phase1_bear_sweep = false
+
+// Check candles BEFORE mid (k starts at 2, up to pm_sweep_lookback + 1)
+for k = 2 to pm_sweep_lookback + 1
+    float c_low   = low[k]
+    float c_high  = high[k]
+    float c_close = close[k]
+    
+    // Check Bullish Liquidity Sweep (against PDL, Asian Low, London Low, or Confirmed Swing Low)
+    if not phase1_bull_sweep
+        if not na(pdl) and pdl > 0 and c_low <= pdl + sweep_tolerance and c_close > pdl - sweep_tolerance
+            phase1_bull_sweep := true
+        if not na(asian_l) and asian_l > 0 and c_low <= asian_l + sweep_tolerance and c_close > asian_l - sweep_tolerance
+            phase1_bull_sweep := true
+        if not na(london_l) and london_l > 0 and c_low <= london_l + sweep_tolerance and c_close > london_l - sweep_tolerance
+            phase1_bull_sweep := true
+        if not na(last_swing_low) and last_swing_low > 0 and c_low <= last_swing_low + sweep_tolerance and c_close > last_swing_low - sweep_tolerance
+            phase1_bull_sweep := true
+
+    // Check Bearish Liquidity Sweep (against PDH, Asian High, London High, or Confirmed Swing High)
+    if not phase1_bear_sweep
+        if not na(pdh) and pdh > 0 and c_high >= pdh - sweep_tolerance and c_close < pdh + sweep_tolerance
+            phase1_bear_sweep := true
+        if not na(asian_h) and asian_h > 0 and c_high >= asian_h - sweep_tolerance and c_close < asian_h + sweep_tolerance
+            phase1_bear_sweep := true
+        if not na(london_h) and london_h > 0 and c_high >= london_h - sweep_tolerance and c_close < london_h + sweep_tolerance
+            phase1_bear_sweep := true
+        if not na(last_swing_high) and last_swing_high > 0 and c_high >= last_swing_high - sweep_tolerance and c_close < last_swing_high + sweep_tolerance
+            phase1_bear_sweep := true
+
+// Phase 2: Volumetric Anatomy of Signal Candle S (bar [1])
+s_range = range_mid
+s_vol   = mid_vol
+s_body  = body_mid
+s_body_ratio = body_ratio_mid
+
+phase2_bull_valid = (s_range >= pm_atr_mult * atr_val[1]) and (s_vol > vol_sma_prior) and (s_body_ratio >= pm_min_body_ratio) and ((mid_high - mid_close) <= pm_max_wick_ratio * s_range) and (mid_close > mid_open)
+phase2_bear_valid = (s_range >= pm_atr_mult * atr_val[1]) and (s_vol > vol_sma_prior) and (s_body_ratio >= pm_min_body_ratio) and ((mid_close - mid_low) <= pm_max_wick_ratio * s_range) and (mid_close < mid_open)
+
+// Phase 3: Delayed Confirmation Gate C (bar [0])
+retrace_floor_bull = mid_close - pm_max_retrace * s_body
+phase3_bull_valid = (curr_close > mid_open) and (curr_low >= retrace_floor_bull)
+
+retrace_ceil_bear = mid_close + pm_max_retrace * s_body
+phase3_bear_valid = (curr_close < mid_open) and (curr_high <= retrace_ceil_bear)
+
+// Requirement 3C: No opposing volumetric signal on S or C
+bool no_opposing_bull = not is_arrow_down and not is_circle_down
+bool no_opposing_bear = not is_arrow_up and not is_circle_up
+
+// Composite PM Setup Resolution
+is_pm_bullish = is_arrow_up and phase1_bull_sweep and phase2_bull_valid and phase3_bull_valid and no_opposing_bull
+is_pm_bearish = is_arrow_down and phase1_bear_sweep and phase2_bear_valid and phase3_bear_valid and no_opposing_bear
+
+// Order Flow Strength (when PM mode is OFF)
+is_strong_bull_normal = is_arrow_up and phase2_bull_valid
+is_strong_bear_normal = is_arrow_down and phase2_bear_valid
+
+// Resolve colors based on Mode
+color arrow_up_color = na
+color arrow_down_color = na
+
+if visualize_pm_only
+    arrow_up_color   := is_arrow_up   ? (is_pm_bullish ? color_pm_bull : color_weak_arrow) : na
+    arrow_down_color := is_arrow_down ? (is_pm_bearish ? color_pm_bear : color_weak_arrow) : na
+else
+    arrow_up_color   := is_arrow_up   ? (is_strong_bull_normal ? color_strong_bull : color_weak_arrow) : na
+    arrow_down_color := is_arrow_down ? (is_strong_bear_normal ? color_strong_bear : color_weak_arrow) : na
+
+// ==========================================
+// 5. CHART PLOTTING
+// ==========================================
+// Plot Bullish PM Arrow (with "PM" text badge)
+plotshape(is_arrow_up and is_pm_bullish and visualize_pm_only, title="Bullish PM Arrow", style=shape.arrowup, location=location.belowbar, color=color_pm_bull, offset=-1, size=size.small, text="PM")
+
+// Plot Bullish Non-PM Arrow (no text badge)
+plotshape(is_arrow_up and not (is_pm_bullish and visualize_pm_only), title="Bullish Non-PM Arrow", style=shape.arrowup, location=location.belowbar, color=arrow_up_color, offset=-1, size=size.small)
+
+// Plot Bearish PM Arrow (with "PM" text badge)
+plotshape(is_arrow_down and is_pm_bearish and visualize_pm_only, title="Bearish PM Arrow", style=shape.arrowdown, location=location.abovebar, color=color_pm_bear, offset=-1, size=size.small, text="PM")
+
+// Plot Bearish Non-PM Arrow (no text badge)
+plotshape(is_arrow_down and not (is_pm_bearish and visualize_pm_only), title="Bearish Non-PM Arrow", style=shape.arrowdown, location=location.abovebar, color=arrow_down_color, offset=-1, size=size.small)
+
+// Plot Bullish Circle Sweep
+plotshape(is_circle_up, title="Bullish Circle Sweep", style=shape.circle, location=location.belowbar, color=color_bull_circle, offset=-1, size=size.tiny)
+
+// Plot Bearish Circle Sweep
+plotshape(is_circle_down, title="Bearish Circle Sweep", style=shape.circle, location=location.abovebar, color=color_bear_circle, offset=-1, size=size.tiny)

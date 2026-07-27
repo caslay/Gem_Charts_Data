@@ -985,7 +985,7 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
   }, [data, selectedInterval, contextAnchorTimestamp, engineSettings]);
 
   // Hook into live alerts: Triggers Binance WS, performs diffs, fires audio/push alerts
-  const { activeAlerts, clearAlerts, dismissAlert, triggerAlert } = useLiveAlerts(data, fetchData);
+  const { activeAlerts, clearAlerts, dismissAlert, triggerAlert } = useLiveAlerts(data, fetchData, signalAlertsEnabled, signalAlerts);
 
   // ── V6 Naked — always full, unsliced ─────────────────────────────────────
   const downloadV6 = useCallback(() => {

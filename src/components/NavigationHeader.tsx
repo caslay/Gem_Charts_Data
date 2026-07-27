@@ -133,6 +133,15 @@ export function NavigationHeader() {
             >
               COMPOUNDING
             </Link>
+            <Link
+              href="/quant-sandbox"
+              className={`px-3 py-1.5 rounded-full text-[10px] font-black tracking-wider uppercase transition-all duration-300 ${pathname === '/quant-sandbox'
+                ? 'bg-purple-600 text-white shadow-sm shadow-purple-500/25'
+                : 'text-purple-400 hover:text-purple-300 bg-purple-950/40 border border-purple-800/40'
+                }`}
+            >
+              UI SANDBOX
+            </Link>
           </div>
 
           {/* RIGHT SECTION (Awareness & Global Triggers) */}

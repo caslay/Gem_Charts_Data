@@ -6,7 +6,7 @@ import Chart from '@/components/Chart';
 import Sidebar from '@/components/Sidebar';
 import SmartAlertsToast from '@/components/SmartAlertsToast';
 import SettingsModal from '@/components/modals/SettingsModal';
-import { Loader2, Menu, Settings, Shield } from 'lucide-react';
+import { Loader2, Menu, Settings, Shield, ChevronLeft } from 'lucide-react';
 import { useStrategyEvaluator } from '@/hooks/useStrategyEvaluator';
 import TimeframeSwitcher, { Timeframe } from '@/components/TimeframeSwitcher';
 import { LiveTicker } from '@/components/LiveTicker';
@@ -25,16 +25,35 @@ export default function Home() {
     activeAlerts,
     dismissAlert,
     setWsInterval,
-    aiAnalysis
+    aiAnalysis,
+    signalAlertsEnabled,
   } = useMarketDataContext();
 
   const { livePrice } = useMarketDataLiveContext();
 
   const [selectedInterval, setSelectedInterval] = useState<Timeframe>('5m');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSoundSettingsOpen, setIsSoundSettingsOpen] = useState(false);
   const [commandCenterTab, setCommandCenterTab] = useState<'strategy' | 'audio'>('strategy');
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setIsSidebarCollapsed(localStorage.getItem('gem_sidebar_collapsed') === 'true');
+    }
+  }, []);
+
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gem_sidebar_collapsed', String(next));
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+      }
+      return next;
+    });
+  };
 
   // ── Manual Trading States ──────────────────────────────────────────────────
   const [isManualTradingActive, setIsManualTradingActive] = useState(false);
@@ -94,7 +113,7 @@ export default function Home() {
       });
 
       if (res.ok) {
-        if (typeof window !== 'undefined') {
+        if (typeof window !== 'undefined' && signalAlertsEnabled?.PRICING_SHIFT !== false) {
           const audio = new Audio('/sounds/pricing_shift.wav');
           audio.play().catch(() => {});
         }
@@ -233,7 +252,7 @@ export default function Home() {
         });
 
         if (res.ok) {
-          if (typeof window !== 'undefined') {
+          if (typeof window !== 'undefined' && signalAlertsEnabled?.DISPLACEMENT_CONFIRMED !== false) {
             const audio = new Audio('/sounds/flow_state.wav');
             audio.play().catch(() => {});
           }
@@ -264,8 +283,10 @@ export default function Home() {
       setPendingOrders((prev) => [...prev, newPending]);
 
       if (typeof window !== 'undefined') {
-        const audio = new Audio('/sounds/pricing_shift.wav');
-        audio.play().catch(() => {});
+        if (signalAlertsEnabled?.PRICING_SHIFT !== false) {
+          const audio = new Audio('/sounds/pricing_shift.wav');
+          audio.play().catch(() => {});
+        }
         alert(`[${manualOrderType} PLACED] ${manualDirection} order at $${(manualEntryPrice as number).toFixed(2)} is now queued in local memory.`);
       }
 
@@ -471,6 +492,8 @@ export default function Home() {
         isLoading={isLoading}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={toggleSidebarCollapse}
       />
 
       {/* Global Command Center Modal */}
@@ -510,6 +533,7 @@ function PendingOrdersManager({
   fetchBalance: () => Promise<void>;
 }) {
   const { livePrice } = useMarketDataLiveContext();
+  const { signalAlertsEnabled } = useMarketDataContext();
 
   useEffect(() => {
     if (!livePrice || pendingOrders.length === 0) return;
@@ -541,7 +565,7 @@ function PendingOrdersManager({
         });
 
         if (res.ok) {
-          if (typeof window !== 'undefined') {
+          if (typeof window !== 'undefined' && signalAlertsEnabled?.DISPLACEMENT_CONFIRMED !== false) {
             const audio = new Audio('/sounds/flow_state.wav');
             audio.play().catch(() => {});
           }
