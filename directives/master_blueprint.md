@@ -1,8 +1,20 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.47
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.48
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-07-28 (V12.0.47 — Chart Cursor Magnet Snapping & Target Anchor Control Feature)  
+> **Last Updated:** 2026-07-28 (V12.0.48 — Setup Lifecycle Status & Dynamic Target Hit Detection)  
+
+## 🆕 V12.0.48 Changelog — Setup Lifecycle Status & Dynamic Target Hit Detection (Completed)
+
+### 1. Dynamic Setup Status Engine (`src/lib/quantTradeEngine.ts` & `src/components/modals/PotentialTradesModal.tsx`)
+- **Historical Touch & Target Fulfillment Resolution:** Fixed static `PENDING_TOUCH` issue where setups failed to reflect historical candle sweeps and target hits.
+- **Dynamic Status Lifecycle:**
+  - **`TARGET_HIT 🎯`**: Triggered when price has already touched the entry zone (e.g. Bullish FVG dip to $1870.66) AND expanded past TP1 / TP2 (e.g. $1888.46).
+  - **`ACTIVE_WATCH ⚡`**: Triggered when price is currently sitting inside or actively bouncing from the entry zone.
+  - **`INVALIDATED ❌`**: Triggered if price breaks past Stop Loss without reaching targets.
+  - **`PENDING_TOUCH ⏳`**: Reserved strictly for un-entered zones.
+
+---
 
 ## 🆕 V12.0.47 Changelog — Chart Cursor Magnet Snapping & Target Anchor Control Feature (Completed)
 
