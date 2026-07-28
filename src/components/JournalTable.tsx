@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useCallback, memo, useRef, useEffect } from "react";
+import React, { useState, useCallback, useMemo, memo, useRef, useEffect } from "react";
 import { Play, Pause, XCircle, Trash2, Loader2, RefreshCw, AlertTriangle } from "lucide-react";
 import { useMarketDataContext, useMarketDataLiveContext } from "@/context/MarketDataContext";
 
@@ -145,7 +145,9 @@ const ClosedTradeRow = memo(function ClosedTradeRow({
   handleClosePosition,
   setDeleteConfirmId,
   handleDeleteTrade,
-  formatDate
+  formatDate,
+  isSelected = false,
+  onToggleSelect
 }: {
   trade: TradeRecord;
   isLoading: boolean;
@@ -156,6 +158,8 @@ const ClosedTradeRow = memo(function ClosedTradeRow({
   setDeleteConfirmId: (id: string | null) => void;
   handleDeleteTrade: (id: string) => void;
   formatDate: (date: string) => string;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const realizedPnL = (trade as any).realized_pnl !== undefined && (trade as any).realized_pnl !== null
     ? parseFloat(String((trade as any).realized_pnl))
@@ -189,7 +193,15 @@ const ClosedTradeRow = memo(function ClosedTradeRow({
     : "text-muted";
 
   return (
-    <tr className="border-b border-card-border/50 hover:bg-card/25 transition-colors">
+    <tr className={`border-b border-card-border/50 transition-colors ${isSelected ? "bg-accent/15 hover:bg-accent/20" : "hover:bg-card/25"}`}>
+      <td className="py-4 px-3 text-center">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggleSelect && onToggleSelect(trade.id)}
+          className="w-3.5 h-3.5 accent-accent cursor-pointer rounded"
+        />
+      </td>
       <td className="py-4 px-4 md:px-6 font-mono text-[11px] text-muted leading-relaxed">
         <div>O: {formatDate(trade.opened_at || trade.created_at || trade.timestamp)}</div>
         {trade.closed_at && <div className="text-[9px] text-[#ffb4ab]">C: {formatDate(trade.closed_at)}</div>}
@@ -277,7 +289,10 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
   handleDeleteTrade,
   formatDate,
   isBacktest = false,
-  backtestLivePrice
+  backtestLivePrice,
+  backtestCandleTime,
+  isSelected = false,
+  onToggleSelect
 }: {
   trade: TradeRecord;
   isLoading: boolean;
@@ -291,6 +306,8 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
   isBacktest?: boolean;
   backtestLivePrice?: number | null;
   backtestCandleTime?: number | null;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   const liveContext = useMarketDataLiveContext();
   const livePrice = isBacktest ? (backtestLivePrice ?? null) : liveContext.livePrice;
@@ -379,7 +396,9 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
     ? "text-rose-500 font-bold"
     : "text-muted";
 
-  const rowHighlightClass = isTpHit
+  const rowHighlightClass = isSelected
+    ? "bg-accent/15 hover:bg-accent/20"
+    : isTpHit
     ? "animate-exit-glow-green"
     : isSlHit
     ? "animate-exit-glow-red"
@@ -387,6 +406,14 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
 
   return (
     <tr className={`border-b border-card-border/50 transition-colors ${rowHighlightClass} relative`}>
+      <td className="py-4 px-3 text-center">
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={() => onToggleSelect && onToggleSelect(trade.id)}
+          className="w-3.5 h-3.5 accent-accent cursor-pointer rounded"
+        />
+      </td>
       <td className="py-4 px-4 md:px-6 font-mono text-[11px] text-muted leading-relaxed">
         <div>O: {formatDate(trade.opened_at || trade.created_at || trade.timestamp)}</div>
         <div className="text-[9px] text-[#50ffaf]/80">C: RUNNING</div>
@@ -496,7 +523,9 @@ const JournalTableRow = memo(function JournalTableRow({
   formatDate,
   isBacktest,
   backtestLivePrice,
-  backtestCandleTime
+  backtestCandleTime,
+  isSelected = false,
+  onToggleSelect
 }: {
   trade: TradeRecord;
   isLoading: boolean;
@@ -510,6 +539,8 @@ const JournalTableRow = memo(function JournalTableRow({
   isBacktest?: boolean;
   backtestLivePrice?: number | null;
   backtestCandleTime?: number | null;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }) {
   if (trade.status === "CLOSED") {
     return (
@@ -523,6 +554,8 @@ const JournalTableRow = memo(function JournalTableRow({
         setDeleteConfirmId={setDeleteConfirmId}
         handleDeleteTrade={handleDeleteTrade}
         formatDate={formatDate}
+        isSelected={isSelected}
+        onToggleSelect={onToggleSelect}
       />
     );
   }
@@ -541,6 +574,8 @@ const JournalTableRow = memo(function JournalTableRow({
       isBacktest={isBacktest}
       backtestLivePrice={backtestLivePrice}
       backtestCandleTime={backtestCandleTime}
+      isSelected={isSelected}
+      onToggleSelect={onToggleSelect}
     />
   );
 });
@@ -553,6 +588,36 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<'ALL' | 'QUANT' | 'MANUAL' | 'STRATEGY'>('ALL');
+  const [selectedTradeIds, setSelectedTradeIds] = useState<string[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isBulkArchiving, setIsBulkArchiving] = useState(false);
+
+  // Filter trades based on Strategy Origin / Source
+  const filteredTrades = useMemo(() => {
+    return trades.filter((t) => {
+      if (sourceFilter === 'ALL') return true;
+      const strat = (t.strategy_name || '').toLowerCase();
+      if (sourceFilter === 'QUANT') return strat.includes('quant') || strat.includes('set-');
+      if (sourceFilter === 'MANUAL') return strat.includes('manual');
+      if (sourceFilter === 'STRATEGY') return strat.includes('strategy') || (!strat.includes('quant') && !strat.includes('manual'));
+      return true;
+    });
+  }, [trades, sourceFilter]);
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedTradeIds.length === filteredTrades.length && filteredTrades.length > 0) {
+      setSelectedTradeIds([]);
+    } else {
+      setSelectedTradeIds(filteredTrades.map((t) => t.id));
+    }
+  }, [filteredTrades, selectedTradeIds]);
+
+  const toggleSelectTrade = useCallback((id: string) => {
+    setSelectedTradeIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }, []);
 
   // Stateful account tracker to display real persistent balance
   const [account, setAccount] = useState(() => {
@@ -745,6 +810,41 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
     }
   }, [tradesApiUrl, isBacktest]);
 
+  const handleBulkArchive = useCallback(async () => {
+    if (selectedTradeIds.length === 0) return;
+    setIsBulkArchiving(true);
+    try {
+      for (const id of selectedTradeIds) {
+        const trade = trades.find((t) => t.id === id);
+        if (trade && trade.status !== "CLOSED") {
+          await handleClosePosition(id);
+        }
+      }
+      setSelectedTradeIds([]);
+    } catch (err) {
+      console.error("[JOURNAL] Bulk archive error:", err);
+    } finally {
+      setIsBulkArchiving(false);
+    }
+  }, [selectedTradeIds, trades, handleClosePosition]);
+
+  const handleBulkDelete = useCallback(async () => {
+    if (selectedTradeIds.length === 0) return;
+    if (!confirm(`Are you sure you want to purge/delete ${selectedTradeIds.length} selected position(s)?`)) return;
+
+    setIsBulkDeleting(true);
+    try {
+      for (const id of selectedTradeIds) {
+        await handleDeleteTrade(id);
+      }
+      setSelectedTradeIds([]);
+    } catch (err) {
+      console.error("[JOURNAL] Bulk delete error:", err);
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  }, [selectedTradeIds, handleDeleteTrade]);
+
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
@@ -875,10 +975,31 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
       </div>
 
       {/* Table Subheader Control Actions */}
-      <div className="flex items-center justify-between mt-4">
-        <span className="text-[10px] font-bold text-muted uppercase tracking-wider">
-          Audited Positions: {trades.length}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-[10px] font-bold text-muted uppercase tracking-wider">
+            Audited Positions: {filteredTrades.length} / {trades.length}
+          </span>
+
+          {/* Strategy Origin / Source Filter */}
+          <div className="flex items-center gap-1 bg-background/50 border border-card-border p-1 rounded-lg">
+            <span className="text-[9px] font-bold text-muted uppercase px-1.5 font-sans">Source:</span>
+            {(['ALL', 'QUANT', 'MANUAL', 'STRATEGY'] as const).map((src) => (
+              <button
+                key={src}
+                onClick={() => setSourceFilter(src)}
+                className={`px-2.5 py-1 text-[9px] font-mono font-bold uppercase rounded-md transition-all cursor-pointer ${
+                  sourceFilter === src
+                    ? 'bg-accent text-accent-foreground shadow-sm'
+                    : 'text-muted hover:text-foreground'
+                }`}
+              >
+                {src === 'ALL' ? 'All' : src === 'QUANT' ? 'Quant Setups 🤖' : src === 'MANUAL' ? 'Manual 🎯' : 'Strategy 📈'}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <button
           onClick={refreshTrades}
           disabled={isRefreshing}
@@ -893,12 +1014,57 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
         </button>
       </div>
 
+      {/* Bulk Action Bar Banner */}
+      {selectedTradeIds.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between bg-accent/10 border border-accent/30 p-2.5 rounded-xl animate-in fade-in duration-200 text-xs gap-3">
+          <div className="flex items-center gap-2 font-mono font-bold text-accent">
+            <span className="w-2 h-2 rounded-full bg-accent animate-ping" />
+            <span>{selectedTradeIds.length} position(s) selected</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleBulkArchive}
+              disabled={isBulkArchiving}
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[9px] font-bold uppercase rounded-lg shadow-sm flex items-center gap-1 cursor-pointer disabled:opacity-50"
+            >
+              {isBulkArchiving ? <Loader2 className="w-3 h-3 animate-spin" /> : "📁"}
+              <span>Archive / Close Selected ({selectedTradeIds.length})</span>
+            </button>
+
+            <button
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-mono text-[9px] font-bold uppercase rounded-lg shadow-sm flex items-center gap-1 cursor-pointer disabled:opacity-50"
+            >
+              {isBulkDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+              <span>Purge / Delete Selected ({selectedTradeIds.length})</span>
+            </button>
+
+            <button
+              onClick={() => setSelectedTradeIds([])}
+              className="px-2.5 py-1.5 bg-card hover:bg-card-border/50 text-muted border border-card-border font-mono text-[9px] font-bold uppercase rounded-lg cursor-pointer"
+            >
+              Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Glassmorphism Data Table Wrapper */}
       <div className="w-full glass-panel overflow-hidden relative border border-card-border rounded-xl">
         <div className="overflow-x-auto min-w-full">
           <table className="w-full border-collapse text-left text-xs text-foreground">
             <thead>
               <tr className="border-b border-card-border bg-card/45 text-[9px] font-bold uppercase tracking-widest text-muted">
+                <th className="py-4 px-3 w-10 text-center">
+                  <input
+                    type="checkbox"
+                    checked={filteredTrades.length > 0 && selectedTradeIds.length === filteredTrades.length}
+                    onChange={toggleSelectAll}
+                    className="w-3.5 h-3.5 accent-accent cursor-pointer rounded"
+                    title="Select / Deselect All Visible Trades"
+                  />
+                </th>
                 <th className="py-4 px-4 md:px-6">Timestamp (UTC+3)</th>
                 <th className="py-4 px-4">Asset</th>
                 <th className="py-4 px-4">Direction</th>
@@ -914,14 +1080,14 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
             </thead>
             <tbody>
               {/* Dynamic Interactive Rows */}
-              {trades.length === 0 ? (
+              {filteredTrades.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-8 px-4 text-center font-mono text-[10px] text-muted uppercase tracking-wider leading-relaxed">
-                    No active positions tracked in the ledger
+                  <td colSpan={12} className="py-8 px-4 text-center font-mono text-[10px] text-muted uppercase tracking-wider leading-relaxed">
+                    No active positions matching source filter [{sourceFilter}]
                   </td>
                 </tr>
               ) : (
-                trades.map((trade) => (
+                filteredTrades.map((trade: TradeRecord) => (
                   <JournalTableRow
                     key={trade.id}
                     trade={trade}
@@ -936,6 +1102,8 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
                     isBacktest={isBacktest}
                     backtestLivePrice={backtestLivePrice}
                     backtestCandleTime={backtestCandleTime}
+                    isSelected={selectedTradeIds.includes(trade.id)}
+                    onToggleSelect={toggleSelectTrade}
                   />
                 ))
               )}
