@@ -1,8 +1,35 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.48
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.50
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-07-28 (V12.0.48 — Setup Lifecycle Status & Dynamic Target Hit Detection)  
+> **Last Updated:** 2026-07-28 (V12.0.50 — Trading Journal Multi-Select Checkboxes & Bulk Actions Feature)  
+
+## 🆕 V12.0.50 Changelog — Trading Journal Multi-Select Checkboxes & Bulk Actions Feature (Completed)
+
+### 1. Multi-Select Row Checkboxes (`src/components/JournalTable.tsx`)
+- **Row & Master Header Checkboxes:** Integrated master `Select All / Deselect All` checkbox in `<thead>` and individual row selection checkboxes in both `ClosedTradeRow` and `ActiveTradeRow`.
+- **Selected Row Highlight:** Styled selected rows with active high-contrast accent highlight (`bg-accent/15`).
+
+### 2. Bulk Operations Action Bar (`src/components/JournalTable.tsx`)
+- **Bulk Action Banner:** Displays floating action bar when 1 or more positions are selected (`N position(s) selected`).
+- **`[ 📁 Archive / Close Selected ]`**: Iteratively closes active positions (`status: CLOSED`) and updates persistent account balance.
+- **`[ 🗑️ Purge / Delete Selected ]`**: Surgical bulk row deletion with confirmation modal.
+- **`[ Clear Selection ]`**: Instant selection reset button.
+
+---
+
+## 🆕 V12.0.49 Changelog — Quant Auto-Trade Execution & Journal Origin Filter Feature (Completed)
+
+### 1. Direct Quant Auto-Trade Execution (`src/components/modals/PotentialTradesModal.tsx`)
+- **One-Click Auto-Open Position:** Added `handleExecuteTrade(setup)` to post setup parameters directly to `/api/journal` with `strategy_name = "Quant Setup (SET-01)"`.
+- **Live Sync Event Broadcast:** Dispatches `trades-refresh` event to update Trading Journal and HUD header instantly without page refresh.
+- **Table & Inspector Triggers:** Added `[ 🚀 Execute ]` buttons in setup table rows and in the Detailed Execution Inspector card with loading and success feedback.
+
+### 2. Trading Journal Source / Origin Filtering (`src/components/JournalTable.tsx`)
+- **Strategy Origin Filter Pill Bar:** Added `sourceFilter` state with categories (`All`, `Quant Setups 🤖`, `Manual 🎯`, `Strategy 📈`).
+- **Dynamic Table Row Filtering:** Filters positions by strategy name origin.
+
+---
 
 ## 🆕 V12.0.48 Changelog — Setup Lifecycle Status & Dynamic Target Hit Detection (Completed)
 

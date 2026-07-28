@@ -14,7 +14,9 @@ import {
   Layers,
   ChevronRight,
   Sparkles,
-  BarChart2
+  BarChart2,
+  Loader2,
+  Play
 } from "lucide-react";
 import { useMarketDataContext } from "@/context/MarketDataContext";
 import { generatePotentialTrades, PotentialTrade } from "@/lib/quantTradeEngine";
@@ -29,6 +31,8 @@ export default function PotentialTradesModal({ isOpen, onClose }: PotentialTrade
   const [filterDirection, setFilterDirection] = useState<"ALL" | "BULLISH" | "BEARISH">("ALL");
   const [selectedSetupId, setSelectedSetupId] = useState<string | null>("SET-01");
   const [copyState, setCopyState] = useState<string | null>(null);
+  const [executingSetupId, setExecutingSetupId] = useState<string | null>(null);
+  const [executedSuccessId, setExecutedSuccessId] = useState<string | null>(null);
 
   const engineSummary = useMemo(() => generatePotentialTrades(data), [data]);
 
@@ -56,6 +60,42 @@ Timestamp: ${new Date().toISOString()}`;
     navigator.clipboard.writeText(text);
     setCopyState(setup.id);
     setTimeout(() => setCopyState(null), 2000);
+  };
+
+  const handleExecuteTrade = async (setup: PotentialTrade) => {
+    setExecutingSetupId(setup.id);
+    const entryMidpoint = (setup.entryMin + setup.entryMax) / 2;
+
+    try {
+      const res = await fetch("/api/journal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: "ETHUSDT",
+          direction: setup.direction === "BULLISH" ? "LONG" : "SHORT",
+          entry_price: entryMidpoint,
+          stop_loss: setup.stopLoss,
+          take_profit: setup.target1,
+          strategy_name: `Quant Setup (${setup.id})`,
+          ai_narrative_summary: `${setup.type}: ${setup.trigger} (${setup.confluence})`,
+        }),
+      });
+
+      if (res.ok) {
+        setExecutedSuccessId(setup.id);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("trades-refresh"));
+        }
+        setTimeout(() => setExecutedSuccessId(null), 2500);
+      } else {
+        const err = await res.json();
+        alert(`Failed to execute trade: ${err.error || res.statusText}`);
+      }
+    } catch (err) {
+      console.error("[POTENTIAL_TRADES] Execution error:", err);
+    } finally {
+      setExecutingSetupId(null);
+    }
   };
 
   return (
@@ -278,7 +318,38 @@ Timestamp: ${new Date().toISOString()}`;
                               {setup.status === "TARGET_HIT" ? "TARGET HIT 🎯" : setup.status.replace("_", " ")}
                             </span>
                           </td>
-                          <td className="px-4 py-3.5 text-right">
+                          <td className="px-4 py-3.5 text-right flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleExecuteTrade(setup);
+                              }}
+                              disabled={executingSetupId === setup.id}
+                              className={`flex items-center gap-1 px-2.5 py-1 text-[9px] font-black uppercase rounded-lg transition-all cursor-pointer ${
+                                executedSuccessId === setup.id
+                                  ? "bg-emerald-500 text-white shadow-sm"
+                                  : executingSetupId === setup.id
+                                  ? "bg-accent/20 text-accent border border-accent/40 cursor-wait"
+                                  : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                              }`}
+                              title="Auto-open position into Trading Journal"
+                            >
+                              {executingSetupId === setup.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : executedSuccessId === setup.id ? (
+                                <Check className="w-3 h-3 text-white" />
+                              ) : (
+                                <Play className="w-3 h-3" />
+                              )}
+                              <span>
+                                {executingSetupId === setup.id
+                                  ? "Opening..."
+                                  : executedSuccessId === setup.id
+                                  ? "Opened!"
+                                  : "Execute"}
+                              </span>
+                            </button>
+
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -313,13 +384,40 @@ Timestamp: ${new Date().toISOString()}`;
                     Detailed Execution Inspector — [{selectedSetup.id}: {selectedSetup.type}]
                   </h4>
                 </div>
-                <button
-                  onClick={() => handleCopySetup(selectedSetup)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-accent-foreground text-[10px] font-black uppercase rounded-lg shadow-sm hover:opacity-90 transition-all cursor-pointer"
-                >
-                  {copyState === selectedSetup.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                  <span>{copyState === selectedSetup.id ? "Copied to Clipboard!" : "Copy Setup Parameters"}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleExecuteTrade(selectedSetup)}
+                    disabled={executingSetupId === selectedSetup.id}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase rounded-lg shadow-sm transition-all cursor-pointer ${
+                      executedSuccessId === selectedSetup.id
+                        ? "bg-emerald-500 text-white"
+                        : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/25"
+                    }`}
+                  >
+                    {executingSetupId === selectedSetup.id ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : executedSuccessId === selectedSetup.id ? (
+                      <Check className="w-3 h-3 text-white" />
+                    ) : (
+                      <Play className="w-3 h-3" />
+                    )}
+                    <span>
+                      {executingSetupId === selectedSetup.id
+                        ? "Executing..."
+                        : executedSuccessId === selectedSetup.id
+                        ? "Trade Executed & Recorded!"
+                        : "Execute & Open Position"}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => handleCopySetup(selectedSetup)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-accent-foreground text-[10px] font-black uppercase rounded-lg shadow-sm hover:opacity-90 transition-all cursor-pointer"
+                  >
+                    {copyState === selectedSetup.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    <span>{copyState === selectedSetup.id ? "Copied!" : "Copy Parameters"}</span>
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
