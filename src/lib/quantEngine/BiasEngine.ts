@@ -6,7 +6,7 @@
  */
 
 export interface BiasEngineParams {
-  true_day_open_0700: number | null;
+  true_day_open_0700?: number | null;
   livePrice: number | null;
   nearest_htf_magnet: { label: string; distance: number } | null;
   activeSwingPOC: number | null;
@@ -15,15 +15,14 @@ export interface BiasEngineParams {
 }
 
 /**
- * Resolves the triple-vector macro daily bias by evaluating the time, structural,
- * and volumetric/liquidation vectors.
+ * Resolves the triple-vector macro daily bias by evaluating structural,
+ * dealing range equilibrium, and volumetric/liquidation vectors.
  *
- * @param params Parameters including day open, live price, nearest magnet, POC, and statuses.
+ * @param params Parameters including live price, nearest magnet, POC, and statuses.
  * @returns 'CONFIRMED_BULLISH' | 'CONFIRMED_BEARISH' | 'NEUTRAL'
  */
 export function resolveTripleVectorBias(params: BiasEngineParams): 'CONFIRMED_BULLISH' | 'CONFIRMED_BEARISH' | 'NEUTRAL' {
   const {
-    true_day_open_0700,
     livePrice,
     nearest_htf_magnet,
     activeSwingPOC,
@@ -32,7 +31,6 @@ export function resolveTripleVectorBias(params: BiasEngineParams): 'CONFIRMED_BU
   } = params;
 
   if (
-    true_day_open_0700 === null ||
     livePrice === null ||
     livePrice === 0 ||
     nearest_htf_magnet === null ||
@@ -41,10 +39,9 @@ export function resolveTripleVectorBias(params: BiasEngineParams): 'CONFIRMED_BU
     return 'NEUTRAL';
   }
 
-  // Vector 1 (Time/AMD): Is current price in a manipulation zone relative to true_day_open_0700?
-  // Bullish: below open (Judas swing buy). Bearish: above open (Judas swing sell).
-  const v1Bullish = livePrice < true_day_open_0700;
-  const v1Bearish = livePrice > true_day_open_0700;
+  // Vector 1 (Pricing Zone / POC): Is current price in Discount relative to activeSwingPOC (Bullish) or Premium (Bearish)?
+  const v1Bullish = livePrice < activeSwingPOC;
+  const v1Bearish = livePrice > activeSwingPOC;
 
   // Vector 2 (Structure): Is the HTF magnet pointing in the anticipated direction?
   // Bullish magnets (above price): PWH, PMH, DAILY_SIBI

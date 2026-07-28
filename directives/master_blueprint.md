@@ -1,8 +1,92 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.50
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.57
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-07-28 (V12.0.50 — Trading Journal Multi-Select Checkboxes & Bulk Actions Feature)  
+> **Last Updated:** 2026-07-28 (V12.0.57 — Deep Audit Fixes: True R:R Ratios, Retested FVG Retention, Replay Lifecycle Isolation)  
+
+## 🆕 V12.0.57 Changelog — Deep Audit Fixes (Completed)
+
+### 1. True Mathematical Risk:Reward Ratios (`src/lib/quantTradeEngine.ts`)
+- **Eliminated Fake R:R Floors:** Removed artificial `Math.max(rr, 1.5)` override so setup R:R ratios represent exact mathematical values.
+
+### 2. Retested FVG Retention (`src/lib/fvgEngine.ts`)
+- **Active Retest Zone Support:** FVGs remain active as trade entry zones while price retests the zone, and are only invalidated if price breaks past `bottom` (for BISI) or `top` (for SIBI).
+
+### 3. Replay-Isolated Setup Lifecycle (`src/lib/quantTradeEngine.ts`, `src/components/modals/BacktestPotentialTradesModal.tsx`)
+- **Replay Memory Isolation:** Added `isBacktest: boolean` mode to bypass live `localStorage` during replay and evaluate setup state strictly on replayed candles after entry touch.
+
+---
+
+## 🆕 V12.0.56 Changelog — Backtest Potential Trades Modal & Replay Execution (Completed)
+
+### 1. Backtest Potential Trades Modal (`src/components/modals/BacktestPotentialTradesModal.tsx`)
+- **Replay Data Isolation:** Consumes active backtest payload (`engine.enrichedPayload`) at the current historical candle timestamp, completely separated from Live HUD WebSockets.
+- **Quality Filters & Telemetry:** Features Replay Price, Institutional Bias, Range Equilibrium, and quality filter pills (`🔥 High Prob`, `🎯 Nearby`, `⚡ Pending Only`, `Show All`).
+
+### 2. Backtest Navigation & Trade Execution (`src/app/backtest/page.tsx`)
+- **`[ ⚡ POTENTIAL TRADES ]` Button:** Added header button to the Backtest control navigation bar.
+- **Backtest Journal Logging:** Executing setups posts trade parameters to `/api/backtest-trades` and updates the Backtest Account balance.
+
+---
+
+## 🆕 V12.0.55 Changelog — AI JSON Parsing SyntaxError Fix (Completed)
+
+### 1. Robust AI JSON Parser Utility (`src/lib/aiJsonParser.ts`)
+- **`extractFirstJsonObject`:** Implemented balanced brace counter (`{...}`) that tracks string literals and escape sequences, extracting the exact first JSON object and ignoring trailing narrative text.
+- **`safeParseAiJson`:** Handles markdown code fences, control character stripping, trailing commas, and fallback extraction cleanly.
+
+### 2. Full System Integration (`src/app/page.tsx`, `src/hooks/useAIAnalysis.ts`, `src/components/Sidebar.tsx`)
+- Replaced fragile `JSON.parse` regex slicing with `safeParseAiJson` across `page.tsx`, `Sidebar.tsx`, and `useAIAnalysis.ts`.
+
+---
+
+## 🆕 V12.0.54 Changelog — 4 Institutional Setup Quality Filters & UI Controls (Completed)
+
+### 1. FVG Overlap Consolidator & Quality Flags (`src/lib/quantTradeEngine.ts`)
+- **Overlap Deduplication:** Merges overlapping 5m and 15m FVGs within 0.35% of each other into single high-confluence cards tagged e.g. `(15m + 5m)`.
+- **Quality & Proximity Flags:** Added `isNearby` ($\le 2\%$ live price distance) and `isHighProbability` ($R:R \ge 1:1.5$ AND $\le 2\%$ distance) boolean attributes to `PotentialTrade` objects.
+
+### 2. Default High-Probability Filter View & Pill Bar (`src/components/modals/PotentialTradesModal.tsx`)
+- **Default High-Probability View:** `PotentialTradesModal` defaults to **`🔥 High Prob (R:R ≥ 1.5)`** so low-reward and far-away setups are hidden by default.
+- **Interactive Control Pills:** Integrated pill controls (`🔥 High Prob`, `🎯 Nearby`, `⚡ Pending Only`, `Show All`) alongside direction filters.
+
+---
+
+## 🆕 V12.0.53 Changelog — FVG Payload Leak Fix & Direct 15m/5m FVG Fallback Scanner (Completed)
+
+### 1. Always-On FVG Payload Assembly (`src/app/api/market-data/route.ts`)
+- **Unrestricted FVG Payload:** Removed `includeFvg ?` gating in `/api/market-data/route.ts` so `active_fvgs` across 5m, 15m, 1h, and 4h timeframes is ALWAYS calculated and delivered in `data_payload` on standard API requests.
+
+### 2. Direct 15m/5m Inline FVG Fallback Scanner (`src/lib/quantTradeEngine.ts`)
+- **Client-Side Inline Detection:** Imported `detectActiveFVGs` and `mapAndConsolidateFVGs` directly into `quantTradeEngine.ts`.
+- **Zero-Latency Fallback:** If `active_fvgs` in the API payload is empty or delayed, `quantTradeEngine.ts` scans `candles_15m` and `candles_5m` directly, ensuring fresh unmitigated 15m FVGs trigger potential trades instantly.
+
+---
+
+## 🆕 V12.0.52 Changelog — Rolling Multi-Setup Scanner & Memory Reset Feature (Completed)
+
+### 1. Dynamic Rolling FVG Setup Queue (`src/lib/quantTradeEngine.ts`)
+- **Multi-Timeframe Active FVG Scanner:** Dynamically scans all active FVGs (`5m`, `15m`, `1h`) in `data?.data_payload?.active_fvgs`.
+- **Sequential Setup Generation:** Spawns rolling setup cards (`SET-01`, `SET-02`, `SET-03`, `SET-04`, `SET-05`, ...) for all active Bullish & Bearish FVGs and Breakout Expansion opportunities.
+- **Continuous Opportunity Stream:** Ensures new setup cards automatically form throughout the trading day as market expansion occurs.
+
+### 2. Manual Setup Memory Reset (`src/components/modals/PotentialTradesModal.tsx`)
+- **`[ 🔄 Reset Setup Memory ]` Button:** Added header button allowing users to clear completed setup history (`gem_quant_setup_history`) on demand.
+
+---
+
+## 🆕 V12.0.51 Changelog — Persistent Quant Setup Memory & Complete True Day Open Deprecation (Completed)
+
+### 1. Persistent Setup Lifecycle Memory (`src/lib/quantTradeEngine.ts`)
+- **Dynamic Live Structure:** Calculates local dealing range swing highs and lows dynamically from active live candle stream (`candles_5m`/`candles_15m`).
+- **Persistent Setup State (`gem_quant_setup_history`):** Saves setup completion status to browser state (`localStorage`). Completed setups (`TARGET_HIT 🎯`, `EXECUTED`, `INVALIDATED ❌`) remain locked across app reloads instead of reverting to `PENDING_TOUCH`.
+
+### 2. Complete Deprecation of True Day Open Across Engine & Telemetry (`src/lib/quantEngine/BiasEngine.ts`, `src/components/modals/PotentialTradesModal.tsx`, `src/app/api/market-data/route.ts`)
+- **Bias Engine Alignment:** Refactored Vector 1 to evaluate pricing state relative to **Volume POC & Range Equilibrium ($EQ$)** instead of arbitrary 07:00 UTC day open.
+- **Telemetry UI Upgrade:** Replaced `TRUE DAY OPEN` box in `PotentialTradesModal` with **`INSTITUTIONAL BIAS`** (`CONFIRMED_BULLISH` / `NEUTRAL`).
+- **API Route:** Pricing state (Premium / Discount) is evaluated strictly against **Dealing Range Equilibrium ($EQ$)**.
+
+---
 
 ## 🆕 V12.0.50 Changelog — Trading Journal Multi-Select Checkboxes & Bulk Actions Feature (Completed)
 

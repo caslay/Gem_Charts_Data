@@ -13,6 +13,7 @@ import { LiveTicker } from '@/components/LiveTicker';
 import DashboardMetrics from '@/components/DashboardMetrics';
 import ManualOrderPanel from '@/components/ManualOrderPanel';
 import { calculateATR } from '@/lib/riskEngine';
+import { safeParseAiJson } from '@/lib/aiJsonParser';
 
 export default function Home() {
   const {
@@ -315,25 +316,10 @@ export default function Home() {
   const currentPrice = data?.data_payload?.candles_5m?.slice(-1)[0]?.c ?? null;
 
   // ── Parse AI analysis response for the HUD Bar ──────────────────────────────
-  let parsedAiResponse: any = null;
+  let parsedAiResponse: any = safeParseAiJson(aiAnalysis);
   let masterBias = 'NEUTRAL';
-  if (aiAnalysis) {
-    try {
-      let candidate = aiAnalysis.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)?.[1];
-      if (!candidate) {
-        const start = aiAnalysis.indexOf('{');
-        const end = aiAnalysis.lastIndexOf('}');
-        if (start !== -1 && end !== -1 && end > start) {
-          candidate = aiAnalysis.slice(start, end + 1);
-        } else {
-          candidate = aiAnalysis;
-        }
-      }
-      parsedAiResponse = JSON.parse(candidate.trim());
-      masterBias = parsedAiResponse?.bias_label || parsedAiResponse?.diagnostics?.master_bias || 'NEUTRAL';
-    } catch (e) {
-      console.error('[Home] Failed to parse AI Analysis JSON for Master Bias:', e);
-    }
+  if (parsedAiResponse) {
+    masterBias = parsedAiResponse?.bias_label || parsedAiResponse?.diagnostics?.master_bias || 'NEUTRAL';
   }
 
   const pricing = data?.ipda_metrics?.pricing_context?.local_dealing_range?.current_status || 'SCANNING';
