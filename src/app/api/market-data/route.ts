@@ -600,25 +600,17 @@ export async function GET(req: Request) {
       target_status = uniqueSweeps.join(" | ") + " / PDH_PDL_PENDING";
     }
 
-    // 5. True Day Open (00:00 UTC Anchor)
+    // 5. Dealing Range Pricing Zone (Premium / Equilibrium / Discount)
     let true_day_open_0700: number | null = null;
-    for (let i = candles15m.length - 1; i >= 0; i--) {
-      const d = new Date(candles15m[i].t);
-      if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
-        true_day_open_0700 = candles15m[i].o;
-        break;
-      }
-    }
-
     let current_pricing = "UNKNOWN";
-    if (true_day_open_0700 !== null && currentLivePrice > 0) {
-      const livePrice = currentLivePrice;
-      if (livePrice > true_day_open_0700) {
+    const rangeEq = (pdh > 0 && pdl > 0) ? (pdh + pdl) / 2 : currentLivePrice;
+    if (rangeEq > 0 && currentLivePrice > 0) {
+      if (currentLivePrice > rangeEq + 0.5) {
         current_pricing = "PREMIUM";
-      } else if (livePrice < true_day_open_0700) {
+      } else if (currentLivePrice < rangeEq - 0.5) {
         current_pricing = "DISCOUNT";
       } else {
-        current_pricing = "FAIR_VALUE";
+        current_pricing = "EQUILIBRIUM";
       }
     }
 
@@ -1115,8 +1107,8 @@ export async function GET(req: Request) {
     };
 
     pricing_context = {
-      vs_daily_open: (true_day_open_0700 !== null)
-        ? (currentLivePrice > true_day_open_0700 ? "ABOVE_OPEN" : "BELOW_OPEN")
+      vs_daily_open: (rangeEq > 0)
+        ? (currentLivePrice > rangeEq ? "ABOVE_EQUILIBRIUM" : "BELOW_EQUILIBRIUM")
         : "UNKNOWN",
       local_dealing_range: localDealingRange,
       ...pricing_context_addon
@@ -1125,7 +1117,6 @@ export async function GET(req: Request) {
     // Resolve Triple-Vector Macro Daily Bias
     const activeSwingPOC = structureAnalysis.dealingRange.profile_metrics?.poc ?? null;
     const resolvedBias = resolveTripleVectorBias({
-      true_day_open_0700,
       livePrice: currentLivePrice,
       nearest_htf_magnet: pricing_context_addon.nearest_htf_magnet,
       activeSwingPOC,
@@ -1133,27 +1124,27 @@ export async function GET(req: Request) {
       target_status
     });
 
-    const fvgGroups = includeFvg ? [
+    const fvgGroups = [
       { fvgs: detectActiveFVGs(candles5m, true), timeframe: '5m' },
       { fvgs: detectActiveFVGs(candles15m, true), timeframe: '15m' },
       { fvgs: detectActiveFVGs(candles1h, true), timeframe: '1h' },
       { fvgs: detectActiveFVGs(candles4h, true), timeframe: '4h' },
-    ] : [];
+    ];
 
-    const allFvgGroups = includeFvg ? [
+    const allFvgGroups = [
       { fvgs: detectActiveFVGs(candles5m, false), timeframe: '5m' },
       { fvgs: detectActiveFVGs(candles15m, false), timeframe: '15m' },
       { fvgs: detectActiveFVGs(candles1h, false), timeframe: '1h' },
       { fvgs: detectActiveFVGs(candles4h, false), timeframe: '4h' },
-    ] : [];
+    ];
 
     if (includeFvg && !isStandardInterval && dynamicVisualCandles && dynamicVisualCandles.length > 0) {
       fvgGroups.push({ fvgs: detectActiveFVGs(dynamicVisualCandles, true), timeframe: visualInterval });
       allFvgGroups.push({ fvgs: detectActiveFVGs(dynamicVisualCandles, false), timeframe: visualInterval });
     }
 
-    const active_fvgs = includeFvg ? mapAndConsolidateFVGs(fvgGroups) : [];
-    const all_fvgs = includeFvg ? mapAndConsolidateFVGs(allFvgGroups) : [];
+    const active_fvgs = mapAndConsolidateFVGs(fvgGroups);
+    const all_fvgs = mapAndConsolidateFVGs(allFvgGroups);
     const pending_fvgs = all_fvgs.filter(fvg => fvg.status === 'PENDING');
     
     const current_time_window = getCurrentKillzone();

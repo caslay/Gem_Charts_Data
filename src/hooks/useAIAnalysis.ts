@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
+import { safeParseAiJson } from '@/lib/aiJsonParser';
 
 export interface UseAIAnalysisReturn {
   aiAnalysis: string | null;
@@ -45,18 +46,7 @@ export function useAIAnalysis(): UseAIAnalysisReturn {
       if (response.ok) {
         setAiAnalysis(result.analysis);
         try {
-          // Robust extraction of bias_signal
-          let candidate = result.analysis.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)?.[1];
-          if (!candidate) {
-            const start = result.analysis.indexOf('{');
-            const end = result.analysis.lastIndexOf('}');
-            if (start !== -1 && end !== -1 && end > start) {
-              candidate = result.analysis.slice(start, end + 1);
-            } else {
-              candidate = result.analysis;
-            }
-          }
-          const parsed = JSON.parse(candidate.trim());
+          const parsed = safeParseAiJson(result.analysis);
           if (parsed && parsed.bias_signal !== undefined) {
             setAiBias(Number(parsed.bias_signal));
           }

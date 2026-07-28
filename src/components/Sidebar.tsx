@@ -2,6 +2,7 @@
 
 import { useState, memo } from 'react';
 import { SYSTEM_VERSION } from '@/lib/version';
+import { safeParseAiJson } from '@/lib/aiJsonParser';
 import {
   DownloadCloud,
   TrendingUp,
@@ -172,18 +173,7 @@ const Sidebar = memo(function Sidebar({
 
   if (aiAnalysis) {
     try {
-      // Robust JSON extraction
-      let candidate = aiAnalysis.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)?.[1];
-      if (!candidate) {
-        const start = aiAnalysis.indexOf('{');
-        const end = aiAnalysis.lastIndexOf('}');
-        if (start !== -1 && end !== -1 && end > start) {
-          candidate = aiAnalysis.slice(start, end + 1);
-        } else {
-          candidate = aiAnalysis;
-        }
-      }
-      parsedAiResponse = JSON.parse(candidate.trim());
+      parsedAiResponse = safeParseAiJson(aiAnalysis);
 
       // Support BOTH old hud_display format and new V8.2 diagnostics/execution format
       if (parsedAiResponse?.hud_display) {

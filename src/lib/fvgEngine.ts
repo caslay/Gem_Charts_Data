@@ -44,11 +44,13 @@ export function detectActiveFVGs(candles: Candle[], onlyClosed: boolean = true) 
       // SIBI: mitigated if future wick pokes INTO the gap (future.h >= bottom)
       for (let j = i + 3; j < candles.length; j++) {
         const future = candles[j];
-        if (type === 'BISI' && future.l <= top) {
+        // BISI: invalidated if price breaks below the FVG bottom
+        if (type === 'BISI' && future.l < bottom) {
           isMitigated = true;
           break;
         }
-        if (type === 'SIBI' && future.h >= bottom) {
+        // SIBI: invalidated if price breaks above the FVG top
+        if (type === 'SIBI' && future.h > top) {
           isMitigated = true;
           break;
         }

@@ -24,6 +24,8 @@ import SettingsModal from '@/components/modals/SettingsModal';
 import BacktestSidebar from './BacktestSidebar';
 import ManualOrderPanel from '@/components/ManualOrderPanel';
 import { calculateATR } from '@/lib/riskEngine';
+import BacktestPotentialTradesModal from '@/components/modals/BacktestPotentialTradesModal';
+import type { PotentialTrade } from '@/lib/quantTradeEngine';
 
 
 // ─── Stat badge ──────────────────────────────────────────────────────────────
@@ -56,6 +58,7 @@ export default function BacktestPage() {
   const [isSoundSettingsOpen, setIsSoundSettingsOpen] = useState(false);
   const [commandCenterTab, setCommandCenterTab] = useState<'strategy' | 'audio'>('strategy');
   const [isTfDropdownOpen, setIsTfDropdownOpen] = useState(false);
+  const [isPotentialTradesOpen, setIsPotentialTradesOpen] = useState(false);
 
   const { signalAlertsEnabled } = useMarketDataContext();
 
@@ -450,6 +453,44 @@ export default function BacktestPage() {
     }
   };
 
+  const handleExecuteBacktestTrade = async (setup: PotentialTrade) => {
+    const entryPrice = parseFloat(((setup.entryMin + setup.entryMax) / 2).toFixed(2));
+    const direction = setup.direction === 'BULLISH' ? 'LONG' : 'SHORT';
+    const lastCandle = (engine.enrichedPayload?.data_payload as any)?.candles_5m?.slice(-1)[0];
+
+    try {
+      const res = await fetch('/api/backtest-trades', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbol: 'ETHUSDT',
+          direction,
+          entry_price: entryPrice,
+          stop_loss: setup.stopLoss,
+          take_profit: setup.target1,
+          strategy_name: `Quant Setup (${setup.id})`,
+          notes: setup.confluence,
+          status: 'OPEN',
+          created_at: lastCandle ? new Date(lastCandle.t).toISOString() : new Date().toISOString(),
+        }),
+      });
+
+      if (res.ok) {
+        if (typeof window !== 'undefined') {
+          const audio = new Audio('/sounds/pricing_shift.wav');
+          audio.play().catch(() => {});
+          window.dispatchEvent(new Event('backtest-trades-refresh'));
+        }
+        fetchBacktestTrades();
+      } else {
+        const err = await res.json();
+        alert(`Failed to execute backtest setup: ${err.error || res.statusText}`);
+      }
+    } catch (err) {
+      console.error('[Backtest] Failed to execute setup:', err);
+    }
+  };
+
   const handleUpdateBacktestTradeLevels = async (tradeId: string, tp: number | null, sl: number | null) => {
     try {
       const res = await fetch('/api/backtest-trades', {
@@ -648,6 +689,16 @@ export default function BacktestPage() {
           >
             <Settings className="w-3.5 h-3.5 text-accent" />
             <span className="hidden sm:inline">[ COMMAND CENTER ]</span>
+          </button>
+
+          {/* Potential Trades Modal Trigger */}
+          <button
+            onClick={() => setIsPotentialTradesOpen(true)}
+            className="bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 px-3.5 py-2 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm"
+            title="Open Replay Potential Trades Modal"
+          >
+            <Zap className="w-3.5 h-3.5 text-purple-400" />
+            <span>[ POTENTIAL TRADES ]</span>
           </button>
 
           {/* Manual Trading Toggle */}
@@ -1171,6 +1222,14 @@ export default function BacktestPage() {
 
       {/* Backtest Toast alerts */}
       <SmartAlertsToast activeAlerts={activeAlerts} dismissAlert={dismissAlert} />
+
+      {/* Backtest Potential Trades Modal */}
+      <BacktestPotentialTradesModal
+        isOpen={isPotentialTradesOpen}
+        onClose={() => setIsPotentialTradesOpen(false)}
+        currentData={engine.enrichedPayload as unknown as MarketDataPayload}
+        onExecuteTrade={handleExecuteBacktestTrade}
+      />
 
       {/* Global Command Center Modal */}
       <SettingsModal
