@@ -264,14 +264,18 @@ Timestamp: ${new Date().toISOString()}`;
                           <td className="px-4 py-3.5">
                             <span
                               className={`px-2 py-0.5 text-[8px] font-black tracking-wider uppercase rounded ${
-                                setup.status === "ACTIVE_WATCH"
-                                  ? "bg-emerald-500 text-white shadow-sm"
+                                setup.status === "TARGET_HIT"
+                                  ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 animate-pulse"
+                                  : setup.status === "ACTIVE_WATCH"
+                                  ? "bg-cyan-500 text-white shadow-sm"
                                   : setup.status === "CONFIRMED"
                                   ? "bg-purple-600 text-white"
+                                  : setup.status === "INVALIDATED"
+                                  ? "bg-rose-500/20 text-rose-400 border border-rose-500/40"
                                   : "bg-card text-muted border border-card-border"
                               }`}
                             >
-                              {setup.status.replace("_", " ")}
+                              {setup.status === "TARGET_HIT" ? "TARGET HIT 🎯" : setup.status.replace("_", " ")}
                             </span>
                           </td>
                           <td className="px-4 py-3.5 text-right">

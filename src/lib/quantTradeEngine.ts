@@ -12,7 +12,7 @@ export interface PotentialTrade {
   target2: number;
   rrRatio: number;
   confluence: string;
-  status: "ACTIVE_WATCH" | "PENDING_TOUCH" | "CONFIRMED" | "WAITING";
+  status: "ACTIVE_WATCH" | "PENDING_TOUCH" | "CONFIRMED" | "WAITING" | "TARGET_HIT" | "INVALIDATED";
 }
 
 export interface TradeEngineSummary {
@@ -52,6 +52,16 @@ export function generatePotentialTrades(data: MarketDataPayload | null): TradeEn
 
   const sponsorshipStatus = data?.ipda_metrics?.order_flow_engine?.displacement_sponsorship?.status || "ACTIVE_BULLISH";
 
+  // Extract recent candle extremes for historical touch & target validation
+  const candles5m = data?.data_payload?.candles_5m || [];
+  const recentCandles = candles5m.slice(-30);
+  const lowestRecent = recentCandles.length > 0
+    ? Math.min(...recentCandles.map((c: any) => (typeof c.l === 'number' ? c.l : typeof c.low === 'number' ? c.low : c.c)))
+    : currentPrice;
+  const highestRecent = recentCandles.length > 0
+    ? Math.max(...recentCandles.map((c: any) => (typeof c.h === 'number' ? c.h : typeof c.high === 'number' ? c.high : c.c)))
+    : currentPrice;
+
   const setups: PotentialTrade[] = [];
 
   // ── 1. Long Setup: Discount FVG Re-entry ─────────────────────────────────
@@ -63,6 +73,22 @@ export function generatePotentialTrades(data: MarketDataPayload | null): TradeEn
   const longRisk = (longEntryMin + longEntryMax) / 2 - longSL;
   const longReward = longTP2 - (longEntryMin + longEntryMax) / 2;
   const longRR = longRisk > 0 ? parseFloat((longReward / longRisk).toFixed(2)) : 3.2;
+
+  // Determine dynamic setup lifecycle status
+  let longStatus: "ACTIVE_WATCH" | "PENDING_TOUCH" | "CONFIRMED" | "WAITING" | "TARGET_HIT" | "INVALIDATED" = "PENDING_TOUCH";
+  const touchedLongEntry = lowestRecent <= longEntryMax + 0.5;
+
+  if (touchedLongEntry) {
+    if (highestRecent >= longTP1 || currentPrice >= longTP1) {
+      longStatus = "TARGET_HIT";
+    } else if (currentPrice < longSL) {
+      longStatus = "INVALIDATED";
+    } else {
+      longStatus = "ACTIVE_WATCH";
+    }
+  } else if (currentPrice <= longEntryMax && currentPrice >= longEntryMin) {
+    longStatus = "ACTIVE_WATCH";
+  }
 
   setups.push({
     id: "SET-01",
@@ -76,7 +102,7 @@ export function generatePotentialTrades(data: MarketDataPayload | null): TradeEn
     target2: parseFloat(longTP2.toFixed(2)),
     rrRatio: Math.max(longRR, 1.5),
     confluence: "SSL Sweep @ " + swingLow.toFixed(2) + " + VSR Volume Sponsorship + Bullish FVG Retest",
-    status: currentPrice <= longEntryMax && currentPrice >= longEntryMin ? "ACTIVE_WATCH" : "PENDING_TOUCH",
+    status: longStatus,
   });
 
   // ── 2. Short Setup: Premium FVG Rejection ───────────────────────────────
@@ -88,6 +114,21 @@ export function generatePotentialTrades(data: MarketDataPayload | null): TradeEn
   const shortRisk = shortSL - (shortEntryMin + shortEntryMax) / 2;
   const shortReward = (shortEntryMin + shortEntryMax) / 2 - shortTP2;
   const shortRR = shortRisk > 0 ? parseFloat((shortReward / shortRisk).toFixed(2)) : 3.5;
+
+  let shortStatus: "ACTIVE_WATCH" | "PENDING_TOUCH" | "CONFIRMED" | "WAITING" | "TARGET_HIT" | "INVALIDATED" = "PENDING_TOUCH";
+  const touchedShortEntry = highestRecent >= shortEntryMin - 0.5;
+
+  if (touchedShortEntry) {
+    if (lowestRecent <= shortTP1 || currentPrice <= shortTP1) {
+      shortStatus = "TARGET_HIT";
+    } else if (currentPrice > shortSL) {
+      shortStatus = "INVALIDATED";
+    } else {
+      shortStatus = "ACTIVE_WATCH";
+    }
+  } else if (currentPrice >= shortEntryMin && currentPrice <= shortEntryMax) {
+    shortStatus = "ACTIVE_WATCH";
+  }
 
   setups.push({
     id: "SET-02",
@@ -101,7 +142,7 @@ export function generatePotentialTrades(data: MarketDataPayload | null): TradeEn
     target2: parseFloat(shortTP2.toFixed(2)),
     rrRatio: Math.max(shortRR, 1.5),
     confluence: "Confluence with True Day Open (" + trueDayOpen.toFixed(2) + ") + Premium Dealing Zone",
-    status: currentPrice >= shortEntryMin && currentPrice <= shortEntryMax ? "ACTIVE_WATCH" : "PENDING_TOUCH",
+    status: shortStatus,
   });
 
   // ── 3. Long Setup: BSL Breakout Expansion ────────────────────────────────
@@ -112,6 +153,13 @@ export function generatePotentialTrades(data: MarketDataPayload | null): TradeEn
   const breakoutRisk = breakoutEntry - breakoutSL;
   const breakoutReward = breakoutTP2 - breakoutEntry;
   const breakoutRR = breakoutRisk > 0 ? parseFloat((breakoutReward / breakoutRisk).toFixed(2)) : 3.0;
+
+  let breakoutStatus: "ACTIVE_WATCH" | "PENDING_TOUCH" | "CONFIRMED" | "WAITING" | "TARGET_HIT" | "INVALIDATED" = "WAITING";
+  if (currentPrice >= breakoutTP1 || highestRecent >= breakoutTP1) {
+    breakoutStatus = "TARGET_HIT";
+  } else if (currentPrice > swingHigh) {
+    breakoutStatus = "CONFIRMED";
+  }
 
   setups.push({
     id: "SET-03",
