@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, SeriesMarker, createSeriesMarkers, ISeriesMarkersPluginApi, LineStyle } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, SeriesMarker, createSeriesMarkers, ISeriesMarkersPluginApi, LineStyle, CrosshairMode } from 'lightweight-charts';
 import { Candle, MarketDataPayload } from '@/hooks/useMarketData';
 import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
 import type { LiveCandle } from '@/hooks/useBinanceWS';
@@ -154,6 +154,71 @@ export default function Chart({
     close: number;
     volume: number;
   } | null>(null);
+
+  // Magnet Cursor Snapping States (Disabled by default per user request)
+  const [isSnapEnabled, setIsSnapEnabled] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('gem_chart_snap_enabled');
+      if (saved !== null) return saved === 'true';
+    }
+    return false; // Disabled by default
+  });
+
+  const [snapTarget, setSnapTarget] = useState<'CLOSE' | 'HIGH' | 'LOW' | 'OPEN' | 'NEAREST'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('gem_chart_snap_target');
+      if (saved && ['CLOSE', 'HIGH', 'LOW', 'OPEN', 'NEAREST'].includes(saved)) {
+        return saved as any;
+      }
+    }
+    return 'CLOSE';
+  });
+
+  const [snappedPrice, setSnappedPrice] = useState<number | null>(null);
+  const [snapNotification, setSnapNotification] = useState<string | null>(null);
+  const [isSnapDropdownOpen, setIsSnapDropdownOpen] = useState(false);
+
+  // Keyboard shortcut effect for Magnet Snapping (Key: 'S')
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          (activeEl as HTMLElement).isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        setIsSnapEnabled((prev) => {
+          const next = !prev;
+          try {
+            localStorage.setItem('gem_chart_snap_enabled', String(next));
+          } catch {}
+          setSnapNotification(next ? `Magnet Snap: ON (${snapTarget})` : 'Magnet Snap: OFF');
+          setTimeout(() => setSnapNotification(null), 1800);
+          return next;
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [snapTarget]);
+
+  // Sync crosshair mode options on chartRef when isSnapEnabled changes
+  useEffect(() => {
+    if (chartRef.current) {
+      chartRef.current.applyOptions({
+        crosshair: {
+          mode: isSnapEnabled ? CrosshairMode.Magnet : CrosshairMode.Normal,
+        },
+      });
+    }
+  }, [isSnapEnabled]);
 
   // Unified modal overlay triggers
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -1003,6 +1068,7 @@ export default function Chart({
         borderColor: 'rgba(74, 68, 87, 0.5)',
       },
       crosshair: {
+        mode: isSnapEnabled ? CrosshairMode.Magnet : CrosshairMode.Normal,
         vertLine: {
           color: 'rgba(74, 68, 87, 0.5)',
           width: 1,
@@ -1042,6 +1108,25 @@ export default function Chart({
           const low = seriesData.low !== undefined ? seriesData.low : seriesData.close;
           const close = seriesData.close;
 
+          // Target anchor calculation for magnet snapping
+          let calculatedSnap = close;
+          if (snapTarget === 'HIGH') calculatedSnap = high;
+          else if (snapTarget === 'LOW') calculatedSnap = low;
+          else if (snapTarget === 'OPEN') calculatedSnap = open;
+          else if (snapTarget === 'CLOSE') calculatedSnap = close;
+          else if (snapTarget === 'NEAREST') {
+            if (param.point && candlestickSeries) {
+              const yPrice = candlestickSeries.coordinateToPrice(param.point.y);
+              if (yPrice !== null) {
+                const candidates = [open, high, low, close];
+                calculatedSnap = candidates.reduce((prev, curr) =>
+                  Math.abs(curr - yPrice) < Math.abs(prev - yPrice) ? curr : prev
+                );
+              }
+            }
+          }
+          setSnappedPrice(calculatedSnap);
+
           // Look up volume from liveCandle or historical data
           let volume = 0;
           const hoverTime = Number(param.time);
@@ -1074,6 +1159,7 @@ export default function Chart({
       }
 
       cursorTimeRef.current = null;
+      setSnappedPrice(null);
       if (prevHovered !== null) {
         prevHovered = null;
         setHoveredCandle(null);
@@ -2063,6 +2149,84 @@ export default function Chart({
               </div>
             </div>
           )}
+
+          {/* Magnet Snapping Control Pill & Target Dropdown */}
+          <div className="relative flex items-center gap-1 pl-2 border-l border-[#4a4457]/30 pointer-events-auto">
+            <button
+              onClick={() => {
+                const next = !isSnapEnabled;
+                setIsSnapEnabled(next);
+                try {
+                  localStorage.setItem('gem_chart_snap_enabled', String(next));
+                } catch {}
+                setSnapNotification(next ? `Magnet Snap: ON (${snapTarget})` : 'Magnet Snap: OFF');
+                setTimeout(() => setSnapNotification(null), 1800);
+              }}
+              className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-black uppercase transition-all flex items-center gap-1 cursor-pointer ${
+                isSnapEnabled
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
+                  : 'bg-card-border/20 text-muted hover:text-foreground border border-card-border/40'
+              }`}
+              title="Toggle Magnet Snapping (HotKey: 'S')"
+            >
+              <span>🧲 {isSnapEnabled ? `SNAP: ${snapTarget}` : 'SNAP: OFF'}</span>
+            </button>
+
+            <button
+              onClick={() => setIsSnapDropdownOpen((prev) => !prev)}
+              className="px-1 py-0.5 rounded text-[8px] font-mono font-bold text-muted hover:text-foreground bg-card-border/20 border border-card-border/40 cursor-pointer"
+              title="Change Snap Target (Close, High, Low, Open, Nearest)"
+            >
+              ▾
+            </button>
+
+            {isSnapDropdownOpen && (
+              <div className="absolute top-7 left-0 z-50 bg-[#141416] border border-[#4a4457]/50 rounded-lg p-1 shadow-2xl flex flex-col gap-0.5 min-w-[130px] font-mono text-[9px]">
+                {(['CLOSE', 'HIGH', 'LOW', 'OPEN', 'NEAREST'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => {
+                      setSnapTarget(t);
+                      try {
+                        localStorage.setItem('gem_chart_snap_target', t);
+                      } catch {}
+                      setIsSnapDropdownOpen(false);
+                      if (!isSnapEnabled) {
+                        setIsSnapEnabled(true);
+                        try {
+                          localStorage.setItem('gem_chart_snap_enabled', 'true');
+                        } catch {}
+                      }
+                      setSnapNotification(`Magnet Target: ${t}`);
+                      setTimeout(() => setSnapNotification(null), 1800);
+                    }}
+                    className={`px-2 py-1 text-left rounded font-bold transition-all cursor-pointer ${
+                      snapTarget === t && isSnapEnabled
+                        ? 'bg-emerald-500/20 text-emerald-400 font-black'
+                        : 'text-muted hover:text-foreground hover:bg-card-border/20'
+                    }`}
+                  >
+                    Snap to {t}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Snapped Price Display */}
+          {isSnapEnabled && snappedPrice !== null && (
+            <div className="flex items-center gap-1 pl-2 border-l border-[#4a4457]/30">
+              <span className="text-emerald-400 font-bold">SNAPPED:</span>
+              <span className="text-emerald-300 font-mono font-black">${snappedPrice.toFixed(2)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Floating Magnet Notification Toast */}
+      {snapNotification && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 bg-[#141416]/95 border border-emerald-500/50 text-emerald-400 text-xs font-mono font-black uppercase tracking-wider rounded-lg shadow-2xl backdrop-blur-md animate-[fadeIn_0.15s_ease-out]">
+          🧲 {snapNotification}
         </div>
       )}
 

@@ -23,6 +23,7 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import HudModal from './modals/HudModal';
+import PotentialTradesModal from './modals/PotentialTradesModal';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
 import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 import { calculateATR } from '@/lib/riskEngine';
@@ -145,6 +146,7 @@ const Sidebar = memo(function Sidebar({
   const { isAnalyzing, aiAnalysis, triggerAiAnalysisScan, wsInterval, structureState, themeSettings } = useMarketDataContext();
   const [isJsonDrawerOpen, setIsJsonDrawerOpen] = useState(false);
   const [isHudModalOpen, setIsHudModalOpen] = useState(false);
+  const [isTradesModalOpen, setIsTradesModalOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
 
   // Inner cards collapsible states (all open by default)
@@ -852,7 +854,7 @@ const Sidebar = memo(function Sidebar({
                     )}
                   </div>
 
-                  <div className="p-3 bg-card/45 border-t border-card-border shrink-0">
+                  <div className="p-3 bg-card/45 border-t border-card-border shrink-0 flex flex-col gap-2">
                     <button
                       onClick={handleLiveSynthesis}
                       disabled={isAnalyzing || !data}
@@ -869,6 +871,13 @@ const Sidebar = memo(function Sidebar({
                           <span>Synthesize Live Data</span>
                         </>
                       )}
+                    </button>
+                    <button
+                      onClick={() => setIsTradesModalOpen(true)}
+                      className="w-full py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer rounded-full"
+                    >
+                      <BarChart3 size={11} />
+                      <span>Potential Trades Table</span>
                     </button>
                   </div>
                 </div>
@@ -981,6 +990,11 @@ const Sidebar = memo(function Sidebar({
         isAnalyzing={isAnalyzing}
         onSynthesize={handleLiveSynthesis}
         copyText={data ? AI_PROMPT_PREFIX + JSON.stringify(slicePayloadByLookback(data, counts), null, 2) : ''}
+      />
+
+      <PotentialTradesModal
+        isOpen={isTradesModalOpen}
+        onClose={() => setIsTradesModalOpen(false)}
       />
     </>
   );

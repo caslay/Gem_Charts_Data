@@ -1,8 +1,49 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.43
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.47
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-07-27 (V12.0.43 — Fixed JSX Syntax Error in Macro Liquidity Card)  
+> **Last Updated:** 2026-07-28 (V12.0.47 — Chart Cursor Magnet Snapping & Target Anchor Control Feature)  
+
+## 🆕 V12.0.47 Changelog — Chart Cursor Magnet Snapping & Target Anchor Control Feature (Completed)
+
+### 1. Chart Snapping Defaults & Controls (`src/components/Chart.tsx`)
+- **Disabled Snapping by Default:** Configured `crosshair.mode` in Lightweight Charts to default to `CrosshairMode.Normal` (free cursor movement with zero auto-snapping).
+- **Keyboard Shortcut Toggle (`S` Key):** Implemented global `S` hotkey event listener to toggle magnet snapping ON/OFF seamlessly with floating notification toast (`[ Magnet Snap: ON/OFF ]`).
+- **Configurable Snap Target Anchors (`CLOSE`, `HIGH`, `LOW`, `OPEN`, `NEAREST`):** Added snap anchor calculation logic and a dropdown selector in the top-left HUD legend allowing users to choose what candle price to snap to.
+- **LocalStorage Persistence:** Saved `gem_chart_snap_enabled` and `gem_chart_snap_target` preferences across sessions.
+
+---
+
+## 🆕 V12.0.46 Changelog — Quant Potential Trades & Market Context Modal Feature (Completed)
+
+### 1. Pure Quantitative Trade Engine (`src/lib/quantTradeEngine.ts`)
+- **Deterministic Trade Calculator:** Ingests live `MarketDataPayload` and evaluates active dealing range ($EQ$), FVGs, BSL/SSL liquidity magnets, and volumetric sponsorship to dynamically generate high-probability trade setups (Discount FVG Re-entry, Premium FVG Rejection, BSL Breakout Expansion, SMT Trap Reversal).
+- **Exact Risk/Reward & Targets:** Calculates precise entry boundaries, structural Stop Loss levels, TP1 (Local liquidity), TP2 (Macro magnet), and Risk:Reward ratios.
+
+### 2. High-Contrast Interactive Modal (`src/components/modals/PotentialTradesModal.tsx`)
+- **Telemetry Bar & Market State:** Displays Live Price, True Day Open baseline, Equilibrium ($EQ$), Pricing Zone, BSL Target, and SSL Target.
+- **Interactive Potential Trades Table:** Supports filtering by direction (All, Bullish, Bearish) with clear status tags (`ACTIVE WATCH`, `PENDING TOUCH`, `CONFIRMED`).
+- **Trade Execution Inspector:** Allows single-click inspection and copy of formatted trade parameters to clipboard.
+- **Header & Sidebar Triggers:** Added `[ 📊 Potential Trades ]` trigger buttons in `NavigationHeader.tsx` and `Sidebar.tsx`.
+
+---
+
+## 🆕 V12.0.45 Changelog — AI System Prompt V12.1.0 Deployment (Completed)
+
+### 1. Institutional AI Prompt Architecture Refactor (`src/lib/aiSystemPrompt.ts` & `scratch/update_db_prompt.js`)
+- **Deprecating True Day Open Veto:** Replaced rigid `true_day_open_0700` ultimate boundary condition with dynamic Structural Trend State (BOS/MSS) and Draw on Liquidity (DOL) targeting.
+- **Volumetric & Profile Validation:** Enforced Swing-Anchored Volume Profile (SAVP) metrics (`poc`, `vah`, `val`) and Volumetric Sponsorship Ratio (`vsr` > 1.0 buyer / < 1.0 seller dominance) checks.
+- **Database Migration:** Successfully executed `scratch/update_db_prompt.js`, updating `SYSTEM_PROMPT` in Postgres `system_settings` table to V12.1.0 while maintaining 100% JSON schema compatibility (`bias_signal`, `bias_label`, `primary_target`, `narrative`, `narrative_summary`).
+
+---
+
+## 🆕 V12.0.44 Changelog — Centralized AI Model Registry & Gemini 3.6 Flash Integration (Completed)
+
+### 1. Centralized AI Model Registry (`src/lib/aiModels.ts`)
+- **Single Source of Truth:** Created `src/lib/aiModels.ts` exporting `AVAILABLE_MODELS` containing all models including `gemini-3.6-flash`.
+- **Settings & Terminal Dropdown Sync (`src/app/settings/page.tsx`):** Refactored settings page to import `AVAILABLE_MODELS` from `@/lib/aiModels`, ensuring `Gemini 3.6 Flash` and all model additions are seamlessly rendered across terminal and analytical model selection dropdowns.
+
+---
 
 ## 🆕 V12.0.43 Changelog — Fixed JSX Syntax Error in Macro Liquidity Card (Completed)
 

@@ -14,9 +14,11 @@ import {
   LayoutGrid,
   Settings,
   Sun,
-  Moon
+  Moon,
+  BarChart2
 } from "lucide-react";
 import MatrixConfigDrawer from "./MatrixConfigDrawer";
+import PotentialTradesModal from "./modals/PotentialTradesModal";
 import { useMarketDataContext } from "@/context/MarketDataContext";
 import { LiveTicker } from "./LiveTicker";
 
@@ -28,6 +30,7 @@ export function NavigationHeader() {
   const { theme, setTheme } = useTheme();
 
   const [isMatrixOpen, setIsMatrixOpen] = useState(false);
+  const [isTradesModalOpen, setIsTradesModalOpen] = useState(false);
   const [resetStatus, setResetStatus] = useState<ResetStatus>('idle');
   const [cairoTime, setCairoTime] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -220,6 +223,16 @@ export function NavigationHeader() {
               )}
             </button>
 
+            {/* Potential Trades Trigger */}
+            <button
+              onClick={() => setIsTradesModalOpen(true)}
+              className="px-2.5 py-1 text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 hover:border-emerald-500/50 rounded-full transition-all duration-300 shrink-0 flex items-center gap-1.5 cursor-pointer font-sans text-[10px] font-black uppercase tracking-wider"
+              title="Quant Potential Trades Matrix"
+            >
+              <BarChart2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Potential Trades</span>
+            </button>
+
             {/* Master Drawer Trigger */}
             <button
               onClick={() => setIsMatrixOpen(true)}
@@ -236,6 +249,11 @@ export function NavigationHeader() {
         isOpen={isMatrixOpen}
         onClose={() => setIsMatrixOpen(false)}
         data={data}
+      />
+
+      <PotentialTradesModal
+        isOpen={isTradesModalOpen}
+        onClose={() => setIsTradesModalOpen(false)}
       />
     </>
   );

@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useAlertSounds, AVAILABLE_ALERT_FILES } from "@/hooks/useAlertSounds";
 import { DEFAULT_THEME_SETTINGS } from "@/hooks/useMarketData";
+import { AVAILABLE_MODELS } from "@/lib/aiModels";
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 interface QuantSettings {
@@ -72,16 +73,6 @@ type TabType = "quant_ai" | "account_risk" | "profile" | "terminal" | "appearanc
 type SaveStatus = "idle" | "saving" | "success" | "error";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const AVAILABLE_MODELS = [
-  { value: "gemini-3.6-flash", label: "Gemini 3.6 Flash" },
-  { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
-  { value: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash Lite" },
-  { value: "gemini-3-flash-preview", label: "Gemini 3 Flash (Preview)" },
-  { value: "gemini-2.5-flash-preview-05-20", label: "Gemini 2.5 Flash (Preview)" },
-  { value: "gemini-2.5-pro-preview-05-06", label: "Gemini 2.5 Pro (Preview)" },
-  { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
-  { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
-] as const;
 
 const DEFAULT_SIGNAL_ALERTS: SignalAlerts = {
   FVG_DETECTION: "fvg_alert.mp3",
