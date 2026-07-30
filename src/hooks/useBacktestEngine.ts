@@ -34,6 +34,7 @@ export interface BtCandle {
 }
 
 export interface BtMasterArrays {
+  candles_4h: BtCandle[];
   candles_1h: BtCandle[];
   candles_15m: BtCandle[];
   candles_5m: BtCandle[];
@@ -84,7 +85,7 @@ function parseBinanceKlines(raw: unknown[][]): BtCandle[] {
  * Fetch klines for a given interval using pagination to support arbitrary date ranges.
  */
 async function fetchLookbackKlines(
-  intervalLabel: '1h' | '15m' | '5m',
+  intervalLabel: '4h' | '1h' | '15m' | '5m',
   startMs: number,   // UTC start
   endMs: number      // UTC end
 ): Promise<BtCandle[]> {
@@ -163,7 +164,7 @@ function buildEnrichedPayload(
   selectedDate: string,
   timeframe: BacktestTimeframe
 ): Record<string, unknown> {
-  const { candles_1h, candles_15m, candles_5m } = visible;
+  const { candles_4h, candles_1h, candles_15m, candles_5m } = visible;
 
   const activeCandles = timeframe === '1h'
     ? candles_1h
@@ -176,17 +177,6 @@ function buildEnrichedPayload(
   const livePrice = liveCandle?.c ?? null;
 
   const lastDateUtc = liveCandle ? new Date(liveCandle.t) : null;
-
-  // ── True Day Open (00:00 UTC Anchor) ─────────────────────────────
-  // Search backward to locate the most recent 00:00 UTC anchor
-  let trueDayOpen0700: number | null = null;
-  for (let i = candles_15m.length - 1; i >= 0; i--) {
-    const d = new Date(candles_15m[i].t);
-    if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
-      trueDayOpen0700 = candles_15m[i].o;
-      break;
-    }
-  }
 
   // ── Previous Day H/L from 1h candles ────────────────────────────────────
   let pdh = 0;
@@ -207,20 +197,23 @@ function buildEnrichedPayload(
   }
   if (pdl === Infinity) pdl = 0;
 
-  // ── Current price & premium/discount status ──────────────────────────────
+  // ── Current price & premium/discount status (anchored to PDH/PDL midpoint) ──────────────────────────────
   let currentPricing = 'UNKNOWN';
-  if (trueDayOpen0700 !== null && livePrice !== null) {
-    if (livePrice > trueDayOpen0700) currentPricing = 'PREMIUM';
-    else if (livePrice < trueDayOpen0700) currentPricing = 'DISCOUNT';
-    else currentPricing = 'FAIR_VALUE';
+  const rangeEq = (pdh > 0 && pdl > 0) ? (pdh + pdl) / 2 : null;
+  if (rangeEq !== null && livePrice !== null) {
+    if (livePrice > rangeEq + 0.5) currentPricing = 'PREMIUM';
+    else if (livePrice < rangeEq - 0.5) currentPricing = 'DISCOUNT';
+    else currentPricing = 'EQUILIBRIUM';
   }
 
-  // ── Active FVGs from 1h, 15m and 5m visible slices using lib/fvgEngine ──
+  // ── Active FVGs from 4h, 1h, 15m and 5m visible slices using lib/fvgEngine ──
   // Treat all historical candles as closed, and the very last visible candle as the active open candle
+  const candles_4h_with_closed = candles_4h.map((c, idx) => ({ ...c, isClosed: idx < candles_4h.length - 1 }));
   const candles_1h_with_closed = candles_1h.map((c, idx) => ({ ...c, isClosed: idx < candles_1h.length - 1 }));
   const candles_15m_with_closed = candles_15m.map((c, idx) => ({ ...c, isClosed: idx < candles_15m.length - 1 }));
   const candles_5m_with_closed = candles_5m.map((c, idx) => ({ ...c, isClosed: idx < candles_5m.length - 1 }));
   
+  const fvgs4h = detectActiveFVGs(candles_4h_with_closed, true);
   const fvgs1h = detectActiveFVGs(candles_1h_with_closed, true);
   const fvgs15m = detectActiveFVGs(candles_15m_with_closed, true);
   const fvgs5m = detectActiveFVGs(candles_5m_with_closed, true);
@@ -229,6 +222,7 @@ function buildEnrichedPayload(
     { fvgs: fvgs5m, timeframe: '5m' },
     { fvgs: fvgs15m, timeframe: '15m' },
     { fvgs: fvgs1h, timeframe: '1h' },
+    { fvgs: fvgs4h, timeframe: '4h' },
   ]);
 
   // ── Session Ranges (Aligned with live HUD's UTC hour metrics) ─────────────
@@ -381,7 +375,6 @@ function buildEnrichedPayload(
 
   const activeSwingPOC = structureAnalysis?.dealingRange?.profile_metrics?.poc ?? null;
   const resolvedBias = resolveTripleVectorBias({
-    true_day_open_0700: trueDayOpen0700,
     livePrice,
     nearest_htf_magnet: nearestHtfMagnet,
     activeSwingPOC,
@@ -395,8 +388,6 @@ function buildEnrichedPayload(
     replay_date: selectedDate,
     ipda_metrics: {
       note: 'Backtest replay — metrics computed from visible slice only.',
-      true_day_open: trueDayOpen0700,
-      true_day_open_0700: trueDayOpen0700,
       current_time_window,
       current_pricing: currentPricing,
       target_status,
@@ -443,18 +434,13 @@ function buildEnrichedPayload(
         pdh,
         pdl,
         asian_high: asianLiquidity.high,
-        asian_low: asianLiquidity.low,
-        true_day_open: trueDayOpen0700
+        asian_low: asianLiquidity.low
       },
       session_ranges: {
         asian_range: asianLiquidity,
         london_range: londonLiquidity
       },
       pricing_context: {
-        vs_daily_open:
-          trueDayOpen0700 !== null && livePrice !== null
-            ? livePrice > trueDayOpen0700 ? 'ABOVE_OPEN' : 'BELOW_OPEN'
-            : 'UNKNOWN',
         local_dealing_range: localDealingRange,
       },
       order_flow_engine: {
@@ -473,6 +459,7 @@ function buildEnrichedPayload(
       fvgs: activeFVGs,
     },
     data_payload: {
+      candles_4h,
       candles_1h,
       candles_15m,
       candles_5m,
@@ -555,8 +542,10 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
     // Exclude HTF candles that are not fully closed at boundaryMs to prevent look-ahead bias
     const visible15m = masterArrays.candles_15m.filter((c) => c.t + 15 * 60 * 1000 <= boundaryMs);
     const visible1h = masterArrays.candles_1h.filter((c) => c.t + 60 * 60 * 1000 <= boundaryMs);
+    const visible4h = masterArrays.candles_4h.filter((c) => c.t + 4 * 60 * 60 * 1000 <= boundaryMs);
 
     return {
+      candles_4h: visible4h,
       candles_5m: visible5m,
       candles_15m: visible15m,
       candles_1h: visible1h,
@@ -587,18 +576,21 @@ export function useBacktestEngine(): UseBacktestEngineReturn {
       // Lookback 4 days before target start date to warm up HTF structural indicators
       const lookbackStartMs = startUtcMs - (4 * 24 * 60 * 60 * 1000);
 
-      const [raw1h, raw15m, raw5m] = await Promise.all([
+      const [raw4h, raw1h, raw15m, raw5m] = await Promise.all([
+        fetchLookbackKlines('4h', lookbackStartMs, endUtcMs),
         fetchLookbackKlines('1h', lookbackStartMs, endUtcMs),
         fetchLookbackKlines('15m', lookbackStartMs, endUtcMs),
         fetchLookbackKlines('5m', lookbackStartMs, endUtcMs),
       ]);
 
       // Annotate raw arrays with volumetric signals before initializing masterArrays
+      annotateCandlesWithVolumetricSignals(raw4h);
       annotateCandlesWithVolumetricSignals(raw1h);
       annotateCandlesWithVolumetricSignals(raw15m);
       annotateCandlesWithVolumetricSignals(raw5m);
 
       const arrays: BtMasterArrays = {
+        candles_4h: raw4h,
         candles_1h: raw1h,
         candles_15m: raw15m,
         candles_5m: raw5m,

@@ -39,16 +39,6 @@ export function buildServerEnrichedPayload(
   const livePrice = liveCandle?.c ?? null;
   const lastDateUtc = liveCandle ? new Date(liveCandle.t) : null;
 
-  // ── True Day Open (00:00 UTC Anchor) ──
-  let trueDayOpen0700: number | null = null;
-  for (let i = candles_15m.length - 1; i >= 0; i--) {
-    const d = new Date(candles_15m[i].t);
-    if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
-      trueDayOpen0700 = candles_15m[i].o;
-      break;
-    }
-  }
-
   // ── Previous Day H/L from 1h candles ──
   let pdh = 0;
   let pdl = Infinity;
@@ -68,12 +58,13 @@ export function buildServerEnrichedPayload(
   }
   if (pdl === Infinity) pdl = 0;
 
-  // ── Current price & premium/discount status ──
+  // ── Current price & premium/discount status (anchored to PDH/PDL midpoint) ──
   let currentPricing = 'UNKNOWN';
-  if (trueDayOpen0700 !== null && livePrice !== null) {
-    if (livePrice > trueDayOpen0700) currentPricing = 'PREMIUM';
-    else if (livePrice < trueDayOpen0700) currentPricing = 'DISCOUNT';
-    else currentPricing = 'FAIR_VALUE';
+  const rangeEq = (pdh > 0 && pdl > 0) ? (pdh + pdl) / 2 : null;
+  if (rangeEq !== null && livePrice !== null) {
+    if (livePrice > rangeEq + 0.5) currentPricing = 'PREMIUM';
+    else if (livePrice < rangeEq - 0.5) currentPricing = 'DISCOUNT';
+    else currentPricing = 'EQUILIBRIUM';
   }
 
   // ── Active FVGs ──
@@ -223,8 +214,6 @@ export function buildServerEnrichedPayload(
     replay_date: selectedDate,
     ipda_metrics: {
       note: 'Headless backtest - server-side computed.',
-      true_day_open: trueDayOpen0700,
-      true_day_open_0700: trueDayOpen0700,
       current_time_window,
       current_pricing: currentPricing,
       target_status,
@@ -269,18 +258,13 @@ export function buildServerEnrichedPayload(
         pdh,
         pdl,
         asian_high: asianLiquidity.high,
-        asian_low: asianLiquidity.low,
-        true_day_open: trueDayOpen0700
+        asian_low: asianLiquidity.low
       },
       session_ranges: {
         asian_range: asianLiquidity,
         london_range: londonLiquidity
       },
       pricing_context: {
-        vs_daily_open:
-          trueDayOpen0700 !== null && livePrice !== null
-            ? livePrice > trueDayOpen0700 ? 'ABOVE_OPEN' : 'BELOW_OPEN'
-            : 'UNKNOWN',
         local_dealing_range: localDealingRange,
       },
       order_flow_engine: {
@@ -429,10 +413,13 @@ function resolveServerMetric(
       return isDivergenceMatch(smt.m5_divergence) || isDivergenceMatch(smt.m15_divergence);
     }
 
+    // [DEPRECATED — Phase 2 TDO Removal] PRICE_VS_OPEN has been removed.
+    // Migrate saved strategies to LOCAL_PRICING (PREMIUM/DISCOUNT).
     case 'PRICE_VS_OPEN': {
-      const trueDayOpen = ipda.true_day_open_0700 || 0;
-      if (trueDayOpen === 0 || livePrice === 0) return 'ABOVE';
-      return livePrice > trueDayOpen ? 'ABOVE' : 'BELOW';
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[QuantLabEngine] PRICE_VS_OPEN is deprecated and removed. Migrate to LOCAL_PRICING.');
+      }
+      return 'UNKNOWN';
     }
 
     case 'EQUILIBRIUM_STATUS': {

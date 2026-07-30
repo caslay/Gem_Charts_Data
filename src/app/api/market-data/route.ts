@@ -302,7 +302,7 @@ export async function GET(req: Request) {
       'openInterest': `https://fapi.binance.com/fapi/v1/openInterest?symbol=${symbol}`,
       // Parallel fetches for BTCUSDT
       'btc_5m': `https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=5m&limit=20`,
-      'btc_15m': `https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=150`, // fetch extra history to resolve true day open
+      'btc_15m': `https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=20`,
       'btc_1h': `https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1h&limit=24`,
     };
 
@@ -481,16 +481,6 @@ export async function GET(req: Request) {
     });
     if (btcPdl === Infinity) btcPdl = 0;
 
-    // BTC True Day Open solver (00:00 UTC Anchor)
-    let btc_true_day_open_0700: number | null = null;
-    for (let i = candlesBtc15m.length - 1; i >= 0; i--) {
-      const d = new Date(candlesBtc15m[i].t);
-      if (d.getUTCHours() === 0 && d.getUTCMinutes() === 0) {
-        btc_true_day_open_0700 = candlesBtc15m[i].o;
-        break;
-      }
-    }
-
     const isPriceRising = candles15m.length > 1 && candles15m[candles15m.length - 1].c > candles15m[candles15m.length - 2].c;
     
     let open_interest_trend = 'NEUTRAL';
@@ -601,7 +591,6 @@ export async function GET(req: Request) {
     }
 
     // 5. Dealing Range Pricing Zone (Premium / Equilibrium / Discount)
-    let true_day_open_0700: number | null = null;
     let current_pricing = "UNKNOWN";
     const rangeEq = (pdh > 0 && pdl > 0) ? (pdh + pdl) / 2 : currentLivePrice;
     if (rangeEq > 0 && currentLivePrice > 0) {
@@ -1161,17 +1150,20 @@ export async function GET(req: Request) {
 
     // Calculate SMT context using the new SMT Detection Engine
     const btcPrice = candlesBtc5m.length > 0 ? candlesBtc5m[candlesBtc5m.length - 1].c : 0;
+    // Use previous 15m close as performance anchor (replaces True Day Open)
+    const ethPrevClose = candles15m.length > 1 ? candles15m[candles15m.length - 2].c : null;
+    const btcPrevClose = candlesBtc15m.length > 1 ? candlesBtc15m[candlesBtc15m.length - 2].c : null;
     const smt_context = getSmtContext({
       ethCandles5m: candles5m,
       btcCandles5m: candlesBtc5m,
       ethCandles15m: candles15m,
       btcCandles15m: candlesBtc15m,
       ethPrice: currentLivePrice,
-      ethOpen: true_day_open_0700,
+      ethPrevClose,
       ethPdh: pdh,
       ethPdl: pdl,
       btcPrice,
-      btcOpen: btc_true_day_open_0700,
+      btcPrevClose,
       btcHigh1h: btcPdh,
       btcLow1h: btcPdl,
       btcPdh,
@@ -1179,7 +1171,6 @@ export async function GET(req: Request) {
     });
 
     const ipda_metrics = {
-      true_day_open: true_day_open_0700,
       current_time_window,
       institutional_sponsorship,
       current_pricing,

@@ -11,8 +11,9 @@ A Swing High / Swing Low cannot be assumed by pure price action. You must valida
 
 ## 2. The Dual-Pricing Matrix & The Veto
 Never execute a trade without cross-referencing BOTH the Macro and Local dealing ranges:
-- **Macro Baseline:** Always anchor to `true_day_open_0700` (Cairo UTC+3 / NY Midnight).
-- **The Rule:** 🟢 BUYS are STRICTLY LOCKED if price is above the True Day Open AND above the Local Range Equilibrium (Premium). 🔴 SELLS are STRICTLY LOCKED if price is below the True Day Open AND below the Local Equilibrium (Discount). 
+- **Macro Baseline [UPDATED — Phase 2]:** The premium/discount anchor is now the **PDH/PDL midpoint** (`(pdh + pdl) / 2`), computed from the previous day's 1h candles. The deprecated `true_day_open_0700` (Cairo UTC+3 / NY Midnight) has been **permanently removed**.
+- **The Rule:** 🟢 BUYS are STRICTLY LOCKED if price is in PREMIUM territory (above PDH/PDL midpoint AND above Local Range Equilibrium). 🔴 SELLS are STRICTLY LOCKED if price is in DISCOUNT territory (below PDH/PDL midpoint AND below Local Equilibrium).
+- **Strategy Metric:** Use `LOCAL_PRICING` (`PREMIUM`/`DISCOUNT`) in the Equation Builder. The deprecated `PRICE_VS_OPEN` metric has been removed.
 - *Exception:* Reversal profiles confirmed by heavy Order Flow displacement.
 
 ## 3. Order Flow & Liquidity Engine (V8.2)

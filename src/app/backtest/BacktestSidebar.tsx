@@ -199,12 +199,7 @@ export default function BacktestSidebar({
                     {metrics?.current_time_window || 'REPLAY'}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] text-muted uppercase font-bold">NY Day Open</span>
-                  <span className="text-sm font-mono font-bold text-foreground">
-                    {formatPrice(metrics?.true_day_open)}
-                  </span>
-                </div>
+
                 <div className="bg-background/40 border border-card-border p-2 mt-2 space-y-1.5 rounded-lg select-none">
                   {[
                     { label: 'ASIAN RANGE', time: '00:00 - 07:00 UTC' },

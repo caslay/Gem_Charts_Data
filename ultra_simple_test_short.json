@@ -1,6 +1,6 @@
 {
   "name": "Ultra Simple Test Short",
-  "description": "Minimalist testing strategy with a single basic rule: triggers a SHORT trade whenever price is below the True Day Open. Ideal for verifying that the backtest engine, risk engine, and database ledger are 100% active.",
+  "description": "Minimalist testing strategy with a single basic rule: triggers a SHORT trade whenever price is in premium dealing range territory. Ideal for verifying that the backtest engine, risk engine, and database ledger are 100% active.",
   "conditions": {
     "direction": "SHORT",
     "sl_logic": "Manual Pips",
@@ -10,9 +10,9 @@
     "momentum_override": true,
     "conditions": [
       {
-        "metric": "PRICE_VS_OPEN",
+        "metric": "LOCAL_PRICING",
         "operator": "EQUALS",
-        "value": "BELOW"
+        "value": "PREMIUM"
       }
     ]
   }

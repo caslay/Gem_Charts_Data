@@ -222,7 +222,8 @@ export function useLiveAlerts(
     const isSmtDivergence = smartMoney.smart_money_divergence === true;
 
     const pricingContext = newData.pricing_context || newData.ipda_metrics || {};
-    const trueDayOpen = pricingContext.true_day_open_0700 || 0;
+    const dealingRangeStatus = (pricingContext?.local_dealing_range?.current_status ||
+      pricingContext?.pricing_context?.local_dealing_range?.current_status || 'UNKNOWN') as string;
 
     const newFvgs = newData.active_arrays?.fvgs || [];
     const oldFvgs = oldData?.active_arrays?.fvgs || [];
@@ -250,7 +251,7 @@ export function useLiveAlerts(
       !oldFvgs.some((oldFvg: any) => oldFvg.price === fvg.price || oldFvg.id === fvg.id)
     );
 
-    if (hasNewBullishFvg && trueDayOpen > 0 && currentPrice > trueDayOpen) {
+    if (hasNewBullishFvg && dealingRangeStatus === 'PREMIUM') {
       if (checkCooldown('RISK_OVERRIDE', 5 * 60 * 1000)) { // 5m cooldown
         triggerAlert(
           'RISK_OVERRIDE',

@@ -196,13 +196,13 @@ function resolveMetric(
       return isDivergenceMatch(smt.m5_divergence) || isDivergenceMatch(smt.m15_divergence);
     }
 
+    // [DEPRECATED — Phase 2 TDO Removal] PRICE_VS_OPEN has been removed.
+    // Migrate saved strategies to LOCAL_PRICING (PREMIUM/DISCOUNT).
     case 'PRICE_VS_OPEN': {
-      const trueDayOpen = ipda.true_day_open_0700
-        || ipda.pricing_context?.true_day_open_0700
-        || 0;
-      const price = livePrice || 0;
-      if (trueDayOpen === 0 || price === 0) return 'ABOVE';
-      return price > trueDayOpen ? 'ABOVE' : 'BELOW';
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[StrategyEvaluator] PRICE_VS_OPEN is deprecated and removed. Migrate to LOCAL_PRICING.');
+      }
+      return 'UNKNOWN';
     }
 
     case 'EQUILIBRIUM_STATUS': {

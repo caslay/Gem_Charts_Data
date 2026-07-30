@@ -6,7 +6,6 @@
  */
 
 export interface BiasEngineParams {
-  true_day_open_0700?: number | null;
   livePrice: number | null;
   nearest_htf_magnet: { label: string; distance: number } | null;
   activeSwingPOC: number | null;

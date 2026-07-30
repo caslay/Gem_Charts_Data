@@ -363,10 +363,6 @@ const Sidebar = memo(function Sidebar({
                     <span className="text-[11px] lg:text-xs text-muted uppercase font-bold">Active Window</span>
                     <span className="text-sm font-black text-accent uppercase">{metrics?.current_time_window || 'WAITING'}</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-[11px] lg:text-xs text-muted uppercase font-bold">NY Day Open</span>
-                    <span className="text-sm font-mono font-bold text-foreground">{formatPrice(metrics?.true_day_open)}</span>
-                  </div>
 
                   {/* Killzone Timings Reference */}
                   <div className="bg-background/40 border border-card-border p-2 mt-2 space-y-1.5 rounded-lg select-none">
