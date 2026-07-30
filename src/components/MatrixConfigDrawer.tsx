@@ -4,7 +4,6 @@ import { useMarketDataContext, useMarketDataLiveContext } from '@/context/Market
 
 export interface MatrixDataPayload {
   ipda_metrics?: {
-    true_day_open?: number | null;
     target_status?: string;
     session_ranges?: {
       asian_range?: { high: number | null; low: number | null };
@@ -17,7 +16,6 @@ export interface MatrixDataPayload {
       asian_low?: number | null;
       london_high?: number | null;
       london_low?: number | null;
-      true_day_open?: number | null;
     };
     historical_magnets?: {
       nearest_weekly_high?: number | null;
@@ -130,12 +128,6 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
               <h3 className="text-[11px] text-muted font-bold uppercase tracking-[0.1em]">Temporal Context</h3>
             </div>
             <div className="space-y-4">
-              <div className="flex justify-between items-end border-b border-card-border pb-2">
-                <span className="text-[11px] text-muted uppercase tracking-tighter font-semibold">True Day Open</span>
-                <span className="text-base font-mono font-bold text-emerald-500 tracking-tighter">
-                  {formatPrice(metrics?.true_day_open)}
-                </span>
-              </div>
               <div className="space-y-2">
                 <span className="text-[9px] text-muted uppercase font-black tracking-widest block mb-1">Local Dealing Range</span>
                 <div className="grid grid-cols-3 gap-2">

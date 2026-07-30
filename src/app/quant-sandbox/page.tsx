@@ -848,10 +848,6 @@ BSL Target: $3,520.00 (850 ETH)`;
                 {!collapsedCards.ipdaLevels && (
                   <div className={`space-y-2 text-xs ${densityPaddingMap[density].card}`}>
                     <div className="flex justify-between items-center">
-                      <span className={labelColor}>True Day Open (07:00 Cairo):</span>
-                      <span className={`${titleColor} tabular-nums font-black`}>$3,412.00</span>
-                    </div>
-                    <div className="flex justify-between items-center">
                       <span className={labelColor}>Asian Session High:</span>
                       <span className={`${currentTheme.accentDown} tabular-nums font-black`}>$3,465.50</span>
                     </div>
@@ -1072,13 +1068,7 @@ BSL Target: $3,520.00 (850 ETH)`;
                       </>
                     )}
 
-                    {/* 2. True Day Open Line */}
-                    <line x1="0" y1={priceToY(3412)} x2={svgWidth} y2={priceToY(3412)} stroke="#d97706" strokeWidth="1.5" strokeDasharray="6 3" />
-                    <text x={svgWidth - 160} y={priceToY(3412) - 4} fill="#d97706" fontSize="9" fontWeight="bold">
-                      True Day Open (Cairo 07:00): $3,412.00
-                    </text>
-
-                    {/* 3. Fair Value Gap */}
+                    {/* 2. Fair Value Gap */}
                     {showFvgOverlay && (
                       <g>
                         <rect

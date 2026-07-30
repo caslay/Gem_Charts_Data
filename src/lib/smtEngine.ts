@@ -80,19 +80,19 @@ export function evaluateMacroSmt(
 }
 
 /**
- * Determines relative strength between ETH and BTC based on standard distance % to True Day Open.
- * Whichever asset is performing stronger relative to its opening anchor is the LEADER, others LAGGARD.
+ * Determines relative strength between ETH and BTC based on % change from previous close.
+ * Whichever asset is performing stronger relative to its prior close is the LEADER.
  */
 export function calculateRelativeStrength(
   ethPrice: number,
-  ethOpen: number | null,
+  ethPrevClose: number | null,
   btcPrice: number,
-  btcOpen: number | null
+  btcPrevClose: number | null
 ): 'LEADER' | 'LAGGARD' {
-  if (!ethOpen || !btcOpen) return 'LAGGARD'; // Default baseline
+  if (!ethPrevClose || !btcPrevClose) return 'LAGGARD'; // Default baseline
 
-  const ethPerf = (ethPrice - ethOpen) / ethOpen;
-  const btcPerf = (btcPrice - btcOpen) / btcOpen;
+  const ethPerf = (ethPrice - ethPrevClose) / ethPrevClose;
+  const btcPerf = (btcPrice - btcPrevClose) / btcPrevClose;
 
   // If BTC performance is superior to ETH, BTC is the leader. Otherwise, BTC is lagging.
   return btcPerf > ethPerf ? 'LEADER' : 'LAGGARD';
@@ -107,11 +107,11 @@ export function getSmtContext(params: {
   ethCandles15m: Candle[];
   btcCandles15m: Candle[];
   ethPrice: number;
-  ethOpen: number | null;
+  ethPrevClose: number | null;
   ethPdh: number;
   ethPdl: number;
   btcPrice: number;
-  btcOpen: number | null;
+  btcPrevClose: number | null;
   btcHigh1h: number;
   btcLow1h: number;
   btcPdh: number;
@@ -133,9 +133,9 @@ export function getSmtContext(params: {
 
   const btc_relative_strength = calculateRelativeStrength(
     params.ethPrice,
-    params.ethOpen,
+    params.ethPrevClose,
     params.btcPrice,
-    params.btcOpen
+    params.btcPrevClose
   );
 
   // Sync is DECOUPLED if we have active confirmed divergences or one asset swept a level while the other failed

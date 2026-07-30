@@ -8,31 +8,32 @@ Before modifying the Quant Logic, Order Flow Engine, or Prompt Builder, review t
 - **The Bug:** The fractal detection algorithm used to get confused by "Outside Bars" (a candle that forms both a swing high and a swing low simultaneously).
 - **The Fix:** We implemented the **"Strict Directional Lock"**. A valid Swing High MUST have a red top preceded by green. A valid Swing Low MUST have a green bottom preceded by red. Do NOT revert to standard 3-bar or 5-bar pure-price checks without color validation.
 
-### 2. Timezone Drift & The True Day Open
-- **The Bug:** Market data was shifting because servers use UTC, but our institutional analysis relies on the NY Midnight / 07:00 Cairo open.
-- **The Fix:** We hard-coded the `true_day_open_0700` inside the `ipda_metrics` payload. Always use this anchor for Macro Bias calculations, NOT the rolling 24h open.
+### 2. [DEPRECATED - Phase 2 TDO Removal 2026-07-29] Timezone Drift & The True Day Open
+- **Historical Context:** Market data was shifting because servers use UTC, but our institutional analysis relied on the NY Midnight / 07:00 Cairo open. The true_day_open_0700 was hardcoded as the macro pricing anchor.
+- **Phase 2 Decision:** The True Day Open has been permanently removed from the entire system. The 00:00 UTC anchor was fragile (required fetching limit=150 BTC candles just to find one anchor), introduced a silent false-positive in the strategy evaluator (PRICE_VS_OPEN returning ABOVE when null), and was a ghost field in BiasEngine.ts (declared but never used).
+- **Replacement:** Premium/Discount classification is now anchored to the PDH/PDL midpoint equilibrium ((pdh + pdl) / 2), computed from the previous day's 1h candles. The PRICE_VS_OPEN strategy metric is removed; use LOCAL_PRICING (PREMIUM/DISCOUNT) instead. The SMT relative strength anchor is now the previous 15m candle close (not TDO).
 
 ### 3. The Context Window Memory Overflow
 - **The Bug:** Sending full raw OHLCV arrays to Gemini caused hallucinations and token limit errors.
-- **The Fix:** We use **Payload Pruning & Pre-Computation**. The Backend Next.js engine computes the `active_fvgs`, `BSL_Magnets`, and `SSL_Magnets` first. We ONLY send the "Sliced JSON" (the Focus Window) to the AI. Do NOT write logic that forces the AI to iterate over thousands of raw candles.
+- **The Fix:** We use **Payload Pruning & Pre-Computation**. The Backend Next.js engine computes the active_fvgs, BSL_Magnets, and SSL_Magnets first. We ONLY send the "Sliced JSON" (the Focus Window) to the AI. Do NOT write logic that forces the AI to iterate over thousands of raw candles.
 
 ### 4. The "DEAD_ZONE" Temporal Trap
 - **The Bug:** The algorithm was taking trades during the NY Lunch/Mid-day pause when volume flatlined, falling for fake structural shifts.
-- **The Fix:** We introduced the `displacement_active` flag based on Open Interest (OI) momentum and Volume. If displacement is inactive, the Agent must output `[⚪ NEUTRAL / 🚫 ABORT]`. Do not bypass this safety net.
+- **The Fix:** We introduced the displacement_active flag based on Open Interest (OI) momentum and Volume. If displacement is inactive, the Agent must output [NEUTRAL / ABORT]. Do not bypass this safety net.
 
 ### 5. Server-Side Fetch Port Mismatches & Silent Failures (Vercel/Python Bridge)
-- **The Bug:** During local development, the Next.js API route (`/api/market-data`) would silently fail when trying to fetch the Python backend. This caused the UI to receive the "offline" fallback values (`t-STAT: 0.0000`, `p-VALUE: 1.0000`, `OLS VALIDATION: REJECTED`) instead of the actual data.
-- **The Cause:** Server-side fetches in Next.js require absolute URLs. We mistakenly hardcoded `127.0.0.1:3000` as the fallback, but the developer's Next.js project was actually running on `localhost:4000`. The fetch failed and the `catch` block silently swallowed it.
-- **The Fix:** We directly bypass the Next.js dev server for internal fetches. In development, the Next.js server route now directly pings `http://127.0.0.1:8000` (the uvicorn Python engine), while in production, it routes to `https://${process.env.VERCEL_URL}` where the Python endpoint is deployed as a Vercel serverless function (`/api/index.py`).
+- **The Bug:** During local development, the Next.js API route (/api/market-data) would silently fail when trying to fetch the Python backend.
+- **The Cause:** Server-side fetches in Next.js require absolute URLs. We mistakenly hardcoded 127.0.0.1:3000 as the fallback, but the dev project was running on localhost:4000.
+- **The Fix:** We directly bypass the Next.js dev server for internal fetches. In dev: pings http://127.0.0.1:8000 (uvicorn). In prod: routes to https://.
 
 ### 6. FastAPI POST returning HTTP 405 in Vercel Production
-- **The Bug:** `verifyDisplacement` returned `HTTP Error: 405` in production when calling `/api/py/calculate-displacement`.
-- **The Cause:** 
-  1. In `next.config.ts`, the rewrite for `/api/py/:path*` was pointed to `/api/index` which triggered Vercel Clean URL 308 redirects.
-  2. The `proxy.ts` (NextAuth middleware) was intercepting the server-to-server fetch. Because the `fetch` from the backend lacked user session cookies, the middleware treated it as unauthenticated and redirected it to `/login?callbackUrl=/api/py/calculate-displacement`. The `fetch` followed the redirect with a `POST` method, hitting `/login` which only accepts `GET`, resulting in `405 Method Not Allowed`.
-- **The Fix:** We added `isPyBackend` to the bypass list in `src/proxy.ts` to allow internal server-to-server fetches to `/api/py` to proceed without authentication. Additionally, we corrected the `next.config.ts` rewrite destination to `/api/` to avoid clean-URL redirect issues.
+- **The Bug:** verifyDisplacement returned HTTP Error: 405 in production when calling /api/py/calculate-displacement.
+- **The Cause:** The next.config.ts rewrite pointed to /api/index (triggering 308 redirects) and the proxy.ts middleware intercepted the request, redirecting to /login which only accepts GET.
+- **The Fix:** Added isPyBackend to the bypass list in src/proxy.ts and corrected the rewrite destination to /api/.
 
 ## 🛠️ Note to AI Agent:
+If you encounter a new bug and successfully fix it, YOU MUST prompt the user to update this 02_lessons.md file with the new Post-Mortem.
+
 If you encounter a new bug and successfully fix it, YOU MUST prompt the user to update this `02_lessons.md` file with the new Post-Mortem.
 
 ### 7. The Double-Alert & Double-Polling Hook Trap
@@ -132,14 +133,21 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
 ### 21. Perfect Movement Setup Phase 1 Sweep Bottleneck (Resolved in V11.1)
 - **The Bug:** When the "Filter Chart Volumetrics (Perfect setups only)" toggle was enabled, **all** arrows turned grey (20% opacity faded). No arrow ever passed the Perfect Movement 3-Phase filter.
 - **The Cause:** Phase 1 (Structural Proximity & Liquidity Sweep) was the critical bottleneck, rejecting **74% of all signals**. Three compounding issues:
-  1. The sweep lookback only checked the **2 candles directly before the signal** (`P1` and `P2`). On 5-minute candles, the sweep event often occurs 3-5 candles before the displacement signal — outside this 2-candle window.
-  2. The sweep required an **exact wick pierce** through a structural level (candle low ≤ level AND close > level). In practice, price often approaches within 1-2 ticks of a level without piercing it exactly — still a valid "proximity sweep" but rejected by exact-match logic.
+  1. The sweep lookback only checked the **2 candles directly before the signal** (`P1` and `P2`). On 5-minute candles, the sweep event often occurs 3-5 candles before the displacement signal â€” outside this 2-candle window.
+  2. The sweep required an **exact wick pierce** through a structural level (candle low â‰¤ level AND close > level). In practice, price often approaches within 1-2 ticks of a level without piercing it exactly â€” still a valid "proximity sweep" but rejected by exact-match logic.
   3. The swing level filter only considered `MAJOR` and `INTERNAL` grade swings, ignoring `INNER` swings that are valid liquidity targets on lower timeframes.
-  4. Phase 2 defaults were also over-restrictive: ATR multiplier 1.5× filtered out normal displacement candles; body ratio 0.6 and wick ratio 0.15 rejected most real-world candle shapes.
-- **The Fix:** Implemented a configurable `pmSweepLookback` parameter (default: 5 candles), added **ATR proximity tolerance** (0.3 × ATR) for near-sweep matching, expanded swing grade search to all grades, and recalibrated all Phase 2 defaults via a 320-configuration parameter grid sweep against live ETHUSDT data. Added a new UI slider "Sweep Lookback (Candles Before Signal)" to the Smart Money Sweet Spot drawer.
+  4. Phase 2 defaults were also over-restrictive: ATR multiplier 1.5Ã— filtered out normal displacement candles; body ratio 0.6 and wick ratio 0.15 rejected most real-world candle shapes.
+- **The Fix:** Implemented a configurable `pmSweepLookback` parameter (default: 5 candles), added **ATR proximity tolerance** (0.3 Ã— ATR) for near-sweep matching, expanded swing grade search to all grades, and recalibrated all Phase 2 defaults via a 320-configuration parameter grid sweep against live ETHUSDT data. Added a new UI slider "Sweep Lookback (Candles Before Signal)" to the Smart Money Sweet Spot drawer.
 
 ### 22. Volumetric Markers Failing to Render on Live Ticks (Resolved in V11.2)
 - **The Bug:** Volumetric arrows and SMT circles were appearing correctly on initial load or timeframe switch, but failed to render on new, real-time live candles as they closed.
 - **The Cause:** The `generateVolumetricMarkers` rendering function bypassed calculation if it detected pre-calculated `volumetric_signal` fields on historical candles. Live candles arriving via WebSocket did not have this field pre-calculated by the Python backend. Because the function exited early due to the historical candles, the live candles were completely skipped.
 - **The Fix:** Removed the `if (!hasPrecalculatedSignals)` short-circuit block in `src/utils/generateChartMarkers.ts`. We now unconditionally run `annotateCandlesWithVolumetricSignals(candles)` on every tick, which iterates efficiently (O(N)) and correctly calculates the markers for both historical and newly formed live candles.
 
+
+
+### 23. FVG Mitigation Ghost Zones — Comment-Code Mismatch (Resolved in V11.4)
+- **The Bug:** Mitigated FVGs remained visible on the chart as persistent ghost zones even after price had clearly traded through the imbalance area.
+- **The Cause:** A critical mismatch between the V8.5 doctrine comment and the actual implementation in `src/lib/fvgEngine.ts` (lines 48–56). The comment correctly described wick-entry mitigation (BISI mitigated when `future.l <= top`, SIBI when `future.h >= bottom`), but the code enforced a full-breakout rule (BISI only mitigated when `future.l < bottom`, SIBI when `future.h > top`). This meant price had to **completely break through the entire gap** before it was marked consumed — allowing partially-filled or wick-entered FVGs to remain ACTIVE indefinitely and render on the chart.
+- **Secondary Bugs Found:** `src/lib/quantEngine/LiquidityEngine.ts` used wrong candle property names (`c.close`, `c.open`, `c.high`, `c.low`) instead of the correct `Candle` interface properties (`c.c`, `c.o`, `c.h`, `c.l`), causing Order Block detection to silently fail (reading `undefined`). Also, `activeFVGs` in `LiquidityEngine` stored raw un-mapped FVG objects, creating a shape mismatch with the `MappedFVG` interface consumed by `MarketStructureAPI`.
+- **The Fix:** Corrected mitigation thresholds in `fvgEngine.ts` to match the V8.5 wick-scanning doctrine. Fixed all candle property names in `LiquidityEngine.ts`. Wrapped `detectActiveFVGs` output in `mapAndConsolidateFVGs` inside `LiquidityEngine` to ensure consistent `MappedFVG` shape.

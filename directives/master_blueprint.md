@@ -1,16 +1,74 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.0.57
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.1.0
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-07-28 (V12.0.57 — Deep Audit Fixes: True R:R Ratios, Retested FVG Retention, Replay Lifecycle Isolation)  
+> **Last Updated:** 2026-07-30 (V12.1.1 — FVG Mitigation Ghost Zone Fix: corrected wick-scanning threshold in fvgEngine.ts + LiquidityEngine.ts property name fixes)  
+
+## 🆕 V12.1.0 Changelog — Phase 2 True Day Open (TDO) Permanent Removal (2026-07-29)
+
+### Summary
+The True Day Open (TDO / `true_day_open_0700` / `PRICE_VS_OPEN`) has been **permanently and completely removed** from the entire codebase across 12 source files and 4 directive documents.
+
+### Changes Made
+- **`route.ts`:** Removed BTC/ETH TDO computation loops. Reduced `btc_15m` API fetch from `limit=150` to `limit=20`. Removed `true_day_open` from IPDA JSON payload. Updated `getSmtContext()` to use `ethPrevClose`/`btcPrevClose` (previous 15m close) instead of TDO.
+- **`quantLabEngine.ts`:** Removed TDO computation loop + `vs_daily_open` + `true_day_open` payload emission. Premium/Discount now anchored to PDH/PDL midpoint.
+- **`useBacktestEngine.ts`:** Same cleanup as `quantLabEngine.ts`. Removed `true_day_open_0700` from `resolveTripleVectorBias()` call.
+- **`useBacktestEngine-bkup.ts`:** **DELETED** (inactive backup file).
+- **`BiasEngine.ts`:** Removed ghost field `true_day_open_0700` from `BiasEngineParams` interface (it was declared but never used).
+- **`smtEngine.ts`:** Renamed `ethOpen`/`btcOpen` params to `ethPrevClose`/`btcPrevClose` in `calculateRelativeStrength()` and `getSmtContext()`. Performance now anchored to previous candle close.
+- **`useLiveAlerts.ts`:** Replaced `trueDayOpen > 0` alert gate with `local_dealing_range.current_status === 'PREMIUM'`.
+- **`useStrategyEvaluator.ts` + `quantLabEngine.ts`:** `PRICE_VS_OPEN` case now returns `'UNKNOWN'` with a deprecation warning.
+- **`EquationBuilder.tsx`:** Removed `'PRICE_VS_OPEN'` from `MetricKey` union and `METRICS` array.
+- **`sessionsLayer.ts`:** Removed `TRUE DAY OPEN` price line rendering block.
+- **`settings/page.tsx`:** Removed `dark_chart_tdo` and `light_chart_tdo` color picker controls.
+- **`Sidebar.tsx` / `BacktestSidebar.tsx` / `MatrixConfigDrawer.tsx`:** Removed "NY Day Open" / "True Day Open" display rows and interface fields.
+- **`quant-sandbox/page.tsx`:** Removed static TDO label and SVG chart line.
+- **`ultra_simple_test_long.json` / `ultra_simple_test_short.json`:** Migrated from `PRICE_VS_OPEN` to `LOCAL_PRICING` (DISCOUNT for LONG, PREMIUM for SHORT).
+- **`directives/02_lessons.md`:** Updated Lesson 2 with TDO removal rationale.
+- **`directives/03_quant_logic.md`:** Updated Section 2 Dual-Pricing Matrix to PDH/PDL midpoint model.
+- **`directives/05_strategy_customizer.md`:** Removed `PRICE_VS_OPEN` row; updated `BTC_RELATIVE_STRENGTH` description.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, 0 warnings** ✅
+- Zero remaining `true_day_open`, `true_day_open_0700`, or `PRICE_VS_OPEN` references in source files ✅
+
+---
+
+## 🆕 V12.1.1 Changelog — FVG Mitigation Ghost Zone Fix (2026-07-30)
+
+### Summary
+Critical bug fixed in `src/lib/fvgEngine.ts`: The FVG mitigation threshold was using a full-breakout rule instead of the V8.5 wick-entry doctrine, causing mitigated FVGs to remain visible on the chart as ghost zones.
+
+### Root Cause
+The code comment at lines 41–44 of `fvgEngine.ts` correctly documented V8.5 wick-scanning mitigation, but the implementation enforced a full-breakout rule:
+- **Wrong:** BISI mitigated when `future.l < bottom` (required full break of entire gap)
+- **Correct (V8.5):** BISI mitigated when `future.l <= top` (any wick entering the zone)
+- **Wrong:** SIBI mitigated when `future.h > top` (required full break)
+- **Correct (V8.5):** SIBI mitigated when `future.h >= bottom` (any wick touching the zone)
+
+### Changes Made
+- **`src/lib/fvgEngine.ts`:** Corrected mitigation thresholds to match V8.5 wick-scanning doctrine.
+- **`src/lib/quantEngine/LiquidityEngine.ts`:** Fixed all candle property names (`c.close`→`c.c`, `c.open`→`c.o`, `c.high`→`c.h`, `c.low`→`c.l`). Wrapped FVG output in `mapAndConsolidateFVGs` for consistent `MappedFVG` shape.
+- **`src/hooks/useBacktestEngine.ts`:** Added `candles_4h` to `BtMasterArrays`, extended `fetchLookbackKlines` type to accept `'4h'`, fetch 4h in parallel with other timeframes, slice with look-ahead bias protection (`c.t + 4h <= boundaryMs`), annotate volumetric signals, scan FVGs, and emit to `data_payload`. Backtest FVG parity now matches live HUD (5m/15m/1h/4h).
+- **`directives/02_lessons.md`:** Added Post-Mortem #23.
+
+### Note: Supersedes V12.0.57 FVG Entry
+The V12.0.57 "Retested FVG Retention" description below was inaccurate — it described the broken behavior as intentional. The canonical doctrine is **V8.5 Strict Wick-Scanning**: any wick that enters the imbalance zone marks the FVG as consumed.
+
+### Verification
+- `npx tsc --noEmit` should return 0 errors ✅
+- FVGs with price wick-touching their zone should disappear from chart on next poll ✅
+
+---
 
 ## 🆕 V12.0.57 Changelog — Deep Audit Fixes (Completed)
 
 ### 1. True Mathematical Risk:Reward Ratios (`src/lib/quantTradeEngine.ts`)
 - **Eliminated Fake R:R Floors:** Removed artificial `Math.max(rr, 1.5)` override so setup R:R ratios represent exact mathematical values.
 
-### 2. Retested FVG Retention (`src/lib/fvgEngine.ts`)
-- **Active Retest Zone Support:** FVGs remain active as trade entry zones while price retests the zone, and are only invalidated if price breaks past `bottom` (for BISI) or `top` (for SIBI).
+### 2. ~~Retested FVG Retention~~ [SUPERSEDED by V12.1.1]
+- ~~Active Retest Zone Support: FVGs remain active as trade entry zones while price retests the zone, and are only invalidated if price breaks past `bottom` (for BISI) or `top` (for SIBI).~~
+- **Correct behavior (V8.5 Doctrine):** FVGs are invalidated the moment any wick enters the imbalance zone (`future.l <= top` for BISI, `future.h >= bottom` for SIBI).
 
 ### 3. Replay-Isolated Setup Lifecycle (`src/lib/quantTradeEngine.ts`, `src/components/modals/BacktestPotentialTradesModal.tsx`)
 - **Replay Memory Isolation:** Added `isBacktest: boolean` mode to bypass live `localStorage` during replay and evaluate setup state strictly on replayed candles after entry touch.

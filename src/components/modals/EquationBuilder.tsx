@@ -14,7 +14,6 @@ export type MetricKey =
   | 'MSS'
   | 'SMT'
   | 'SMT_DIVERGENCE'
-  | 'PRICE_VS_OPEN'
   | 'EQUILIBRIUM_STATUS'
   | 'TARGET_EXHAUSTION'
   | 'NEARBY_MAGNET'
@@ -68,7 +67,6 @@ const METRICS: { key: MetricKey; label: string; type: 'boolean' | 'enum' | 'numb
   { key: 'MSS', label: 'Market Structure Shift', type: 'boolean' },
   { key: 'SMT', label: 'Smart Money Trap', type: 'boolean' },
   { key: 'SMT_DIVERGENCE', label: 'SMT Divergence (BTC/ETH)', type: 'boolean' },
-  { key: 'PRICE_VS_OPEN', label: 'Price vs Open', type: 'enum', options: ['ABOVE', 'BELOW'] },
   { key: 'EQUILIBRIUM_STATUS', label: 'Equilibrium Status', type: 'enum', options: ['PREMIUM', 'DISCOUNT'] },
   { key: 'TARGET_EXHAUSTION', label: 'Target Exhaustion', type: 'enum', options: ['PENDING', 'EXHAUSTED', 'ASIAN_HIGH_SWEPT', 'ASIAN_LOW_SWEPT', 'LONDON_HIGH_SWEPT', 'LONDON_LOW_SWEPT'] },
   { key: 'NEARBY_MAGNET', label: 'Nearby Magnet', type: 'boolean' },

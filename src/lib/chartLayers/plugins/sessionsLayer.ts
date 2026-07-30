@@ -4,7 +4,7 @@ import type { ChartLayer } from '../types';
 export const sessionsLayer: ChartLayer = {
   id: 'sessions',
   name: 'Session Ranges',
-  description: 'Asian / London Killzone range boundaries & True Open',
+  description: 'Asian / London Killzone range boundaries',
   icon: 'Clock',
   renderChart(context) {
     const { series, data, theme, themeSettings, storage } = context;
@@ -19,26 +19,11 @@ export const sessionsLayer: ChartLayer = {
     storage.delete('lines');
 
     const ipda = data.ipda_metrics || {};
-    const macro = ipda.macro_levels || {};
-    const tdo = macro.true_day_open || macro.true_day_open_0700 || null;
     const ranges = ipda.session_ranges || {};
     const asian = ranges.asian_range || {};
     const london = ranges.london_range || {};
 
     const newLines: any[] = [];
-
-    // Draw True Day Open
-    if (typeof tdo === 'number' && tdo > 0) {
-      const line = series.createPriceLine({
-        price: tdo,
-        color: theme === 'dark' ? (themeSettings?.dark_chart_tdo || '#a855f7') : (themeSettings?.light_chart_tdo || '#4f46e5'),
-        lineStyle: 0, // Solid
-        lineWidth: 2,
-        axisLabelVisible: true,
-        title: 'TRUE DAY OPEN',
-      });
-      newLines.push(line);
-    }
 
     // Draw Asian High/Low
     if (typeof asian.high === 'number' && asian.high > 0) {

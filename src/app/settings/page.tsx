@@ -1282,7 +1282,6 @@ export default function SettingsPage() {
                           <ColorPickerItem label="MSS Structural Badge" value={themeSettings.dark_chart_mss} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_mss: val }))} />
                           <ColorPickerItem label="Bullish FVG Box" value={themeSettings.dark_chart_fvg_bullish} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_fvg_bullish: val }))} />
                           <ColorPickerItem label="Bearish FVG Box" value={themeSettings.dark_chart_fvg_bearish} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_fvg_bearish: val }))} />
-                          <ColorPickerItem label="True Day Open Ray" value={themeSettings.dark_chart_tdo} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_tdo: val }))} />
                           <ColorPickerItem label="Asian Session Range" value={themeSettings.dark_chart_session_asian} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_session_asian: val }))} />
                           <ColorPickerItem label="London Session Range" value={themeSettings.dark_chart_session_london} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_session_london: val }))} />
                           <ColorPickerItem label="Buy-Side Liquidity (BSL)" value={themeSettings.dark_chart_magnet_bsl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, dark_chart_magnet_bsl: val }))} />
@@ -1562,7 +1561,6 @@ export default function SettingsPage() {
                           <ColorPickerItem label="MSS Structural Badge" value={themeSettings.light_chart_mss} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_mss: val }))} />
                           <ColorPickerItem label="Bullish FVG Box" value={themeSettings.light_chart_fvg_bullish} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_fvg_bullish: val }))} />
                           <ColorPickerItem label="Bearish FVG Box" value={themeSettings.light_chart_fvg_bearish} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_fvg_bearish: val }))} />
-                          <ColorPickerItem label="True Day Open Ray" value={themeSettings.light_chart_tdo} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_tdo: val }))} />
                           <ColorPickerItem label="Asian Session Range" value={themeSettings.light_chart_session_asian} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_session_asian: val }))} />
                           <ColorPickerItem label="London Session Range" value={themeSettings.light_chart_session_london} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_session_london: val }))} />
                           <ColorPickerItem label="Buy-Side Liquidity (BSL)" value={themeSettings.light_chart_magnet_bsl} onChange={(val) => setThemeSettings((s: any) => ({ ...s, light_chart_magnet_bsl: val }))} />
