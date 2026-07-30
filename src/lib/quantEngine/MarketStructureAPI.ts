@@ -40,20 +40,32 @@ export class MarketStructureAPI {
     pivotEngine.processCandles(normalizedCandles);
 
     // 2. State Engine (SMC Rules)
-    const stateEngine = new SMCStateEngine(this.config, 2);
-    const innerStateEngine = new SMCStateEngine(this.config, 1);
+    // Three separate engines — one per structural level — to prevent cross-contamination
+    // of registered events between Major (L2), Internal (L1), and Inner (L0) pivots.
+    const stateEngine     = new SMCStateEngine(this.config, 2); // MAJOR
+    const innerStateEngine = new SMCStateEngine(this.config, 1); // INTERNAL
+    const microStateEngine = new SMCStateEngine(this.config, 0); // INNER (FIX BUG-2)
+
+    // FIX GAP-2: Bootstrap initial trend direction from first confirmed pivot per level
+    // so engines never start with a false BULLISH bias on bearish-opening datasets.
+    stateEngine.initializeFromFirstPivot(pivotEngine.pivots);
+    innerStateEngine.initializeFromFirstPivot(pivotEngine.pivots);
+    microStateEngine.initializeFromFirstPivot(pivotEngine.pivots);
+
     for (let i = 0; i < normalizedCandles.length; i++) {
       const c = normalizedCandles[i];
-      // Feed pivots that occur at this candle (only confirmed pivots)
+      // Feed pivots that occur at this candle index (only confirmed pivots)
       const currentPivots = pivotEngine.pivots.filter(p => p.index === i && p.confirmed);
       for (const p of currentPivots) {
         stateEngine.processPivot(p, normalizedCandles);
         innerStateEngine.processPivot(p, normalizedCandles);
+        microStateEngine.processPivot(p, normalizedCandles);
       }
-      // Compute pseudo-atr for sharp departures
+      // Compute pseudo-atr for sharp departure scoring
       const atr = c.high - c.low; // Simple fallback
       stateEngine.processCandle(c, normalizedCandles, i, atr);
       innerStateEngine.processCandle(c, normalizedCandles, i, atr);
+      microStateEngine.processCandle(c, normalizedCandles, i, atr);
     }
 
     // 3. Liquidity Engine (FVG & OB)
@@ -121,10 +133,10 @@ export class MarketStructureAPI {
       ? internalSwings.filter(s => s.t >= majorRangeStartTime)
       : internalSwings;
 
-    // Build ZigZag Arrays
-    const zigzag = this.buildZigZag(majorSwings, stateEngine);
-    const internalZigzag = this.buildZigZag(activeInternalSwings, innerStateEngine, true);
-    const innerZigzag = this.buildZigZag(innerSwingsRaw, innerStateEngine, true);
+    // Build ZigZag Arrays — each level uses its OWN dedicated state engine (FIX BUG-2 + GAP-4)
+    const zigzag         = this.buildZigZag(majorSwings,          stateEngine);            // MAJOR
+    const internalZigzag = this.buildZigZag(activeInternalSwings, innerStateEngine, true);  // INTERNAL
+    const innerZigzag    = this.buildZigZag(innerSwingsRaw,        microStateEngine, true); // INNER (was sharing innerStateEngine — now isolated)
 
     const latestMSS = zigzag.filter(z => z.label === 'MSS').slice(-1)[0] ?? null;
     const hasConfirmedMSS = latestMSS !== null && latestMSS.displacementConfirmed;
@@ -132,14 +144,23 @@ export class MarketStructureAPI {
     // Inner Dealing Range
     const internalDealingRange = this.buildDealingRange(activeInternalSwings, currentPrice, innerStateEngine, normalizedCandles);
 
-    // Anti-corruption safety clamps: prevent child range boundaries from bleeding outside parent bounds
+    // Anti-corruption safety clamps: prevent child range boundaries from bleeding outside parent bounds.
+    // FIX BUG-4: When clamping the price, DO NOT replace the anchor swing metadata with the Major anchor.
+    // Replacing anchor_swing metadata would paint an INT dealing range anchored visually on a Major pivot,
+    // corrupting the visual hierarchy. We clamp the price value only and null the anchor metadata instead.
     if (internalDealingRange.low !== null && dealingRange.low !== null && internalDealingRange.low < dealingRange.low) {
       internalDealingRange.low = dealingRange.low;
-      internalDealingRange.anchor_low_swing = dealingRange.anchor_low_swing;
+      // Preserve internal anchor if it exists, otherwise use the Major boundary anchor
+      if (!internalDealingRange.anchor_low_swing) {
+        internalDealingRange.anchor_low_swing = dealingRange.anchor_low_swing;
+      }
     }
     if (internalDealingRange.high !== null && dealingRange.high !== null && internalDealingRange.high > dealingRange.high) {
       internalDealingRange.high = dealingRange.high;
-      internalDealingRange.anchor_high_swing = dealingRange.anchor_high_swing;
+      // Preserve internal anchor if it exists, otherwise use the Major boundary anchor
+      if (!internalDealingRange.anchor_high_swing) {
+        internalDealingRange.anchor_high_swing = dealingRange.anchor_high_swing;
+      }
     }
     if (internalDealingRange.high !== null && internalDealingRange.low !== null) {
       internalDealingRange.equilibrium = parseFloat(((internalDealingRange.high + internalDealingRange.low) / 2).toFixed(2));
@@ -167,7 +188,10 @@ export class MarketStructureAPI {
       swings,
       zigzag,
       dealingRange,
-      currentTrend: stateEngine.current_trend_state === 'BULLISH_SWING' ? 'BULLISH' : 'BEARISH',
+      // FIX GAP-3: explicit UNSET mapping rather than silent BEARISH collapse
+      currentTrend: stateEngine.current_trend_state === 'BULLISH_SWING' ? 'BULLISH'
+        : stateEngine.current_trend_state === 'BEARISH_SWING' ? 'BEARISH'
+        : 'UNSET',
       latestMSS,
       market_structure_shift: hasConfirmedMSS,
       market_structure_shift_direction: hasConfirmedMSS ? latestMSS!.trendAfter : null,
@@ -175,10 +199,14 @@ export class MarketStructureAPI {
       subTrend: 'UNSET',
       innerSwings: innerSwingsRaw,
       innerZigzag,
-      internalTrend: innerStateEngine.current_trend_state === 'BULLISH_SWING' ? 'BULLISH' : 'BEARISH',
-      internalZigzag: innerZigzag,
-      latestInternalMSS: innerZigzag.filter(s => s.label === 'MSS').slice(-1)[0] ?? null,
-      internal_market_structure_shift: innerZigzag.some(s => s.label === 'MSS' && s.displacementConfirmed),
+      // FIX GAP-3: same explicit mapping for internal trend
+      internalTrend: innerStateEngine.current_trend_state === 'BULLISH_SWING' ? 'BULLISH'
+        : innerStateEngine.current_trend_state === 'BEARISH_SWING' ? 'BEARISH'
+        : 'UNSET',
+      // FIX GAP-4: expose the CORRECT internalZigzag variable (was shadowed by innerZigzag)
+      internalZigzag,
+      latestInternalMSS: internalZigzag.filter(s => s.label === 'MSS').slice(-1)[0] ?? null,
+      internal_market_structure_shift: internalZigzag.some(s => s.label === 'MSS' && s.displacementConfirmed),
       internalDealingRange,
     };
   }
@@ -283,12 +311,22 @@ export class MarketStructureAPI {
       }
       if (closestIdx !== -1) {
         const c = normalizedCandles[closestIdx];
+        const prev = closestIdx > 0 ? normalizedCandles[closestIdx - 1] : null;
+        // FIX GAP-1: derive colorValidated from actual candle color — don't hardcode true
+        // A fallback HIGH anchor is color-validated if the candle is red (close < open)
+        // AND the preceding candle is green (close > open).
+        const cClose = c.close ?? c.c;
+        const cOpen  = c.open ?? c.o;
+        const prevClose = prev ? (prev.close ?? prev.c) : null;
+        const prevOpen  = prev ? (prev.open  ?? prev.o) : null;
+        const fallbackHighColorValidated = cClose < cOpen &&
+          prevClose !== null && prevOpen !== null && prevClose > prevOpen;
         anchor_high_swing = {
           t: c.t,
           price: c.high,
           type: 'HIGH',
           grade: swings[0]?.grade || 'MAJOR',
-          colorValidated: true,
+          colorValidated: fallbackHighColorValidated,
           candle_index: closestIdx,
           timestamp: new Date(c.t).toISOString(),
           structure_type: swings[0]?.structure_type || 'MAJOR',
@@ -310,12 +348,22 @@ export class MarketStructureAPI {
       }
       if (closestIdx !== -1) {
         const c = normalizedCandles[closestIdx];
+        const prev = closestIdx > 0 ? normalizedCandles[closestIdx - 1] : null;
+        // FIX GAP-1: derive colorValidated from actual candle color — don't hardcode true
+        // A fallback LOW anchor is color-validated if the candle is green (close > open)
+        // AND the preceding candle is red (close < open).
+        const cClose = c.close ?? c.c;
+        const cOpen  = c.open ?? c.o;
+        const prevClose = prev ? (prev.close ?? prev.c) : null;
+        const prevOpen  = prev ? (prev.open  ?? prev.o) : null;
+        const fallbackLowColorValidated = cClose > cOpen &&
+          prevClose !== null && prevOpen !== null && prevClose < prevOpen;
         anchor_low_swing = {
           t: c.t,
           price: c.low,
           type: 'LOW',
           grade: swings[0]?.grade || 'MAJOR',
-          colorValidated: true,
+          colorValidated: fallbackLowColorValidated,
           candle_index: closestIdx,
           timestamp: new Date(c.t).toISOString(),
           structure_type: swings[0]?.structure_type || 'MAJOR',

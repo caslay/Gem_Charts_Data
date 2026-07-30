@@ -46,8 +46,23 @@ export class PivotEngine {
 
         const isConfirmed = (candles[i + lb] !== undefined) && (candles[i + lb].isClosed !== false);
 
+        // ─── Directional Color Lock (Lesson #1 / Lesson #17 Doctrine) ───────────────
+        // A valid Swing High MUST be a red candle (close < open) immediately preceded
+        // by a green candle (close > open).
+        // A valid Swing Low MUST be a green candle (close > open) immediately preceded
+        // by a red candle (close < open).
+        // Unvalidated pivots are still registered so the renderer can show them as
+        // dim/dashed visual hints, but they are NOT used for dealing-range anchoring.
+        const prev = i > 0 ? candles[i - 1] : null;
+        const cIsRed   = (c.close ?? c.c) < (c.open ?? c.o);
+        const cIsGreen = (c.close ?? c.c) > (c.open ?? c.o);
+        const prevIsGreen = prev !== null && (prev.close ?? prev.c) > (prev.open ?? prev.o);
+        const prevIsRed   = prev !== null && (prev.close ?? prev.c) < (prev.open ?? prev.o);
+
         if (isPH) {
           const pIdx = c.index ?? i;
+          // Color Lock: red top preceded by green candle
+          const colorValidated = cIsRed && prevIsGreen;
           this.pivots.push({
             type: 'SWING_HIGH',
             index: pIdx,
@@ -55,12 +70,14 @@ export class PivotEngine {
             confirmed: isConfirmed,
             timestamp: c.t,
             level: lvl.level,
-            colorValidated: true // Automatically valid in standard SMC
+            colorValidated
           });
         }
 
         if (isPL) {
           const pIdx = c.index ?? i;
+          // Color Lock: green bottom preceded by red candle
+          const colorValidated = cIsGreen && prevIsRed;
           this.pivots.push({
             type: 'SWING_LOW',
             index: pIdx,
@@ -68,7 +85,7 @@ export class PivotEngine {
             confirmed: isConfirmed,
             timestamp: c.t,
             level: lvl.level,
-            colorValidated: true // Automatically valid in standard SMC
+            colorValidated
           });
         }
       }

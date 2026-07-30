@@ -35,6 +35,29 @@ export class SMCStateEngine {
     this.target_level = targetLevel;
   }
 
+  /**
+   * Bootstrap the trend direction from the first confirmed pivot in the dataset.
+   * This prevents the false BULLISH bias on markets that open in a bearish leg.
+   * Called by MarketStructureAPI before the main candle-processing loop.
+   */
+  public initializeFromFirstPivot(pivots: import('./types').Pivot[]): void {
+    const firstConfirmed = pivots
+      .filter(p => p.confirmed && p.level === this.target_level)
+      .sort((a, b) => a.timestamp - b.timestamp)[0];
+
+    if (!firstConfirmed) return;
+
+    if (firstConfirmed.type === 'SWING_LOW') {
+      // First major pivot is a low → market was rallying → start BULLISH
+      this.current_trend_state = 'BULLISH_SWING';
+      this.active_swing_low = firstConfirmed.price;
+    } else {
+      // First major pivot is a high → market was declining → start BEARISH
+      this.current_trend_state = 'BEARISH_SWING';
+      this.active_swing_high = firstConfirmed.price;
+    }
+  }
+
   private compute_volume_sma(candles: Candle[], idx: number, len: number): number {
     const start = Math.max(0, idx - len + 1);
     let volSum = 0;
