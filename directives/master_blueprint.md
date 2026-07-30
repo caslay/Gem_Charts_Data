@@ -1,8 +1,8 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.1.0
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.1.2
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-07-30 (V12.1.1 — FVG Mitigation Ghost Zone Fix: corrected wick-scanning threshold in fvgEngine.ts + LiquidityEngine.ts property name fixes)  
+> **Last Updated:** 2026-07-30 (V12.1.2 — Market Structure Audit: Directional Color Lock enforced, microStateEngine isolation, internalZigzag shadow fixed, anti-corruption clamp metadata preserved, fallback anchors color-validated, initial trend bias bootstrapped)  
 
 ## 🆕 V12.1.0 Changelog — Phase 2 True Day Open (TDO) Permanent Removal (2026-07-29)
 
@@ -31,6 +31,25 @@ The True Day Open (TDO / `true_day_open_0700` / `PRICE_VS_OPEN`) has been **perm
 ### Verification
 - `npx tsc --noEmit` → **0 errors, 0 warnings** ✅
 - Zero remaining `true_day_open`, `true_day_open_0700`, or `PRICE_VS_OPEN` references in source files ✅
+
+---
+
+## 🆕 V12.1.2 Changelog — Market Structure Audit: 3 Critical Bugs + 4 Design Gaps Fixed (2026-07-30)
+
+### Summary
+A deep audit of all four market structure layers (Major, Inner, Internal, iSAR) found that the Directional Color Lock from Lesson #1 and Lesson #17 was completely bypassed, Inner/Internal ZigZags shared a state engine causing cross-contamination, the `internalZigzag` return field was shadowed by `innerZigzag`, and the anti-corruption clamp silently replaced anchor metadata with Major swings.
+
+### Bug Fixes
+- **`PivotEngine.ts`:** Implemented the Directional Color Lock — SWING_HIGH requires red candle preceded by green; SWING_LOW requires green candle preceded by red. Unvalidated pivots still register for visualization but are correctly flagged `colorValidated: false`. Previously all pivots were hardcoded `colorValidated: true` (BUG-1).
+- **`MarketStructureAPI.ts`:** Added a dedicated `microStateEngine = new SMCStateEngine(config, 0)` for Level 0 (INNER) pivots. Previously both INTERNAL and INNER zigzags were built from the same `innerStateEngine`, cross-contaminating BOS/MSS labels across structural levels (BUG-2).
+- **`MarketStructureAPI.ts`:** Fixed `internalZigzag` variable shadow — the return object now correctly exposes the `internalZigzag` variable (built from `activeInternalSwings` + `innerStateEngine`). Previously both `internalZigzag` and `innerZigzag` fields pointed to the same `innerZigzag` array, losing all INT-specific structural break labels (GAP-4).
+- **`MarketStructureAPI.ts`:** Fixed anti-corruption clamp — when the internal range is clamped to parent bounds, the anchor swing metadata is now preserved if it exists rather than being replaced with the Major swing anchor (BUG-4).
+- **`MarketStructureAPI.ts`:** Fixed fallback DR anchor `colorValidated` — the nearest-candle fallback anchor builder now derives color validation from actual candle open/close data instead of hardcoding `true` (GAP-1).
+- **`SMCStateEngine.ts`:** Added `initializeFromFirstPivot()` method. Called at the start of each analysis to bootstrap the initial trend state from the first confirmed pivot per level, eliminating the false BULLISH bias on datasets that open in a bearish leg (GAP-2).
+- **`MarketStructureAPI.ts`:** Fixed `currentTrend` and `internalTrend` mappings to use an explicit three-way ternary (`BULLISH / BEARISH / UNSET`) instead of a two-way that silently collapsed any non-BULLISH state to `BEARISH` (GAP-3).
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, 0 warnings** ✅
 
 ---
 
