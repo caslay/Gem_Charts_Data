@@ -459,9 +459,27 @@ export default function BacktestPage() {
   };
 
   const handleExecuteBacktestTrade = async (setup: PotentialTrade) => {
-    const entryPrice = parseFloat(((setup.entryMin + setup.entryMax) / 2).toFixed(2));
+    const isCompleted = setup.status === 'TARGET_HIT' || setup.status === 'INVALIDATED';
+    const isWin = setup.status === 'TARGET_HIT';
     const direction = setup.direction === 'BULLISH' ? 'LONG' : 'SHORT';
+    const entryPrice = parseFloat((setup.openPrice ?? ((setup.entryMin + setup.entryMax) / 2)).toFixed(2));
+    const exitPrice = isCompleted
+      ? parseFloat((setup.closePrice ?? (isWin ? setup.target1 : setup.stopLoss)).toFixed(2))
+      : undefined;
+
+    let realizedPnl: number | undefined = undefined;
+    if (isCompleted && exitPrice !== undefined) {
+      const diff = direction === 'LONG' ? exitPrice - entryPrice : entryPrice - exitPrice;
+      realizedPnl = parseFloat(diff.toFixed(2));
+    }
+
     const lastCandle = (engine.enrichedPayload?.data_payload as any)?.candles_5m?.slice(-1)[0];
+    const openTimeStr = setup.openTime || (lastCandle ? new Date(lastCandle.t).toISOString() : new Date().toISOString());
+    const closeTimeStr = isCompleted ? (setup.closeTime || new Date().toISOString()) : undefined;
+
+    const summaryText = isCompleted
+      ? `[COMPLETED - ${isWin ? 'TARGET HIT 🎯' : 'INVALIDATED 🚫'}] ${setup.type}: ${setup.trigger}\nEntry: $${entryPrice.toFixed(2)} | Exit: $${exitPrice?.toFixed(2)} | Open: ${openTimeStr} | Close: ${closeTimeStr} | TP2: $${setup.target2.toFixed(2)} | ${setup.confluence}`
+      : `${setup.confluence} | TP2: $${setup.target2.toFixed(2)}`;
 
     try {
       const res = await fetch('/api/backtest-trades', {
@@ -471,12 +489,18 @@ export default function BacktestPage() {
           symbol: 'ETHUSDC',
           direction,
           entry_price: entryPrice,
+          exit_price: exitPrice,
           stop_loss: setup.stopLoss,
           take_profit: setup.target1,
           strategy_name: `Quant Setup (${setup.id})`,
-          notes: `${setup.confluence} | TP2: $${setup.target2.toFixed(2)}`,
-          status: 'OPEN',
-          created_at: lastCandle ? new Date(lastCandle.t).toISOString() : new Date().toISOString(),
+          notes: summaryText,
+          status: isCompleted ? 'CLOSED' : 'OPEN',
+          outcome: isCompleted ? (isWin ? 'WIN' : 'LOSS') : undefined,
+          pnl: realizedPnl,
+          realized_pnl: realizedPnl,
+          created_at: openTimeStr,
+          opened_at: openTimeStr,
+          closed_at: closeTimeStr,
         }),
       });
 
@@ -495,6 +519,7 @@ export default function BacktestPage() {
       console.error('[Backtest] Failed to execute setup:', err);
     }
   };
+
 
   const handleUpdateBacktestTradeLevels = async (tradeId: string, tp: number | null, sl: number | null) => {
     try {

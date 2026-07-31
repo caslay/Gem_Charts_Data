@@ -51,24 +51,29 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
       );
     }
 
-    // Dynamic checks
-    const openTradesCount = inMemoryTrades.filter(t => t.status === "OPEN").length;
-    if (openTradesCount > 0) {
-      return NextResponse.json(
-        { error: "GLOBAL_LOCK: An active trade is already in progress. Close it before initiating new setups." },
-        { status: 403 }
+    const isNewTradeClosed = body.status === "CLOSED";
+
+    // Dynamic checks for OPEN trades (bypassed for historical completed setups)
+    if (!isNewTradeClosed) {
+      const openTradesCount = inMemoryTrades.filter(t => t.status === "OPEN").length;
+      if (openTradesCount > 0) {
+        return NextResponse.json(
+          { error: "GLOBAL_LOCK: An active trade is already in progress. Close it before initiating new setups." },
+          { status: 403 }
+        );
+      }
+
+      const isThisStrategyAlreadyOpen = inMemoryTrades.some(
+        t => t.strategy_name === strategy_name && (t.status === "OPEN" || t.status === "PAUSED")
       );
+      if (isThisStrategyAlreadyOpen) {
+        return NextResponse.json(
+          { error: "[ENTRY_BLOCKED: ONE_TRADE_RULE] This strategy already has an active open position. Close it before opening a new one." },
+          { status: 409 }
+        );
+      }
     }
 
-    const isThisStrategyAlreadyOpen = inMemoryTrades.some(
-      t => t.strategy_name === strategy_name && (t.status === "OPEN" || t.status === "PAUSED")
-    );
-    if (isThisStrategyAlreadyOpen) {
-      return NextResponse.json(
-        { error: "[ENTRY_BLOCKED: ONE_TRADE_RULE] This strategy already has an active open position. Close it before opening a new one." },
-        { status: 409 }
-      );
-    }
 
     // Resolve current market price
     const current_market_price = body.current_price
@@ -294,24 +299,26 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
 
     const savedTrade = {
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15) + '-' + Math.random().toString(36).substring(2, 15),
-      timestamp: new Date().toISOString(),
+      timestamp: body.created_at || new Date().toISOString(),
       symbol,
       direction,
       entry_price: parseFloat(entry_price.toFixed(4)),
       stop_loss: parseFloat(stop_loss.toFixed(4)),
       take_profit: parseFloat(take_profit.toFixed(4)),
-      status: "OPEN",
+      status: body.status || "OPEN",
       strategy_name,
       ai_narrative_summary: ai_narrative_summary || null,
       position_size,
-      exit_price: null,
-      realized_pnl: null,
+      exit_price: body.exit_price !== undefined && body.exit_price !== null ? parseFloat(Number(body.exit_price).toFixed(4)) : null,
+      realized_pnl: body.realized_pnl !== undefined && body.realized_pnl !== null ? parseFloat(Number(body.realized_pnl).toFixed(2)) : (body.pnl !== undefined ? parseFloat(Number(body.pnl).toFixed(2)) : null),
+      outcome: body.outcome || (body.status === "CLOSED" ? (Number(body.realized_pnl ?? body.pnl ?? 0) >= 0 ? "WIN" : "LOSS") : null),
       roi: null,
       risk_amount_usd,
-      opened_at: new Date().toISOString(),
-      closed_at: null,
-      created_at: new Date().toISOString()
+      opened_at: body.opened_at || body.created_at || new Date().toISOString(),
+      closed_at: body.closed_at || (body.status === "CLOSED" ? new Date().toISOString() : null),
+      created_at: body.created_at || new Date().toISOString()
     };
+
 
     inMemoryTrades.push(savedTrade);
 
@@ -1000,48 +1007,56 @@ export async function POST(req: Request) {
     // ── 9b. Global Portfolio Risk Guard Veto Gate (V8.4) ────────────────────
     const newTradeRiskUsd = sl_distance * position_size;
 
-    // Calculate sum of Risk Amount for all currently OPEN trades
-    const openTradesRes = await sql`
-      SELECT entry_price, stop_loss, position_size FROM paper_trades
-      WHERE status = 'OPEN'
-    `;
-    let currentOpenRiskUsd = 0;
-    for (const row of openTradesRes.rows) {
-      const entry = parseFloat(row.entry_price);
-      const sl = parseFloat(row.stop_loss);
-      const size = parseFloat(row.position_size || 1.0);
-      currentOpenRiskUsd += Math.abs(entry - sl) * size;
-    }
+    const isNewTradeClosed = body.status === "CLOSED";
 
-    // Reject trade if (Current Open Risk + New Trade Risk) > max_risk_limit_pct of portfolio
-    const proposedTotalRiskUsd = currentOpenRiskUsd + newTradeRiskUsd;
-    const maxAllowedRiskUsd = current_balance * (max_risk_limit_pct / 100);
+    if (!isNewTradeClosed) {
+      // Calculate sum of Risk Amount for all currently OPEN trades
+      const openTradesRes = await sql`
+        SELECT entry_price, stop_loss, position_size FROM paper_trades
+        WHERE status = 'OPEN'
+      `;
+      let currentOpenRiskUsd = 0;
+      for (const row of openTradesRes.rows) {
+        const entry = parseFloat(row.entry_price);
+        const sl = parseFloat(row.stop_loss);
+        const size = parseFloat(row.position_size || 1.0);
+        currentOpenRiskUsd += Math.abs(entry - sl) * size;
+      }
 
-    if (proposedTotalRiskUsd > maxAllowedRiskUsd) {
-      console.warn(`[RISK_VETO: PORTFOLIO_AT_CAPACITY] Rejecting trade. Proposed: $${proposedTotalRiskUsd.toFixed(2)}, Allowed: $${maxAllowedRiskUsd.toFixed(2)}.`);
-      return NextResponse.json(
-        { error: "[RISK_VETO: PORTFOLIO_AT_CAPACITY]" },
-        { status: 403 }
-      );
-    }
+      // Reject trade if (Current Open Risk + New Trade Risk) > max_risk_limit_pct of portfolio
+      const proposedTotalRiskUsd = currentOpenRiskUsd + newTradeRiskUsd;
+      const maxAllowedRiskUsd = current_balance * (max_risk_limit_pct / 100);
 
-    // ── 9c. One-Trade Rule (Server-Side Guard, V8.5) ─────────────────────────
-    // Reject if a trade with the same strategy_name is already OPEN or PAUSED.
-    const existingActiveTradeRes = await sql`
-      SELECT id FROM paper_trades
-      WHERE strategy_name = ${strategy_name}
-        AND status IN ('OPEN', 'PAUSED')
-      LIMIT 1
-    `;
-    if (existingActiveTradeRes.rows.length > 0) {
-      return NextResponse.json(
-        { error: "[ENTRY_BLOCKED: ONE_TRADE_RULE] This strategy already has an active open position. Close it before opening a new one." },
-        { status: 409 }
-      );
+      if (proposedTotalRiskUsd > maxAllowedRiskUsd) {
+        console.warn(`[RISK_VETO: PORTFOLIO_AT_CAPACITY] Rejecting trade. Proposed: $${proposedTotalRiskUsd.toFixed(2)}, Allowed: $${maxAllowedRiskUsd.toFixed(2)}.`);
+        return NextResponse.json(
+          { error: "[RISK_VETO: PORTFOLIO_AT_CAPACITY]" },
+          { status: 403 }
+        );
+      }
+
+      // ── 9c. One-Trade Rule (Server-Side Guard, V8.5) ─────────────────────────
+      const existingActiveTradeRes = await sql`
+        SELECT id FROM paper_trades
+        WHERE strategy_name = ${strategy_name}
+          AND status IN ('OPEN', 'PAUSED')
+        LIMIT 1
+      `;
+      if (existingActiveTradeRes.rows.length > 0) {
+        return NextResponse.json(
+          { error: "[ENTRY_BLOCKED: ONE_TRADE_RULE] This strategy already has an active open position. Close it before opening a new one." },
+          { status: 409 }
+        );
+      }
     }
 
     // ── 10. Persist Trade Execution ──────────────────────────────────────────
-    const status = "OPEN";
+    const status = body.status || "OPEN";
+    const exitPriceNum = body.exit_price !== undefined && body.exit_price !== null ? parseFloat(Number(body.exit_price).toFixed(4)) : null;
+    const pnlNum = body.realized_pnl !== undefined && body.realized_pnl !== null ? parseFloat(Number(body.realized_pnl).toFixed(2)) : (body.pnl !== undefined ? parseFloat(Number(body.pnl).toFixed(2)) : null);
+    const openedAtStr = body.opened_at || body.created_at || new Date().toISOString();
+    const closedAtStr = body.closed_at || (status === "CLOSED" ? new Date().toISOString() : null);
+
     const dbResult = await sql`
       INSERT INTO paper_trades (
         symbol,
@@ -1054,7 +1069,10 @@ export async function POST(req: Request) {
         ai_narrative_summary,
         position_size,
         risk_amount_usd,
-        opened_at
+        exit_price,
+        realized_pnl,
+        opened_at,
+        closed_at
       ) VALUES (
         ${symbol},
         ${direction},
@@ -1066,9 +1084,13 @@ export async function POST(req: Request) {
         ${ai_narrative_summary || null},
         ${position_size},
         ${risk_amount_usd},
-        CURRENT_TIMESTAMP
+        ${exitPriceNum},
+        ${pnlNum},
+        ${openedAtStr},
+        ${closedAtStr}
       ) RETURNING id, timestamp;
     `;
+
 
     const savedTrade = dbResult.rows[0];
 

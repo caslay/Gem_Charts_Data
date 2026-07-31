@@ -96,21 +96,47 @@ Timestamp: ${new Date().toISOString()}`;
   const handleExecuteTrade = async (setup: PotentialTrade) => {
     setExecutingSetupId(setup.id);
     setConfirmingSetupId(null);
-    const entryMidpoint = parseFloat(((setup.entryMin + setup.entryMax) / 2).toFixed(2));
+    const isCompleted = setup.status === "TARGET_HIT" || setup.status === "INVALIDATED";
+    const isWin = setup.status === "TARGET_HIT";
+    const direction = setup.direction === "BULLISH" ? "LONG" : "SHORT";
+    const entryMidpoint = parseFloat((setup.openPrice ?? ((setup.entryMin + setup.entryMax) / 2)).toFixed(2));
+    const exitPrice = isCompleted
+      ? parseFloat((setup.closePrice ?? (isWin ? setup.target1 : setup.stopLoss)).toFixed(2))
+      : undefined;
+
+    let realizedPnl: number | undefined = undefined;
+    if (isCompleted && exitPrice !== undefined) {
+      const diff = direction === "LONG" ? exitPrice - entryMidpoint : entryMidpoint - exitPrice;
+      realizedPnl = parseFloat(diff.toFixed(2));
+    }
+
+    const openTimeStr = setup.openTime || new Date().toISOString();
+    const closeTimeStr = isCompleted ? (setup.closeTime || new Date().toISOString()) : undefined;
+
+    const summaryText = isCompleted
+      ? `[COMPLETED - ${isWin ? "TARGET HIT 🎯" : "INVALIDATED 🚫"}] ${setup.type}: ${setup.trigger}\nEntry: $${entryMidpoint.toFixed(2)} | Exit: $${exitPrice?.toFixed(2)} | Open: ${openTimeStr} | Close: ${closeTimeStr} | TP2: $${setup.target2.toFixed(2)} | ${setup.confluence}`
+      : `${setup.type}: ${setup.trigger}\nTP2: $${setup.target2.toFixed(2)} | ${setup.confluence}`;
 
     try {
-      // FIX: The real live journal endpoint is /api/trades, not /api/journal (404).
       const res = await fetch("/api/trades", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           symbol: "ETHUSDC",
-          direction: setup.direction === "BULLISH" ? "LONG" : "SHORT",
+          direction,
           entry_price: entryMidpoint,
+          exit_price: exitPrice,
           stop_loss: setup.stopLoss,
-          take_profit: setup.target1,   // TP1 as primary take-profit
+          take_profit: setup.target1,
           strategy_name: `Quant Setup (${setup.id})`,
-          ai_narrative_summary: `${setup.type}: ${setup.trigger}\nTP2: $${setup.target2.toFixed(2)} | ${setup.confluence}`,
+          ai_narrative_summary: summaryText,
+          status: isCompleted ? "CLOSED" : "OPEN",
+          outcome: isCompleted ? (isWin ? "WIN" : "LOSS") : undefined,
+          pnl: realizedPnl,
+          realized_pnl: realizedPnl,
+          created_at: openTimeStr,
+          opened_at: openTimeStr,
+          closed_at: closeTimeStr,
         }),
       });
 
@@ -130,6 +156,7 @@ Timestamp: ${new Date().toISOString()}`;
       setExecutingSetupId(null);
     }
   };
+
 
   /**
    * Derives button visual config and click behaviour based on setup status.
@@ -206,23 +233,24 @@ Timestamp: ${new Date().toISOString()}`;
 
       case "TARGET_HIT":
         return {
-          disabled: true,
-          className: "bg-muted/10 text-muted border border-muted/20 cursor-not-allowed opacity-50",
-          icon: <Lock className="w-3 h-3" />,
-          label: "Completed",
-          onClick: () => {},
-          title: "Move already played out. Cannot enter a completed setup.",
+          disabled: false,
+          className: "bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30",
+          icon: <Check className="w-3 h-3 text-emerald-400" />,
+          label: "Log Win 🎯",
+          onClick: () => handleExecuteTrade(setup),
+          title: "Log completed winning trade into trading journal with open/close timeline data",
         };
 
       case "INVALIDATED":
         return {
-          disabled: true,
-          className: "bg-rose-500/10 text-rose-500/50 border border-rose-500/20 cursor-not-allowed opacity-50",
-          icon: <Ban className="w-3 h-3" />,
-          label: "Invalidated",
-          onClick: () => {},
-          title: "Setup invalidated — stop loss was breached.",
+          disabled: false,
+          className: "bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30",
+          icon: <Ban className="w-3 h-3 text-rose-400" />,
+          label: "Log Loss 🚫",
+          onClick: () => handleExecuteTrade(setup),
+          title: "Log completed invalidated trade into trading journal with open/close timeline data",
         };
+
 
       default:
         return {

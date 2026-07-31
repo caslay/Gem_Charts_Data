@@ -51,24 +51,29 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
       );
     }
 
-    // Dynamic checks
-    const openTradesCount = inMemoryTrades.filter(t => t.status === "OPEN").length;
-    if (openTradesCount > 0) {
-      return NextResponse.json(
-        { error: "GLOBAL_LOCK: An active backtest trade is already in progress. Close it before initiating new setups." },
-        { status: 403 }
+    const isNewTradeClosed = body.status === "CLOSED";
+
+    // Dynamic checks for OPEN trades (bypassed for historical completed setups)
+    if (!isNewTradeClosed) {
+      const openTradesCount = inMemoryTrades.filter(t => t.status === "OPEN").length;
+      if (openTradesCount > 0) {
+        return NextResponse.json(
+          { error: "GLOBAL_LOCK: An active backtest trade is already in progress. Close it before initiating new setups." },
+          { status: 403 }
+        );
+      }
+
+      const isThisStrategyAlreadyOpen = inMemoryTrades.some(
+        t => t.strategy_name === strategy_name && (t.status === "OPEN" || t.status === "PAUSED")
       );
+      if (isThisStrategyAlreadyOpen) {
+        return NextResponse.json(
+          { error: "[ENTRY_BLOCKED: ONE_TRADE_RULE] This strategy already has an active open backtest position." },
+          { status: 409 }
+        );
+      }
     }
 
-    const isThisStrategyAlreadyOpen = inMemoryTrades.some(
-      t => t.strategy_name === strategy_name && (t.status === "OPEN" || t.status === "PAUSED")
-    );
-    if (isThisStrategyAlreadyOpen) {
-      return NextResponse.json(
-        { error: "[ENTRY_BLOCKED: ONE_TRADE_RULE] This strategy already has an active open backtest position." },
-        { status: 409 }
-      );
-    }
 
     // Resolve current market price
     const current_market_price = body.current_price
@@ -299,8 +304,8 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
         { status: 400 }
       );
     }
-    const candleTime = candles5m[candles5m.length - 1].t;
-    const opened_at_str = new Date(candleTime).toISOString();
+    const candleTime = (candles5m && Array.isArray(candles5m) && candles5m.length > 0) ? candles5m[candles5m.length - 1].t : null;
+    const opened_at_str = body.created_at || body.opened_at || (candleTime ? new Date(candleTime).toISOString() : new Date().toISOString());
 
     const savedTrade = {
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15) + '-' + Math.random().toString(36).substring(2, 15),
@@ -310,18 +315,20 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
       entry_price: parseFloat(entry_price.toFixed(4)),
       stop_loss: parseFloat(stop_loss.toFixed(4)),
       take_profit: parseFloat(take_profit.toFixed(4)),
-      status: "OPEN",
+      status: body.status || "OPEN",
       strategy_name,
-      ai_narrative_summary: ai_narrative_summary || null,
+      ai_narrative_summary: ai_narrative_summary || body.notes || null,
       position_size,
-      exit_price: null,
-      realized_pnl: null,
+      exit_price: body.exit_price !== undefined && body.exit_price !== null ? parseFloat(Number(body.exit_price).toFixed(4)) : null,
+      realized_pnl: body.realized_pnl !== undefined && body.realized_pnl !== null ? parseFloat(Number(body.realized_pnl).toFixed(2)) : (body.pnl !== undefined ? parseFloat(Number(body.pnl).toFixed(2)) : null),
+      outcome: body.outcome || (body.status === "CLOSED" ? (Number(body.realized_pnl ?? body.pnl ?? 0) >= 0 ? "WIN" : "LOSS") : null),
       roi: null,
       risk_amount_usd,
       opened_at: opened_at_str,
-      closed_at: null,
+      closed_at: body.closed_at || (body.status === "CLOSED" ? new Date().toISOString() : null),
       created_at: opened_at_str
     };
+
 
     inMemoryTrades.push(savedTrade);
 
@@ -981,33 +988,35 @@ export async function POST(req: Request) {
       );
     }
 
-    // One trade per strategy check
-    const existingActiveTradeRes = await sql`
-      SELECT id FROM backtest_trades
-      WHERE strategy_name = ${strategy_name}
-        AND status IN ('OPEN', 'PAUSED')
-      LIMIT 1
-    `;
-    if (existingActiveTradeRes.rows.length > 0) {
-      return NextResponse.json(
-        { error: "[ENTRY_BLOCKED: ONE_TRADE_RULE] This strategy already has an active open backtest position." },
-        { status: 409 }
-      );
+    const isNewTradeClosed = body.status === "CLOSED";
+
+    if (!isNewTradeClosed) {
+      // One trade per strategy check
+      const existingActiveTradeRes = await sql`
+        SELECT id FROM backtest_trades
+        WHERE strategy_name = ${strategy_name}
+          AND status IN ('OPEN', 'PAUSED')
+        LIMIT 1
+      `;
+      if (existingActiveTradeRes.rows.length > 0) {
+        return NextResponse.json(
+          { error: "[ENTRY_BLOCKED: ONE_TRADE_RULE] This strategy already has an active open backtest position." },
+          { status: 409 }
+        );
+      }
     }
 
     // Resolve chronological backtest opened_at timestamp from visible kline stream
     const candles5m = ipda_metrics?.data_payload?.candles_5m;
-    if (!candles5m || !Array.isArray(candles5m) || candles5m.length === 0) {
-      return NextResponse.json(
-        { error: "Missing historical kline stream payload in backtest mode." },
-        { status: 400 }
-      );
-    }
-    const candleTime = candles5m[candles5m.length - 1].t;
-    const opened_at_val = new Date(candleTime).toISOString();
+    const candleTime = (candles5m && Array.isArray(candles5m) && candles5m.length > 0) ? candles5m[candles5m.length - 1].t : null;
+    const opened_at_val = body.created_at || body.opened_at || (candleTime ? new Date(candleTime).toISOString() : new Date().toISOString());
+    const closed_at_val = body.closed_at || (isNewTradeClosed ? new Date().toISOString() : null);
 
     // Insert
-    const status = "OPEN";
+    const status = body.status || "OPEN";
+    const exitPriceNum = body.exit_price !== undefined && body.exit_price !== null ? parseFloat(Number(body.exit_price).toFixed(4)) : null;
+    const pnlNum = body.realized_pnl !== undefined && body.realized_pnl !== null ? parseFloat(Number(body.realized_pnl).toFixed(2)) : (body.pnl !== undefined ? parseFloat(Number(body.pnl).toFixed(2)) : null);
+
     const dbResult = await sql`
       INSERT INTO backtest_trades (
         symbol,
@@ -1020,7 +1029,10 @@ export async function POST(req: Request) {
         ai_narrative_summary,
         position_size,
         risk_amount_usd,
+        exit_price,
+        realized_pnl,
         opened_at,
+        closed_at,
         timestamp,
         created_at
       ) VALUES (
@@ -1031,14 +1043,18 @@ export async function POST(req: Request) {
         ${take_profit},
         ${status},
         ${strategy_name},
-        ${ai_narrative_summary || null},
+        ${ai_narrative_summary || body.notes || null},
         ${position_size},
         ${risk_amount_usd},
+        ${exitPriceNum},
+        ${pnlNum},
         ${opened_at_val},
+        ${closed_at_val},
         ${opened_at_val},
         ${opened_at_val}
       ) RETURNING id, timestamp;
     `;
+
 
     const savedTrade = dbResult.rows[0];
 
