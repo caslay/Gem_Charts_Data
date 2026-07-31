@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { useMarketData as useMarketDataHook } from '@/hooks/useMarketData';
 import { useBinanceWS } from '@/hooks/useBinanceWS';
+import { useAutoTradeExecutor } from '@/hooks/useAutoTradeExecutor';
 import type { LiveCandle, WSStatus } from '@/hooks/useBinanceWS';
 
 type MarketDataReturnType = ReturnType<typeof useMarketDataHook>;
@@ -35,6 +36,10 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
   } = useBinanceWS({ symbol: 'ethusdc', interval: wsInterval });
 
   const marketData = useMarketDataHook(wsInterval, liveCandle);
+
+  // Background Auto-Trade Executor: automatically opens trades in journal when price touches entry
+  useAutoTradeExecutor(marketData.data, false);
+
 
   const staticValue: MarketDataContextValue = {
     ...marketData,

@@ -1,8 +1,25 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.4
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.5
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-07-31 (V12.4 — Potential Trades: Chronological Sequential Candle Evaluation, Exact Candle Open/Close Timestamps, Stable FVG Persistence Keys)  
+> **Last Updated:** 2026-07-31 (V12.5 — Potential Trades Auto-Execution Engine: Background Auto-Trade Executor Hook, Selective Setup Toggles, Idempotency Guard, Journal Integration)  
+
+## 🆕 V12.5 Changelog — Selective Potential Trades Auto-Execution Engine (2026-07-31)
+
+### Summary
+Added a full-featured, selective **Auto-Execution Engine** for Potential Trades. Traders can now toggle `⚡ Auto-Open` on any specific setup in either Live or Backtest mode. When price touches the entry range, the system automatically logs the position directly into the Trading Journal in real time.
+
+### Key Features & Architecture
+- **Selective Auto-Open Toggle (`toggleAutoExecuteKey`):** Allows traders to select specific high-conviction trades for automated execution. Preferences persist across sessions via `gem_quant_auto_execute_keys`.
+- **Background Auto-Trade Executor (`useAutoTradeExecutor`):** Dedicated hook mounted inside `MarketDataProvider` (for 24/7 background live monitoring) and `BacktestPage` (for replay steps). Monitors setup lifecycle and automatically posts position parameters to `/api/trades` or `/api/backtest-trades`.
+- **Idempotency & Audio Notifications:** `autoOpened: true` flag ensures trades are executed exactly ONCE per setup. Fires real-time UI refresh events (`trades-refresh` / `backtest-trades-refresh`) and plays audio confirmation.
+- **Modals UI Suite:** Integrated an Auto-Execution Status Banner and `⚡ Auto-Open ON/OFF` toggle buttons on every row and inspector card across both `PotentialTradesModal` and `BacktestPotentialTradesModal`.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, 0 warnings** ✅
+
+---
+
 
 ## 🆕 V12.4 Changelog — Potential Trades Timeline Chronology & False TARGET_HIT Fix (2026-07-31)
 
