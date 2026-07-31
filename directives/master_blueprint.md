@@ -1,8 +1,24 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.3
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.4
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-07-31 (V12.3 — Potential Trades: TP1 guaranteed ≥1:1 R:R, TP2 locked to stable structural anchors, Execute button fixed `/api/journal` → `/api/trades`)  
+> **Last Updated:** 2026-07-31 (V12.4 — Potential Trades: Chronological Sequential Candle Evaluation, Exact Candle Open/Close Timestamps, Stable FVG Persistence Keys)  
+
+## 🆕 V12.4 Changelog — Potential Trades Timeline Chronology & False TARGET_HIT Fix (2026-07-31)
+
+### Summary
+Fixed two critical bugs in the Potential Trades engine where setups were incorrectly flagged as `TARGET_HIT` before reaching TP levels, and open/close timestamps were identical millisecond system times.
+
+### Key Enhancements & Fixes
+- **Chronological Sequential Candle Evaluation (`evaluateSetupTimeline`):** Replaced non-sequential candle high/low aggregate checks with a strict timeline scanner. The engine first locates the exact candle where price touched/retested the entry range, and ONLY scans subsequent candles for exit targets (TP1/TP2 or SL).
+- **Exact Candle Timestamps:** `openTime` and `closeTime` now capture the exact candle timestamps (`c.t`) where entry touch and target hit/invalidation occurred, rendering distinct, accurate open and close dates and times.
+- **Stable Intrinsic Setup Keys:** Migrated `localStorage` persistence keys from transient display IDs (`SET-04_BULL_...`) to intrinsic setup signatures (`FVG_BULL_1852.41_1852.86_...`), completely eliminating cross-contamination across refresh frames.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, 0 warnings** ✅
+
+---
+
 
 ## 🆕 V12.2 Changelog — Potential Trades Engine: 6 Silent Corruption Bugs Fixed (2026-07-31)
 
