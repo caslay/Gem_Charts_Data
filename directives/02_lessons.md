@@ -184,3 +184,15 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
   2. **TP2** is now locked to a stable structural anchor chain: `bslMagnets[0]` (PDH-anchored, stable) ? `swingHigh` ? `entryMid + 2×risk`. It no longer uses `bslMagnets[1]` or `[2]` which are deep order-book entries that churn on every poll.
   3. Fixed `/api/journal` ? `/api/trades` in `PotentialTradesModal.tsx`.
   4. Updated all execute handlers to use `ETHUSDC` as symbol.
+
+### 27. Potential Trades Timeline Chronology & False TARGET_HIT Bug (Resolved in V12.4)
+- **The Bugs:**
+  1. **(False TARGET_HIT)** Setups evaluated status by checking aggregate 50-candle highestRecent / lowestRecent bounds regardless of candle sequence. If price reached TP level hours BEFORE touching the FVG entry, the engine evaluated pre-entry candles and marked the setup as TARGET_HIT prematurely.
+  2. **(Identical Open/Close Timestamps)** openTime and closeTime were recorded using 
+ew Date().toISOString() on the same millisecond tick when evaluated.
+  3. **(Transient Setup Key Collisions)** Setup keys in localStorage were anchored to transient UI display IDs (SET-04_BULL_...), causing setup state to cross-contaminate when FVG positions shifted across poll frames.
+- **The Fix:**
+  1. Implemented `evaluateSetupTimeline()` in `quantTradeEngine.ts`: scans candles strictly chronologically, first locating the exact candle index where entry touch occurred.
+  2. Exit criteria (TP1/TP2 or SL breach) are ONLY evaluated on candles occurring at or after the entry touch index.
+  3. `openTime` and `closeTime` are extracted directly from the candle timestamps (c.t) where entry touch and exit target/SL breach occurred.
+  4. Migrated localStorage setup keys to stable intrinsic representations (FVG_BULL_1852.41_1852.86_...), eliminating setup ID cross-contamination.
