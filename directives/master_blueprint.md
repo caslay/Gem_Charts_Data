@@ -1,8 +1,30 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.5
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.6
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-07-31 (V12.5 — Potential Trades Auto-Execution Engine: Background Auto-Trade Executor Hook, Selective Setup Toggles, Idempotency Guard, Journal Integration)  
+> **Last Updated:** 2026-07-31 (V12.6 — Completed Trade Auto-Open & Historical Journal Logging: Closed Status Payload, Realized PnL Calculation, Open/Close Candle Timestamps, API Guard Bypass)  
+
+## 🆕 V12.6 Changelog — Completed Trade Auto-Open & Journal Logging (2026-07-31)
+
+### Summary
+Enhanced the Auto-Execution Engine and Potential Trades execution flow to support **completed trades** (`TARGET_HIT` [WIN] and `INVALIDATED` [LOSS]). When a completed setup is auto-opened or manually logged, it is recorded directly in the Trading Journal as a **COMPLETED / CLOSED TRADE** with complete timeline attributes.
+
+### Key Features & Architecture
+- **Closed Trade Payload Construction:** For completed setups, the engine calculates:
+  - `status: "CLOSED"`
+  - `outcome: "WIN" | "LOSS"`
+  - `exit_price: setup.closePrice ?? (isWin ? setup.target1 : setup.stopLoss)`
+  - `realized_pnl: ±(exitPrice - entryPrice) * size`
+  - `opened_at: setup.openTime` (exact candle touch timestamp)
+  - `closed_at: setup.closeTime` (exact target/invalidation timestamp)
+- **API Guard Bypass:** Updated `/api/trades` and `/api/backtest-trades` POST routes so `status === "CLOSED"` payloads bypass the active open position locks (`GLOBAL_LOCK`, portfolio risk cap, and `ONE_TRADE_RULE`), enabling seamless insertion of historical completed setups.
+- **UI Button Upgrades:** Upgraded `TARGET_HIT` and `INVALIDATED` button states in `PotentialTradesModal` and `BacktestPotentialTradesModal` to interactive `Log Win 🎯` and `Log Loss 🚫` buttons.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, 0 warnings** ✅
+
+---
+
 
 ## 🆕 V12.5 Changelog — Selective Potential Trades Auto-Execution Engine (2026-07-31)
 

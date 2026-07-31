@@ -204,3 +204,10 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   2. **Background Executor Hook (`useAutoTradeExecutor`):** Mounted inside `MarketDataProvider` (for 24/7 live polling) and `BacktestPage` (for replay steps). Monitors active setups and automatically POSTs to `/api/trades` or `/api/backtest-trades` the moment a setup transitions to `ACTIVE_WATCH` or `CONFIRMED`.
   3. **Idempotency Guard:** utoOpened: true is persisted per setup in localStorage, guaranteeing zero duplicate trade opens.
   4. **UI Banner & Controls:** Added Auto-Execution status banner and interactive ? Auto-Open toggle buttons across table rows and inspector cards in both Live and Backtest Potential Trades modals.
+
+### 29. Completed Trade Auto-Open & Historical Journal Record Logging (Resolved in V12.6)
+- **The Feature:** When a Potential Trade completes (status TARGET_HIT [WIN] or INVALIDATED [LOSS]), Auto-Open or manual click execution logs it into the Trading Journal as a **COMPLETED / CLOSED TRADE** with complete timeline metadata.
+- **The Protocol & Payload:**
+  1. **Closed Trade Attributes:** Set status: "CLOSED", outcome: "WIN" | "LOSS", exit_price: closePrice, ealized_pnl: (exit_price - entry_price) * size, opened_at: openTime, closed_at: closeTime.
+  2. **API Route Bypass:** Updated /api/trades and /api/backtest-trades POST handlers so status === "CLOSED" payloads bypass the active open-trade locks (GLOBAL_LOCK, portfolio risk cap, and ONE_TRADE_RULE).
+  3. **UI Action Buttons:** Replaced disabled states for TARGET_HIT and INVALIDATED with interactive Log Win ?? and Log Loss ?? buttons across table rows and inspector cards.

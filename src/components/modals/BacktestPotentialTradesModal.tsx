@@ -167,19 +167,24 @@ Timestamp: ${new Date().toISOString()}`;
 
       case "TARGET_HIT":
         return {
-          disabled: true,
-          className: "bg-muted/10 text-muted border-muted/20 cursor-not-allowed opacity-50",
-          icon: <Lock className="w-3 h-3" />, label: "Completed", onClick: () => {},
-          title: "Move already played out. Cannot enter a completed setup.",
+          disabled: false,
+          className: "bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30",
+          icon: <Check className="w-3 h-3 text-emerald-400" />,
+          label: "Log Win 🎯",
+          onClick: () => handleExecute(setup),
+          title: "Log completed winning setup into backtest journal with open/close timeline data",
         };
 
       case "INVALIDATED":
         return {
-          disabled: true,
-          className: "bg-rose-500/10 text-rose-500/50 border-rose-500/20 cursor-not-allowed opacity-50",
-          icon: <Ban className="w-3 h-3" />, label: "Invalidated", onClick: () => {},
-          title: "Setup invalidated — stop loss was breached.",
+          disabled: false,
+          className: "bg-rose-500/15 hover:bg-rose-500/25 text-rose-400 border border-rose-500/30",
+          icon: <Ban className="w-3 h-3 text-rose-400" />,
+          label: "Log Loss 🚫",
+          onClick: () => handleExecute(setup),
+          title: "Log completed invalidated setup into backtest journal with open/close timeline data",
         };
+
 
       default:
         return {

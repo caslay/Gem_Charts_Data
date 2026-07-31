@@ -73,35 +73,74 @@ export async function autoExecuteTradeIfNeeded(
     return false;
   }
 
-  // Only trigger auto-execution if status is ACTIVE_WATCH, CONFIRMED, or TARGET_HIT
-  if (setup.status !== "ACTIVE_WATCH" && setup.status !== "CONFIRMED" && setup.status !== "TARGET_HIT") {
+  // Trigger auto-execution if status is ACTIVE_WATCH, CONFIRMED, TARGET_HIT, or INVALIDATED
+  if (
+    setup.status !== "ACTIVE_WATCH" &&
+    setup.status !== "CONFIRMED" &&
+    setup.status !== "TARGET_HIT" &&
+    setup.status !== "INVALIDATED"
+  ) {
     return false;
   }
 
-  const entryMidpoint = parseFloat(((setup.entryMin + setup.entryMax) / 2).toFixed(2));
+  const isCompleted = setup.status === "TARGET_HIT" || setup.status === "INVALIDATED";
+  const isWin = setup.status === "TARGET_HIT";
+  const direction = setup.direction === "BULLISH" ? "LONG" : "SHORT";
+  const entryMidpoint = parseFloat((setup.openPrice ?? ((setup.entryMin + setup.entryMax) / 2)).toFixed(2));
+  const exitPrice = isCompleted
+    ? parseFloat((setup.closePrice ?? (isWin ? setup.target1 : setup.stopLoss)).toFixed(2))
+    : undefined;
+
+  let realizedPnl: number | undefined = undefined;
+  if (isCompleted && exitPrice !== undefined) {
+    const diff = direction === "LONG" ? exitPrice - entryMidpoint : entryMidpoint - exitPrice;
+    realizedPnl = parseFloat(diff.toFixed(2));
+  }
+
+  const openTimeStr = setup.openTime || new Date().toISOString();
+  const closeTimeStr = isCompleted ? (setup.closeTime || new Date().toISOString()) : undefined;
+
   const endpoint = isBacktest ? "/api/backtest-trades" : "/api/trades";
+
+  const summaryText = isCompleted
+    ? `[COMPLETED - ${isWin ? "TARGET HIT 🎯" : "INVALIDATED 🚫"}] ${setup.type}: ${setup.trigger}\nEntry: $${entryMidpoint.toFixed(2)} | Exit: $${exitPrice?.toFixed(2)} | Open: ${openTimeStr} | Close: ${closeTimeStr} | TP2: $${setup.target2.toFixed(2)} | ${setup.confluence}`
+    : `[AUTO-OPENED] ${setup.type}: ${setup.trigger}\nTP2: $${setup.target2.toFixed(2)} | ${setup.confluence}`;
 
   try {
     const payload = isBacktest
       ? {
           symbol: "ETHUSDC",
-          direction: setup.direction === "BULLISH" ? "LONG" : "SHORT",
+          direction,
           entry_price: entryMidpoint,
+          exit_price: exitPrice,
           stop_loss: setup.stopLoss,
           take_profit: setup.target1,
           strategy_name: `Auto Quant Setup (${setup.id})`,
-          notes: `${setup.confluence} | TP2: $${setup.target2.toFixed(2)} [AUTO-EXECUTED]`,
-          status: "OPEN",
-          created_at: setup.openTime || new Date().toISOString(),
+          notes: summaryText,
+          status: isCompleted ? "CLOSED" : "OPEN",
+          outcome: isCompleted ? (isWin ? "WIN" : "LOSS") : undefined,
+          pnl: realizedPnl,
+          realized_pnl: realizedPnl,
+          created_at: openTimeStr,
+          opened_at: openTimeStr,
+          closed_at: closeTimeStr,
         }
       : {
           symbol: "ETHUSDC",
-          direction: setup.direction === "BULLISH" ? "LONG" : "SHORT",
+          direction,
           entry_price: entryMidpoint,
+          exit_price: exitPrice,
           stop_loss: setup.stopLoss,
           take_profit: setup.target1,
           strategy_name: `Auto Quant Setup (${setup.id})`,
-          ai_narrative_summary: `[AUTO-OPENED] ${setup.type}: ${setup.trigger}\nTP2: $${setup.target2.toFixed(2)} | ${setup.confluence}`,
+          ai_narrative_summary: summaryText,
+          status: isCompleted ? "CLOSED" : "OPEN",
+          outcome: isCompleted ? (isWin ? "WIN" : "LOSS") : undefined,
+          pnl: realizedPnl,
+          realized_pnl: realizedPnl,
+          created_at: openTimeStr,
+          opened_at: openTimeStr,
+          closed_at: closeTimeStr,
         };
 
     const res = await fetch(endpoint, {
@@ -109,6 +148,7 @@ export async function autoExecuteTradeIfNeeded(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+
 
     if (res.ok) {
       if (typeof window !== "undefined") {
