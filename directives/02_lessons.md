@@ -196,3 +196,11 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   2. Exit criteria (TP1/TP2 or SL breach) are ONLY evaluated on candles occurring at or after the entry touch index.
   3. `openTime` and `closeTime` are extracted directly from the candle timestamps (c.t) where entry touch and exit target/SL breach occurred.
   4. Migrated localStorage setup keys to stable intrinsic representations (FVG_BULL_1852.41_1852.86_...), eliminating setup ID cross-contamination.
+
+### 28. Potential Trades Auto-Open & Real-Time Journal Tracking (Resolved in V12.5)
+- **The Feature:** Traders needed an option to select specific Potential Trades to automatically open positions in the Trading Journal when price touches entry range, so they can track performance in real time without manual execution.
+- **The Architecture:**
+  1. **Selective Toggle:** Added `setupKey`, `isAutoExecute`, and `isAutoOpened` properties to `PotentialTrade` interface, backed by persistent localStorage helpers (`getAutoExecuteKeys`, `toggleAutoExecuteKey`).
+  2. **Background Executor Hook (`useAutoTradeExecutor`):** Mounted inside `MarketDataProvider` (for 24/7 live polling) and `BacktestPage` (for replay steps). Monitors active setups and automatically POSTs to `/api/trades` or `/api/backtest-trades` the moment a setup transitions to `ACTIVE_WATCH` or `CONFIRMED`.
+  3. **Idempotency Guard:** utoOpened: true is persisted per setup in localStorage, guaranteeing zero duplicate trade opens.
+  4. **UI Banner & Controls:** Added Auto-Execution status banner and interactive ? Auto-Open toggle buttons across table rows and inspector cards in both Live and Backtest Potential Trades modals.

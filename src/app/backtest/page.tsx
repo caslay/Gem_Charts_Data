@@ -26,7 +26,7 @@ import ManualOrderPanel from '@/components/ManualOrderPanel';
 import { calculateATR } from '@/lib/riskEngine';
 import BacktestPotentialTradesModal from '@/components/modals/BacktestPotentialTradesModal';
 import type { PotentialTrade } from '@/lib/quantTradeEngine';
-
+import { useAutoTradeExecutor } from '@/hooks/useAutoTradeExecutor';
 
 // ─── Stat badge ──────────────────────────────────────────────────────────────
 interface StatBadgeProps {
@@ -49,6 +49,11 @@ export default function BacktestPage() {
   const engine = useBacktestEngine();
   const { themeSettings } = useMarketDataContext();
   const { aiAnalysis, aiBias, isAnalyzing, triggerAiAnalysisScan } = useAIAnalysis();
+
+  // Background Auto-Trade Executor for backtest replay
+  useAutoTradeExecutor((engine.enrichedPayload as unknown as MarketDataPayload | null), true);
+
+
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
   const [activeTimeframe, setActiveTimeframe] = useState<BacktestTimeframe>('5m');
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });

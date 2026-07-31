@@ -22,7 +22,121 @@ export interface PotentialTrade {
   openTime?: string;   // ISO 8601
   closePrice?: number;
   closeTime?: string;  // ISO 8601
+  setupKey: string;           // Intrinsic stable setup key
+  isAutoExecute?: boolean;    // User enabled auto-open for this setup
+  isAutoOpened?: boolean;     // Trade was auto-opened into journal
 }
+
+// ── Auto-Execution Helpers ──────────────────────────────────────────────────
+const AUTO_EXECUTE_STORAGE_KEY = "gem_quant_auto_execute_keys";
+
+export function getAutoExecuteKeys(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(AUTO_EXECUTE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function toggleAutoExecuteKey(setupKey: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const keys = getAutoExecuteKeys();
+    const idx = keys.indexOf(setupKey);
+    let enabled = false;
+    if (idx >= 0) {
+      keys.splice(idx, 1);
+      enabled = false;
+    } else {
+      keys.push(setupKey);
+      enabled = true;
+    }
+    localStorage.setItem(AUTO_EXECUTE_STORAGE_KEY, JSON.stringify(keys));
+    return enabled;
+  } catch {
+    return false;
+  }
+}
+
+export function isAutoExecuteEnabled(setupKey: string): boolean {
+  const keys = getAutoExecuteKeys();
+  return keys.includes(setupKey);
+}
+
+export async function autoExecuteTradeIfNeeded(
+  setup: PotentialTrade,
+  isBacktest: boolean = false
+): Promise<boolean> {
+  if (!setup.isAutoExecute || setup.isAutoOpened) {
+    return false;
+  }
+
+  // Only trigger auto-execution if status is ACTIVE_WATCH, CONFIRMED, or TARGET_HIT
+  if (setup.status !== "ACTIVE_WATCH" && setup.status !== "CONFIRMED" && setup.status !== "TARGET_HIT") {
+    return false;
+  }
+
+  const entryMidpoint = parseFloat(((setup.entryMin + setup.entryMax) / 2).toFixed(2));
+  const endpoint = isBacktest ? "/api/backtest-trades" : "/api/trades";
+
+  try {
+    const payload = isBacktest
+      ? {
+          symbol: "ETHUSDC",
+          direction: setup.direction === "BULLISH" ? "LONG" : "SHORT",
+          entry_price: entryMidpoint,
+          stop_loss: setup.stopLoss,
+          take_profit: setup.target1,
+          strategy_name: `Auto Quant Setup (${setup.id})`,
+          notes: `${setup.confluence} | TP2: $${setup.target2.toFixed(2)} [AUTO-EXECUTED]`,
+          status: "OPEN",
+          created_at: setup.openTime || new Date().toISOString(),
+        }
+      : {
+          symbol: "ETHUSDC",
+          direction: setup.direction === "BULLISH" ? "LONG" : "SHORT",
+          entry_price: entryMidpoint,
+          stop_loss: setup.stopLoss,
+          take_profit: setup.target1,
+          strategy_name: `Auto Quant Setup (${setup.id})`,
+          ai_narrative_summary: `[AUTO-OPENED] ${setup.type}: ${setup.trigger}\nTP2: $${setup.target2.toFixed(2)} | ${setup.confluence}`,
+        };
+
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (res.ok) {
+      if (typeof window !== "undefined") {
+        try {
+          const storageKey = isBacktest ? "gem_quant_backtest_setup_history" : "gem_quant_setup_history";
+          const raw = localStorage.getItem(storageKey);
+          let history = raw ? JSON.parse(raw) : {};
+          const existing = typeof history[setup.setupKey] === "object" ? history[setup.setupKey] : { status: setup.status };
+          history[setup.setupKey] = { ...existing, autoOpened: true };
+          localStorage.setItem(storageKey, JSON.stringify(history));
+
+          const eventName = isBacktest ? "backtest-trades-refresh" : "trades-refresh";
+          window.dispatchEvent(new Event(eventName));
+
+          const audio = new Audio("/sounds/pricing_shift.wav");
+          audio.play().catch(() => {});
+        } catch (e) {
+          console.error("[AutoExecute] Storage update error:", e);
+        }
+      }
+      return true;
+    }
+  } catch (err) {
+    console.error("[AutoExecute] Trade POST error:", err);
+  }
+  return false;
+}
+
 
 export interface TradeEngineSummary {
   symbol: string;
@@ -134,7 +248,7 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
 
   // ── Persistent Setup Memory (bypassed during Backtest Replay) ────────────
   // Storage shape: { [setupKey]: SetupRecord }
-  // SetupRecord = { status, openPrice?, openTime?, closePrice?, closeTime? }
+  // SetupRecord = { status, openPrice?, openTime?, closePrice?, closeTime?, autoOpened? }
   // Backward-compat: old entries may be a plain string (status only).
   interface SetupRecord {
     status: string;
@@ -142,16 +256,9 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
     openTime?: string;
     closePrice?: number;
     closeTime?: string;
+    autoOpened?: boolean;
   }
 
-  // ── Persistent Setup Memory (bypassed during Backtest Replay) ────────────
-  interface SetupRecord {
-    status: string;
-    openPrice?: number;
-    openTime?: string;
-    closePrice?: number;
-    closeTime?: string;
-  }
 
   let storedHistory: Record<string, SetupRecord | string> = {};
   if (!isBacktest && typeof window !== "undefined") {
@@ -340,6 +447,11 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
         const closePrice = timeline.closePrice;
         const closeTime  = timeline.closeTime;
 
+        const storedRec    = readRecord(storedHistory[setupKey]);
+        const autoKeys     = getAutoExecuteKeys();
+        const isAutoExec   = autoKeys.includes(setupKey);
+        const isAutoOpened = Boolean(storedRec?.autoOpened);
+
         if (!isBacktest) {
           saveSetupState(setupKey, status, { openPrice, openTime, closePrice, closeTime });
         }
@@ -364,6 +476,9 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
           openTime,
           closePrice,
           closeTime,
+          setupKey,
+          isAutoExecute: isAutoExec,
+          isAutoOpened,
         });
       } else {
         const sl = Math.max(swingHigh + 1.5, entryMax + 3.0);
@@ -392,6 +507,11 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
         const closePrice = timeline.closePrice;
         const closeTime  = timeline.closeTime;
 
+        const storedRec    = readRecord(storedHistory[setupKey]);
+        const autoKeys     = getAutoExecuteKeys();
+        const isAutoExec   = autoKeys.includes(setupKey);
+        const isAutoOpened = Boolean(storedRec?.autoOpened);
+
         if (!isBacktest) {
           saveSetupState(setupKey, status, { openPrice, openTime, closePrice, closeTime });
         }
@@ -416,8 +536,12 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
           openTime,
           closePrice,
           closeTime,
+          setupKey,
+          isAutoExecute: isAutoExec,
+          isAutoOpened,
         });
       }
+
     });
   } else {
     // Structural Fallback Setups if payload active_fvgs is currently empty
@@ -444,6 +568,11 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
     const closePrice = timeline.closePrice;
     const closeTime  = timeline.closeTime;
 
+    const storedRec1   = readRecord(storedHistory[set1Key]);
+    const autoKeys     = getAutoExecuteKeys();
+    const isAutoExec1  = autoKeys.includes(set1Key);
+    const isAutoOpened1= Boolean(storedRec1?.autoOpened);
+
     if (!isBacktest) {
       saveSetupState(set1Key, bullStatus, { openPrice, openTime, closePrice, closeTime });
     }
@@ -467,6 +596,9 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
       openTime,
       closePrice,
       closeTime,
+      setupKey: set1Key,
+      isAutoExecute: isAutoExec1,
+      isAutoOpened: isAutoOpened1,
     });
   }
 
@@ -501,6 +633,11 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
   const closePrice = timeline.closePrice;
   const closeTime  = timeline.closeTime;
 
+  const storedRecB    = readRecord(storedHistory[setBreakKey]);
+  const autoKeysB     = getAutoExecuteKeys();
+  const isAutoExecB   = autoKeysB.includes(setBreakKey);
+  const isAutoOpenedB = Boolean(storedRecB?.autoOpened);
+
   if (!isBacktest) {
     saveSetupState(setBreakKey, breakoutStatus, { openPrice, openTime, closePrice, closeTime });
   }
@@ -524,7 +661,11 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
     openTime,
     closePrice,
     closeTime,
+    setupKey: setBreakKey,
+    isAutoExecute: isAutoExecB,
+    isAutoOpened: isAutoOpenedB,
   });
+
 
   const firstBull = consolidatedFvgs.find((f) => f.type === "BULLISH");
   const firstBear = consolidatedFvgs.find((f) => f.type === "BEARISH");
