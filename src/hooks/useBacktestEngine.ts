@@ -430,6 +430,13 @@ function buildEnrichedPayload(
         market_structure_shift_direction: structureAnalysis.market_structure_shift_direction || null
       } : null,
       active_fvgs: activeFVGs,
+      // BUG-3 FIX: quantTradeEngine reads macro_structural_magnets to anchor the dealing range.
+      // The backtest payload omitted this field entirely, causing the engine to fall back
+      // to a raw 50-candle window high/low (much tighter than the real structural anchors).
+      macro_structural_magnets: {
+        major_swing_high: structureAnalysis?.dealingRange?.high ?? (pdh > 0 ? pdh : null),
+        major_swing_low:  structureAnalysis?.dealingRange?.low  ?? (pdl > 0 ? pdl : null),
+      },
       macro_levels: {
         pdh,
         pdl,
@@ -445,7 +452,9 @@ function buildEnrichedPayload(
       },
       order_flow_engine: {
         open_interest_trend: openInterestTrend,
-        displacement_sponsorship: displacementSponsorship,
+        // BUG-6 FIX: was emitting a plain string ("ACTIVE"/"INACTIVE") but quantTradeEngine
+        // reads displacement_sponsorship?.status (object form). Now emits the full object.
+        displacement_sponsorship: displacement,
         smart_money_sentiment: { smart_money_divergence: false },
         resting_liquidity_pools: {
           BSL_Magnets: pdh > 0 ? [pdh] : [],

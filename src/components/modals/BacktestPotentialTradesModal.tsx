@@ -17,7 +17,10 @@ import {
   BarChart2,
   Loader2,
   Play,
-  RotateCcw
+  RotateCcw,
+  AlertTriangle,
+  Lock,
+  Ban
 } from "lucide-react";
 import type { MarketDataPayload } from "@/hooks/useMarketData";
 import { generatePotentialTrades, PotentialTrade } from "@/lib/quantTradeEngine";
@@ -41,6 +44,7 @@ export default function BacktestPotentialTradesModal({
   const [copyState, setCopyState] = useState<string | null>(null);
   const [executingSetupId, setExecutingSetupId] = useState<string | null>(null);
   const [executedSuccessId, setExecutedSuccessId] = useState<string | null>(null);
+  const [confirmingSetupId, setConfirmingSetupId] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const engineSummary = useMemo(() => generatePotentialTrades(currentData, true), [currentData, refreshTrigger]);
@@ -86,6 +90,7 @@ Timestamp: ${new Date().toISOString()}`;
 
   const handleExecute = async (setup: PotentialTrade) => {
     setExecutingSetupId(setup.id);
+    setConfirmingSetupId(null);
     try {
       await onExecuteTrade(setup);
       setExecutedSuccessId(setup.id);
@@ -94,6 +99,86 @@ Timestamp: ${new Date().toISOString()}`;
       console.error("[BACKTEST_POTENTIAL_TRADES] Execution error:", err);
     } finally {
       setExecutingSetupId(null);
+    }
+  };
+
+  /** Status-aware Execute button config (same doctrine as Live HUD modal) */
+  const getExecConfig = (setup: PotentialTrade) => {
+    const isExecuting  = executingSetupId === setup.id;
+    const isSuccess    = executedSuccessId === setup.id;
+    const isConfirming = confirmingSetupId === setup.id;
+
+    if (isSuccess) return {
+      disabled: false, className: "bg-emerald-500 text-white border-emerald-500",
+      icon: <Check className="w-3 h-3" />, label: "Opened!", onClick: () => {},
+      title: "Trade successfully opened in backtest journal",
+    };
+    if (isExecuting) return {
+      disabled: true, className: "bg-purple-500/20 border-purple-500/40 text-purple-300 cursor-wait",
+      icon: <Loader2 className="w-3 h-3 animate-spin" />, label: "Opening...", onClick: () => {},
+      title: "Opening trade...",
+    };
+
+    switch (setup.status) {
+      case "ACTIVE_WATCH":
+      case "CONFIRMED":
+        return {
+          disabled: false,
+          className: "bg-purple-500/20 hover:bg-purple-500/30 border-purple-500/40 text-purple-300",
+          icon: <Play className="w-3 h-3 fill-current" />,
+          label: "Execute",
+          onClick: () => handleExecute(setup),
+          title: "Price is in entry zone — execute replay trade",
+        };
+
+      case "PENDING_TOUCH":
+      case "WAITING":
+        if (isConfirming) return {
+          disabled: false,
+          className: "bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/40 text-amber-300 animate-pulse",
+          icon: <AlertTriangle className="w-3 h-3" />,
+          label: setup.status === "PENDING_TOUCH" ? "Force Entry?" : "Force Breakout?",
+          onClick: () => handleExecute(setup),
+          title: setup.status === "PENDING_TOUCH"
+            ? "Entry zone not touched yet. Click again to force-enter."
+            : "Breakout not confirmed yet. Click again to force-enter.",
+        };
+        return {
+          disabled: false,
+          className: "bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-400",
+          icon: <AlertTriangle className="w-3 h-3" />,
+          label: setup.status === "PENDING_TOUCH" ? "Not Touched" : "Not Confirmed",
+          onClick: () => setConfirmingSetupId(setup.id),
+          title: setup.status === "PENDING_TOUCH"
+            ? "Entry zone not yet reached. Click to see force-entry option."
+            : "Breakout not confirmed yet. Click to see force-entry option.",
+        };
+
+      case "TARGET_HIT":
+        return {
+          disabled: true,
+          className: "bg-muted/10 text-muted border-muted/20 cursor-not-allowed opacity-50",
+          icon: <Lock className="w-3 h-3" />, label: "Completed", onClick: () => {},
+          title: "Move already played out. Cannot enter a completed setup.",
+        };
+
+      case "INVALIDATED":
+        return {
+          disabled: true,
+          className: "bg-rose-500/10 text-rose-500/50 border-rose-500/20 cursor-not-allowed opacity-50",
+          icon: <Ban className="w-3 h-3" />, label: "Invalidated", onClick: () => {},
+          title: "Setup invalidated — stop loss was breached.",
+        };
+
+      default:
+        return {
+          disabled: false,
+          className: "bg-purple-500/20 hover:bg-purple-500/30 border-purple-500/40 text-purple-300",
+          icon: <Play className="w-3 h-3 fill-current" />,
+          label: "Execute",
+          onClick: () => handleExecute(setup),
+          title: "Execute replay trade",
+        };
     }
   };
 
@@ -376,25 +461,22 @@ Timestamp: ${new Date().toISOString()}`;
                             </span>
                           </td>
                           <td className="px-4 py-3.5 text-right space-x-1.5" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              onClick={() => handleExecute(setup)}
-                              disabled={isExecuting}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-mono font-bold uppercase rounded-lg border transition-all cursor-pointer ${
-                                isSuccess
-                                  ? "bg-emerald-500 text-white border-emerald-500"
-                                  : "bg-purple-500/20 hover:bg-purple-500/30 border-purple-500/40 text-purple-300"
-                              }`}
-                              title="Execute Trade in Backtest Replay"
-                            >
-                              {isExecuting ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : isSuccess ? (
-                                <Check className="w-3 h-3" />
-                              ) : (
-                                <Play className="w-3 h-3 fill-current" />
-                              )}
-                              <span>{isSuccess ? "Opened!" : "Execute"}</span>
-                            </button>
+                            {(() => {
+                              const cfg = getExecConfig(setup);
+                              return (
+                                <button
+                                  onClick={cfg.onClick}
+                                  disabled={cfg.disabled}
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1 text-[10px] font-mono font-bold uppercase rounded-lg border transition-all ${
+                                    cfg.disabled ? '' : 'cursor-pointer'
+                                  } ${cfg.className}`}
+                                  title={cfg.title}
+                                >
+                                  {cfg.icon}
+                                  <span>{cfg.label}</span>
+                                </button>
+                              );
+                            })()}
 
                             <button
                               onClick={() => handleCopySetup(setup)}
@@ -429,24 +511,28 @@ Timestamp: ${new Date().toISOString()}`;
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleExecute(selectedSetup)}
-                    disabled={executingSetupId === selectedSetup.id}
-                    className={`flex items-center gap-2 px-4 py-1.5 text-xs font-mono font-black uppercase rounded-xl border transition-all cursor-pointer ${
-                      executedSuccessId === selectedSetup.id
-                        ? "bg-emerald-500 text-white border-emerald-500"
-                        : "bg-purple-500/20 hover:bg-purple-500/30 border-purple-500/40 text-purple-300"
-                    }`}
-                  >
-                    {executingSetupId === selectedSetup.id ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : executedSuccessId === selectedSetup.id ? (
-                      <Check className="w-3.5 h-3.5" />
-                    ) : (
-                      <Play className="w-3.5 h-3.5 fill-current" />
-                    )}
-                    <span>{executedSuccessId === selectedSetup.id ? "Position Opened!" : "Execute Trade in Backtest"}</span>
-                  </button>
+                  {(() => {
+                    const cfg = getExecConfig(selectedSetup);
+                    return (
+                      <button
+                        onClick={cfg.onClick}
+                        disabled={cfg.disabled}
+                        className={`flex items-center gap-2 px-4 py-1.5 text-xs font-mono font-black uppercase rounded-xl border transition-all ${
+                          cfg.disabled ? '' : 'cursor-pointer'
+                        } ${cfg.className}`}
+                        title={cfg.title}
+                      >
+                        {cfg.icon}
+                        <span>
+                          {executedSuccessId === selectedSetup.id
+                            ? "Position Opened!"
+                            : cfg.label === "Execute"
+                            ? "Execute Trade in Backtest"
+                            : cfg.label}
+                        </span>
+                      </button>
+                    );
+                  })()}
 
                   <button
                     onClick={() => handleCopySetup(selectedSetup)}
@@ -472,6 +558,91 @@ Timestamp: ${new Date().toISOString()}`;
                   <p className="text-foreground font-semibold">{selectedSetup.confluence}</p>
                 </div>
               </div>
+
+              {/* ── Trade Timeline — visible only for completed/invalidated setups ── */}
+              {(selectedSetup.status === "TARGET_HIT" || selectedSetup.status === "INVALIDATED") && (
+                <div className="space-y-2">
+                  <span className="text-[9px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5">
+                    <span className={selectedSetup.status === "TARGET_HIT" ? "text-emerald-400" : "text-rose-400"}>
+                      {selectedSetup.status === "TARGET_HIT" ? "✓" : "✕"}
+                    </span>
+                    Trade Timeline
+                  </span>
+                  <div className="grid grid-cols-2 gap-3 text-xs font-sans">
+                    {/* Open */}
+                    <div className={`p-3 rounded-lg border space-y-2 ${
+                      selectedSetup.status === "TARGET_HIT"
+                        ? "bg-emerald-500/5 border-emerald-500/20"
+                        : "bg-rose-500/5 border-rose-500/20"
+                    }`}>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted block">📥 Trade Open</span>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Price</span>
+                          <span className="text-xs font-black font-mono text-foreground">
+                            ${(selectedSetup.openPrice ?? ((selectedSetup.entryMin + selectedSetup.entryMax) / 2)).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Date</span>
+                          <span className="text-[10px] font-mono text-foreground">
+                            {selectedSetup.openTime
+                              ? new Date(selectedSetup.openTime).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                              : <span className="text-muted italic">Replay detected</span>}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Time</span>
+                          <span className="text-[10px] font-mono text-foreground">
+                            {selectedSetup.openTime
+                              ? new Date(selectedSetup.openTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+                              : <span className="text-muted italic">—</span>}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Close */}
+                    <div className={`p-3 rounded-lg border space-y-2 ${
+                      selectedSetup.status === "TARGET_HIT"
+                        ? "bg-emerald-500/10 border-emerald-500/30"
+                        : "bg-rose-500/10 border-rose-500/30"
+                    }`}>
+                      <span className={`text-[9px] font-bold uppercase tracking-wider block ${
+                        selectedSetup.status === "TARGET_HIT" ? "text-emerald-400" : "text-rose-400"
+                      }`}>
+                        {selectedSetup.status === "TARGET_HIT" ? "🎯 Trade Close (Target Hit)" : "🚫 Trade Close (Invalidated)"}
+                      </span>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Price</span>
+                          <span className={`text-xs font-black font-mono ${
+                            selectedSetup.status === "TARGET_HIT" ? "text-emerald-400" : "text-rose-400"
+                          }`}>
+                            ${(selectedSetup.closePrice ?? (selectedSetup.status === "TARGET_HIT" ? selectedSetup.target1 : selectedSetup.stopLoss)).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Date</span>
+                          <span className="text-[10px] font-mono text-foreground">
+                            {selectedSetup.closeTime
+                              ? new Date(selectedSetup.closeTime).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                              : <span className="text-muted italic">Replay detected</span>}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Time</span>
+                          <span className="text-[10px] font-mono text-foreground">
+                            {selectedSetup.closeTime
+                              ? new Date(selectedSetup.closeTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+                              : <span className="text-muted italic">—</span>}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

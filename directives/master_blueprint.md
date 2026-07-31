@@ -1,8 +1,28 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.1.2
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.3
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-07-30 (V12.1.2 — Market Structure Audit: Directional Color Lock enforced, microStateEngine isolation, internalZigzag shadow fixed, anti-corruption clamp metadata preserved, fallback anchors color-validated, initial trend bias bootstrapped)  
+> **Last Updated:** 2026-07-31 (V12.3 — Potential Trades: TP1 guaranteed ≥1:1 R:R, TP2 locked to stable structural anchors, Execute button fixed `/api/journal` → `/api/trades`)  
+
+## 🆕 V12.2 Changelog — Potential Trades Engine: 6 Silent Corruption Bugs Fixed (2026-07-31)
+
+### Summary
+A full audit of the Potential Trades system found that the engine was operating on incorrect data paths on every single invocation. The FVG source, the institutional bias, the backtest dealing range anchors, the bearish target logic, the proximity filter, and the sponsorship shape were all corrupted simultaneously.
+
+### Bug Fixes
+- **`quantTradeEngine.ts` BUG-1:** Corrected the FVG primary source from `data.data_payload.active_fvgs` (always `undefined`) to `data.ipda_metrics.active_fvgs` (the actual publish location). The inline fallback scanner was activating on every call, discarding 4h/1h context computed by the backend.
+- **`quantTradeEngine.ts` BUG-2:** Removed ghost field reads. `data.ipda_metrics.last_price` does not exist — price is now sourced directly from the candle close. `data.ipda_metrics.bias_signal` does not exist — institutional bias now reads from `data.ipda_metrics.macro_daily_bias`. Previously, `institutionalBias` was permanently hardcoded to `"CONFIRMED_BULLISH"`.
+- **`useBacktestEngine.ts` BUG-3:** Added `macro_structural_magnets: { major_swing_high, major_swing_low }` to the backtest enriched payload, populated from `structureAnalysis.dealingRange` with PDH/PDL fallback. Previously this field was missing entirely, forcing backtest setups to use raw 50-candle window extremes as dealing range anchors.
+- **`quantTradeEngine.ts` BUG-4:** Corrected the bearish FVG `TARGET_HIT` condition from `lowestRecent <= tp1` (equilibrium) to `lowestRecent <= tp2` (SSL magnet). Equilibrium is always between current price and the FVG, so every touched bearish setup was instantly promoted to `TARGET_HIT`.
+- **`quantTradeEngine.ts` BUG-5:** Changed BSL Breakout Expansion `isNearby` from hardcoded `true` to the computed `Math.abs(breakoutEntry - currentPrice) / currentPrice <= 0.02`, matching the 2% proximity guard used by all FVG setups.
+- **`useBacktestEngine.ts` + `quantTradeEngine.ts` BUG-6:** Changed backtest `displacement_sponsorship` emission from plain string (`"ACTIVE"`/`"INACTIVE"`) to the full `InstitutionalSponsorship` object. Added a dual-form guard in `quantTradeEngine.ts` to safely handle both string and object forms of this field.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, 0 warnings** ✅
+
+---
+
+
 
 ## 🆕 V12.1.0 Changelog — Phase 2 True Day Open (TDO) Permanent Removal (2026-07-29)
 

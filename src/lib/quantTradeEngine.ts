@@ -17,6 +17,11 @@ export interface PotentialTrade {
   isHighProbability?: boolean;
   isNearby?: boolean;
   timeframeConfluence?: string;
+  // Trade timeline — populated when a setup transitions through ACTIVE_WATCH → TARGET_HIT/INVALIDATED
+  openPrice?: number;
+  openTime?: string;   // ISO 8601
+  closePrice?: number;
+  closeTime?: string;  // ISO 8601
 }
 
 export interface TradeEngineSummary {
@@ -41,7 +46,11 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
   const candles15m = data?.data_payload?.candles_15m || [];
   const recentCandles = candles5m.slice(-50);
 
-  const currentPrice = data?.ipda_metrics?.last_price || (recentCandles.length > 0 ? recentCandles[recentCandles.length - 1].c : 1875.55);
+  // BUG-2 FIX: last_price is a ghost field — it does not exist on ipda_metrics.
+  // Price is always sourced from the most recent candle close as the ground truth.
+  const currentPrice = (recentCandles.length > 0 ? recentCandles[recentCandles.length - 1].c : null)
+    ?? (data?.ipda_metrics?.current_price as number | undefined)
+    ?? 1875.55;
 
   // Dynamic swing high & low from live candle stream
   const candleHighs = recentCandles.map((c: any) => (typeof c.h === 'number' ? c.h : typeof c.high === 'number' ? c.high : c.c));
@@ -56,8 +65,12 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
 
   const dealingZone = currentPrice > equilibrium + 0.5 ? "PREMIUM" : currentPrice < equilibrium - 0.5 ? "DISCOUNT" : "EQUILIBRIUM";
 
+  // BUG-1 FIX: FVGs are published at ipda_metrics.active_fvgs, NOT data_payload.active_fvgs.
+  // data_payload only contains raw candle arrays (candles_5m, 15m, 1h, 4h).
+  // Reading data_payload.active_fvgs silently returned undefined on every call,
+  // forcing the inline fallback scanner to run on every invocation.
   let activeFvgs: Array<{ type: string; bottom: number; top: number; timeframe?: string; origin_time?: number }> =
-    (data?.data_payload?.active_fvgs as any) || [];
+    (data?.ipda_metrics?.active_fvgs as any) || [];
 
   // Inline Fallback Scanner: If active_fvgs payload is empty, scan candles_15m and candles_5m directly
   if (activeFvgs.length === 0 && (candles15m.length > 0 || candles5m.length > 0)) {
@@ -109,11 +122,29 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
   const bslMagnets = data?.ipda_metrics?.order_flow_engine?.resting_liquidity_pools?.BSL_Magnets || [swingHigh, swingHigh + 4.0, swingHigh + 10.0];
   const sslMagnets = data?.ipda_metrics?.order_flow_engine?.resting_liquidity_pools?.SSL_Magnets || [swingLow, swingLow - 5.0];
 
-  const sponsorshipStatus = data?.ipda_metrics?.order_flow_engine?.displacement_sponsorship?.status || "ACTIVE_BULLISH";
-  const institutionalBias = data?.ipda_metrics?.bias_signal || "CONFIRMED_BULLISH";
+  // BUG-6 FIX: In the backtest payload, displacement_sponsorship is a plain string ("ACTIVE"/"INACTIVE"),
+  // not an object. Guard both forms.
+  const rawSponsor = data?.ipda_metrics?.order_flow_engine?.displacement_sponsorship;
+  const sponsorshipStatus = (typeof rawSponsor === 'object' && rawSponsor !== null)
+    ? (rawSponsor as { status?: string }).status || 'INACTIVE'
+    : (typeof rawSponsor === 'string' ? rawSponsor : 'INACTIVE');
 
-  // Persistent Setup Memory Handler (bypassed during Backtest Replay)
-  let storedHistory: Record<string, string> = {};
+  // BUG-2 FIX: bias_signal is a ghost field. The actual field is macro_daily_bias.
+  const institutionalBias = (data?.ipda_metrics?.macro_daily_bias as string | undefined) || "UNRESOLVED";
+
+  // ── Persistent Setup Memory (bypassed during Backtest Replay) ────────────
+  // Storage shape: { [setupKey]: SetupRecord }
+  // SetupRecord = { status, openPrice?, openTime?, closePrice?, closeTime? }
+  // Backward-compat: old entries may be a plain string (status only).
+  interface SetupRecord {
+    status: string;
+    openPrice?: number;
+    openTime?: string;
+    closePrice?: number;
+    closeTime?: string;
+  }
+
+  let storedHistory: Record<string, SetupRecord | string> = {};
   if (!isBacktest && typeof window !== "undefined") {
     try {
       const raw = localStorage.getItem("gem_quant_setup_history");
@@ -121,10 +152,30 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
     } catch {}
   }
 
-  const saveSetupState = (setupKey: string, status: string) => {
+  /** Read the status string from a stored entry (handles both old strings and new objects). */
+  const readStatus = (entry: SetupRecord | string | undefined): string | undefined => {
+    if (!entry) return undefined;
+    if (typeof entry === "string") return entry;
+    return entry.status;
+  };
+
+  /** Read the full record (upgrading plain strings to objects on read). */
+  const readRecord = (entry: SetupRecord | string | undefined): SetupRecord | undefined => {
+    if (!entry) return undefined;
+    if (typeof entry === "string") return { status: entry };
+    return entry;
+  };
+
+  const saveSetupState = (
+    setupKey: string,
+    status: string,
+    extra?: { openPrice?: number; openTime?: string; closePrice?: number; closeTime?: string }
+  ) => {
     if (!isBacktest && typeof window !== "undefined") {
       try {
-        storedHistory[setupKey] = status;
+        const existing = readRecord(storedHistory[setupKey]) || {};
+        const next: SetupRecord = { ...existing, status, ...extra };
+        storedHistory[setupKey] = next;
         localStorage.setItem("gem_quant_setup_history", JSON.stringify(storedHistory));
       } catch {}
     }
@@ -151,28 +202,54 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
 
       if (isBull) {
         const sl = Math.min(swingLow - 1.5, entryMin - 3.0);
-        const tp1 = Math.min(equilibrium, bslMagnets[0] || swingHigh);
-        const tp2 = bslMagnets[1] || swingHigh;
         const risk = entryMid - sl;
+
+        // TP1 RULE: Minimum 1:1 R:R. Anchor to equilibrium or BSL[0] only if it
+        // clears the 1:1 floor; otherwise use entryMid + risk (exact 1:1).
+        const tp1_natural = Math.min(equilibrium, bslMagnets[0] || swingHigh);
+        const tp1_floor   = entryMid + risk;          // exact 1:1
+        const tp1 = tp1_natural > tp1_floor ? tp1_natural : tp1_floor;
+
+        // TP2 RULE: Locked structural anchor — BSL magnet[0] (not [1], which drifts more),
+        // falling back to swingHigh, then 2× risk. Never changes unless the structural
+        // swing high itself changes.
+        const tp2_candidate = bslMagnets[0] || swingHigh;
+        const tp2 = tp2_candidate > tp1 ? tp2_candidate : entryMid + 2 * risk;
+
         const reward = tp2 - entryMid;
-        // Exact mathematical R:R calculation without artificial ceilings or floors
         const rr = risk > 0 ? parseFloat((reward / risk).toFixed(2)) : 0;
         const isHighProbability = rr >= 1.5 && isNearby;
 
         const setupKey = `${id}_BULL_${entryMin.toFixed(1)}_${entryMax.toFixed(1)}`;
-        let status: PotentialTrade["status"] = (storedHistory[setupKey] as any) || "PENDING_TOUCH";
+        const storedRec = readRecord(storedHistory[setupKey]);
+        let status: PotentialTrade["status"] = (readStatus(storedHistory[setupKey]) as any) || "PENDING_TOUCH";
+        let openPrice  = storedRec?.openPrice;
+        let openTime   = storedRec?.openTime;
+        let closePrice = storedRec?.closePrice;
+        let closeTime  = storedRec?.closeTime;
 
         if (status !== "TARGET_HIT" && status !== "INVALIDATED") {
           const touched = lowestRecent <= entryMax + 0.2;
           if (touched) {
+            // Record open price the first time price enters the zone
+            if (!openPrice) {
+              openPrice = parseFloat(entryMid.toFixed(2));
+              openTime  = new Date().toISOString();
+              saveSetupState(setupKey, status, { openPrice, openTime });
+            }
             if (currentPrice < sl) {
-              status = "INVALIDATED";
-              saveSetupState(setupKey, "INVALIDATED");
+              status     = "INVALIDATED";
+              closePrice = parseFloat(sl.toFixed(2));
+              closeTime  = new Date().toISOString();
+              saveSetupState(setupKey, "INVALIDATED", { openPrice, openTime, closePrice, closeTime });
             } else if (highestRecent >= tp1) {
-              status = "TARGET_HIT";
-              saveSetupState(setupKey, "TARGET_HIT");
+              status     = "TARGET_HIT";
+              closePrice = parseFloat(tp1.toFixed(2));
+              closeTime  = new Date().toISOString();
+              saveSetupState(setupKey, "TARGET_HIT", { openPrice, openTime, closePrice, closeTime });
             } else {
               status = "ACTIVE_WATCH";
+              saveSetupState(setupKey, "ACTIVE_WATCH", { openPrice, openTime });
             }
           } else if (currentPrice <= entryMax && currentPrice >= entryMin) {
             status = "ACTIVE_WATCH";
@@ -195,31 +272,59 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
           isHighProbability,
           isNearby,
           timeframeConfluence: fvg.timeframes.join(" + "),
+          openPrice,
+          openTime,
+          closePrice,
+          closeTime,
         });
       } else {
         const sl = Math.max(swingHigh + 1.5, entryMax + 3.0);
-        const tp1 = parseFloat(equilibrium.toFixed(2));
-        const tp2 = sslMagnets[0] || swingLow;
         const risk = sl - entryMid;
+
+        // TP1 RULE: Minimum 1:1 R:R. Anchor to equilibrium only if it gives ≥1:1;
+        // otherwise use exact 1:1 floor (entryMid - risk).
+        const tp1_natural = equilibrium;
+        const tp1_floor   = entryMid - risk;          // exact 1:1 short
+        const tp1 = tp1_natural < tp1_floor ? tp1_natural : tp1_floor;
+
+        // TP2 RULE: Locked structural anchor — SSL magnet[0] → swingLow → 2× risk.
+        // Uses sslMagnets[0] which is the deepest resting pool (PDL), stable across ticks.
+        const tp2_candidate = sslMagnets[0] || swingLow;
+        const tp2 = tp2_candidate < tp1 ? tp2_candidate : entryMid - 2 * risk;
+
         const reward = entryMid - tp2;
-        // Exact mathematical R:R calculation without artificial ceilings or floors
         const rr = risk > 0 ? parseFloat((reward / risk).toFixed(2)) : 0;
         const isHighProbability = rr >= 1.5 && isNearby;
 
         const setupKey = `${id}_BEAR_${entryMin.toFixed(1)}_${entryMax.toFixed(1)}`;
-        let status: PotentialTrade["status"] = (storedHistory[setupKey] as any) || "PENDING_TOUCH";
+        const storedRec = readRecord(storedHistory[setupKey]);
+        let status: PotentialTrade["status"] = (readStatus(storedHistory[setupKey]) as any) || "PENDING_TOUCH";
+        let openPrice  = storedRec?.openPrice;
+        let openTime   = storedRec?.openTime;
+        let closePrice = storedRec?.closePrice;
+        let closeTime  = storedRec?.closeTime;
 
         if (status !== "TARGET_HIT" && status !== "INVALIDATED") {
           const touched = highestRecent >= entryMin - 0.2;
           if (touched) {
+            if (!openPrice) {
+              openPrice = parseFloat(entryMid.toFixed(2));
+              openTime  = new Date().toISOString();
+              saveSetupState(setupKey, status, { openPrice, openTime });
+            }
             if (currentPrice > sl) {
-              status = "INVALIDATED";
-              saveSetupState(setupKey, "INVALIDATED");
-            } else if (lowestRecent <= tp1) {
-              status = "TARGET_HIT";
-              saveSetupState(setupKey, "TARGET_HIT");
+              status     = "INVALIDATED";
+              closePrice = parseFloat(sl.toFixed(2));
+              closeTime  = new Date().toISOString();
+              saveSetupState(setupKey, "INVALIDATED", { openPrice, openTime, closePrice, closeTime });
+            } else if (lowestRecent <= tp2) {
+              status     = "TARGET_HIT";
+              closePrice = parseFloat(tp1.toFixed(2));
+              closeTime  = new Date().toISOString();
+              saveSetupState(setupKey, "TARGET_HIT", { openPrice, openTime, closePrice, closeTime });
             } else {
               status = "ACTIVE_WATCH";
+              saveSetupState(setupKey, "ACTIVE_WATCH", { openPrice, openTime });
             }
           } else if (currentPrice >= entryMin && currentPrice <= entryMax) {
             status = "ACTIVE_WATCH";
@@ -242,6 +347,10 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
           isHighProbability,
           isNearby,
           timeframeConfluence: fvg.timeframes.join(" + "),
+          openPrice,
+          openTime,
+          closePrice,
+          closeTime,
         });
       }
     });
@@ -250,10 +359,18 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
     const bullEntryMin = swingLow + 1.5;
     const bullEntryMax = swingLow + 4.0;
     const bullSL = Math.min(swingLow - 1.5, bullEntryMin - 3.0);
-    const bullTP1 = Math.min(equilibrium, bslMagnets[0] || swingHigh);
-    const bullTP2 = bslMagnets[1] || swingHigh;
-    const bullRisk = (bullEntryMin + bullEntryMax) / 2 - bullSL;
-    const bullReward = bullTP2 - (bullEntryMin + bullEntryMax) / 2;
+    const bullEntryMid = (bullEntryMin + bullEntryMax) / 2;
+    const bullRisk = bullEntryMid - bullSL;
+
+    // TP1: 1:1 floor, step up to equilibrium if it clears the floor
+    const bullTP1_natural = Math.min(equilibrium, bslMagnets[0] || swingHigh);
+    const bullTP1 = bullTP1_natural > bullEntryMid + bullRisk ? bullTP1_natural : bullEntryMid + bullRisk;
+
+    // TP2: structural BSL anchor → swingHigh → 2× risk. No drift.
+    const bullTP2_candidate = bslMagnets[0] || swingHigh;
+    const bullTP2 = bullTP2_candidate > bullTP1 ? bullTP2_candidate : bullEntryMid + 2 * bullRisk;
+
+    const bullReward = bullTP2 - bullEntryMid;
     const bullRR = bullRisk > 0 ? parseFloat((bullReward / bullRisk).toFixed(2)) : 0;
 
     const set1Key = `SET-01_${bullEntryMin.toFixed(1)}_${bullEntryMax.toFixed(1)}`;
@@ -295,10 +412,21 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
 
   // ── 2. Structural Breakout Expansion Setup ───────────────────────────────
   const breakoutEntry = swingHigh + 0.5;
-  const breakoutSL = equilibrium;
-  const breakoutTP1 = bslMagnets[1] || swingHigh + 8.0;
-  const breakoutTP2 = bslMagnets[2] || swingHigh + 15.0;
-  const breakoutRisk = breakoutEntry - breakoutSL;
+  const breakoutSL    = equilibrium;
+  const breakoutRisk  = breakoutEntry - breakoutSL;
+
+  // TP1: 1:1 floor from entry. Prefer BSL[1] if it clears, else exact 1:1.
+  const breakoutTP1_natural = bslMagnets[1] || swingHigh + 8.0;
+  const breakoutTP1 = breakoutTP1_natural > breakoutEntry + breakoutRisk
+    ? breakoutTP1_natural
+    : breakoutEntry + breakoutRisk;
+
+  // TP2: BSL[2] → structural extension 15pt above swing high. Locked.
+  const breakoutTP2_candidate = bslMagnets[2] || swingHigh + 15.0;
+  const breakoutTP2 = breakoutTP2_candidate > breakoutTP1
+    ? breakoutTP2_candidate
+    : breakoutTP1 + breakoutRisk;
+
   const breakoutReward = breakoutTP2 - breakoutEntry;
   const breakoutRR = breakoutRisk > 0 ? parseFloat((breakoutReward / breakoutRisk).toFixed(2)) : 0;
 
@@ -328,7 +456,8 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
     confluence: "Confirmed 5-bar BOS + Active Institutional Displacement Sponsorship",
     status: breakoutStatus,
     isHighProbability: breakoutRR >= 1.5,
-    isNearby: true,
+    // BUG-5 FIX: was hardcoded true, bypassing the 2% proximity guard used by all FVG setups.
+    isNearby: currentPrice > 0 && Math.abs(breakoutEntry - currentPrice) / currentPrice <= 0.02,
   });
 
   const firstBull = consolidatedFvgs.find((f) => f.type === "BULLISH");
