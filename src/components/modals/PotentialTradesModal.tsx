@@ -17,7 +17,10 @@ import {
   BarChart2,
   Loader2,
   Play,
-  RotateCcw
+  RotateCcw,
+  AlertTriangle,
+  Lock,
+  Ban
 } from "lucide-react";
 import { useMarketDataContext } from "@/context/MarketDataContext";
 import { generatePotentialTrades, PotentialTrade } from "@/lib/quantTradeEngine";
@@ -35,6 +38,7 @@ export default function PotentialTradesModal({ isOpen, onClose }: PotentialTrade
   const [copyState, setCopyState] = useState<string | null>(null);
   const [executingSetupId, setExecutingSetupId] = useState<string | null>(null);
   const [executedSuccessId, setExecutedSuccessId] = useState<string | null>(null);
+  const [confirmingSetupId, setConfirmingSetupId] = useState<string | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const engineSummary = useMemo(() => generatePotentialTrades(data), [data, refreshTrigger]);
@@ -80,20 +84,22 @@ Timestamp: ${new Date().toISOString()}`;
 
   const handleExecuteTrade = async (setup: PotentialTrade) => {
     setExecutingSetupId(setup.id);
-    const entryMidpoint = (setup.entryMin + setup.entryMax) / 2;
+    setConfirmingSetupId(null);
+    const entryMidpoint = parseFloat(((setup.entryMin + setup.entryMax) / 2).toFixed(2));
 
     try {
-      const res = await fetch("/api/journal", {
+      // FIX: The real live journal endpoint is /api/trades, not /api/journal (404).
+      const res = await fetch("/api/trades", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          symbol: "ETHUSDT",
+          symbol: "ETHUSDC",
           direction: setup.direction === "BULLISH" ? "LONG" : "SHORT",
           entry_price: entryMidpoint,
           stop_loss: setup.stopLoss,
-          take_profit: setup.target1,
+          take_profit: setup.target1,   // TP1 as primary take-profit
           strategy_name: `Quant Setup (${setup.id})`,
-          ai_narrative_summary: `${setup.type}: ${setup.trigger} (${setup.confluence})`,
+          ai_narrative_summary: `${setup.type}: ${setup.trigger}\nTP2: $${setup.target2.toFixed(2)} | ${setup.confluence}`,
         }),
       });
 
@@ -111,6 +117,111 @@ Timestamp: ${new Date().toISOString()}`;
       console.error("[POTENTIAL_TRADES] Execution error:", err);
     } finally {
       setExecutingSetupId(null);
+    }
+  };
+
+  /**
+   * Derives button visual config and click behaviour based on setup status.
+   *
+   * STATUS RULES:
+   *  ACTIVE_WATCH / CONFIRMED  → Execute immediately (green)
+   *  PENDING_TOUCH / WAITING   → Two-step: first click shows amber warning;
+   *                              second click actually executes.
+   *  TARGET_HIT                → Disabled grey. Move already played out.
+   *  INVALIDATED               → Disabled red. Setup is dead.
+   */
+  const getExecConfig = (setup: PotentialTrade) => {
+    const isExecuting = executingSetupId === setup.id;
+    const isSuccess   = executedSuccessId === setup.id;
+    const isConfirming = confirmingSetupId === setup.id;
+
+    if (isSuccess) {
+      return {
+        disabled: false,
+        className: "bg-emerald-500 text-white shadow-sm",
+        icon: <Check className="w-3 h-3" />,
+        label: "Opened!",
+        onClick: () => {},
+        title: "Trade successfully opened in journal",
+      };
+    }
+    if (isExecuting) {
+      return {
+        disabled: true,
+        className: "bg-accent/20 text-accent border border-accent/40 cursor-wait",
+        icon: <Loader2 className="w-3 h-3 animate-spin" />,
+        label: "Opening...",
+        onClick: () => {},
+        title: "Opening trade...",
+      };
+    }
+
+    switch (setup.status) {
+      case "ACTIVE_WATCH":
+      case "CONFIRMED":
+        return {
+          disabled: false,
+          className: "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
+          icon: <Play className="w-3 h-3" />,
+          label: "Execute",
+          onClick: () => handleExecuteTrade(setup),
+          title: "Price is in entry zone — execute trade",
+        };
+
+      case "PENDING_TOUCH":
+      case "WAITING":
+        if (isConfirming) {
+          return {
+            disabled: false,
+            className: "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 animate-pulse",
+            icon: <AlertTriangle className="w-3 h-3" />,
+            label: setup.status === "PENDING_TOUCH" ? "Force Entry?" : "Force Breakout?",
+            onClick: () => handleExecuteTrade(setup),
+            title: setup.status === "PENDING_TOUCH"
+              ? "Entry zone not touched yet. Click again to force-enter."
+              : "Breakout not confirmed yet. Click again to force-enter.",
+          };
+        }
+        return {
+          disabled: false,
+          className: "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30",
+          icon: <AlertTriangle className="w-3 h-3" />,
+          label: setup.status === "PENDING_TOUCH" ? "Not Touched" : "Not Confirmed",
+          onClick: () => setConfirmingSetupId(setup.id),
+          title: setup.status === "PENDING_TOUCH"
+            ? "Entry zone not yet reached. Click to see force-entry option."
+            : "Breakout not confirmed yet. Click to see force-entry option.",
+        };
+
+      case "TARGET_HIT":
+        return {
+          disabled: true,
+          className: "bg-muted/10 text-muted border border-muted/20 cursor-not-allowed opacity-50",
+          icon: <Lock className="w-3 h-3" />,
+          label: "Completed",
+          onClick: () => {},
+          title: "Move already played out. Cannot enter a completed setup.",
+        };
+
+      case "INVALIDATED":
+        return {
+          disabled: true,
+          className: "bg-rose-500/10 text-rose-500/50 border border-rose-500/20 cursor-not-allowed opacity-50",
+          icon: <Ban className="w-3 h-3" />,
+          label: "Invalidated",
+          onClick: () => {},
+          title: "Setup invalidated — stop loss was breached.",
+        };
+
+      default:
+        return {
+          disabled: false,
+          className: "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30",
+          icon: <Play className="w-3 h-3" />,
+          label: "Execute",
+          onClick: () => handleExecuteTrade(setup),
+          title: "Execute trade",
+        };
     }
   };
 
@@ -392,36 +503,25 @@ Timestamp: ${new Date().toISOString()}`;
                             </span>
                           </td>
                           <td className="px-4 py-3.5 text-right flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleExecuteTrade(setup);
-                              }}
-                              disabled={executingSetupId === setup.id}
-                              className={`flex items-center gap-1 px-2.5 py-1 text-[9px] font-black uppercase rounded-lg transition-all cursor-pointer ${
-                                executedSuccessId === setup.id
-                                  ? "bg-emerald-500 text-white shadow-sm"
-                                  : executingSetupId === setup.id
-                                  ? "bg-accent/20 text-accent border border-accent/40 cursor-wait"
-                                  : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                              }`}
-                              title="Auto-open position into Trading Journal"
-                            >
-                              {executingSetupId === setup.id ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : executedSuccessId === setup.id ? (
-                                <Check className="w-3 h-3 text-white" />
-                              ) : (
-                                <Play className="w-3 h-3" />
-                              )}
-                              <span>
-                                {executingSetupId === setup.id
-                                  ? "Opening..."
-                                  : executedSuccessId === setup.id
-                                  ? "Opened!"
-                                  : "Execute"}
-                              </span>
-                            </button>
+                            {(() => {
+                              const cfg = getExecConfig(setup);
+                              return (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    cfg.onClick();
+                                  }}
+                                  disabled={cfg.disabled}
+                                  className={`flex items-center gap-1 px-2.5 py-1 text-[9px] font-black uppercase rounded-lg transition-all ${
+                                    cfg.disabled ? '' : 'cursor-pointer'
+                                  } ${cfg.className}`}
+                                  title={cfg.title}
+                                >
+                                  {cfg.icon}
+                                  <span>{cfg.label}</span>
+                                </button>
+                              );
+                            })()}
 
                             <button
                               onClick={(e) => {
@@ -458,30 +558,28 @@ Timestamp: ${new Date().toISOString()}`;
                   </h4>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleExecuteTrade(selectedSetup)}
-                    disabled={executingSetupId === selectedSetup.id}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase rounded-lg shadow-sm transition-all cursor-pointer ${
-                      executedSuccessId === selectedSetup.id
-                        ? "bg-emerald-500 text-white"
-                        : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/25"
-                    }`}
-                  >
-                    {executingSetupId === selectedSetup.id ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                    ) : executedSuccessId === selectedSetup.id ? (
-                      <Check className="w-3 h-3 text-white" />
-                    ) : (
-                      <Play className="w-3 h-3" />
-                    )}
-                    <span>
-                      {executingSetupId === selectedSetup.id
-                        ? "Executing..."
-                        : executedSuccessId === selectedSetup.id
-                        ? "Trade Executed & Recorded!"
-                        : "Execute & Open Position"}
-                    </span>
-                  </button>
+                  {(() => {
+                    const cfg = getExecConfig(selectedSetup);
+                    return (
+                      <button
+                        onClick={cfg.onClick}
+                        disabled={cfg.disabled}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase rounded-lg shadow-sm transition-all ${
+                          cfg.disabled ? '' : 'cursor-pointer'
+                        } ${cfg.className}`}
+                        title={cfg.title}
+                      >
+                        {cfg.icon}
+                        <span>
+                          {executedSuccessId === selectedSetup.id
+                            ? "Trade Executed & Recorded!"
+                            : cfg.label === "Execute"
+                            ? "Execute & Open Position"
+                            : cfg.label}
+                        </span>
+                      </button>
+                    );
+                  })()}
 
                   <button
                     onClick={() => handleCopySetup(selectedSetup)}
@@ -507,6 +605,93 @@ Timestamp: ${new Date().toISOString()}`;
                   </p>
                 </div>
               </div>
+
+              {/* ── Trade Timeline — visible only for completed/invalidated setups ── */}
+              {(selectedSetup.status === "TARGET_HIT" || selectedSetup.status === "INVALIDATED") && (
+                <div className="space-y-2">
+                  <span className="text-[9px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5">
+                    <span className={selectedSetup.status === "TARGET_HIT" ? "text-emerald-400" : "text-rose-400"}>
+                      {selectedSetup.status === "TARGET_HIT" ? "✓" : "✕"}
+                    </span>
+                    Trade Timeline
+                  </span>
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Open */}
+                    <div className={`p-3 rounded-lg border space-y-2 ${
+                      selectedSetup.status === "TARGET_HIT"
+                        ? "bg-emerald-500/5 border-emerald-500/20"
+                        : "bg-rose-500/5 border-rose-500/20"
+                    }`}>
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-muted block">
+                        📥 Trade Open
+                      </span>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Price</span>
+                          <span className="text-xs font-black font-mono text-foreground">
+                            ${(selectedSetup.openPrice ?? ((selectedSetup.entryMin + selectedSetup.entryMax) / 2)).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Date</span>
+                          <span className="text-[10px] font-mono text-foreground">
+                            {selectedSetup.openTime
+                              ? new Date(selectedSetup.openTime).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                              : <span className="text-muted italic">Session detected</span>}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Time</span>
+                          <span className="text-[10px] font-mono text-foreground">
+                            {selectedSetup.openTime
+                              ? new Date(selectedSetup.openTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+                              : <span className="text-muted italic">—</span>}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Close */}
+                    <div className={`p-3 rounded-lg border space-y-2 ${
+                      selectedSetup.status === "TARGET_HIT"
+                        ? "bg-emerald-500/10 border-emerald-500/30"
+                        : "bg-rose-500/10 border-rose-500/30"
+                    }`}>
+                      <span className={`text-[9px] font-bold uppercase tracking-wider block ${
+                        selectedSetup.status === "TARGET_HIT" ? "text-emerald-400" : "text-rose-400"
+                      }`}>
+                        {selectedSetup.status === "TARGET_HIT" ? "🎯 Trade Close (Target Hit)" : "🚫 Trade Close (Invalidated)"}
+                      </span>
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Price</span>
+                          <span className={`text-xs font-black font-mono ${
+                            selectedSetup.status === "TARGET_HIT" ? "text-emerald-400" : "text-rose-400"
+                          }`}>
+                            ${(selectedSetup.closePrice ?? (selectedSetup.status === "TARGET_HIT" ? selectedSetup.target1 : selectedSetup.stopLoss)).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Date</span>
+                          <span className="text-[10px] font-mono text-foreground">
+                            {selectedSetup.closeTime
+                              ? new Date(selectedSetup.closeTime).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                              : <span className="text-muted italic">Session detected</span>}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-muted">Time</span>
+                          <span className="text-[10px] font-mono text-foreground">
+                            {selectedSetup.closeTime
+                              ? new Date(selectedSetup.closeTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+                              : <span className="text-muted italic">—</span>}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

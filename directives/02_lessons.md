@@ -162,3 +162,25 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
   2. **`SMCStateEngine.ts`:** Added `initializeFromFirstPivot()` which bootstraps initial trend state from the first confirmed pivot per level before the candle loop begins.
   3. **`MarketStructureAPI.ts`:** Added a dedicated `microStateEngine = new SMCStateEngine(config, 0)` for Level 0 INNER pivots. Fixed the `internalZigzag` shadow. Fixed anti-corruption clamp to preserve anchor metadata. Fixed fallback anchor `colorValidated` to check actual candle colors. Fixed trend ternaries to explicit 3-way BULLISH / BEARISH / UNSET mapping.
 
+
+### 25. Potential Trades Engine — 6 Silent Corruption Bugs (Resolved in V12.2)
+- **The Bugs:**
+  1. **(BUG-1) Dead FVG primary path:** `quantTradeEngine.ts` read `data.data_payload.active_fvgs` which is always `undefined` (the field lives at `data.ipda_metrics.active_fvgs`). Every call fell through to the inline fallback scanner, missing 4h/1h FVG context.
+  2. **(BUG-2) Ghost field reads:** `data.ipda_metrics.last_price` and `data.ipda_metrics.bias_signal` do not exist. Real fields are candle close and `macro_daily_bias`. `institutionalBias` was permanently hardcoded to `CONFIRMED_BULLISH`.
+  3. **(BUG-3) Missing `macro_structural_magnets` in backtest payload:** `useBacktestEngine.ts` never emitted this field. Backtest setups used raw 50-candle window extremes as dealing range anchors instead of structure-validated levels.
+  4. **(BUG-4) Bearish TARGET_HIT checks wrong target:** Checked `lowestRecent <= tp1` (equilibrium) instead of `lowestRecent <= tp2` (SSL magnet). Equilibrium is always between price and the FVG, so every touched bearish setup instantly became TARGET_HIT.
+  5. **(BUG-5) BSL Breakout `isNearby` hardcoded `true`:** Skipped the 2% proximity guard, polluting the Nearby quality filter tab.
+  6. **(BUG-6) `displacement_sponsorship` type mismatch:** Backtest payload emitted a plain string but engine read `.status` as an object, always returning undefined and falling back to hardcoded `ACTIVE_BULLISH`.
+- **The Fix:** (1) `data.ipda_metrics.active_fvgs` path corrected. (2) Ghost reads removed; bias reads from `macro_daily_bias`. (3) `macro_structural_magnets` added to backtest enriched payload, populated from `structureAnalysis.dealingRange` with PDH/PDL fallback. (4) Bearish TARGET_HIT condition corrected to `lowestRecent <= tp2`. (5) `isNearby` now computes real 2% distance. (6) Backtest now emits full `InstitutionalSponsorship` object; engine has dual-form guard for both string and object forms.
+
+### 26. Potential Trades TP Drift & Dead Execute Button (Resolved in V12.3)
+- **The Bugs:**
+  1. **(TP1 R:R)** TP1 was anchored to `Math.min(equilibrium, bslMagnets[0])`, which could land BELOW the 1:1 R:R threshold (or even below entry when price is near equilibrium). No R:R floor was enforced, violating the minimum institutional execution standard.
+  2. **(TP2 Drift)** TP2 was sourced from `bslMagnets[1]` / `sslMagnets[0]` — order-book resting pools that fluctuate by small decimal amounts on every tick. This caused TP2 to visibly change price on every data poll, giving no stable reference level.
+  3. **(Execute Button 404)** `PotentialTradesModal.tsx` posted to `/api/journal` which does not exist. The real live journal endpoint is `/api/trades`. Every Execute click silently returned a 404 and the trade was never recorded.
+  4. **(Wrong Symbol)** Both modals hardcoded `ETHUSDT` instead of `ETHUSDC`.
+- **The Fix:**
+  1. **TP1** now enforces a guaranteed 1:1 floor: `tp1 = max(tp1_natural, entryMid + risk)`. The structural anchor (equilibrium / BSL magnet) is preferred only if it surpasses the floor.
+  2. **TP2** is now locked to a stable structural anchor chain: `bslMagnets[0]` (PDH-anchored, stable) ? `swingHigh` ? `entryMid + 2×risk`. It no longer uses `bslMagnets[1]` or `[2]` which are deep order-book entries that churn on every poll.
+  3. Fixed `/api/journal` ? `/api/trades` in `PotentialTradesModal.tsx`.
+  4. Updated all execute handlers to use `ETHUSDC` as symbol.
