@@ -1,8 +1,40 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.6
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.8
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-07-31 (V12.6 — Completed Trade Auto-Open & Historical Journal Logging: Closed Status Payload, Realized PnL Calculation, Open/Close Candle Timestamps, API Guard Bypass)  
+> **Last Updated:** 2026-08-01 (V12.8 — Minimalist Ultra-Compact Dashboard Metrics Bar: 70%+ Vertical Height Reduction, Single-Line Micro Pills, Chart Real Estate Optimization)  
+
+## 🆕 V12.8 Changelog — Minimalist Ultra-Compact Dashboard Metrics Bar (2026-08-01)
+
+### Summary
+Redesigned `DashboardMetrics.tsx` (`MASTER BIAS`, `RANGE CONTEXT`, `TARGET STATUS (DOL)`) into a hyper-compact, single-line horizontal metrics bar. Reduced vertical container height from ~140px to ~38px, reclaiming nearly 100px of vertical screen real estate for the main chart viewport.
+
+### Key Features & Architecture
+- **70%+ Height Reduction:** Converted bulky 105px+ stacked cards into slim single-line flex pills (`py-1.5 px-3`).
+- **Micro-Icon Alignment:** Embedded sharp micro-vector icons (`Compass`, `Activity`, `Target`) alongside compact `text-[9px]` category headers.
+- **High-Density Monospace Badges:** Formatted values (`BULLISH`, `PREMIUM`, `TARGET STATUS`) into crisp, high-visibility monospace badges (`text-xs font-black`).
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, 0 warnings** ✅
+
+---
+
+
+## 🆕 V12.7 Changelog — Same-Direction Multi-Position Execution Engine (2026-08-01)
+
+### Summary
+Upgraded the execution engine and API guard architecture (`/api/trades` & `/api/backtest-trades`) to support **Same-Direction Multi-Position Execution**. Traders can now open multiple concurrent positions as long as they align in direction (e.g. adding a second SHORT trade while an active SHORT trade is already open). Opposing directional hedging (e.g. opening a LONG trade while a SHORT is open) remains strictly vetoed.
+
+### Key Features & Architecture
+- **Directional Alignment Guard:** Replaced total count `GLOBAL_LOCK` check with a directional matching query: `SELECT direction FROM paper_trades WHERE status = 'OPEN'`.
+- **Same-Direction Multi-Position Execution:** If existing open trade(s) have direction matching the new trade (`SHORT` + `SHORT` or `LONG` + `LONG`), execution proceeds cleanly (portfolio risk capacity cap still applies).
+- **Hedging Veto:** Opposing direction trades are rejected with status 403: `[HEDGING_BLOCKED] Cannot open a LONG position while an active SHORT trade is in progress.`
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, 0 warnings** ✅
+
+---
+
 
 ## 🆕 V12.6 Changelog — Completed Trade Auto-Open & Journal Logging (2026-07-31)
 

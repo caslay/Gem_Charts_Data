@@ -2,6 +2,7 @@
 
 import React, { memo, useMemo } from 'react';
 import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
+import { Target, Activity, Compass } from 'lucide-react';
 
 interface DashboardMetricsProps {
   masterBias: string;
@@ -10,27 +11,23 @@ interface DashboardMetricsProps {
   isLive?: boolean;
 }
 
-// 1. Master Bias Card - Memoized, only re-renders when masterBias changes
+// 1. Master Bias Card - Compact Minimalist Bar
 const MasterBiasCard = memo(function MasterBiasCard({ masterBias }: { masterBias: string }) {
   const isBullish = masterBias === 'BULLISH';
   const isBearish = masterBias === 'BEARISH';
 
   return (
-    <div className={`glass-panel p-4 lg:p-5 min-h-[105px] flex flex-col justify-between relative overflow-hidden group select-none transition-all duration-300 ${
-      isBullish ? 'shadow-[inset_0_0_20px_rgba(16,185,129,0.04)] border-emerald-500/20' :
-      isBearish ? 'shadow-[inset_0_0_20px_rgba(244,63,94,0.04)] border-rose-500/20' :
-      'border-card-border'
+    <div className={`flex items-center justify-between px-3 py-1.5 rounded-lg border backdrop-blur-md transition-all duration-200 ${
+      isBullish ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' :
+      isBearish ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' :
+      'bg-card/40 border-card-border text-foreground'
     }`}>
-      <div className={`absolute -right-4 -bottom-4 w-24 h-24 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-all duration-300 ${
-        isBullish ? 'bg-emerald-500/10 dark:bg-emerald-500/20' :
-        isBearish ? 'bg-rose-500/10 dark:bg-rose-500/20' :
-        'bg-accent/5'
-      }`} />
-      <span className="text-[10px] lg:text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-zinc-400">Master Bias</span>
-      <span className={`text-2xl lg:text-3xl font-black mt-2 leading-none transition-colors duration-300 ${
-        isBullish ? 'text-emerald-500 dark:text-emerald-400' :
-        isBearish ? 'text-rose-500 dark:text-rose-400' :
-        'text-foreground'
+      <div className="flex items-center gap-1.5 min-w-0">
+        <Compass className={`w-3 h-3 shrink-0 ${isBullish ? 'text-emerald-400' : isBearish ? 'text-rose-400' : 'text-muted'}`} />
+        <span className="text-[9px] font-black uppercase tracking-wider text-muted truncate">Master Bias</span>
+      </div>
+      <span className={`text-xs font-black uppercase tracking-wide ml-2 font-mono ${
+        isBullish ? 'text-emerald-400' : isBearish ? 'text-rose-400' : 'text-foreground'
       }`}>
         {masterBias}
       </span>
@@ -38,7 +35,7 @@ const MasterBiasCard = memo(function MasterBiasCard({ masterBias }: { masterBias
   );
 });
 
-// 2. Premium / Discount Card - Subscribes to live price if isLive is true
+// 2. Premium / Discount Card - Compact Minimalist Bar
 const PremiumDiscountCard = memo(function PremiumDiscountCard({
   staticPricing,
   isLive = false
@@ -59,22 +56,21 @@ const PremiumDiscountCard = memo(function PremiumDiscountCard({
     return staticPricing;
   }, [isLive, livePrice, equilibrium, staticPricing]);
 
+  const isDiscount = pricing === 'DISCOUNT';
+  const isPremium = pricing === 'PREMIUM';
+
   return (
-    <div className={`glass-panel p-4 lg:p-5 min-h-[105px] flex flex-col justify-between relative overflow-hidden group select-none transition-all duration-300 ${
-      pricing === 'DISCOUNT' ? 'shadow-[inset_0_0_20px_rgba(16,185,129,0.04)] border-emerald-500/20' :
-      pricing === 'PREMIUM' ? 'shadow-[inset_0_0_20px_rgba(244,63,94,0.04)] border-rose-500/20' :
-      'border-card-border'
+    <div className={`flex items-center justify-between px-3 py-1.5 rounded-lg border backdrop-blur-md transition-all duration-200 ${
+      isDiscount ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' :
+      isPremium ? 'bg-rose-500/10 border-rose-500/30 text-rose-400' :
+      'bg-card/40 border-card-border text-amber-400'
     }`}>
-      <div className={`absolute -right-4 -bottom-4 w-24 h-24 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-all duration-300 ${
-        pricing === 'DISCOUNT' ? 'bg-emerald-500/10 dark:bg-emerald-500/20' :
-        pricing === 'PREMIUM' ? 'bg-rose-500/10 dark:bg-rose-500/20' :
-        'bg-accent/5'
-      }`} />
-      <span className="text-[10px] lg:text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-zinc-400">Range Context</span>
-      <span className={`text-2xl lg:text-3xl font-black mt-2 leading-none transition-colors duration-300 ${
-        pricing === 'DISCOUNT' ? 'text-emerald-500 dark:text-emerald-400' :
-        pricing === 'PREMIUM' ? 'text-rose-500 dark:text-rose-400' :
-        'text-foreground'
+      <div className="flex items-center gap-1.5 min-w-0">
+        <Activity className={`w-3 h-3 shrink-0 ${isDiscount ? 'text-emerald-400' : isPremium ? 'text-rose-400' : 'text-amber-400'}`} />
+        <span className="text-[9px] font-black uppercase tracking-wider text-muted truncate">Range Context</span>
+      </div>
+      <span className={`text-xs font-black uppercase tracking-wide ml-2 font-mono ${
+        isDiscount ? 'text-emerald-400' : isPremium ? 'text-rose-400' : 'text-foreground'
       }`}>
         {pricing}
       </span>
@@ -82,21 +78,15 @@ const PremiumDiscountCard = memo(function PremiumDiscountCard({
   );
 });
 
-// 3. Target Status Card - Memoized, only re-renders when targetStatus changes
+// 3. Target Status Card - Compact Minimalist Bar
 const TargetStatusCard = memo(function TargetStatusCard({ targetStatus }: { targetStatus: string }) {
   return (
-    <div className={`glass-panel p-4 lg:p-5 min-h-[105px] flex flex-col justify-between relative overflow-hidden group select-none transition-all duration-300 ${
-      targetStatus === 'EXHAUSTED' ? 'shadow-[inset_0_0_20px_rgba(16,185,129,0.04)] border-emerald-500/20' :
-      'border-card-border'
-    }`}>
-      <div className={`absolute -right-4 -bottom-4 w-24 h-24 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-all duration-300 ${
-        targetStatus === 'EXHAUSTED' ? 'bg-emerald-500/10 dark:bg-emerald-500/20' :
-        'bg-accent/5'
-      }`} />
-      <span className="text-[10px] lg:text-xs font-bold uppercase tracking-widest text-slate-600 dark:text-zinc-400">Target Status (DOL)</span>
-      <span className={`text-lg lg:text-xl font-black mt-2 leading-none transition-colors duration-300 ${
-        targetStatus === 'EXHAUSTED' ? 'text-emerald-500 dark:text-emerald-400' : 'text-accent'
-      }`}>
+    <div className="flex items-center justify-between px-3 py-1.5 rounded-lg border border-card-border bg-card/40 backdrop-blur-md transition-all duration-200 min-w-0">
+      <div className="flex items-center gap-1.5 shrink-0">
+        <Target className="w-3 h-3 text-accent shrink-0" />
+        <span className="text-[9px] font-black uppercase tracking-wider text-muted truncate">Target Status (DOL)</span>
+      </div>
+      <span className="text-[11px] font-black uppercase tracking-tight text-accent truncate ml-2 font-mono" title={targetStatus}>
         {targetStatus}
       </span>
     </div>
@@ -105,10 +95,11 @@ const TargetStatusCard = memo(function TargetStatusCard({ targetStatus }: { targ
 
 export default function DashboardMetrics({ masterBias, pricing, targetStatus, isLive = false }: DashboardMetricsProps) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-4 lg:px-6 py-4 shrink-0 relative z-10">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 px-4 lg:px-6 py-1.5 shrink-0 relative z-10">
       <MasterBiasCard masterBias={masterBias} />
       <PremiumDiscountCard staticPricing={pricing} isLive={isLive} />
       <TargetStatusCard targetStatus={targetStatus} />
     </div>
   );
 }
+
