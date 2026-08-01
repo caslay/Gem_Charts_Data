@@ -463,8 +463,20 @@ Timestamp: ${new Date().toISOString()}`;
                         >
                           <td className="px-4 py-3.5 font-bold text-foreground">{setup.id}</td>
                           <td className="px-4 py-3.5 font-sans font-semibold text-foreground">
-                            {setup.type}
+                            <div className="flex items-center gap-2">
+                              <span>{setup.type}</span>
+                              {setup.scenarioTier && (
+                                <span className={`px-1.5 py-0.5 text-[8px] font-mono font-black rounded border ${
+                                  setup.scenarioTier === "A+" ? "bg-amber-500/20 text-amber-300 border-amber-500/40" :
+                                  setup.scenarioTier === "A" ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40" :
+                                  "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                                }`}>
+                                  {setup.scenarioTier} ({setup.scenarioScore}%)
+                                </span>
+                              )}
+                            </div>
                           </td>
+
                           <td className="px-4 py-3.5">
                             <span
                               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black ${
@@ -665,6 +677,34 @@ Timestamp: ${new Date().toISOString()}`;
                   <p className="text-foreground font-semibold">{selectedSetup.confluence}</p>
                 </div>
               </div>
+
+              {/* 🎯 Institutional Best Scenario Join Guide */}
+              {selectedSetup.scenarioRules && selectedSetup.scenarioRules.length > 0 && (
+                <div className="p-4 bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-background/50 border border-amber-500/30 rounded-xl space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Institutional Best Scenario Join Guide
+                    </span>
+                    <span className={`px-2 py-0.5 text-[9px] font-mono font-black uppercase rounded ${
+                      selectedSetup.scenarioTier === "A+" ? "bg-amber-500/20 text-amber-300 border border-amber-500/40" :
+                      selectedSetup.scenarioTier === "A" ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40" :
+                      "bg-purple-500/20 text-purple-300 border border-purple-500/40"
+                    }`}>
+                      Tier {selectedSetup.scenarioTier ?? "A"} • Score: {selectedSetup.scenarioScore ?? 85}%
+                    </span>
+                  </div>
+                  <div className="space-y-1.5 text-xs text-foreground font-medium">
+                    {selectedSetup.scenarioRules.map((rule, idx) => (
+                      <div key={idx} className="flex items-start gap-2 bg-background/50 p-2 rounded-lg border border-card-border/40">
+                        <span className="font-mono text-purple-400 text-[10px] mt-0.5">•</span>
+                        <span className="leading-relaxed">{rule}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
 
               {/* ── Trade Timeline — visible only for completed/invalidated setups ── */}
               {(selectedSetup.status === "TARGET_HIT" || selectedSetup.status === "INVALIDATED") && (

@@ -17,6 +17,9 @@ export interface PotentialTrade {
   isHighProbability?: boolean;
   isNearby?: boolean;
   timeframeConfluence?: string;
+  scenarioTier?: "A+" | "A" | "B";
+  scenarioScore?: number;
+  scenarioRules?: string[];
   // Trade timeline — populated when a setup transitions through ACTIVE_WATCH → TARGET_HIT/INVALIDATED
   openPrice?: number;
   openTime?: string;   // ISO 8601
@@ -26,6 +29,7 @@ export interface PotentialTrade {
   isAutoExecute?: boolean;    // User enabled auto-open for this setup
   isAutoOpened?: boolean;     // Trade was auto-opened into journal
 }
+
 
 // ── Auto-Execution Helpers ──────────────────────────────────────────────────
 const AUTO_EXECUTE_STORAGE_KEY = "gem_quant_auto_execute_keys";
@@ -194,7 +198,62 @@ export interface TradeEngineSummary {
   setups: PotentialTrade[];
 }
 
+export function computeScenarioMetrics(
+  direction: "BULLISH" | "BEARISH",
+  institutionalBias: string,
+  dealingZone: string,
+  sponsorshipStatus: string,
+  timeframeConfluenceCount: number,
+  rr: number,
+  entryMin: number,
+  entryMax: number,
+  sl: number,
+  tp1: number,
+  tp2: number,
+  swingHigh: number,
+  swingLow: number
+): { scenarioTier: "A+" | "A" | "B"; scenarioScore: number; scenarioRules: string[] } {
+  let score = 50;
+
+  if (direction === "BULLISH") {
+    if (institutionalBias === "BULLISH") score += 25;
+    if (dealingZone === "DISCOUNT") score += 15;
+    if (sponsorshipStatus.includes("ACTIVE") || sponsorshipStatus === "ACTIVE_BULLISH") score += 10;
+    if (timeframeConfluenceCount >= 2) score += 10;
+    if (rr >= 1.5) score += 10;
+  } else {
+    if (institutionalBias === "BEARISH") score += 25;
+    if (dealingZone === "PREMIUM") score += 15;
+    if (sponsorshipStatus.includes("ACTIVE") || sponsorshipStatus === "ACTIVE_BEARISH") score += 10;
+    if (timeframeConfluenceCount >= 2) score += 10;
+    if (rr >= 1.5) score += 10;
+  }
+
+  score = Math.min(100, Math.max(30, score));
+  const scenarioTier: "A+" | "A" | "B" = score >= 85 ? "A+" : score >= 70 ? "A" : "B";
+
+  const isBull = direction === "BULLISH";
+  const scenarioRules = [
+    `1. Entry Trigger: Set limit order inside [$${entryMin.toFixed(2)} – $${entryMax.toFixed(2)}] or wait for 5m wick touch.`,
+    `2. Institutional Bias: ${
+      isBull
+        ? (institutionalBias === "BULLISH" ? "✅ Aligned with Cairo Bullish Bias (+25 pts)" : "⚠️ Counter-bias re-entry (use tight risk)")
+        : (institutionalBias === "BEARISH" ? "✅ Aligned with Cairo Bearish Bias (+25 pts)" : "⚠️ Counter-bias rejection (use tight risk)")
+    }.`,
+    `3. Dealing Zone Pricing: ${
+      isBull
+        ? (dealingZone === "DISCOUNT" ? "✅ Favorable Discount Pricing (+15 pts)" : "⚠️ Premium Pricing (monitor volume displacement)")
+        : (dealingZone === "PREMIUM" ? "✅ Favorable Premium Pricing (+15 pts)" : "⚠️ Discount Pricing (monitor volume displacement)")
+    }.`,
+    `4. Structural SL Protection: Place SL at $${sl.toFixed(2)} (${isBull ? `below swing low $${swingLow.toFixed(2)}` : `above swing high $${swingHigh.toFixed(2)}`}).`,
+    `5. Target Scaling: Scale 50% position at TP1 ($${tp1.toFixed(2)}), trail stop to entry, and target TP2 ($${tp2.toFixed(2)}).`
+  ];
+
+  return { scenarioTier, scenarioScore: score, scenarioRules };
+}
+
 export function generatePotentialTrades(data: MarketDataPayload | null, isBacktest: boolean = false): TradeEngineSummary {
+
   // Extract recent candles for dynamic live structure detection
   const candles5m = data?.data_payload?.candles_5m || [];
   const candles15m = data?.data_payload?.candles_15m || [];
@@ -288,7 +347,7 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
 
   // ── Persistent Setup Memory (bypassed during Backtest Replay) ────────────
   // Storage shape: { [setupKey]: SetupRecord }
-  // SetupRecord = { status, openPrice?, openTime?, closePrice?, closeTime?, autoOpened? }
+  // SetupRecord = { status, openPrice?, openTime?, closePrice?, closeTime?, autoOpened?, dateStr?, lastUpdated? }
   // Backward-compat: old entries may be a plain string (status only).
   interface SetupRecord {
     status: string;
@@ -297,20 +356,46 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
     closePrice?: number;
     closeTime?: string;
     autoOpened?: boolean;
+    dateStr?: string;
+    lastUpdated?: number;
   }
 
-
   let storedHistory: Record<string, SetupRecord | string> = {};
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const nowMs = Date.now();
+
   if (!isBacktest && typeof window !== "undefined") {
     try {
       const raw = localStorage.getItem("gem_quant_setup_history");
-      if (raw) storedHistory = JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        let cleaned = false;
+        for (const k in parsed) {
+          const item = parsed[k];
+          if (typeof item === "object" && item !== null) {
+            const itemDate = item.dateStr || (item.openTime ? item.openTime.slice(0, 10) : undefined);
+            const itemAge = item.lastUpdated ? nowMs - item.lastUpdated : undefined;
+            // Expire setup memory entries from previous trading days or older than 24h
+            if ((itemDate && itemDate !== todayStr) || (itemAge && itemAge > 86400000)) {
+              delete parsed[k];
+              cleaned = true;
+            }
+          }
+        }
+        storedHistory = parsed;
+        if (cleaned) {
+          localStorage.setItem("gem_quant_setup_history", JSON.stringify(storedHistory));
+        }
+      }
     } catch {}
   }
 
   const readRecord = (entry: SetupRecord | string | undefined): SetupRecord | undefined => {
     if (!entry) return undefined;
     if (typeof entry === "string") return { status: entry };
+    // If entry is from a previous calendar day, treat as expired
+    if (entry.dateStr && entry.dateStr !== todayStr) return undefined;
+    if (entry.lastUpdated && nowMs - entry.lastUpdated > 86400000) return undefined;
     return entry;
   };
 
@@ -322,12 +407,19 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
     if (!isBacktest && typeof window !== "undefined") {
       try {
         const existing = readRecord(storedHistory[setupKey]) || {};
-        const next: SetupRecord = { ...existing, status, ...extra };
+        const next: SetupRecord = {
+          ...existing,
+          status,
+          dateStr: todayStr,
+          lastUpdated: nowMs,
+          ...extra
+        };
         storedHistory[setupKey] = next;
         localStorage.setItem("gem_quant_setup_history", JSON.stringify(storedHistory));
       } catch {}
     }
   };
+
 
   // ── Sequential Candle Timeline Evaluator ─────────────────────────────────
   // Evaluates trade lifecycle strictly chronologically:
@@ -496,6 +588,22 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
           saveSetupState(setupKey, status, { openPrice, openTime, closePrice, closeTime });
         }
 
+        const scenarioMetrics = computeScenarioMetrics(
+          "BULLISH",
+          institutionalBias,
+          dealingZone,
+          sponsorshipStatus,
+          fvg.timeframes.length,
+          rr,
+          entryMin,
+          entryMax,
+          sl,
+          tp1,
+          tp2,
+          swingHigh,
+          swingLow
+        );
+
         setups.push({
           id,
           type: `Discount FVG Re-entry${tfLabel}`,
@@ -512,6 +620,9 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
           isHighProbability,
           isNearby,
           timeframeConfluence: fvg.timeframes.join(" + "),
+          scenarioTier: scenarioMetrics.scenarioTier,
+          scenarioScore: scenarioMetrics.scenarioScore,
+          scenarioRules: scenarioMetrics.scenarioRules,
           openPrice,
           openTime,
           closePrice,
@@ -556,6 +667,22 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
           saveSetupState(setupKey, status, { openPrice, openTime, closePrice, closeTime });
         }
 
+        const scenarioMetrics = computeScenarioMetrics(
+          "BEARISH",
+          institutionalBias,
+          dealingZone,
+          sponsorshipStatus,
+          fvg.timeframes.length,
+          rr,
+          entryMin,
+          entryMax,
+          sl,
+          tp1,
+          tp2,
+          swingHigh,
+          swingLow
+        );
+
         setups.push({
           id,
           type: `Premium FVG Rejection${tfLabel}`,
@@ -572,6 +699,9 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
           isHighProbability,
           isNearby,
           timeframeConfluence: fvg.timeframes.join(" + "),
+          scenarioTier: scenarioMetrics.scenarioTier,
+          scenarioScore: scenarioMetrics.scenarioScore,
+          scenarioRules: scenarioMetrics.scenarioRules,
           openPrice,
           openTime,
           closePrice,
@@ -583,8 +713,12 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
       }
 
     });
-  } else {
-    // Structural Fallback Setups if payload active_fvgs is currently empty
+  }
+
+  // ── Always-Active Structural Liquidity Sweep Setup ───────────────────────
+  // Evaluated alongside FVG queue to guarantee actionable setups even when price ranges
+  const hasBullishFvgSetup = setups.some((s) => s.direction === "BULLISH" && s.type.includes("FVG"));
+  if (!hasBullishFvgSetup || setups.length < 2) {
     const bullEntryMin = swingLow + 1.5;
     const bullEntryMax = swingLow + 4.0;
     const bullSL = Math.min(swingLow - 1.5, bullEntryMin - 3.0);
@@ -599,7 +733,7 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
     const bullReward = bullTP2 - bullEntryMid;
     const bullRR = bullRisk > 0 ? parseFloat((bullReward / bullRisk).toFixed(2)) : 0;
 
-    const set1Key = `FALLBACK_BULL_${bullEntryMin.toFixed(2)}_${bullEntryMax.toFixed(2)}`;
+    const set1Key = `STRUCTURAL_BULL_${bullEntryMin.toFixed(2)}_${bullEntryMax.toFixed(2)}`;
     const timeline = evaluateSetupTimeline("BULLISH", bullEntryMin, bullEntryMax, bullSL, bullTP1, bullTP2);
 
     const bullStatus = timeline.status;
@@ -617,21 +751,40 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
       saveSetupState(set1Key, bullStatus, { openPrice, openTime, closePrice, closeTime });
     }
 
+    const scenarioMetrics = computeScenarioMetrics(
+      "BULLISH",
+      institutionalBias,
+      dealingZone,
+      sponsorshipStatus,
+      1,
+      bullRR,
+      bullEntryMin,
+      bullEntryMax,
+      bullSL,
+      bullTP1,
+      bullTP2,
+      swingHigh,
+      swingLow
+    );
+
     setups.push({
       id: `SET-${String(setupCounter++).padStart(2, "0")}`,
-      type: "Discount FVG Re-entry",
+      type: "Discount SSL Liquidity Sweep Re-entry",
       direction: "BULLISH",
-      trigger: "Retest & bounce inside Bullish FVG after SSL liquidity sweep",
+      trigger: "Retest & bounce inside structural demand zone after SSL liquidity sweep",
       entryMin: parseFloat(bullEntryMin.toFixed(2)),
       entryMax: parseFloat(bullEntryMax.toFixed(2)),
       stopLoss: parseFloat(bullSL.toFixed(2)),
       target1: parseFloat(bullTP1.toFixed(2)),
       target2: parseFloat(bullTP2.toFixed(2)),
       rrRatio: bullRR,
-      confluence: `SSL Sweep @ ${swingLow.toFixed(2)} + VSR Volume Sponsorship + Bullish FVG Retest`,
+      confluence: `SSL Sweep @ ${swingLow.toFixed(2)} + VSR Volume Sponsorship + Institutional Demand Retest`,
       status: bullStatus,
       isHighProbability: bullRR >= 1.5,
       isNearby: true,
+      scenarioTier: scenarioMetrics.scenarioTier,
+      scenarioScore: scenarioMetrics.scenarioScore,
+      scenarioRules: scenarioMetrics.scenarioRules,
       openPrice,
       openTime,
       closePrice,
@@ -641,6 +794,7 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
       isAutoOpened: isAutoOpened1,
     });
   }
+
 
   // ── 2. Structural Breakout Expansion Setup ───────────────────────────────
   const breakoutEntry = swingHigh + 0.5;
@@ -682,6 +836,22 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
     saveSetupState(setBreakKey, breakoutStatus, { openPrice, openTime, closePrice, closeTime });
   }
 
+  const breakoutMetrics = computeScenarioMetrics(
+    "BULLISH",
+    institutionalBias,
+    dealingZone,
+    sponsorshipStatus,
+    1,
+    breakoutRR,
+    breakoutEntry,
+    breakoutEntry + 1.2,
+    breakoutSL,
+    breakoutTP1,
+    breakoutTP2,
+    swingHigh,
+    swingLow
+  );
+
   setups.push({
     id: `SET-${String(setupCounter++).padStart(2, "0")}`,
     type: "BSL Breakout Expansion",
@@ -697,6 +867,9 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
     status: breakoutStatus,
     isHighProbability: breakoutRR >= 1.5,
     isNearby: currentPrice > 0 && Math.abs(breakoutEntry - currentPrice) / currentPrice <= 0.02,
+    scenarioTier: breakoutMetrics.scenarioTier,
+    scenarioScore: breakoutMetrics.scenarioScore,
+    scenarioRules: breakoutMetrics.scenarioRules,
     openPrice,
     openTime,
     closePrice,
@@ -705,6 +878,7 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
     isAutoExecute: isAutoExecB,
     isAutoOpened: isAutoOpenedB,
   });
+
 
 
   const firstBull = consolidatedFvgs.find((f) => f.type === "BULLISH");

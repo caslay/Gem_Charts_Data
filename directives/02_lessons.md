@@ -1,6 +1,6 @@
-# 🧠 Flow-State Systemic Memory & Post-Mortems
+# ðŸ§  Flow-State Systemic Memory & Post-Mortems
 
-## 🛑 Critical Lessons Learned (Never Repeat These Mistakes)
+## ðŸ›‘ Critical Lessons Learned (Never Repeat These Mistakes)
 
 Before modifying the Quant Logic, Order Flow Engine, or Prompt Builder, review these historical system fixes:
 
@@ -31,7 +31,7 @@ Before modifying the Quant Logic, Order Flow Engine, or Prompt Builder, review t
 - **The Cause:** The next.config.ts rewrite pointed to /api/index (triggering 308 redirects) and the proxy.ts middleware intercepted the request, redirecting to /login which only accepts GET.
 - **The Fix:** Added isPyBackend to the bypass list in src/proxy.ts and corrected the rewrite destination to /api/.
 
-## 🛠️ Note to AI Agent:
+## ðŸ› ï¸� Note to AI Agent:
 If you encounter a new bug and successfully fix it, YOU MUST prompt the user to update this 02_lessons.md file with the new Post-Mortem.
 
 If you encounter a new bug and successfully fix it, YOU MUST prompt the user to update this `02_lessons.md` file with the new Post-Mortem.
@@ -133,11 +133,11 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
 ### 21. Perfect Movement Setup Phase 1 Sweep Bottleneck (Resolved in V11.1)
 - **The Bug:** When the "Filter Chart Volumetrics (Perfect setups only)" toggle was enabled, **all** arrows turned grey (20% opacity faded). No arrow ever passed the Perfect Movement 3-Phase filter.
 - **The Cause:** Phase 1 (Structural Proximity & Liquidity Sweep) was the critical bottleneck, rejecting **74% of all signals**. Three compounding issues:
-  1. The sweep lookback only checked the **2 candles directly before the signal** (`P1` and `P2`). On 5-minute candles, the sweep event often occurs 3-5 candles before the displacement signal â€” outside this 2-candle window.
-  2. The sweep required an **exact wick pierce** through a structural level (candle low â‰¤ level AND close > level). In practice, price often approaches within 1-2 ticks of a level without piercing it exactly â€” still a valid "proximity sweep" but rejected by exact-match logic.
+  1. The sweep lookback only checked the **2 candles directly before the signal** (`P1` and `P2`). On 5-minute candles, the sweep event often occurs 3-5 candles before the displacement signal Ã¢â‚¬â€� outside this 2-candle window.
+  2. The sweep required an **exact wick pierce** through a structural level (candle low Ã¢â€°Â¤ level AND close > level). In practice, price often approaches within 1-2 ticks of a level without piercing it exactly Ã¢â‚¬â€� still a valid "proximity sweep" but rejected by exact-match logic.
   3. The swing level filter only considered `MAJOR` and `INTERNAL` grade swings, ignoring `INNER` swings that are valid liquidity targets on lower timeframes.
-  4. Phase 2 defaults were also over-restrictive: ATR multiplier 1.5Ã— filtered out normal displacement candles; body ratio 0.6 and wick ratio 0.15 rejected most real-world candle shapes.
-- **The Fix:** Implemented a configurable `pmSweepLookback` parameter (default: 5 candles), added **ATR proximity tolerance** (0.3 Ã— ATR) for near-sweep matching, expanded swing grade search to all grades, and recalibrated all Phase 2 defaults via a 320-configuration parameter grid sweep against live ETHUSDT data. Added a new UI slider "Sweep Lookback (Candles Before Signal)" to the Smart Money Sweet Spot drawer.
+  4. Phase 2 defaults were also over-restrictive: ATR multiplier 1.5Ãƒâ€” filtered out normal displacement candles; body ratio 0.6 and wick ratio 0.15 rejected most real-world candle shapes.
+- **The Fix:** Implemented a configurable `pmSweepLookback` parameter (default: 5 candles), added **ATR proximity tolerance** (0.3 Ãƒâ€” ATR) for near-sweep matching, expanded swing grade search to all grades, and recalibrated all Phase 2 defaults via a 320-configuration parameter grid sweep against live ETHUSDT data. Added a new UI slider "Sweep Lookback (Candles Before Signal)" to the Smart Money Sweet Spot drawer.
 
 ### 22. Volumetric Markers Failing to Render on Live Ticks (Resolved in V11.2)
 - **The Bug:** Volumetric arrows and SMT circles were appearing correctly on initial load or timeframe switch, but failed to render on new, real-time live candles as they closed.
@@ -146,24 +146,24 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
 
 
 
-### 23. FVG Mitigation Ghost Zones — Comment-Code Mismatch (Resolved in V11.4)
+### 23. FVG Mitigation Ghost Zones â€” Comment-Code Mismatch (Resolved in V11.4)
 - **The Bug:** Mitigated FVGs remained visible on the chart as persistent ghost zones even after price had clearly traded through the imbalance area.
-- **The Cause:** A critical mismatch between the V8.5 doctrine comment and the actual implementation in `src/lib/fvgEngine.ts` (lines 48–56). The comment correctly described wick-entry mitigation (BISI mitigated when `future.l <= top`, SIBI when `future.h >= bottom`), but the code enforced a full-breakout rule (BISI only mitigated when `future.l < bottom`, SIBI when `future.h > top`). This meant price had to **completely break through the entire gap** before it was marked consumed — allowing partially-filled or wick-entered FVGs to remain ACTIVE indefinitely and render on the chart.
+- **The Cause:** A critical mismatch between the V8.5 doctrine comment and the actual implementation in `src/lib/fvgEngine.ts` (lines 48â€“56). The comment correctly described wick-entry mitigation (BISI mitigated when `future.l <= top`, SIBI when `future.h >= bottom`), but the code enforced a full-breakout rule (BISI only mitigated when `future.l < bottom`, SIBI when `future.h > top`). This meant price had to **completely break through the entire gap** before it was marked consumed â€” allowing partially-filled or wick-entered FVGs to remain ACTIVE indefinitely and render on the chart.
 - **Secondary Bugs Found:** `src/lib/quantEngine/LiquidityEngine.ts` used wrong candle property names (`c.close`, `c.open`, `c.high`, `c.low`) instead of the correct `Candle` interface properties (`c.c`, `c.o`, `c.h`, `c.l`), causing Order Block detection to silently fail (reading `undefined`). Also, `activeFVGs` in `LiquidityEngine` stored raw un-mapped FVG objects, creating a shape mismatch with the `MappedFVG` interface consumed by `MarketStructureAPI`.
 - **The Fix:** Corrected mitigation thresholds in `fvgEngine.ts` to match the V8.5 wick-scanning doctrine. Fixed all candle property names in `LiquidityEngine.ts`. Wrapped `detectActiveFVGs` output in `mapAndConsolidateFVGs` inside `LiquidityEngine` to ensure consistent `MappedFVG` shape.
 
-### 24. Market Structure Audit — 3 Critical Bugs + 4 Design Gaps (Resolved in V12.1.2)
+### 24. Market Structure Audit â€” 3 Critical Bugs + 4 Design Gaps (Resolved in V12.1.2)
 - **The Bugs (BUG-1):** The Directional Color Lock from Lesson #1 and Lesson #17 was COMPLETELY BYPASSED in `PivotEngine.ts`. Every pivot at every level (MAJOR, INTERNAL, INNER) was hardcoded `colorValidated: true`, allowing outside bars and non-institutional extremes to anchor the Macro Dealing Range, corrupting all downstream BOS/MSS labels.
-- **The Bugs (BUG-2 + GAP-4):** INTERNAL and INNER ZigZags shared the same `innerStateEngine` instance (`targetLevel: 1`), so Inner pivot events were contaminated by Internal-level triggers. Additionally, the return object's `internalZigzag` field was silently shadowed to point to `innerZigzag` — so all INT structural break labels were lost and both fields returned the same array.
+- **The Bugs (BUG-2 + GAP-4):** INTERNAL and INNER ZigZags shared the same `innerStateEngine` instance (`targetLevel: 1`), so Inner pivot events were contaminated by Internal-level triggers. Additionally, the return object's `internalZigzag` field was silently shadowed to point to `innerZigzag` â€” so all INT structural break labels were lost and both fields returned the same array.
 - **The Bug (BUG-4):** The anti-corruption clamp that prevents the internal range from bleeding outside parent bounds was unconditionally replacing `anchor_low_swing` / `anchor_high_swing` with the Major swing anchors. This painted INT levels with Major pivot metadata, corrupting the visual hierarchy.
 - **The Gaps (GAP-1 / GAP-2 / GAP-3):** Fallback DR anchors in the nearest-candle search hardcoded `colorValidated: true`. The SMCStateEngine always started BULLISH regardless of the actual market direction, producing false BOS events in bearish-opening datasets. The `currentTrend` ternary silently collapsed UNSET to BEARISH.
 - **The Fix:**
-  1. **`PivotEngine.ts`:** Implemented the Color Lock — SWING_HIGH: red top (close < open) preceded by green (close > open). SWING_LOW: green bottom (close > open) preceded by red (close < open).
+  1. **`PivotEngine.ts`:** Implemented the Color Lock â€” SWING_HIGH: red top (close < open) preceded by green (close > open). SWING_LOW: green bottom (close > open) preceded by red (close < open).
   2. **`SMCStateEngine.ts`:** Added `initializeFromFirstPivot()` which bootstraps initial trend state from the first confirmed pivot per level before the candle loop begins.
   3. **`MarketStructureAPI.ts`:** Added a dedicated `microStateEngine = new SMCStateEngine(config, 0)` for Level 0 INNER pivots. Fixed the `internalZigzag` shadow. Fixed anti-corruption clamp to preserve anchor metadata. Fixed fallback anchor `colorValidated` to check actual candle colors. Fixed trend ternaries to explicit 3-way BULLISH / BEARISH / UNSET mapping.
 
 
-### 25. Potential Trades Engine � 6 Silent Corruption Bugs (Resolved in V12.2)
+### 25. Potential Trades Engine — 6 Silent Corruption Bugs (Resolved in V12.2)
 - **The Bugs:**
   1. **(BUG-1) Dead FVG primary path:** `quantTradeEngine.ts` read `data.data_payload.active_fvgs` which is always `undefined` (the field lives at `data.ipda_metrics.active_fvgs`). Every call fell through to the inline fallback scanner, missing 4h/1h FVG context.
   2. **(BUG-2) Ghost field reads:** `data.ipda_metrics.last_price` and `data.ipda_metrics.bias_signal` do not exist. Real fields are candle close and `macro_daily_bias`. `institutionalBias` was permanently hardcoded to `CONFIRMED_BULLISH`.
@@ -176,12 +176,12 @@ If you encounter a new bug and successfully fix it, YOU MUST prompt the user to 
 ### 26. Potential Trades TP Drift & Dead Execute Button (Resolved in V12.3)
 - **The Bugs:**
   1. **(TP1 R:R)** TP1 was anchored to `Math.min(equilibrium, bslMagnets[0])`, which could land BELOW the 1:1 R:R threshold (or even below entry when price is near equilibrium). No R:R floor was enforced, violating the minimum institutional execution standard.
-  2. **(TP2 Drift)** TP2 was sourced from `bslMagnets[1]` / `sslMagnets[0]` � order-book resting pools that fluctuate by small decimal amounts on every tick. This caused TP2 to visibly change price on every data poll, giving no stable reference level.
+  2. **(TP2 Drift)** TP2 was sourced from `bslMagnets[1]` / `sslMagnets[0]` — order-book resting pools that fluctuate by small decimal amounts on every tick. This caused TP2 to visibly change price on every data poll, giving no stable reference level.
   3. **(Execute Button 404)** `PotentialTradesModal.tsx` posted to `/api/journal` which does not exist. The real live journal endpoint is `/api/trades`. Every Execute click silently returned a 404 and the trade was never recorded.
   4. **(Wrong Symbol)** Both modals hardcoded `ETHUSDT` instead of `ETHUSDC`.
 - **The Fix:**
   1. **TP1** now enforces a guaranteed 1:1 floor: `tp1 = max(tp1_natural, entryMid + risk)`. The structural anchor (equilibrium / BSL magnet) is preferred only if it surpasses the floor.
-  2. **TP2** is now locked to a stable structural anchor chain: `bslMagnets[0]` (PDH-anchored, stable) ? `swingHigh` ? `entryMid + 2�risk`. It no longer uses `bslMagnets[1]` or `[2]` which are deep order-book entries that churn on every poll.
+  2. **TP2** is now locked to a stable structural anchor chain: `bslMagnets[0]` (PDH-anchored, stable) ? `swingHigh` ? `entryMid + 2×risk`. It no longer uses `bslMagnets[1]` or `[2]` which are deep order-book entries that churn on every poll.
   3. Fixed `/api/journal` ? `/api/trades` in `PotentialTradesModal.tsx`.
   4. Updated all execute handlers to use `ETHUSDC` as symbol.
 
@@ -203,11 +203,34 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   1. **Selective Toggle:** Added `setupKey`, `isAutoExecute`, and `isAutoOpened` properties to `PotentialTrade` interface, backed by persistent localStorage helpers (`getAutoExecuteKeys`, `toggleAutoExecuteKey`).
   2. **Background Executor Hook (`useAutoTradeExecutor`):** Mounted inside `MarketDataProvider` (for 24/7 live polling) and `BacktestPage` (for replay steps). Monitors active setups and automatically POSTs to `/api/trades` or `/api/backtest-trades` the moment a setup transitions to `ACTIVE_WATCH` or `CONFIRMED`.
   3. **Idempotency Guard:** utoOpened: true is persisted per setup in localStorage, guaranteeing zero duplicate trade opens.
+  3. **Idempotency Guard:**  utoOpened: true is persisted per setup in localStorage, guaranteeing zero duplicate trade opens.
   4. **UI Banner & Controls:** Added Auto-Execution status banner and interactive ? Auto-Open toggle buttons across table rows and inspector cards in both Live and Backtest Potential Trades modals.
 
 ### 29. Completed Trade Auto-Open & Historical Journal Record Logging (Resolved in V12.6)
 - **The Feature:** When a Potential Trade completes (status TARGET_HIT [WIN] or INVALIDATED [LOSS]), Auto-Open or manual click execution logs it into the Trading Journal as a **COMPLETED / CLOSED TRADE** with complete timeline metadata.
 - **The Protocol & Payload:**
-  1. **Closed Trade Attributes:** Set status: "CLOSED", outcome: "WIN" | "LOSS", exit_price: closePrice, ealized_pnl: (exit_price - entry_price) * size, opened_at: openTime, closed_at: closeTime.
+  1. **Closed Trade Attributes:** Set status: "CLOSED", outcome: "WIN" | "LOSS", exit_price: closePrice, ealized_pnl: (exit_price - entry_price) * size, opened_at: openTime, closed_at: closeTime.
   2. **API Route Bypass:** Updated /api/trades and /api/backtest-trades POST handlers so status === "CLOSED" payloads bypass the active open-trade locks (GLOBAL_LOCK, portfolio risk cap, and ONE_TRADE_RULE).
   3. **UI Action Buttons:** Replaced disabled states for TARGET_HIT and INVALIDATED with interactive Log Win ?? and Log Loss ?? buttons across table rows and inspector cards.
+
+### 31. Minimalist Ultra-Compact Dashboard Metrics Bar Redesign (Resolved in V12.8)
+- **The Issue:** The top `DashboardMetrics` header bar (`MASTER BIAS`, `RANGE CONTEXT`, `TARGET STATUS (DOL)`) occupied over `115px-140px` of vertical height, taking up excessive screen real estate above the chart.
+- **The Redesign:**
+  1. Reduced total vertical height from `140px` to `~36px-40px` (>70% vertical screen space saved!).
+  2. Transformed bulky stacked cards into single-line horizontal flex pills with tight padding (`py-1.5 px-3`), crisp micro-icons (`Compass`, `Activity`, `Target`), and bold monospace badges.
+  3. Reclaimed nearly 100 pixels of vertical screen space, expanding chart viewport height significantly.
+
+### 32. Intraday Potential Trade Refresh & Retest Preservation (Resolved in V12.9)
+- **The Issue:** When price remained inside yesterday's range, the engine ignored new intraday setups and displayed only passed/completed setups from yesterday.
+- **The Cause & Fix:**
+  1. **Intraday Session Expiration:** `SetupRecord` in `quantTradeEngine.ts` now stores `dateStr` and `lastUpdated` timestamps. Memory entries older than 24h or from previous calendar days automatically expire, freeing today's price action to evaluate fresh setups.
+  2. **FVG Retest Preservation:** Updated `detectActiveFVGs()` in `fvgEngine.ts` so that touching an FVG zone marks it as `ACTIVE_RETESTED` instead of dropping it from active scans. FVGs are only marked mitigated upon full boundary invalidations.
+  3. **Always-Active Structural Sweeps:** Decoupled structural SSL liquidity sweep re-entry setups in `quantTradeEngine.ts` so that actionable structural setups generate every session alongside FVG queues.
+
+### 33. Institutional Scenario Grading & Step-by-Step Join Guide (Resolved in V13.0)
+- **The Feature:** Enriched setup generation with a 0-100 Quant Confluence Score, Tier Badges (`⭐ A+`, `⚡ A`, `🔹 B`), and step-by-step institutional trade join instructions.
+- **The Implementation:**
+  1. **Quant Scoring (`computeScenarioMetrics`):** Evaluates Cairo Master Bias match (+25), Dealing Zone alignment (+15), Displacement Sponsorship (+10), Multi-timeframe FVG confluence (+10), and R:R ≥ 1.5 (+10).
+  2. **Scenario Join Guide UI:** Rendered a dedicated **"🎯 Institutional Best Scenario Join Guide"** box in both Live and Replay Potential Trades modal inspectors with step-by-step entry, SL protection, and TP scaling rules.
+
+

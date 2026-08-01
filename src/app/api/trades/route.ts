@@ -55,10 +55,11 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
 
     // Dynamic checks for OPEN trades (bypassed for historical completed setups)
     if (!isNewTradeClosed) {
-      const openTradesCount = inMemoryTrades.filter(t => t.status === "OPEN").length;
-      if (openTradesCount > 0) {
+      const openTrades = inMemoryTrades.filter(t => t.status === "OPEN");
+      const conflicting = openTrades.find(t => t.direction !== direction);
+      if (conflicting) {
         return NextResponse.json(
-          { error: "GLOBAL_LOCK: An active trade is already in progress. Close it before initiating new setups." },
+          { error: `[HEDGING_BLOCKED] Cannot open a ${direction} position while an active ${conflicting.direction} trade is in progress.` },
           { status: 403 }
         );
       }
@@ -73,6 +74,7 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
         );
       }
     }
+
 
 
     // Resolve current market price
@@ -695,29 +697,39 @@ export async function POST(req: Request) {
       );
     }
 
-    // ── 2b. Backend Directional Guard (GLOBAL_LOCK Veto) ────────────────────
-    try {
-      const openCheckRes = await sql`
-        SELECT COUNT(*) AS count FROM paper_trades WHERE status = 'OPEN'
-      `;
-      const openCount = parseInt(openCheckRes.rows[0]?.count || "0", 10);
-      if (openCount > 0) {
+    const body = parsedBody;
+    const isNewTradeClosed = body?.status === "CLOSED";
+    const tradeDirection = body?.direction;
+
+    // ── 2b. Directional Alignment Guard (Hedging Blocked, Same-Direction Multi-Position Allowed) ──
+    if (!isNewTradeClosed && tradeDirection) {
+      try {
+        const openCheckRes = await sql`
+          SELECT direction FROM paper_trades WHERE status = 'OPEN'
+        `;
+        if (openCheckRes.rows.length > 0) {
+          const conflicting = openCheckRes.rows.find(r => r.direction !== tradeDirection);
+          if (conflicting) {
+            return NextResponse.json(
+              { error: `[HEDGING_BLOCKED] Cannot open a ${tradeDirection} position while an active ${conflicting.direction} trade is in progress.` },
+              { status: 403 }
+            );
+          }
+        }
+      } catch (guardError) {
+        console.error("[PAPER TRADES API] Directional Guard DB check failed:", guardError);
         return NextResponse.json(
-          { error: "GLOBAL_LOCK: An active trade is already in progress. Close it before initiating new setups." },
-          { status: 403 }
+          { error: "Database error during Directional Guard verification." },
+          { status: 500 }
         );
       }
-    } catch (guardError) {
-      console.error("[PAPER TRADES API] Directional Guard DB check failed:", guardError);
-      return NextResponse.json(
-        { error: "Database error during Global Lock verification." },
-        { status: 500 }
-      );
     }
 
+
+
     // ── 3. Parse and Validate Request Payload ──────────────────────────────
-    const body = parsedBody;
     const { symbol, direction, strategy_name, ai_narrative_summary, ipda_metrics, sl_logic, tp_logic } = body;
+
 
     if (!symbol || !direction || !strategy_name) {
       return NextResponse.json(
@@ -1007,9 +1019,8 @@ export async function POST(req: Request) {
     // ── 9b. Global Portfolio Risk Guard Veto Gate (V8.4) ────────────────────
     const newTradeRiskUsd = sl_distance * position_size;
 
-    const isNewTradeClosed = body.status === "CLOSED";
-
     if (!isNewTradeClosed) {
+
       // Calculate sum of Risk Amount for all currently OPEN trades
       const openTradesRes = await sql`
         SELECT entry_price, stop_loss, position_size FROM paper_trades
