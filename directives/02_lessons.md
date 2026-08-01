@@ -219,3 +219,18 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   1. Reduced total vertical height from `140px` to `~36px-40px` (>70% vertical screen space saved!).
   2. Transformed bulky stacked cards into single-line horizontal flex pills with tight padding (`py-1.5 px-3`), crisp micro-icons (`Compass`, `Activity`, `Target`), and bold monospace badges.
   3. Reclaimed nearly 100 pixels of vertical screen space, expanding chart viewport height significantly.
+
+### 32. Intraday Potential Trade Refresh & Retest Preservation (Resolved in V12.9)
+- **The Issue:** When price remained inside yesterday's range, the engine ignored new intraday setups and displayed only passed/completed setups from yesterday.
+- **The Cause & Fix:**
+  1. **Intraday Session Expiration:** `SetupRecord` in `quantTradeEngine.ts` now stores `dateStr` and `lastUpdated` timestamps. Memory entries older than 24h or from previous calendar days automatically expire, freeing today's price action to evaluate fresh setups.
+  2. **FVG Retest Preservation:** Updated `detectActiveFVGs()` in `fvgEngine.ts` so that touching an FVG zone marks it as `ACTIVE_RETESTED` instead of dropping it from active scans. FVGs are only marked mitigated upon full boundary invalidations.
+  3. **Always-Active Structural Sweeps:** Decoupled structural SSL liquidity sweep re-entry setups in `quantTradeEngine.ts` so that actionable structural setups generate every session alongside FVG queues.
+
+### 33. Institutional Scenario Grading & Step-by-Step Join Guide (Resolved in V13.0)
+- **The Feature:** Enriched setup generation with a 0-100 Quant Confluence Score, Tier Badges (`⭐ A+`, `⚡ A`, `🔹 B`), and step-by-step institutional trade join instructions.
+- **The Implementation:**
+  1. **Quant Scoring (`computeScenarioMetrics`):** Evaluates Cairo Master Bias match (+25), Dealing Zone alignment (+15), Displacement Sponsorship (+10), Multi-timeframe FVG confluence (+10), and R:R ≥ 1.5 (+10).
+  2. **Scenario Join Guide UI:** Rendered a dedicated **"🎯 Institutional Best Scenario Join Guide"** box in both Live and Replay Potential Trades modal inspectors with step-by-step entry, SL protection, and TP scaling rules.
+
+

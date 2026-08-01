@@ -1,8 +1,51 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V12.8
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.0
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-01 (V12.8 — Minimalist Ultra-Compact Dashboard Metrics Bar: 70%+ Vertical Height Reduction, Single-Line Micro Pills, Chart Real Estate Optimization)  
+> **Last Updated:** 2026-08-01 (V13.0 — Institutional Scenario Grading Engine & Step-by-Step Join Guide: 0-100 Quant Confluence Score, Tier A+/A/B Badging, Execution Inspector Guidance)  
+
+## 🆕 V13.0 Changelog — Institutional Scenario Grading Engine & Step-by-Step Join Guide (2026-08-01)
+
+### Summary
+Upgraded `quantTradeEngine.ts`, `PotentialTradesModal.tsx`, and `BacktestPotentialTradesModal.tsx` to automatically grade setups with a **0-100 Quant Confluence Score**, **Institutional Tier Badges** (`⭐ A+`, `⚡ A`, `🔹 B`), and a dedicated **Institutional Best Scenario Join Guide** box inside the Execution Inspector card.
+
+### Key Features & Architecture
+- **Quant Confluence Scoring (`computeScenarioMetrics`):**
+  - Cairo Master Bias Alignment: +25 pts
+  - Premium/Discount Dealing Zone Alignment: +15 pts
+  - Institutional Displacement Sponsorship: +10 pts
+  - Multi-Timeframe FVG Confluence (15m + 5m): +10 pts
+  - Risk-to-Reward Ratio ≥ 1.5: +10 pts
+  - Tiers: `A+` (≥85%), `A` (≥70%), `B` (<70%).
+- **Institutional Best Scenario Join Guide UI:**
+  - Displays step-by-step institutional rules directly in the inspector:
+    1. Entry Trigger & Limit Zone
+    2. Institutional Bias Alignment Verification
+    3. Dealing Zone Pricing Check
+    4. Structural Stop Loss Protection
+    5. Take Profit 1 (1:1 floor) & Take Profit 2 Scaling Strategy
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, 0 warnings** ✅
+
+---
+
+
+## 🆕 V12.9 Changelog — Intraday Potential Trade Refresh & Retest Preservation (2026-08-01)
+
+### Summary
+Upgraded `quantTradeEngine.ts` and `fvgEngine.ts` to ensure that when price remains inside yesterday's range, the system automatically expires yesterday's setup memory and generates fresh intraday setups. Retested FVG zones remain active for scanning, and structural liquidity sweep setups are evaluated every session.
+
+### Key Features & Architecture
+- **Session Expiration Gate:** Setup memory records store `dateStr` (`YYYY-MM-DD`) and `lastUpdated` timestamps. Records from previous calendar days or >24 hours old return `undefined` (expired), allowing today's price action to evaluate fresh setups.
+- **FVG Retest Preservation:** Updated `detectActiveFVGs()` in `fvgEngine.ts` so that touching an FVG zone marks it as `ACTIVE_RETESTED` instead of dropping it from active scans. Full invalidation occurs only when price breaches the opposite boundary (`l < bottom` for BISI / `h > top` for SIBI).
+- **Always-Active Structural Sweeps:** Decoupled structural SSL liquidity sweep re-entry setups in `quantTradeEngine.ts` to ensure structural sweep setups generate every session alongside FVG queues.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, 0 warnings** ✅
+
+---
+
 
 ## 🆕 V12.8 Changelog — Minimalist Ultra-Compact Dashboard Metrics Bar (2026-08-01)
 

@@ -38,32 +38,43 @@ export function detectActiveFVGs(candles: Candle[], onlyClosed: boolean = true) 
 
     if (type) {
       let isMitigated = false;
-      // V8.5 — Strict Wick-Scanning: any subsequent candle whose wick enters
-      // the imbalance zone (between bottom and top) marks the FVG as consumed.
-      // BISI: mitigated if future wick dips INTO the gap from above (future.l <= top)
-      // SIBI: mitigated if future wick pokes INTO the gap from below (future.h >= bottom)
+      let isRetested = false;
+
+      // Institutional Invalidation & Retest Scanning:
+      // BISI: fully invalidated when price breaches below bottom boundary. Touches inside top/bottom mark an active retest.
+      // SIBI: fully invalidated when price breaches above top boundary. Touches inside bottom/top mark an active retest.
       for (let j = i + 3; j < candles.length; j++) {
         const future = candles[j];
-        // BISI: mitigated when any wick enters the gap zone (touches or penetrates the top boundary)
-        if (type === 'BISI' && future.l <= top) {
-          isMitigated = true;
-          break;
-        }
-        // SIBI: mitigated when any wick enters the gap zone (touches or penetrates the bottom boundary)
-        if (type === 'SIBI' && future.h >= bottom) {
-          isMitigated = true;
-          break;
+        if (type === 'BISI') {
+          if (future.l < bottom) {
+            isMitigated = true;
+            break;
+          }
+          if (future.l <= top) {
+            isRetested = true;
+          }
+        } else if (type === 'SIBI') {
+          if (future.h > top) {
+            isMitigated = true;
+            break;
+          }
+          if (future.h >= bottom) {
+            isRetested = true;
+          }
         }
       }
 
       if (!isMitigated) {
         const isClosed = c3.isClosed === undefined ? true : c3.isClosed;
+        const fvgStatus = isClosed
+          ? (isRetested ? 'ACTIVE_RETESTED' : 'ACTIVE_UNMITIGATED')
+          : 'PENDING_FVG';
 
         if (onlyClosed) {
           if (isClosed) {
             active_fvgs.push({
               type,
-              status: 'ACTIVE_UNMITIGATED',
+              status: fvgStatus,
               coordinates: {
                 top,
                 ce_50_percent: (top + bottom) / 2,
@@ -75,7 +86,7 @@ export function detectActiveFVGs(candles: Candle[], onlyClosed: boolean = true) 
         } else {
           active_fvgs.push({
             type,
-            status: isClosed ? 'ACTIVE_UNMITIGATED' : 'PENDING_FVG',
+            status: fvgStatus,
             coordinates: {
               top,
               ce_50_percent: (top + bottom) / 2,
@@ -86,6 +97,7 @@ export function detectActiveFVGs(candles: Candle[], onlyClosed: boolean = true) 
         }
       }
     }
+
   }
 
   return active_fvgs;
@@ -111,9 +123,10 @@ export function mapAndConsolidateFVGs(
     top: fvg.coordinates.top,
     bottom: fvg.coordinates.bottom,
     ce: fvg.coordinates.ce_50_percent,
-    status: fvg.status === 'ACTIVE_UNMITIGATED' ? 'UNMITIGATED' : (fvg.status === 'PENDING_FVG' ? 'PENDING' : 'MITIGATED'),
+    status: (fvg.status === 'ACTIVE_UNMITIGATED' || fvg.status === 'ACTIVE_RETESTED') ? 'UNMITIGATED' : (fvg.status === 'PENDING_FVG' ? 'PENDING' : 'MITIGATED'),
     origin_time: fvg.origin_time
   });
+
 
   if (legacyFvgs5m !== undefined && Array.isArray(fvgGroups)) {
     return [
