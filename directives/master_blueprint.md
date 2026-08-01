@@ -1,8 +1,9 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.0
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.1
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-01 (V13.0 — Institutional Scenario Grading Engine & Step-by-Step Join Guide: 0-100 Quant Confluence Score, Tier A+/A/B Badging, Execution Inspector Guidance)  
+> **Last Updated:** 2026-08-01 (V13.1 — Potential Trades Modal Layout Optimization: 90% Viewport Width Container `max-w-[90vw]`)  
+
 
 ## 🆕 V13.0 Changelog — Institutional Scenario Grading Engine & Step-by-Step Join Guide (2026-08-01)
 
