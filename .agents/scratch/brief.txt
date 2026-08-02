@@ -1,0 +1,45 @@
+# TASK BRIEF: Fix KLineChart Live Price Streaming, Drawing Tools Event Interception & Timeframe Switching
+
+## Objective
+On `/sandbox/klinechart` route (`KLineChartSandbox.tsx`), solve 3 critical regressions:
+1. **User Drawing Tools Blocked by SMC Overlays:** Automated SMC overlays (FVGs, BOS/MSS lines, Volumetric annotations) currently intercept canvas click events because they have `lock: true` or default overlay event capturing, preventing the user drawing toolbar (Segment, Ray Line, Rectangle, Fibonacci) from placing points.
+2. **Live WebSocket Ticks Not Updating Chart:** Live price ticks from `useMarketDataLiveContext()` must smoothly update the current candle frame in real-time on KLineChart canvas without freezing or falling behind.
+3. **Timeframe Button Selection:** Timeframe buttons (`1m`, `3m`, `5m`, `15m`, `1h`, `4h`) must seamlessly fetch historical data, switch `chart.setPeriod()`, and reset the canvas data.
+
+---
+
+## Target Files
+- `src/components/KLineChartSandbox.tsx`
+- `src/app/sandbox/klinechart/page.tsx`
+
+---
+
+## Required Changes
+
+### 1. Fix User Drawing Tool Event Interception in `KLineChartSandbox.tsx`
+- Ensure automated SMC overlays (FVGs, BOS/MSS lines, Volumetric annotations) do NOT intercept mouse clicks.
+- Do NOT use `lock: true` on automated overlays if it captures user drawing clicks; instead set `lock: false` and disable mouse event listeners on automated overlay templates so user clicks hit the canvas directly.
+- When a user selects a drawing tool (`segment`, `rayLine`, `rectangle`, `fibonacciLine`), call `chart.createOverlay({ name: tool, groupId: 'user_drawings' })` cleanly.
+- Keep `activeTool` state in sync with the toolbar buttons.
+
+### 2. Fix Real-Time Live WebSocket Tick Updates
+- In `useEffect` listening to `liveCandle`:
+  - Properly scale `liveCandle.time` to milliseconds matching `activeCandles` timestamp format (`ts = liveCandle.time > 1e10 ? liveCandle.time : liveCandle.time * 1000`).
+  - Pass the updated `KLineData` object to `liveWsCallbackRef.current(klineData)` or update the data stream so the current price wick/body and HUD price text (`Price: $1857.96`) move dynamically on every tick.
+
+### 3. Ensure Timeframe Switch & Async Hydration Reliability
+- When timeframe changes (`1m`, `3m`, `5m`, `15m`, `1h`, `4h`):
+  - Update `wsInterval` state via `setWsInterval(tf)`.
+  - Update `chart.setPeriod(getPeriodFromInterval(tf))`.
+  - Call `refetch()`.
+  - Upon receiving updated `activeCandles`, call `chart.resetData()`, pass the formatted/sorted candles to `setDataLoader`, resize, and call `chart.scrollToRealTime()`.
+
+---
+
+## Gates / Verification Command
+Before finishing, run:
+```bash
+npx tsc --noEmit
+npm run build
+```
+Both commands MUST pass with 0 errors. Do NOT commit the code (the orchestrator will review and commit).

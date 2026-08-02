@@ -1,11 +1,28 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.1
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.2
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-01 (V13.1 — Potential Trades Modal Layout Optimization: 90% Viewport Width Container `max-w-[90vw]`)  
+> **Last Updated:** 2026-08-02 (V13.2 — Isolated KLineChart Sandbox Migration & Evaluation)  
 
 
-## 🆕 V13.0 Changelog — Institutional Scenario Grading Engine & Step-by-Step Join Guide (2026-08-01)
+## 🆕 V13.2 Changelog — Isolated KLineChart Sandbox Migration & Evaluation (2026-08-02)
+
+### Summary
+Built an isolated feature branch sandbox route (`/sandbox/klinechart`) and wrapper component (`KLineChartSandbox.tsx`) evaluating `klinecharts` (v10) to supply built-in user drawing tools (trendlines, rays, rectangles, fibonacci retracements) while preserving 100% of existing Quant Engine backend logic, automated SMC overlays (FVGs, Market Structure Swings, Volumetric Displacement Markers), and real-time WebSocket tick streaming performance.
+
+### Key Features & Architecture
+- **Isolated Sandbox Component (`KLineChartSandbox.tsx`):** Wraps `klinecharts` v10 with Bloomberg HUD dark styling (`#0b0e14` container, `#1e293b` grid lines, `#50ffaf` bullish / `#ffb4ab` bearish bars) without replacing or modifying `Chart.tsx`.
+- **Automated SMC Overlays Porting:**
+  - **FVG Layer:** Registered custom `fvgRect` polygon overlay template in KLineCharts v10 to render unmitigated bullish (`rgba(80, 255, 175, 0.25)`) and bearish (`rgba(255, 180, 171, 0.25)`) Fair Value Gap rectangles with dashed border boundaries directly from backend `ipda_metrics.active_fvgs`. Enforced strict real-time mitigation scanning against subsequent candle high/low boundaries to immediately remove mitigated FVGs when price breaches through them.
+  - **Market Structure Layer:** Registered custom `pivotDot` circle overlay template for 60+ swing high/low pivots (`SH`/`SL`) and native `segment` overlays for horizontal BOS (`#a855f7`) and MSS (`#50ffaf`) breach lines directly from backend `ipda_metrics.full_structure_map`.
+  - **Volumetric Displacement Layer:** Native `simpleAnnotation` overlays with `backgroundColor: 'transparent'` and `borderColor: 'transparent'`, rendering directional arrows (`▲`/`▼`) and SMT trap circles (`●`) without background badge bubbles.
+- **Defensive Sizing & Hydration Guards:** Added defensive `data_payload` check in `useMarketData.ts` line 899 (`if (!data || !data.data_payload) return;`), explicit container `minHeight: '550px'`, `chart.resetData()` calls on asynchronous payload hydration, `formatAndSortCandles()` strict deduplication and ascending timestamp sorting, decoupled live WebSocket tick streaming via `liveWsCallbackRef`, resolved overlay click event interception by removing `lock: true` on automated SMC overlays to enable native user drawing tools (`segment`, `rayLine`, `rectangle`, `fibonacciLine`), updated `src/proxy.ts` to allow unauthenticated `/sandbox` and `/api/` route access, added `dispose(containerRef.current)` before `init()` to eliminate React 18 StrictMode duplicate canvas layers, and added `requestAnimationFrame(() => chart.scrollToRealTime())` to guarantee instant candlestick rendering.
+- **Native User Drawing Tools Toolbar:** Sleek UI toolbar offering user selection for Segment/Trendline (`segment`), Ray Line (`rayLine`), Rectangle Zone (`rectangle`), Fibonacci Retracement (`fibonacciLine`), and Price Line (`priceLine`), with user drawings persisting across WebSocket tick updates and clear actions.
+- **Dedicated Sandbox Page (`src/app/sandbox/klinechart/page.tsx`):** Serves the evaluation environment with `NavigationHeader` and `MarketDataProvider` context.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, 0 warnings** ✅
+- `npm run build` → **Compiled successfully (Static Page `/sandbox/klinechart`)** ✅
 
 ### Summary
 Upgraded `quantTradeEngine.ts`, `PotentialTradesModal.tsx`, and `BacktestPotentialTradesModal.tsx` to automatically grade setups with a **0-100 Quant Confluence Score**, **Institutional Tier Badges** (`⭐ A+`, `⚡ A`, `🔹 B`), and a dedicated **Institutional Best Scenario Join Guide** box inside the Execution Inspector card.

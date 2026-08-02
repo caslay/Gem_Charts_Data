@@ -26,6 +26,8 @@ export default auth((req) => {
   const isAuthRoute = nextUrl.pathname.startsWith("/api/auth");
   const isPyBackend = nextUrl.pathname.startsWith("/api/py");
   const isLoginPage = nextUrl.pathname === "/login";
+  const isSandboxRoute = nextUrl.pathname.startsWith("/sandbox");
+  const isApiRoute = nextUrl.pathname.startsWith("/api/");
   const isPublicAsset =
     nextUrl.pathname.startsWith("/_next") ||
     nextUrl.pathname.startsWith("/favicon.ico") ||
@@ -34,8 +36,8 @@ export default auth((req) => {
     nextUrl.pathname.startsWith("/manifest.json") ||
     nextUrl.pathname.startsWith("/sw.js");
 
-  // Skip proxy for auth API routes, python backend, and static assets
-  if (isAuthRoute || isPyBackend || isPublicAsset) {
+  // Skip proxy for auth API routes, api endpoints, python backend, sandbox evaluation routes, and static assets
+  if (isAuthRoute || isPyBackend || isSandboxRoute || isApiRoute || isPublicAsset) {
     return NextResponse.next();
   }
 

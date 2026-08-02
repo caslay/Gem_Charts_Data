@@ -887,7 +887,7 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
       return {
         ...prev,
         data_payload: {
-          ...prev.data_payload,
+          ...(prev?.data_payload || {}),
           [activeSeriesKey]: updatedCandles
         }
       };
@@ -896,7 +896,7 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
 
   // Synchronize and update the stabilized structural state
   useEffect(() => {
-    if (!data) return;
+    if (!data || !data.data_payload) return;
 
     // Prefer the backend's fully computed, stateful structural map if available to ensure 100% stability and zero lookback truncation drift
     if (data.ipda_metrics?.full_structure_map) {
@@ -905,7 +905,7 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
     }
 
     const activeSeriesKey = `candles_${selectedInterval}`;
-    const activeCandles = data.data_payload[activeSeriesKey] || data.data_payload.candles_15m || [];
+    const activeCandles = data.data_payload[activeSeriesKey] || data.data_payload.candles_5m || data.data_payload.candles_15m || [];
     if (activeCandles.length === 0) return;
 
     // 1. Establish the stable Context Anchor on the very first successful initial load
