@@ -1,8 +1,78 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.3
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.6
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-08 (V13.3 — Potential Trades Engine & Modal Overhaul)  
+> **Last Updated:** 2026-08-08 (V13.6 — AI SOP Analysis & Potential Trades Alignment Engine)  
+
+## 🆕 V13.6 Changelog — AI SOP Analysis & Potential Trades Alignment Engine (2026-08-08)
+
+### Summary
+Fully aligned the Potential Trades Engine (`src/lib/quantTradeEngine.ts`) with Gemini 3.6 Flash AI SOP Analysis (`src/lib/aiSystemPrompt.ts`). Pinned the AI SOP Setup card as a top-tier `⭐ AI Quant SOP Setup` card and boosted aligned local setups while embedding an interactive AI Synthesis control bar in `PotentialTradesModal.tsx`.
+
+### Key Features & Architecture
+- **Pinned Top-Tier AI SOP Setup Card (`quantTradeEngine.ts`):**
+  - Synthesizes Gemini's explicit `sop_report` payload into a top-tier setup card tagged `⭐ AI Quant SOP Setup` (A+ Tier, 100% Confluence Score).
+  - Populates exact AI risk parameters (`entry_range`, `invalidation`, `tp1`, `tp2`, `rr_ratio`) and full SOP narrative steps directly in the execution inspector.
+- **AI Directional Score Booster (+20 pts):**
+  - Compares local client-side setups against Gemini's `bias_signal`. Matching setups receive a **+20 pt Confluence Score boost** and an `🤖 AI SOP Confluence` rule tag.
+- **Interactive AI Synthesis Control Bar (`PotentialTradesModal.tsx`):**
+  - Integrated a dedicated `[ 🤖 Gemini AI SOP Quant Synthesis Engine ]` control bar at the top of the Potential Trades modal with loading state and 1-click `[ ⚡ Run AI SOP Synthesis ]` trigger button.
+
+### Verification
+- `npx tsc --noEmit --skipLibCheck` → **0 errors, clean compilation** ✅
+
+---
+
+## 🆕 V13.5 Changelog — Gemini AI Quant API & SOP Skill Integration (2026-08-08)
+
+### Summary
+Upgraded the live Gemini AI Quant Engine (`src/lib/aiSystemPrompt.ts` & Postgres `system_settings`), API routes (`/api/quant-analyze` & `/api/log-sop-tracker`), and Potential Trades UI (`PotentialTradesModal.tsx`) to natively execute the **ETHUSDC.p Quantitative Analysis SOP Framework**.
+
+### Key Features & Architecture
+- **Upgraded Gemini System Prompt (`QUANT_SYSTEM_PROMPT`):**
+  - Updated `src/lib/aiSystemPrompt.ts` and executed `scratch/update_db_prompt.js` to update `SYSTEM_PROMPT` in PostgreSQL `system_settings`.
+  - Enforces the 6-Step SOP Workflow (Intake, HTF DOL, Session Profile, BTC SMT, 15m MSS/Displacement, Invalidation & Targets) and strict prohibition of TDO / Cairo TDO.
+- **Enhanced JSON Output Schema:**
+  - Gemini API returns backwards-compatible HUD fields (`bias_signal`, `bias_label`, `primary_target`, `narrative`) along with structured `sop_report` (Market Context, HTF DOL, Session Profile, SMT Status, Trade Narrative, Risk Parameters) and `next_database_state`.
+- **Automated + Manual Daily Tracker Logging (`sopTrackerLogger.ts`):**
+  - **Auto-Log:** `/api/quant-analyze` automatically appends active setups to `directives/ETHUSDC_Daily_Tracker.md` and `directives/ETHUSDC_Daily_Tracker.json`.
+  - **Manual UI Trigger:** Added `[ 💾 SOP Log ]` action button to `PotentialTradesModal.tsx` rows via `/api/log-sop-tracker`.
+
+### Verification
+- `npx tsc --noEmit --skipLibCheck` → **0 errors, clean compilation** ✅
+- Postgres `system_settings` updated successfully ✅
+
+---
+
+## 🆕 V13.4 Changelog — ETHUSDC.p Quantitative SOP AI Agent Skill Deployment (2026-08-08)
+
+### Summary
+Converted the `ETHUSDC.p Quantitative Analysis Framework & AI Agent Skill SOP` into an interactive `/skill` (`/eth-quant-sop`) located at `.agents/skills/eth-quant-sop/SKILL.md`. Formatted following a `/grill-me` alignment, equipped with 7 specialized sub-commands, automated TDO prohibition enforcement, and dual Daily Tracker persistence (Markdown & JSON).
+
+### Key Features & Architecture
+- **7-Command Palette (`/eth-quant-sop <sub-command>`):**
+  - **`analyze`:** Direct 6-step top-down quantitative report generation formatted to Section 3 matrix table.
+  - **`guided`:** Interactive step-by-step walkthrough across data intake, HTF DOL, session profiling, BTC SMT, 15m MSS/displacement mapping, and risk parameters.
+  - **`smt`:** Dedicated inter-market SMT divergence inspector comparing ETH vs BTC structural swings.
+  - **`log`:** Automated Daily Tracker setup recorder.
+  - **`review`:** Session close outcome reviewer (`Success`, `Stop Out`, `No Trigger`).
+  - **`audit`:** Enforces strict SOP compliance (verifying ZERO TDO/Cairo TDO usage, explicit invalidation, valid targets).
+  - **`report`:** Standardized report table generator from raw chart observations.
+- **Skill Architectural Blueprint & Operational Guide (`SKILL_BLUEPRINT.md`):**
+  - Dedicated architecture blueprint created at `.agents/skills/eth-quant-sop/references/SKILL_BLUEPRINT.md`.
+  - Includes full System Architecture, Data Flow diagrams, 6-Step Quantitative Hierarchy, SMT State Machine (with Mermaid visual diagrams), Guardrails/TDO Prohibition enforcement, and Troubleshooting Playbook.
+- **Dual Daily Tracker Storage:**
+  - Maintains `directives/ETHUSDC_Daily_Tracker.md` (human-readable table log with win rate telemetry) and `directives/ETHUSDC_Daily_Tracker.json` (structured dataset for quantitative backtesting).
+- **Prohibition Guardrails:**
+  - Enforces explicit prohibition of True Day Open (TDO) or Cairo TDO in all analytical routines and prompt outputs.
+
+### Verification
+- Skill registration verified in `.agents/skills/eth-quant-sop/SKILL.md` ✅
+- Skill Architectural Blueprint created in `.agents/skills/eth-quant-sop/references/SKILL_BLUEPRINT.md` ✅
+- SOP Reference saved in `.agents/skills/eth-quant-sop/resources/sop_reference.md` ✅
+- Dual Daily Tracker initialized in `directives/ETHUSDC_Daily_Tracker.md` & `directives/ETHUSDC_Daily_Tracker.json` ✅
+
+---
 
 ## 🆕 V13.3 Changelog — Potential Trades Engine & Modal Overhaul (2026-08-08)
 
