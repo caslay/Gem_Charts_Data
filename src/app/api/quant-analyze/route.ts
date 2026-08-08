@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { sql } from '@vercel/postgres';
+import { autoLogSopSetup } from '@/lib/sopTrackerLogger';
 
 /**
  * Quant Analyze API — V8.3 Stateful Engine (Phase 4)
@@ -120,7 +121,7 @@ export async function POST(req: Request) {
     const result = await model.generateContent(prompt);
     const text = result.response.text();
 
-    // ── 10. PHASE 4: Parse next_database_state & UPSERT ─────────────────
+    // ── 10. PHASE 4 & SOP ENGINE: Parse next_database_state, UPSERT & Auto-Log Setup ──
     try {
       const nextState = extractNextDatabaseState(text);
       if (nextState) {
@@ -133,12 +134,22 @@ export async function POST(req: Request) {
       } else {
         console.log('[MEMORY BANK] No next_database_state found in AI response. State unchanged.');
       }
+
+      // Auto-Log setup to directives/ETHUSDC_Daily_Tracker.md & .json if sop_report is present
+      try {
+        const parsedJson = typeof text === 'string' ? JSON.parse(text.replace(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/, '$1').trim()) : null;
+        if (parsedJson?.sop_report) {
+          autoLogSopSetup(parsedJson.sop_report, nextState || undefined);
+        }
+      } catch (jsonErr) {
+        // Non-fatal if text contains narrative or non-JSON wrapper
+      }
     } catch (upsertErr) {
-      console.error('[MEMORY BANK] Failed to upsert next_database_state:', upsertErr);
+      console.error('[MEMORY BANK] Failed to upsert next_database_state or auto-log:', upsertErr);
       // Non-fatal: the analysis still returns to the client
     }
 
-    // ── 11. Return the extracted markdown text to the client ─────────────
+    // ── 11. Return the extracted text to the client ─────────────
     return NextResponse.json({ analysis: text });
 
   } catch (error: unknown) {

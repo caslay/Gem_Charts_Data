@@ -1,5 +1,6 @@
 import type { MarketDataPayload } from "@/hooks/useMarketData";
 import { detectActiveFVGs, mapAndConsolidateFVGs } from "@/lib/fvgEngine";
+import { safeParseAiJson } from "@/lib/aiJsonParser";
 
 export interface PotentialTrade {
   id: string;
@@ -211,7 +212,8 @@ export function computeScenarioMetrics(
   tp1: number,
   tp2: number,
   swingHigh: number,
-  swingLow: number
+  swingLow: number,
+  aiBiasSignal?: number | null
 ): { scenarioTier: "A+" | "A" | "B"; scenarioScore: number; scenarioRules: string[] } {
   let score = 50;
 
@@ -221,12 +223,14 @@ export function computeScenarioMetrics(
     if (sponsorshipStatus.includes("ACTIVE") || sponsorshipStatus === "ACTIVE_BULLISH") score += 10;
     if (timeframeConfluenceCount >= 2) score += 10;
     if (rr >= 1.5) score += 10;
+    if (aiBiasSignal === 1) score += 20;
   } else {
     if (institutionalBias === "BEARISH") score += 25;
     if (dealingZone === "PREMIUM") score += 15;
     if (sponsorshipStatus.includes("ACTIVE") || sponsorshipStatus === "ACTIVE_BEARISH") score += 10;
     if (timeframeConfluenceCount >= 2) score += 10;
     if (rr >= 1.5) score += 10;
+    if (aiBiasSignal === -1) score += 20;
   }
 
   score = Math.min(100, Math.max(30, score));
@@ -246,13 +250,23 @@ export function computeScenarioMetrics(
         : (dealingZone === "PREMIUM" ? "✅ Favorable Premium Pricing (+15 pts)" : "⚠️ Discount Pricing (monitor volume displacement)")
     }.`,
     `4. Structural SL Protection: Place SL at $${sl.toFixed(2)} (${isBull ? `below swing low $${swingLow.toFixed(2)}` : `above swing high $${swingHigh.toFixed(2)}`}).`,
-    `5. Target Scaling: Scale 50% position at TP1 ($${tp1.toFixed(2)}), trail stop to entry, and target TP2 ($${tp2.toFixed(2)}).`
+    `5. Target Scaling: Scale 50% position at TP1 ($${tp1.toFixed(2)}), trail stop to entry, and target TP2 ($${tp2.toFixed(2)}).`,
+    ...(aiBiasSignal === (isBull ? 1 : -1) ? ["6. AI SOP Confluence: ✅ Setup direction aligns with Gemini AI SOP Master Bias (+20 pts)."] : [])
   ];
 
   return { scenarioTier, scenarioScore: score, scenarioRules };
 }
 
-export function generatePotentialTrades(data: MarketDataPayload | null, isBacktest: boolean = false): TradeEngineSummary {
+export function generatePotentialTrades(
+  data: MarketDataPayload | null,
+  isBacktest: boolean = false,
+  aiAnalysisRaw?: string | null
+): TradeEngineSummary {
+
+  // Parse Gemini AI Analysis Payload if available
+  const parsedAi = aiAnalysisRaw ? safeParseAiJson(aiAnalysisRaw) : null;
+  const aiBiasSignal = parsedAi && typeof parsedAi.bias_signal === 'number' ? Number(parsedAi.bias_signal) : null;
+  const sopReport = parsedAi?.sop_report;
 
   // Extract recent candles for dynamic live structure detection
   const candles5m = data?.data_payload?.candles_5m || [];
@@ -880,6 +894,58 @@ export function generatePotentialTrades(data: MarketDataPayload | null, isBackte
   });
 
 
+
+  // ── AI SOP Analysis Synthesis: Pin AI SOP Setup Card if available ─────────
+  if (sopReport && sopReport.risk_parameters) {
+    try {
+      const rp = sopReport.risk_parameters;
+      const aiDirection: "BULLISH" | "BEARISH" =
+        aiBiasSignal === -1 || parsedAi?.bias_label === "BEARISH" ? "BEARISH" : "BULLISH";
+
+      const entryMin = Array.isArray(rp.entry_range) && rp.entry_range.length >= 2 ? rp.entry_range[0] : (currentPrice - 2);
+      const entryMax = Array.isArray(rp.entry_range) && rp.entry_range.length >= 2 ? rp.entry_range[1] : (currentPrice + 2);
+      const sl = typeof rp.invalidation === 'number' ? rp.invalidation : (aiDirection === "BULLISH" ? currentPrice - 15 : currentPrice + 15);
+      const tp1 = typeof rp.tp1 === 'number' ? rp.tp1 : (aiDirection === "BULLISH" ? currentPrice + 10 : currentPrice - 10);
+      const tp2 = typeof rp.tp2 === 'number' ? rp.tp2 : (aiDirection === "BULLISH" ? currentPrice + 25 : currentPrice - 25);
+      const rr = typeof rp.rr_ratio === 'number' ? rp.rr_ratio : 1.8;
+
+      const aiSetupKey = `AI_SOP_${aiDirection}_${entryMin.toFixed(2)}_${entryMax.toFixed(2)}_${sl.toFixed(2)}`;
+
+      const aiSetupCard: PotentialTrade = {
+        id: "AI-SOP-01",
+        type: "⭐ AI Quant SOP Setup",
+        direction: aiDirection,
+        trigger: sopReport.trade_narrative || parsedAi?.narrative_summary || "Gemini 3.6 Flash Quant SOP Analysis",
+        entryMin: parseFloat(entryMin.toFixed(2)),
+        entryMax: parseFloat(entryMax.toFixed(2)),
+        stopLoss: parseFloat(sl.toFixed(2)),
+        target1: parseFloat(tp1.toFixed(2)),
+        target2: parseFloat(tp2.toFixed(2)),
+        rrRatio: parseFloat(rr.toFixed(2)),
+        confluence: `🤖 AI SOP Aligned | ${sopReport.smt_status || "BTC SMT Divergence"}`,
+        status: "ACTIVE_WATCH",
+        isHighProbability: true,
+        isNearby: true,
+        timeframeConfluence: "⭐ AI Quant SOP Setup",
+        scenarioTier: "A+",
+        scenarioScore: 100,
+        scenarioRules: [
+          `1. AI SOP Narrative: ${sopReport.trade_narrative || parsedAi?.narrative || "Bullish expansion"}`,
+          `2. HTF DOL Target: ${sopReport.htf_dol || "PDH ($1,934.44)"}`,
+          `3. Session Profile: ${sopReport.session_profile || "London High/Low"}`,
+          `4. SMT Status: ${sopReport.smt_status || "Bullish SMT vs BTC"}`,
+          `5. Risk Parameters: SL $${sl.toFixed(2)} | TP1 $${tp1.toFixed(2)} | TP2 $${tp2.toFixed(2)} (1:${rr.toFixed(2)} R:R)`
+        ],
+        setupKey: aiSetupKey,
+        isAutoExecute: isAutoExecuteEnabled(aiSetupKey),
+        isAutoOpened: false,
+      };
+
+      setups.unshift(aiSetupCard);
+    } catch (aiErr) {
+      console.warn("[quantTradeEngine] Error synthesizing AI SOP setup:", aiErr);
+    }
+  }
 
   const firstBull = consolidatedFvgs.find((f) => f.type === "BULLISH");
   const firstBear = consolidatedFvgs.find((f) => f.type === "BEARISH");
