@@ -109,7 +109,7 @@ export interface MappedFVG {
   top: number;
   bottom: number;
   ce: number;
-  status: 'UNMITIGATED' | 'MITIGATED' | 'PENDING';
+  status: 'UNMITIGATED' | 'RETESTED' | 'MITIGATED' | 'PENDING';
   origin_time: number;
 }
 
@@ -123,7 +123,13 @@ export function mapAndConsolidateFVGs(
     top: fvg.coordinates.top,
     bottom: fvg.coordinates.bottom,
     ce: fvg.coordinates.ce_50_percent,
-    status: (fvg.status === 'ACTIVE_UNMITIGATED' || fvg.status === 'ACTIVE_RETESTED') ? 'UNMITIGATED' : (fvg.status === 'PENDING_FVG' ? 'PENDING' : 'MITIGATED'),
+    status: fvg.status === 'ACTIVE_UNMITIGATED'
+      ? 'UNMITIGATED'
+      : fvg.status === 'ACTIVE_RETESTED'
+      ? 'RETESTED'
+      : fvg.status === 'PENDING_FVG'
+      ? 'PENDING'
+      : 'MITIGATED',
     origin_time: fvg.origin_time
   });
 

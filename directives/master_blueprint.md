@@ -1,8 +1,24 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.1
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.2
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-01 (V13.1 — Potential Trades Modal Layout Optimization: 90% Viewport Width Container `max-w-[90vw]`)  
+> **Last Updated:** 2026-08-08 (V13.2 — FVG Retest Status Mapping & Chart Ghost Zone Resolution)  
+
+
+## 🆕 V13.2 Changelog — FVG Retest Status Mapping & Chart Ghost Zone Resolution (2026-08-08)
+
+### Summary
+Resolved the FVG mitigation status mapping leak in `fvgEngine.ts`. When price ticks into an FVG (e.g. 15m BISI or SIBI gap), its mapped status now cleanly updates to `'RETESTED'`, causing it to unmount from the unmitigated FVG chart overlay instead of remaining visible as a persistent ghost zone.
+
+### Key Features & Architecture
+- **MappedFVG Status Extension:** Added `'RETESTED'` to the `MappedFVG.status` union (`'UNMITIGATED' | 'RETESTED' | 'MITIGATED' | 'PENDING'`).
+- **Mapper Status Disambiguation (`mapAndConsolidateFVGs`):** Fixed `mapFVG` mapping logic so `ACTIVE_UNMITIGATED` maps to `'UNMITIGATED'`, `ACTIVE_RETESTED` maps to `'RETESTED'`, `PENDING_FVG` maps to `'PENDING'`, and full invalidation maps to `'MITIGATED'`.
+- **Chart Overlay Unmounting:** `Chart.tsx` (`computeFvgOverlay`) and `fvgLayer.ts` filter unmitigated overlays via `if (fvg.status !== 'UNMITIGATED') continue;`. Because retested FVGs now return `status: 'RETESTED'`, they unmount from the chart overlay the moment price ticks into the gap.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, 0 warnings** ✅
+
+---
 
 
 ## 🆕 V13.0 Changelog — Institutional Scenario Grading Engine & Step-by-Step Join Guide (2026-08-01)

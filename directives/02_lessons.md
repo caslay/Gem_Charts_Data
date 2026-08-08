@@ -233,4 +233,10 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   1. **Quant Scoring (`computeScenarioMetrics`):** Evaluates Cairo Master Bias match (+25), Dealing Zone alignment (+15), Displacement Sponsorship (+10), Multi-timeframe FVG confluence (+10), and R:R ≥ 1.5 (+10).
   2. **Scenario Join Guide UI:** Rendered a dedicated **"🎯 Institutional Best Scenario Join Guide"** box in both Live and Replay Potential Trades modal inspectors with step-by-step entry, SL protection, and TP scaling rules.
 
+### 34. FVG Retest Status Mapping & Chart Ghost Zone Resolution (Resolved in V13.1)
+- **The Bug:** When price ticked into a Fair Value Gap (e.g. 15m BISI or SIBI), the FVG box remained visible on the chart as a persistent unmitigated ghost zone indefinitely.
+- **The Cause:** `detectActiveFVGs()` in `fvgEngine.ts` flagged touched FVGs as `ACTIVE_RETESTED`, but `mapAndConsolidateFVGs()` collapsed both `ACTIVE_UNMITIGATED` and `ACTIVE_RETESTED` into `status: 'UNMITIGATED'`. Because `Chart.tsx` and `fvgLayer.ts` filtered overlays via `if (fvg.status !== 'UNMITIGATED') continue;`, touched/retested FVGs were treated as unmitigated fresh zones and rendered continuously.
+- **The Fix:** Updated `MappedFVG.status` to include `'RETESTED'`. Refactored `mapAndConsolidateFVGs()` to map `ACTIVE_UNMITIGATED` to `'UNMITIGATED'` and `ACTIVE_RETESTED` to `'RETESTED'`. As a result, once price ticks into an FVG, its mapped status updates to `'RETESTED'`, and it cleanly unmounts from the unmitigated FVG chart overlay.
+
+
 
