@@ -13,6 +13,8 @@ import {
   Shield,
   Layers,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Sparkles,
   BarChart2,
   Loader2,
@@ -20,7 +22,9 @@ import {
   RotateCcw,
   AlertTriangle,
   Lock,
-  Ban
+  Ban,
+  History,
+  Award
 } from "lucide-react";
 import { useMarketDataContext } from "@/context/MarketDataContext";
 import { generatePotentialTrades, PotentialTrade, toggleAutoExecuteKey } from "@/lib/quantTradeEngine";
@@ -32,13 +36,15 @@ interface PotentialTradesModalProps {
 
 export default function PotentialTradesModal({ isOpen, onClose }: PotentialTradesModalProps) {
   const { data } = useMarketDataContext();
+  const [activeTab, setActiveTab] = useState<"ACTIVE" | "COMPLETED">("ACTIVE");
   const [filterDirection, setFilterDirection] = useState<"ALL" | "BULLISH" | "BEARISH">("ALL");
-  const [qualityMode, setQualityMode] = useState<"HIGH_PROBABILITY" | "NEARBY" | "PENDING" | "ALL">("HIGH_PROBABILITY");
-  const [selectedSetupId, setSelectedSetupId] = useState<string | null>("SET-01");
+  const [qualityMode, setQualityMode] = useState<"PREMIUM" | "ENTRY_ZONE" | "ALL">("PREMIUM");
+  const [selectedSetupId, setSelectedSetupId] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<string | null>(null);
   const [executingSetupId, setExecutingSetupId] = useState<string | null>(null);
   const [executedSuccessId, setExecutedSuccessId] = useState<string | null>(null);
   const [confirmingSetupId, setConfirmingSetupId] = useState<string | null>(null);
+  const [isJoinGuideOpen, setIsJoinGuideOpen] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const engineSummary = useMemo(() => generatePotentialTrades(data), [data, refreshTrigger]);
@@ -53,9 +59,6 @@ export default function PotentialTradesModal({ isOpen, onClose }: PotentialTrade
     setRefreshTrigger((prev) => prev + 1);
   };
 
-  if (!isOpen) return null;
-
-
   const handleResetMemory = () => {
     if (typeof window !== "undefined") {
       try {
@@ -65,17 +68,59 @@ export default function PotentialTradesModal({ isOpen, onClose }: PotentialTrade
     }
   };
 
-  const filteredSetups = engineSummary.setups.filter((s) => {
-    if (filterDirection === "BULLISH" && s.direction !== "BULLISH") return false;
-    if (filterDirection === "BEARISH" && s.direction !== "BEARISH") return false;
+  // Separate active setups from completed trades
+  const activeSetups = useMemo(() => {
+    return engineSummary.setups.filter(
+      (s) => s.status !== "TARGET_HIT" && s.status !== "INVALIDATED"
+    );
+  }, [engineSummary.setups]);
 
-    if (qualityMode === "HIGH_PROBABILITY") return s.isHighProbability || s.status === "ACTIVE_WATCH";
-    if (qualityMode === "NEARBY") return s.isNearby;
-    if (qualityMode === "PENDING") return s.status === "PENDING_TOUCH" || s.status === "ACTIVE_WATCH" || s.status === "WAITING";
-    return true;
-  });
+  const completedSetups = useMemo(() => {
+    return engineSummary.setups.filter(
+      (s) => s.status === "TARGET_HIT" || s.status === "INVALIDATED"
+    );
+  }, [engineSummary.setups]);
 
-  const selectedSetup = engineSummary.setups.find((s) => s.id === selectedSetupId) || engineSummary.setups[0];
+  // Filter & Sort Active Setups
+  const filteredActiveSetups = useMemo(() => {
+    let list = activeSetups.filter((s) => {
+      if (filterDirection === "BULLISH" && s.direction !== "BULLISH") return false;
+      if (filterDirection === "BEARISH" && s.direction !== "BEARISH") return false;
+
+      if (qualityMode === "PREMIUM") return (s.scenarioScore ?? 0) >= 70 || s.isHighProbability;
+      if (qualityMode === "ENTRY_ZONE") return s.status === "ACTIVE_WATCH" || s.status === "CONFIRMED";
+      return true;
+    });
+
+    // Sort by Tier (A+ -> A -> B) and Confluence Score (descending)
+    return list.sort((a, b) => {
+      const scoreA = a.scenarioScore ?? 0;
+      const scoreB = b.scenarioScore ?? 0;
+      if (scoreA !== scoreB) return scoreB - scoreA;
+
+      // Status actionability tie-breaker
+      const isActionableA = a.status === "ACTIVE_WATCH" || a.status === "CONFIRMED" ? 1 : 0;
+      const isActionableB = b.status === "ACTIVE_WATCH" || b.status === "CONFIRMED" ? 1 : 0;
+      return isActionableB - isActionableA;
+    });
+  }, [activeSetups, filterDirection, qualityMode]);
+
+  // Filter Completed Setups
+  const filteredCompletedSetups = useMemo(() => {
+    return completedSetups.filter((s) => {
+      if (filterDirection === "BULLISH" && s.direction !== "BULLISH") return false;
+      if (filterDirection === "BEARISH" && s.direction !== "BEARISH") return false;
+      return true;
+    });
+  }, [completedSetups, filterDirection]);
+
+  // Displayed setups list based on active tab
+  const displayedSetups = activeTab === "ACTIVE" ? filteredActiveSetups : filteredCompletedSetups;
+
+  // Selected setup
+  const selectedSetup = displayedSetups.find((s) => s.id === selectedSetupId) || displayedSetups[0] || engineSummary.setups[0];
+
+  if (!isOpen) return null;
 
   const handleCopySetup = (setup: PotentialTrade) => {
     const text = `[QUANT TRADE SETUP: ${setup.id} - ${setup.type}]
@@ -157,17 +202,6 @@ Timestamp: ${new Date().toISOString()}`;
     }
   };
 
-
-  /**
-   * Derives button visual config and click behaviour based on setup status.
-   *
-   * STATUS RULES:
-   *  ACTIVE_WATCH / CONFIRMED  → Execute immediately (green)
-   *  PENDING_TOUCH / WAITING   → Two-step: first click shows amber warning;
-   *                              second click actually executes.
-   *  TARGET_HIT                → Disabled grey. Move already played out.
-   *  INVALIDATED               → Disabled red. Setup is dead.
-   */
   const getExecConfig = (setup: PotentialTrade) => {
     const isExecuting = executingSetupId === setup.id;
     const isSuccess   = executedSuccessId === setup.id;
@@ -251,7 +285,6 @@ Timestamp: ${new Date().toISOString()}`;
           title: "Log completed invalidated trade into trading journal with open/close timeline data",
         };
 
-
       default:
         return {
           disabled: false,
@@ -265,10 +298,9 @@ Timestamp: ${new Date().toISOString()}`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-[fade-in_0.15s_ease-out]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-[fade-in_0.15s_ease-out]">
       <div className="relative w-full max-w-[90vw] max-h-[92vh] flex flex-col bg-card/95 border border-card-border shadow-2xl rounded-2xl overflow-hidden font-sans text-foreground">
 
-        
         {/* ── Modal Header ────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-card-border bg-background/60 backdrop-blur-md">
           <div className="flex items-center gap-3">
@@ -281,13 +313,46 @@ Timestamp: ${new Date().toISOString()}`;
                   [ QUANT POTENTIAL TRADES & CONTEXT ]
                 </h2>
                 <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                  LIVE ENGINE
+                  V13.3 ENGINE
                 </span>
               </div>
               <p className="text-[10px] text-muted font-bold uppercase tracking-wider">
                 Institutional IPDA Liquidity & Structure Matrix
               </p>
             </div>
+          </div>
+
+          {/* ── Tab Navigation Selector ─────────────────────────────────────── */}
+          <div className="flex items-center gap-1.5 p-1 bg-background/60 border border-card-border rounded-xl">
+            <button
+              onClick={() => setActiveTab("ACTIVE")}
+              className={`flex items-center gap-2 px-4 py-1.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                activeTab === "ACTIVE"
+                  ? "bg-accent text-accent-foreground shadow-sm shadow-accent/30"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>⚡ Active Setups</span>
+              <span className="px-1.5 py-0.2 text-[9px] font-mono font-black rounded-full bg-background/40">
+                {activeSetups.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("COMPLETED")}
+              className={`flex items-center gap-2 px-4 py-1.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+                activeTab === "COMPLETED"
+                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm"
+                  : "text-muted hover:text-foreground"
+              }`}
+            >
+              <History className="w-3.5 h-3.5" />
+              <span>📜 Completed Log</span>
+              <span className="px-1.5 py-0.2 text-[9px] font-mono font-black rounded-full bg-background/40">
+                {completedSetups.length}
+              </span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -347,9 +412,7 @@ Timestamp: ${new Date().toISOString()}`;
           </div>
 
           {/* ── 1. Telemetry Bar (Market Context Cards) ────────────────────────── */}
-
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            
             {/* Live Price */}
             <div className="p-3 bg-background/50 border border-card-border rounded-xl space-y-1">
               <span className="text-[9px] font-bold text-muted uppercase tracking-wider block">Live Price</span>
@@ -403,7 +466,6 @@ Timestamp: ${new Date().toISOString()}`;
                 ${engineSummary.sslMagnets[0]?.toFixed(2) || engineSummary.swingLow.toFixed(2)}
               </div>
             </div>
-
           </div>
 
           {/* ── 2. Potential Trades Table Section ──────────────────────────────── */}
@@ -412,54 +474,48 @@ Timestamp: ${new Date().toISOString()}`;
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-accent" />
                 <h3 className="text-xs font-black uppercase tracking-wider text-foreground">
-                  Evaluated High-Probability Setups
+                  {activeTab === "ACTIVE"
+                    ? `Actionable Setups (${filteredActiveSetups.length} Sorted by Tier & Score)`
+                    : `Completed Trades Log (${filteredCompletedSetups.length} Trades Recorded)`}
                 </h3>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {/* Quality Mode Pills */}
-                <div className="flex items-center gap-1 p-1 bg-background/50 border border-card-border rounded-lg">
-                  <button
-                    onClick={() => setQualityMode("HIGH_PROBABILITY")}
-                    className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-md transition-all cursor-pointer ${
-                      qualityMode === "HIGH_PROBABILITY"
-                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm"
-                        : "text-muted hover:text-foreground"
-                    }`}
-                  >
-                    🔥 High Prob (R:R ≥ 1.5)
-                  </button>
-                  <button
-                    onClick={() => setQualityMode("NEARBY")}
-                    className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-md transition-all cursor-pointer ${
-                      qualityMode === "NEARBY"
-                        ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm"
-                        : "text-muted hover:text-foreground"
-                    }`}
-                  >
-                    🎯 Nearby (≤2%)
-                  </button>
-                  <button
-                    onClick={() => setQualityMode("PENDING")}
-                    className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-md transition-all cursor-pointer ${
-                      qualityMode === "PENDING"
-                        ? "bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm"
-                        : "text-muted hover:text-foreground"
-                    }`}
-                  >
-                    ⚡ Pending Only
-                  </button>
-                  <button
-                    onClick={() => setQualityMode("ALL")}
-                    className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-md transition-all cursor-pointer ${
-                      qualityMode === "ALL"
-                        ? "bg-accent text-accent-foreground shadow-sm"
-                        : "text-muted hover:text-foreground"
-                    }`}
-                  >
-                    Show All
-                  </button>
-                </div>
+                {/* Quality Mode Pills — Active Tab Only */}
+                {activeTab === "ACTIVE" && (
+                  <div className="flex items-center gap-1 p-1 bg-background/50 border border-card-border rounded-lg">
+                    <button
+                      onClick={() => setQualityMode("PREMIUM")}
+                      className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-md transition-all cursor-pointer ${
+                        qualityMode === "PREMIUM"
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm"
+                          : "text-muted hover:text-foreground"
+                      }`}
+                    >
+                      ⭐ Premium (A+/A Only)
+                    </button>
+                    <button
+                      onClick={() => setQualityMode("ENTRY_ZONE")}
+                      className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-md transition-all cursor-pointer ${
+                        qualityMode === "ENTRY_ZONE"
+                          ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm"
+                          : "text-muted hover:text-foreground"
+                      }`}
+                    >
+                      🎯 In Entry Zone
+                    </button>
+                    <button
+                      onClick={() => setQualityMode("ALL")}
+                      className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-md transition-all cursor-pointer ${
+                        qualityMode === "ALL"
+                          ? "bg-accent text-accent-foreground shadow-sm"
+                          : "text-muted hover:text-foreground"
+                      }`}
+                    >
+                      All Active Setups
+                    </button>
+                  </div>
+                )}
 
                 {/* Direction Filters */}
                 <div className="flex items-center gap-1.5 p-1 bg-background/50 border border-card-border rounded-lg">
@@ -471,7 +527,7 @@ Timestamp: ${new Date().toISOString()}`;
                         : "text-muted hover:text-foreground"
                     }`}
                   >
-                    All ({engineSummary.setups.length})
+                    All ({displayedSetups.length})
                   </button>
                   <button
                     onClick={() => setFilterDirection("BULLISH")}
@@ -515,165 +571,192 @@ Timestamp: ${new Date().toISOString()}`;
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-card-border/60">
-                    {filteredSetups.map((setup) => {
-                      const isSelected = selectedSetup?.id === setup.id;
-                      return (
-                        <tr
-                          key={setup.id}
-                          onClick={() => setSelectedSetupId(setup.id)}
-                          className={`group transition-colors cursor-pointer ${
-                            isSelected ? "bg-accent/10 hover:bg-accent/15" : "hover:bg-card-hover/20"
-                          }`}
-                        >
-                          <td className="px-4 py-3.5 font-mono font-black text-foreground">
-                            {setup.id}
-                          </td>
-                          <td className="px-4 py-3.5 font-bold text-foreground">
-                            <div className="flex items-center gap-2">
-                              <span>{setup.type}</span>
-                              {setup.scenarioTier && (
-                                <span className={`px-1.5 py-0.5 text-[8px] font-mono font-black rounded border ${
-                                  setup.scenarioTier === "A+" ? "bg-amber-500/20 text-amber-300 border-amber-500/40" :
-                                  setup.scenarioTier === "A" ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40" :
-                                  "bg-purple-500/20 text-purple-300 border-purple-500/40"
-                                }`}>
-                                  {setup.scenarioTier} ({setup.scenarioScore}%)
-                                </span>
-                              )}
-                            </div>
-                          </td>
+                    {displayedSetups.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="px-4 py-8 text-center text-muted font-mono">
+                          {activeTab === "ACTIVE"
+                            ? "No active setups match the selected filter. Try selecting 'All Active Setups'."
+                            : "No completed trades logged yet."}
+                        </td>
+                      </tr>
+                    ) : (
+                      displayedSetups.map((setup) => {
+                        const isSelected = selectedSetup?.id === setup.id;
+                        return (
+                          <tr
+                            key={setup.id}
+                            onClick={() => setSelectedSetupId(setup.id)}
+                            className={`group transition-colors cursor-pointer ${
+                              isSelected ? "bg-accent/10 hover:bg-accent/15" : "hover:bg-card-hover/20"
+                            }`}
+                          >
+                            <td className="px-4 py-3.5 font-mono font-black text-foreground">
+                              {setup.id}
+                            </td>
+                            <td className="px-4 py-3.5 font-bold text-foreground">
+                              <div className="flex items-center gap-2">
+                                <span>{setup.type}</span>
+                                {setup.scenarioTier && (
+                                  <span className={`px-1.5 py-0.5 text-[8px] font-mono font-black rounded border ${
+                                    setup.scenarioTier === "A+" ? "bg-amber-500/20 text-amber-300 border-amber-500/40" :
+                                    setup.scenarioTier === "A" ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40" :
+                                    "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                                  }`}>
+                                    {setup.scenarioTier} ({setup.scenarioScore}%)
+                                  </span>
+                                )}
+                              </div>
+                            </td>
 
-                          <td className="px-4 py-3.5">
-                            <span
-                              className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-black rounded ${
-                                setup.direction === "BULLISH"
-                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                  : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                              }`}
-                            >
-                              {setup.direction === "BULLISH" ? (
-                                <TrendingUp className="w-3 h-3" />
-                              ) : (
-                                <TrendingDown className="w-3 h-3" />
-                              )}
-                              {setup.direction}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5 font-mono text-foreground font-bold">
-                            ${setup.entryMin.toFixed(2)} – ${setup.entryMax.toFixed(2)}
-                          </td>
-                          <td className="px-4 py-3.5 font-mono text-rose-400 font-bold">
-                            ${setup.stopLoss.toFixed(2)}
-                          </td>
-                          <td className="px-4 py-3.5 font-mono text-emerald-400">
-                            <span className="font-bold">${setup.target1.toFixed(2)}</span> / ${setup.target2.toFixed(2)}
-                          </td>
-                          <td className="px-4 py-3.5 font-mono font-black text-accent">
-                            1 : {setup.rrRatio}
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <span
-                              className={`px-2 py-0.5 text-[8px] font-black tracking-wider uppercase rounded ${
-                                setup.status === "TARGET_HIT"
-                                  ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 animate-pulse"
-                                  : setup.status === "ACTIVE_WATCH"
-                                  ? "bg-cyan-500 text-white shadow-sm"
-                                  : setup.status === "CONFIRMED"
-                                  ? "bg-purple-600 text-white"
-                                  : setup.status === "INVALIDATED"
-                                  ? "bg-rose-500/20 text-rose-400 border border-rose-500/40"
-                                  : "bg-card text-muted border border-card-border"
-                              }`}
-                            >
-                              {setup.status === "TARGET_HIT" ? "TARGET HIT 🎯" : setup.status.replace("_", " ")}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3.5 text-right flex items-center justify-end gap-1.5">
-                            {/* Auto-Open Toggle */}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleToggleAutoExecute(setup);
-                              }}
-                              className={`flex items-center gap-1 px-2.5 py-1 text-[9px] font-black uppercase rounded-lg border transition-all cursor-pointer ${
-                                setup.isAutoOpened
-                                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                                  : setup.isAutoExecute
-                                  ? "bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-500/20"
-                                  : "bg-muted/10 hover:bg-card-border/50 text-muted hover:text-foreground border-card-border"
-                              }`}
-                              title={
-                                setup.isAutoOpened
-                                  ? "Trade auto-opened into journal"
-                                  : setup.isAutoExecute
-                                  ? "Auto-Open ENABLED: Click to disable"
-                                  : "Click to enable Auto-Open when entry triggers"
-                              }
-                            >
-                              <Zap className={`w-3 h-3 ${setup.isAutoExecute ? "text-cyan-400 fill-current animate-pulse" : ""}`} />
-                              <span>
-                                {setup.isAutoOpened
-                                  ? "Auto-Opened"
-                                  : setup.isAutoExecute
-                                  ? "Auto ON"
-                                  : "Auto OFF"}
+                            <td className="px-4 py-3.5">
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 text-[9px] font-black rounded ${
+                                  setup.direction === "BULLISH"
+                                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                    : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                }`}
+                              >
+                                {setup.direction === "BULLISH" ? (
+                                  <TrendingUp className="w-3 h-3" />
+                                ) : (
+                                  <TrendingDown className="w-3 h-3" />
+                                )}
+                                {setup.direction}
                               </span>
-                            </button>
+                            </td>
+                            <td className="px-4 py-3.5 font-mono text-foreground font-bold">
+                              ${setup.entryMin.toFixed(2)} – ${setup.entryMax.toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3.5 font-mono text-rose-400 font-bold">
+                              ${setup.stopLoss.toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3.5 font-mono text-emerald-400">
+                              <span className="font-bold">${setup.target1.toFixed(2)}</span> / ${setup.target2.toFixed(2)}
+                            </td>
+                            <td className="px-4 py-3.5 font-mono font-black text-accent">
+                              1 : {setup.rrRatio}
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span
+                                className={`px-2 py-0.5 text-[8px] font-black tracking-wider uppercase rounded ${
+                                  setup.status === "TARGET_HIT"
+                                    ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 animate-pulse"
+                                    : setup.status === "ACTIVE_WATCH"
+                                    ? "bg-cyan-500 text-white shadow-sm"
+                                    : setup.status === "CONFIRMED"
+                                    ? "bg-purple-600 text-white"
+                                    : setup.status === "INVALIDATED"
+                                    ? "bg-rose-500/20 text-rose-400 border border-rose-500/40"
+                                    : "bg-card text-muted border border-card-border"
+                                }`}
+                              >
+                                {setup.status === "TARGET_HIT" ? "TARGET HIT 🎯" : setup.status.replace("_", " ")}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-right flex items-center justify-end gap-1.5">
+                              {/* Auto-Open Toggle */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleAutoExecute(setup);
+                                }}
+                                className={`flex items-center gap-1 px-2.5 py-1 text-[9px] font-black uppercase rounded-lg border transition-all cursor-pointer ${
+                                  setup.isAutoOpened
+                                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                                    : setup.isAutoExecute
+                                    ? "bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-500/20"
+                                    : "bg-muted/10 hover:bg-card-border/50 text-muted hover:text-foreground border-card-border"
+                                }`}
+                                title={
+                                  setup.isAutoOpened
+                                    ? "Trade auto-opened into journal"
+                                    : setup.isAutoExecute
+                                    ? "Auto-Open ENABLED: Click to disable"
+                                    : "Click to enable Auto-Open when entry triggers"
+                                }
+                              >
+                                <Zap className={`w-3 h-3 ${setup.isAutoExecute ? "text-cyan-400 fill-current animate-pulse" : ""}`} />
+                                <span>
+                                  {setup.isAutoOpened
+                                    ? "Auto-Opened"
+                                    : setup.isAutoExecute
+                                    ? "Auto ON"
+                                    : "Auto OFF"}
+                                </span>
+                              </button>
 
-                            {(() => {
-                              const cfg = getExecConfig(setup);
-                              return (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    cfg.onClick();
-                                  }}
-                                  disabled={cfg.disabled}
-                                  className={`flex items-center gap-1 px-2.5 py-1 text-[9px] font-black uppercase rounded-lg transition-all ${
-                                    cfg.disabled ? '' : 'cursor-pointer'
-                                  } ${cfg.className}`}
-                                  title={cfg.title}
-                                >
-                                  {cfg.icon}
-                                  <span>{cfg.label}</span>
-                                </button>
-                              );
-                            })()}
+                              {(() => {
+                                const cfg = getExecConfig(setup);
+                                return (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      cfg.onClick();
+                                    }}
+                                    disabled={cfg.disabled}
+                                    className={`flex items-center gap-1 px-2.5 py-1 text-[9px] font-black uppercase rounded-lg transition-all ${
+                                      cfg.disabled ? '' : 'cursor-pointer'
+                                    } ${cfg.className}`}
+                                    title={cfg.title}
+                                  >
+                                    {cfg.icon}
+                                    <span>{cfg.label}</span>
+                                  </button>
+                                );
+                              })()}
 
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCopySetup(setup);
-                              }}
-                              className="p-1.5 bg-card hover:bg-accent/20 hover:text-accent border border-card-border rounded-lg transition-all text-muted cursor-pointer"
-                              title="Copy setup parameters"
-                            >
-                              {copyState === setup.id ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCopySetup(setup);
+                                }}
+                                className="p-1.5 bg-card hover:bg-accent/20 hover:text-accent border border-card-border rounded-lg transition-all text-muted cursor-pointer"
+                                title="Copy setup parameters"
+                              >
+                                {copyState === setup.id ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                                ) : (
+                                  <Copy className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
           </div>
 
-          {/* ── 3. Trade Inspector Card ───────────────────────────────────────── */}
+          {/* ── 3. Streamlined Trade Inspector Card ───────────────────────────── */}
           {selectedSetup && (
-            <div className="p-5 bg-card/60 border border-card-border rounded-xl space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Target className="w-4 h-4 text-accent" />
-                  <h4 className="text-xs font-black uppercase tracking-wider text-foreground">
-                    Detailed Execution Inspector — [{selectedSetup.id}: {selectedSetup.type}]
-                  </h4>
+            <div className="p-5 bg-card/60 border border-card-border rounded-xl space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-card-border/60 pb-3">
+                <div className="flex items-center gap-3">
+                  <Target className="w-5 h-5 text-accent" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-foreground">
+                        [{selectedSetup.id}: {selectedSetup.type}]
+                      </h4>
+                      {selectedSetup.scenarioTier && (
+                        <span className={`px-2 py-0.5 text-[9px] font-mono font-black uppercase rounded border ${
+                          selectedSetup.scenarioTier === "A+" ? "bg-amber-500/20 text-amber-300 border-amber-500/40" :
+                          selectedSetup.scenarioTier === "A" ? "bg-cyan-500/20 text-cyan-300 border-cyan-500/40" :
+                          "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                        }`}>
+                          Tier {selectedSetup.scenarioTier} • Score: {selectedSetup.scenarioScore}%
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-muted font-medium">
+                      R:R 1:{selectedSetup.rrRatio} • {selectedSetup.confluence}
+                    </span>
+                  </div>
                 </div>
+
                 <div className="flex items-center gap-2">
                   {/* Inspector Auto-Open Toggle Button */}
                   <button
@@ -709,7 +792,7 @@ Timestamp: ${new Date().toISOString()}`;
                       <button
                         onClick={cfg.onClick}
                         disabled={cfg.disabled}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black uppercase rounded-lg shadow-sm transition-all ${
+                        className={`flex items-center gap-1.5 px-3.5 py-1.5 text-[10px] font-black uppercase rounded-lg shadow-sm transition-all ${
                           cfg.disabled ? '' : 'cursor-pointer'
                         } ${cfg.className}`}
                         title={cfg.title}
@@ -726,7 +809,6 @@ Timestamp: ${new Date().toISOString()}`;
                     );
                   })()}
 
-
                   <button
                     onClick={() => handleCopySetup(selectedSetup)}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-accent text-accent-foreground text-[10px] font-black uppercase rounded-lg shadow-sm hover:opacity-90 transition-all cursor-pointer"
@@ -737,14 +819,42 @@ Timestamp: ${new Date().toISOString()}`;
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div className="space-y-1.5 p-3 bg-background/50 border border-card-border rounded-lg">
+              {/* Key Price Levels Row */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div className="p-3 bg-background/50 border border-card-border rounded-lg space-y-1">
+                  <span className="text-[9px] font-bold text-muted uppercase tracking-wider block">Entry Range</span>
+                  <div className="text-xs font-mono font-black text-foreground">
+                    ${selectedSetup.entryMin.toFixed(2)} – ${selectedSetup.entryMax.toFixed(2)}
+                  </div>
+                </div>
+                <div className="p-3 bg-background/50 border border-card-border rounded-lg space-y-1">
+                  <span className="text-[9px] font-bold text-rose-500 uppercase tracking-wider block">Stop Loss (ATR Buffered)</span>
+                  <div className="text-xs font-mono font-black text-rose-400">
+                    ${selectedSetup.stopLoss.toFixed(2)}
+                  </div>
+                </div>
+                <div className="p-3 bg-background/50 border border-card-border rounded-lg space-y-1">
+                  <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-wider block">TP1 (1:1 Floor)</span>
+                  <div className="text-xs font-mono font-black text-emerald-400">
+                    ${selectedSetup.target1.toFixed(2)}
+                  </div>
+                </div>
+                <div className="p-3 bg-background/50 border border-card-border rounded-lg space-y-1">
+                  <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-wider block">TP2 (Structural Magnet)</span>
+                  <div className="text-xs font-mono font-black text-emerald-400">
+                    ${selectedSetup.target2.toFixed(2)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div className="space-y-1 p-3 bg-background/50 border border-card-border rounded-lg">
                   <span className="text-[9px] font-bold text-muted uppercase tracking-wider block">Trigger Condition</span>
                   <p className="text-foreground font-medium leading-relaxed">
                     {selectedSetup.trigger}
                   </p>
                 </div>
-                <div className="space-y-1.5 p-3 bg-background/50 border border-card-border rounded-lg">
+                <div className="space-y-1 p-3 bg-background/50 border border-card-border rounded-lg">
                   <span className="text-[9px] font-bold text-muted uppercase tracking-wider block">Institutional Confluences</span>
                   <p className="text-accent font-medium leading-relaxed">
                     {selectedSetup.confluence}
@@ -752,42 +862,44 @@ Timestamp: ${new Date().toISOString()}`;
                 </div>
               </div>
 
-              {/* 🎯 Institutional Best Scenario Join Guide */}
+              {/* 🎯 Collapsible Institutional Best Scenario Join Guide Accordion */}
               {selectedSetup.scenarioRules && selectedSetup.scenarioRules.length > 0 && (
-                <div className="p-4 bg-gradient-to-r from-amber-500/10 via-accent/10 to-background/50 border border-amber-500/30 rounded-xl space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5" />
-                      Institutional Best Scenario Join Guide
-                    </span>
-                    <span className={`px-2 py-0.5 text-[9px] font-mono font-black uppercase rounded ${
-                      selectedSetup.scenarioTier === "A+" ? "bg-amber-500/20 text-amber-300 border border-amber-500/40" :
-                      selectedSetup.scenarioTier === "A" ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40" :
-                      "bg-purple-500/20 text-purple-300 border border-purple-500/40"
-                    }`}>
-                      Tier {selectedSetup.scenarioTier ?? "A"} • Score: {selectedSetup.scenarioScore ?? 85}%
-                    </span>
-                  </div>
-                  <div className="space-y-1.5 text-xs text-foreground font-medium">
-                    {selectedSetup.scenarioRules.map((rule, idx) => (
-                      <div key={idx} className="flex items-start gap-2 bg-background/50 p-2 rounded-lg border border-card-border/40">
-                        <span className="font-mono text-accent text-[10px] mt-0.5">•</span>
-                        <span className="leading-relaxed">{rule}</span>
-                      </div>
-                    ))}
-                  </div>
+                <div className="border border-amber-500/30 rounded-xl overflow-hidden bg-background/40">
+                  <button
+                    onClick={() => setIsJoinGuideOpen(!isJoinGuideOpen)}
+                    className="w-full flex items-center justify-between p-3 bg-amber-500/10 hover:bg-amber-500/15 text-amber-300 text-xs font-black uppercase tracking-wider transition-all cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Institutional Best Scenario Join Guide</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] font-mono">
+                      <span>{selectedSetup.scenarioRules.length} Execution Rules</span>
+                      {isJoinGuideOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </div>
+                  </button>
+
+                  {isJoinGuideOpen && (
+                    <div className="p-4 space-y-2 text-xs text-foreground border-t border-amber-500/20 bg-background/60">
+                      {selectedSetup.scenarioRules.map((rule, idx) => (
+                        <div key={idx} className="flex items-start gap-2.5 bg-background/80 p-2.5 rounded-lg border border-card-border/40">
+                          <span className="font-mono text-accent text-[10px] font-black mt-0.5">{idx + 1}.</span>
+                          <span className="leading-relaxed font-medium">{rule}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
-
-              {/* ── Trade Timeline — visible only for completed/invalidated setups ── */}
+              {/* ── Trade Timeline — visible for completed setups ── */}
               {(selectedSetup.status === "TARGET_HIT" || selectedSetup.status === "INVALIDATED") && (
-                <div className="space-y-2">
+                <div className="space-y-2 pt-2 border-t border-card-border/50">
                   <span className="text-[9px] font-bold text-muted uppercase tracking-wider flex items-center gap-1.5">
                     <span className={selectedSetup.status === "TARGET_HIT" ? "text-emerald-400" : "text-rose-400"}>
                       {selectedSetup.status === "TARGET_HIT" ? "✓" : "✕"}
                     </span>
-                    Trade Timeline
+                    Trade Timeline & Execution Summary
                   </span>
                   <div className="grid grid-cols-2 gap-3">
                     {/* Open */}
@@ -873,7 +985,7 @@ Timestamp: ${new Date().toISOString()}`;
 
         {/* ── Modal Footer ────────────────────────────────────────────────────── */}
         <div className="px-6 py-3 border-t border-card-border bg-background/60 flex items-center justify-between text-[10px] text-muted font-mono">
-          <span>Flow-State Quant Engine V12.1.0</span>
+          <span>Flow-State Quant Engine V13.3</span>
           <span>Interbank Price Delivery Algorithm (IPDA) Rules Applied</span>
         </div>
 
@@ -881,3 +993,4 @@ Timestamp: ${new Date().toISOString()}`;
     </div>
   );
 }
+
