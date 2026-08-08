@@ -1,9 +1,33 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.2
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.3
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-08 (V13.2 — FVG Retest Status Mapping & Chart Ghost Zone Resolution)  
+> **Last Updated:** 2026-08-08 (V13.3 — Potential Trades Engine & Modal Overhaul)  
 
+## 🆕 V13.3 Changelog — Potential Trades Engine & Modal Overhaul (2026-08-08)
+
+### Summary
+Comprehensive redesign of `PotentialTradesModal.tsx` and `BacktestPotentialTradesModal.tsx` based on the `/grill-me` design alignment. Resolves clutter, range-overlapping setup memory bugs, and simplifies setup inspection.
+
+### Key Features & Architecture
+- **2-Tab Modal Structure (`⚡ Active Setups` vs `📜 Completed Log`):**
+  - **`⚡ Active Setups`:** Dedicated view showing live/pending setups ONLY (`ACTIVE_WATCH`, `CONFIRMED`, `PENDING_TOUCH`, `WAITING`).
+  - **`📜 Completed Log`:** Dedicated journal history log showing completed `TARGET_HIT` (wins) and `INVALIDATED` (losses) setups with one-click trade logging buttons (`Log Win 🎯` / `Log Loss 🚫`).
+- **Quality Filters & Tier/Score Sorting:**
+  - Active setups automatically sorted by Tier (`⭐ A+` ➔ `⚡ A` ➔ `🔹 B`) and Confluence Score (0-100%).
+  - Quick filter pill buttons added: `⭐ Premium (A+/A Only)`, `🎯 In Entry Zone`, and `All Active Setups`.
+- **Streamlined Inspector & Collapsible Join Guide:**
+  - Key price levels (Entry Range, Stop Loss, TP1 1:1 floor, TP2 Structural Magnet) positioned prominently at the top of the inspector card.
+  - **Institutional Best Scenario Join Guide** converted into a clean collapsible accordion toggle (`Show Institutional Join Guide ▾`).
+- **Setup Key Timeframe & Timestamp Isolation:**
+  - Enforced unique time-stamped setup keys across setup generators (`FVG_BULL_15m_1850.00_1855.00_1723123400000`). Completed trades move to the Completed Log tab without blocking new setups at identical price ranges later.
+- **Replay Parity:**
+  - Applied 100% identical 2-tab navigation, filtering, sorting, and inspector guide structure to `BacktestPotentialTradesModal.tsx`.
+
+### Verification
+- `npx tsc --noEmit --skipLibCheck` → **0 errors, clean compilation** ✅
+
+---
 
 ## 🆕 V13.2 Changelog — FVG Retest Status Mapping & Chart Ghost Zone Resolution (2026-08-08)
 
