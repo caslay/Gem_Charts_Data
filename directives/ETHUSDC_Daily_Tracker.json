@@ -1,15 +1,34 @@
 {
   "version": "1.0.0",
   "symbol": "ETHUSDC.p",
-  "lastUpdated": "2026-08-08T14:07:26.165Z",
+  "lastUpdated": "2026-08-08T14:30:16.796Z",
   "stats": {
-    "totalSetups": 2,
+    "totalSetups": 3,
     "success": 0,
     "stopOut": 0,
     "noTrigger": 0,
     "winRate": 0
   },
   "entries": [
+    {
+      "id": "ETH-20260808-1918",
+      "date": "2026-08-08",
+      "time": "14:30",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Displacement expansion above the local premiu",
+      "htfDol": "PDH ($1,940.98) & Asian Range Deviation Targets ($1,928.29 - $1,931.82)",
+      "smtStatus": "BULLISH_SMT — BTC printed a Higher Low ($64,967.30) at 13:45 UTC while ETH formed a double bottom equal low ($1,916.68), validating BTC relative strength leadership.",
+      "entryRange": [
+        1918.43,
+        1919.5
+      ],
+      "invalidation": 1912,
+      "tp1": 1928.29,
+      "tp2": 1940.98,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,921.17 | H4/15m Bullish Order Flow in NY AM Killzone"
+    },
     {
       "id": "ETH-20260808-1917",
       "date": "2026-08-08",

@@ -192,13 +192,22 @@ const Sidebar = memo(function Sidebar({
           aiNote = { title: '💡 AI Quant Note', text: parsedAiResponse.narrative };
         }
       } else if (parsedAiResponse && (parsedAiResponse.bias_signal !== undefined || parsedAiResponse.bias_label !== undefined)) {
-        // Support new "Bias-only" output schema
+        const sopRp = parsedAiResponse.sop_report?.risk_parameters;
+        const nextSt = parsedAiResponse.next_database_state;
+
+        const fmtP = (val?: number) => (val !== undefined && val !== null && !isNaN(Number(val))) ? `$${Number(val).toFixed(2)}` : 'N/A';
+        const fmtR = (arr?: [number, number]) => (Array.isArray(arr) && arr.length >= 2) ? `$${Number(arr[0]).toFixed(2)} – $${Number(arr[1]).toFixed(2)}` : 'N/A';
+
         hudData = {
-          BIAS_SIGNAL: parsedAiResponse.bias_signal,
-          BIAS_LABEL: parsedAiResponse.bias_label,
-          PRIMARY_TARGET: parsedAiResponse.primary_target
+          BIAS_SIGNAL: parsedAiResponse.bias_signal ?? (parsedAiResponse.bias_label === 'BULLISH' ? 1 : parsedAiResponse.bias_label === 'BEARISH' ? -1 : 0),
+          BIAS_LABEL: parsedAiResponse.bias_label ?? 'NEUTRAL',
+          EXECUTION_ZONE: fmtR(sopRp?.entry_range),
+          INVALIDATION_LEVEL: fmtP(sopRp?.invalidation ?? nextSt?.invalidation_level),
+          TP1: fmtP(sopRp?.tp1),
+          TP2: fmtP(sopRp?.tp2 ?? nextSt?.target_level),
+          PRIMARY_TARGET: fmtP(parsedAiResponse.primary_target ?? sopRp?.tp2 ?? nextSt?.target_level)
         };
-        const narrativeText = parsedAiResponse.narrative_summary || parsedAiResponse.narrative || '';
+        const narrativeText = parsedAiResponse.narrative_summary || parsedAiResponse.narrative || parsedAiResponse.sop_report?.trade_narrative || '';
         if (narrativeText) {
           aiNote = { title: '💡 AI Quant Bias Narrative', text: narrativeText };
         }

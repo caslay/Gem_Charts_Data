@@ -1,8 +1,29 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.6
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.7
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-08 (V13.6 — AI SOP Analysis & Potential Trades Alignment Engine)  
+> **Last Updated:** 2026-08-08 (V13.7 — Synthesis Console Table SOP Telemetry Expansion)  
+
+## 🆕 V13.7 Changelog — Synthesis Console Table SOP Telemetry Expansion (2026-08-08)
+
+### Summary
+Expanded the AI Synthesis Console table across both Live Sidebar (`src/components/Sidebar.tsx`) and Backtest Sidebar (`src/app/backtest/BacktestSidebar.tsx`) to display the complete 7-field SOP Telemetry matrix.
+
+### Key Features & Architecture
+- **Full SOP Telemetry Table Order:**
+  1. `BIAS SIGNAL` (e.g. `1`)
+  2. `BIAS LABEL` (e.g. `BULLISH`)
+  3. `EXECUTION ZONE` (e.g. `$1,916.50 – $1,918.50`)
+  4. `INVALIDATION LEVEL` (e.g. `$1,913.00`)
+  5. `TP1` (e.g. `$1,923.19`)
+  6. `TP2` (e.g. `$1,934.44`)
+  7. `PRIMARY TARGET` (e.g. `$1,934.44`)
+- **100% UI Parity:** Sourced directly from Gemini's `sop_report.risk_parameters` and `next_database_state` across both live HUD and backtest replay sidebars.
+
+### Verification
+- `npx tsc --noEmit --skipLibCheck` → **0 errors, clean compilation** ✅
+
+---
 
 ## 🆕 V13.6 Changelog — AI SOP Analysis & Potential Trades Alignment Engine (2026-08-08)
 
