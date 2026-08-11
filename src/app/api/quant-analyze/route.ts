@@ -3,6 +3,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { sql } from '@vercel/postgres';
 import { autoLogSopSetup } from '@/lib/sopTrackerLogger';
 
+import { DEFAULT_ETH_SOP_SYSTEM_PROMPT } from '@/lib/sopPromptBuilder';
+
 /**
  * Quant Analyze API — V8.3 Stateful Engine (Phase 4)
  *
@@ -30,11 +32,11 @@ export async function POST(req: Request) {
       config[row.key_name] = row.key_value;
     }
 
-    const apiKey = config['GEMINI_LIVE_KEY'];
-    const activeModel = config['ACTIVE_MODEL'];
-    const systemPrompt = config['SYSTEM_PROMPT'];
+    const apiKey = config['GEMINI_LIVE_KEY'] || process.env.GEMINI_LIVE_KEY;
+    const activeModel = config['ACTIVE_MODEL'] || 'gemini-1.5-pro';
+    const systemPrompt = config['SYSTEM_PROMPT'] || DEFAULT_ETH_SOP_SYSTEM_PROMPT;
 
-    // ── 2. Fail-closed validation — all three parameters are mandatory ──
+    // ── 2. Fail-closed validation ──
     if (!apiKey) {
       return NextResponse.json(
         { error: 'System Vault Locked: Missing API Key.' },
