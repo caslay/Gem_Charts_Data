@@ -1,8 +1,31 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.7
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.8
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-08 (V13.7 — Synthesis Console Table SOP Telemetry Expansion)  
+> **Last Updated:** 2026-08-11 (V13.8 — ETHUSDC SOP AI Prompt Engine, 30m Auto-Scan & Self-Correction Memory)  
+
+## 🆕 V13.8 Changelog — ETHUSDC SOP AI Prompt Engine, 30m Auto-Scan & Self-Correction Memory (2026-08-11)
+
+### Summary
+Upgraded the AI Quantitative Engine with the authoritative ETHUSDC.p SOP system prompt (`DEFAULT_ETH_SOP_SYSTEM_PROMPT`), implemented a 30-minute automated analysis scan scheduler with live UI controls, hardened AI JSON parser output functions, and built a dedicated Self-Correction UI modal allowing users to submit trade mistake logs and feed Gemini's historical memory bank (`ai_trade_state.state_json.recent_mistakes_lessons`).
+
+### Key Features & Architecture
+- **ETHUSDC SOP System Prompt & Prompt Builder (`src/lib/sopPromptBuilder.ts`):**
+  - Enforces strict zero-TDO / Cairo TDO rule, 6-step analytical workflow, 0-90m Killzone window, pre-news filter, and structured JSON output specification (`sop_report`, `bias_signal`, `bias_label`, `trade_narrative`, `risk_parameters`, `next_database_state`).
+- **30-Minute Automated Analysis Scheduler (`useMarketData.ts` & `Sidebar.tsx`):**
+  - Added 30m countdown timer (`next30mScanSeconds`) and toggle switch (`isAuto30mScanActive`) in `useMarketData.ts` and `Sidebar.tsx` to automatically re-trigger AI follow-up scans every 30 minutes.
+- **AI Self-Correction & Learning Modal (`src/components/modals/SelfCorrectionModal.tsx` & `/api/self-correction`):**
+  - Created a glassmorphic modal accessible from the AI Synthesis panel in the Sidebar.
+  - Allows selecting logged setups from `ETHUSDC_Daily_Tracker.json`, marking outcome (`SUCCESS`, `STOP_OUT`, `NO_TRIGGER`, `WRONG_BIAS`), choosing mistake category, and logging custom lessons learned.
+  - API endpoint `/api/self-correction` updates `ETHUSDC_Daily_Tracker.json`, `ETHUSDC_Daily_Tracker.md`, and upserts lesson records into `ai_trade_state` under `recent_mistakes_lessons` for Gemini prompt memory injection.
+- **Hardened AI JSON Parsing & Auto-Logging (`src/lib/aiJsonParser.ts` & `quant-analyze/route.ts`):**
+  - Injected `recent_mistakes_lessons` from `ai_trade_state` directly into Gemini's `HISTORICAL MEMORY` context block.
+  - Enhanced parsing of `next_database_state` and auto-logging into Daily Tracker files.
+
+### Verification
+- `npm run build` → **0 compilation errors, clean production build** ✅
+
+---
 
 ## 🆕 V13.7 Changelog — Synthesis Console Table SOP Telemetry Expansion (2026-08-08)
 
