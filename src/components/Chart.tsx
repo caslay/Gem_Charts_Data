@@ -118,7 +118,12 @@ export default function Chart({
 
   // Sync data prop to local state
   useEffect(() => {
-    setLocalCandles(data);
+    if (!data) return;
+    setLocalCandles((prev) => {
+      if (prev === data) return prev;
+      if (prev.length === 0 && data.length === 0) return prev;
+      return data;
+    });
   }, [data]);
 
   // Sync local state to refs
@@ -511,7 +516,10 @@ export default function Chart({
       })
       .filter((pos): pos is { id: string; y: number; price: number; color: string; status: 'active' | 'triggered' } => pos.y !== null);
 
-    setAlertLabelPositions(positions);
+    setAlertLabelPositions((prev) => {
+      if (prev.length === 0 && positions.length === 0) return prev;
+      return positions;
+    });
   }, [alerts]);
 
   // ── Ghost Line Performance Mechanics ──────────────────────────────────────
@@ -1540,7 +1548,7 @@ export default function Chart({
     const chart = chartRef.current;
     const series = seriesRef.current;
     if (!chart || !series || !activeFvgs || activeFvgs.length === 0) {
-      setFvgOverlayBoxes([]);
+      setFvgOverlayBoxes((prev) => (prev.length === 0 ? prev : []));
       return;
     }
 
@@ -1582,7 +1590,10 @@ export default function Chart({
       });
     }
 
-    setFvgOverlayBoxes(boxes);
+    setFvgOverlayBoxes((prev) => {
+      if (prev.length === 0 && boxes.length === 0) return prev;
+      return boxes;
+    });
   }, [activeFvgs]);
 
   // Recompute FVG overlay whenever activeFvgs or localCandles updates

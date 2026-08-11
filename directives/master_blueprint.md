@@ -1,27 +1,40 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.7
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.9
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-08 (V13.7 — Synthesis Console Table SOP Telemetry Expansion)  
+> **Last Updated:** 2026-08-11 (V13.9 — ETHUSDC.p Quant SOP & HTF Order Flow Gate Update)  
 
-## 🆕 V13.7 Changelog — Synthesis Console Table SOP Telemetry Expansion (2026-08-08)
+## 🆕 V13.9 Changelog — ETHUSDC.p Quant SOP Skill & HTF Order Flow Gate Update (2026-08-11)
 
 ### Summary
-Expanded the AI Synthesis Console table across both Live Sidebar (`src/components/Sidebar.tsx`) and Backtest Sidebar (`src/app/backtest/BacktestSidebar.tsx`) to display the complete 7-field SOP Telemetry matrix.
+Updated the `/eth-quant-sop` skill files (`SKILL.md`, `sop_reference.md`, `SKILL_BLUEPRINT.md`) and quant system directives (`directives/02_lessons.md`, `directives/03_quant_logic.md`) to enforce the **HTF Order Flow Hierarchy & Counter-Trend Veto Rule**.
 
-### Key Features & Architecture
-- **Full SOP Telemetry Table Order:**
-  1. `BIAS SIGNAL` (e.g. `1`)
-  2. `BIAS LABEL` (e.g. `BULLISH`)
-  3. `EXECUTION ZONE` (e.g. `$1,916.50 – $1,918.50`)
-  4. `INVALIDATION LEVEL` (e.g. `$1,913.00`)
-  5. `TP1` (e.g. `$1,923.19`)
-  6. `TP2` (e.g. `$1,934.44`)
-  7. `PRIMARY TARGET` (e.g. `$1,934.44`)
-- **100% UI Parity:** Sourced directly from Gemini's `sop_report.risk_parameters` and `next_database_state` across both live HUD and backtest replay sidebars.
+### Key Features & Architectural Fixes
+- **HTF Order Flow Hierarchy Rule:**
+  - Enforced that Higher Timeframe (1H/H4) Market Structure and Order Flow ALWAYS take precedence over 15m micro-structure and SMT signals.
+- **Counter-Trend Bullish Long Veto:**
+  - If 1H/H4 Order Flow is **BEARISH** (major support broken into HTF Bearish Supply), the engine is strictly prohibited from generating 15m Counter-Trend Bullish Long setups.
+  - All 15m Bullish SMT signals inside 1H Bearish Trends are VETOED as liquidity traps into 1H Bearish Supply ($1,888–$1,898).
+- **Primary Setup Focus:**
+  - Forces analysis to focus exclusively on **Primary HTF Short Retests** (shorting the HTF Supply Zone for $1,868 SSL / $1,850 HTF Demand).
+- **Skill Documentation Synchronization:**
+  - Synchronized `SKILL.md`, `sop_reference.md`, and `SKILL_BLUEPRINT.md` with Rule 4 (HTF Order Flow Hierarchy & Counter-Trend Veto).
+
+---
+
+### Summary
+Fixed React console error `Maximum update depth exceeded. This can happen when a component calls setState inside useEffect...` triggered in `Chart.tsx` during market data context re-evaluations and parent render passes.
+
+### Key Features & Architectural Fixes
+- **Static Array Fallbacks (`src/app/page.tsx`):**
+  - Replaced inline un-memoized array literals `[]` in `getChartData()` and `activeFvgs={data?.ipda_metrics?.active_fvgs || []}` with static immutable empty array constants (`EMPTY_CANDLES`, `EMPTY_FVGS`).
+  - Wrapped `getChartData()` and `onManualPricesChange` in `useCallback` to guarantee stable object reference identity across parent render passes.
+- **Functional State Update Bailout Guards (`src/components/Chart.tsx`):**
+  - Refactored `setLocalCandles`: `setLocalCandles((prev) => (prev.length === 0 && data.length === 0 ? prev : data))` to immediately bail out of state updates when receiving empty data array references.
+  - Refactored `setFvgOverlayBoxes` and `setAlertLabelPositions` inside `computeFvgOverlay` and `updateAlertPositions` with functional reference bailout checks.
 
 ### Verification
-- `npx tsc --noEmit --skipLibCheck` → **0 errors, clean compilation** ✅
+- `npx tsc --noEmit` → **0 errors, clean compilation** ✅
 
 ---
 

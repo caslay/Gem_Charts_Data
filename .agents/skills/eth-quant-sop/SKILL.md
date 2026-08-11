@@ -19,6 +19,7 @@ This skill operationalizes the **ETHUSDC.p Quantitative Analysis SOP** into a su
 1. **PROHIBITION OF TDO / CAIRO TDO:** The AI Agent is **EXPLICITLY PROHIBITED** from calculating, using, or referencing True Day Open (TDO) or Cairo TDO in any narrative or calculation. All market analysis must rely exclusively on session-based liquidity (London/NY) and HTF structural markers (D1/H4 swings, FVGs, ERL/IRL).
 2. **ASSET FOCUS:** Primary asset is **ETHUSDC.p** with secondary inter-market correlation on **BTCUSDC.p**.
 3. **OBJECTIVE:** Identify high-probability Draw on Liquidity (DOL) targets, SMT divergence anchors, and 15m displacement execution zones.
+4. **HTF ORDER FLOW HIERARCHY & COUNTER-TREND VETO:** Higher Timeframe (1H/H4) Order Flow and Market Structure ALWAYS override 15m micro-structure and SMT signals. If 1H/H4 Order Flow is **BEARISH** (e.g., major support broken into HTF Bearish Supply), the AI Agent is **STRICTLY PROHIBITED** from generating 15m Counter-Trend Bullish Long setups. All 15m Bullish SMT signals inside a 1H Bearish Trend are VETOED as liquidity traps, and analysis must focus exclusively on primary HTF Short Retests (shorting the HTF Supply Zone for SSL / HTF Demand targets).
 
 ---
 
@@ -33,7 +34,7 @@ When invoked, choose or process the appropriate sub-command:
 | `/eth-quant-sop smt` | **Inter-Market SMT Checker** | Validates BTC vs ETH structural swing highs/lows at key liquidity levels for bullish or bearish SMT divergence. |
 | `/eth-quant-sop log` | **Daily Tracker Logger** | Formats and appends a newly identified setup into both `directives/ETHUSDC_Daily_Tracker.md` and `directives/ETHUSDC_Daily_Tracker.json`. |
 | `/eth-quant-sop review` | **Session Close Outcome Review** | Updates the Daily Tracker at NY session close with setup outcomes (`Success`, `Stop Out`, `No Trigger`) and price action commentary. |
-| `/eth-quant-sop audit` | **Rule Compliance Audit** | Audits any given analysis narrative or setup for strict rule compliance (verifying ZERO TDO usage, explicit invalidation, valid targets). |
+| `/eth-quant-sop audit` | **Rule Compliance Audit** | Audits any given analysis narrative or setup for strict rule compliance (verifying ZERO TDO usage, explicit invalidation, valid targets, and HTF Order Flow alignment). |
 | `/eth-quant-sop report` | **Standardized Matrix Output** | Formats raw market observations, indicator readings, or chart notes into the exact Section 3 report matrix table. |
 
 ---
@@ -55,19 +56,21 @@ When invoked, choose or process the appropriate sub-command:
   * **New York Session:** Morning expansion range
 * Determine which session liquidity is expected to sweep based on HTF DOL intent.
 
-### Step 4: BTC SMT Correlation
-* Check inter-market divergence at key structural support/resistance:
+### Step 4: BTC SMT Correlation & HTF Gate
+* Perform Inter-market analysis (BTC vs ETH divergence):
   * **Bullish SMT:** BTC makes Lower Low while ETH forms Higher Low at support.
   * **Bearish SMT:** BTC makes Higher High while ETH forms Lower High at resistance.
+* **HTF Gate Filter:** Validate SMT direction against 1H/H4 Order Flow. If 1H/H4 Order Flow is Bearish, 15m Bullish SMT signals are VETOED from initiating Long setups and must be treated as liquidity traps into 1H Bearish Supply.
 
 ### Step 5: 15m Execution Mapping
 * Lower timeframe (15m) entry confirmation:
-  * Market Structure Shift (MSS) following session sweep or SMT formation.
-  * Strong Displacement candle leaving a clean 15m FVG or Order Block (OB).
+* Must align strictly with 1H/H4 HTF Order Flow direction.
+* Identify Market Structure Shift (MSS) following a session sweep or SMT formation.
+* Identify strong Displacement candle leaving a clean 15m FVG or Order Block (OB) in the direction of the HTF trend.
 
 ### Step 6: Invalidation & Targets
-* **Invalidation Point:** Define exact structural level that invalidates the setup (e.g. low of sweep candle).
-* **Targets:** Define TP1 (1:1 floor or local liquidity) and TP2 (HTF DOL magnet target).
+* **Invalidation Point:** Define exact structural level that invalidates the setup (e.g. 15m candle close past HTF Supply/Demand boundary).
+* **Targets:** Define TP1 (1:1 floor or local liquidity) and TP2 (HTF DOL magnet target, e.g. SSL / HTF Demand).
 
 ---
 

@@ -238,5 +238,21 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
 - **The Cause:** `detectActiveFVGs()` in `fvgEngine.ts` flagged touched FVGs as `ACTIVE_RETESTED`, but `mapAndConsolidateFVGs()` collapsed both `ACTIVE_UNMITIGATED` and `ACTIVE_RETESTED` into `status: 'UNMITIGATED'`. Because `Chart.tsx` and `fvgLayer.ts` filtered overlays via `if (fvg.status !== 'UNMITIGATED') continue;`, touched/retested FVGs were treated as unmitigated fresh zones and rendered continuously.
 - **The Fix:** Updated `MappedFVG.status` to include `'RETESTED'`. Refactored `mapAndConsolidateFVGs()` to map `ACTIVE_UNMITIGATED` to `'UNMITIGATED'` and `ACTIVE_RETESTED` to `'RETESTED'`. As a result, once price ticks into an FVG, its mapped status updates to `'RETESTED'`, and it cleanly unmounts from the unmitigated FVG chart overlay.
 
+### 35. Maximum Update Depth Exceeded in Chart useEffect Sync (Resolved in V13.2)
+- **The Bug:** Next.js console error: `Maximum update depth exceeded. This can happen when a component calls setState inside useEffect, but useEffect either doesn't have a dependency array, or one of the dependencies changes on every render` at `Chart.useEffect (src/components/Chart.tsx:121:5)`.
+- **The Cause:** 
+  1. Unstable Array Literals in Parent Render: In `src/app/page.tsx`, `getChartData()` and `activeFvgs={data?.ipda_metrics?.active_fvgs || []}` returned a newly instantiated empty array (`[]`) on every render when data was loading or missing.
+  2. Un-guarded State Setters inside Effects: `Chart.tsx` had `useEffect(() => { setLocalCandles(data); }, [data])` and `setFvgOverlayBoxes([])` in `computeFvgOverlay()`. When `data` or `activeFvgs` changed reference on every render, the effects executed `setLocalCandles` and `setFvgOverlayBoxes`, triggering child component re-renders that re-computed `getChartData()`, causing a synchronous infinite render cycle.
+- **The Fix:** 
+  1. Defined static immutable empty array fallbacks (`EMPTY_CANDLES`, `EMPTY_FVGS`) and memoized `getChartData()` and `onManualPricesChange` in `src/app/page.tsx`.
+  2. Implemented functional bailout checks in `Chart.tsx`: `setLocalCandles((prev) => (prev.length === 0 && data.length === 0 ? prev : data))` and `setFvgOverlayBoxes((prev) => (prev.length === 0 && boxes.length === 0 ? prev : boxes))` to bail out of state updates when empty, completely halting infinite re-render loops.
 
-
+### 36. Micro SMT Counter-Trend Trap & HTF Order Flow Gate (Resolved in V13.3)
+- **The Failure:** The quant engine generated a Bullish signal based on a 15m SMT Divergence (BTC Lower Low vs ETH Higher Low at $1,883.73), targeting $1,891.50–$1,897.30 (PDH). The setup stopped out as price rejected sharply from the $1,888.00–$1,898.00 zone down to sweep $1,868.00.
+- **The Root Cause:** 
+  1. **HTF Structure Blindness:** 1H/H4 market structure had broken major support at $1,905 down to $1,874, flipping HTF Order Flow to **BEARISH**. The rally to $1,888–$1,898 was a 1H Bearish Retest / Premium FVG Mitigation.
+  2. **Un-Gated 15m Counter-Trend Scalp:** The engine treated a 15m SMT bounce in Discount as a macro bullish reversal instead of recognizing it as a short-term counter-trend retracement into an HTF Bearish Supply Zone.
+  3. **Target Over-Extension:** The SOP failed to enforce Scenario C of `SKILL_BLUEPRINT.md`: Counter-trend SMT scalps must NOT target macro BSL/PDH; they must be strictly capped at 1H Bearish Supply with immediate breakeven stops.
+- **The Systemic Fix:** 
+  1. Enforced a **Mandatory 1H/H4 HTF Order Flow Gate**: When 1H/H4 Order Flow is Bearish, 15m Bullish SMT signals are marked as `COUNTER_TREND_RETRACEMENT` and capped at 1H Bearish Supply ($1,888–$1,898).
+  2. Primary setups in HTF Bearish Order Flow MUST align with the **HTF Bearish Retest** (shorting the $1,888–$1,898 Action Zone down to $1,868 SSL / $1,850 HTF Demand).

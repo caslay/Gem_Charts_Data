@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, memo, useCallback } from 'react';
 import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 import Chart from '@/components/Chart';
 import Sidebar from '@/components/Sidebar';
@@ -14,6 +14,9 @@ import DashboardMetrics from '@/components/DashboardMetrics';
 import ManualOrderPanel from '@/components/ManualOrderPanel';
 import { calculateATR } from '@/lib/riskEngine';
 import { safeParseAiJson } from '@/lib/aiJsonParser';
+
+const EMPTY_CANDLES: any[] = [];
+const EMPTY_FVGS: any[] = [];
 
 export default function Home() {
   const {
@@ -307,11 +310,17 @@ export default function Home() {
     refetch();
   }, [selectedInterval, refetch]);
 
-  function getChartData() {
-    if (!data || !data.data_payload) return [];
+  const getChartData = useCallback(() => {
+    if (!data || !data.data_payload) return EMPTY_CANDLES;
     const key = `candles_${selectedInterval}`;
-    return data.data_payload[key] ?? [];
-  }
+    return data.data_payload[key] ?? EMPTY_CANDLES;
+  }, [data, selectedInterval]);
+
+  const handleManualPricesChange = useCallback((entry: number | null, tp: number | null, sl: number | null) => {
+    setManualEntryPrice(entry);
+    setManualTakeProfit(tp);
+    setManualStopLoss(sl);
+  }, []);
 
   const currentPrice = data?.data_payload?.candles_5m?.slice(-1)[0]?.c ?? null;
 
@@ -414,7 +423,7 @@ export default function Home() {
               <div className="absolute inset-0 shadow-[inset_0_0_100px_rgba(255,255,255,0.01)] pointer-events-none z-10" />
               <Chart
                 data={getChartData()}
-                activeFvgs={data?.ipda_metrics?.active_fvgs || []}
+                activeFvgs={data?.ipda_metrics?.active_fvgs ?? EMPTY_FVGS}
                 localDealingRange={data?.ipda_metrics?.pricing_context?.local_dealing_range}
                 interval={selectedInterval}
                 isManualTradingActive={isManualTradingActive}
@@ -423,11 +432,7 @@ export default function Home() {
                 manualEntryPrice={manualEntryPrice}
                 manualTakeProfit={manualTakeProfit}
                 manualStopLoss={manualStopLoss}
-                onManualPricesChange={(entry, tp, sl) => {
-                  setManualEntryPrice(entry);
-                  setManualTakeProfit(tp);
-                  setManualStopLoss(sl);
-                }}
+                onManualPricesChange={handleManualPricesChange}
                 openTrades={openTrades}
                 onUpdateTradeLevels={handleUpdateTradeLevels}
               />
