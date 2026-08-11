@@ -49,3 +49,10 @@ A Market Structure Shift (MSS) event is classified as:
 - 3-bar (INNER) fractals are informational visual aids only and NEVER anchor the dealing range.
 - Color Lock (§1 above) is MANDATORY for dealing range fractal anchors: a fractal without proper institutional color signature is rejected.
 - Fallback: if no validated fractals exist in the candle window, raw candle extremes are used (documented as degraded mode).
+
+### 5.5 HTF Order Flow Hierarchy & Counter-Trend SMT Gating Rule (V13.3)
+- **Hierarchy Mandate:** Higher Timeframe (1H/H4) Market Structure and Order Flow ALWAYS take precedence over 15m micro-structure and SMT signals.
+- **The Rule:** If 1H/H4 Order Flow is **BEARISH** (major support broken into HTF Bearish Supply), a 15m Bullish SMT bounce is strictly classified as a **Counter-Trend Retracement** into the HTF Bearish Supply Zone ($1,888.00–$1,898.00).
+- **Execution Constraints:**
+  1. Primary setups MUST align with the **HTF Bearish Retest** (shorting the HTF Supply Zone for $1,868 SSL / $1,850 Demand).
+  2. Long counter-trend SMT trades inside HTF Bearish trends MUST NOT target macro BSL or PDH. They are capped at the HTF Bearish Supply entry boundary ($1,888.00) with mandatory breakeven locks.

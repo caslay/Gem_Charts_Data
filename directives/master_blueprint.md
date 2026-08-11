@@ -1,50 +1,40 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.8
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V13.9
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-11 (V13.8 — ETHUSDC SOP AI Prompt Engine, 30m Auto-Scan & Self-Correction Memory)  
+> **Last Updated:** 2026-08-11 (V13.9 — ETHUSDC.p Quant SOP & HTF Order Flow Gate Update)  
 
-## 🆕 V13.8 Changelog — ETHUSDC SOP AI Prompt Engine, 30m Auto-Scan & Self-Correction Memory (2026-08-11)
+## 🆕 V13.9 Changelog — ETHUSDC.p Quant SOP Skill & HTF Order Flow Gate Update (2026-08-11)
 
 ### Summary
-Upgraded the AI Quantitative Engine with the authoritative ETHUSDC.p SOP system prompt (`DEFAULT_ETH_SOP_SYSTEM_PROMPT`), implemented a 30-minute automated analysis scan scheduler with live UI controls, hardened AI JSON parser output functions, and built a dedicated Self-Correction UI modal allowing users to submit trade mistake logs and feed Gemini's historical memory bank (`ai_trade_state.state_json.recent_mistakes_lessons`).
+Updated the `/eth-quant-sop` skill files (`SKILL.md`, `sop_reference.md`, `SKILL_BLUEPRINT.md`) and quant system directives (`directives/02_lessons.md`, `directives/03_quant_logic.md`) to enforce the **HTF Order Flow Hierarchy & Counter-Trend Veto Rule**.
 
-### Key Features & Architecture
-- **ETHUSDC SOP System Prompt & Prompt Builder (`src/lib/sopPromptBuilder.ts`):**
-  - Enforces strict zero-TDO / Cairo TDO rule, 6-step analytical workflow, 0-90m Killzone window, pre-news filter, and structured JSON output specification (`sop_report`, `bias_signal`, `bias_label`, `trade_narrative`, `risk_parameters`, `next_database_state`).
-- **30-Minute Automated Analysis Scheduler (`useMarketData.ts` & `Sidebar.tsx`):**
-  - Added 30m countdown timer (`next30mScanSeconds`) and toggle switch (`isAuto30mScanActive`) in `useMarketData.ts` and `Sidebar.tsx` to automatically re-trigger AI follow-up scans every 30 minutes.
-- **AI Self-Correction & Learning Modal (`src/components/modals/SelfCorrectionModal.tsx` & `/api/self-correction`):**
-  - Created a glassmorphic modal accessible from the AI Synthesis panel in the Sidebar.
-  - Allows selecting logged setups from `ETHUSDC_Daily_Tracker.json`, marking outcome (`SUCCESS`, `STOP_OUT`, `NO_TRIGGER`, `WRONG_BIAS`), choosing mistake category, and logging custom lessons learned.
-  - API endpoint `/api/self-correction` updates `ETHUSDC_Daily_Tracker.json`, `ETHUSDC_Daily_Tracker.md`, and upserts lesson records into `ai_trade_state` under `recent_mistakes_lessons` for Gemini prompt memory injection.
-- **Hardened AI JSON Parsing & Auto-Logging (`src/lib/aiJsonParser.ts` & `quant-analyze/route.ts`):**
-  - Injected `recent_mistakes_lessons` from `ai_trade_state` directly into Gemini's `HISTORICAL MEMORY` context block.
-  - Enhanced parsing of `next_database_state` and auto-logging into Daily Tracker files.
-
-### Verification
-- `npm run build` → **0 compilation errors, clean production build** ✅
+### Key Features & Architectural Fixes
+- **HTF Order Flow Hierarchy Rule:**
+  - Enforced that Higher Timeframe (1H/H4) Market Structure and Order Flow ALWAYS take precedence over 15m micro-structure and SMT signals.
+- **Counter-Trend Bullish Long Veto:**
+  - If 1H/H4 Order Flow is **BEARISH** (major support broken into HTF Bearish Supply), the engine is strictly prohibited from generating 15m Counter-Trend Bullish Long setups.
+  - All 15m Bullish SMT signals inside 1H Bearish Trends are VETOED as liquidity traps into 1H Bearish Supply ($1,888–$1,898).
+- **Primary Setup Focus:**
+  - Forces analysis to focus exclusively on **Primary HTF Short Retests** (shorting the HTF Supply Zone for $1,868 SSL / $1,850 HTF Demand).
+- **Skill Documentation Synchronization:**
+  - Synchronized `SKILL.md`, `sop_reference.md`, and `SKILL_BLUEPRINT.md` with Rule 4 (HTF Order Flow Hierarchy & Counter-Trend Veto).
 
 ---
 
-## 🆕 V13.7 Changelog — Synthesis Console Table SOP Telemetry Expansion (2026-08-08)
-
 ### Summary
-Expanded the AI Synthesis Console table across both Live Sidebar (`src/components/Sidebar.tsx`) and Backtest Sidebar (`src/app/backtest/BacktestSidebar.tsx`) to display the complete 7-field SOP Telemetry matrix.
+Fixed React console error `Maximum update depth exceeded. This can happen when a component calls setState inside useEffect...` triggered in `Chart.tsx` during market data context re-evaluations and parent render passes.
 
-### Key Features & Architecture
-- **Full SOP Telemetry Table Order:**
-  1. `BIAS SIGNAL` (e.g. `1`)
-  2. `BIAS LABEL` (e.g. `BULLISH`)
-  3. `EXECUTION ZONE` (e.g. `$1,916.50 – $1,918.50`)
-  4. `INVALIDATION LEVEL` (e.g. `$1,913.00`)
-  5. `TP1` (e.g. `$1,923.19`)
-  6. `TP2` (e.g. `$1,934.44`)
-  7. `PRIMARY TARGET` (e.g. `$1,934.44`)
-- **100% UI Parity:** Sourced directly from Gemini's `sop_report.risk_parameters` and `next_database_state` across both live HUD and backtest replay sidebars.
+### Key Features & Architectural Fixes
+- **Static Array Fallbacks (`src/app/page.tsx`):**
+  - Replaced inline un-memoized array literals `[]` in `getChartData()` and `activeFvgs={data?.ipda_metrics?.active_fvgs || []}` with static immutable empty array constants (`EMPTY_CANDLES`, `EMPTY_FVGS`).
+  - Wrapped `getChartData()` and `onManualPricesChange` in `useCallback` to guarantee stable object reference identity across parent render passes.
+- **Functional State Update Bailout Guards (`src/components/Chart.tsx`):**
+  - Refactored `setLocalCandles`: `setLocalCandles((prev) => (prev.length === 0 && data.length === 0 ? prev : data))` to immediately bail out of state updates when receiving empty data array references.
+  - Refactored `setFvgOverlayBoxes` and `setAlertLabelPositions` inside `computeFvgOverlay` and `updateAlertPositions` with functional reference bailout checks.
 
 ### Verification
-- `npx tsc --noEmit --skipLibCheck` → **0 errors, clean compilation** ✅
+- `npx tsc --noEmit` → **0 errors, clean compilation** ✅
 
 ---
 

@@ -126,6 +126,7 @@ stateDiagram-v2
 | Guardrail Rule | Enforced Requirement | Failure Action |
 | :--- | :--- | :--- |
 | **NO TDO / Cairo TDO** | Zero mention of `True Day Open`, `TDO`, or `Cairo TDO`. | `audit` command flags as VIOLATION; prompt engine rejects reference. |
+| **HTF Order Flow Veto** | 15m Counter-Trend Bullish SMT signals strictly VETOED when 1H/H4 Order Flow is Bearish. | Forces focus exclusively on HTF Bearish Retests (shorting HTF Supply for SSL targets). |
 | **Session Anchor Only** | All intraday sweeps must reference London High/Low or NY AM expansion. | Re-anchors analysis to London/NY session markers. |
 | **Explicit Invalidation** | Must state exact numerical price level for Stop Loss. | Prompts user for structural low/high anchor. |
 | **SMT Confluence** | SMT divergence must occur at key liquidity levels. | Flags un-anchored divergence as low probability. |
@@ -188,8 +189,8 @@ stateDiagram-v2
 * **Resolution:** Mark setup outcome in tracker as `NO_TRIGGER / EXPIRED`. Do NOT chase price.
 
 ### Scenario C: Opposing HTF Bias vs LTF Session Sweep
-* **Condition:** Daily trend is Bearish, but London Low is swept with Bullish SMT.
-* **Resolution:** Treat setup as a **Counter-Trend Internal Retest to Premium FVG** (TP1 floor is mandatory exit; do NOT target new All-Time Highs).
+* **Condition:** 1H/H4 HTF Trend is Bearish, but London Low is swept with Bullish SMT.
+* **Resolution:** **STRICTLY VETO LONG SETUPS.** Do NOT generate counter-trend long trades. Treat the 15m SMT bounce strictly as liquidity engineering for 1H Bearish Supply ($1,888–$1,898). Analysis must focus exclusively on primary HTF Short Retests targeting SSL ($1,868) and HTF Demand ($1,850).
 
 ---
 
