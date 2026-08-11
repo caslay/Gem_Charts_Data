@@ -42,4 +42,6 @@ Do NOT guess the project architecture or past logic. To save the context window,
 Before writing any code or answering, output an internal thought process indicating WHICH directive file you need to read to complete the task accurately.
 
 ## 📜 Master Blueprint Maintenance Rule
-After completing any update or task, you MUST update the master blueprint file at `directives/master_blueprint.md` to ensure all system documentation, database schemas, and API handlers remain fully synchronized and up to date. Do not end a task without ensuring the blueprint is updated.
+After completing any **CODEBASE or SYSTEM ARCHITECTURE** update (e.g. Next.js code, API routes, DB schemas, UI components, Quant engine logic), you MUST update the master blueprint file at `directives/master_blueprint.md` to ensure system documentation remains fully synchronized. 
+
+⚠️ **STRICT SCOPE BOUNDARY:** Do NOT include daily trade logs, trade setup reviews (`/eth-quant-sop review`), analytical skill outputs, or daily tracker entries in `directives/master_blueprint.md`. Trade tracking and SOP logs belong strictly in `directives/ETHUSDC_Daily_Tracker.md` and `directives/ETHUSDC_Daily_Tracker.json`.
