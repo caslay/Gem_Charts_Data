@@ -1,23 +1,137 @@
 {
   "version": "1.0.0",
   "symbol": "ETHUSDC.p",
-  "lastUpdated": "2026-08-08T14:30:16.796Z",
+  "lastUpdated": "2026-08-11T15:06:13.737Z",
   "stats": {
-    "totalSetups": 3,
+    "totalSetups": 9,
     "success": 0,
-    "stopOut": 0,
+    "stopOut": 4,
     "noTrigger": 0,
     "winRate": 0
   },
   "entries": [
     {
+      "id": "ETH-20260811-1871",
+      "date": "2026-08-11",
+      "time": "15:06",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Bullish response following sweep of London Lo",
+      "htfDol": "London High ($1,893.88), Major Swing High ($1,895.96) & PDH ($1,929.77)",
+      "smtStatus": "ALIGNED_EXPANSION — BTC swept local low to $63,680 while ETH held structural support above PDL ($1,865.19)",
+      "entryRange": [
+        1871.5,
+        1873.5
+      ],
+      "invalidation": 1865.19,
+      "tp1": 1884.01,
+      "tp2": 1893.88,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,873.33 | HTF Bullish Structure Shift in Discount"
+    },
+    {
+      "id": "ETH-20260811-1874",
+      "date": "2026-08-11",
+      "time": "14:30",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Bullish MSS confirmed with displacement break",
+      "htfDol": "PDH ($1,929.77) & London High ($1,893.88)",
+      "smtStatus": "BULLISH_SMT — BTC printed Lower Low ($64,027.3) while ETH formed Higher Low ($1,874.07)",
+      "entryRange": [
+        1874,
+        1878
+      ],
+      "invalidation": 1868.12,
+      "tp1": 1893.88,
+      "tp2": 1929.77,
+      "outcome": "STOP_OUT",
+      "dolReached": false,
+      "notes": "Invalidation breached at $1,868.12 during NY session liquidity expansion."
+    },
+    {
+      "id": "ETH-20260811-1881",
+      "date": "2026-08-11",
+      "time": "14:18",
+      "symbol": "ETHUSDC.p",
+      "setupType": "15m Bullish MSS confirmed above $1,879.56 fol",
+      "htfDol": "PDH ($1,929.77) & 1h Bearish SIBI FVGs ($1,902.40 - $1,912.30)",
+      "smtStatus": "BULLISH_SMT — BTC printed Lower Low ($64,020.20) while ETH held Higher Low ($1,881.36)",
+      "entryRange": [
+        1881.36,
+        1886.5
+      ],
+      "invalidation": 1873.16,
+      "tp1": 1893.88,
+      "tp2": 1929.77,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,886.89 | HTF Bullish Structure & Expansion Mode"
+    },
+    {
+      "id": "ETH-20260811-1879",
+      "date": "2026-08-11",
+      "time": "13:27",
+      "symbol": "ETHUSDC.p",
+      "setupType": "NY AM retracement into 15m/H4 BISI FVG entry ",
+      "htfDol": "PDH ($1,929.77) & PWH ($1,940.98)",
+      "smtStatus": "BULLISH_SYNC — BTC leading momentum supporting ETH higher low structure above $1,873.16",
+      "entryRange": [
+        1879.56,
+        1883
+      ],
+      "invalidation": 1873.16,
+      "tp1": 1895.96,
+      "tp2": 1929.77,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,882.92 | HTF Bullish Structure Shift"
+    },
+    {
+      "id": "ETH-20260811-1878",
+      "date": "2026-08-11",
+      "time": "10:00",
+      "symbol": "ETHUSDC.p",
+      "setupType": "15m Bullish CHoCH above $1,879.56 with sharp ",
+      "htfDol": "Asian Range 1.5 Dev ($1,896.24), BSL Magnets ($1,893.58 - $1,894.00), & PDH ($1,929.77)",
+      "smtStatus": "BULLISH_SMT — BTC pushed deeper towards PDL ($63,788) while ETH formed Higher Low above PDL ($1,865.19)",
+      "entryRange": [
+        1878.07,
+        1880.59
+      ],
+      "invalidation": 1870.91,
+      "tp1": 1893.58,
+      "tp2": 1929.77,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,883.01 | HTF Bullish Market Structure Shift"
+    },
+    {
+      "id": "ETH-20260809-0645",
+      "date": "2026-08-09",
+      "time": "06:45",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Bullish SMT Divergence + 15m MSS & BISI FVG Retracement",
+      "htfDol": "PDH ($1,925.85) & H4 Equal Highs ($1,926.00)",
+      "smtStatus": "BULLISH_SMT — BTC printed Lower Low ($64,747.40) while ETH formed Higher Low ($1,913.00) above London Low.",
+      "entryRange": [
+        1916.5,
+        1917.5
+      ],
+      "invalidation": 1912.5,
+      "tp1": 1922.5,
+      "tp2": 1925.85,
+      "outcome": "PENDING (TRIGGERED - IN ENTRY ZONE)",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,917.20 | Triggered at 06:45 UTC. Active in 15m BISI entry zone, holding above $1,912.50 invalidation."
+    },
+    {
       "id": "ETH-20260808-1918",
       "date": "2026-08-08",
       "time": "14:30",
       "symbol": "ETHUSDC.p",
-      "setupType": "Displacement expansion above the local premiu",
-      "htfDol": "PDH ($1,940.98) & Asian Range Deviation Targets ($1,928.29 - $1,931.82)",
-      "smtStatus": "BULLISH_SMT — BTC printed a Higher Low ($64,967.30) at 13:45 UTC while ETH formed a double bottom equal low ($1,916.68), validating BTC relative strength leadership.",
+      "setupType": "Displacement expansion above local premium range",
+      "htfDol": "PDH ($1,940.98) & Asian Deviation Targets ($1,928.29 - $1,931.82)",
+      "smtStatus": "BULLISH_SMT — BTC printed Higher Low ($64,967.30) at 13:45 UTC while ETH formed double bottom equal low ($1,916.68).",
       "entryRange": [
         1918.43,
         1919.5
@@ -25,18 +139,18 @@
       "invalidation": 1912,
       "tp1": 1928.29,
       "tp2": 1940.98,
-      "outcome": "PENDING",
+      "outcome": "STOP_OUT",
       "dolReached": false,
-      "notes": "ETHUSDC.p $1,921.17 | H4/15m Bullish Order Flow in NY AM Killzone"
+      "notes": "Triggered at 18:15 UTC. Max peak $1,921.99. Stopped out at $1,912.00 at 03:00 UTC on Aug 9 during Asia sweep."
     },
     {
       "id": "ETH-20260808-1917",
       "date": "2026-08-08",
       "time": "14:07",
       "symbol": "ETHUSDC.p",
-      "setupType": "15m Bullish MSS above $1,914.73, looking to e",
+      "setupType": "15m Bullish MSS above $1,914.73",
       "htfDol": "PDH ($1,940.98) & Major BSL Pool ($1,930.00 - $1,935.00)",
-      "smtStatus": "BULLISH_SMT — BTC printed a relative Lower Low at $64,890 while ETH formed a Higher Low at $1,916.68 above London Low",
+      "smtStatus": "BULLISH_SMT — BTC printed relative Lower Low at $64,890 while ETH formed Higher Low at $1,916.68.",
       "entryRange": [
         1917.56,
         1918.28
@@ -44,18 +158,18 @@
       "invalidation": 1912,
       "tp1": 1921.87,
       "tp2": 1940.98,
-      "outcome": "PENDING",
+      "outcome": "STOP_OUT",
       "dolReached": false,
-      "notes": "ETHUSDC.p $1,918.61 | HTF Bullish Structure"
+      "notes": "Triggered at 22:30 UTC. Max peak $1,919.88. Stopped out at $1,912.00 at 03:00 UTC on Aug 9."
     },
     {
       "id": "ETH-20260808-1915",
       "date": "2026-08-08",
       "time": "13:46",
       "symbol": "ETHUSDC.p",
-      "setupType": "Mitigation of the 15m BISI FVG ($1,915.41 - $",
+      "setupType": "Mitigation of 15m BISI FVG ($1,915.41 - $1,917.00)",
       "htfDol": "PDH ($1,940.98) & Buy-side Liquidity Pool ($1,927.70 - $1,928.50)",
-      "smtStatus": "BULLISH_SMT — BTC swept its local structure low to print $64,890.80 while ETH formed a higher low at $1,916.68",
+      "smtStatus": "BULLISH_SMT — BTC swept local structure low to print $64,890.80 while ETH formed higher low at $1,916.68.",
       "entryRange": [
         1915.5,
         1917
@@ -63,9 +177,9 @@
       "invalidation": 1912,
       "tp1": 1921.87,
       "tp2": 1927.7,
-      "outcome": "PENDING",
+      "outcome": "STOP_OUT",
       "dolReached": false,
-      "notes": "ETHUSDC.p $1,917.00 | M15 Bullish Order Flow in Discount Dealing Range"
+      "notes": "Triggered at 22:45 UTC. Max peak $1,919.37. Stopped out at $1,912.00 at 03:00 UTC on Aug 9."
     }
   ]
 }

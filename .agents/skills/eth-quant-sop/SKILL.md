@@ -90,6 +90,8 @@ Every complete market analysis must be formatted into this exact matrix table:
 
 ## 💾 DUAL DAILY TRACKER LOGGING PROTOCOL
 
+> ⚠️ **Scope Boundary:** Trade setup logs and outcome reviews are strictly written to these 2 daily tracker files. Do NOT write or append trade logs or outcome reviews to `directives/master_blueprint.md` (which is reserved exclusively for system code and architecture updates).
+
 When `/eth-quant-sop log` or `/eth-quant-sop review` is executed, update **BOTH** files in `directives/`:
 
 ### 1. Markdown Tracker (`directives/ETHUSDC_Daily_Tracker.md`)
