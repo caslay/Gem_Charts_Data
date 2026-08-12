@@ -1107,9 +1107,47 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
     setAiBias
   } = useAIAnalysis();
 
+  // ── 30-Minute Automated Analysis Scan Scheduler ────────────────────────────
+  const [isAuto30mScanActive, setIsAuto30mScanActive] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('gem_auto_30m_scan') === 'true';
+    }
+    return true; // Active by default
+  });
+  const [next30mScanSeconds, setNext30mScanSeconds] = useState<number>(1800); // 30 minutes = 1800s
+
+  const toggleAuto30mScan = useCallback(() => {
+    setIsAuto30mScanActive((prev) => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gem_auto_30m_scan', String(next));
+      }
+      return next;
+    });
+  }, []);
+
   const triggerAiAnalysisScan = useCallback(async (alertMetadata?: unknown) => {
+    setNext30mScanSeconds(1800); // Reset timer on manual or auto trigger
     return triggerScan(data, alertMetadata);
   }, [data, triggerScan]);
+
+  // 30-minute periodic countdown effect
+  useEffect(() => {
+    if (!isAuto30mScanActive) return;
+
+    const timer = setInterval(() => {
+      setNext30mScanSeconds((prev) => {
+        if (prev <= 1) {
+          // Trigger scan and reset countdown
+          triggerAiAnalysisScan();
+          return 1800;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isAuto30mScanActive, triggerAiAnalysisScan]);
 
   return {
     data,
@@ -1127,6 +1165,9 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
     isAnalyzing,
     setAiAnalysis,
     triggerAiAnalysisScan,
+    isAuto30mScanActive,
+    toggleAuto30mScan,
+    next30mScanSeconds,
     signalAlerts,
     updateSignalAlert,
     signalAlertsEnabled,

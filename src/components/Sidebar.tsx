@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import HudModal from './modals/HudModal';
 import PotentialTradesModal from './modals/PotentialTradesModal';
+import SelfCorrectionModal from './modals/SelfCorrectionModal';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
 import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 import { calculateATR } from '@/lib/riskEngine';
@@ -144,10 +145,21 @@ const Sidebar = memo(function Sidebar({
   isCollapsed = false,
   onToggleCollapse,
 }: SidebarProps) {
-  const { isAnalyzing, aiAnalysis, triggerAiAnalysisScan, wsInterval, structureState, themeSettings } = useMarketDataContext();
+  const {
+    isAnalyzing,
+    aiAnalysis,
+    triggerAiAnalysisScan,
+    wsInterval,
+    structureState,
+    themeSettings,
+    isAuto30mScanActive,
+    toggleAuto30mScan,
+    next30mScanSeconds
+  } = useMarketDataContext();
   const [isJsonDrawerOpen, setIsJsonDrawerOpen] = useState(false);
   const [isHudModalOpen, setIsHudModalOpen] = useState(false);
   const [isTradesModalOpen, setIsTradesModalOpen] = useState(false);
+  const [isSelfCorrectionModalOpen, setIsSelfCorrectionModalOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
 
   // Inner cards collapsible states (all open by default)
@@ -850,6 +862,30 @@ const Sidebar = memo(function Sidebar({
                   </div>
 
                   <div className="p-3 bg-card/45 border-t border-card-border shrink-0 flex flex-col gap-2">
+                    {/* 30m Auto-Scan Toggle & Countdown */}
+                    <div className="flex items-center justify-between px-2 py-1 bg-background/50 border border-card-border rounded-lg text-[10px] font-mono">
+                      <div className="flex items-center gap-1.5">
+                        <Clock size={11} className={isAuto30mScanActive ? "text-accent animate-pulse" : "text-muted"} />
+                        <span className="text-muted font-bold">30m Auto-Scan:</span>
+                        <span className="text-foreground font-extrabold">
+                          {isAuto30mScanActive
+                            ? `${Math.floor((next30mScanSeconds ?? 1800) / 60)}:${((next30mScanSeconds ?? 1800) % 60).toString().padStart(2, '0')}`
+                            : 'OFF'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={toggleAuto30mScan}
+                        className={`px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider border transition-colors ${
+                          isAuto30mScanActive
+                            ? 'bg-accent/20 border-accent text-accent'
+                            : 'bg-card border-card-border text-muted hover:text-foreground'
+                        }`}
+                      >
+                        {isAuto30mScanActive ? 'ENABLED' : 'PAUSED'}
+                      </button>
+                    </div>
+
                     <button
                       onClick={handleLiveSynthesis}
                       disabled={isAnalyzing || !data}
@@ -867,13 +903,24 @@ const Sidebar = memo(function Sidebar({
                         </>
                       )}
                     </button>
-                    <button
-                      onClick={() => setIsTradesModalOpen(true)}
-                      className="w-full py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer rounded-full"
-                    >
-                      <BarChart3 size={11} />
-                      <span>Potential Trades Table</span>
-                    </button>
+
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        onClick={() => setIsTradesModalOpen(true)}
+                        className="py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer rounded-full"
+                      >
+                        <BarChart3 size={11} />
+                        <span>Trades</span>
+                      </button>
+                      <button
+                        onClick={() => setIsSelfCorrectionModalOpen(true)}
+                        className="py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer rounded-full"
+                        title="Open Self-Correction & AI Learning Window"
+                      >
+                        <Brain size={11} />
+                        <span>Self-Correction</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -987,6 +1034,13 @@ const Sidebar = memo(function Sidebar({
         copyText={data ? AI_PROMPT_PREFIX + JSON.stringify(slicePayloadByLookback(data, counts), null, 2) : ''}
       />
 
+      {/* Self-Correction Modal */}
+      <SelfCorrectionModal
+        isOpen={isSelfCorrectionModalOpen}
+        onClose={() => setIsSelfCorrectionModalOpen(false)}
+      />
+
+      {/* Potential Trades Modal */}
       <PotentialTradesModal
         isOpen={isTradesModalOpen}
         onClose={() => setIsTradesModalOpen(false)}
