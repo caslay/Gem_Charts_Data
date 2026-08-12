@@ -324,10 +324,17 @@ export async function verifyDisplacement(recentCandles: Candle[], symbol: string
   if (recentCandles.length < 16) {
     return localResult;
   }
+
+  // Fast-path: in development mode or unless USE_PYTHON_DISPLACEMENT is explicitly enabled,
+  // use the high-performance local JS OLS analytical engine directly (0ms network latency)
+  if (process.env.NODE_ENV === 'development' && process.env.USE_PYTHON_DISPLACEMENT !== 'true') {
+    return localResult;
+  }
+
   try {
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), 1200); // 1.2s rapid response threshold
- 
+
     const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
     const baseUrl = process.env.NODE_ENV === 'development' 
       ? 'http://127.0.0.1:8000' 

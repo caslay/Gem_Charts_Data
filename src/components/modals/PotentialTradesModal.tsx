@@ -80,8 +80,23 @@ export default function PotentialTradesModal({ isOpen, onClose }: PotentialTrade
   };
 
   const engineSummary = useMemo(
-    () => generatePotentialTrades(data, false, aiAnalysis),
-    [data, aiAnalysis, refreshTrigger]
+    () => {
+      if (!isOpen) {
+        return {
+          currentPrice: 0,
+          institutionalBias: "NEUTRAL",
+          equilibrium: 0,
+          dealingZone: "EQUILIBRIUM",
+          bslMagnets: [],
+          sslMagnets: [],
+          swingHigh: 0,
+          swingLow: 0,
+          setups: [],
+        };
+      }
+      return generatePotentialTrades(data, false, aiAnalysis);
+    },
+    [isOpen, data, aiAnalysis, refreshTrigger]
   );
 
   const autoExecuteCount = useMemo(

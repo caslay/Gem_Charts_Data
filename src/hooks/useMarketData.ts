@@ -322,6 +322,7 @@ export interface EngineSettings {
   includeStructureAnalysis: boolean;
   includeFvgDetection: boolean;
   visualizePerfectMovementOnly: boolean;
+  highPerformanceMode?: boolean;
   pmAtrMultiplier: number;
   pmVolumeSmaPeriod: number;
   pmMinBodyRatio: number;
@@ -346,6 +347,7 @@ export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
   includeStructureAnalysis: true,
   includeFvgDetection: true,
   visualizePerfectMovementOnly: false,
+  highPerformanceMode: false,
   pmAtrMultiplier: 0.5,
   pmVolumeSmaPeriod: 10,
   pmMinBodyRatio: 0.3,
@@ -805,11 +807,6 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
 
       // Clear any pre-existing initial load error upon a successful poll
       setError(null);
-
-      // Unified event sync: Trigger a refresh of the trades state across the UI on server-side closes
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('trades-refresh'));
-      }
     } catch (err: unknown) {
       console.warn('[MarketData] Background poll error caught:', err);
       if (!isPolling) {
@@ -831,19 +828,38 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
     const initialTimer = setTimeout(() => {
       fetchData();
     }, 0);
-    // Added 5000ms polling to keep resting_liquidity_pools (BSL/SSL) fresh
+
+    // 5000ms polling to keep resting_liquidity_pools (BSL/SSL) fresh
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       fetchData(true);
     }, 5000);
+
+    // Instantly refetch on tab return/focus to prevent background queue buildup
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchData(true);
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
     return () => {
       clearTimeout(initialTimer);
       clearInterval(interval);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
     };
   }, [fetchData]);
 
   // Synchronize WebSocket live candle updates into the main data payload
+  // Decoupled tick architecture: Intermediate unclosed ticks update Chart canvas directly
+  // via MarketDataLiveContext. We ONLY update root data state on official candle closes.
   useEffect(() => {
-    if (!liveCandle || !data) return;
+    if (!liveCandle || !data || !data.data_payload) return;
 
     const activeSeriesKey = `candles_${selectedInterval}`;
     const prevCandles = data.data_payload[activeSeriesKey] || [];
@@ -855,10 +871,12 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
     const isSameTime = liveCandle.time === lastTimeSec;
     const isNewerTime = liveCandle.time > lastTimeSec;
 
+    // Skip intermediate ticks on the open candle to prevent root React re-render cascades
+    if (isSameTime && !liveCandle.isClosed) return;
     if (!isSameTime && !isNewerTime) return;
 
     setData((prev) => {
-      if (!prev) return null;
+      if (!prev || !prev.data_payload) return null;
       const candles = prev.data_payload[activeSeriesKey] || [];
       if (candles.length === 0) return prev;
 
@@ -877,7 +895,7 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
       };
 
       if (isSameTime) {
-        // Perform a lightweight mutation on the live-edge candle preview properties
+        // Update the last candle on official close
         updatedCandles[lastIdx] = mappedCandle;
       } else {
         // Append a new candle frame (candle officially closed and a new one started)
@@ -896,7 +914,7 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
 
   // Synchronize and update the stabilized structural state
   useEffect(() => {
-    if (!data) return;
+    if (!data || !data.data_payload) return;
 
     // Prefer the backend's fully computed, stateful structural map if available to ensure 100% stability and zero lookback truncation drift
     if (data.ipda_metrics?.full_structure_map) {

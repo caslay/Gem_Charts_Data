@@ -19,15 +19,19 @@ export const magnetsLayer: ChartLayer = {
 
     const ipda = data.ipda_metrics || {};
     const orderFlow = ipda.order_flow_engine || {};
-    const bsl = orderFlow.resting_liquidity_pools?.BSL_Magnets || [];
-    const ssl = orderFlow.resting_liquidity_pools?.SSL_Magnets || [];
+    const bslRaw = orderFlow.resting_liquidity_pools?.BSL_Magnets || [];
+    const sslRaw = orderFlow.resting_liquidity_pools?.SSL_Magnets || [];
+
+    // Deduplicate and limit to strictly 3 unique price levels max
+    const bsl = Array.from(new Set(bslRaw.map((p: any) => Number(p)).filter((p: number) => !isNaN(p)))).slice(0, 3);
+    const ssl = Array.from(new Set(sslRaw.map((p: any) => Number(p)).filter((p: number) => !isNaN(p)))).slice(0, 3);
 
     const newLines: any[] = [];
 
     // Render BSL magnets
-    bsl.forEach((price: number, idx: number) => {
+    bsl.forEach((price: any, idx: number) => {
       const line = series.createPriceLine({
-        price,
+        price: Number(price),
         color: theme === 'dark' ? (themeSettings?.dark_chart_magnet_bsl || 'rgba(255, 180, 171, 0.45)') : (themeSettings?.light_chart_magnet_bsl || 'rgba(225, 29, 72, 0.45)'),
         lineStyle: 2, // Dashed
         lineWidth: 1,
@@ -38,9 +42,9 @@ export const magnetsLayer: ChartLayer = {
     });
 
     // Render SSL magnets
-    ssl.forEach((price: number, idx: number) => {
+    ssl.forEach((price: any, idx: number) => {
       const line = series.createPriceLine({
-        price,
+        price: Number(price),
         color: theme === 'dark' ? (themeSettings?.dark_chart_magnet_ssl || 'rgba(80, 255, 175, 0.45)') : (themeSettings?.light_chart_magnet_ssl || 'rgba(5, 150, 105, 0.45)'),
         lineStyle: 2, // Dashed
         lineWidth: 1,

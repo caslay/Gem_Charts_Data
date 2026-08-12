@@ -600,6 +600,10 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
 
   // Dynamic Trade Sensing state
   const [trades, setTrades] = useState<any[]>([]);
+  const tradesRef = useRef<any[]>([]);
+  useEffect(() => {
+    tradesRef.current = trades;
+  }, [trades]);
 
   // Per-strategy debounce lock: maps strategy ID → last fired candle time
   const firedLockRef = useRef<Map<string, number>>(new Map());
@@ -686,8 +690,9 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
     if (!data || strategies.length === 0) return;
 
     // Derived states for Directional & Active Trade Sensing
-    const hasOpenShort = trades.some(t => t.status === 'OPEN' && t.direction === 'SHORT');
-    const hasOpenLong = trades.some(t => t.status === 'OPEN' && t.direction === 'LONG');
+    const currentTrades = tradesRef.current;
+    const hasOpenShort = currentTrades.some(t => t.status === 'OPEN' && t.direction === 'SHORT');
+    const hasOpenLong = currentTrades.some(t => t.status === 'OPEN' && t.direction === 'LONG');
 
     const structureState = isBacktest
       ? data?.ipda_metrics?.full_structure_map
@@ -857,7 +862,7 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
         console.error(`[StrategyEvaluator] Trade execution connection error:`, err);
       });
     }
-  }, [data, liveCandle, livePrice, strategies, trades, triggerSmartAlert, isBacktest, tradesApiUrl]);
+  }, [data, liveCandle, livePrice, strategies, triggerSmartAlert, isBacktest, tradesApiUrl]);
 
   return {
     strategies,
