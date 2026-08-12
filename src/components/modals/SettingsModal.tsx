@@ -730,6 +730,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           </span>
                         </div>
                       </label>
+
+                      {/* High Performance Chart Mode Toggle */}
+                      <label className="flex items-center gap-3.5 cursor-pointer group select-none">
+                        <input
+                          type="checkbox"
+                          checked={engineSettings?.highPerformanceMode === true}
+                          onChange={(e) => updateEngineSettings && updateEngineSettings({ highPerformanceMode: e.target.checked })}
+                          className="rounded border border-card-border w-4 h-4 cursor-pointer accent-accent transition-all"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold uppercase text-foreground tracking-widest group-hover:text-accent transition-colors flex items-center gap-1.5">
+                            ⚡ High Performance Chart Mode (FPS Boost)
+                          </span>
+                          <span className="block text-[10px] text-muted italic font-sans leading-tight">
+                            Slices active chart indicator lookbacks to 500 candles and defers background overlays for ultra-smooth 60+ FPS chart rendering on lower-power devices.
+                          </span>
+                        </div>
+                      </label>
                     </div>
                   </div>
 

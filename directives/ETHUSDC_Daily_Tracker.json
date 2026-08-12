@@ -1,15 +1,53 @@
 {
   "version": "1.0.0",
   "symbol": "ETHUSDC.p",
-  "lastUpdated": "2026-08-11T15:57:51.742Z",
+  "lastUpdated": "2026-08-12T17:22:03.089Z",
   "stats": {
-    "totalSetups": 10,
+    "totalSetups": 12,
     "success": 0,
     "stopOut": 4,
     "noTrigger": 0,
     "winRate": 0
   },
   "entries": [
+    {
+      "id": "ETH-20260812-1889",
+      "date": "2026-08-12",
+      "time": "17:22",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Premium retest of the 15m Bearish FVG ($1,889",
+      "htfDol": "Major Swing Low ($1,881.66) & HTF Demand ($1,876.63)",
+      "smtStatus": "BEARISH_SMT — BTC printed Higher Low ($63,447.30) while ETH formed Lower Low ($1,886.86), validating ETH relative weakness.",
+      "entryRange": [
+        1889.48,
+        1890.26
+      ],
+      "invalidation": 1893.8,
+      "tp1": 1883,
+      "tp2": 1881.66,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,883.96 | HTF Bearish Order Flow"
+    },
+    {
+      "id": "ETH-20260812-1893",
+      "date": "2026-08-12",
+      "time": "17:12",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Retest of the 1H Bearish FVG supply zone ($18",
+      "htfDol": "Recent Swing Low ($1881.66) & PDL ($1851.18)",
+      "smtStatus": "BULLISH_SMT VETOED — All 15m Bullish SMT signals are vetoed as liquidity traps due to the 1H Bearish Order Flow gate filter",
+      "entryRange": [
+        1893,
+        1896
+      ],
+      "invalidation": 1898.91,
+      "tp1": 1881.66,
+      "tp2": 1851.18,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1887.92 | HTF Bearish Reversal"
+    },
     {
       "id": "ETH-20260811-1863",
       "date": "2026-08-11",

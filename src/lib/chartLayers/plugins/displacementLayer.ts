@@ -9,7 +9,19 @@ export const displacementLayer: ChartLayer = {
   renderChart(context) {
     const { seriesMarkers, activeCandles, theme, themeSettings, storage, engineSettings, data } = context;
 
-    if (seriesMarkers) {
+    if (seriesMarkers && activeCandles && activeCandles.length > 0) {
+      const isHighPerf = engineSettings?.highPerformanceMode ?? false;
+      const lastClosedT = activeCandles[activeCandles.length - 2]?.t ?? activeCandles[activeCandles.length - 1]?.t;
+      const cacheKey = `${lastClosedT}_${activeCandles.length}_${theme}_${engineSettings?.visualizePerfectMovementOnly}_${isHighPerf}`;
+
+      // Reuse memoized markers if candle close timestamp and settings have not changed
+      if (storage.get('cacheKey') === cacheKey && storage.has('cachedMarkers')) {
+        const cached = storage.get('cachedMarkers');
+        seriesMarkers.setMarkers(cached);
+        storage.set('hasMarkers', true);
+        return;
+      }
+
       // Resolve dynamic customizer colors
       const sponsorshipColor = theme === 'dark'
         ? (themeSettings?.dark_text_title || '#ffffff')
@@ -27,8 +39,12 @@ export const displacementLayer: ChartLayer = {
         ? (themeSettings?.dark_chart_volumetric_strong_arrow || '#ff007f')
         : (themeSettings?.light_chart_volumetric_strong_arrow || '#e11d48');
 
-      // Draw markers using the volumetric generator
-      const sortedData = [...activeCandles].sort((a, b) => a.t - b.t);
+      // Sort and slice data (in High Performance Mode, limit lookback to last 500 candles for max FPS)
+      let sortedData = [...activeCandles].sort((a, b) => a.t - b.t);
+      if (isHighPerf && sortedData.length > 500) {
+        sortedData = sortedData.slice(sortedData.length - 500);
+      }
+
       const markers = generateVolumetricMarkers(
         sortedData,
         {
@@ -49,6 +65,10 @@ export const displacementLayer: ChartLayer = {
         }
       );
 
+      // Save to storage cache
+      storage.set('cacheKey', cacheKey);
+      storage.set('cachedMarkers', markers);
+
       // Set markers on the series
       seriesMarkers.setMarkers(markers);
       storage.set('hasMarkers', true);
@@ -59,6 +79,8 @@ export const displacementLayer: ChartLayer = {
     if (seriesMarkers && storage.get('hasMarkers')) {
       seriesMarkers.setMarkers([]);
       storage.delete('hasMarkers');
+      storage.delete('cacheKey');
+      storage.delete('cachedMarkers');
     }
   }
 };

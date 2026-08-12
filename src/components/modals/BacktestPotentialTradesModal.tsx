@@ -53,7 +53,22 @@ export default function BacktestPotentialTradesModal({
   const [isJoinGuideOpen, setIsJoinGuideOpen] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const engineSummary = useMemo(() => generatePotentialTrades(currentData, true), [currentData, refreshTrigger]);
+  const engineSummary = useMemo(() => {
+    if (!isOpen) {
+      return {
+        currentPrice: 0,
+        institutionalBias: "NEUTRAL",
+        equilibrium: 0,
+        dealingZone: "EQUILIBRIUM",
+        bslMagnets: [],
+        sslMagnets: [],
+        swingHigh: 0,
+        swingLow: 0,
+        setups: [],
+      };
+    }
+    return generatePotentialTrades(currentData, true);
+  }, [isOpen, currentData, refreshTrigger]);
 
   const autoExecuteCount = useMemo(
     () => engineSummary.setups.filter((s) => s.isAutoExecute).length,

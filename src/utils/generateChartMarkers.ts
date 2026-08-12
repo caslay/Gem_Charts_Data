@@ -291,7 +291,7 @@ export function generateVolumetricMarkers(candles: MarkerCandle[], colors: Marke
         arrowColor = isPerfect ? '#00f0ff' : fadedColor;
       } else {
         const isStrong = c.taker_buy_vol !== undefined && c.taker_sell_vol !== undefined && c.taker_buy_vol > c.taker_sell_vol;
-        const weakColor = colors.theme === 'light' ? 'rgba(0, 0, 0, 0.15)' : 'rgba(255, 255, 255, 0.15)';
+        const weakColor = colors.theme === 'light' ? 'rgba(0, 0, 0, 0.45)' : 'rgba(255, 255, 255, 0.45)';
         arrowColor = isStrong ? (colors.volumetricStrongArrowColor || (colors.theme === 'light' ? '#e11d48' : '#ff007f')) : weakColor;
       }
 
@@ -322,7 +322,7 @@ export function generateVolumetricMarkers(candles: MarkerCandle[], colors: Marke
         arrowColor = isPerfect ? '#ff007f' : fadedColor;
       } else {
         const isStrong = c.taker_buy_vol !== undefined && c.taker_sell_vol !== undefined && c.taker_sell_vol > c.taker_buy_vol;
-        const weakColor = colors.theme === 'light' ? 'rgba(0, 0, 0, 0.15)' : 'rgba(255, 255, 255, 0.15)';
+        const weakColor = colors.theme === 'light' ? 'rgba(0, 0, 0, 0.45)' : 'rgba(255, 255, 255, 0.45)';
         arrowColor = isStrong ? (colors.volumetricStrongArrowColor || (colors.theme === 'light' ? '#e11d48' : '#ff007f')) : weakColor;
       }
 

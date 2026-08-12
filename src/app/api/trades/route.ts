@@ -555,8 +555,11 @@ async function handleDeleteFallback(req: Request) {
  * 5. Persists the trade execution into the Neon SQL PostgreSQL database.
  */
 
+let isSchemaInitialized = false;
+
 // Self-healing trading_account database schema generator
 async function initAccountTable() {
+  if (isSchemaInitialized) return;
   try {
     await sql`
       CREATE TABLE IF NOT EXISTS trading_account (
@@ -593,6 +596,7 @@ async function getOrCreateAccount(userEmail: string) {
 
 // Self-healing database schema generator
 async function initTradesTable() {
+  if (isSchemaInitialized) return;
   try {
     // Ensure account table is initialized
     await initAccountTable();
@@ -621,6 +625,7 @@ async function initTradesTable() {
     await sql`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS risk_amount_usd DECIMAL(18, 2);`;
     await sql`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS opened_at TIMESTAMP WITH TIME ZONE;`;
     await sql`ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS closed_at TIMESTAMP WITH TIME ZONE;`;
+    isSchemaInitialized = true;
   } catch (error) {
     console.error("[PAPER TRADES API] Self-healing table initialization failed:", error);
     throw error;

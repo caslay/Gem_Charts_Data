@@ -390,15 +390,18 @@ export async function GET(req: Request) {
     const formatCandles = (data: any[]) => {
       const now = Date.now();
       return data.map((c) => {
-        const v = parseFloat(c[5]);
-        const taker_buy_vol = parseFloat(c[9]);
+        const v = parseFloat(c[5]) || 0;
+        const openPrice = parseFloat(c[1]);
+        const closePrice = parseFloat(c[4]);
+        const rawTakerBuy = parseFloat(c[9]);
+        const taker_buy_vol = !isNaN(rawTakerBuy) && rawTakerBuy >= 0 ? rawTakerBuy : (v * (closePrice > openPrice ? 0.6 : 0.4));
         const taker_sell_vol = v - taker_buy_vol;
         return {
           t: c[0],
-          o: parseFloat(c[1]),
+          o: openPrice,
           h: parseFloat(c[2]),
           l: parseFloat(c[3]),
-          c: parseFloat(c[4]),
+          c: closePrice,
           v: v,
           taker_buy_vol,
           taker_sell_vol,

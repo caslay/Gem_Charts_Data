@@ -15,6 +15,20 @@ import { useLayerStore } from '@/lib/chartLayers/store';
 import ChartLayerHud from './ChartLayerHud';
 // Imports of detectActiveFVGs, mapAndConsolidateFVGs, and analyzeMarketStructure removed to prevent main-thread blocking calculations
 
+function findCandleByTime(candles: Candle[] | undefined, targetSec: number): Candle | undefined {
+  if (!candles || candles.length === 0) return undefined;
+  let low = 0;
+  let high = candles.length - 1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const midSec = Math.floor(candles[mid].t / 1000);
+    if (midSec === targetSec) return candles[mid];
+    if (midSec < targetSec) low = mid + 1;
+    else high = mid - 1;
+  }
+  return undefined;
+}
+
 interface ChartProps {
   data: Candle[];
   activeFvgs?: any[];
@@ -108,6 +122,7 @@ export default function Chart({
   const htmlLayerCacheRef = useRef<Record<string, React.ReactNode>>({});
   const prevFirstCandleTimeRef = useRef<number | null>(null);
   const lastDataPayloadRef = useRef<any>(null);
+  const [, setViewportTick] = useState(0);
 
   const getLayerStorage = useCallback((layerId: string) => {
     if (!layerStorageRef.current.has(layerId)) {
@@ -1135,16 +1150,14 @@ export default function Chart({
           }
           setSnappedPrice(calculatedSnap);
 
-          // Look up volume from liveCandle or historical data
+          // Fast binary search lookup for hovered candle volume
           let volume = 0;
           const hoverTime = Number(param.time);
 
           if (liveCandle && Number(liveCandle.time) === hoverTime) {
             volume = liveCandle.volume;
           } else {
-            const histCandle = dataRef.current?.find(
-              (d) => Math.floor(d.t / 1000) === hoverTime
-            );
+            const histCandle = findCandleByTime(dataRef.current, hoverTime);
             if (histCandle) {
               volume = histCandle.v;
             }
@@ -1344,6 +1357,46 @@ export default function Chart({
     }
   }, [data, theme, isBacktest]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
+  // Reset viewport and layer caches whenever timeframe interval changes
+  useEffect(() => {
+    isInitialLoad.current = true;
+    
+    // Cleanly remove all active canvas price lines before clearing storage
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (chart && series) {
+      const activeTheme = theme === 'dark' ? 'dark' : 'light';
+      registry.getAll().forEach((layer) => {
+        if (layer.clearChart) {
+          const storage = getLayerStorage(layer.id);
+          try {
+            layer.clearChart({
+              chart,
+              series,
+              seriesMarkers: seriesMarkersRef.current,
+              data: (marketContextData || undefined) as any,
+              activeCandles: localCandles,
+              theme: activeTheme as 'dark' | 'light',
+              themeSettings,
+              storage,
+              structureState,
+              contextAnchorTimestamp,
+              engineSettings: context.engineSettings,
+            });
+          } catch (err) {
+            console.error(`[LayerOrchestrator] Failed to clear layer ${layer.id} on timeframe switch:`, err);
+          }
+        }
+      });
+    }
+
+    layerStorageRef.current.clear();
+    htmlLayerCacheRef.current = {};
+    lastClosedTRef.current = null;
+    lastVisibleRangeRef.current = null;
+    lastDataPayloadRef.current = null;
+  }, [interval]);
+
   // ── Dynamic Recalculations for Real-Time WebSocket Reactivity ──────────────
   const activeStructureState = useMemo(() => {
     if (!structureState) return null;
@@ -1469,7 +1522,7 @@ export default function Chart({
         }
       }
     });
-  }, [localCandles, marketContextData, visibility, theme, themeSettings, getLayerStorage, activeStructureState, structureState, contextAnchorTimestamp, context.engineSettings, activeDragLine, activeDragTradeLine, isHotkeyAlertModeActive, hoveredCandle]);
+  }, [localCandles, marketContextData, visibility, theme, themeSettings, getLayerStorage, activeStructureState, structureState, contextAnchorTimestamp, context.engineSettings, activeDragLine, activeDragTradeLine, isHotkeyAlertModeActive]);
 
   // ── Sync Active Alerts with Price Lines ───────────────────────────────────
   useEffect(() => {
@@ -1511,37 +1564,6 @@ export default function Chart({
     // 3. Trigger alert badge updates
     updateAlertPositions();
   }, [alerts, upColor, downColor, updateAlertPositions]);
-
-  useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart) return;
-
-    const handleChartUpdate = (logicalRange?: any) => {
-      updateAlertPositions();
-      computeFvgOverlay();
-      updateSvgCoordinates();
-
-      if (logicalRange && logicalRange.from < 15 && loadMoreHistory && !isFetchingMore) {
-        loadMoreHistory();
-      }
-    };
-
-    chart.timeScale().subscribeVisibleLogicalRangeChange(handleChartUpdate);
-
-    const priceScaleApi = chart.priceScale('right') as any;
-    if (priceScaleApi && priceScaleApi.subscribeVisiblePriceRangeChange) {
-      priceScaleApi.subscribeVisiblePriceRangeChange(handleChartUpdate);
-    }
-
-    return () => {
-      if (chartRef.current) {
-        chartRef.current.timeScale().unsubscribeVisibleLogicalRangeChange(handleChartUpdate);
-      }
-      if (priceScaleApi && priceScaleApi.unsubscribeVisiblePriceRangeChange) {
-        priceScaleApi.unsubscribeVisiblePriceRangeChange(handleChartUpdate);
-      }
-    };
-  }, [alerts, updateAlertPositions, updateSvgCoordinates, loadMoreHistory, isFetchingMore]); // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // ── V8.6: FVG Overlay Pixel Calculator (Finite & Anchored) ───────────────
   const computeFvgOverlay = useCallback(() => {
@@ -1596,6 +1618,49 @@ export default function Chart({
     });
   }, [activeFvgs]);
 
+  // ── Throttled Layout Update Scheduler (requestAnimationFrame) ──────────────
+  const rafScheduledRef = useRef(false);
+  const scheduleLayoutUpdates = useCallback(() => {
+    if (rafScheduledRef.current) return;
+    rafScheduledRef.current = true;
+    requestAnimationFrame(() => {
+      rafScheduledRef.current = false;
+      updateAlertPositions();
+      computeFvgOverlay();
+      updateSvgCoordinates();
+      setViewportTick((v) => (v + 1) % 100000);
+    });
+  }, [updateAlertPositions, computeFvgOverlay, updateSvgCoordinates]);
+
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+
+    const handleChartUpdate = (logicalRange?: any) => {
+      scheduleLayoutUpdates();
+
+      if (logicalRange && logicalRange.from < 15 && loadMoreHistory && !isFetchingMore) {
+        loadMoreHistory();
+      }
+    };
+
+    chart.timeScale().subscribeVisibleLogicalRangeChange(handleChartUpdate);
+
+    const priceScaleApi = chart.priceScale('right') as any;
+    if (priceScaleApi && priceScaleApi.subscribeVisiblePriceRangeChange) {
+      priceScaleApi.subscribeVisiblePriceRangeChange(handleChartUpdate);
+    }
+
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.timeScale().unsubscribeVisibleLogicalRangeChange(handleChartUpdate);
+      }
+      if (priceScaleApi && priceScaleApi.unsubscribeVisiblePriceRangeChange) {
+        priceScaleApi.unsubscribeVisiblePriceRangeChange(handleChartUpdate);
+      }
+    };
+  }, [alerts, scheduleLayoutUpdates, loadMoreHistory, isFetchingMore]); // eslint-disable-next-line react-hooks/exhaustive-deps
+
   // Recompute FVG overlay whenever activeFvgs or localCandles updates
   useEffect(() => {
     computeFvgOverlay();
@@ -1610,11 +1675,14 @@ export default function Chart({
         const lastBarTimeSec = Math.floor(lastBar.t / 1000);
 
         if (liveCandle.time >= lastBarTimeSec) {
-          // Update the lightweight chart series
+          // Direct canvas update via Lightweight Charts API (60fps native draw)
           seriesRef.current.update(liveCandle as any);
-          updateAlertPositions();
+          scheduleLayoutUpdates();
 
-          // Sync into localCandles state
+          // Sync into localCandles state ONLY on new candle open or candle close to prevent re-render thrashing
+          const isSameTime = liveCandle.time === lastBarTimeSec;
+          if (isSameTime && !liveCandle.isClosed) return;
+
           setLocalCandles(prev => {
             if (prev.length === 0) return prev;
             const updated = [...prev];
@@ -1635,7 +1703,7 @@ export default function Chart({
             };
 
             if (liveCandle.time === lastTimeSec) {
-              // Overwrite or update the last candle
+              // Overwrite or update the last candle on official close
               updated[lastIdx] = mappedCandle;
             } else if (liveCandle.time > lastTimeSec) {
               // Append a new candle
@@ -1648,7 +1716,7 @@ export default function Chart({
         console.error('[Chart] Lightweight Charts Update Error:', error);
       }
     }
-  }, [liveCandle, updateAlertPositions]);
+  }, [liveCandle, scheduleLayoutUpdates]);
 
   // ── Phase 3: The Execution Loop & Tick Crossovers ─────────────────────────
   const executeAlert = useCallback((alert: Alert) => {
@@ -1975,23 +2043,6 @@ export default function Chart({
           return null;
         }
 
-        const lastClosedT = localCandles[localCandles.length - 2]?.t;
-        const isNewCandle = lastClosedTRef.current !== lastClosedT;
-
-        const visibleRange = chartRef.current.timeScale().getVisibleLogicalRange();
-        const isViewportChanged = !lastVisibleRangeRef.current || 
-          lastVisibleRangeRef.current.from !== visibleRange?.from || 
-          lastVisibleRangeRef.current.to !== visibleRange?.to;
-
-        const isDataChanged = lastDataPayloadRef.current !== activeData;
-
-        // Force rebuild HTML nodes only if candle closed, viewport changed, data changed, or cache is missing
-        const shouldRecalculate = isNewCandle || isViewportChanged || isDataChanged || !htmlLayerCacheRef.current[layer.id];
-
-        if (!shouldRecalculate && htmlLayerCacheRef.current[layer.id]) {
-          return htmlLayerCacheRef.current[layer.id];
-        }
-
         const storage = getLayerStorage(layer.id);
         const context = {
           chart: chartRef.current,
@@ -2007,13 +2058,11 @@ export default function Chart({
         };
 
         try {
-          const rendered = (
+          return (
             <React.Fragment key={layer.id}>
               {layer.renderHtml(context)}
             </React.Fragment>
           );
-          htmlLayerCacheRef.current[layer.id] = rendered;
-          return rendered;
         } catch (err) {
           console.error(`[LayerOrchestrator] Failed to render HTML layer ${layer.id}:`, err);
           return null;
