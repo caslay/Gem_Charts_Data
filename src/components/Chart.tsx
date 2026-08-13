@@ -156,6 +156,10 @@ export default function Chart({
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
   const [alertLabelPositions, setAlertLabelPositions] = useState<{ id: string; y: number; price: number; color: string; status: 'active' | 'triggered' }[]>([]);
+
+  // Countdown timer for current candle
+  const countdownRef = useRef<HTMLDivElement>(null);
+  const [countdownText, setCountdownText] = useState<string>('');
   const [hudPulse, setHudPulse] = useState<'BULLISH' | 'BEARISH' | null>(null);
 
   // V8.6 — FVG Overlay: pixel-mapped anchored rectangles for unmitigated FVG zones
@@ -536,6 +540,21 @@ export default function Chart({
       return positions;
     });
   }, [alerts]);
+
+  const updateCountdownPosition = useCallback(() => {
+    const series = seriesRef.current;
+    if (!series || !countdownRef.current) return;
+    
+    const candles = localCandlesRef.current;
+    const currentPriceForAlerts = livePrice !== null && livePrice !== undefined
+      ? livePrice
+      : (candles && candles.length > 0 ? candles[candles.length - 1].c : 0);
+      
+    const y = series.priceToCoordinate(currentPriceForAlerts) as number | null;
+    if (y !== null) {
+      countdownRef.current.style.top = `${y}px`;
+    }
+  }, [livePrice]);
 
   // ── Ghost Line Performance Mechanics ──────────────────────────────────────
   const updateGhostLine = useCallback((offsetY: number, hoverTime: number | null) => {
@@ -1628,9 +1647,10 @@ export default function Chart({
       updateAlertPositions();
       computeFvgOverlay();
       updateSvgCoordinates();
+      updateCountdownPosition();
       setViewportTick((v) => (v + 1) % 100000);
     });
-  }, [updateAlertPositions, computeFvgOverlay, updateSvgCoordinates]);
+  }, [updateAlertPositions, computeFvgOverlay, updateSvgCoordinates, updateCountdownPosition]);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -1665,6 +1685,43 @@ export default function Chart({
   useEffect(() => {
     computeFvgOverlay();
   }, [activeFvgs, localCandles, computeFvgOverlay]);
+
+  // Countdown Timer Interval
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const candles = localCandlesRef.current;
+      if (!candles || candles.length === 0) return;
+      const latestCandle = candles[candles.length - 1];
+      
+      const intervalStr = interval || '5m'; 
+      let intSeconds = 300;
+      if (intervalStr.endsWith('m')) intSeconds = parseInt(intervalStr) * 60;
+      else if (intervalStr.endsWith('h')) intSeconds = parseInt(intervalStr) * 3600;
+      else if (intervalStr.endsWith('d')) intSeconds = parseInt(intervalStr) * 86400;
+
+      const openTimeSec = Math.floor(latestCandle.t / 1000);
+      const closeTimeSec = openTimeSec + intSeconds;
+      const nowSec = Math.floor(Date.now() / 1000);
+      let diff = closeTimeSec - nowSec;
+      
+      if (diff <= 0) {
+        setCountdownText('00:00');
+        return;
+      }
+      
+      const mm = Math.floor(diff / 60).toString().padStart(2, '0');
+      const ss = (diff % 60).toString().padStart(2, '0');
+      let text = `${mm}:${ss}`;
+      if (diff >= 3600) {
+        const hh = Math.floor(diff / 3600).toString().padStart(2, '0');
+        const remMm = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
+        text = `${hh}:${remMm}:${ss}`;
+      }
+      setCountdownText(text);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [interval]);
 
   // ── Phase 2: Live Candle Injection & Snapping Update ─────────────────────
   useEffect(() => {
@@ -2072,8 +2129,17 @@ export default function Chart({
       {/* Persistent Layer Visibility Control HUD Panel */}
       <ChartLayerHud />
 
-      {/* HTML Overlays for Placed Alerts */}
+      {/* Dynamic DOM Overlays */}
       <div className="absolute right-0 top-0 bottom-0 w-28 pointer-events-none z-10 overflow-hidden">
+        {countdownText && (
+          <div
+            ref={countdownRef}
+            className="absolute right-[56px] -translate-y-1/2 pointer-events-none flex items-center justify-center bg-[#141416]/95 border border-[#4a4457]/50 text-[10px] text-muted font-mono font-bold tracking-wider px-1.5 py-[2px] rounded-sm shadow-md transition-none"
+            style={{ top: '-100px' }}
+          >
+            {countdownText}
+          </div>
+        )}
         {alertLabelPositions.map((pos) => (
           <div
             key={pos.id}
