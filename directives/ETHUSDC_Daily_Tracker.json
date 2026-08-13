@@ -1,15 +1,91 @@
 {
   "version": "1.0.0",
   "symbol": "ETHUSDC.p",
-  "lastUpdated": "2026-08-12T18:34:16.858Z",
+  "lastUpdated": "2026-08-13T17:29:11.440Z",
   "stats": {
-    "totalSetups": 14,
+    "totalSetups": 18,
     "success": 0,
     "stopOut": 4,
     "noTrigger": 0,
     "winRate": 0
   },
   "entries": [
+    {
+      "id": "ETH-20260813-1876",
+      "date": "2026-08-13",
+      "time": "17:29",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Retest into 15m/1H SIBI FVG supply zone ($1,8",
+      "htfDol": "PDL Swept ($1,870.50), targeting key internal SSL ($1,851.18) & PWL ($1,825.43)",
+      "smtStatus": "BEARISH_SYNC — Both BTC ($62,800) and ETH ($1,860.71) expanded lower; counter-trend 15m Bullish SMT signals VETOED by 1H Bearish HTF Gate Filter",
+      "entryRange": [
+        1876.3,
+        1882.5
+      ],
+      "invalidation": 1885.9,
+      "tp1": 1860.71,
+      "tp2": 1851.18,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,874.75 | 1H/H4 Bearish Expansion in Discount"
+    },
+    {
+      "id": "ETH-20260813-1872",
+      "date": "2026-08-13",
+      "time": "16:41",
+      "symbol": "ETHUSDC.p",
+      "setupType": "15m displacement down through $1,872.74 valid",
+      "htfDol": "PDL ($1,870.50 - Purged) & HTF Major Swing Low / SSL ($1,851.18)",
+      "smtStatus": "BEARISH_SYNC — BTC printed Lower Low ($63,010) with ETH confirming correlated breakdown below $1,870.50",
+      "entryRange": [
+        1872.5,
+        1878
+      ],
+      "invalidation": 1885.9,
+      "tp1": 1863.87,
+      "tp2": 1851.18,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,866.15 | 1H Bearish Order Flow Continuation"
+    },
+    {
+      "id": "ETH-20260813-1881",
+      "date": "2026-08-13",
+      "time": "16:35",
+      "symbol": "ETHUSDC.p",
+      "setupType": "15m Bearish MSS below $1,885.90 with displace",
+      "htfDol": "PDL ($1,870.50) & Asian Low ($1,870.50)",
+      "smtStatus": "BEARISH_SYNC — BTC and ETH synchronized downward expansion following $1,895.19 rejection, confirming HTF institutional short sponsorship.",
+      "entryRange": [
+        1881.63,
+        1884.03
+      ],
+      "invalidation": 1891.56,
+      "tp1": 1875.69,
+      "tp2": 1870.5,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,877.89 | HTF Bearish Order Flow Continuation"
+    },
+    {
+      "id": "ETH-20260813-1883",
+      "date": "2026-08-13",
+      "time": "16:07",
+      "symbol": "ETHUSDC.p",
+      "setupType": "15m Bearish MSS below $1,885.90 with displace",
+      "htfDol": "PDL ($1,870.50) & SSL Liquidity Pool ($1,868.23)",
+      "smtStatus": "BEARISH_SYNC / BULLISH_SMT_VETOED — Bullish SMT signals vetoed due to active 1H Bearish Order Flow gate filter",
+      "entryRange": [
+        1883,
+        1887
+      ],
+      "invalidation": 1895.2,
+      "tp1": 1875.69,
+      "tp2": 1870.5,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,880.74 | HTF Bearish Continuation"
+    },
     {
       "id": "ETH-20260812-1887",
       "date": "2026-08-12",
