@@ -1,3 +1,10 @@
+import type {
+  OrderFlowState,
+  OrderFlowStateRecord,
+  OrderFlowTimelineStats,
+  OrderFlowTimelineSummary
+} from '@/lib/quantEngine/types';
+
 export interface RestingLiquidityPools {
   BSL_Magnets: number[];
   SSL_Magnets: number[];
@@ -15,10 +22,11 @@ export interface SmartMoneySentiment {
 
 export interface OrderFlowEngine {
   open_interest_trend: string;
-  displacement_sponsorship: string;
+  displacement_sponsorship: string | any;
   resting_liquidity_pools: RestingLiquidityPools;
   liquidation_events: LiquidationEvents;
   smart_money_sentiment: SmartMoneySentiment;
+  state_timeline?: OrderFlowTimelineSummary;
 }
 
 export async function fetchRestingLiquidity(symbol: string = 'ETHUSDC'): Promise<RestingLiquidityPools> {
@@ -245,3 +253,502 @@ export async function fetchSmartMoneySentiment(symbol: string = 'ETHUSDC'): Prom
     };
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 📈 Order Flow State Machine & Chronological Timeline Engine (V14.1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Normalizes raw string input into a strongly typed OrderFlowState enum.
+ */
+export function normalizeOrderFlowState(raw: string | undefined | null): OrderFlowState {
+  if (!raw) return 'NEUTRAL';
+  const u = raw.toUpperCase().trim();
+  if (u.includes('RISING_WITH_PRICE') || u === 'RISING_WITH_PRICE') return 'RISING_WITH_PRICE';
+  if (u.includes('RISING_AGAINST_PRICE') || u === 'RISING_AGAINST_PRICE') return 'RISING_AGAINST_PRICE';
+  if (u.includes('FALLING_WITH_PRICE') || u === 'FALLING_WITH_PRICE') return 'FALLING_WITH_PRICE';
+  if (u.includes('FALLING_AGAINST_PRICE') || u === 'FALLING_AGAINST_PRICE') return 'FALLING_AGAINST_PRICE';
+  if (u.includes('FLAT') || u === 'FLAT') return 'FLAT';
+  if (u.includes('BULLISH')) return 'RISING_WITH_PRICE';
+  if (u.includes('BEARISH')) return 'RISING_AGAINST_PRICE';
+  if (u === 'UNAVAILABLE') return 'UNAVAILABLE';
+  return 'NEUTRAL';
+}
+
+/**
+ * Computes aggregated statistics across a history of state transitions.
+ */
+export function calculateOrderFlowStats(
+  history: OrderFlowStateRecord[],
+  activeState: OrderFlowStateRecord | null,
+  nowMs: number = Date.now()
+): OrderFlowTimelineStats {
+  let buySec = 0;
+  let shortSec = 0;
+  let liqSec = 0;
+  let covSec = 0;
+  let neutSec = 0;
+  let totalDur = 0;
+  let totalCount = 0;
+
+  const stateDurationMap: Record<OrderFlowState, number> = {
+    RISING_WITH_PRICE: 0,
+    RISING_AGAINST_PRICE: 0,
+    FALLING_WITH_PRICE: 0,
+    FALLING_AGAINST_PRICE: 0,
+    FLAT: 0,
+    NEUTRAL: 0,
+    UNAVAILABLE: 0
+  };
+
+  const oneDayAgo = nowMs - 24 * 60 * 60 * 1000;
+
+  const allRecords: OrderFlowStateRecord[] = [...history];
+  if (activeState) {
+    const elapsed = Math.max(1, Math.round((nowMs - activeState.entered_at) / 1000));
+    allRecords.push({
+      ...activeState,
+      duration_seconds: elapsed
+    });
+  }
+
+  for (const rec of allRecords) {
+    const dur = rec.duration_seconds || (rec.exited_at ? Math.max(1, Math.round((rec.exited_at - rec.entered_at) / 1000)) : 60);
+    totalDur += dur;
+    totalCount += 1;
+
+    if (rec.entered_at >= oneDayAgo) {
+      stateDurationMap[rec.state] = (stateDurationMap[rec.state] || 0) + dur;
+    }
+
+    switch (rec.state) {
+      case 'RISING_WITH_PRICE':
+        buySec += dur;
+        break;
+      case 'RISING_AGAINST_PRICE':
+        shortSec += dur;
+        break;
+      case 'FALLING_WITH_PRICE':
+        liqSec += dur;
+        break;
+      case 'FALLING_AGAINST_PRICE':
+        covSec += dur;
+        break;
+      default:
+        neutSec += dur;
+        break;
+    }
+  }
+
+  let dominant_state: OrderFlowState = 'NEUTRAL';
+  let maxTime = -1;
+  for (const [st, timeVal] of Object.entries(stateDurationMap) as [OrderFlowState, number][]) {
+    if (timeVal > maxTime && st !== 'NEUTRAL' && st !== 'FLAT' && st !== 'UNAVAILABLE') {
+      maxTime = timeVal;
+      dominant_state = st;
+    }
+  }
+
+  return {
+    total_transitions: history.length + (activeState ? 1 : 0),
+    time_in_buy_sponsorship_sec: buySec,
+    time_in_short_sponsorship_sec: shortSec,
+    time_in_liquidation_sec: liqSec,
+    time_in_covering_sec: covSec,
+    time_in_neutral_sec: neutSec,
+    dominant_state_last_24h: dominant_state,
+    avg_state_duration_sec: totalCount > 0 ? Math.round(totalDur / totalCount) : 0,
+  };
+}
+
+/**
+ * Pure deterministic chronological timeline generator from an array of candles.
+ * Used for Backtest Replay iterations and bootstrapping live historical state memory.
+ */
+export function computeTimelineFromCandles(
+  candles: Array<{
+    t: number;
+    o: number;
+    h: number;
+    l: number;
+    c: number;
+    v?: number;
+    taker_buy_vol?: number;
+    taker_sell_vol?: number;
+  }>,
+  symbol: string = 'ETHUSDC'
+): OrderFlowTimelineSummary {
+  if (!candles || candles.length === 0) {
+    const emptyStats: OrderFlowTimelineStats = {
+      total_transitions: 0,
+      time_in_buy_sponsorship_sec: 0,
+      time_in_short_sponsorship_sec: 0,
+      time_in_liquidation_sec: 0,
+      time_in_covering_sec: 0,
+      time_in_neutral_sec: 0,
+      dominant_state_last_24h: 'NEUTRAL',
+      avg_state_duration_sec: 0
+    };
+    return { active_state: null, history: [], stats: emptyStats };
+  }
+
+  // Calculate rolling volume SMA
+  const rollingVols: number[] = [];
+  const candleStates: {
+    candle: (typeof candles)[0];
+    state: OrderFlowState;
+    buyRatio: number;
+    volDelta: number;
+  }[] = [];
+
+  for (let i = 0; i < candles.length; i++) {
+    const c = candles[i];
+    const vol = c.v ?? 0;
+    rollingVols.push(vol);
+    const avgVol = calculateSMA(rollingVols.slice(Math.max(0, i - 14), i + 1), 14);
+
+    const isPriceRising = c.c >= c.o;
+    const takerBuy = c.taker_buy_vol ?? (vol * (isPriceRising ? 0.6 : 0.4));
+    const takerSell = c.taker_sell_vol ?? (vol - takerBuy);
+    const totalTaker = takerBuy + takerSell;
+    const buyRatio = totalTaker > 0 ? takerBuy / totalTaker : 0.5;
+    const volDelta = takerBuy - takerSell;
+
+    const isHighVolume = avgVol > 0 ? vol >= avgVol * 0.95 : true;
+
+    let state: OrderFlowState = 'NEUTRAL';
+
+    if (isHighVolume) {
+      if (isPriceRising && buyRatio >= 0.505) {
+        // Aggressive buying driving price up
+        state = 'RISING_WITH_PRICE';
+      } else if (!isPriceRising && buyRatio <= 0.495) {
+        // Aggressive selling driving price down
+        state = 'RISING_AGAINST_PRICE';
+      } else if (!isPriceRising && buyRatio > 0.505) {
+        // Price falling despite taker buying -> Long Liquidation / Absorption
+        state = 'FALLING_WITH_PRICE';
+      } else if (isPriceRising && buyRatio < 0.495) {
+        // Price rising despite taker selling -> Short Covering / Squeeze
+        state = 'FALLING_AGAINST_PRICE';
+      } else {
+        state = 'FLAT';
+      }
+    } else {
+      state = isPriceRising ? 'FLAT' : 'NEUTRAL';
+    }
+
+    candleStates.push({ candle: c, state, buyRatio, volDelta });
+  }
+
+  // Group contiguous candle states into timeline records
+  const history: OrderFlowStateRecord[] = [];
+  let currentGroup: {
+    state: OrderFlowState;
+    startCandle: (typeof candles)[0];
+    lastCandle: (typeof candles)[0];
+    count: number;
+    totalVolDelta: number;
+    buyRatioSum: number;
+  } | null = null;
+
+  for (let i = 0; i < candleStates.length; i++) {
+    const cs = candleStates[i];
+    if (!currentGroup) {
+      currentGroup = {
+        state: cs.state,
+        startCandle: cs.candle,
+        lastCandle: cs.candle,
+        count: 1,
+        totalVolDelta: cs.volDelta,
+        buyRatioSum: cs.buyRatio,
+      };
+    } else if (currentGroup.state === cs.state) {
+      currentGroup.lastCandle = cs.candle;
+      currentGroup.count += 1;
+      currentGroup.totalVolDelta += cs.volDelta;
+      currentGroup.buyRatioSum += cs.buyRatio;
+    } else {
+      // Close previous group
+      const entered_at = currentGroup.startCandle.t;
+      // Approximate exit timestamp from next candle open or candle end
+      const exited_at = cs.candle.t;
+      const entry_price = currentGroup.startCandle.o;
+      const exit_price = currentGroup.lastCandle.c;
+      const duration_seconds = Math.max(1, Math.round((exited_at - entered_at) / 1000));
+      const price_change = parseFloat((exit_price - entry_price).toFixed(2));
+      const price_change_pct = parseFloat((((exit_price - entry_price) / entry_price) * 100).toFixed(3));
+
+      history.push({
+        id: `bt-${entered_at}`,
+        symbol,
+        state: currentGroup.state,
+        entered_at,
+        entry_price,
+        exited_at,
+        exit_price,
+        duration_seconds,
+        price_change,
+        price_change_pct,
+        metadata: {
+          candle_count: currentGroup.count,
+          volume_delta: parseFloat(currentGroup.totalVolDelta.toFixed(2)),
+          taker_buy_ratio: parseFloat((currentGroup.buyRatioSum / currentGroup.count).toFixed(3)),
+        }
+      });
+
+      // Start new group
+      currentGroup = {
+        state: cs.state,
+        startCandle: cs.candle,
+        lastCandle: cs.candle,
+        count: 1,
+        totalVolDelta: cs.volDelta,
+        buyRatioSum: cs.buyRatio,
+      };
+    }
+  }
+
+  let active_state: OrderFlowStateRecord | null = null;
+
+  if (currentGroup) {
+    const entered_at = currentGroup.startCandle.t;
+    const entry_price = currentGroup.startCandle.o;
+    const currentPrice = currentGroup.lastCandle.c;
+    const nowMs = candles[candles.length - 1].t;
+    const duration_seconds = Math.max(1, Math.round((nowMs - entered_at) / 1000));
+    const price_change = parseFloat((currentPrice - entry_price).toFixed(2));
+    const price_change_pct = parseFloat((((currentPrice - entry_price) / entry_price) * 100).toFixed(3));
+
+    active_state = {
+      id: `active-${entered_at}`,
+      symbol,
+      state: currentGroup.state,
+      entered_at,
+      entry_price,
+      exited_at: null,
+      exit_price: null,
+      duration_seconds,
+      price_change,
+      price_change_pct,
+      metadata: {
+        candle_count: currentGroup.count,
+        volume_delta: parseFloat(currentGroup.totalVolDelta.toFixed(2)),
+        taker_buy_ratio: parseFloat((currentGroup.buyRatioSum / currentGroup.count).toFixed(3)),
+        is_live: true,
+      }
+    };
+  }
+
+  const stats = calculateOrderFlowStats(history, active_state, candles[candles.length - 1].t);
+
+  return {
+    active_state,
+    history,
+    stats,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🏛️ Stateful In-Memory & Database Persistent Tracker Singleton (Live Streaming)
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface SymbolTrackerMemory {
+  active_state: OrderFlowStateRecord | null;
+  history: OrderFlowStateRecord[];
+  isBootstrapped: boolean;
+}
+
+class OrderFlowStateTrackerClass {
+  private trackerMap = new Map<string, SymbolTrackerMemory>();
+
+  private getMemory(symbol: string): SymbolTrackerMemory {
+    const key = symbol.toUpperCase();
+    if (!this.trackerMap.has(key)) {
+      this.trackerMap.set(key, {
+        active_state: null,
+        history: [],
+        isBootstrapped: false,
+      });
+    }
+    return this.trackerMap.get(key)!;
+  }
+
+  /**
+   * Bootstraps historical timeline state from recent candles if uninitialized.
+   */
+  public bootstrapFromCandles(symbol: string, candles: Array<any>) {
+    const mem = this.getMemory(symbol);
+    if (!mem.isBootstrapped && candles && candles.length > 0) {
+      const summary = computeTimelineFromCandles(candles, symbol);
+      mem.history = summary.history.slice(-100);
+      mem.active_state = summary.active_state;
+      mem.isBootstrapped = true;
+    }
+  }
+
+  /**
+   * Evaluates live ticks/polls and logs state transitions.
+   */
+  public updateLiveState(
+    symbol: string,
+    rawState: string,
+    timestamp: number,
+    livePrice: number,
+    metadata?: Record<string, any>
+  ): OrderFlowTimelineSummary {
+    const mem = this.getMemory(symbol);
+    const normalizedState = normalizeOrderFlowState(rawState);
+
+    // Initial state setup
+    if (!mem.active_state) {
+      mem.active_state = {
+        id: `live-${timestamp}`,
+        symbol,
+        state: normalizedState,
+        entered_at: timestamp,
+        entry_price: livePrice,
+        exited_at: null,
+        exit_price: null,
+        duration_seconds: 0,
+        price_change: 0,
+        price_change_pct: 0,
+        metadata: { ...metadata, is_live: true }
+      };
+      const stats = calculateOrderFlowStats(mem.history, mem.active_state, timestamp);
+      return {
+        active_state: mem.active_state,
+        history: mem.history.slice(-50),
+        stats
+      };
+    }
+
+    // Check for State Transition
+    if (mem.active_state.state !== normalizedState) {
+      // 1. Close previous record
+      const previous = mem.active_state;
+      const exited_at = timestamp;
+      const exit_price = livePrice;
+      const duration_seconds = Math.max(1, Math.round((exited_at - previous.entered_at) / 1000));
+      const price_change = parseFloat((exit_price - previous.entry_price).toFixed(2));
+      const price_change_pct = parseFloat((((exit_price - previous.entry_price) / previous.entry_price) * 100).toFixed(3));
+
+      const closedRecord: OrderFlowStateRecord = {
+        ...previous,
+        exited_at,
+        exit_price,
+        duration_seconds,
+        price_change,
+        price_change_pct,
+      };
+
+      // Push to in-memory history ring buffer
+      mem.history.push(closedRecord);
+      if (mem.history.length > 200) {
+        mem.history.shift();
+      }
+
+      // Asynchronously persist to Neon PostgreSQL
+      persistStateTransitionToDb(closedRecord).catch((err) => {
+        console.warn(`[OrderFlowTracker] Failed to persist state transition to DB: ${err.message || err}`);
+      });
+
+      // 2. Create new active state record
+      mem.active_state = {
+        id: `live-${timestamp}`,
+        symbol,
+        state: normalizedState,
+        entered_at: timestamp,
+        entry_price: livePrice,
+        exited_at: null,
+        exit_price: null,
+        duration_seconds: 0,
+        price_change: 0,
+        price_change_pct: 0,
+        metadata: { ...metadata, is_live: true }
+      };
+    } else {
+      // State is ongoing: update duration and live price delta
+      const duration_seconds = Math.max(0, Math.round((timestamp - mem.active_state.entered_at) / 1000));
+      const price_change = parseFloat((livePrice - mem.active_state.entry_price).toFixed(2));
+      const price_change_pct = parseFloat((((livePrice - mem.active_state.entry_price) / mem.active_state.entry_price) * 100).toFixed(3));
+
+      mem.active_state = {
+        ...mem.active_state,
+        duration_seconds,
+        price_change,
+        price_change_pct,
+      };
+    }
+
+    const stats = calculateOrderFlowStats(mem.history, mem.active_state, timestamp);
+    return {
+      active_state: mem.active_state,
+      history: mem.history.slice(-50),
+      stats
+    };
+  }
+
+  /**
+   * Retrieves the current timeline snapshot.
+   */
+  public getTimelineSummary(symbol: string): OrderFlowTimelineSummary {
+    const mem = this.getMemory(symbol);
+    const now = Date.now();
+    const stats = calculateOrderFlowStats(mem.history, mem.active_state, now);
+    return {
+      active_state: mem.active_state,
+      history: mem.history.slice(-50),
+      stats
+    };
+  }
+
+  /**
+   * Directly injects historical records into memory cache (e.g. from DB load).
+   */
+  public setHistory(symbol: string, records: OrderFlowStateRecord[]) {
+    const mem = this.getMemory(symbol);
+    mem.history = records;
+    mem.isBootstrapped = true;
+  }
+}
+
+export const OrderFlowStateTracker = new OrderFlowStateTrackerClass();
+
+/**
+ * Asynchronously logs closed state transitions to database.
+ */
+async function persistStateTransitionToDb(record: OrderFlowStateRecord): Promise<void> {
+  try {
+    const { sql } = await import('@vercel/postgres');
+    await sql`
+      INSERT INTO order_flow_states_log (
+        symbol,
+        state,
+        entered_at,
+        entry_price,
+        exited_at,
+        exit_price,
+        duration_seconds,
+        price_change,
+        price_change_pct,
+        metadata
+      ) VALUES (
+        ${record.symbol},
+        ${record.state},
+        ${record.entered_at},
+        ${record.entry_price},
+        ${record.exited_at},
+        ${record.exit_price},
+        ${record.duration_seconds},
+        ${record.price_change},
+        ${record.price_change_pct},
+        ${JSON.stringify(record.metadata || {})}
+      )
+    `;
+  } catch (error: any) {
+    // Database offline or serverless cold start - silently ignore as memory cache holds state
+    // console.warn(`[order_flow_states_log] Database write skipped: ${error.message || error}`);
+  }
+}
+

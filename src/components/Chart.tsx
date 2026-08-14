@@ -1322,15 +1322,20 @@ export default function Chart({
   // ── Sync Historical Data ──────────────────────────────────────────────────
   useEffect(() => {
     if (seriesRef.current && data && data.length > 0) {
-      const formattedData = data.map((d) => ({
-        time: (Math.floor(d.t / 1000)) as any,
-        open: d.o,
-        high: d.h,
-        low: d.l,
-        close: d.c,
-      }));
+      // Format and deduplicate candles by timestamp (in seconds) to guarantee strictly ascending order for Lightweight Charts
+      const candleMap = new Map<number, { time: any; open: number; high: number; low: number; close: number }>();
+      for (const d of data) {
+        const timeSec = Math.floor(d.t / 1000);
+        candleMap.set(timeSec, {
+          time: timeSec as any,
+          open: d.o,
+          high: d.h,
+          low: d.l,
+          close: d.c,
+        });
+      }
 
-      formattedData.sort((a, b) => a.time - b.time);
+      const formattedData = Array.from(candleMap.values()).sort((a, b) => (a.time as number) - (b.time as number));
 
       // Calculate shift count for left-edge prepends
       let prependedCount = 0;

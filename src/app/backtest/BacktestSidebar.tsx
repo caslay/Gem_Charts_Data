@@ -19,6 +19,8 @@ import type { MarketDataPayload } from '@/hooks/useMarketData';
 import type { BacktestTimeframe } from '@/hooks/useBacktestEngine';
 import { useMarketDataContext } from '@/context/MarketDataContext';
 import { calculateATR } from '@/lib/riskEngine';
+import OrderFlowTimelineModal from '@/components/modals/OrderFlowTimelineModal';
+import { getStateMetadata, formatDuration } from '@/components/OrderFlowTimelineRibbon';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 interface BacktestSidebarProps {
@@ -116,6 +118,7 @@ export default function BacktestSidebar({
   onClose,
 }: BacktestSidebarProps) {
   const [isHudExpanded, setIsHudExpanded] = useState(false);
+  const [isOrderFlowModalOpen, setIsOrderFlowModalOpen] = useState(false);
   const { themeSettings } = useMarketDataContext();
 
   const metrics = enrichedPayload?.ipda_metrics;
@@ -462,22 +465,70 @@ export default function BacktestSidebar({
               </div>
             </div>
 
-            {/* Card: Order Flow Pulse */}
+            {/* Card: Order Flow & State Tracker */}
             <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
-              <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] tracking-widest">
-                <BarChart3 size={12} className="text-accent" />
-                <span>Order Flow Pulse</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] tracking-widest">
+                  <BarChart3 size={12} className="text-accent" />
+                  <span>Order Flow & State</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsOrderFlowModalOpen(true)}
+                  className="p-1 rounded-md text-muted hover:text-accent hover:bg-card border border-transparent hover:border-card-border transition-all cursor-pointer"
+                  title="Open Order Flow State Timeline"
+                >
+                  <Activity size={12} />
+                </button>
               </div>
               <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-[11px] text-muted font-bold">OI Trend</span>
-                  <span className={`text-[11px] font-black uppercase tracking-wider ${
-                    orderFlow?.open_interest_trend === 'BULLISH' ? 'text-emerald-500' :
-                    orderFlow?.open_interest_trend === 'BEARISH' ? 'text-rose-500' : 'text-muted'
-                  }`}>
-                    {orderFlow?.open_interest_trend || 'NEUTRAL'}
-                  </span>
-                </div>
+                {/* Active State Machine Regime */}
+                {(() => {
+                  const activeSt = orderFlow?.state_timeline?.active_state;
+                  const meta = activeSt ? getStateMetadata(activeSt.state) : getStateMetadata(orderFlow?.open_interest_trend || 'NEUTRAL');
+                  return (
+                    <div className={`p-2.5 rounded-lg border ${meta.colorBorder} ${meta.colorBgMuted} space-y-1`}>
+                      <div className="flex justify-between items-center text-[10px]">
+                        <span className="text-muted uppercase font-bold">OI State Regime:</span>
+                        <span className={`font-black uppercase tracking-wider ${meta.colorText}`}>
+                          {meta.label}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center text-[9px] text-muted-foreground">
+                        <span>{meta.description}</span>
+                        {activeSt?.duration_seconds !== undefined && (
+                          <span className="font-mono font-bold text-foreground">
+                            {formatDuration(activeSt.duration_seconds)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Mini Timeline Ribbon Preview */}
+                {orderFlow?.state_timeline?.history && orderFlow.state_timeline.history.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center text-[9px] text-muted font-bold uppercase">
+                      <span>Replay Transitions:</span>
+                      <span>{orderFlow.state_timeline.history.length} logged</span>
+                    </div>
+                    <div className="w-full h-2 rounded-sm overflow-hidden flex gap-[1px] bg-background/60 p-0.5 border border-card-border/60">
+                      {orderFlow.state_timeline.history.slice(-10).map((seg: any, idx: number) => {
+                        const meta = getStateMetadata(seg.state);
+                        return (
+                          <div
+                            key={`bt-sidebar-mini-seg-${seg.id || seg.entered_at}-${idx}`}
+                            style={{ flex: Math.max(1, seg.duration_seconds || 30) }}
+                            className={`h-full rounded-[1px] ${meta.colorBg} opacity-80`}
+                            title={`${meta.label} (${formatDuration(seg.duration_seconds)})`}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex justify-between items-center">
                   <span className="text-[11px] text-muted font-bold">Displacement</span>
                   <span className={`text-[11px] font-black uppercase tracking-wider ${
@@ -488,6 +539,16 @@ export default function BacktestSidebar({
                     {metrics?.institutional_sponsorship?.status || 'INACTIVE'}
                   </span>
                 </div>
+
+                {/* Open Timeline Modal Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsOrderFlowModalOpen(true)}
+                  className="w-full py-1.5 px-2.5 rounded-lg bg-card hover:bg-accent/15 border border-card-border hover:border-accent text-muted hover:text-accent font-mono text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                >
+                  <Activity size={11} />
+                  <span>[ VIEW REPLAY TIMELINE & STATS ]</span>
+                </button>
 
                 {/* Statistical Validation */}
                 {metrics?.institutional_sponsorship?.statistical_validation && (
@@ -519,16 +580,6 @@ export default function BacktestSidebar({
                     </div>
                   </div>
                 )}
-
-                {/* Smart Money Divergence */}
-                <div className="bg-background/40 p-2.5 border border-card-border rounded-lg">
-                  <span className="text-[10px] text-muted block mb-1 uppercase tracking-wider font-bold">
-                    Smart Money Divergence
-                  </span>
-                  <p className="text-[10px] text-muted italic leading-normal select-text">
-                    {orderFlow?.smart_money_sentiment?.smart_money_divergence || 'No divergence detected in HTF/LTF pairing.'}
-                  </p>
-                </div>
               </div>
             </div>
 
@@ -738,6 +789,16 @@ export default function BacktestSidebar({
 
         </div>
       </aside>
+
+      {/* Order Flow State Timeline Modal for Backtest Replay */}
+      <OrderFlowTimelineModal
+        isOpen={isOrderFlowModalOpen}
+        onClose={() => setIsOrderFlowModalOpen(false)}
+        timeline={orderFlow?.state_timeline}
+        livePrice={lastPrice}
+        symbol="ETHUSDC.backtest"
+        isBacktest={true}
+      />
     </>
   );
 }

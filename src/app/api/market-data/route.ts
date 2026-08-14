@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { fetchRestingLiquidity, fetchOIMetricsAndLiquidations, fetchSmartMoneySentiment } from '@/lib/orderFlowEngine';
+import { fetchRestingLiquidity, fetchOIMetricsAndLiquidations, fetchSmartMoneySentiment, OrderFlowStateTracker } from '@/lib/orderFlowEngine';
 import { detectActiveFVGs, mapAndConsolidateFVGs } from '@/lib/fvgEngine';
 import { verifyDisplacement } from '@/lib/displacementEngine';
 import { calculateDynamicRisk, generateTradeExecutionParameters, calculateATR } from '@/lib/riskEngine';
@@ -108,8 +108,12 @@ function generateMockCandles(
   // seamless price continuity across the lazy-load boundary.
   let currentPrice = (startPrice && isFinite(startPrice) && startPrice > 0) ? startPrice : basePrice;
 
+  // Align start timestamp to the exact interval boundary
+  const rawNow = endTimestamp || Date.now();
+  const alignedNow = Math.floor(rawNow / intervalMs) * intervalMs;
+
   for (let i = 0; i < count; i++) {
-    const timestamp = now - i * intervalMs;
+    const timestamp = alignedNow - i * intervalMs;
     const change = (Math.random() - 0.5) * (currentPrice * 0.0008);
     const close = currentPrice;
     const open = currentPrice - change;
@@ -1233,13 +1237,28 @@ export async function GET(req: Request) {
       projected_targets,
       smt_traps,
       pricing_context,
-      order_flow_engine: {
-        open_interest_trend,
-        displacement_sponsorship: institutional_sponsorship.status !== "INACTIVE" ? "ACTIVE" : "INACTIVE",
-        resting_liquidity_pools,
-        liquidation_events,
-        smart_money_sentiment,
-      },
+      order_flow_engine: (() => {
+        // Bootstrap in-memory state tracking if needed
+        OrderFlowStateTracker.bootstrapFromCandles(symbol, candles15m.length > 0 ? candles15m : candles5m);
+        const state_timeline = OrderFlowStateTracker.updateLiveState(
+          symbol,
+          open_interest_trend,
+          latestCandleFromAny ? latestCandleFromAny.t : Date.now(),
+          currentLivePrice,
+          {
+            displacement_status: institutional_sponsorship.status,
+            liquidation_status: liquidation_events.status,
+          }
+        );
+        return {
+          open_interest_trend,
+          displacement_sponsorship: institutional_sponsorship.status !== "INACTIVE" ? "ACTIVE" : "INACTIVE",
+          resting_liquidity_pools,
+          liquidation_events,
+          smart_money_sentiment,
+          state_timeline,
+        };
+      })(),
       active_fvgs,
       pending_fvgs,
       trade_execution_parameters,
@@ -1264,6 +1283,8 @@ export async function GET(req: Request) {
       // Annotate delta candles before slicing
       annotateCandlesWithVolumetricSignals(activeCandles);
 
+      const state_timeline = OrderFlowStateTracker.getTimelineSummary(symbol);
+
       const deltaPayload = {
         isDelta: true,
         timestamp: new Date().toISOString(),
@@ -1278,6 +1299,7 @@ export async function GET(req: Request) {
           resting_liquidity_pools,
           liquidation_events,
           smart_money_sentiment,
+          state_timeline,
         },
       };
 

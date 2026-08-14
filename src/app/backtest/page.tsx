@@ -25,6 +25,8 @@ import BacktestSidebar from './BacktestSidebar';
 import ManualOrderPanel from '@/components/ManualOrderPanel';
 import { calculateATR } from '@/lib/riskEngine';
 import BacktestPotentialTradesModal from '@/components/modals/BacktestPotentialTradesModal';
+import OrderFlowTimelineRibbon from '@/components/OrderFlowTimelineRibbon';
+import OrderFlowTimelineModal from '@/components/modals/OrderFlowTimelineModal';
 import type { PotentialTrade } from '@/lib/quantTradeEngine';
 import { useAutoTradeExecutor } from '@/hooks/useAutoTradeExecutor';
 
@@ -64,6 +66,7 @@ export default function BacktestPage() {
   const [commandCenterTab, setCommandCenterTab] = useState<'strategy' | 'audio'>('strategy');
   const [isTfDropdownOpen, setIsTfDropdownOpen] = useState(false);
   const [isPotentialTradesOpen, setIsPotentialTradesOpen] = useState(false);
+  const [isOrderFlowModalOpen, setIsOrderFlowModalOpen] = useState(false);
 
   const { signalAlertsEnabled } = useMarketDataContext();
 
@@ -685,7 +688,7 @@ export default function BacktestPage() {
       </div>
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <header className="relative z-20 h-14 lg:h-16 border-b border-card-border flex items-center justify-between px-4 lg:px-8 bg-card/45 backdrop-blur-md shrink-0 transition-colors">
+      <header className="relative z-40 h-14 lg:h-16 border-b border-card-border flex items-center justify-between px-4 lg:px-8 bg-card/45 backdrop-blur-md shrink-0 transition-colors">
         <div className="flex items-center gap-3 min-w-0">
           <Link
             href="/"
@@ -1042,7 +1045,16 @@ export default function BacktestPage() {
         <div className="flex-1 flex flex-col min-w-0 overflow-y-auto scrollbar-thin scrollbar-thumb-card-border scrollbar-track-transparent">
 
           {/* Chart area */}
-          <div className="h-[680px] relative p-3 lg:p-5 shrink-0 min-h-0">
+          <div className="h-[740px] relative p-3 lg:p-5 shrink-0 min-h-0 flex flex-col gap-2">
+            {/* Order Flow State Tracker & Chronological Timeline Ribbon */}
+            <OrderFlowTimelineRibbon
+              timeline={(engine.enrichedPayload?.ipda_metrics as any)?.order_flow_engine?.state_timeline}
+              livePrice={lastPrice}
+              onOpenModal={() => setIsOrderFlowModalOpen(true)}
+              isBacktest={true}
+            />
+
+            <div className="flex-1 relative min-h-0">
             {engine.status === 'idle' && (
               <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-muted">
                 <div className="w-20 h-20 rounded-2xl bg-card border border-card-border flex items-center justify-center shadow-lg">
@@ -1181,6 +1193,7 @@ export default function BacktestPage() {
                 )}
               </div>
             )}
+            </div>
           </div>
 
           {/* Journal Table area */}
@@ -1273,6 +1286,15 @@ export default function BacktestPage() {
         onDelete={() => {
           refetchStrategies();
         }}
+      />
+      {/* Order Flow State Timeline Modal for Backtest Replay */}
+      <OrderFlowTimelineModal
+        isOpen={isOrderFlowModalOpen}
+        onClose={() => setIsOrderFlowModalOpen(false)}
+        timeline={(engine.enrichedPayload?.ipda_metrics as any)?.order_flow_engine?.state_timeline}
+        livePrice={lastPrice}
+        symbol="ETHUSDC.backtest"
+        isBacktest={true}
       />
     </main>
   );

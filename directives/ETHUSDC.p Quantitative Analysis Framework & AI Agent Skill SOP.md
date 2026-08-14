@@ -20,10 +20,15 @@ This Standard Operating Procedure (SOP) defines the unified Institutional Synthe
 * Phase C: Utilize Phase C Spring / Shakeout for long entries and Phase C UTAD for short entries.  
 * Phase D: Require Sign of Strength (SOS) or Weakness (SOW) demonstrated via Displacement body closes (MSS) creating clean FVGs.
 
-## **Market Microstructure & SMT Gatekeeper**
+## **Market Microstructure & Order Flow State Machine Engine**
 
 * SMT Gatekeeper: Mandatory SMT requirement (ETH vs BTC) as a strict execution gatekeeper.  
-* Institutional Backing: Verify Open Interest (OI) and Cumulative Volume Delta (CVD) to confirm institutional capital over retail stop-outs.  
+* Order Flow State Machine Decoding: Evaluate the active Open Interest trend and state transitions across 5 dimensions:
+  1. **Institutional Intent:** `RISING_WITH_PRICE` (Aggressive Buy Sponsorship / Long Deployment), `RISING_AGAINST_PRICE` (Aggressive Short Sponsorship / Short Deployment), `FALLING_WITH_PRICE` (Long Liquidation / Bear Trap Absorption at VAL), `FALLING_AGAINST_PRICE` (Short Covering / Squeeze — do not chase breakouts), `FLAT` (Passive Equilibrium).
+  2. **Regime Fatigue & Duration Decay:** Compare active state duration vs average persistence (>3x avg indicates statistical exhaustion into HTF boundaries).
+  3. **MSS & Auction Gatekeeping:** Bullish MSS is only validated when backed by `RISING_WITH_PRICE`; MSS during short covering is unconfirmed.
+  4. **24h Distribution Asymmetry:** Align macro trade sizing and direction with the 24h dominant sponsorship regime.
+  5. **Inter-Market Absorption Climax:** Synthesize ETH `RISING_AGAINST_PRICE` with BTC Bullish SMT to detect smart money absorption traps.
 * DOL Targeting: Align Action Zones with Liquidation Density Clusters for profit targets.
 
 # **2\. Optimized 5-Step Daily & Hourly Workflow**
@@ -32,7 +37,7 @@ This Standard Operating Procedure (SOP) defines the unified Institutional Synthe
 2. Step 2: Session & Value Profiling: Identify Value Area Extremes (VAH/VAL) and HVNs/LVNs.  
 3. Step 3: Temporal Execution Gate: Apply Killzone timing windows and Pre-News Volatility Filter.  
 4. Step 4: Liquidity Raid & SMT Confirmation: Confirm setup via liquidity sweep and mandatory SMT divergence.  
-5. Step 5: Micro Execution: Execute based on MSS \+ FVG/LVN alignment and OI/CVD institutional backing.
+5. Step 5: Micro Execution & Order Flow State Telemetry: Execute based on MSS \+ FVG/LVN alignment, Order Flow State Machine regime, and CVD Delta absorption.
 
 # **3\. Standardized Output Specification & Report Template**
 
@@ -44,8 +49,9 @@ Every analysis must be delivered using the following structured template to ensu
 | **HTF DOL** | Identified target on D1/H4 (e.g., PDH or FVG) |
 | **Session Profile** | Active Session Liquidity Highs/Lows |
 | **SMT Status** | Presence of BTC/ETH Divergence (Yes/No \+ Description) |
+| **Order Flow State** | Active Regime, Duration, Delta & 24h Dominant State |
 | **Trade Narrative** | Description of the 15m setup and expected move |
-| **Risk Parameters** | Invalidation Level and Take Profit (TP) Levels |
+| **Risk Parameters** | Invalidation Level, Two-Stage SL, and Take Profit (TP) Levels |
 
 # **4\. Automated Daily Tracker Logging Protocol**
 

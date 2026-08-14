@@ -1,10 +1,52 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V15.0
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V15.1
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-14 (V15.0 — Live HUD & Matrix Metrics Unified Telemetry Architecture)  
+> **Last Updated:** 2026-08-14 (V15.1 — Order Flow State Tracker & Chronological Timeline Suite)  
 
-## 🆕 V15.0 Changelog — Live HUD & Matrix Metrics Unified Telemetry Architecture (2026-08-14)
+## 🆕 V15.1 Changelog — Order Flow State Tracker & Chronological Timeline Suite (2026-08-14)
+
+### Summary
+Engineered an institutional-grade **Order Flow State Tracker & Chronological Timeline Suite** across both the Live WebSocket execution engine and the Backtest Replay Engine. Implemented a deterministic state machine logger tracking Open Interest momentum, aggressive institutional sponsorship transitions (`RISING_WITH_PRICE`, `RISING_AGAINST_PRICE`), liquidation/covering events (`FALLING_WITH_PRICE`, `FALLING_AGAINST_PRICE`), and equilibrium phases (`FLAT`/`NEUTRAL`). Built real-time multi-segmented ribbon visualizers, interactive hover cards, a dedicated analytics modal suite, and dual persistence across in-memory ring buffers and Neon PostgreSQL database tables.
+
+### Key Features & Architectural Fixes
+- **Deterministic State Machine Logging Protocol (`src/lib/orderFlowEngine.ts`):**
+  - **State Normalization:** Standardized raw engine signals to canonical enums: `RISING_WITH_PRICE` (Aggressive Buy Sponsorship), `RISING_AGAINST_PRICE` (Aggressive Short Sponsorship), `FALLING_WITH_PRICE` (Long Liquidation / Long Unwinding), `FALLING_AGAINST_PRICE` (Short Covering / Short Squeeze), `FLAT` (Equilibrium / Passive Order Book), and `NEUTRAL`.
+  - **Lifecycle Transition Tracking:** Automatically closes previous state records upon state changes (`exited_at`, `exit_price`, `duration_seconds`, `price_change`, `price_change_pct`), logs active state (`exited_at: null`, `exit_price: null`, `duration_seconds: 0`), and caches up to 200 state transitions in memory.
+  - **Historical Candle Reconstruction (`computeTimelineFromCandles`):** Deterministic algorithmic parser computing chronological state transitions directly from historical candle series, enabling 100% parity between live execution and backtest replay.
+  - **Telemetry & Quant Metrics (`calculateOrderFlowStats`):** Aggregates total duration in buy vs short vs liquidation vs covering states, average state persistence duration, total transitions, and 24-hour dominant institutional regime.
+- **Database & API Layer (`src/app/api/order-flow/states/route.ts` & `src/app/api/market-data/route.ts`):**
+  - Self-healing DDL query creating `order_flow_states_log` table and `idx_of_states_symbol_entered` index in Neon PostgreSQL.
+  - Asynchronous background insertion for zero latency impact on WebSocket / polling loops.
+  - Resilient design: Gracefully falls back to in-memory state tracking if the database is offline or unreachable.
+  - Fully integrated with `/api/market-data` initial responses and polling delta payloads (`MarketDataDeltaPayload`).
+- **Interactive Multi-Segmented Ribbon Component (`src/components/OrderFlowTimelineRibbon.tsx`):**
+  - Color-coded institutional segments (Neon Emerald `#10b981`, Institutional Crimson `#f43f5e`, Sky Blue `#0284c7`, Amber `#d97706`, Slate `#475569`).
+  - Active state live ticker timer (`MM:SS`) with pulse dot indicator.
+  - Interactive hover floating card displaying State Name, Institutional Translation, Cairo (UTC+3) Entered/Exited timestamps, Duration, Price Transition ($From ➔ $To), and Price Delta ($ and %).
+- **Chronological Timeline Analytics Modal (`src/components/modals/OrderFlowTimelineModal.tsx`):**
+  - Top metric cards tracking Buy Sponsorship %, Short Sponsorship %, Liquidation %, Covering %, and Avg State Duration.
+  - Stacked proportional regime volume & time distribution bar.
+  - Interactive chronological transition strip with per-block inspection.
+  - Filterable, searchable transition log table with CSV and JSON export capabilities for quantitative backtesting.
+- **HUD Sidebar & Replay Engine Integration (`src/components/Sidebar.tsx` & `src/app/backtest/BacktestSidebar.tsx`):**
+  - Enriched Card 6 ("Order Flow Pulse & State") with active regime badge, duration timer, mini transition ribbon preview, and direct modal trigger.
+  - Integrated `OrderFlowTimelineRibbon` and `OrderFlowTimelineModal` in both `src/app/page.tsx` and `src/app/backtest/page.tsx`.
+- **AI Agent Prompt & JSON Schema Synchronization (`src/lib/sopPromptBuilder.ts`, `src/lib/aiSystemPrompt.ts`, `src/lib/sopTrackerLogger.ts`):**
+  - Synthesized Order Flow State Machine decoding into the 5 core AI dimensions: Intent Decoding, Regime Fatigue & Duration Decay, MSS Gatekeeping, 24h Distribution Asymmetry, and Inter-Market Absorption Climax.
+  - Injected `order_flow_state_telemetry` object into the SOP JSON output report format.
+  - Updated `SopReportData`, `SopTrackerEntry`, `directives/ETHUSDC_Daily_Tracker.json`, and database `SYSTEM_PROMPT` in PostgreSQL `system_settings` table.
+- **Chart Data Resilience & Timestamp Deduplication (`src/components/Chart.tsx` & `src/app/api/market-data/route.ts`):**
+  - Deduplicated historical and live candles by second timestamp using `Map<number, Candle>` in `Chart.tsx` before calling `seriesRef.current.setData()`, permanently preventing Lightweight Charts strictly-ascending time assertion crashes.
+  - Aligned offline mock candle generator timestamps to exact timeframe multiples (`Math.floor(rawNow / intervalMs) * intervalMs`).
+- **Header & Timeframe Dropdown Stacking Context Alignment (`src/app/page.tsx` & `src/app/backtest/page.tsx`):**
+  - Elevated the main page and backtest action headers to `relative z-40` and set the Order Flow Timeline Ribbon container to `relative z-20`, ensuring the Timeframe selector dropdown menu (`z-50`) renders cleanly above the Order Flow header and HUD cards without clipping or occlusion.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, clean compilation** ✅
+- Visual & interactive browser validation → **Ribbon, tooltips, analytics modal, and transition log verified** ✅
+
+---
 
 ### Summary
 Audited and resolved telemetry duplication across the Live HUD Sidebar and Matrix Metrics side panel. Consolidated redundant resting magnets and dealing range boxes into a single, high-performance telemetry command sidebar, while introducing dedicated widgets for Auction Market Theory (AMT Value Area), BTC SMT Gatekeeper, London High/Low session sweeps, and Two-Stage Trailing Stop Risk Monitoring.
