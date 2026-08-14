@@ -1,8 +1,81 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V15.1
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V15.2
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-14 (V15.1 — Order Flow State Tracker & Chronological Timeline Suite)  
+> **Last Updated:** 2026-08-14 (V15.2 — M2M Agent Bridge API)  
+
+## 🆕 V15.2 Changelog — Machine-to-Machine (M2M) Agent Bridge API (2026-08-14)
+
+### Summary
+Engineered a dedicated, secure **Machine-to-Machine (M2M) Agent Bridge** at `GET|POST|PATCH /api/agent/context`. This bridge enables external AI reasoning agents (Gemini Spark, Antigravity CLI `agy`, background workers) to pull enriched quant market state and persist analytical decisions into Neon PostgreSQL — completely decoupled from browser-level authentication (NextAuth / Google OAuth). Zero disruption to existing routes, chart components, or WebSocket streams.
+
+### Key Features & Architectural Fixes
+- **M2M Security Gate (`src/lib/m2mAuth.ts`):**
+  - High-entropy Bearer token validation against `M2M_AGENT_SECRET` env var. Zero NextAuth dependency.
+  - Timing-safe string comparison (`timingSafeStringEqual`) to prevent token enumeration attacks.
+  - Startup secret strength validation with one-time console warning (≥32 chars required).
+  - Unauthorized access audit logging (token length + timestamp, no secret leaked).
+- **Strict TypeScript Types (`src/types/agentTypes.ts`):**
+  - `AgentContextPayload` — full GET response shape (market structure, FVGs, liquidity, order flow, displacement, SMT, trade memory, last agent decision).
+  - `AgentDecisionPayload` — POST request body (bias_signal, entry_range, invalidation_level, targets, narrative).
+  - `AgentDecisionPatchPayload` — PATCH request body.
+  - `AgentDecisionRecord` — DB row shape mirroring `agent_decision_log`.
+  - `M2MInvalidationCheckResult` — pre-flight guard result.
+- **Pure Context Serializer (`src/lib/agentContextSerializer.ts`):**
+  - Pure function (no I/O). Ingests pre-fetched engine outputs and compresses to token-efficient LLM JSON.
+  - Enforces Lesson #3 (Context Window Memory Overflow): zero raw OHLCV arrays emitted.
+  - Prunes: last 10 ZigZag segments, 5 active FVGs (nearest-to-price), 3 BSL/SSL magnets, last 5 trades.
+  - All numeric values rounded to 4 decimal places.
+- **Route Handler (`src/app/api/agent/context/route.ts`):**
+  - **GET /api/agent/context?symbol=ETHUSDC** — Fetches fresh Binance klines (15m, 5m, 1h, BTC 5m/15m) in parallel via `Promise.allSettled` with graceful offline fallbacks. Computes full quant state (structure, FVGs, displacement, SMT, bias, order flow, PDH/PDL, session levels). Queries last 5 `paper_trades` and last `agent_decision_log` record. Returns `AgentContextPayload` with no-cache headers.
+  - **POST /api/agent/context** — Accepts `AgentDecisionPayload`. Pre-flight invalidation guard: fetches live Binance price and rejects with `409 INVALIDATION_BREACHED` if price has breached `invalidation_level`. Persists validated decision to `agent_decision_log` with `status: 'ACTIVE'`.
+  - **PATCH /api/agent/context** — Updates existing record by id. Re-runs invalidation guard on stored level; auto-marks `INVALIDATED` if breached. Updates: status, narrative, target_1, target_2, invalidated_at.
+- **Database DDL (`agent_decision_log`):**
+  - Self-healing DDL (`CREATE TABLE IF NOT EXISTS`) cached per cold-start via `isSchemaInitialized` flag (Lesson #14.3 pattern).
+  - Indexed on `(symbol, status, submitted_at DESC)` for efficient agent memory queries.
+  - Fields: `id`, `symbol`, `agent_id`, `bias_signal`, `entry_range_low/high`, `invalidation_level`, `target_1/2`, `narrative`, `status`, `live_price_at_submission`, `submitted_at`, `invalidated_at`, `created_at`.
+- **Non-Disruption Guarantee:**
+  - `/api/market-data` (God Node) — NOT touched.
+  - `Chart.tsx`, canvas overlays, WebSocket streams — NOT touched.
+  - Existing DB tables (`paper_trades`, `order_flow_states_log`, `system_settings`) — read-only from new route.
+
+### New Files
+| File | Purpose |
+|---|---|
+| `src/types/agentTypes.ts` | All M2M TypeScript interfaces |
+| `src/lib/m2mAuth.ts` | Bearer token auth helper |
+| `src/lib/agentContextSerializer.ts` | Pure context serializer |
+| `src/app/api/agent/context/route.ts` | Route handler (GET + POST + PATCH) |
+
+### Environment Variables Required
+```bash
+# .env.local (min 32 chars, never commit)
+M2M_AGENT_SECRET=<generate-48-char-hex>
+```
+
+### Agent Usage Examples
+```bash
+# GET — Pull market context
+curl -H "Authorization: Bearer <secret>" \
+  http://localhost:4000/api/agent/context?symbol=ETHUSDC
+
+# POST — Submit analytical decision
+curl -X POST -H "Authorization: Bearer <secret>" \
+  -H "Content-Type: application/json" \
+  -d '{"symbol":"ETHUSDC","agent_id":"gemini-spark-v1","bias_signal":"CONFIRMED_BULLISH","entry_range_low":1850,"entry_range_high":1855,"invalidation_level":1840,"target_1":1880,"target_2":1910,"narrative":"HTF bullish retest of 15m FVG"}' \
+  http://localhost:4000/api/agent/context
+
+# PATCH — Update decision status
+curl -X PATCH -H "Authorization: Bearer <secret>" \
+  -H "Content-Type: application/json" \
+  -d '{"id":1,"status":"COMPLETED","narrative":"TP1 hit at 1880"}' \
+  http://localhost:4000/api/agent/context
+```
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, clean compilation** ✅
+
+---
 
 ## 🆕 V15.1 Changelog — Order Flow State Tracker & Chronological Timeline Suite (2026-08-14)
 
