@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, memo } from 'react';
+import { useState, memo, useMemo } from 'react';
 import { SYSTEM_VERSION } from '@/lib/version';
 import { safeParseAiJson } from '@/lib/aiJsonParser';
 import {
-  DownloadCloud,
   TrendingUp,
   Activity,
   X,
@@ -21,7 +20,11 @@ import {
   Clock,
   ChevronDown,
   ChevronRight,
-  ChevronLeft
+  ChevronLeft,
+  Shield,
+  Layers,
+  Target,
+  History
 } from 'lucide-react';
 import HudModal from './modals/HudModal';
 import PotentialTradesModal from './modals/PotentialTradesModal';
@@ -58,7 +61,7 @@ export function slicePayloadByLookback(
 
 // ─── AI Prompt Prefix ────────────────────────────────────────────────────────
 const AI_PROMPT_PREFIX =
-  'Act as the Institutional Flow Synthesizer V12.0. Analyze the following quantitative data and provide a mechanical bias report: \n\n';
+  'Act as the Institutional Flow Synthesizer V14.0 (SOP V2.0.0). Analyze the following quantitative data and provide a mechanical bias report: \n\n';
 
 // ─── Resting Magnets Card ───────────────────────────────────────────────────
 const RestingMagnetsCard = memo(function RestingMagnetsCard({ orderFlow }: { orderFlow: any }) {
@@ -73,7 +76,7 @@ const RestingMagnetsCard = memo(function RestingMagnetsCard({ orderFlow }: { ord
       >
         <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
           <Activity size={12} className="text-accent" />
-          <span>Resting Magnets</span>
+          <span>Resting Liquidity Pools</span>
         </div>
         <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
           {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -82,7 +85,7 @@ const RestingMagnetsCard = memo(function RestingMagnetsCard({ orderFlow }: { ord
       {isOpen && (
         <div className="space-y-3.5 animate-[fade-in_0.15s_ease-out]">
           <div className="space-y-1.5">
-            <span className="text-[10px] font-black text-emerald-500 dark:text-emerald-400 uppercase tracking-wider">BSL Targets</span>
+            <span className="text-[10px] font-black text-emerald-500 dark:text-emerald-400 uppercase tracking-wider">BSL Magnets</span>
             <div className="flex flex-col gap-1">
               {orderFlow?.resting_liquidity_pools?.BSL_Magnets?.length ? orderFlow.resting_liquidity_pools.BSL_Magnets.map((p: number, idx: number) => {
                 const isPurged = livePrice !== null && livePrice >= p;
@@ -98,7 +101,7 @@ const RestingMagnetsCard = memo(function RestingMagnetsCard({ orderFlow }: { ord
             </div>
           </div>
           <div className="space-y-1.5">
-            <span className="text-[10px] font-black text-rose-500 dark:text-rose-400 uppercase tracking-wider">SSL Targets</span>
+            <span className="text-[10px] font-black text-rose-500 dark:text-rose-400 uppercase tracking-wider">SSL Magnets</span>
             <div className="flex flex-col gap-1">
               {orderFlow?.resting_liquidity_pools?.SSL_Magnets?.length ? orderFlow.resting_liquidity_pools.SSL_Magnets.map((p: number, idx: number) => {
                 const isPurged = livePrice !== null && livePrice <= p;
@@ -118,6 +121,62 @@ const RestingMagnetsCard = memo(function RestingMagnetsCard({ orderFlow }: { ord
     </div>
   );
 });
+
+// ─── Value Area Calculator Helper ───────────────────────────────────────────
+function calculateValueArea(candles: Array<{ c?: number; h?: number; l?: number; v?: number }>) {
+  if (!candles || candles.length === 0) return { vah: null, val: null, poc: null };
+  const slice = candles.slice(-48);
+  let minP = Infinity, maxP = -Infinity;
+  slice.forEach(c => {
+    const h = c.h ?? 0, l = c.l ?? 0;
+    if (h > maxP) maxP = h;
+    if (l < minP && l > 0) minP = l;
+  });
+  if (minP === Infinity || maxP === -Infinity || minP === maxP) return { vah: null, val: null, poc: null };
+
+  const bins = 24;
+  const step = (maxP - minP) / bins;
+  const profile = new Array(bins).fill(0);
+  let totalVol = 0;
+
+  slice.forEach(c => {
+    const price = c.c ?? (minP + maxP) / 2;
+    const vol = c.v ?? 1;
+    const idx = Math.min(bins - 1, Math.max(0, Math.floor((price - minP) / step)));
+    profile[idx] += vol;
+    totalVol += vol;
+  });
+
+  let maxIdx = 0;
+  profile.forEach((v, i) => {
+    if (v > profile[maxIdx]) maxIdx = i;
+  });
+
+  const poc = minP + (maxIdx + 0.5) * step;
+
+  let vaVol = profile[maxIdx];
+  let up = maxIdx, down = maxIdx;
+  while (vaVol < totalVol * 0.70 && (up < bins - 1 || down > 0)) {
+    const nextUp = up < bins - 1 ? profile[up + 1] : 0;
+    const nextDown = down > 0 ? profile[down - 1] : 0;
+    if (nextUp >= nextDown && up < bins - 1) {
+      up++;
+      vaVol += profile[up];
+    } else if (down > 0) {
+      down--;
+      vaVol += profile[down];
+    } else if (up < bins - 1) {
+      up++;
+      vaVol += profile[up];
+    } else {
+      break;
+    }
+  }
+
+  const vah = minP + (up + 1) * step;
+  const val = minP + down * step;
+  return { vah, val, poc };
+}
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
@@ -156,6 +215,9 @@ const Sidebar = memo(function Sidebar({
     toggleAuto30mScan,
     next30mScanSeconds
   } = useMarketDataContext();
+
+  const { livePrice } = useMarketDataLiveContext();
+
   const [isJsonDrawerOpen, setIsJsonDrawerOpen] = useState(false);
   const [isHudModalOpen, setIsHudModalOpen] = useState(false);
   const [isTradesModalOpen, setIsTradesModalOpen] = useState(false);
@@ -165,9 +227,13 @@ const Sidebar = memo(function Sidebar({
   // Inner cards collapsible states (all open by default)
   const [cardOpenState, setCardOpenState] = useState({
     time: true,
+    valueArea: true,
     structure: true,
+    smtGate: true,
     liquidity: true,
     orderFlow: true,
+    restingMagnets: true,
+    twoStageRisk: true,
     synthesis: true,
   });
 
@@ -178,6 +244,11 @@ const Sidebar = memo(function Sidebar({
   const metrics = data?.ipda_metrics;
   const targetStatus = metrics?.target_status || '';
 
+  // ── AMT Value Area Calculation ──
+  const candles15m = data?.data_payload?.candles_15m || [];
+  const { vah, val, poc } = useMemo(() => calculateValueArea(candles15m), [candles15m]);
+
+  // ── Parse AI analysis response ──
   let parsedAiResponse: any = null;
   let hudData: any = null;
   let aiNote: { title: string, text: string } | null = null;
@@ -187,13 +258,12 @@ const Sidebar = memo(function Sidebar({
     try {
       parsedAiResponse = safeParseAiJson(aiAnalysis);
 
-      // Support BOTH old hud_display format and new V8.2 diagnostics/execution format
       if (parsedAiResponse?.hud_display) {
         hudData = { ...parsedAiResponse.hud_display };
         const noteKey = Object.keys(hudData).find(k => k.toLowerCase().includes('note'));
         if (noteKey) {
           aiNote = { title: noteKey, text: hudData[noteKey] as string };
-          delete hudData[noteKey]; // Remove note from table
+          delete hudData[noteKey];
         }
       } else if (parsedAiResponse?.diagnostics || parsedAiResponse?.execution) {
         hudData = {
@@ -214,14 +284,15 @@ const Sidebar = memo(function Sidebar({
           BIAS_SIGNAL: parsedAiResponse.bias_signal ?? (parsedAiResponse.bias_label === 'BULLISH' ? 1 : parsedAiResponse.bias_label === 'BEARISH' ? -1 : 0),
           BIAS_LABEL: parsedAiResponse.bias_label ?? 'NEUTRAL',
           EXECUTION_ZONE: fmtR(sopRp?.entry_range),
-          INVALIDATION_LEVEL: fmtP(sopRp?.invalidation ?? nextSt?.invalidation_level),
+          STAGE_1_SL: fmtP(sopRp?.stage1_sl ?? sopRp?.invalidation ?? nextSt?.invalidation_level),
+          STAGE_2_SL: sopRp?.stage2_sl ? String(sopRp.stage2_sl) : 'M15 HL post-TP1',
           TP1: fmtP(sopRp?.tp1),
           TP2: fmtP(sopRp?.tp2 ?? nextSt?.target_level),
           PRIMARY_TARGET: fmtP(parsedAiResponse.primary_target ?? sopRp?.tp2 ?? nextSt?.target_level)
         };
         const narrativeText = parsedAiResponse.narrative_summary || parsedAiResponse.narrative || parsedAiResponse.sop_report?.trade_narrative || '';
         if (narrativeText) {
-          aiNote = { title: '💡 AI Quant Bias Narrative', text: narrativeText };
+          aiNote = { title: '💡 Institutional Synthesis Narrative', text: narrativeText };
         }
       }
 
@@ -229,13 +300,13 @@ const Sidebar = memo(function Sidebar({
         tvAlerts = parsedAiResponse.tradingview_alerts;
       }
     } catch (e) {
-      // Failed to parse, it will be treated as raw
       console.error('[HUD] Failed to parse AI Analysis JSON:', e);
     }
   }
 
   const orderFlow = metrics?.order_flow_engine;
-  const pricing = metrics?.current_pricing;
+  const magnets = metrics?.historical_magnets;
+  const targets = metrics?.projected_targets;
 
   const handleLiveSynthesis = () => {
     triggerAiAnalysisScan();
@@ -280,6 +351,35 @@ const Sidebar = memo(function Sidebar({
 
   const asianHigh = metrics?.macro_levels?.asian_high;
   const asianLow = metrics?.macro_levels?.asian_low;
+  const londonHigh = metrics?.macro_levels?.london_high;
+  const londonLow = metrics?.macro_levels?.london_low;
+
+  // Macro Trend & SMT Gatekeeper logic
+  const macroTrend = structureState?.currentTrend || data?.ipda_metrics?.current_trend || 'UNSET';
+  const smtStatusRaw = parsedAiResponse?.sop_report?.smt_status || orderFlow?.smart_money_sentiment?.smart_money_divergence || 'NEUTRAL';
+  const isBullishSMT = String(smtStatusRaw).toUpperCase().includes('BULLISH');
+  const isBearishSMT = String(smtStatusRaw).toUpperCase().includes('BEARISH');
+
+  let htfVetoStatus = '🟢 AUTHORIZED';
+  let htfVetoColor = 'text-emerald-500 bg-emerald-500/10 border-emerald-500/30';
+  if (macroTrend === 'BEARISH' && isBullishSMT) {
+    htfVetoStatus = '🚫 COUNTER-TREND LONG VETOED';
+    htfVetoColor = 'text-rose-500 bg-rose-500/10 border-rose-500/30';
+  } else if (macroTrend === 'BULLISH' && isBearishSMT) {
+    htfVetoStatus = '🚫 COUNTER-TREND SHORT VETOED';
+    htfVetoColor = 'text-rose-500 bg-rose-500/10 border-rose-500/30';
+  }
+
+  // Value Area State
+  let auctionState = '⚪ VALUE ACCEPTANCE (HVN)';
+  let auctionColor = 'text-amber-400 bg-amber-500/10 border-amber-500/30';
+  if (livePrice && val && livePrice <= val) {
+    auctionState = '🟢 DISCOUNT AUCTION (< VAL)';
+    auctionColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
+  } else if (livePrice && vah && livePrice >= vah) {
+    auctionState = '🔴 PREMIUM AUCTION (> VAH)';
+    auctionColor = 'text-rose-400 bg-rose-500/10 border-rose-500/30';
+  }
 
   return (
     <>
@@ -301,7 +401,7 @@ const Sidebar = memo(function Sidebar({
             items-center justify-center group select-none
             ${isCollapsed ? 'right-0 border-r-0 shadow-[0_0_15px_rgba(168,85,247,0.25)]' : 'right-80 border-r-0'}
           `}
-          title={isCollapsed ? 'Expand Sidebar (Live HUD)' : 'Collapse Sidebar (Full Width Chart)'}
+          title={isCollapsed ? 'Expand Telemetry Sidebar' : 'Collapse Sidebar (Full Width Chart)'}
         >
           {isCollapsed ? (
             <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform text-accent animate-pulse" />
@@ -328,7 +428,7 @@ const Sidebar = memo(function Sidebar({
           <div className="p-4 border-b border-card-border flex items-center justify-between shrink-0 bg-card/45">
             <div className="flex items-center gap-2">
               <Activity className="w-4 h-4 text-accent" />
-              <h2 className="text-xs font-black uppercase tracking-[0.2em] text-foreground">Flow Execution</h2>
+              <h2 className="text-xs font-black uppercase tracking-[0.2em] text-foreground">Quant Telemetry</h2>
             </div>
 
             <div className="flex items-center gap-1.5">
@@ -338,7 +438,7 @@ const Sidebar = memo(function Sidebar({
                   type="button"
                   onClick={onToggleCollapse}
                   className="hidden lg:flex p-1.5 rounded-full text-muted hover:text-foreground hover:bg-card border border-card-border hover:border-accent transition-all cursor-pointer items-center justify-center shrink-0"
-                  title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar (Full Width Chart)'}
+                  title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
                 >
                   <ChevronRight size={14} />
                 </button>
@@ -349,7 +449,7 @@ const Sidebar = memo(function Sidebar({
                 onClick={() => setIsJsonDrawerOpen(!isJsonDrawerOpen)}
                 className={`p-1.5 rounded-full transition-colors flex items-center justify-center shrink-0 cursor-pointer ${isJsonDrawerOpen ? 'bg-accent/15 text-accent border border-accent/35' : 'text-muted hover:text-foreground hover:bg-card border border-transparent'
                   }`}
-                title="Toggle JSON Data Drawer"
+                title="Toggle JSON Data Stream"
               >
                 <Database size={14} />
               </button>
@@ -363,7 +463,7 @@ const Sidebar = memo(function Sidebar({
           {/* Scrollable Cards Area */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-card-border scrollbar-track-transparent">
 
-            {/* Time Card: Killzone Context */}
+            {/* Card 1: Time Killzones */}
             <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
               <div
                 onClick={() => toggleCard('time')}
@@ -385,28 +485,69 @@ const Sidebar = memo(function Sidebar({
                     <span className="text-sm font-black text-accent uppercase">{metrics?.current_time_window || 'WAITING'}</span>
                   </div>
 
-                  {/* Killzone Timings Reference */}
                   <div className="bg-background/40 border border-card-border p-2 mt-2 space-y-1.5 rounded-lg select-none">
                     <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
-                      <span className="text-muted font-bold uppercase tracking-wider">ASIAN RANGE</span>
-                      <span className="text-foreground font-mono font-bold">00:00 - 07:00 UTC</span>
+                      <span className="text-muted font-bold uppercase tracking-wider">LONDON (0-90m)</span>
+                      <span className="text-foreground font-mono font-bold">02:00 - 05:00 EST</span>
                     </div>
                     <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
-                      <span className="text-muted font-bold uppercase tracking-wider">LONDON OPEN</span>
-                      <span className="text-foreground font-mono font-bold">07:00 - 10:00 UTC</span>
+                      <span className="text-muted font-bold uppercase tracking-wider">NY AM (0-90m)</span>
+                      <span className="text-foreground font-mono font-bold">08:00 - 11:00 EST</span>
                     </div>
                     <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
-                      <span className="text-muted font-bold uppercase tracking-wider">NY OPEN</span>
-                      <span className="text-foreground font-mono font-bold">12:00 - 15:00 UTC</span>
+                      <span className="text-rose-400 font-bold uppercase tracking-wider">DEAD_ZONE (PAUSE)</span>
+                      <span className="text-rose-400 font-mono font-bold">12:00 - 13:30 EST</span>
                     </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Market Structure Card (Nested Hierarchy View) */}
+            {/* Card 2: AMT Value Area Matrix (NEW Institutional Synthesis Widget) */}
+            <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
+              <div
+                onClick={() => toggleCard('valueArea')}
+                className="flex items-center justify-between cursor-pointer select-none group-hover:text-accent transition-colors"
+              >
+                <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
+                  <Layers size={12} className="text-accent" />
+                  <span>AMT Value Area</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase ${auctionColor}`}>
+                    {auctionState.split(' ')[0]}
+                  </span>
+                  <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
+                    {cardOpenState.valueArea ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </button>
+                </div>
+              </div>
+
+              {cardOpenState.valueArea && (
+                <div className="space-y-2.5 animate-[fade-in_0.15s_ease-out]">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-background/40 p-2 border border-card-border rounded-lg text-center">
+                      <span className="text-[8px] text-muted block uppercase font-bold">VAH (70%)</span>
+                      <span className="text-xs font-mono font-bold text-rose-400">{formatPrice(vah)}</span>
+                    </div>
+                    <div className="bg-background/40 p-2 border border-card-border rounded-lg text-center">
+                      <span className="text-[8px] text-muted block uppercase font-bold">POC (HVN)</span>
+                      <span className="text-xs font-mono font-bold text-accent">{formatPrice(poc)}</span>
+                    </div>
+                    <div className="bg-background/40 p-2 border border-card-border rounded-lg text-center">
+                      <span className="text-[8px] text-muted block uppercase font-bold">VAL (70%)</span>
+                      <span className="text-xs font-mono font-bold text-emerald-400">{formatPrice(val)}</span>
+                    </div>
+                  </div>
+                  <div className={`p-2 rounded-lg border text-center text-[10px] font-black uppercase tracking-wider ${auctionColor}`}>
+                    {auctionState}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Card 3: Market Structure Matrix */}
             <div className="glass-panel p-4 space-y-3.5 relative overflow-hidden group">
-              {/* Header with Title and Alignment Status */}
               <div
                 onClick={() => toggleCard('structure')}
                 className="flex items-center justify-between cursor-pointer select-none group-hover:text-accent transition-colors"
@@ -417,17 +558,15 @@ const Sidebar = memo(function Sidebar({
                 </div>
                 <div className="flex items-center gap-2">
                   {(() => {
-                    const majorTrend = structureState?.currentTrend || data?.ipda_metrics?.current_trend || 'UNSET';
                     const internalTrend = structureState?.internalTrend || data?.ipda_metrics?.internal_context?.trend || 'UNSET';
-                    if (majorTrend === 'UNSET' || internalTrend === 'UNSET') return null;
-                    const isAligned = majorTrend === internalTrend;
+                    if (macroTrend === 'UNSET' || internalTrend === 'UNSET') return null;
+                    const isAligned = macroTrend === internalTrend;
                     return (
                       <span
-                        className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase transition-all duration-300 ${isAligned
-                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.08)]'
-                          : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.08)]'
+                        className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase ${isAligned
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500'
+                          : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400'
                           }`}
-                        title={isAligned ? 'Major and Internal trends are synchronized' : 'Retracement in progress (Intraday trend is running counter to Macro)'}
                       >
                         {isAligned ? '🟢 ALIGNED' : '⚪ DIVERGENT'}
                       </span>
@@ -441,176 +580,99 @@ const Sidebar = memo(function Sidebar({
 
               {cardOpenState.structure && (
                 <div className="space-y-3 animate-[fade-in_0.15s_ease-out]">
-                  {/* ──────── TOP SECTION: MACRO DEPTH ──────── */}
+                  {/* Macro Depth */}
                   <div className="space-y-2">
                     <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80">
-                      <span>Macro Depth</span>
-                      <span className="text-[9px] font-mono text-muted">(Limit {data?.candles_limit ?? 1000})</span>
+                      <span>Macro Trend</span>
+                      {macroTrend === 'BULLISH' ? (
+                        <span className="text-[11px] font-black text-emerald-500">🟢 BULLISH</span>
+                      ) : macroTrend === 'BEARISH' ? (
+                        <span className="text-[11px] font-black text-rose-500">🔴 BEARISH</span>
+                      ) : (
+                        <span className="text-[11px] font-black text-muted">⚪ UNSET</span>
+                      )}
                     </div>
 
                     {(() => {
                       const range = structureState?.dealingRange || data?.ipda_metrics?.full_structure_map?.dealingRange;
-                      const isAwaiting = !range || range.low === null || range.current_status === 'AWAITING_IDM_SWEEP';
-                      const pricingStatus = isAwaiting ? 'AWAITING_IDM_SWEEP' : (range?.current_status || 'UNKNOWN');
-                      const pricingColorClass = isAwaiting
-                        ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
-                        : pricingStatus === 'DISCOUNT'
-                          ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_6px_rgba(16,185,129,0.05)]'
-                          : pricingStatus === 'PREMIUM'
-                            ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
-                            : 'text-muted bg-card-border/20 border-transparent';
-
+                      if (!range) return null;
                       return (
-                        <div className={`p-2.5 border rounded-lg space-y-2 transition-colors duration-300 ${
-                          isAwaiting
-                            ? 'bg-amber-500/5 border-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.03)]'
-                            : 'bg-background/40 border-card-border'
-                        }`}>
+                        <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5 text-[10px]">
                           <div className="flex justify-between items-center">
-                            <span className={`text-[10px] uppercase font-bold ${isAwaiting ? 'text-amber-500/70' : 'text-muted'}`}>Macro Trend</span>
-                            {(() => {
-                              const trend = structureState?.currentTrend || data?.ipda_metrics?.current_trend || 'UNSET';
-                              if (isAwaiting) return <span className="text-[11px] font-black text-amber-500 uppercase animate-pulse">AWAITING SWEEP</span>;
-                              if (trend === 'BULLISH') return <span className="text-[11px] font-black text-emerald-500 uppercase">🟢 BULLISH</span>;
-                              if (trend === 'BEARISH') return <span className="text-[11px] font-black text-rose-500 uppercase">🔴 BEARISH</span>;
-                              return <span className="text-[11px] font-black text-muted uppercase">⚪ UNSET</span>;
-                            })()}
+                            <span className="text-muted uppercase font-bold">Dealing Range</span>
+                            <span className="font-mono font-bold text-foreground">{formatPrice(range.low)} - {formatPrice(range.high)}</span>
                           </div>
-
-                          {range && (
-                            <div className={`space-y-1.5 border-t pt-1.5 ${isAwaiting ? 'border-amber-500/10' : 'border-card-border/30'}`}>
-                              <div className="flex justify-between items-center text-[10px]">
-                                <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Dealing Range</span>
-                                <span className={`font-mono font-bold ${isAwaiting ? 'text-[#fbbf24] text-[10px]' : 'text-foreground/90'}`}>
-                                  {isAwaiting ? 'AWAITING_IDM_SWEEP' : `${formatPrice(range.low)} - ${formatPrice(range.high)}`}
-                                </span>
-                              </div>
-
-                              <div className="flex justify-between items-center text-[10px]">
-                                <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Equilibrium</span>
-                                <span className={`font-mono font-bold ${isAwaiting ? 'text-amber-500/80 text-[10px]' : 'text-accent'}`}>
-                                  {isAwaiting ? 'AWAITING sweep confirmation' : formatPrice(range.equilibrium)}
-                                </span>
-                              </div>
-
-                              <div className="flex justify-between items-center text-[10px]">
-                                <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Pricing Context</span>
-                                <span className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase ${pricingColorClass}`}>
-                                  {pricingStatus}
-                                </span>
-                              </div>
-                            </div>
-                          )}
+                          <div className="flex justify-between items-center">
+                            <span className="text-muted uppercase font-bold">Equilibrium (EQ)</span>
+                            <span className="font-mono font-bold text-accent">{formatPrice(range.equilibrium)}</span>
+                          </div>
                         </div>
                       );
                     })()}
                   </div>
 
-                  {/* ──────── BOTTOM SECTION: INTRADAY DEPTH ──────── */}
-                  <div className="space-y-2 border-t border-card-border/30 pt-3">
-                    <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80">
-                      <span>Intraday Depth</span>
-                      <span className="text-[9px] font-mono text-muted">(Dynamic Swings)</span>
-                    </div>
+                  {/* Multi-Scale Swing Telemetry (Integrated from Matrix Drawer) */}
+                  {(() => {
+                    const swings = structureState?.swings || data?.ipda_metrics?.full_structure_map?.swings || [];
+                    const majorCount = swings.filter((s: any) => s.grade === 'MAJOR').length;
+                    const innerCount = swings.filter((s: any) => s.grade === 'INNER').length;
+                    const mssConfirmed = structureState?.market_structure_shift || data?.ipda_metrics?.market_structure_shift || false;
 
-                    {(() => {
-                      const internalRange = structureState?.internalDealingRange || data?.ipda_metrics?.internal_context || data?.ipda_metrics?.full_structure_map?.internalDealingRange;
-                      if (!internalRange || (internalRange.high === null && internalRange.low === null)) {
-                        return (
-                          <div className="bg-background/40 p-2.5 border border-card-border rounded-lg text-[10px] text-muted italic text-center py-4">
-                            No confirmed internal swings yet
-                          </div>
-                        );
-                      }
-
-                      const isAwaiting = internalRange.low === null || internalRange.high === null || internalRange.current_status === 'AWAITING_IDM_SWEEP' || internalRange.pricing_status === 'AWAITING_IDM_SWEEP';
-                      const pricingStatus = isAwaiting ? 'AWAITING_IDM_SWEEP' : (internalRange.current_status || internalRange.pricing_status || 'UNKNOWN');
-                      const pricingColorClass = isAwaiting
-                        ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
-                        : pricingStatus === 'DISCOUNT'
-                          ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20 shadow-[0_0_6px_rgba(16,185,129,0.05)]'
-                          : pricingStatus === 'PREMIUM'
-                            ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-[0_0_6px_rgba(245,158,11,0.05)]'
-                            : 'text-muted bg-card-border/20 border-transparent';
-
-                      return (
-                        <div className={`p-2.5 border rounded-lg space-y-2 transition-colors duration-300 ${
-                          isAwaiting
-                            ? 'bg-amber-500/5 border-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.03)]'
-                            : 'bg-background/40 border-card-border'
-                        }`}>
-                          <div className="flex justify-between items-center">
-                            <span className={`text-[10px] uppercase font-bold ${isAwaiting ? 'text-amber-500/70' : 'text-muted'}`}>Internal Trend</span>
-                            {(() => {
-                              const trend = structureState?.internalTrend || data?.ipda_metrics?.internal_context?.trend || 'UNSET';
-                              if (isAwaiting) return <span className="text-[11px] font-black text-amber-500 uppercase animate-pulse">AWAITING SWEEP</span>;
-                              if (trend === 'BULLISH') return <span className="text-[11px] font-black text-emerald-500 uppercase">🟢 BULLISH</span>;
-                              if (trend === 'BEARISH') return <span className="text-[11px] font-black text-rose-500 uppercase">🔴 BEARISH</span>;
-                              return <span className="text-[11px] font-black text-muted uppercase">⚪ UNSET</span>;
-                            })()}
-                          </div>
-
-                          <div className={`space-y-1.5 border-t pt-1.5 ${isAwaiting ? 'border-amber-500/10' : 'border-card-border/30'}`}>
-                            <div className="flex justify-between items-center text-[10px]">
-                              <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Internal Range</span>
-                              <span className={`font-mono font-bold ${isAwaiting ? 'text-[#fbbf24] text-[10px]' : 'text-foreground/90'}`}>
-                                {isAwaiting ? 'AWAITING_IDM_SWEEP' : `${formatPrice(internalRange.low)} - ${formatPrice(internalRange.high)}`}
-                              </span>
-                            </div>
-
-                            <div className="flex justify-between items-center text-[10px]">
-                              <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Equilibrium</span>
-                              <span className={`font-mono font-bold ${isAwaiting ? 'text-amber-500/80 text-[10px]' : 'text-accent'}`}>
-                                {isAwaiting ? 'AWAITING sweep confirmation' : formatPrice(internalRange.equilibrium)}
-                              </span>
-                            </div>
-
-                            <div className="flex justify-between items-center text-[10px]">
-                              <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Pricing Context</span>
-                              <span className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase ${pricingColorClass}`}>
-                                {pricingStatus}
-                              </span>
-                            </div>
-
-                            <div className="flex justify-between items-center text-[10px]">
-                              <span className={`font-bold uppercase tracking-wider ${isAwaiting ? 'text-amber-500/60' : 'text-muted'}`}>Volatility Gate</span>
-                              {(() => {
-                                const multiplier = parseFloat(themeSettings?.structure_istr_atr_multiplier || '1.5');
-                                const activeCandles = data?.data_payload?.[`candles_${wsInterval}` as keyof typeof data.data_payload] || [];
-                                const atr = activeCandles.length > 0 ? calculateATR(activeCandles) : 0;
-                                const rangeHeight = internalRange.high && internalRange.low && !isAwaiting ? (internalRange.high - internalRange.low) : 0;
-                                const isSuppressed = rangeHeight > 0 && atr > 0 && rangeHeight < atr * multiplier;
-                                if (isAwaiting) {
-                                  return (
-                                    <span className="text-[9px] font-black text-amber-500/70 bg-amber-500/5 border border-amber-500/10 px-1.5 py-0.5 rounded tracking-wider uppercase">
-                                      PENDING
-                                    </span>
-                                  );
-                                }
-                                if (isSuppressed) {
-                                  return (
-                                    <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded tracking-wider uppercase shadow-[0_0_6px_rgba(245,158,11,0.05)]">
-                                      ⚠️ NOISE_SUPPRESSED
-                                    </span>
-                                  );
-                                }
-                                return (
-                                  <span className="text-[9px] font-black text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded tracking-wider uppercase shadow-[0_0_6px_rgba(16,185,129,0.05)]">
-                                    🟢 AUTHORIZED
-                                  </span>
-                                );
-                              })()}
-                            </div>
-                          </div>
+                    return (
+                      <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5 text-[10px]">
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted uppercase font-bold">Shift Status (MSS)</span>
+                          <span className={`font-black uppercase ${mssConfirmed ? 'text-emerald-400' : 'text-amber-400'}`}>
+                            {mssConfirmed ? 'CONFIRMED ⚡' : 'PENDING / NONE'}
+                          </span>
                         </div>
-                      );
-                    })()}
+                        <div className="flex justify-between items-center border-t border-card-border/30 pt-1">
+                          <span className="text-muted uppercase font-bold">Swings (Maj / Inn)</span>
+                          <span className="font-mono font-bold text-foreground">{majorCount} MAJ / {innerCount} INN</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+
+            {/* Card 4: BTC SMT Gatekeeper (NEW Institutional Synthesis Widget) */}
+            <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
+              <div
+                onClick={() => toggleCard('smtGate')}
+                className="flex items-center justify-between cursor-pointer select-none group-hover:text-accent transition-colors"
+              >
+                <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
+                  <Zap size={12} className="text-accent" />
+                  <span>BTC SMT Gatekeeper</span>
+                </div>
+                <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
+                  {cardOpenState.smtGate ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </button>
+              </div>
+
+              {cardOpenState.smtGate && (
+                <div className="space-y-2.5 animate-[fade-in_0.15s_ease-out]">
+                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5">
+                    <div className="flex justify-between items-center text-[10px]">
+                      <span className="text-muted uppercase font-bold">SMT Divergence</span>
+                      <span className={`font-mono text-[10px] font-bold ${isBullishSMT ? 'text-emerald-400' : isBearishSMT ? 'text-rose-400' : 'text-muted'}`}>
+                        {smtStatusRaw}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px] border-t border-card-border/30 pt-1.5">
+                      <span className="text-muted uppercase font-bold">HTF Trend Filter</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase border ${htfVetoColor}`}>
+                        {htfVetoStatus}
+                      </span>
+                    </div>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Liquidity Card: Macro Ranges */}
+            {/* Card 5: Liquidity Pools & Macro Context */}
             <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
               <div
                 onClick={() => toggleCard('liquidity')}
@@ -618,7 +680,7 @@ const Sidebar = memo(function Sidebar({
               >
                 <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
                   <Magnet size={12} className="text-accent" />
-                  <span>Liquidity Pool context</span>
+                  <span>Session Liquidity</span>
                 </div>
                 <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
                   {cardOpenState.liquidity ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -629,43 +691,95 @@ const Sidebar = memo(function Sidebar({
                 <div className="space-y-2.5 animate-[fade-in_0.15s_ease-out]">
                   {/* PDH / PDL */}
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-background/40 p-2.5 border border-card-border rounded-lg relative">
+                    <div className="bg-background/40 p-2.5 border border-card-border rounded-lg">
                       <span className="text-[10px] text-muted block mb-0.5 uppercase font-bold tracking-wider">Prev Day High (PDH)</span>
                       <span className="text-sm font-mono font-bold text-foreground">{formatPrice(metrics?.macro_levels?.pdh)}</span>
                     </div>
-                    <div className="bg-background/40 p-2.5 border border-card-border rounded-lg relative">
+                    <div className="bg-background/40 p-2.5 border border-card-border rounded-lg">
                       <span className="text-[10px] text-muted block mb-0.5 uppercase font-bold tracking-wider">Prev Day Low (PDL)</span>
                       <span className="text-sm font-mono font-bold text-foreground">{formatPrice(metrics?.macro_levels?.pdl)}</span>
                     </div>
                   </div>
 
-                  {/* Asian Range High / Low Sweeps */}
-                  {asianHigh && (
+                  {/* London Session High / Low */}
+                  {londonHigh && (
                     <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5">
-                      <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
-                        <span className="text-muted uppercase font-bold tracking-wider">Asian High</span>
+                      <span className="text-[9px] text-accent uppercase font-black tracking-wider block">London Session Pools</span>
+                      <div className="flex justify-between items-center text-[10px]">
+                        <span className="text-muted uppercase font-bold">London High (LH)</span>
                         <div className="flex items-center gap-1.5">
-                          <span className={`font-mono text-xs lg:text-sm font-bold ${isAsianHighSwept ? 'text-rose-500 line-through opacity-60' : 'text-foreground'}`}>
-                            {formatPrice(asianHigh)}
+                          <span className={`font-mono font-bold ${isLondonHighSwept ? 'text-rose-500 line-through opacity-60' : 'text-foreground'}`}>
+                            {formatPrice(londonHigh)}
                           </span>
-                          {isAsianHighSwept && (
-                            <span className="px-1 py-0.5 bg-rose-500/10 text-rose-500 text-[8px] font-black rounded-sm border border-rose-500/20">
-                              SWEPT 🧹
-                            </span>
-                          )}
+                          {isLondonHighSwept && <span className="px-1 py-0.5 bg-rose-500/10 text-rose-500 text-[8px] font-black rounded-sm border border-rose-500/20">SWEPT 🧹</span>}
                         </div>
                       </div>
-                      <div className="flex justify-between items-center text-[10px] lg:text-[11px]">
-                        <span className="text-muted uppercase font-bold tracking-wider">Asian Low</span>
+                      <div className="flex justify-between items-center text-[10px]">
+                        <span className="text-muted uppercase font-bold">London Low (LL)</span>
                         <div className="flex items-center gap-1.5">
-                          <span className={`font-mono text-xs lg:text-sm font-bold ${isAsianLowSwept ? 'text-emerald-500 line-through opacity-60' : 'text-foreground'}`}>
+                          <span className={`font-mono font-bold ${isLondonLowSwept ? 'text-emerald-500 line-through opacity-60' : 'text-foreground'}`}>
+                            {formatPrice(londonLow)}
+                          </span>
+                          {isLondonLowSwept && <span className="px-1 py-0.5 bg-emerald-500/10 text-emerald-500 text-[8px] font-black rounded-sm border border-emerald-500/20">SWEPT 🧹</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Asian Session High / Low */}
+                  {asianHigh && (
+                    <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5">
+                      <span className="text-[9px] text-muted uppercase font-black tracking-wider block">Asian Session Pools</span>
+                      <div className="flex justify-between items-center text-[10px]">
+                        <span className="text-muted uppercase font-bold">Asian High</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`font-mono font-bold ${isAsianHighSwept ? 'text-rose-500 line-through opacity-60' : 'text-foreground'}`}>
+                            {formatPrice(asianHigh)}
+                          </span>
+                          {isAsianHighSwept && <span className="px-1 py-0.5 bg-rose-500/10 text-rose-500 text-[8px] font-black rounded-sm border border-rose-500/20">SWEPT 🧹</span>}
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px]">
+                        <span className="text-muted uppercase font-bold">Asian Low</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`font-mono font-bold ${isAsianLowSwept ? 'text-emerald-500 line-through opacity-60' : 'text-foreground'}`}>
                             {formatPrice(asianLow)}
                           </span>
-                          {isAsianLowSwept && (
-                            <span className="px-1 py-0.5 bg-emerald-500/10 text-emerald-500 text-[8px] font-black rounded-sm border border-emerald-500/20">
-                              SWEPT 🧹
-                            </span>
-                          )}
+                          {isAsianLowSwept && <span className="px-1 py-0.5 bg-emerald-500/10 text-emerald-500 text-[8px] font-black rounded-sm border border-emerald-500/20">SWEPT 🧹</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Historical HTF Imbalances (Integrated from Drawer) */}
+                  {magnets && (
+                    <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5 text-[10px]">
+                      <span className="text-[9px] text-muted uppercase font-black tracking-wider block">Historical HTF Magnets</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="flex justify-between">
+                          <span className="text-muted">Weekly wH:</span>
+                          <span className="font-mono font-bold text-foreground">{formatPrice(magnets.nearest_weekly_high)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted">Weekly wL:</span>
+                          <span className="font-mono font-bold text-foreground">{formatPrice(magnets.nearest_weekly_low)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Asian Range Standard Deviation Targets (Integrated from Drawer) */}
+                  {targets && (
+                    <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5 text-[10px]">
+                      <span className="text-[9px] text-muted uppercase font-black tracking-wider block">Asian Range Projections (SD)</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1 text-emerald-400 font-mono">
+                          <div className="flex justify-between text-[9px]"><span>+1.5 SD:</span><span>{formatPrice(targets.upward_dev_1_5)}</span></div>
+                          <div className="flex justify-between text-[9px]"><span>+2.0 SD:</span><span>{formatPrice(targets.upward_dev_2_0)}</span></div>
+                        </div>
+                        <div className="space-y-1 text-rose-400 font-mono">
+                          <div className="flex justify-between text-[9px]"><span>-1.5 SD:</span><span>{formatPrice(targets.downward_dev_1_5)}</span></div>
+                          <div className="flex justify-between text-[9px]"><span>-2.0 SD:</span><span>{formatPrice(targets.downward_dev_2_0)}</span></div>
                         </div>
                       </div>
                     </div>
@@ -674,7 +788,7 @@ const Sidebar = memo(function Sidebar({
               )}
             </div>
 
-            {/* Card 3: Order Flow Pulse */}
+            {/* Card 6: Order Flow Pulse */}
             <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
               <div
                 onClick={() => toggleCard('orderFlow')}
@@ -692,7 +806,7 @@ const Sidebar = memo(function Sidebar({
               {cardOpenState.orderFlow && (
                 <div className="space-y-3 animate-[fade-in_0.15s_ease-out]">
                   <div className="flex justify-between items-center">
-                    <span className="text-[11px] lg:text-xs text-muted font-bold">OI Trend</span>
+                    <span className="text-[11px] lg:text-xs text-muted font-bold">OI Expansion (ΔOI)</span>
                     <span className={`text-[11px] lg:text-xs font-black uppercase tracking-wider ${orderFlow?.open_interest_trend === 'BULLISH' ? 'text-emerald-500' :
                       orderFlow?.open_interest_trend === 'BEARISH' ? 'text-rose-500' : 'text-muted'
                       }`}>
@@ -723,7 +837,7 @@ const Sidebar = memo(function Sidebar({
                         </span>
                       </div>
                       <div className="flex justify-between text-[10px] items-center">
-                        <span className="text-muted">OLS VALIDATION</span>
+                        <span className="text-muted">OLS 95% CONFIDENCE</span>
                         <span className={`font-black uppercase text-[9px] tracking-wider ${metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true ? 'text-emerald-500' :
                           metrics.institutional_sponsorship.status === 'CONSOLIDATION' ? 'text-accent' : 'text-rose-500'
                           }`}>
@@ -733,20 +847,53 @@ const Sidebar = memo(function Sidebar({
                       </div>
                     </div>
                   )}
-                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg">
-                    <span className="text-[10px] text-muted block mb-1 uppercase tracking-wider font-bold">Smart Money Divergence</span>
-                    <p className="text-[10px] text-muted italic leading-normal select-text">
-                      {orderFlow?.smart_money_sentiment?.smart_money_divergence || 'No divergence detected in HTF/LTF pairing.'}
+                </div>
+              )}
+            </div>
+
+            {/* Card 7: Resting Liquidity Pools */}
+            <RestingMagnetsCard orderFlow={orderFlow} />
+
+            {/* Card 8: Two-Stage Trailing Stop Monitor (NEW Institutional Synthesis Widget) */}
+            <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
+              <div
+                onClick={() => toggleCard('twoStageRisk')}
+                className="flex items-center justify-between cursor-pointer select-none group-hover:text-accent transition-colors"
+              >
+                <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
+                  <Shield size={12} className="text-accent" />
+                  <span>Two-Stage Trailing Stop</span>
+                </div>
+                <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
+                  {cardOpenState.twoStageRisk ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </button>
+              </div>
+
+              {cardOpenState.twoStageRisk && (
+                <div className="space-y-2 animate-[fade-in_0.15s_ease-out] text-[10px]">
+                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted uppercase font-bold">Stage 1 (In-Flight)</span>
+                      <span className="font-mono font-bold text-amber-400">Anchored Base SL</span>
+                    </div>
+                    <p className="text-[9px] text-muted leading-tight">
+                      Prohibits trailing to Internal Range Liquidity / micro-swings before TP1.
+                    </p>
+                  </div>
+                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted uppercase font-bold">Stage 2 (Runner Phase)</span>
+                      <span className="font-mono font-bold text-emerald-400">M15 Structural HL</span>
+                    </div>
+                    <p className="text-[9px] text-muted leading-tight">
+                      70% volume banked at TP1 (ERL) $\rightarrow$ SL trailed to confirmed M15 HL/LH.
                     </p>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Card 4: Resting Magnets */}
-            <RestingMagnetsCard orderFlow={orderFlow} />
-
-            {/* Card 5: AI Synthesis Console */}
+            {/* Card 9: AI Synthesis Console */}
             <div className={`glass-panel flex flex-col transition-all duration-200 overflow-hidden ${cardOpenState.synthesis ? 'h-[380px]' : 'h-auto'}`}>
               <div
                 onClick={() => toggleCard('synthesis')}
@@ -856,7 +1003,7 @@ const Sidebar = memo(function Sidebar({
                     ) : (
                       <div className="h-full flex flex-col items-center justify-center text-center p-4">
                         <Brain size={24} className="text-card-border mb-2 animate-pulse" />
-                        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">System Ready. Awaiting Live Payload Injection.</p>
+                        <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Institutional SOP Engine Ready. Awaiting Live Payload Injection.</p>
                       </div>
                     )}
                   </div>
@@ -928,10 +1075,10 @@ const Sidebar = memo(function Sidebar({
 
           </div>
 
-          {/* Collapsible Data Export Panel — RELOCATED TO DRAWER */}
+          {/* Footer Branding */}
           <div className="p-3 border-t border-card-border bg-card/45 shrink-0 select-none text-center">
             <span className="text-[8px] font-black text-muted-foreground tracking-widest uppercase">
-              Flow-State Quant Dashboard V{SYSTEM_VERSION}
+              Flow-State Quant Engine V{SYSTEM_VERSION} (SOP V2.0.0)
             </span>
           </div>
 
@@ -1001,10 +1148,10 @@ const Sidebar = memo(function Sidebar({
                   onClick={() => onDownloadV7Sliced(counts)}
                   disabled={!data}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-background hover:bg-card border border-card-border text-muted hover:text-foreground rounded-full transition-all duration-300 cursor-pointer"
-                  title="Download Sliced V12.0 JSON"
+                  title="Download Sliced V14.0 JSON"
                 >
                   <Download size={12} />
-                  <span className="text-[9px] font-black uppercase tracking-wider">DL V12.0 JSON</span>
+                  <span className="text-[9px] font-black uppercase tracking-wider">DL V14.0 JSON</span>
                 </button>
               </div>
 
