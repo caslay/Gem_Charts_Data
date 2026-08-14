@@ -1,8 +1,31 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V14.9
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V15.0
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-14 (V14.9 — Institutional Synthesis Framework SOP & Terminal AI Prompt Synchronization)  
+> **Last Updated:** 2026-08-14 (V15.0 — Live HUD & Matrix Metrics Unified Telemetry Architecture)  
+
+## 🆕 V15.0 Changelog — Live HUD & Matrix Metrics Unified Telemetry Architecture (2026-08-14)
+
+### Summary
+Audited and resolved telemetry duplication across the Live HUD Sidebar and Matrix Metrics side panel. Consolidated redundant resting magnets and dealing range boxes into a single, high-performance telemetry command sidebar, while introducing dedicated widgets for Auction Market Theory (AMT Value Area), BTC SMT Gatekeeper, London High/Low session sweeps, and Two-Stage Trailing Stop Risk Monitoring.
+
+### Key Features & Architectural Fixes
+- **Unified Telemetry Command Sidebar (`src/components/Sidebar.tsx`):**
+  - **AMT Value Area Matrix:** Live dynamic calculation of Value Area High (VAH), Value Area Low (VAL), and Point of Control (POC) with real-time auction state badges (`DISCOUNT AUCTION < VAL` / `PREMIUM AUCTION > VAH` / `HVN FAIR VALUE`).
+  - **BTC SMT Gatekeeper Card:** Displays live BTC vs ETH structural divergence (`BULLISH_SMT` / `BEARISH_SMT` / `NEUTRAL`) and HTF Order Flow Trend Veto status (`🟢 AUTHORIZED` vs `🚫 VETOED / COUNTER-TREND`).
+  - **Enhanced Session Liquidity Card:** Consolidated **London High (LH)** and **London Low (LL)** next to Asian High/Low with real-time `SWEPT 🧹` badges, plus historical HTF weekly swings (`wH`, `wL`) and Asian Standard Deviation targets (1.5, 2.0, 2.5 SD).
+  - **Two-Stage Trailing Stop Monitor:** Live tracking of Stage 1 (Protected Displacement Base SL) vs Stage 2 (M15 Structural HL post-TP1 70% scale-out).
+  - **Canonical Resting Liquidity Surface:** Consolidated BSL and SSL resting magnets into a single canonical component, eliminating the 100% duplicate rendering from the secondary drawer.
+- **Top Dashboard HUD Bar Alignment (`src/components/DashboardMetrics.tsx`):**
+  - Card 1: Master Bias with algorithmic Trend Alignment status.
+  - Card 2: AMT Value Area Context (Live price vs VAH/VAL/EQ).
+  - Card 3: SMT Gatekeeper & Primary Target (DOL).
+- **Brand & Engine Label Standardization:** Updated all UI surfaces to `Flow-State Quant Engine V15.0 (SOP V2.0.0)`.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, clean compilation** ✅
+
+---
 
 ## 🆕 V14.9 Changelog — Institutional Synthesis Framework SOP & Terminal AI Prompt Synchronization (2026-08-14)
 
