@@ -14,6 +14,13 @@ export interface SopReportData {
   htf_dol?: string;
   session_profile?: string;
   smt_status?: string;
+  order_flow_state_telemetry?: {
+    active_regime?: string;
+    duration?: string;
+    price_delta?: string;
+    dominant_24h?: string;
+    institutional_intent?: string;
+  };
   trade_narrative?: string;
   risk_parameters?: SopRiskParameters;
 }
@@ -26,6 +33,7 @@ export interface SopTrackerEntry {
   setupType: string;
   htfDol: string;
   smtStatus: string;
+  orderFlowState?: string;
   entryRange: [number, number];
   invalidation: number;
   tp1: number;
@@ -79,6 +87,8 @@ export function autoLogSopSetup(sopReport: SopReportData, nextState?: Record<str
       return duplicate;
     }
 
+    const ofRegime = sopReport.order_flow_state_telemetry?.active_regime ?? 'RISING_WITH_PRICE';
+
     const newEntry: SopTrackerEntry = {
       id: setupId,
       date: dateStr,
@@ -87,6 +97,7 @@ export function autoLogSopSetup(sopReport: SopReportData, nextState?: Record<str
       setupType: sopReport.trade_narrative?.substring(0, 45) ?? 'SOP Quant Setup',
       htfDol: sopReport.htf_dol ?? 'HTF Magnet',
       smtStatus: sopReport.smt_status ?? 'SMT Divergence',
+      orderFlowState: ofRegime,
       entryRange: entryRange,
       invalidation: inv,
       tp1: tp1,

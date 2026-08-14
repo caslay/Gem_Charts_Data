@@ -29,6 +29,7 @@ import { AuthProvider } from "@/components/AuthProvider";
 import { MarketDataProvider } from "@/context/MarketDataContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import ThemeSync from "@/components/ThemeSync";
+import Script from "next/script";
 
 export default function RootLayout({
   children,
@@ -40,7 +41,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased bg-background text-foreground transition-colors duration-300`}
       >
-        <script
+        <Script
+          id="register-sw"
+          strategy="afterInteractive"
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {

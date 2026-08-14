@@ -29,6 +29,8 @@ import {
 import HudModal from './modals/HudModal';
 import PotentialTradesModal from './modals/PotentialTradesModal';
 import SelfCorrectionModal from './modals/SelfCorrectionModal';
+import OrderFlowTimelineModal from './modals/OrderFlowTimelineModal';
+import { getStateMetadata, formatDuration } from './OrderFlowTimelineRibbon';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
 import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 import { calculateATR } from '@/lib/riskEngine';
@@ -222,6 +224,7 @@ const Sidebar = memo(function Sidebar({
   const [isHudModalOpen, setIsHudModalOpen] = useState(false);
   const [isTradesModalOpen, setIsTradesModalOpen] = useState(false);
   const [isSelfCorrectionModalOpen, setIsSelfCorrectionModalOpen] = useState(false);
+  const [isOrderFlowModalOpen, setIsOrderFlowModalOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
 
   // Inner cards collapsible states (all open by default)
@@ -788,7 +791,7 @@ const Sidebar = memo(function Sidebar({
               )}
             </div>
 
-            {/* Card 6: Order Flow Pulse */}
+            {/* Card 6: Order Flow Pulse & State Tracker */}
             <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
               <div
                 onClick={() => toggleCard('orderFlow')}
@@ -796,23 +799,75 @@ const Sidebar = memo(function Sidebar({
               >
                 <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
                   <BarChart3 size={12} className="text-accent" />
-                  <span>Order Flow Pulse</span>
+                  <span>Order Flow Pulse & State</span>
                 </div>
-                <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
-                  {cardOpenState.orderFlow ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsOrderFlowModalOpen(true);
+                    }}
+                    className="p-1 rounded-md text-muted hover:text-accent hover:bg-card border border-transparent hover:border-card-border transition-all cursor-pointer"
+                    title="Open Order Flow State Timeline"
+                  >
+                    <Activity size={12} />
+                  </button>
+                  <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
+                    {cardOpenState.orderFlow ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </button>
+                </div>
               </div>
 
               {cardOpenState.orderFlow && (
                 <div className="space-y-3 animate-[fade-in_0.15s_ease-out]">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[11px] lg:text-xs text-muted font-bold">OI Expansion (ΔOI)</span>
-                    <span className={`text-[11px] lg:text-xs font-black uppercase tracking-wider ${orderFlow?.open_interest_trend === 'BULLISH' ? 'text-emerald-500' :
-                      orderFlow?.open_interest_trend === 'BEARISH' ? 'text-rose-500' : 'text-muted'
-                      }`}>
-                      {orderFlow?.open_interest_trend || 'NEUTRAL'}
-                    </span>
-                  </div>
+                  {/* Active State Machine Regime */}
+                  {(() => {
+                    const activeSt = orderFlow?.state_timeline?.active_state;
+                    const meta = activeSt ? getStateMetadata(activeSt.state) : getStateMetadata(orderFlow?.open_interest_trend || 'NEUTRAL');
+                    return (
+                      <div className={`p-2.5 rounded-lg border ${meta.colorBorder} ${meta.colorBgMuted} space-y-1`}>
+                        <div className="flex justify-between items-center text-[10px]">
+                          <span className="text-muted uppercase font-bold">OI State Machine:</span>
+                          <span className={`font-black uppercase tracking-wider ${meta.colorText}`}>
+                            {meta.label}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center text-[9px] text-muted-foreground">
+                          <span>{meta.description}</span>
+                          {activeSt?.duration_seconds !== undefined && (
+                            <span className="font-mono font-bold text-foreground">
+                              {formatDuration(activeSt.duration_seconds)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Mini Timeline Ribbon Preview */}
+                  {orderFlow?.state_timeline?.history && orderFlow.state_timeline.history.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[9px] text-muted font-bold uppercase">
+                        <span>Recent Transitions:</span>
+                        <span>{orderFlow.state_timeline.history.length} logged</span>
+                      </div>
+                      <div className="w-full h-2 rounded-sm overflow-hidden flex gap-[1px] bg-background/60 p-0.5 border border-card-border/60">
+                        {orderFlow.state_timeline.history.slice(-10).map((seg: any, idx: number) => {
+                          const meta = getStateMetadata(seg.state);
+                          return (
+                            <div
+                              key={`sidebar-mini-seg-${seg.id || seg.entered_at}-${idx}`}
+                              style={{ flex: Math.max(1, seg.duration_seconds || 30) }}
+                              className={`h-full rounded-[1px] ${meta.colorBg} opacity-80`}
+                              title={`${meta.label} (${formatDuration(seg.duration_seconds)})`}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex justify-between items-center">
                     <span className="text-[11px] lg:text-xs text-muted font-bold">Displacement</span>
                     <span className={`text-[11px] lg:text-xs font-black uppercase tracking-wider ${metrics?.institutional_sponsorship?.status?.includes('BULLISH') ? 'text-emerald-500' :
@@ -822,6 +877,17 @@ const Sidebar = memo(function Sidebar({
                       {metrics?.institutional_sponsorship?.status || 'INACTIVE'}
                     </span>
                   </div>
+
+                  {/* Open Timeline Modal Button */}
+                  <button
+                    type="button"
+                    onClick={() => setIsOrderFlowModalOpen(true)}
+                    className="w-full py-1.5 px-2.5 rounded-lg bg-card hover:bg-accent/15 border border-card-border hover:border-accent text-muted hover:text-accent font-mono text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Activity size={11} />
+                    <span>[ VIEW TIMELINE & STATS ]</span>
+                  </button>
+
                   {metrics?.institutional_sponsorship?.statistical_validation && (
                     <div className="bg-background/40 p-2 border border-card-border rounded-lg space-y-1">
                       <div className="flex justify-between text-[10px] items-center">
@@ -1010,11 +1076,11 @@ const Sidebar = memo(function Sidebar({
 
                   <div className="p-3 bg-card/45 border-t border-card-border shrink-0 flex flex-col gap-2">
                     {/* 30m Auto-Scan Toggle & Countdown */}
-                    <div className="flex items-center justify-between px-2 py-1 bg-background/50 border border-card-border rounded-lg text-[10px] font-mono">
-                      <div className="flex items-center gap-1.5">
+                    <div suppressHydrationWarning className="flex items-center justify-between px-2 py-1 bg-background/50 border border-card-border rounded-lg text-[10px] font-mono">
+                      <div suppressHydrationWarning className="flex items-center gap-1.5">
                         <Clock size={11} className={isAuto30mScanActive ? "text-accent animate-pulse" : "text-muted"} />
                         <span className="text-muted font-bold">30m Auto-Scan:</span>
-                        <span className="text-foreground font-extrabold">
+                        <span suppressHydrationWarning className="text-foreground font-extrabold">
                           {isAuto30mScanActive
                             ? `${Math.floor((next30mScanSeconds ?? 1800) / 60)}:${((next30mScanSeconds ?? 1800) % 60).toString().padStart(2, '0')}`
                             : 'OFF'}
@@ -1023,6 +1089,7 @@ const Sidebar = memo(function Sidebar({
                       <button
                         type="button"
                         onClick={toggleAuto30mScan}
+                        suppressHydrationWarning
                         className={`px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider border transition-colors ${
                           isAuto30mScanActive
                             ? 'bg-accent/20 border-accent text-accent'
@@ -1191,6 +1258,15 @@ const Sidebar = memo(function Sidebar({
       <PotentialTradesModal
         isOpen={isTradesModalOpen}
         onClose={() => setIsTradesModalOpen(false)}
+      />
+
+      {/* Order Flow State Timeline Modal */}
+      <OrderFlowTimelineModal
+        isOpen={isOrderFlowModalOpen}
+        onClose={() => setIsOrderFlowModalOpen(false)}
+        timeline={orderFlow?.state_timeline}
+        livePrice={livePrice}
+        symbol="ETHUSDC.p"
       />
     </>
   );

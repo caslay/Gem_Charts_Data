@@ -256,3 +256,14 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
 - **The Systemic Fix:** 
   1. Enforced a **Mandatory 1H/H4 HTF Order Flow Gate**: When 1H/H4 Order Flow is Bearish, 15m Bullish SMT signals are marked as `COUNTER_TREND_RETRACEMENT` and capped at 1H Bearish Supply ($1,888–$1,898).
   2. Primary setups in HTF Bearish Order Flow MUST align with the **HTF Bearish Retest** (shorting the $1,888–$1,898 Action Zone down to $1,868 SSL / $1,850 HTF Demand).
+
+### 37. Binance HTTP 418 IP Ban & Chart Ascending Time Assertion Resolution (Resolved in V15.1)
+- **The Issue:**
+  1. Binance API returned `HTTP 418: I'm a teapot`, triggering offline simulation mode.
+  2. Lightweight Charts crashed with `Uncaught Error: Assertion failed: data must be asc ordered by time, index=600, time=1786735500, prev time=1786735500` at `Chart.tsx:1341` during `seriesRef.current.setData(formattedData)`.
+- **The Cause:**
+  1. **Binance HTTP 418:** Binance uses status code 418 when a client IP address exceeds API rate limits (1200 request weight/min or frequent burst connections from polling/hot-reloads), triggering a temporary WAF IP ban. Restarting the router assigns a fresh public IP from the ISP to immediately bypass the rate limit.
+  2. **Duplicate Timestamps:** When historical candles or offline mock candles were formatted (`Math.floor(d.t / 1000)`), two adjacent items with the same second timestamp collided. Lightweight Charts strictly enforces `time[i] > time[i-1]`.
+- **The Fix:**
+  1. **Chart Data Deduplication:** In `src/components/Chart.tsx`, wrapped `formattedData` conversion in a `Map<number, Candle>` keyed by `timeSec` before sorting and calling `setData(uniqueFormattedData)`. This guarantees that duplicate timestamps are collapsed and strictly ascending.
+  2. **Interval Boundary Alignment:** In `src/app/api/market-data/route.ts`, aligned `generateMockCandles` timestamps strictly to the interval multiple `Math.floor(rawNow / intervalMs) * intervalMs`.

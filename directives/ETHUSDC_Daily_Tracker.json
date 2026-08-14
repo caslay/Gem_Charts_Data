@@ -1,15 +1,35 @@
 {
   "version": "1.0.0",
   "symbol": "ETHUSDC.p",
-  "lastUpdated": "2026-08-13T22:39:23.953Z",
+  "lastUpdated": "2026-08-14T20:07:29.902Z",
   "stats": {
-    "totalSetups": 20,
+    "totalSetups": 21,
     "success": 0,
     "stopOut": 4,
     "noTrigger": 0,
     "winRate": 0
   },
   "entries": [
+    {
+      "id": "ETH-20260814-1873",
+      "date": "2026-08-14",
+      "time": "20:07",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Phase D Displacement MSS above $1,878.57 foll",
+      "htfDol": "PDH ($1,897.88) & H4 ERL Supply Boundary ($1,898.00)",
+      "smtStatus": "BULLISH_SMT — BTC printed Lower Low ($62,781.40) at 19:15 while ETH held VAL Higher Low ($1,871.07)",
+      "orderFlowState": "FALLING_WITH_PRICE",
+      "entryRange": [
+        1873.26,
+        1875.5
+      ],
+      "invalidation": 1866,
+      "tp1": 1885.99,
+      "tp2": 1897.88,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,878.07 | HTF Bullish Structure / Local Discount Retrace"
+    },
     {
       "id": "ETH-20260813-1888",
       "date": "2026-08-13",
@@ -18,6 +38,7 @@
       "setupType": "15m bearish rejection from $1,891.48 inside l",
       "htfDol": "PDL ($1,870.50) & Major Swing Low ($1,860.71)",
       "smtStatus": "BEARISH_SMT — BTC formed a Higher High ($63,613.6) while ETH printed a Lower High ($1,891.48) inside Bearish Trend",
+      "orderFlowState": "RISING_AGAINST_PRICE",
       "entryRange": [
         1888.5,
         1891
@@ -37,6 +58,7 @@
       "setupType": "Short retest into 15m/1H SIBI FVG (Displacement Exception)",
       "htfDol": "HTF SSL ($1,851.18) & PWL ($1,825.43)",
       "smtStatus": "BEARISH_SYNC — Counter-trend 15m Bullish SMT VETOED by 1H Bearish HTF Gate",
+      "orderFlowState": "RISING_AGAINST_PRICE",
       "entryRange": [
         1876.3,
         1882.5

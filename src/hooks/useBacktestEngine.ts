@@ -17,6 +17,7 @@ import { generateTradeExecutionParameters } from '@/lib/riskEngine';
 import { analyzeMarketStructure } from '@/lib/structureEngine';
 import { resolveTripleVectorBias } from '@/lib/quantEngine/BiasEngine';
 import { annotateCandlesWithVolumetricSignals } from '@/utils/generateChartMarkers';
+import { computeTimelineFromCandles } from '@/lib/orderFlowEngine';
 
 
 // ── Internal types ────────────────────────────────────────────────────────────
@@ -298,15 +299,19 @@ function buildEnrichedPayload(
     target_status = uniqueSweeps.join(" | ") + " / PDH_PDL_PENDING";
   }
 
-  // ── Offline Sponsorship and Risk calculations ────────────────────────────
+  // ── Offline Sponsorship, Order Flow State Machine, and Risk calculations ──
   const displacement = verifyDisplacementOffline(activeCandles, SYMBOL);
   const displacementSponsorship = displacement.status !== 'INACTIVE' && displacement.status !== 'CONSOLIDATION'
     ? 'ACTIVE'
     : 'INACTIVE';
 
-  const openInterestTrend = displacement.status !== 'INACTIVE' && displacement.status !== 'CONSOLIDATION'
-    ? 'RISING'
-    : 'FLAT';
+  // Compute exact chronological Order Flow state timeline from visible replay candles
+  const stateTimeline = computeTimelineFromCandles(activeCandles, SYMBOL);
+  const openInterestTrend = stateTimeline.active_state?.state || (
+    displacement.status !== 'INACTIVE' && displacement.status !== 'CONSOLIDATION'
+      ? 'RISING_WITH_PRICE'
+      : 'FLAT'
+  );
 
   // ── V10.13 Centralized Structure Analysis via structureEngine ─────────────
   // Slice active candles to match the standard 350-candle lookback limit of the live HUD.
@@ -460,6 +465,7 @@ function buildEnrichedPayload(
           BSL_Magnets: pdh > 0 ? [pdh] : [],
           SSL_Magnets: pdl > 0 ? [pdl] : [],
         },
+        state_timeline: stateTimeline,
       },
       institutional_sponsorship: displacement,
       trade_execution_parameters,

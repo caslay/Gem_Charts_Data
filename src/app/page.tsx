@@ -12,6 +12,8 @@ import TimeframeSwitcher, { Timeframe } from '@/components/TimeframeSwitcher';
 import { LiveTicker } from '@/components/LiveTicker';
 import DashboardMetrics from '@/components/DashboardMetrics';
 import ManualOrderPanel from '@/components/ManualOrderPanel';
+import OrderFlowTimelineRibbon from '@/components/OrderFlowTimelineRibbon';
+import OrderFlowTimelineModal from '@/components/modals/OrderFlowTimelineModal';
 import { calculateATR } from '@/lib/riskEngine';
 import { safeParseAiJson } from '@/lib/aiJsonParser';
 
@@ -39,6 +41,7 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSoundSettingsOpen, setIsSoundSettingsOpen] = useState(false);
+  const [isOrderFlowModalOpen, setIsOrderFlowModalOpen] = useState(false);
   const [commandCenterTab, setCommandCenterTab] = useState<'strategy' | 'audio'>('strategy');
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
 
@@ -346,7 +349,7 @@ export default function Home() {
         <div className="absolute bottom-[-10%] right-[10%] w-[40%] h-[40%] rounded-full bg-purple-900/10 blur-[120px] pointer-events-none" />
 
         {/* ── Header ─────────────────────────────────────────────────────── */}
-        <div className="py-3.5 md:py-4 mb-3 border-b border-card-border flex items-center justify-between px-4 lg:px-6 relative z-12 bg-card/45 backdrop-blur-xl gap-4 transition-colors">
+        <div className="py-3.5 md:py-4 mb-3 border-b border-card-border flex items-center justify-between px-4 lg:px-6 relative z-40 bg-card/45 backdrop-blur-xl gap-4 transition-colors">
 
           {/* Focal Price & Asset Display */}
           <div className="flex items-baseline gap-3.5 select-none">
@@ -399,6 +402,15 @@ export default function Home() {
 
         {/* ── 3 Large Visual HUD Cards ─────────────────────────────────────── */}
         <DashboardMetrics masterBias={masterBias} pricing={pricing} targetStatus={targetStatus} isLive={true} />
+
+        {/* ── Order Flow State Tracker & Chronological Timeline Ribbon ─────────── */}
+        <div className="px-4 lg:px-6 mb-2 relative z-20">
+          <OrderFlowTimelineRibbon
+            timeline={data?.ipda_metrics?.order_flow_engine?.state_timeline}
+            livePrice={livePrice}
+            onOpenModal={() => setIsOrderFlowModalOpen(true)}
+          />
+        </div>
 
         {/* ── Chart Area ─────────────────────────────────────────────────── */}
         <div className="flex-1 relative px-4 lg:px-6 pb-4 z-10 flex flex-col min-h-0">
@@ -495,6 +507,15 @@ export default function Home() {
         onClose={() => setIsSoundSettingsOpen(false)}
         onSave={() => { }}
         onDelete={() => { }}
+      />
+
+      {/* Order Flow State Timeline Modal */}
+      <OrderFlowTimelineModal
+        isOpen={isOrderFlowModalOpen}
+        onClose={() => setIsOrderFlowModalOpen(false)}
+        timeline={data?.ipda_metrics?.order_flow_engine?.state_timeline}
+        livePrice={livePrice}
+        symbol="ETHUSDC.p"
       />
       {/* Decoupled Leaf Runners */}
       <StrategyEvaluatorRunner />

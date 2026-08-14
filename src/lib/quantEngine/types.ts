@@ -118,3 +118,52 @@ export interface MarketStructureConfig {
   displacementVef?: number;
   sharpDepartureMult?: number;
 }
+
+// ─── Order Flow State Machine & Chronological Timeline Types ────────────────
+export type OrderFlowState =
+  | 'RISING_WITH_PRICE'       // Aggressive Buy Sponsorship (Longs Building)
+  | 'RISING_AGAINST_PRICE'    // Aggressive Short Sponsorship (Shorts Building)
+  | 'FALLING_WITH_PRICE'      // Long Liquidation / Long Unwinding
+  | 'FALLING_AGAINST_PRICE'   // Short Covering / Short Squeeze
+  | 'FLAT'                    // Equilibrium / Flat Open Interest
+  | 'NEUTRAL'                 // Low Volatility / Undecided
+  | 'UNAVAILABLE';            // Offline / Uninitialized
+
+export interface OrderFlowStateRecord {
+  id?: string | number;
+  symbol: string;
+  state: OrderFlowState;
+  entered_at: number; // UTC ms timestamp
+  entry_price: number;
+  exited_at: number | null; // UTC ms timestamp (null while state is active)
+  exit_price: number | null; // (null while state is active)
+  duration_seconds: number | null; // calculated when state exits or live elapsed
+  price_change?: number | null; // exit_price - entry_price (or live - entry)
+  price_change_pct?: number | null; // ((exit_price - entry_price) / entry_price) * 100
+  metadata?: {
+    volume_delta?: number;
+    oi_delta?: number;
+    taker_buy_ratio?: number;
+    displacement_status?: string;
+    is_live?: boolean;
+    candle_count?: number;
+  };
+}
+
+export interface OrderFlowTimelineStats {
+  total_transitions: number;
+  time_in_buy_sponsorship_sec: number;
+  time_in_short_sponsorship_sec: number;
+  time_in_liquidation_sec: number;
+  time_in_covering_sec: number;
+  time_in_neutral_sec: number;
+  dominant_state_last_24h: OrderFlowState;
+  avg_state_duration_sec: number;
+}
+
+export interface OrderFlowTimelineSummary {
+  active_state: OrderFlowStateRecord | null;
+  history: OrderFlowStateRecord[];
+  stats: OrderFlowTimelineStats;
+}
+

@@ -29,9 +29,14 @@ This skill operationalizes the **Institutional Synthesis Framework: ETHUSDC.p Qu
 5. **THE WYCKOFF METHOD INTEGRATION:**
    * **Phase C:** Require Phase C Spring / Shakeout for long setups and Phase C Upthrust After Distribution (UTAD) for short setups.
    * **Phase D:** Require Sign of Strength (SOS) or Weakness (SOW) demonstrated via Displacement candle body closes (MSS) leaving clean imbalances (FVG).
-6. **MARKET MICROSTRUCTURE & SMT GATEKEEPER:**
+6. **MARKET MICROSTRUCTURE & ORDER FLOW STATE MACHINE ENGINE:**
    * **SMT Gatekeeper:** Mandatory SMT requirement (ETH vs BTC divergence) at structural levels as a strict execution gatekeeper.
-   * **Institutional Backing:** Verify Open Interest (OI) expansion and Cumulative Volume Delta (CVD) divergence to confirm institutional absorption over retail stop-outs.
+   * **Order Flow State Machine Decoding:** Evaluate the active Open Interest trend and state transitions across 5 dimensions:
+     1. **Institutional Intent:** `RISING_WITH_PRICE` (Aggressive Buy Sponsorship / Long Deployment), `RISING_AGAINST_PRICE` (Aggressive Short Sponsorship / Short Deployment), `FALLING_WITH_PRICE` (Long Liquidation / Bear Trap Absorption at VAL), `FALLING_AGAINST_PRICE` (Short Covering / Squeeze — do not chase breakouts), `FLAT` (Passive Equilibrium).
+     2. **Regime Fatigue & Duration Decay:** Compare active state duration vs average persistence (>3x avg indicates statistical exhaustion into HTF boundaries).
+     3. **MSS & Auction Gatekeeping:** Bullish MSS is only validated when backed by `RISING_WITH_PRICE`; MSS during short covering is unconfirmed.
+     4. **24h Distribution Asymmetry:** Align macro trade sizing and direction with the 24h dominant sponsorship regime.
+     5. **Inter-Market Absorption Climax:** Synthesize ETH `RISING_AGAINST_PRICE` with BTC Bullish SMT to detect smart money absorption traps.
    * **DOL Targeting:** Align primary profit targets with Liquidation Density Clusters and HTF External/Internal Range Liquidity.
 7. **HTF ORDER FLOW HIERARCHY & COUNTER-TREND VETO:** Higher Timeframe (1H/H4) Order Flow and Market Structure ALWAYS override 15m micro-structure and SMT signals. If 1H/H4 Order Flow is **BEARISH** (e.g., major support broken into HTF Bearish Supply), the AI Agent is **STRICTLY PROHIBITED** from generating 15m Counter-Trend Bullish Long setups. All 15m Bullish SMT signals inside a 1H Bearish Trend are VETOED as liquidity traps into 1H Supply, and analysis must focus exclusively on primary HTF Short Retests.
 8. **DYNAMIC RISK & TWO-STAGE TRAILING STOP PROTOCOL:**

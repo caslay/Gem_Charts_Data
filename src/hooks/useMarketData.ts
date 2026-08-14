@@ -393,6 +393,7 @@ export interface MarketDataDeltaPayload {
     resting_liquidity_pools: { BSL_Magnets: number[]; SSL_Magnets: number[] };
     liquidation_events: any;
     smart_money_sentiment: any;
+    state_timeline?: any;
   };
   delta_structure?: {
     latestMSS: any;
@@ -1108,13 +1109,20 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
   } = useAIAnalysis();
 
   // ── 30-Minute Automated Analysis Scan Scheduler ────────────────────────────
-  const [isAuto30mScanActive, setIsAuto30mScanActive] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('gem_auto_30m_scan') === 'true';
-    }
-    return true; // Active by default
-  });
+  const [isAuto30mScanActive, setIsAuto30mScanActive] = useState<boolean>(true);
   const [next30mScanSeconds, setNext30mScanSeconds] = useState<number>(1800); // 30 minutes = 1800s
+
+  // Sync with localStorage on client mount (avoids SSR hydration mismatch)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('gem_auto_30m_scan');
+      if (stored !== null) {
+        setIsAuto30mScanActive(stored === 'true');
+      }
+    } catch {
+      // Ignore localStorage errors
+    }
+  }, []);
 
   const toggleAuto30mScan = useCallback(() => {
     setIsAuto30mScanActive((prev) => {
