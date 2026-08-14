@@ -1,58 +1,38 @@
-# **ETHUSDC.p Quantitative Analysis Framework & AI Agent Skill SOP**
+# **Institutional Synthesis Framework: ETHUSDC.p Quantitative Analysis SOP**
 
-This Standard Operating Procedure (SOP) defines the systematic approach for the quantitative analysis of the ETHUSDC.p market. It outlines the specific technical constraints, analytical hierarchies, and reporting requirements for the AI Agent.
+This Standard Operating Procedure (SOP) defines the unified Institutional Synthesis Framework for the quantitative analysis of the ETHUSDC.p market. It integrates Pure ICT, Auction Market Theory (AMT & Volume Profile), The Wyckoff Method, and Market Microstructure (Open Interest & CVD Delta) into a systematic analytical hierarchy.
 
-# **1\. System Role & Operating Rules**
+# **1\. Core Framework Components & Rules**
 
-The AI Agent operates as a specialized Quantitative Market Analyst focused exclusively on ETHUSDC.p price action and inter-market correlations.
+## **Pure ICT Time & Price Engine**
 
-## **Core Operating Rules**
+* Kill-Zone Timing Windows: London (02:00-05:00 EST / 09:00-12:00 Cairo) and NY AM (08:00-11:00 EST / 15:00-18:00 Cairo) with a 0-90 min entry window.  
+* PD Arrays: Focus on Fair Value Gaps (FVG), Order Blocks (OB), Breakers, and Rejection Blocks.  
+* Prohibited Rule: Explicit prohibition of the True Day Open (TDO) or Cairo TDO rule.
 
-* **Primary Constraint:** The system is explicitly prohibited from using, referencing, or calculating the True Day Open (TDO) or Cairo TDO. All analysis must rely on session-based liquidity and HTF structural markers rather than these specific daily opening price concepts.  
-* **Asset Focus:** Primary focus on ETHUSDC.p with secondary correlation analysis of BTCUSDC.p.  
-* **Objective:** To identify high-probability Draw on Liquidity (DOL) targets and execution zones based on algorithmic price action principles.
+## **Auction Market Theory (AMT) & Volume Profiling**
 
-# **2\. Step-by-Step Analytical Workflow**
+* Value Area Extremes: Execute longs below Value Area Low (VAL) and shorts above Value Area High (VAH). Avoid trading inside High Volume Nodes (HVN / Fair Value Points).  
+* Volume Vacuums: Filter FVGs to align with Low Volume Nodes (LVN) at Value Area edges.
 
-The workflow follows a top-down technical progression to ensure all trade ideas are grounded in higher-timeframe intent.
+## **The Wyckoff Method Integration**
 
-## **Step 1: Real-time Data Intake**
+* Phase C: Utilize Phase C Spring / Shakeout for long entries and Phase C UTAD for short entries.  
+* Phase D: Require Sign of Strength (SOS) or Weakness (SOW) demonstrated via Displacement body closes (MSS) creating clean FVGs.
 
-* Fetch current price data for ETHUSDC.p and BTCUSDC.p.  
-* Note the current spread, volatility index, and volume profiles.
+## **Market Microstructure & SMT Gatekeeper**
 
-## **Step 2: HTF Draw on Liquidity (DOL)**
+* SMT Gatekeeper: Mandatory SMT requirement (ETH vs BTC) as a strict execution gatekeeper.  
+* Institutional Backing: Verify Open Interest (OI) and Cumulative Volume Delta (CVD) to confirm institutional capital over retail stop-outs.  
+* DOL Targeting: Align Action Zones with Liquidation Density Clusters for profit targets.
 
-* Analyze Daily and H4 timeframes.  
-* Identify the most likely target for price:  
-  * Unfilled Fair Value Gaps (FVG).  
-  * Previous Daily Highs/Lows (PDH/PDL).  
-  * External Range Liquidity (ERL) vs. Internal Range Liquidity (IRL).
+# **2\. Optimized 5-Step Daily & Hourly Workflow**
 
-## **Step 3: Session Liquidity Profiling**
-
-* Mark significant liquidity pools formed during specific sessions:  
-  * **London Session:** Identify the London High and London Low.  
-  * **New York Session:** Identify the initial morning expansion.  
-* Determine which session liquidity is likely to be swept based on the HTF DOL.
-
-## **Step 4: BTC SMT Correlation**
-
-* Perform Inter-market Analysis (SMT Logic):  
-  * **Bullish SMT:** BTC makes a lower low while ETH makes a higher low at a key support level.  
-  * **Bearish SMT:** BTC makes a higher high while ETH makes a lower high at a key resistance level.  
-* Divergence must occur at key liquidity levels to be valid.
-
-## **Step 5: 15m Execution Mapping**
-
-* Refine the narrative to the 15m timeframe.  
-* Look for a Market Structure Shift (MSS) following a liquidity sweep or SMT formation.  
-* Identify the Displacement and the resulting 15m FVG or Order Block (OB) for potential entry.
-
-## **Step 6: Invalidation & Targets**
-
-* **Invalidation:** Define the structural point where the current thesis is no longer valid (e.g., a break of the low/high that initiated the sweep).  
-* **Targets:** Set primary and secondary profit targets based on the HTF DOL identified in Step 2\.
+1. Step 1: HTF Narrative: Analyze higher-timeframe intent and primary Draw on Liquidity (DOL).  
+2. Step 2: Session & Value Profiling: Identify Value Area Extremes (VAH/VAL) and HVNs/LVNs.  
+3. Step 3: Temporal Execution Gate: Apply Killzone timing windows and Pre-News Volatility Filter.  
+4. Step 4: Liquidity Raid & SMT Confirmation: Confirm setup via liquidity sweep and mandatory SMT divergence.  
+5. Step 5: Micro Execution: Execute based on MSS \+ FVG/LVN alignment and OI/CVD institutional backing.
 
 # **3\. Standardized Output Specification & Report Template**
 
@@ -79,10 +59,18 @@ To maintain quantitative rigor, all analysis and outcomes must be logged into th
    * DOL Reached: (Boolean)  
    * Notes on Price Action: (Brief commentary on deviation from plan)
 
-**Approval & Version Control**
+# **5. Dynamic Risk & Scale-Out Management**
+
+This section outlines the Two-Stage Trailing Stop Protocol to ensure systematic risk management during market expansion.
+
+* **Stage 1 (Pre-TP1 / In-Flight):** Stop Loss remains anchored below the True Protected Displacement Base or Entry Breakeven. Strictly prohibit trailing to Internal Range Liquidity (IRL) / micro-swings inside an active expansion leg.
+* **Stage 2 (Post-TP1 / Runner Phase):** Only after banking 70% at TP1 (External Range Liquidity), trail SL to the confirmed M15 Structural Higher Low.
+
+---
+
+## **Approval & Version Control**
 
 | Role | Name | Date |
 | :---- | :---- | :---- |
-| Document Owner | Person | Date |
-| System Reviewer | Person | Date |
-
+| Document Owner | Quantitative Strategy Team | 2026-08-14 |
+| System Reviewer | Flow-State Quant Engine | 2026-08-14 |

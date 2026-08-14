@@ -1,8 +1,26 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V14.8
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V14.9
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-12 (V14.8 — Viewport Auto-Zoom & Scroll Reset Dependency Fix)  
+> **Last Updated:** 2026-08-14 (V14.9 — Institutional Synthesis Framework SOP & Terminal AI Prompt Synchronization)  
+
+## 🆕 V14.9 Changelog — Institutional Synthesis Framework SOP & Terminal AI Prompt Synchronization (2026-08-14)
+
+### Summary
+Synchronized the terminal AI prompt builder, system prompt definitions, and PostgreSQL settings vault with the updated Version 2.0.0 Institutional Synthesis Framework SOP (synthesizing Pure ICT, Auction Market Theory, Wyckoff Method, Market Microstructure, SMT Gatekeeper, and Two-Stage Trailing Stop Risk Management).
+
+### Key Features & Architectural Fixes
+- **Unified Institutional Synthesis Prompt Engine (`src/lib/sopPromptBuilder.ts` & `src/lib/aiSystemPrompt.ts`):**
+  - Synthesized 4 core institutional pillars: Pure ICT Time & Price (Killzones 0–90m window & zero TDO), AMT (VAL discount longs / VAH premium shorts, HVN avoidance, LVN vacuum alignment), Wyckoff Method (Phase C Spring/UTAD and Phase D Displacement MSS), and Market Microstructure (OI expansion $\Delta \text{OI} > 0$ and CVD Delta absorption).
+  - Integrated Two-Stage Trailing Stop risk management into the system prompt and JSON report schema (`stage1_sl` at Protected Displacement Base, `stage2_sl` trailed to M15 Structural HL post-TP1).
+- **PostgreSQL Settings Vault Migration (`scratch/update_db_prompt.js`):**
+  - Updated the active `SYSTEM_PROMPT` record in `system_settings` table to ensure live runtime queries in `/api/quant-analyze` utilize the latest Institutional Synthesis system prompt.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors, clean compilation** ✅
+- Database Migration → `Successfully updated SYSTEM_PROMPT in database.` ✅
+
+---
 
 ## 🆕 V14.8 Changelog — Viewport Auto-Zoom & Scroll Reset Dependency Fix (2026-08-12)
 

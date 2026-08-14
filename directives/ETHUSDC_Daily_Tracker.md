@@ -3,7 +3,7 @@
 This log tracks all quantitative setups, Draw on Liquidity (DOL) targets, SMT divergence states, and session outcomes evaluated by the `/eth-quant-sop` AI Agent Skill.
 
 ## 📊 Summary Statistics
-- **Total Logged Setups:** 7
+- **Total Logged Setups:** 8
 - **Successful Trades:** 0
 - **Stopped Out:** 4
 - **No Trigger / Expired:** 0
@@ -29,3 +29,4 @@ This log tracks all quantitative setups, Draw on Liquidity (DOL) targets, SMT di
 | 2026-08-13 | 16:07 | 15m Bearish MSS below $1,885.90 with displace | PDL ($1,870.50) & SSL Liquidity Pool ($1,868.23) | BEARISH_SYNC / BULLISH_SMT_VETOED — Bullish SMT signals vetoed due to active 1H Bearish Order Flow gate filter | $1895.2 | TP1: $1875.69 / TP2: $1870.5 | PENDING | ETHUSDC.p $1,880.74 | HTF Bearish Continuation |
 | 2026-08-13 | 16:35 | 15m Bearish MSS below $1,885.90 with displace | PDL ($1,870.50) & Asian Low ($1,870.50) | BEARISH_SYNC — BTC and ETH synchronized downward expansion following $1,895.19 rejection, confirming HTF institutional short sponsorship. | $1891.56 | TP1: $1875.69 / TP2: $1870.5 | PENDING | ETHUSDC.p $1,877.89 | HTF Bearish Order Flow Continuation |
 | 2026-08-13 | 16:41 | 15m displacement down through $1,872.74 valid | PDL ($1,870.50 - Purged) & HTF Major Swing Low / SSL ($1,851.18) | BEARISH_SYNC — BTC printed Lower Low ($63,010) with ETH confirming correlated breakdown below $1,870.50 | $1885.9 | TP1: $1863.87 / TP2: $1851.18 | PENDING | ETHUSDC.p $1,866.15 | 1H Bearish Order Flow Continuation |
+| 2026-08-13 | 22:43 | Short retest into 15m/1H SIBI FVG (Displacement Exception) | HTF SSL ($1,851.18) & PWL ($1,825.43) | BEARISH_SYNC — Counter-trend 15m Bullish SMT VETOED by 1H Bearish HTF Gate | $1885.90 | TP1: $1860.71 / TP2: $1851.18 | PENDING | ETHUSDC.p $1,874.75 | Displacement-backed exception logged from Audit |
