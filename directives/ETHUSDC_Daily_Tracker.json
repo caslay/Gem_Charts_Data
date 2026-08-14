@@ -1,15 +1,53 @@
 {
   "version": "1.0.0",
   "symbol": "ETHUSDC.p",
-  "lastUpdated": "2026-08-13T17:29:11.440Z",
+  "lastUpdated": "2026-08-13T22:39:23.953Z",
   "stats": {
-    "totalSetups": 18,
+    "totalSetups": 20,
     "success": 0,
     "stopOut": 4,
     "noTrigger": 0,
     "winRate": 0
   },
   "entries": [
+    {
+      "id": "ETH-20260813-1888",
+      "date": "2026-08-13",
+      "time": "22:39",
+      "symbol": "ETHUSDC.p",
+      "setupType": "15m bearish rejection from $1,891.48 inside l",
+      "htfDol": "PDL ($1,870.50) & Major Swing Low ($1,860.71)",
+      "smtStatus": "BEARISH_SMT — BTC formed a Higher High ($63,613.6) while ETH printed a Lower High ($1,891.48) inside Bearish Trend",
+      "entryRange": [
+        1888.5,
+        1891
+      ],
+      "invalidation": 1893.5,
+      "tp1": 1882.81,
+      "tp2": 1870.5,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,888.03 | Premium of H1 Bearish Dealing Range"
+    },
+    {
+      "id": "ETH-20260813-2243",
+      "date": "2026-08-13",
+      "time": "22:43",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Short retest into 15m/1H SIBI FVG (Displacement Exception)",
+      "htfDol": "HTF SSL ($1,851.18) & PWL ($1,825.43)",
+      "smtStatus": "BEARISH_SYNC — Counter-trend 15m Bullish SMT VETOED by 1H Bearish HTF Gate",
+      "entryRange": [
+        1876.3,
+        1882.5
+      ],
+      "invalidation": 1885.9,
+      "tp1": 1860.71,
+      "tp2": 1851.18,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,874.75 | Displacement-backed exception logged from Audit"
+    },
     {
       "id": "ETH-20260813-1876",
       "date": "2026-08-13",
