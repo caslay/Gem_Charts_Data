@@ -76,10 +76,10 @@ export function getStateMetadata(state: OrderFlowState | string) {
       label: 'FLAT / BALANCE',
       shortLabel: 'FLAT',
       description: 'Equilibrium / Passive Order Book',
-      colorBg: 'bg-slate-700/60',
-      colorBgMuted: 'bg-slate-700/20',
-      colorBorder: 'border-slate-600/40',
-      colorText: 'text-slate-300',
+      colorBg: 'bg-slate-600/80',
+      colorBgMuted: 'bg-slate-600/25',
+      colorBorder: 'border-slate-500/50',
+      colorText: 'text-slate-200',
       colorGlow: '',
       colorDot: 'bg-slate-400',
       icon: Activity,
@@ -89,10 +89,10 @@ export function getStateMetadata(state: OrderFlowState | string) {
     label: 'NEUTRAL',
     shortLabel: 'NEUT',
     description: 'Neutral / Undecided Volume Flow',
-    colorBg: 'bg-zinc-700/50',
-    colorBgMuted: 'bg-zinc-800/30',
-    colorBorder: 'border-zinc-700/40',
-    colorText: 'text-zinc-400',
+    colorBg: 'bg-zinc-600/70',
+    colorBgMuted: 'bg-zinc-700/30',
+    colorBorder: 'border-zinc-500/40',
+    colorText: 'text-zinc-300',
     colorGlow: '',
     colorDot: 'bg-zinc-400',
     icon: Activity,
@@ -281,7 +281,7 @@ export default function OrderFlowTimelineRibbon({
               onMouseLeave={() => setHoveredRecord(null)}
               onClick={onOpenModal}
               className={`
-                h-full rounded-sm transition-all duration-150 cursor-pointer relative group
+                h-full min-w-[6px] rounded-sm transition-all duration-150 cursor-pointer relative group border border-black/20
                 ${meta.colorBg} hover:brightness-125 hover:scale-y-110 hover:z-20
                 ${isLatest ? `animate-pulse ${meta.colorGlow} ring-1 ring-white/50` : 'opacity-90 hover:opacity-100'}
               `}

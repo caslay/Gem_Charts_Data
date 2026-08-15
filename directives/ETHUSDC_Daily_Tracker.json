@@ -1,15 +1,35 @@
 {
   "version": "1.0.0",
   "symbol": "ETHUSDC.p",
-  "lastUpdated": "2026-08-14T20:07:29.902Z",
+  "lastUpdated": "2026-08-15T13:42:57.563Z",
   "stats": {
-    "totalSetups": 21,
+    "totalSetups": 22,
     "success": 0,
     "stopOut": 4,
     "noTrigger": 0,
     "winRate": 0
   },
   "entries": [
+    {
+      "id": "ETH-20260815-1876",
+      "date": "2026-08-15",
+      "time": "13:42",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Phase D Displacement MSS above $1,878.85 foll",
+      "htfDol": "PDH ($1,889.16) & BSL Cluster ($1,891.00)",
+      "smtStatus": "BULLISH_SMT — ETH held $1,873.24 Higher Low while BTC swept to Lower Low ($62,890.20)",
+      "orderFlowState": "RISING_AGAINST_PRICE",
+      "entryRange": [
+        1876.6,
+        1879.72
+      ],
+      "invalidation": 1873,
+      "tp1": 1882.54,
+      "tp2": 1889.16,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,881.00 | HTF Bullish Expansion / NY AM Kill-Zone"
+    },
     {
       "id": "ETH-20260814-1873",
       "date": "2026-08-14",

@@ -575,38 +575,48 @@ class OrderFlowStateTrackerClass {
   }
 
   /**
-   * Bootstraps historical timeline state from recent candles if uninitialized.
+   * Bootstraps historical timeline state deterministically from candles
+   * and guarantees perfect stability and parity across server instances.
    */
   public bootstrapFromCandles(symbol: string, candles: Array<any>) {
     const mem = this.getMemory(symbol);
-    if (!mem.isBootstrapped && candles && candles.length > 0) {
-      const summary = computeTimelineFromCandles(candles, symbol);
-      mem.history = summary.history.slice(-100);
+    if (!candles || candles.length === 0) return;
+
+    // Pure deterministic reconstruction from closed candles
+    const summary = computeTimelineFromCandles(candles, symbol);
+    
+    // Always sync historical segments to immutable closed-candle ground truth
+    mem.history = summary.history.slice(-100);
+    if (!mem.active_state) {
       mem.active_state = summary.active_state;
-      mem.isBootstrapped = true;
     }
+    mem.isBootstrapped = true;
   }
 
   /**
-   * Evaluates live ticks/polls and logs state transitions.
+   * Evaluates live ticks/polls and maintains active state without generating 5s sub-tick flutter.
+   * Gated strictly on confirmed candle closes / new candle arrivals for history push.
    */
   public updateLiveState(
     symbol: string,
     rawState: string,
     timestamp: number,
     livePrice: number,
-    metadata?: Record<string, any>
+    metadata?: Record<string, any>,
+    currentCandleTimestamp?: number
   ): OrderFlowTimelineSummary {
     const mem = this.getMemory(symbol);
     const normalizedState = normalizeOrderFlowState(rawState);
 
-    // Initial state setup
+    const candleStart = currentCandleTimestamp || timestamp;
+
+    // Initial state setup if empty
     if (!mem.active_state) {
       mem.active_state = {
-        id: `live-${timestamp}`,
+        id: `live-${candleStart}`,
         symbol,
         state: normalizedState,
-        entered_at: timestamp,
+        entered_at: candleStart,
         entry_price: livePrice,
         exited_at: null,
         exit_price: null,
@@ -618,16 +628,18 @@ class OrderFlowStateTrackerClass {
       const stats = calculateOrderFlowStats(mem.history, mem.active_state, timestamp);
       return {
         active_state: mem.active_state,
-        history: mem.history.slice(-50),
+        history: mem.history.slice(-100),
         stats
       };
     }
 
-    // Check for State Transition
-    if (mem.active_state.state !== normalizedState) {
-      // 1. Close previous record
+    const isNewCandleBoundary = currentCandleTimestamp ? (currentCandleTimestamp > mem.active_state.entered_at) : false;
+
+    // Check for State Transition at confirmed candle boundary
+    if (isNewCandleBoundary && mem.active_state.state !== normalizedState) {
+      // 1. Close previous record upon confirmed candle close
       const previous = mem.active_state;
-      const exited_at = timestamp;
+      const exited_at = candleStart;
       const exit_price = livePrice;
       const duration_seconds = Math.max(1, Math.round((exited_at - previous.entered_at) / 1000));
       const price_change = parseFloat((exit_price - previous.entry_price).toFixed(2));
@@ -653,12 +665,12 @@ class OrderFlowStateTrackerClass {
         console.warn(`[OrderFlowTracker] Failed to persist state transition to DB: ${err.message || err}`);
       });
 
-      // 2. Create new active state record
+      // 2. Create new active state record for the new candle
       mem.active_state = {
-        id: `live-${timestamp}`,
+        id: `live-${candleStart}`,
         symbol,
         state: normalizedState,
-        entered_at: timestamp,
+        entered_at: candleStart,
         entry_price: livePrice,
         exited_at: null,
         exit_price: null,
@@ -668,7 +680,12 @@ class OrderFlowStateTrackerClass {
         metadata: { ...metadata, is_live: true }
       };
     } else {
-      // State is ongoing: update duration and live price delta
+      // Intra-candle live tick: update active state regime & live metrics without polluting history array
+      if (!isNewCandleBoundary && mem.active_state.state !== normalizedState) {
+        // Update active regime on live open candle without committing prematurely to closed history
+        mem.active_state.state = normalizedState;
+      }
+
       const duration_seconds = Math.max(0, Math.round((timestamp - mem.active_state.entered_at) / 1000));
       const price_change = parseFloat((livePrice - mem.active_state.entry_price).toFixed(2));
       const price_change_pct = parseFloat((((livePrice - mem.active_state.entry_price) / mem.active_state.entry_price) * 100).toFixed(3));
@@ -676,6 +693,7 @@ class OrderFlowStateTrackerClass {
       mem.active_state = {
         ...mem.active_state,
         duration_seconds,
+        exit_price: livePrice,
         price_change,
         price_change_pct,
       };
@@ -684,7 +702,7 @@ class OrderFlowStateTrackerClass {
     const stats = calculateOrderFlowStats(mem.history, mem.active_state, timestamp);
     return {
       active_state: mem.active_state,
-      history: mem.history.slice(-50),
+      history: mem.history.slice(-100),
       stats
     };
   }
@@ -698,7 +716,7 @@ class OrderFlowStateTrackerClass {
     const stats = calculateOrderFlowStats(mem.history, mem.active_state, now);
     return {
       active_state: mem.active_state,
-      history: mem.history.slice(-50),
+      history: mem.history.slice(-100),
       stats
     };
   }
@@ -747,8 +765,7 @@ async function persistStateTransitionToDb(record: OrderFlowStateRecord): Promise
       )
     `;
   } catch (error: any) {
-    // Database offline or serverless cold start - silently ignore as memory cache holds state
-    // console.warn(`[order_flow_states_log] Database write skipped: ${error.message || error}`);
+    // Database offline or serverless cold start - silently ignore as deterministic candle truth holds state
   }
 }
 

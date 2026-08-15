@@ -1239,7 +1239,9 @@ export async function GET(req: Request) {
       pricing_context,
       order_flow_engine: (() => {
         // Bootstrap in-memory state tracking if needed
-        OrderFlowStateTracker.bootstrapFromCandles(symbol, candles15m.length > 0 ? candles15m : candles5m);
+        const primaryCandles = candles15m.length > 0 ? candles15m : candles5m;
+        const currentCandleT = primaryCandles.length > 0 ? primaryCandles[primaryCandles.length - 1].t : undefined;
+        OrderFlowStateTracker.bootstrapFromCandles(symbol, primaryCandles);
         const state_timeline = OrderFlowStateTracker.updateLiveState(
           symbol,
           open_interest_trend,
@@ -1248,7 +1250,8 @@ export async function GET(req: Request) {
           {
             displacement_status: institutional_sponsorship.status,
             liquidation_status: liquidation_events.status,
-          }
+          },
+          currentCandleT
         );
         return {
           open_interest_trend,
