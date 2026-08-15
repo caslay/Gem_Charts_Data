@@ -287,5 +287,18 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   1. Added strict `if (!prev || !prev.data_payload) return jsonData;` guard in `setData` to automatically accept the incoming payload if previous state is empty.
   2. Added defensive optional chaining `prev?.data_payload?.[activeKey] || []` in both `fetchData` and `mergeDeltaPayload()`.
 
+### 40. Service Worker API Interception & Plain-Text JSON Parsing Collision (Resolved in V15.5)
+- **The Bug:** Client console error: `[StrategyEvaluator] Failed to fetch strategies: SyntaxError: Unexpected token 'O', "Offline mode active." is not valid JSON` and `Failed to refresh active trade names: SyntaxError: Unexpected token 'O', "Offline mode active." is not valid JSON`.
+- **The Cause:** 
+  1. `public/sw.js` intercepted all incoming `fetch()` requests across the origin. When any network request failed or dev server reloaded, its fallback catch returned `new Response("Offline mode active.")` which defaulted to `status: 200` with `text/plain`.
+  2. Because `res.ok` was `true`, client hooks (`useStrategyEvaluator`, `EquationBuilder`, `page.tsx`) immediately executed `res.json()`, failing on the plain text string.
+  3. In addition, the service worker remained active in development on `localhost` across dev server restarts.
+- **The Fix:**
+  1. **SW Bypass Gate:** Updated `public/sw.js` to unconditionally bypass `/api/*` routes, `/_next/*` assets, and non-GET requests, allowing native fetch execution.
+  2. **Explicit 503 Status:** Configured fallback responses to return `status: 503` (Service Unavailable) rather than masking failures as `200 OK`.
+  3. **Dev SW Auto-Cleanup:** In `src/app/layout.tsx`, gated SW registration to HTTPS production environments and actively unregistered any leftover workers on `localhost` / `http:`.
+  4. **Defensive Content-Type Verification:** Injected `res.headers.get('content-type')?.includes('application/json')` guards across all client API consumers before invoking `res.json()`.
+
+
 
 

@@ -47,11 +47,21 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').catch(function(err) {
-                    console.log('SW registration failed: ', err);
+                var isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('192.168.') || window.location.protocol === 'http:';
+                if (!isLocal && window.location.protocol === 'https:') {
+                  window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/sw.js').catch(function(err) {
+                      console.log('SW registration failed: ', err);
+                    });
                   });
-                });
+                } else {
+                  // In local development / HTTP, unregister any stale service workers to prevent API/caching collisions
+                  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                    for (var r of registrations) {
+                      r.unregister();
+                    }
+                  });
+                }
               }
             `,
           }}

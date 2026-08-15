@@ -616,6 +616,10 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
     try {
       const res = await fetch('/api/strategies');
       if (res.ok) {
+        const contentType = res.headers.get('content-type');
+        if (contentType && !contentType.includes('application/json')) {
+          return;
+        }
         const json = await res.json();
         const activeStrats = (json.strategies || []).filter((s: CustomStrategy) => s.is_active);
         const filtered = activeStrats.filter((s: any) => {
@@ -640,6 +644,10 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
     try {
       const res = await fetch(tradesApiUrl);
       if (res.ok) {
+        const contentType = res.headers.get('content-type');
+        if (contentType && !contentType.includes('application/json')) {
+          return;
+        }
         const json = await res.json();
         const tradesList = json.trades || [];
         setTrades(tradesList);

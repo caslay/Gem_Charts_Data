@@ -173,6 +173,10 @@ export default function EquationBuilder() {
       setIsLoading(true);
       const res = await fetch('/api/strategies');
       if (res.ok) {
+        const contentType = res.headers.get('content-type');
+        if (contentType && !contentType.includes('application/json')) {
+          return;
+        }
         const data = await res.json();
         setStrategies(data.strategies || []);
       }

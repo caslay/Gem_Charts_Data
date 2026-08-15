@@ -198,6 +198,9 @@ export function runInvalidationCheck(
   livePrice: number,
   biasSignal: string
 ): InvalidationCheckResult {
+  if (biasSignal === 'NEUTRAL' || biasSignal === 'ABORT' || !invalidationLevel) {
+    return { breached: false, live_price: livePrice, invalidation_level: invalidationLevel, breach_direction: null };
+  }
   const isBullish = biasSignal.includes('BULLISH');
   let breached = false;
   let breach_direction: 'ABOVE' | 'BELOW' | null = null;
