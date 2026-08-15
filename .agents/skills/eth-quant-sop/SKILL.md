@@ -1,16 +1,46 @@
 ---
 name: eth-quant-sop
 description: >-
-  Institutional Synthesis Quantitative Analysis Framework & AI Agent SOP for ETHUSDC.p price action and inter-market correlation (BTC SMT). Integrates Pure ICT, Auction Market Theory (AMT & Volume Profile), The Wyckoff Method, and Market Microstructure (OI & CVD Delta). Includes 7 execution sub-commands: analyze, guided, smt, log, review, audit, and report. Strict prohibition of True Day Open (TDO) or Cairo TDO, with Two-Stage Trailing Stop Risk Management.
+  Institutional Synthesis Quantitative Analysis Framework & AI Agent SOP for ETHUSDC.p price action and inter-market correlation (BTC SMT). Integrates Pure ICT, Auction Market Theory (AMT & Volume Profile), The Wyckoff Method, and Market Microstructure (OI & CVD Delta) with live MCP Tool integration (flow-state-quant-engine) and dual daily tracker persistence. Includes 7 execution sub-commands: analyze, guided, smt, log, review, audit, and report. Strict prohibition of True Day Open (TDO) or Cairo TDO, with Two-Stage Trailing Stop Risk Management.
 license: MIT
 metadata:
-  version: 2.0.0
+  version: 2.1.0
   author: Flow-State Quant Engine Team
 ---
 
 # 🤖 Institutional Synthesis Framework: ETHUSDC.p Quantitative Analysis SOP Skill
 
-This skill operationalizes the **Institutional Synthesis Framework: ETHUSDC.p Quantitative Analysis SOP** into a suite of AI Agent commands. It systematically synthesizes **Pure ICT Time & Price**, **Auction Market Theory (AMT & Volume Profile)**, **The Wyckoff Method**, and **Market Microstructure (OI & CVD Delta)** with dual daily tracker persistence.
+This skill operationalizes the **Institutional Synthesis Framework: ETHUSDC.p Quantitative Analysis SOP** into a suite of AI Agent commands powered by the live **`flow-state-quant-engine` Model Context Protocol (MCP)** toolset. It systematically synthesizes **Pure ICT Time & Price**, **Auction Market Theory (AMT & Volume Profile)**, **The Wyckoff Method**, and **Market Microstructure (OI & CVD Delta)** with automated live context extraction, pre-flight safety invalidation guards, and dual daily tracker persistence.
+
+---
+
+## ⚡ LIVE MCP INTEGRATION PROTOCOL (`flow-state-quant-engine`)
+
+When executing quantitative workflows, the AI Agent must utilize the available MCP tools to fetch live state and log decisions:
+
+### 1. Auto-Fetch Live Market Context: `get_market_context`
+* **Invocation:** Call `get_market_context(symbol: "ETHUSDC", timeframe: "15m")` (or `"5m"` / `"1h"` depending on resolution needs).
+* **Extracted Properties for SOP:**
+  * `live_price`: Synchronizes live price action and dealing range position.
+  * `market_structure`: Trend (`BULLISH` / `BEARISH` / `NEUTRAL`), ZigZag pivots, dealing range discount/premium boundaries, and equilibrium ($50\%$).
+  * `liquidity`: PDH, PDL, Asian High/Low, London High/Low, and resting BSL/SSL magnets.
+  * `active_fvgs`: 5 nearest unmitigated Fair Value Gaps with exact upper/lower bounds, timeframes, and distance to price.
+  * `order_flow`: Active state machine intent (`RISING_WITH_PRICE`, `RISING_AGAINST_PRICE`, `FALLING_WITH_PRICE`, `FALLING_AGAINST_PRICE`, `FLAT`) and duration metrics.
+  * `displacement`: Institutional sponsorship status (`ACTIVE` vs `INACTIVE`), taker buy volume ratio, and OI delta.
+  * `smt`: Inter-market BTC vs ETH divergence classification, HTF trend alignment, and `counter_trend_vetoed` flag.
+  * `trade_memory`: Last 5 journal trades and active persistent agent decisions.
+
+### 2. Auto-Log Validated Setups: `submit_quant_decision`
+* **Invocation:** When logging a setup via `/eth-quant-sop log` or finalizing `/eth-quant-sop analyze`, call `submit_quant_decision(args)`.
+* **Payload Parameters:**
+  * `agent_id`: `"eth-quant-sop-agent"` (or custom caller identifier).
+  * `symbol`: `"ETHUSDC"`.
+  * `bias_signal`: `"CONFIRMED_BULLISH"` | `"CONFIRMED_BEARISH"` | `"NEUTRAL"` | `"ABORT"` | `"COUNTER_TREND_RETRACEMENT"`.
+  * `entry_range_low` / `entry_range_high`: Planned execution zone.
+  * `invalidation_level`: Hard stop floor/ceiling.
+  * `target_1` / `target_2`: TP1 (ERL) and TP2 (HTF DOL).
+  * `narrative`: Summary of ICT, AMT, Wyckoff Phase C/D, and SMT confluences.
+* **Pre-Flight Safety Guard:** The tool verifies that the live Binance Perpetual price has not breached `invalidation_level` prior to recording.
 
 ---
 
@@ -31,14 +61,14 @@ This skill operationalizes the **Institutional Synthesis Framework: ETHUSDC.p Qu
    * **Phase D:** Require Sign of Strength (SOS) or Weakness (SOW) demonstrated via Displacement candle body closes (MSS) leaving clean imbalances (FVG).
 6. **MARKET MICROSTRUCTURE & ORDER FLOW STATE MACHINE ENGINE:**
    * **SMT Gatekeeper:** Mandatory SMT requirement (ETH vs BTC divergence) at structural levels as a strict execution gatekeeper.
-   * **Order Flow State Machine Decoding:** Evaluate the active Open Interest trend and state transitions across 5 dimensions:
-     1. **Institutional Intent:** `RISING_WITH_PRICE` (Aggressive Buy Sponsorship / Long Deployment), `RISING_AGAINST_PRICE` (Aggressive Short Sponsorship / Short Deployment), `FALLING_WITH_PRICE` (Long Liquidation / Bear Trap Absorption at VAL), `FALLING_AGAINST_PRICE` (Short Covering / Squeeze — do not chase breakouts), `FLAT` (Passive Equilibrium).
+   * **Order Flow State Machine Decoding:** Evaluate active Open Interest and state transitions:
+     1. **Institutional Intent:** `RISING_WITH_PRICE` (Aggressive Buy Sponsorship), `RISING_AGAINST_PRICE` (Aggressive Short Sponsorship), `FALLING_WITH_PRICE` (Long Liquidation / Absorption at VAL), `FALLING_AGAINST_PRICE` (Short Covering — do not chase), `FLAT` (Equilibrium).
      2. **Regime Fatigue & Duration Decay:** Compare active state duration vs average persistence (>3x avg indicates statistical exhaustion into HTF boundaries).
      3. **MSS & Auction Gatekeeping:** Bullish MSS is only validated when backed by `RISING_WITH_PRICE`; MSS during short covering is unconfirmed.
      4. **24h Distribution Asymmetry:** Align macro trade sizing and direction with the 24h dominant sponsorship regime.
      5. **Inter-Market Absorption Climax:** Synthesize ETH `RISING_AGAINST_PRICE` with BTC Bullish SMT to detect smart money absorption traps.
    * **DOL Targeting:** Align primary profit targets with Liquidation Density Clusters and HTF External/Internal Range Liquidity.
-7. **HTF ORDER FLOW HIERARCHY & COUNTER-TREND VETO:** Higher Timeframe (1H/H4) Order Flow and Market Structure ALWAYS override 15m micro-structure and SMT signals. If 1H/H4 Order Flow is **BEARISH** (e.g., major support broken into HTF Bearish Supply), the AI Agent is **STRICTLY PROHIBITED** from generating 15m Counter-Trend Bullish Long setups. All 15m Bullish SMT signals inside a 1H Bearish Trend are VETOED as liquidity traps into 1H Supply, and analysis must focus exclusively on primary HTF Short Retests.
+7. **HTF ORDER FLOW HIERARCHY & COUNTER-TREND VETO:** Higher Timeframe (1H/H4) Order Flow and Market Structure ALWAYS override 15m micro-structure and SMT signals. If 1H/H4 Order Flow is **BEARISH** (e.g., major support broken into HTF Bearish Supply), the AI Agent is **STRICTLY PROHIBITED** from generating 15m Counter-Trend Bullish Long setups. All 15m Bullish SMT signals inside a 1H Bearish Trend are VETOED (`smt.counter_trend_vetoed: true`), and analysis must focus exclusively on primary HTF Short Retests.
 8. **DYNAMIC RISK & TWO-STAGE TRAILING STOP PROTOCOL:**
    * **Stage 1 (Pre-TP1 / In-Flight):** Stop Loss remains anchored strictly below the True Protected Displacement Base or Entry Breakeven. Strictly prohibit trailing to Internal Range Liquidity (IRL) / micro-swings inside an active expansion leg.
    * **Stage 2 (Post-TP1 / Runner Phase):** Only after banking 70% at TP1 (External Range Liquidity), trail SL to the confirmed M15 Structural Higher Low (for longs) or Lower High (for shorts).
@@ -47,56 +77,56 @@ This skill operationalizes the **Institutional Synthesis Framework: ETHUSDC.p Qu
 
 ## 🎛️ SUB-COMMAND SUITE (`/eth-quant-sop <sub-command>`)
 
-When invoked, choose or process the appropriate sub-command:
+When invoked, execute the workflow using the live MCP engine:
 
-| Command | Purpose | Description |
-| :--- | :--- | :--- |
-| `/eth-quant-sop analyze` | **Direct Full Synthesis** | Executes the complete 5-step institutional synthesis analysis and outputs the Section 3 Quantitative Report table immediately with two-stage risk parameters. |
-| `/eth-quant-sop guided` | **Interactive Walkthrough** | Interactively guides the user through each of the 5 steps (HTF Narrative, Value Profile, Temporal Gate, SMT Confirmation, Micro Execution + Risk Protocol). |
-| `/eth-quant-sop smt` | **Inter-Market SMT Checker** | Validates BTC vs ETH structural swing highs/lows at Value Area Extremes (VAH/VAL) or session liquidity levels for institutional divergence. |
-| `/eth-quant-sop log` | **Daily Tracker Logger** | Formats and appends a newly identified setup into both `directives/ETHUSDC_Daily_Tracker.md` and `directives/ETHUSDC_Daily_Tracker.json`. |
-| `/eth-quant-sop review` | **Session Close Outcome Review** | Updates the Daily Tracker at NY session close with setup outcomes (`Success`, `Stop Out`, `No Trigger`) and price action commentary. |
-| `/eth-quant-sop audit` | **Rule Compliance Audit** | Audits any given analysis narrative or setup for strict rule compliance (Zero TDO, Killzone window, AMT VAH/VAL alignment, Wyckoff Phase C/D, OI/CVD backing, SMT Gatekeeper, Two-Stage SL, and HTF Order Flow alignment). |
-| `/eth-quant-sop report` | **Standardized Matrix Output** | Formats raw market observations, indicator readings, or chart notes into the exact Section 3 report matrix table. |
+| Command | MCP Action | Purpose | Description |
+| :--- | :--- | :--- | :--- |
+| `/eth-quant-sop analyze` | `get_market_context` + `submit_quant_decision` | **Direct Full Synthesis** | Fetches live market context via MCP, performs complete 5-step synthesis, outputs Section 3 Quantitative Report table, and persists decision to Neon DB + local trackers. |
+| `/eth-quant-sop guided` | `get_market_context` | **Interactive Walkthrough** | Pulls live MCP context and interactively guides the user step-by-step through HTF Narrative, Value Profile, Temporal Gate, SMT, and Micro Execution. |
+| `/eth-quant-sop smt` | `get_market_context` | **Inter-Market SMT Checker** | Pulls live BTC & ETH swing extremes from MCP context and validates institutional divergence and HTF veto status at key structural levels. |
+| `/eth-quant-sop log` | `submit_quant_decision` | **Daily Tracker Logger** | Submits setup to database via MCP with pre-flight invalidation check and appends to `directives/ETHUSDC_Daily_Tracker.md` and `.json`. |
+| `/eth-quant-sop review` | None (Local DB / File) | **Session Close Outcome Review** | Updates the Daily Tracker at session close with setup outcomes (`Success`, `Stop Out`, `No Trigger`) and price action commentary. |
+| `/eth-quant-sop audit` | None | **Rule Compliance Audit** | Audits any given analysis narrative or setup for strict compliance with the 8 core rules (Zero TDO, Killzones, VAH/VAL, SMT, Two-Stage SL, HTF veto). |
+| `/eth-quant-sop report` | None | **Standardized Matrix Output** | Formats raw market observations into the standardized Section 3 report matrix table. |
 
 ---
 
 ## 📈 OPTIMIZED 5-STEP QUANTITATIVE WORKFLOW
 
 ### Step 1: HTF Narrative & Draw on Liquidity (DOL)
-* Analyze Daily (D1) and 4-Hour (H4) timeframes for macro intent:
-  * Primary DOL targets: Unfilled HTF Fair Value Gaps (FVG), Previous Daily High/Low (PDH/PDL), Liquidation Density Clusters.
-  * Structural dealing range state: External Range Liquidity (ERL) vs Internal Range Liquidity (IRL).
-  * HTF Order Flow Trend: Lock macro bias (BULLISH / BEARISH).
+* Utilize MCP `get_market_context` payload:
+  * Primary DOL targets: Nearest BSL/SSL magnets (`liquidity.bsl_magnets`, `liquidity.ssl_magnets`), PDH/PDL (`liquidity.pdh`, `liquidity.pdl`), and HTF FVGs.
+  * Dealing range equilibrium: Check `market_structure.dealing_range.equilibrium` ($50\%$) to identify Discount vs Premium pricing.
+  * Macro Trend & Daily Bias: Check `macro_daily_bias` and `market_structure.trend`.
 
 ### Step 2: Session & Value Profiling (AMT)
-* Identify session key levels and Auction Market Theory profile:
-  * **London Session:** London High (LH) & London Low (LL).
-  * **New York Session:** Initial Morning Expansion Range.
-  * **Value Area Extremes:** Value Area High (VAH), Value Area Low (VAL), Point of Control (POC).
-  * **Node Profiling:** Mark High Volume Nodes (HVN — avoid) and Low Volume Nodes (LVN — volume vacuums for FVG alignment).
+* Evaluate session liquidity from MCP context:
+  * **London Session:** `liquidity.session_levels.london_high` & `london_low`.
+  * **Asian Session:** `liquidity.session_levels.asian_high` & `asian_low`.
+  * **Value Area Extremes:** Longs prioritized below VAL; Shorts prioritized above VAH.
+  * **Node Profiling:** Avoid HVN equilibrium; align entry FVGs with LVN volume vacuums.
 
 ### Step 3: Temporal Execution Gate
-* Enforce Kill-Zone entry window:
+* Enforce Kill-Zone entry windows:
   * **London Killzone:** 02:00–05:00 EST (09:00–12:00 Cairo) with 0–90 min entry window.
   * **NY AM Killzone:** 08:00–11:00 EST (15:00–18:00 Cairo) with 0–90 min entry window.
-  * **Pre-News Volatility Filter:** Stand down 15 min before/after high-impact macro releases.
+  * **Pre-News Filter:** Stand down 15 min before/after high-impact releases.
   * **DEAD_ZONE Filter:** 12:00–13:30 EST entries are strictly invalid.
 
 ### Step 4: Liquidity Raid & SMT Confirmation
-* Confirm liquidity raid and institutional divergence:
-  * **Wyckoff Phase C:** Identify Spring / Shakeout below VAL/Session Low (for longs) or UTAD above VAH/Session High (for shorts).
-  * **Inter-Market SMT Gatekeeper:**
+* Synthesize Wyckoff Phase C and MCP SMT data:
+  * **Wyckoff Phase C:** Identify Spring / Shakeout below Session Low/VAL or UTAD above Session High/VAH.
+  * **Inter-Market SMT Status:** Evaluate `smt.divergence`.
     * *Bullish SMT:* BTC makes Lower Low while ETH forms Higher Low at key support/VAL.
     * *Bearish SMT:* BTC makes Higher High while ETH forms Lower High at key resistance/VAH.
-  * **HTF Order Flow Veto:** Verify setup aligns with 1H/H4 Order Flow. Counter-trend long setups in a 1H Bearish Trend are VETOED.
+  * **HTF Order Flow Veto:** Verify `smt.counter_trend_vetoed` is `false`. If `true`, counter-trend setups are strictly VETOED.
 
 ### Step 5: Micro Execution & Microstructure Verification
-* Lower timeframe (15m) execution confirmation:
-  * **Wyckoff Phase D / Displacement:** Require clean Market Structure Shift (MSS) candle body close leaving a high-quality 15m FVG overlapping an LVN.
-  * **Microstructure Validation:** Confirm rising Open Interest (OI) and directional Cumulative Volume Delta (CVD) delta skew, proving institutional capital absorption.
+* Confirm lower timeframe execution parameters:
+  * **Wyckoff Phase D / Displacement:** Require clean MSS candle close leaving a high-quality 15m FVG (`active_fvgs`).
+  * **Microstructure Verification:** Verify `displacement.institutional_sponsorship: "ACTIVE"` and `order_flow.active_state.state: "RISING_WITH_PRICE"`.
   * **Risk Protocol (Two-Stage SL):**
-    * *Stage 1 (Pre-TP1):* Anchor SL strictly below the True Protected Displacement Base.
+    * *Stage 1 (Pre-TP1):* Anchor SL strictly below True Protected Displacement Base.
     * *Stage 2 (Post-TP1):* Bank 70% at TP1 (ERL), trail SL to M15 Structural Higher Low.
 
 ---
@@ -108,47 +138,51 @@ Every complete market analysis must be formatted into this exact matrix table:
 ```markdown
 | Section | Analysis Detail |
 | :--- | :--- |
-| **Market Context** | Current ETHUSDC.p Price & HTF Trend Bias |
-| **HTF DOL** | Identified target on D1/H4 (e.g., PDH or FVG) |
-| **Session Profile** | Active Session Liquidity Highs/Lows |
-| **SMT Status** | Presence of BTC/ETH Divergence (Yes/No + Description) |
+| **Market Context** | Current ETHUSDC.p Price ($[price]) & HTF Trend Bias ([bias]) |
+| **HTF DOL** | Identified target on D1/H4 (e.g., PDH $[pdh] or BSL Magnet $[bsl]) |
+| **Session Profile** | Active Session Liquidity (London: $[lh] / $[ll], Asian: $[ah] / $[al]) |
+| **SMT Status** | Presence of BTC/ETH Divergence ([Yes/No] — [Description]) |
+| **Order Flow State** | Active Regime ([state]) & Displacement Sponsorship ([ACTIVE/INACTIVE]) |
 | **Trade Narrative** | Description of the 15m setup and expected move |
-| **Risk Parameters** | Invalidation Level and Take Profit (TP) Levels |
+| **Risk Parameters** | Invalidation Level ($[sl]) and Take Profit Levels (TP1: $[tp1], TP2: $[tp2]) |
 ```
 
 ---
 
-## 💾 DUAL DAILY TRACKER LOGGING PROTOCOL
+## 💾 DUAL DAILY TRACKER & MCP PERSISTENCE PROTOCOL
 
-> ⚠️ **Scope Boundary:** Trade setup logs and outcome reviews are strictly written to these 2 daily tracker files. Do NOT write or append trade logs or outcome reviews to `directives/master_blueprint.md` (which is reserved exclusively for system code and architecture updates).
+> ⚠️ **Scope Boundary:** Trade setup logs and outcome reviews are strictly written to these 2 daily tracker files and the Neon PostgreSQL `agent_decision_log` table via MCP. Do NOT write trade logs to `directives/master_blueprint.md`.
 
-When `/eth-quant-sop log` or `/eth-quant-sop review` is executed, update **BOTH** files in `directives/`:
+When `/eth-quant-sop log` or `/eth-quant-sop analyze` is executed, persist across **ALL 3 stores**:
 
-### 1. Markdown Tracker (`directives/ETHUSDC_Daily_Tracker.md`)
+### 1. Database Persistence via MCP (`submit_quant_decision`)
+Call `submit_quant_decision` with structured parameters. The pre-flight invalidation guard automatically validates that live price has not breached `invalidation_level`.
+
+### 2. Markdown Tracker (`directives/ETHUSDC_Daily_Tracker.md`)
 Append row to setup table:
 `| YYYY-MM-DD | HH:MM | Setup Type | HTF DOL Target | SMT Divergence | Invalidation | TP Targets | Pending/Success/Stop Out | Commentary |`
 
-### 2. JSON Tracker (`directives/ETHUSDC_Daily_Tracker.json`)
+### 3. JSON Tracker (`directives/ETHUSDC_Daily_Tracker.json`)
 Append entry object to `"entries"` array and update `"stats"` object counters (`totalSetups`, `success`, `stopOut`, `noTrigger`, `winRate`).
 
 ```json
 {
-  "id": "ETH-20260814-01",
-  "date": "2026-08-14",
-  "time": "16:14",
+  "id": "ETH-20260815-01",
+  "date": "2026-08-15",
+  "time": "19:45",
   "symbol": "ETHUSDC.p",
   "setupType": "Wyckoff Phase C Spring + SMT + 15m MSS",
-  "htfDol": "PDH ($3,520.00)",
+  "htfDol": "PDH ($1,892.00)",
   "smtStatus": "Bullish SMT vs BTC at VAL",
-  "entryRange": [3440.0, 3448.5],
-  "invalidation": 3425.0,
-  "tp1": 3485.0,
-  "tp2": 3520.0,
-  "stage1Sl": 3425.0,
+  "entryRange": [1878.0, 1882.5],
+  "invalidation": 1861.0,
+  "tp1": 1892.0,
+  "tp2": 1920.0,
+  "stage1Sl": 1861.0,
   "stage2Sl": "M15 Structural HL post-TP1",
   "outcome": "PENDING",
   "dolReached": false,
-  "notes": "London Low swept below VAL into 15m BISI FVG / LVN with CVD absorption"
+  "notes": "London Low swept below VAL into 15m BISI FVG with RISING_WITH_PRICE sponsorship"
 }
 ```
 
@@ -157,6 +191,7 @@ Append entry object to `"entries"` array and update `"stats"` object counters (`
 ## 📑 REFERENCES
 - Architectural Blueprint & Guide: [references/SKILL_BLUEPRINT.md](references/SKILL_BLUEPRINT.md)
 - Full SOP Reference: [resources/sop_reference.md](resources/sop_reference.md)
-- Canonical SOP Directive: [file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/directives/ETHUSDC.p%20Quantitative%20Analysis%20Framework%20&%20AI%20Agent%20Skill%20SOP.md](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/directives/ETHUSDC.p%20Quantitative%20Analysis%20Framework%20&%20AI%20Agent%20Skill%20SOP.md)
+- M2M & Remote MCP Integration Manual: [file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/docs/M2M_AGENT_MCP_MANUAL.md](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/docs/M2M_AGENT_MCP_MANUAL.md)
+- Core MCP Directive: [file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/directives/07_m2m_agent_mcp_guide.md](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/directives/07_m2m_agent_mcp_guide.md)
 - Daily Tracker MD: [file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/directives/ETHUSDC_Daily_Tracker.md](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/directives/ETHUSDC_Daily_Tracker.md)
 - Daily Tracker JSON: [file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/directives/ETHUSDC_Daily_Tracker.json](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/directives/ETHUSDC_Daily_Tracker.json)

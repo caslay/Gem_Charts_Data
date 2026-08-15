@@ -1,7 +1,7 @@
 # 🏛️ Institutional Synthesis Framework — Skill Architectural Blueprint & Guide
 
 > **Document Type:** Skill Architectural Blueprint & Operational Guide  
-> **Version:** 2.0.0  
+> **Version:** 2.1.0  
 > **Target Asset:** `ETHUSDC.p` (Primary) & `BTCUSDC.p` (Inter-Market SMT Correlation)  
 > **Skill Root:** `.agents/skills/eth-quant-sop/`  
 
@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary & Purpose
 
-The **`eth-quant-sop`** skill transforms the **Institutional Synthesis Framework: ETHUSDC.p Quantitative Analysis SOP** into an executable, interactive quant engine capability within Antigravity and Gemini Sparks.
+The **`eth-quant-sop`** skill transforms the **Institutional Synthesis Framework: ETHUSDC.p Quantitative Analysis SOP** into an executable, interactive quant engine capability within Antigravity and Gemini Sparks powered by the **`flow-state-quant-engine` MCP Server**.
 
 It systematically synthesizes four foundational institutional paradigms:
 1. **Pure ICT Time & Price Engine:** Kill-Zones, PD Arrays, and strict TDO prohibition.
@@ -33,16 +33,24 @@ graph TD
     SkillEngine -->|Sub-command| CmdAudit[/eth-quant-sop audit/]
     SkillEngine -->|Sub-command| CmdReport[/eth-quant-sop report/]
 
-    CmdAnalyze --> QuantWorkflow[5-Step Institutional Synthesis Engine]
+    CmdAnalyze -->|Auto-fetches Live Context| MCPContext[MCP: get_market_context]
+    CmdGuided -->|Auto-fetches Live Context| MCPContext
+    CmdSMT -->|Auto-fetches SMT State| MCPContext
+    
+    MCPContext -->|Returns Live Price, Structure, FVGs, SMT, Order Flow| QuantWorkflow[5-Step Institutional Synthesis Engine]
     CmdGuided --> StepByStep[Interactive Step-by-Step Prompting]
     CmdSMT --> SMTValidator[Inter-Market SMT & AMT Gatekeeper]
     CmdAudit --> TDOGuard[Strict TDO Prohibition & 8-Point Rule Audit]
     CmdReport --> MatrixFormatter[Section 3 Report Matrix Formatter]
     
+    QuantWorkflow --> MatrixFormatter
+    CmdAnalyze -->|Persists Setup Decision| MCPDecision[MCP: submit_quant_decision]
+    CmdLog -->|Persists Setup Decision| MCPDecision
+    
+    MCPDecision -->|Neon Postgres Table| DBLog[(agent_decision_log)]
+    
     CmdLog --> TrackerWriter[Dual Tracker Persistence Engine]
     CmdReview --> TrackerWriter
-    
-    QuantWorkflow --> MatrixFormatter
     
     TrackerWriter -->|Appends Table Row| MDTracker[(directives/ETHUSDC_Daily_Tracker.md)]
     TrackerWriter -->|Updates JSON Array & Stats| JSONTracker[(directives/ETHUSDC_Daily_Tracker.json)]
