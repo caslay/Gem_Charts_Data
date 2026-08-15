@@ -297,7 +297,16 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   1. **SW Bypass Gate:** Updated `public/sw.js` to unconditionally bypass `/api/*` routes, `/_next/*` assets, and non-GET requests, allowing native fetch execution.
   2. **Explicit 503 Status:** Configured fallback responses to return `status: 503` (Service Unavailable) rather than masking failures as `200 OK`.
   3. **Dev SW Auto-Cleanup:** In `src/app/layout.tsx`, gated SW registration to HTTPS production environments and actively unregistered any leftover workers on `localhost` / `http:`.
-  4. **Defensive Content-Type Verification:** Injected `res.headers.get('content-type')?.includes('application/json')` guards across all client API consumers before invoking `res.json()`.
+### 41. MCP SDK SEP-2243 Header-Mismatch (-32020) with Proxy Transports (Resolved in V15.5)
+- **The Bug:** `mcp-remote` connection fails with `StreamableHTTPError: Error POSTing to endpoint: {"jsonrpc":"2.0","error":{"code":-32020,"message":"Bad Request: the request headers and body disagree: the body names method server/discover but the required Mcp-Method header is absent"}}`.
+- **The Cause:** 
+  1. `@modelcontextprotocol/server@2.0.0` strictly enforces the SEP-2243 standard-header validation ladder for modern Streamable HTTP protocol revisions.
+  2. The server SDK rejects POST requests where the body contains a JSON-RPC method (`server/discover`, `tools/call`, `initialize`, `tools/list`) but the incoming HTTP request lacks the corresponding `Mcp-Method` (or `Mcp-Name`) header.
+  3. Proxy clients (such as `mcp-remote`, Claude Desktop, Cursor, Gemini Spark) do not always inject the `Mcp-Method` HTTP header into their raw POST payloads.
+- **The Fix:**
+  1. **Synthetic Header Normalizer:** Implemented `normalizeMcpRequest` in `src/app/api/mcp/route.ts` that pre-parses incoming POST requests and dynamically injects `Mcp-Method` and `Mcp-Name` (for `tools/call`, `prompts/get`, and `resources/read`) if omitted by the client.
+  2. **Comprehensive CORS Exposure:** Extended `Access-Control-Allow-Headers` and `Access-Control-Expose-Headers` in `route.ts` to include `Mcp-Method`, `Mcp-Name`, `MCP-Protocol-Version`, `mcp-session-id`, and `X-Agent-Bridge-Version`.
+
 
 
 
