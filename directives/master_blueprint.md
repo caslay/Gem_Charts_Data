@@ -39,7 +39,7 @@ Engineered a fully compliant **Remote MCP (Model Context Protocol) Server** at `
 - **Proxy Bypass (`src/proxy.ts`):**
   - Added bypass for `/api/agent`, `/api/mcp`, `/api/oauth`, and `/.well-known` so NextAuth does not redirect machine callers to `/login`.
 
-### New Files
+### New Files & Documentation
 | File | Purpose |
 |---|---|
 | `src/app/api/mcp/route.ts` | MCP Server — GET (SSE) + POST (JSON-RPC) handlers |
@@ -48,6 +48,9 @@ Engineered a fully compliant **Remote MCP (Model Context Protocol) Server** at `
 | `src/app/api/oauth/discovery/route.ts` | RFC 8414 Discovery metadata endpoint |
 | `src/app/api/oauth/authorize/route.ts` | OAuth authorization code endpoint |
 | `src/app/api/oauth/token/route.ts` | OAuth token exchange endpoint |
+| `directives/07_m2m_agent_mcp_guide.md` | Directive 07: Core M2M & Remote MCP Protocol specification |
+| `docs/M2M_AGENT_MCP_MANUAL.md` | Full multi-platform User Manual & Developer Integration Guide |
+| `.agents/mcp_config.json` | Workspace MCP registration for Antigravity & Antigravity IDE |
 
 ### Modified Files
 | File | Change |
@@ -56,6 +59,7 @@ Engineered a fully compliant **Remote MCP (Model Context Protocol) Server** at `
 | `src/app/api/agent/context/route.ts` | Refactored to thin delegation layer; added `?timeframe=` |
 | `src/proxy.ts` | Added M2M & OAuth bypass |
 | `package.json` | Added `mcp-handler@^2`, `@modelcontextprotocol/server@^2` |
+| `AGENTS.md` | Added Directive 07 to Directives Index |
 
 ### Gemini Spark Connection (Custom Connected Apps)
 ```
