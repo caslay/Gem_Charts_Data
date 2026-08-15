@@ -38,6 +38,10 @@ Do NOT guess the project architecture or past logic. To save the context window,
    - **File:** `directives/06_volumetric_sponsorship.md`
    - **When to read:** When modifying the Displacement Engine, chart markers (Arrows/Circles), OLS statistical validation, or any system that consumes `InstitutionalSponsorship`. Contains full architecture, mathematics, and visual rendering documentation.
 
+7. **M2M Agent Bridge & Remote MCP Protocol** 🤖
+   - **File:** `directives/07_m2m_agent_mcp_guide.md`
+   - **When to read:** When modifying headless AI integrations, the Remote MCP server (`/api/mcp`), OAuth 2.0 gateway (`/api/oauth/*`), or the M2M context serialization pipeline (`/api/agent/context`). Complete integration manual available at `docs/M2M_AGENT_MCP_MANUAL.md`.
+
 ## ⚠️ Execution Mandate
 Before writing any code or answering, output an internal thought process indicating WHICH directive file you need to read to complete the task accurately.
 
