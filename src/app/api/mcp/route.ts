@@ -29,7 +29,7 @@
 
 import { createMcpHandler } from 'mcp-handler';
 import { z } from 'zod';
-import { validateM2MToken } from '@/lib/m2mAuth';
+import { validateOAuthToken } from '@/lib/oauthServer';
 import {
   runGetMarketContext,
   runSubmitQuantDecision,
@@ -245,10 +245,14 @@ The decision is stored with status 'ACTIVE' and can later be updated via the RES
 // Any MCP client with the correct Bearer token is accepted.
 
 async function authGuard(req: Request): Promise<Response | null> {
-  const auth = validateM2MToken(req);
-  if (!auth.ok) {
+  const authHeader = req.headers.get('authorization');
+  const tokenInfo = await validateOAuthToken(authHeader);
+  if (!tokenInfo.valid) {
     return new Response(
-      JSON.stringify({ error: auth.error, hint: 'Add Authorization: Bearer <M2M_AGENT_SECRET> header.' }),
+      JSON.stringify({
+        error: 'Unauthorized',
+        message: 'Invalid or missing Bearer token. Gemini Spark OAuth tokens and M2M_AGENT_SECRET Bearer tokens are accepted.',
+      }),
       {
         status: 401,
         headers: {

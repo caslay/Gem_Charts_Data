@@ -1,85 +1,75 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V15.3
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V15.4
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-15 (V15.4 — Remote MCP Server Endpoint)  
+> **Last Updated:** 2026-08-15 (V15.4 — Remote MCP Server & OAuth 2.0 Provider)  
 
-## 🆕 V15.4 Changelog — Remote MCP Server Endpoint (2026-08-15)
+## 🆕 V15.4 Changelog — Remote MCP Server Endpoint & OAuth 2.0 Provider (2026-08-15)
 
 ### Summary
-Engineered a fully compliant **Remote MCP (Model Context Protocol) Server** at `GET|POST /api/mcp`. This endpoint allows Gemini Spark, Claude Desktop, Cursor, and any MCP-compliant AI client to auto-discover and invoke quant tools via a single HTTPS URL — no custom API client required. Simultaneously refactored the V15.2 M2M Bridge route into a thin delegation layer by extracting all engine logic into a shared `agentEngineHandlers.ts` lib (DRY architecture). Added `timeframe` parameter to both the MCP `get_market_context` tool and the REST `GET /api/agent/context` endpoint.
+Engineered a fully compliant **Remote MCP (Model Context Protocol) Server** at `GET|POST /api/mcp` along with a dedicated **OAuth 2.0 Authorization Server** compliant with RFC 6749 and RFC 8414. This enables **Gemini Spark's "Custom Connected Apps" gateway** (which strictly requires standard OAuth) as well as Claude Desktop, Cursor, and any MCP client to auto-discover and invoke quant tools securely via HTTPS. Simultaneously refactored the V15.2 M2M Bridge route into a thin delegation layer by extracting all engine logic into a shared `agentEngineHandlers.ts` lib (DRY architecture).
 
 ### Key Features
+- **OAuth 2.0 Server for Gemini Spark:**
+  - `/.well-known/oauth-authorization-server` -> RFC 8414 discovery metadata endpoint (via `next.config.ts` rewrite to `/api/oauth/discovery`).
+  - `/api/oauth/authorize` -> Auto-approves Gemini Spark redirect with one-time authorization code.
+  - `/api/oauth/token` -> Exchanges authorization code for a long-lived Bearer access token stored in Neon PostgreSQL (`oauth_access_tokens` table).
+  - Dual-mode authentication: accepts both OAuth tokens and static `M2M_AGENT_SECRET` Bearer tokens.
+
 - **Remote MCP Server (`src/app/api/mcp/route.ts`):**
   - Implements MCP Streamable HTTP transport (spec `2026-07-28`, stateless per-request).
-  - Built on `mcp-handler@2.1.1` + `@modelcontextprotocol/server@2.0.0` — returns a Web-standard `(Request) => Response` handler, fully compatible with Next.js 16 App Router.
-  - Auth wrapper validates `M2M_AGENT_SECRET` Bearer token BEFORE the MCP handshake starts.
-  - Any MCP-compliant client connecting with the correct Bearer token is accepted (Gemini Spark, Claude Desktop, Cursor, `agy` CLI, etc.).
-  - `GET /api/mcp` — SSE channel for server-initiated notifications.
-  - `POST /api/mcp` — Primary JSON-RPC request/response channel (handles `initialize`, `tools/list`, `tools/call`).
+  - Built on `mcp-handler@2.1.1` + `@modelcontextprotocol/server@2.0.0`.
+  - Authenticates external agents before MCP handshake starts.
 
 - **Tool 1: `get_market_context`:**
   - Parameters: `symbol` (default: `ETHUSDC`), `timeframe` (`1m` | `5m` | `15m` | `1h`, default: `15m`).
   - Returns full `AgentContextPayload` + `_meta` diagnostic object as MCP text content.
   - Per-timeframe candle limits: `1m`→300, `5m`→250, `15m`→200, `1h`→100.
-  - FVG detection pairs primary TF with lower supporting TF (e.g. `15m` primary + `5m` lower).
-  - SMT context adapts BTC candle source to the requested timeframe.
+  - FVG detection pairs primary TF with lower supporting TF.
 
 - **Tool 2: `submit_quant_decision`:**
   - Parameters: `agent_id`, `symbol`, `bias_signal` (enum), optional `entry_range_low/high`, `invalidation_level`, `target_1/2`, `narrative`.
   - Pre-flight invalidation guard fetches live Binance price; rejects with `INVALIDATION_BREACHED` if breached.
   - Persists validated decision to `agent_decision_log` with `status: 'ACTIVE'`.
-  - Returns DB record ID, live price at submission, and invalidation guard status.
 
 - **Shared Engine Handlers (`src/lib/agentEngineHandlers.ts`):**
   - Extracted all quant engine orchestration logic from `/api/agent/context` into a pure shared lib.
   - Exports: `runGetMarketContext(options)`, `runSubmitQuantDecision(payload)`, `ensureAgentDecisionTableInitialized()`, `fetchLivePrice()`, `runInvalidationCheck()`, `fetchKlines()`.
-  - Error model: throws structured errors with `.code` and `.status` fields for clean MCP / REST error mapping.
-
-- **M2M REST Route Refactor (`src/app/api/agent/context/route.ts`):**
-  - Now a thin delegation layer (~200 lines, down from ~775).
-  - GET adds `?timeframe=` query parameter (mirrors MCP tool parameter).
-  - All engine logic delegated to `agentEngineHandlers.ts`.
-  - PATCH handler preserved inline (no MCP equivalent needed).
 
 - **Proxy Bypass (`src/proxy.ts`):**
-  - Added `isM2MRoute` check for `/api/agent` and `/api/mcp`.
-  - These routes bypass the NextAuth session gate and handle their own Bearer token auth.
-  - Critical fix: without this, Gemini Spark gets redirected to `/login` instead of receiving `401`.
+  - Added bypass for `/api/agent`, `/api/mcp`, `/api/oauth`, and `/.well-known` so NextAuth does not redirect machine callers to `/login`.
 
 ### New Files
 | File | Purpose |
 |---|---|
-| `src/app/api/mcp/route.ts` | MCP Server — GET + POST handlers |
+| `src/app/api/mcp/route.ts` | MCP Server — GET (SSE) + POST (JSON-RPC) handlers |
 | `src/lib/agentEngineHandlers.ts` | Shared engine pipeline (M2M REST + MCP) |
+| `src/lib/oauthServer.ts` | OAuth 2.0 server logic, token exchange, and DB persistence |
+| `src/app/api/oauth/discovery/route.ts` | RFC 8414 Discovery metadata endpoint |
+| `src/app/api/oauth/authorize/route.ts` | OAuth authorization code endpoint |
+| `src/app/api/oauth/token/route.ts` | OAuth token exchange endpoint |
 
 ### Modified Files
 | File | Change |
 |---|---|
+| `next.config.ts` | Added `/.well-known/oauth-authorization-server` rewrite |
 | `src/app/api/agent/context/route.ts` | Refactored to thin delegation layer; added `?timeframe=` |
-| `src/proxy.ts` | Added M2M bypass for `/api/agent` and `/api/mcp` |
+| `src/proxy.ts` | Added M2M & OAuth bypass |
 | `package.json` | Added `mcp-handler@^2`, `@modelcontextprotocol/server@^2` |
 
-### Gemini Spark Connection
+### Gemini Spark Connection (Custom Connected Apps)
 ```
-MCP Server URL:   https://flow-state-terminal.vercel.app/api/mcp
-Auth Header:      Authorization: Bearer <M2M_AGENT_SECRET>
-Protocol:         MCP Streamable HTTP 2026-07-28 (stateless)
-```
-
-### Smoke Test Results (Local Dev)
-```
-POST /api/mcp — no auth         → 401 { "error": "M2M endpoint is not configured" }
-POST /api/mcp — wrong secret    → 401 { "error": "Invalid Bearer token. Access denied." }
-POST /api/mcp — tools/list      → 200 SSE: both tools with full JSON Schema descriptions ✅
-npx tsc --noEmit                → 0 errors ✅
+Add a custom app link:  https://flow-state-terminal.vercel.app/api/mcp
+Client ID:              gemini-spark-client-176ab3226a39516b
+Client secret:          sec_b8b3d5aec9bf2271c8f3fcca3e7b1695d58bc425a905b977
 ```
 
 ### Environment Variables Required
 ```bash
-# .env.local — already generated and saved
+# In .env.local (already saved) AND in Vercel Project Settings:
 M2M_AGENT_SECRET=961d2c9ac5320b55c0a455bf41c349fbaeb12b5c609ce756
-# Add same value in Vercel → Project Settings → Environment Variables
+OAUTH_CLIENT_ID=gemini-spark-client-176ab3226a39516b
+OAUTH_CLIENT_SECRET=sec_b8b3d5aec9bf2271c8f3fcca3e7b1695d58bc425a905b977
 ```
 
 ---

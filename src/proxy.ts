@@ -26,11 +26,13 @@ export default auth((req) => {
   const isAuthRoute = nextUrl.pathname.startsWith("/api/auth");
   const isPyBackend = nextUrl.pathname.startsWith("/api/py");
   const isLoginPage = nextUrl.pathname === "/login";
-  // M2M Bearer token routes — handle their own auth via M2M_AGENT_SECRET.
-  // Must bypass the NextAuth session gate or external agents get redirected to /login.
+  // M2M & OAuth routes — handle their own auth.
+  // Must bypass the NextAuth session gate so external agents (Gemini Spark) can authenticate.
   const isM2MRoute =
     nextUrl.pathname.startsWith("/api/agent") ||
-    nextUrl.pathname.startsWith("/api/mcp");
+    nextUrl.pathname.startsWith("/api/mcp") ||
+    nextUrl.pathname.startsWith("/api/oauth") ||
+    nextUrl.pathname.startsWith("/.well-known");
   const isPublicAsset =
     nextUrl.pathname.startsWith("/_next") ||
     nextUrl.pathname.startsWith("/favicon.ico") ||
@@ -39,7 +41,7 @@ export default auth((req) => {
     nextUrl.pathname.startsWith("/manifest.json") ||
     nextUrl.pathname.startsWith("/sw.js");
 
-  // Skip proxy for auth API routes, python backend, M2M routes, and static assets
+  // Skip proxy for auth API routes, python backend, M2M/OAuth routes, and static assets
   if (isAuthRoute || isPyBackend || isM2MRoute || isPublicAsset) {
     return NextResponse.next();
   }
