@@ -339,7 +339,7 @@ export default function OrderFlowTimelineModal({
                     style={{ flex: Math.max(1, seg.duration_seconds || 60) }}
                     onClick={() => setSelectedRecord(seg)}
                     className={`
-                      h-full rounded-sm transition-all cursor-pointer relative group
+                      h-full min-w-[6px] shrink-0 rounded-sm transition-all cursor-pointer relative group border border-black/30
                       ${meta.colorBg} hover:brightness-125
                       ${isSelected ? 'ring-2 ring-accent scale-y-105 z-10 brightness-125' : 'opacity-90'}
                       ${isLatest ? `animate-pulse ${meta.colorGlow}` : ''}

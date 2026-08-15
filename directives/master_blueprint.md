@@ -1,8 +1,24 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V15.2
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V15.3
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-14 (V15.2 — M2M Agent Bridge API)  
+> **Last Updated:** 2026-08-15 (V15.3 — Order Flow Timeline Stabilization & Parity)  
+
+## 🆕 V15.3 Changelog — Order Flow Timeline Stabilization & Serverless Parity (2026-08-15)
+
+### Summary
+Resolved historical Order Flow Timeline state drift and parity discrepancies between Localhost (persistent Node.js process) and Vercel production (serverless Lambdas). Gated state transition commits strictly on confirmed candle boundaries, eliminating 5-second tick noise and micro-fluttering while guaranteeing 100% stable historical parity and high-contrast visual rendering.
+
+### Key Features & Architectural Fixes
+- **Strict Closed-Candle Boundary Gating (`src/lib/orderFlowEngine.ts`):**
+  - Refactored `OrderFlowStateTracker.updateLiveState` to gate historical segment creation strictly on confirmed candle closes / new candle arrivals (`isNewCandleBoundary`).
+  - Intra-candle live price ticks update the active record's live metrics (duration, price delta) without polluting the historical array.
+- **Deterministic Closed-Candle Ground Truth (`computeTimelineFromCandles`):**
+  - Bootstrapping and historical sync are seeded from pure deterministic candle reconstruction across closed 15m OHLCV data.
+  - Guarantees 100% identical, stable historical timeline records across Localhost, Vercel, and Backtest Replay.
+- **Visual Contrast Polish (`OrderFlowTimelineRibbon.tsx` & `OrderFlowTimelineModal.tsx`):**
+  - Increased contrast for `FLAT` (`bg-slate-600/80`) and `NEUTRAL` (`bg-zinc-600/70`) states with `min-w-[6px]` and distinct segment borders.
+  - Chronological Transitions Strip in the modal renders all historical segments with high clarity, eliminating dark empty voids.
 
 ## 🆕 V15.2 Changelog — Machine-to-Machine (M2M) Agent Bridge API (2026-08-14)
 

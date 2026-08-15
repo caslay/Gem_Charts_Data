@@ -452,13 +452,16 @@ export async function GET(req: Request) {
     });
 
     // Order flow state — bootstrap + update in-memory tracker
-    OrderFlowStateTracker.bootstrapFromCandles(symbol, candles15m.length > 0 ? candles15m : candles5m);
+    const primaryCandlesForTracker = candles15m.length > 0 ? candles15m : candles5m;
+    const currentCandleT = primaryCandlesForTracker.length > 0 ? primaryCandlesForTracker[primaryCandlesForTracker.length - 1].t : undefined;
+    OrderFlowStateTracker.bootstrapFromCandles(symbol, primaryCandlesForTracker);
     const stateTimeline = OrderFlowStateTracker.updateLiveState(
       symbol,
       oiResult.open_interest_trend,
       primaryCandles.length > 0 ? primaryCandles[primaryCandles.length - 1].t : Date.now(),
       currentLivePrice,
-      { displacement_status: displacementStatus, liquidation_status: oiResult.liquidation_events?.status }
+      { displacement_status: displacementStatus, liquidation_status: oiResult.liquidation_events?.status },
+      currentCandleT
     );
 
     const orderFlowEngine = {

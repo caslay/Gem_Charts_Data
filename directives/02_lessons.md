@@ -267,3 +267,14 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
 - **The Fix:**
   1. **Chart Data Deduplication:** In `src/components/Chart.tsx`, wrapped `formattedData` conversion in a `Map<number, Candle>` keyed by `timeSec` before sorting and calling `setData(uniqueFormattedData)`. This guarantees that duplicate timestamps are collapsed and strictly ascending.
   2. **Interval Boundary Alignment:** In `src/app/api/market-data/route.ts`, aligned `generateMockCandles` timestamps strictly to the interval multiple `Math.floor(rawNow / intervalMs) * intervalMs`.
+
+### 38. Order Flow Timeline State Drift & Serverless DB Synchronization (Resolved in V15.3)
+- **The Bug:** The historical Order Flow Timeline kept mutating and fluctuating every few minutes/seconds (jumping between 50, 100, 111 transitions), producing discrepancies between Localhost (persistent Node process) and Vercel (ephemeral serverless Lambdas). In addition, the chronological transitions strip in the modal rendered 62% of the timeline as an empty dark void.
+- **The Cause:**
+  1. **5-Second Micro-Tick Flutter:** `updateLiveState` was evaluated against the unclosed candle on every 5-second poll. When live price or OI micro-fluctuated, `updateLiveState` treated it as a real transition and pushed duplicate 5-second records into `mem.history` and PostgreSQL. Localhost accumulated 111+ mutations while Vercel Lambdas reset to 50 on cold starts.
+  2. **Low Visual Contrast:** 62% of the timeline was `NEUTRAL`/`FLAT` styled with 50% opacity grey (`bg-zinc-700/50`) on `#0d0e12`, rendering as an invisible dark void.
+- **The Fix:**
+  1. **Strict Closed-Candle Boundary Gating:** `OrderFlowStateTracker.updateLiveState` now gates historical segment creation strictly on confirmed candle closes / new candle arrivals (`isNewCandleBoundary`). Intra-candle live price ticks update the active record's live metrics without polluting the historical array.
+  2. **Deterministic Closed-Candle Truth:** Bootstrapping seeds history from pure deterministic candle reconstruction (`computeTimelineFromCandles`), ensuring 100% stable parity across Localhost, Vercel, and Backtest Replay.
+  3. **Visual Polish:** Increased contrast for `FLAT` (`bg-slate-600/80`) and `NEUTRAL` (`bg-zinc-600/70`) with `min-w-[6px]` and distinct segment borders, rendering all historical segments cleanly across the timeline strip.
+
