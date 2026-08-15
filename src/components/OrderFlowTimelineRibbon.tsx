@@ -167,12 +167,16 @@ export default function OrderFlowTimelineRibbon({
     return () => clearInterval(interval);
   }, [activeState?.entered_at, activeState?.duration_seconds, isBacktest]);
 
-  // Combine visible history (last 16-24 segments) + active state, strictly deduplicating by entered_at
+  // Combine visible history (last 16-24 segments) + active state, strictly deduplicating and sorting chronologically
   const allSegments = useMemo(() => {
     const recs: OrderFlowStateRecord[] = [];
     const seenEnteredAt = new Set<number>();
 
-    for (const h of history.slice(-20)) {
+    const validHistory = activeState
+      ? history.filter((h) => h.entered_at < activeState.entered_at)
+      : history;
+
+    for (const h of validHistory.slice(-20)) {
       if (!seenEnteredAt.has(h.entered_at)) {
         seenEnteredAt.add(h.entered_at);
         recs.push(h);
@@ -198,6 +202,7 @@ export default function OrderFlowTimelineRibbon({
       }
     }
 
+    recs.sort((a, b) => a.entered_at - b.entered_at);
     return recs;
   }, [history, activeState, liveDurationSec, livePrice]);
 
