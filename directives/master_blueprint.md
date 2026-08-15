@@ -4706,5 +4706,17 @@ To prevent Progressive Web App (PWA) Service Workers from interfering with inter
 
 ---
 
+## 17. Remote MCP SEP-2243 Header Normalization Architecture (V15.5)
+
+To guarantee 100% interoperability across external AI agents and STDIO-to-HTTP bridges (`mcp-remote`, Gemini Spark, Claude Desktop, Cursor) interacting with `/api/mcp`:
+
+### 17.1 The SEP-2243 Header-Mismatch Defense (`src/app/api/mcp/route.ts`)
+- **Protocol Mandate:** The `@modelcontextprotocol/server@2.0.0` Streamable HTTP stack strictly validates the presence of `Mcp-Method` and `Mcp-Name` headers against the incoming JSON-RPC payload (`server/discover`, `tools/call`, `prompts/get`, `resources/read`).
+- **Dynamic Header Normalizer (`normalizeMcpRequest`):** Pre-parses incoming POST requests. If a client transmits a valid JSON-RPC body but omits `Mcp-Method` or `Mcp-Name`, the normalizer synthetically injects the missing headers into a cloned `Request` object before delegating to `mcpHandler`, eliminating `-32020` header-mismatch errors.
+- **Extended CORS Negotiation:** Exposes `Mcp-Method`, `Mcp-Name`, `MCP-Protocol-Version`, `mcp-session-id`, and `X-Agent-Bridge-Version` across `Access-Control-Allow-Headers` and `Access-Control-Expose-Headers`.
+
+---
+
 > **End of Master Blueprint.** This document should be treated as the canonical reference for all future modifications to the Flow-State Quant Engine. When in doubt, trace back to the source files linked throughout this document.
+
 

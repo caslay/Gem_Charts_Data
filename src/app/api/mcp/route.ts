@@ -270,8 +270,65 @@ async function authGuard(req: Request): Promise<Response | null> {
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept, X-Requested-With',
+  'Access-Control-Allow-Headers':
+    'Content-Type, Authorization, Accept, X-Requested-With, Mcp-Method, Mcp-Name, MCP-Protocol-Version, mcp-session-id, X-Agent-Bridge-Version, *',
+  'Access-Control-Expose-Headers':
+    'Mcp-Method, Mcp-Name, MCP-Protocol-Version, mcp-session-id, X-Agent-Bridge-Version',
 };
+
+/**
+ * Normalizes inbound Request headers to comply with modern MCP SDK SEP-2243
+ * standard-header validation ladder without breaking clients (e.g. mcp-remote,
+ * Gemini Spark, Claude Desktop, Cursor) that omit Mcp-Method / Mcp-Name headers.
+ */
+async function normalizeMcpRequest(req: Request): Promise<Request> {
+  if (req.method !== 'POST') return req;
+  const contentType = req.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) return req;
+
+  try {
+    const rawBody = await req.clone().text();
+    if (!rawBody) return req;
+    const body = JSON.parse(rawBody);
+
+    if (body && typeof body === 'object' && 'method' in body && typeof body.method === 'string') {
+      const headers = new Headers(req.headers);
+      let headersModified = false;
+
+      // 1. Inject Mcp-Method if missing
+      if (!headers.get('mcp-method')) {
+        headers.set('Mcp-Method', body.method);
+        headersModified = true;
+      }
+
+      // 2. Inject Mcp-Name for methods that require it (tools/call, prompts/get, resources/read)
+      if (body.method === 'tools/call' && body.params?.name && !headers.get('mcp-name')) {
+        headers.set('Mcp-Name', String(body.params.name));
+        headersModified = true;
+      } else if (body.method === 'prompts/get' && body.params?.name && !headers.get('mcp-name')) {
+        headers.set('Mcp-Name', String(body.params.name));
+        headersModified = true;
+      } else if (body.method === 'resources/read' && body.params?.uri && !headers.get('mcp-name')) {
+        headers.set('Mcp-Name', String(body.params.uri));
+        headersModified = true;
+      }
+
+      if (headersModified) {
+        return new Request(req.url, {
+          method: req.method,
+          headers,
+          body: rawBody,
+          // @ts-ignore
+          duplex: 'half',
+        });
+      }
+    }
+  } catch {
+    // If parsing fails, fall back to original request and let mcpHandler reject standardly
+  }
+
+  return req;
+}
 
 export async function OPTIONS() {
   return new Response(null, {
@@ -285,15 +342,20 @@ export async function GET(req: Request): Promise<Response> {
   if (unauthorized) return unauthorized;
   const res = await mcpHandler(req);
   // Attach CORS headers
-  res.headers.set('Access-Control-Allow-Origin', '*');
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    res.headers.set(key, value);
+  }
   return res;
 }
 
 export async function POST(req: Request): Promise<Response> {
   const unauthorized = await authGuard(req);
   if (unauthorized) return unauthorized;
-  const res = await mcpHandler(req);
+  const normalizedReq = await normalizeMcpRequest(req);
+  const res = await mcpHandler(normalizedReq);
   // Attach CORS headers
-  res.headers.set('Access-Control-Allow-Origin', '*');
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    res.headers.set(key, value);
+  }
   return res;
 }
