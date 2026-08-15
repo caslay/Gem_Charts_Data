@@ -16,6 +16,10 @@ Resolved historical Order Flow Timeline state drift and parity discrepancies bet
 - **Deterministic Closed-Candle Ground Truth (`computeTimelineFromCandles`):**
   - Bootstrapping and historical sync are seeded from pure deterministic candle reconstruction across closed 15m OHLCV data.
   - Guarantees 100% identical, stable historical timeline records across Localhost, Vercel, and Backtest Replay.
+- **15m Structural Timeframe Anchoring (`src/hooks/useBacktestEngine.ts`):**
+  - Anchored backtest Order Flow calculation strictly to `candles_15m` structural arrays across all routes, preventing timeframe cross-contamination and out-of-order timestamps when users switch visual chart intervals.
+- **Chronological Sanitizer & Sorter (`OrderFlowTimelineRibbon.tsx` & `OrderFlowTimelineModal.tsx`):**
+  - Added chronological sanitizers that filter out corrupted future records past `activeState.entered_at` and enforce strict ascending sort order (`.sort((a, b) => a.entered_at - b.entered_at)`).
 - **Visual Contrast Polish (`OrderFlowTimelineRibbon.tsx` & `OrderFlowTimelineModal.tsx`):**
   - Increased contrast for `FLAT` (`bg-slate-600/80`) and `NEUTRAL` (`bg-zinc-600/70`) states with `min-w-[6px]` and distinct segment borders.
   - Chronological Transitions Strip in the modal renders all historical segments with high clarity, eliminating dark empty voids.

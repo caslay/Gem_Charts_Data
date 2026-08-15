@@ -305,8 +305,9 @@ function buildEnrichedPayload(
     ? 'ACTIVE'
     : 'INACTIVE';
 
-  // Compute exact chronological Order Flow state timeline from visible replay candles
-  const stateTimeline = computeTimelineFromCandles(activeCandles, SYMBOL);
+  // Compute exact chronological Order Flow state timeline from visible structural replay candles (anchored to 15m)
+  const orderFlowCandles = candles_15m.length > 0 ? candles_15m : (candles_5m.length > 0 ? candles_5m : activeCandles);
+  const stateTimeline = computeTimelineFromCandles(orderFlowCandles, SYMBOL);
   const openInterestTrend = stateTimeline.active_state?.state || (
     displacement.status !== 'INACTIVE' && displacement.status !== 'CONSOLIDATION'
       ? 'RISING_WITH_PRICE'

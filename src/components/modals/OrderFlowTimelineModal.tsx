@@ -48,12 +48,17 @@ export default function OrderFlowTimelineModal({
   const history = timeline?.history || [];
   const stats = timeline?.stats;
 
-  // Aggregate all records: history (reversed to newest first for table view) + active
+  // Aggregate all records: history (chronological oldest first) + active state
   const allChronological = useMemo(() => {
     const list: OrderFlowStateRecord[] = [];
     const seenEnteredAt = new Set<number>();
 
-    for (const h of history) {
+    // Only include historical records strictly prior to active state to prevent overlap
+    const validHistory = activeState
+      ? history.filter((h) => h.entered_at < activeState.entered_at)
+      : history;
+
+    for (const h of validHistory) {
       if (!seenEnteredAt.has(h.entered_at)) {
         seenEnteredAt.add(h.entered_at);
         list.push(h);
@@ -68,6 +73,9 @@ export default function OrderFlowTimelineModal({
         list.push(activeState);
       }
     }
+
+    // Strictly sort ascending by entered_at to guarantee chronological integrity
+    list.sort((a, b) => a.entered_at - b.entered_at);
     return list;
   }, [history, activeState]);
 
