@@ -80,13 +80,19 @@ export function getBaseUrl(req?: Request): string {
       return `${proto}://${host}`;
     }
   }
-  if (process.env.NEXTAUTH_URL && !process.env.NEXTAUTH_URL.includes('localhost')) {
-    return process.env.NEXTAUTH_URL.replace(/\/$/, '');
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/\/$/, '')}`;
   }
   if (process.env.VERCEL_URL) {
     return `https://${process.env.VERCEL_URL.replace(/\/$/, '')}`;
   }
-  return (process.env.NEXTAUTH_URL ?? 'http://localhost:4000').replace(/\/$/, '');
+  if (process.env.NEXTAUTH_URL && !process.env.NEXTAUTH_URL.includes('localhost')) {
+    return process.env.NEXTAUTH_URL.replace(/\/$/, '');
+  }
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://flow-state-terminal.vercel.app';
+  }
+  return 'http://localhost:4000';
 }
 
 /** Validates that OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET are configured. */
