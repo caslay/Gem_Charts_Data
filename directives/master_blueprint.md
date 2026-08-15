@@ -60,6 +60,9 @@ Engineered a fully compliant **Remote MCP (Model Context Protocol) Server** at `
 | `src/proxy.ts` | Added M2M & OAuth bypass |
 | `package.json` | Added `mcp-handler@^2`, `@modelcontextprotocol/server@^2` |
 | `AGENTS.md` | Added Directive 07 to Directives Index |
+| `src/components/Sidebar.tsx` | Overhauled Resting Liquidity Pools card to dual inset sub-cards with rank badges, live deltas, and swept tags |
+| `src/app/backtest/BacktestSidebar.tsx` | Unified Resting Liquidity Pools card to matching dual inset layout for replay parity |
+| `src/hooks/useMarketData.ts` | Added defensive guards in `mergeDeltaPayload` and `setData` for `prev.data_payload` undefined access |
 
 ### Gemini Spark Connection (Custom Connected Apps)
 ```

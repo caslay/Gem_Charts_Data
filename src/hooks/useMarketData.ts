@@ -409,35 +409,35 @@ export function mergeDeltaPayload(
   activeInterval: string
 ): MarketDataPayload {
   const activeKey = `candles_${activeInterval}`;
-  const prevCandles = prev.data_payload[activeKey] || [];
+  const prevCandles = prev?.data_payload?.[activeKey] || [];
   
   // Merge only the last few candles, matching by timestamp
   const candleMap = new Map(prevCandles.map(c => [c.t, c]));
-  delta.delta_candles.forEach(c => candleMap.set(c.t, c));
+  (delta.delta_candles || []).forEach(c => candleMap.set(c.t, c));
   const mergedCandles = Array.from(candleMap.values()).sort((a, b) => a.t - b.t);
 
   return {
     ...prev,
     open_interest: delta.open_interest,
-    risk_management: delta.risk_management || prev.risk_management,
+    risk_management: delta.risk_management || prev?.risk_management,
     correlation_data: {
-      ...prev.correlation_data,
-      btc_live_price: delta.correlation_data?.btc_live_price ?? prev.correlation_data?.btc_live_price,
+      ...prev?.correlation_data,
+      btc_live_price: delta.correlation_data?.btc_live_price ?? prev?.correlation_data?.btc_live_price,
     },
     ipda_metrics: {
-      ...prev.ipda_metrics,
+      ...prev?.ipda_metrics,
       order_flow_engine: {
-        ...prev.ipda_metrics?.order_flow_engine,
+        ...prev?.ipda_metrics?.order_flow_engine,
         ...delta.order_flow_engine,
         // Preserve displacement_sponsorship from prev state during delta ticks
-        displacement_sponsorship: prev.ipda_metrics?.order_flow_engine?.displacement_sponsorship,
+        displacement_sponsorship: prev?.ipda_metrics?.order_flow_engine?.displacement_sponsorship,
       },
       // Update structural delta components if available
       ...(delta.delta_structure ? {
-        market_structure_shift: delta.delta_structure.currentTrend !== prev.ipda_metrics?.current_trend,
+        market_structure_shift: delta.delta_structure.currentTrend !== prev?.ipda_metrics?.current_trend,
         current_trend: delta.delta_structure.currentTrend,
         full_structure_map: {
-          ...prev.ipda_metrics?.full_structure_map,
+          ...prev?.ipda_metrics?.full_structure_map,
           latestMSS: delta.delta_structure.latestMSS,
           latestInternalMSS: delta.delta_structure.latestInternalMSS,
           currentTrend: delta.delta_structure.currentTrend,
@@ -446,7 +446,7 @@ export function mergeDeltaPayload(
       } : {})
     },
     data_payload: {
-      ...prev.data_payload,
+      ...(prev?.data_payload || {}),
       [activeKey]: mergedCandles,
     },
   };
@@ -780,13 +780,13 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
       const jsonData: MarketDataPayload = await res.json();
 
       setData((prev) => {
-        if (!prev) return jsonData;
+        if (!prev || !prev.data_payload) return jsonData;
 
         // Check if the incoming payload is a delta structure
         if ('isDelta' in jsonData && (jsonData as any).isDelta) {
           const delta = jsonData as any as MarketDataDeltaPayload;
           const activeKey = `candles_${selectedInterval}`;
-          const prevCandles = prev.data_payload[activeKey] || [];
+          const prevCandles = prev.data_payload?.[activeKey] || [];
           
           if (prevCandles.length > 0 && delta.delta_candles && delta.delta_candles.length > 1) {
             const prevLastClosedT = prevCandles[prevCandles.length - 2]?.t;
@@ -877,7 +877,7 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
     if (!isSameTime && !isNewerTime) return;
 
     setData((prev) => {
-      if (!prev || !prev.data_payload) return null;
+      if (!prev || !prev.data_payload) return prev;
       const candles = prev.data_payload[activeSeriesKey] || [];
       if (candles.length === 0) return prev;
 

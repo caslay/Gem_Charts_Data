@@ -280,4 +280,12 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   3. **Chronological Sanitizer & Sorter:** Added chronological sanitizers in `OrderFlowTimelineModal.tsx` and `OrderFlowTimelineRibbon.tsx` that prune overlapping records past `activeState.entered_at` and enforce strict ascending sort order (`.sort((a, b) => a.entered_at - b.entered_at)`).
   4. **Visual Polish:** Increased contrast for `FLAT` (`bg-slate-600/80`) and `NEUTRAL` (`bg-zinc-600/70`) with `min-w-[6px]` and distinct segment borders, rendering all historical segments cleanly across the timeline strip.
 
+### 39. Delta Polling Undefined Data Payload Guard (Resolved in V15.4)
+- **The Bug:** Runtime TypeError: `Cannot read properties of undefined (reading 'candles_5m')` at `useMarketData.useCallback[fetchData] (src/hooks/useMarketData.ts:789:48)`.
+- **The Cause:** During initial mount or after transient network reconnection, `prev` or `prev.data_payload` was undefined when a fast 5-second delta poll returned `isDelta: true`. `prev.data_payload[activeKey]` attempted to access a property on `undefined`.
+- **The Fix:**
+  1. Added strict `if (!prev || !prev.data_payload) return jsonData;` guard in `setData` to automatically accept the incoming payload if previous state is empty.
+  2. Added defensive optional chaining `prev?.data_payload?.[activeKey] || []` in both `fetchData` and `mergeDeltaPayload()`.
+
+
 
