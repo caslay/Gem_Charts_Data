@@ -79,6 +79,8 @@ export default function Home() {
     try {
       const res = await fetch('/api/account');
       if (res.ok) {
+        const contentType = res.headers.get('content-type');
+        if (contentType && !contentType.includes('application/json')) return;
         const json = await res.json();
         if (json.account) {
           setAccountBalance(parseFloat(json.account.current_balance));
@@ -96,6 +98,8 @@ export default function Home() {
     try {
       const res = await fetch('/api/trades');
       if (res.ok) {
+        const contentType = res.headers.get('content-type');
+        if (contentType && !contentType.includes('application/json')) return;
         const json = await res.json();
         if (json.trades) {
           const openOnly = json.trades.filter((t: any) => t.status === 'OPEN');

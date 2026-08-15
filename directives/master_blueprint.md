@@ -4689,4 +4689,22 @@ Verified build and compile stability using the strict TS compiler pipeline: `npx
 
 ---
 
+## 16. Service Worker PWA Isolation & Defensive API Fetch Architecture (V15.5)
+
+To prevent Progressive Web App (PWA) Service Workers from interfering with internal Next.js 16 APIs, WebSocket pipelines, and dynamic JSON routes, the following isolation standards are enforced:
+
+### 16.1 Service Worker Route Protection (`public/sw.js`)
+- **API & Next.js Asset Bypass:** The Service Worker fetch listener inspects request URLs and immediately bypasses SW handling (`return;`) for all `/api/*` endpoints, `/_next/*` chunks/HMR events, and non-`GET` mutation methods. This guarantees that all programmatic data operations execute natively over the network without service worker interception.
+- **Explicit 503 Fallback Responses:** For static assets or navigation fallback catches, the worker returns `new Response("Offline mode active.", { status: 503, headers: { "Content-Type": "text/plain" } })`. This ensures `res.ok` evaluates to `false`, preventing client hooks from attempting to parse plain text as JSON.
+
+### 16.2 Environment-Aware Registration Lifecycle (`src/app/layout.tsx`)
+- **Development Auto-Cleanup:** On `localhost`, `127.0.0.1`, local subnet IPs (`192.168.*`), and `http:` connections, `layout.tsx` scans for and actively unregisters any leftover Service Worker registrations via `navigator.serviceWorker.getRegistrations()`, eliminating cross-session HMR and API caching collisions.
+- **Production Gating:** Service Worker registration only initiates when running over secure HTTPS in production environments.
+
+### 16.3 Client-Side Defensive Content-Type Verification
+- **JSON Headers Pre-Check:** Client-side consumer hooks and components (`useStrategyEvaluator`, `EquationBuilder`, `page.tsx`) inspect `res.headers.get('content-type')?.includes('application/json')` prior to calling `res.json()`, gracefully failing without throwing unhandled `SyntaxError: Unexpected token` exceptions.
+
+---
+
 > **End of Master Blueprint.** This document should be treated as the canonical reference for all future modifications to the Flow-State Quant Engine. When in doubt, trace back to the source files linked throughout this document.
+

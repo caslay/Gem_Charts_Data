@@ -1,15 +1,35 @@
 {
   "version": "1.0.0",
   "symbol": "ETHUSDC.p",
-  "lastUpdated": "2026-08-15T17:46:16.213Z",
+  "lastUpdated": "2026-08-15T18:02:15.000Z",
   "stats": {
-    "totalSetups": 23,
+    "totalSetups": 24,
     "success": 0,
     "stopOut": 4,
     "noTrigger": 0,
     "winRate": 0
   },
   "entries": [
+    {
+      "id": "ETH-20260815-1881",
+      "date": "2026-08-15",
+      "time": "18:02",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Consolidation in Premium / Standing Down (Awaiting Discount VAL & London Low Retest)",
+      "htfDol": "PDH ($1,889.16) & BSL Magnet ($1,892.15)",
+      "smtStatus": "NEUTRAL — No active BTC/ETH divergence at current Premium equilibrium ($1,881.98)",
+      "orderFlowState": "NEUTRAL",
+      "entryRange": [
+        1874.17,
+        1877.18
+      ],
+      "invalidation": 1861.18,
+      "tp1": 1884.37,
+      "tp2": 1889.16,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,881.98 | Premium of Dealing Range ($1,872.78 Eq) | Order Flow NEUTRAL | Sponsorship INACTIVE"
+    },
     {
       "id": "ETH-20260815-1878",
       "date": "2026-08-15",
