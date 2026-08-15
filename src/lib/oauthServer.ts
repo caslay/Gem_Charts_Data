@@ -69,8 +69,23 @@ export async function ensureOAuthSchemaInitialized(): Promise<void> {
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-/** Returns the base URL of this deployment. */
-export function getBaseUrl(): string {
+/** Returns the base URL of this deployment, dynamically derived from request headers or environment. */
+export function getBaseUrl(req?: Request): string {
+  if (req) {
+    const host = req.headers.get('x-forwarded-host') || req.headers.get('host');
+    if (host) {
+      const proto =
+        req.headers.get('x-forwarded-proto') ||
+        (host.includes('localhost') || host.includes('127.0.0.1') ? 'http' : 'https');
+      return `${proto}://${host}`;
+    }
+  }
+  if (process.env.NEXTAUTH_URL && !process.env.NEXTAUTH_URL.includes('localhost')) {
+    return process.env.NEXTAUTH_URL.replace(/\/$/, '');
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL.replace(/\/$/, '')}`;
+  }
   return (process.env.NEXTAUTH_URL ?? 'http://localhost:4000').replace(/\/$/, '');
 }
 

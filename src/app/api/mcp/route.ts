@@ -267,18 +267,33 @@ async function authGuard(req: Request): Promise<Response | null> {
 
 // ─── Route Exports (Next.js App Router) ──────────────────────────────────────
 //
-// MCP Streamable HTTP transport uses:
-//   GET  — SSE channel for server-initiated notifications (optional)
-//   POST — Primary JSON-RPC request/response channel
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept, X-Requested-With',
+};
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: CORS_HEADERS,
+  });
+}
 
 export async function GET(req: Request): Promise<Response> {
   const unauthorized = await authGuard(req);
   if (unauthorized) return unauthorized;
-  return mcpHandler(req);
+  const res = await mcpHandler(req);
+  // Attach CORS headers
+  res.headers.set('Access-Control-Allow-Origin', '*');
+  return res;
 }
 
 export async function POST(req: Request): Promise<Response> {
   const unauthorized = await authGuard(req);
   if (unauthorized) return unauthorized;
-  return mcpHandler(req);
+  const res = await mcpHandler(req);
+  // Attach CORS headers
+  res.headers.set('Access-Control-Allow-Origin', '*');
+  return res;
 }

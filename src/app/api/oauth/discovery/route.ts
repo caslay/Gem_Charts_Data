@@ -13,8 +13,21 @@ import { getBaseUrl } from '@/lib/oauthServer';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  const base = getBaseUrl();
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+};
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: CORS_HEADERS,
+  });
+}
+
+export async function GET(req: Request) {
+  const base = getBaseUrl(req);
 
   // RFC 8414 — Authorization Server Metadata
   const metadata = {
@@ -31,8 +44,8 @@ export async function GET() {
   return NextResponse.json(metadata, {
     status: 200,
     headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Cache-Control': 'public, max-age=3600',
+      ...CORS_HEADERS,
+      'Cache-Control': 'no-store',
     },
   });
 }
