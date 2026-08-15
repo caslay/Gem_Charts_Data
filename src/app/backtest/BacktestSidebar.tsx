@@ -14,6 +14,9 @@ import {
   Clock,
   ArrowUpRight,
   ArrowDownRight,
+  Layers,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
 import type { BacktestTimeframe } from '@/hooks/useBacktestEngine';
@@ -583,61 +586,130 @@ export default function BacktestSidebar({
               </div>
             </div>
 
-            {/* Card: Resting Magnets */}
-            <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
-              <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] tracking-widest">
-                <Activity size={12} className="text-accent" />
-                <span>Resting Magnets</span>
-              </div>
-              <div className="space-y-3.5">
-                {/* BSL */}
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-black text-emerald-500 uppercase tracking-wider">BSL Targets</span>
-                  <div className="flex flex-col gap-1">
-                    {orderFlow?.resting_liquidity_pools?.BSL_Magnets?.length
-                      ? orderFlow.resting_liquidity_pools.BSL_Magnets.map((p: number, idx: number) => {
-                          const isPurged = lastPrice !== null && lastPrice >= p;
-                          return (
-                            <div key={idx} className="flex justify-between items-center text-[13px] font-mono">
-                              <span className={isPurged ? 'text-emerald-500 line-through opacity-60' : 'text-foreground font-bold'}>
-                                {p.toFixed(2)}
-                              </span>
-                              {isPurged && (
-                                <span className="text-[8px] text-emerald-500 font-black tracking-wider bg-emerald-500/10 px-1 py-0.5 rounded-sm border border-emerald-500/20">
-                                  PURGED 🧹
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })
-                      : <span className="text-[13px] font-mono text-muted">N/A</span>}
+            {/* Card: Resting Liquidity Pools */}
+            {(() => {
+              const bslPools: number[] = orderFlow?.resting_liquidity_pools?.BSL_Magnets || [];
+              const sslPools: number[] = orderFlow?.resting_liquidity_pools?.SSL_Magnets || [];
+
+              return (
+                <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
+                  <div className="flex items-center justify-between select-none">
+                    <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] tracking-widest group-hover:text-accent">
+                      <Layers size={12} className="text-accent" />
+                      <span>Resting Liquidity Pools</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 animate-[fade-in_0.15s_ease-out] text-[10px]">
+                    {/* BSL Pools Sub-Card */}
+                    <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] text-emerald-400 uppercase font-black tracking-wider flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          BSL Magnets (Buy Stops)
+                        </span>
+                        <span className="text-[9px] font-mono text-muted">
+                          {bslPools.length} {bslPools.length === 1 ? 'POOL' : 'POOLS'}
+                        </span>
+                      </div>
+
+                      {bslPools.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {bslPools.map((p: number, idx: number) => {
+                            const isPurged = lastPrice !== null && lastPrice >= p;
+                            const delta = lastPrice !== null ? p - lastPrice : null;
+                            const deltaPct = lastPrice !== null && lastPrice > 0 ? ((p - lastPrice) / lastPrice) * 100 : null;
+
+                            return (
+                              <div
+                                key={`bt-bsl-pool-${idx}`}
+                                className="flex items-center justify-between text-[11px] font-mono py-0.5"
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <span className="px-1 py-0.2 rounded text-[8px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                    #{idx + 1}
+                                  </span>
+                                  <span className={`font-bold ${isPurged ? 'text-emerald-500/60 line-through' : 'text-foreground'}`}>
+                                    ${p.toFixed(2)}
+                                  </span>
+                                </div>
+
+                                {isPurged ? (
+                                  <span className="text-[8px] text-emerald-400 font-black tracking-wider bg-emerald-500/10 px-1 py-0.5 rounded-sm border border-emerald-500/20">
+                                    SWEPT 🧹
+                                  </span>
+                                ) : (
+                                  delta !== null && (
+                                    <span className="text-[9px] text-muted font-bold">
+                                      +{delta > 0 ? `$${delta.toFixed(2)}` : `$${Math.abs(delta).toFixed(2)}`} ({deltaPct ? `+${deltaPct.toFixed(2)}%` : '0%'})
+                                    </span>
+                                  )
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] font-mono text-muted block text-center py-1">No Active BSL Pools</span>
+                      )}
+                    </div>
+
+                    {/* SSL Pools Sub-Card */}
+                    <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] text-rose-400 uppercase font-black tracking-wider flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                          SSL Magnets (Sell Stops)
+                        </span>
+                        <span className="text-[9px] font-mono text-muted">
+                          {sslPools.length} {sslPools.length === 1 ? 'POOL' : 'POOLS'}
+                        </span>
+                      </div>
+
+                      {sslPools.length > 0 ? (
+                        <div className="space-y-1.5">
+                          {sslPools.map((p: number, idx: number) => {
+                            const isPurged = lastPrice !== null && lastPrice <= p;
+                            const delta = lastPrice !== null ? lastPrice - p : null;
+                            const deltaPct = lastPrice !== null && lastPrice > 0 ? ((lastPrice - p) / lastPrice) * 100 : null;
+
+                            return (
+                              <div
+                                key={`bt-ssl-pool-${idx}`}
+                                className="flex items-center justify-between text-[11px] font-mono py-0.5"
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  <span className="px-1 py-0.2 rounded text-[8px] font-mono font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                                    #{idx + 1}
+                                  </span>
+                                  <span className={`font-bold ${isPurged ? 'text-rose-500/60 line-through' : 'text-foreground'}`}>
+                                    ${p.toFixed(2)}
+                                  </span>
+                                </div>
+
+                                {isPurged ? (
+                                  <span className="text-[8px] text-rose-400 font-black tracking-wider bg-rose-500/10 px-1 py-0.5 rounded-sm border border-rose-500/20">
+                                    SWEPT 🧹
+                                  </span>
+                                ) : (
+                                  delta !== null && (
+                                    <span className="text-[9px] text-muted font-bold">
+                                      -{delta > 0 ? `$${delta.toFixed(2)}` : `$${Math.abs(delta).toFixed(2)}`} ({deltaPct ? `-${deltaPct.toFixed(2)}%` : '0%'})
+                                    </span>
+                                  )
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] font-mono text-muted block text-center py-1">No Active SSL Pools</span>
+                      )}
+                    </div>
                   </div>
                 </div>
-                {/* SSL */}
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-black text-rose-500 uppercase tracking-wider">SSL Targets</span>
-                  <div className="flex flex-col gap-1">
-                    {orderFlow?.resting_liquidity_pools?.SSL_Magnets?.length
-                      ? orderFlow.resting_liquidity_pools.SSL_Magnets.map((p: number, idx: number) => {
-                          const isPurged = lastPrice !== null && lastPrice <= p;
-                          return (
-                            <div key={idx} className="flex justify-between items-center text-[13px] font-mono">
-                              <span className={isPurged ? 'text-rose-500 line-through opacity-60' : 'text-foreground font-bold'}>
-                                {p.toFixed(2)}
-                              </span>
-                              {isPurged && (
-                                <span className="text-[8px] text-rose-500 font-black tracking-wider bg-rose-500/10 px-1 py-0.5 rounded-sm border border-rose-500/20">
-                                  PURGED 🧹
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })
-                      : <span className="text-[13px] font-mono text-muted">N/A</span>}
-                  </div>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Card: AI Synthesis Console */}
             <div className="glass-panel flex flex-col overflow-hidden">

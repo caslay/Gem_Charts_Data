@@ -70,6 +70,9 @@ const RestingMagnetsCard = memo(function RestingMagnetsCard({ orderFlow }: { ord
   const [isOpen, setIsOpen] = useState(true);
   const { livePrice } = useMarketDataLiveContext();
 
+  const bslPools: number[] = orderFlow?.resting_liquidity_pools?.BSL_Magnets || [];
+  const sslPools: number[] = orderFlow?.resting_liquidity_pools?.SSL_Magnets || [];
+
   return (
     <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
       <div
@@ -77,46 +80,120 @@ const RestingMagnetsCard = memo(function RestingMagnetsCard({ orderFlow }: { ord
         className="flex items-center justify-between cursor-pointer select-none group-hover:text-accent transition-colors"
       >
         <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
-          <Activity size={12} className="text-accent" />
+          <Layers size={12} className="text-accent" />
           <span>Resting Liquidity Pools</span>
         </div>
         <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
           {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
       </div>
+
       {isOpen && (
-        <div className="space-y-3.5 animate-[fade-in_0.15s_ease-out]">
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-black text-emerald-500 dark:text-emerald-400 uppercase tracking-wider">BSL Magnets</span>
-            <div className="flex flex-col gap-1">
-              {orderFlow?.resting_liquidity_pools?.BSL_Magnets?.length ? orderFlow.resting_liquidity_pools.BSL_Magnets.map((p: number, idx: number) => {
-                const isPurged = livePrice !== null && livePrice >= p;
-                return (
-                  <div key={idx} className="flex justify-between items-center text-[13px] font-mono">
-                    <span className={`${isPurged ? 'text-emerald-500 line-through opacity-60' : 'text-foreground font-bold'}`}>
-                      {p.toFixed(2)}
-                    </span>
-                    {isPurged && <span className="text-[8px] text-emerald-500 font-black tracking-wider bg-emerald-500/10 px-1 py-0.5 rounded-sm border border-emerald-500/20">PURGED 🧹</span>}
-                  </div>
-                );
-              }) : <span className="text-[13px] font-mono text-muted">N/A</span>}
+        <div className="space-y-2 animate-[fade-in_0.15s_ease-out] text-[10px]">
+          {/* BSL Pools Sub-Card */}
+          <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] text-emerald-400 uppercase font-black tracking-wider flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                BSL Magnets (Buy Stops)
+              </span>
+              <span className="text-[9px] font-mono text-muted">
+                {bslPools.length} {bslPools.length === 1 ? 'POOL' : 'POOLS'}
+              </span>
             </div>
+
+            {bslPools.length > 0 ? (
+              <div className="space-y-1.5">
+                {bslPools.map((p: number, idx: number) => {
+                  const isPurged = livePrice !== null && livePrice >= p;
+                  const delta = livePrice !== null ? p - livePrice : null;
+                  const deltaPct = livePrice !== null && livePrice > 0 ? ((p - livePrice) / livePrice) * 100 : null;
+
+                  return (
+                    <div
+                      key={`bsl-pool-${idx}`}
+                      className="flex items-center justify-between text-[11px] font-mono py-0.5"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-1 py-0.2 rounded text-[8px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          #{idx + 1}
+                        </span>
+                        <span className={`font-bold ${isPurged ? 'text-emerald-500/60 line-through' : 'text-foreground'}`}>
+                          ${p.toFixed(2)}
+                        </span>
+                      </div>
+
+                      {isPurged ? (
+                        <span className="text-[8px] text-emerald-400 font-black tracking-wider bg-emerald-500/10 px-1 py-0.5 rounded-sm border border-emerald-500/20">
+                          SWEPT 🧹
+                        </span>
+                      ) : (
+                        delta !== null && (
+                          <span className="text-[9px] text-muted font-bold">
+                            +{delta > 0 ? `$${delta.toFixed(2)}` : `$${Math.abs(delta).toFixed(2)}`} ({deltaPct ? `+${deltaPct.toFixed(2)}%` : '0%'})
+                          </span>
+                        )
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <span className="text-[10px] font-mono text-muted block text-center py-1">No Active BSL Pools</span>
+            )}
           </div>
-          <div className="space-y-1.5">
-            <span className="text-[10px] font-black text-rose-500 dark:text-rose-400 uppercase tracking-wider">SSL Magnets</span>
-            <div className="flex flex-col gap-1">
-              {orderFlow?.resting_liquidity_pools?.SSL_Magnets?.length ? orderFlow.resting_liquidity_pools.SSL_Magnets.map((p: number, idx: number) => {
-                const isPurged = livePrice !== null && livePrice <= p;
-                return (
-                  <div key={idx} className="flex justify-between items-center text-[13px] font-mono">
-                    <span className={`${isPurged ? 'text-rose-500 line-through opacity-60' : 'text-foreground font-bold'}`}>
-                      {p.toFixed(2)}
-                    </span>
-                    {isPurged && <span className="text-[8px] text-rose-500 font-black tracking-wider bg-rose-500/10 px-1 py-0.5 rounded-sm border border-rose-500/20">PURGED 🧹</span>}
-                  </div>
-                );
-              }) : <span className="text-[13px] font-mono text-muted">N/A</span>}
+
+          {/* SSL Pools Sub-Card */}
+          <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] text-rose-400 uppercase font-black tracking-wider flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                SSL Magnets (Sell Stops)
+              </span>
+              <span className="text-[9px] font-mono text-muted">
+                {sslPools.length} {sslPools.length === 1 ? 'POOL' : 'POOLS'}
+              </span>
             </div>
+
+            {sslPools.length > 0 ? (
+              <div className="space-y-1.5">
+                {sslPools.map((p: number, idx: number) => {
+                  const isPurged = livePrice !== null && livePrice <= p;
+                  const delta = livePrice !== null ? livePrice - p : null;
+                  const deltaPct = livePrice !== null && livePrice > 0 ? ((livePrice - p) / livePrice) * 100 : null;
+
+                  return (
+                    <div
+                      key={`ssl-pool-${idx}`}
+                      className="flex items-center justify-between text-[11px] font-mono py-0.5"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-1 py-0.2 rounded text-[8px] font-mono font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                          #{idx + 1}
+                        </span>
+                        <span className={`font-bold ${isPurged ? 'text-rose-500/60 line-through' : 'text-foreground'}`}>
+                          ${p.toFixed(2)}
+                        </span>
+                      </div>
+
+                      {isPurged ? (
+                        <span className="text-[8px] text-rose-400 font-black tracking-wider bg-rose-500/10 px-1 py-0.5 rounded-sm border border-rose-500/20">
+                          SWEPT 🧹
+                        </span>
+                      ) : (
+                        delta !== null && (
+                          <span className="text-[9px] text-muted font-bold">
+                            -{delta > 0 ? `$${delta.toFixed(2)}` : `$${Math.abs(delta).toFixed(2)}`} ({deltaPct ? `-${deltaPct.toFixed(2)}%` : '0%'})
+                          </span>
+                        )
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <span className="text-[10px] font-mono text-muted block text-center py-1">No Active SSL Pools</span>
+            )}
           </div>
         </div>
       )}
@@ -952,7 +1029,7 @@ const Sidebar = memo(function Sidebar({
                       <span className="font-mono font-bold text-emerald-400">M15 Structural HL</span>
                     </div>
                     <p className="text-[9px] text-muted leading-tight">
-                      70% volume banked at TP1 (ERL) $\rightarrow$ SL trailed to confirmed M15 HL/LH.
+                      70% volume banked at TP1 (ERL) → SL trailed to confirmed M15 HL/LH.
                     </p>
                   </div>
                 </div>

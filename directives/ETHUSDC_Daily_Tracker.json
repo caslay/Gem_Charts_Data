@@ -1,15 +1,35 @@
 {
   "version": "1.0.0",
   "symbol": "ETHUSDC.p",
-  "lastUpdated": "2026-08-15T13:42:57.563Z",
+  "lastUpdated": "2026-08-15T17:46:16.213Z",
   "stats": {
-    "totalSetups": 22,
+    "totalSetups": 23,
     "success": 0,
     "stopOut": 4,
     "noTrigger": 0,
     "winRate": 0
   },
   "entries": [
+    {
+      "id": "ETH-20260815-1878",
+      "date": "2026-08-15",
+      "time": "17:46",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Bullish M15 Displacement MSS above $1,878.92 ",
+      "htfDol": "PDH ($1,889.16) & Macro Expansion Magnet ($1,897.88)",
+      "smtStatus": "BULLISH_SMT — BTC printed lower consolidation low while ETH held higher low above London Low ($1,873.24)",
+      "orderFlowState": "FALLING_AGAINST_PRICE",
+      "entryRange": [
+        1878,
+        1881
+      ],
+      "invalidation": 1873.24,
+      "tp1": 1884.37,
+      "tp2": 1889.16,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,881.38 | HTF Bullish Structure / Discount Retest"
+    },
     {
       "id": "ETH-20260815-1876",
       "date": "2026-08-15",
