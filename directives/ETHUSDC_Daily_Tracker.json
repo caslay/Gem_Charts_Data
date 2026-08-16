@@ -1,15 +1,35 @@
 {
   "version": "1.0.0",
   "symbol": "ETHUSDC.p",
-  "lastUpdated": "2026-08-16T20:45:31.742Z",
+  "lastUpdated": "2026-08-16T22:31:49.391Z",
   "stats": {
-    "totalSetups": 26,
+    "totalSetups": 27,
     "success": 0,
     "stopOut": 4,
     "noTrigger": 0,
     "winRate": 0
   },
   "entries": [
+    {
+      "id": "ETH-20260816-1874",
+      "date": "2026-08-16",
+      "time": "22:31",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Execution engine enforced STAND_DOWN per SOP ",
+      "htfDol": "SSL Liquidity Cluster ($1,861.33) & Previous Weekly Low ($1,825.43)",
+      "smtStatus": "NO_SMT_DIVERGENCE — ETH and BTC printed synchronized lower lows without structural divergence",
+      "orderFlowState": "FALLING_WITH_PRICE",
+      "entryRange": [
+        1874.7,
+        1876.61
+      ],
+      "invalidation": 1883.91,
+      "tp1": 1866.21,
+      "tp2": 1861.33,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,872.09 | HTF Bearish Structure / DEAD_ZONE Execution Hold"
+    },
     {
       "id": "ETH-20260816-1878",
       "date": "2026-08-16",

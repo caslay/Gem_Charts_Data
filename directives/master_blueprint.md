@@ -1,8 +1,30 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.8
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.9
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-16 (V16.8 — Multi-Timeframe (MTF) Live Order Block & Breaker Execution Matrix)  
+> **Last Updated:** 2026-08-17 (V16.9 — Live Automated Trade Persistence & Database Journal Re-hydration)  
+
+## 🆕 V16.9 Changelog — Live Automated Trade Persistence & Database Journal Re-hydration (2026-08-17)
+
+### Summary
+Built full-duplex atomic database persistence, progressive multi-stage PATCH lifecycle synchronization, and on-mount state re-hydration for all live automated Order Block and Breaker trades. Ensured that auto-executed positions are immediately committed to the persistent database ledger (`paper_trades`), partial scale-outs (Stage 1 @ 40%, Stage 2 @ 40%) update trailing stop loss levels and accrued realized profit in real-time, position closures write definitive P&L and status, and uncommitted or rejected entries are rolled back atomically to eliminate ghost positions.
+
+### Key Features & Architectural Safeguards
+- **Atomic Entry Persistence & Rollback Guard (`useLiveOrderBlockExecution.ts` & `LiveOrderBlockExecutionEngine.ts`):**
+  - Upon live order execution, immediately dispatches `POST /api/trades` with complete trade metadata (symbol, direction, entry price, initial SL, TP1/2/3 targets, risk amount, strategy name).
+  - If the database, authentication, or portfolio risk limit rejects the trade (e.g. 401, 403 Risk Veto, 409 One-Trade Rule, 500 DB error), `engine.rollbackPosition()` immediately removes the position from local memory and frees the Order Block, eliminating ghost trades.
+  - On success, captures the database UUID (`dbTradeId`) onto the active position instance.
+- **On-Mount Database Re-hydration (`rehydrateOpenPositions`):**
+  - When the app initializes or refreshes (`F5`), fetches all active `OPEN` trades from the database ledger (`GET /api/trades`).
+  - Restores active automated positions directly into the live execution engine with exact entry price, active trailing Stop Loss, stage fill flags (`isTp1Filled`, `isTp2Filled`), and realized R-multiples.
+- **Progressive Lifecycle PATCH Synchronization (`route.ts` & `useLiveOrderBlockExecution.ts`):**
+  - **Stage 1 Harvest (40% @ 1.0R):** Dispatches `PATCH /api/trades` updating `stop_loss` to FVG CE / Breakeven and accruing +0.4R realized profit.
+  - **Stage 2 Harvest (40% @ 1.5R):** Dispatches `PATCH /api/trades` ratcheting `stop_loss` to +1.0R Profit Floor and securing +1.0R cumulative profit.
+  - **Trade Exit (DOL Runner or SL):** Dispatches closing `PATCH /api/trades` with exact exit price, closed timestamp, and final realized P&L, transitioning status to `CLOSED`.
+- **Global Event Synchronization (`trades-refresh`):**
+  - Dispatches `window.dispatchEvent(new Event('trades-refresh'))` on all open, scale-out, close, and rollback events, automatically synchronizing Journal Table records and account balance metrics across the application without requiring page reloads.
+
+---
 
 ## 🆕 V16.8 Changelog — Multi-Timeframe (MTF) Live Order Block & Breaker Execution Matrix (2026-08-16)
 

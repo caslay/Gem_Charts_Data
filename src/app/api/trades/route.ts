@@ -451,6 +451,17 @@ async function handlePatchFallback(req: Request, parsedBody?: any) {
     }
 
     const trade = inMemoryTrades[tradeIndex];
+
+    if (body.stop_loss !== undefined && body.stop_loss !== null) {
+      trade.stop_loss = parseFloat(body.stop_loss);
+    }
+    if (body.take_profit !== undefined && body.take_profit !== null) {
+      trade.take_profit = parseFloat(body.take_profit);
+    }
+    if (body.ai_narrative_summary) {
+      trade.ai_narrative_summary = body.ai_narrative_summary;
+    }
+
     if (uppercaseStatus === "CLOSED") {
       if (trade.status === "CLOSED") {
         return NextResponse.json({ error: `Trade with ID ${trade_id} is already CLOSED.` }, { status: 400 });
@@ -472,9 +483,11 @@ async function handlePatchFallback(req: Request, parsedBody?: any) {
       const rawRiskAmountUsd = trade.risk_amount_usd !== null && trade.risk_amount_usd !== undefined ? parseFloat(trade.risk_amount_usd) : 0;
       const riskAmountUsd = rawRiskAmountUsd > 0 ? rawRiskAmountUsd : Math.abs(entryPrice - stopLoss) * positionSize;
 
-      let realized_pnl = direction === "LONG"
-        ? (exit_price - entryPrice) * positionSize
-        : (entryPrice - exit_price) * positionSize;
+      let realized_pnl = body.realized_pnl !== undefined && body.realized_pnl !== null
+        ? parseFloat(body.realized_pnl)
+        : (direction === "LONG"
+          ? (exit_price - entryPrice) * positionSize
+          : (entryPrice - exit_price) * positionSize);
 
       let roi = riskAmountUsd > 0 ? (realized_pnl / riskAmountUsd) * 100 : 0;
 
@@ -482,7 +495,7 @@ async function handlePatchFallback(req: Request, parsedBody?: any) {
       trade.realized_pnl = parseFloat(realized_pnl.toFixed(4));
       trade.roi = parseFloat(roi.toFixed(4));
       trade.status = "CLOSED";
-      trade.closed_at = new Date().toISOString();
+      trade.closed_at = body.closed_at || new Date().toISOString();
 
       const initialCapital = parseFloat(inMemoryAccount.initial_capital);
       const totalRealizedPnl = inMemoryTrades
@@ -493,6 +506,9 @@ async function handlePatchFallback(req: Request, parsedBody?: any) {
       inMemoryAccount.updated_at = new Date().toISOString();
     } else {
       trade.status = uppercaseStatus;
+      if (body.realized_pnl !== undefined && body.realized_pnl !== null) {
+        trade.realized_pnl = parseFloat(body.realized_pnl);
+      }
     }
 
     return NextResponse.json({
@@ -1391,10 +1407,12 @@ export async function PATCH(req: Request) {
         const rawRiskAmountUsd = trade.risk_amount_usd !== null && trade.risk_amount_usd !== undefined ? parseFloat(trade.risk_amount_usd) : 0;
         const riskAmountUsd = rawRiskAmountUsd > 0 ? rawRiskAmountUsd : Math.abs(entryPrice - stopLoss) * positionSize;
 
-        // 3. Calculate Realized P&L
-        let realized_pnl = direction === "LONG"
-          ? (exit_price - entryPrice) * positionSize
-          : (entryPrice - exit_price) * positionSize;
+        // 3. Calculate or assign Realized P&L
+        let realized_pnl = body.realized_pnl !== undefined && body.realized_pnl !== null
+          ? parseFloat(body.realized_pnl)
+          : (direction === "LONG"
+            ? (exit_price - entryPrice) * positionSize
+            : (entryPrice - exit_price) * positionSize);
 
         // 4. Calculate ROI Percentage based on risk taken
         let roi = riskAmountUsd > 0
@@ -1405,6 +1423,9 @@ export async function PATCH(req: Request) {
         realized_pnl = parseFloat(realized_pnl.toFixed(4));
         roi = parseFloat(roi.toFixed(4));
 
+        const narrativeUpdate = body.ai_narrative_summary || trade.ai_narrative_summary || null;
+        const closedAtTimestamp = body.closed_at ? new Date(body.closed_at) : new Date();
+
         // 6. Update trade record with closed parameters FIRST (so it's included in the P&L SUM)
         updateResult = await sql`
           UPDATE paper_trades
@@ -1412,7 +1433,8 @@ export async function PATCH(req: Request) {
               exit_price = ${exit_price},
               realized_pnl = ${realized_pnl},
               roi = ${roi},
-              closed_at = CURRENT_TIMESTAMP
+              ai_narrative_summary = ${narrativeUpdate},
+              closed_at = ${closedAtTimestamp.toISOString()}
           WHERE id = ${trade_id}
           RETURNING *;
         `;
@@ -1448,10 +1470,19 @@ export async function PATCH(req: Request) {
         throw txErr;
       }
     } else {
-      // Status change to other values (OPEN / PAUSED)
+      // Status change or level update for active trades (OPEN / PAUSED)
+      const updatedSl = body.stop_loss !== undefined && body.stop_loss !== null ? parseFloat(body.stop_loss) : null;
+      const updatedTp = body.take_profit !== undefined && body.take_profit !== null ? parseFloat(body.take_profit) : null;
+      const updatedPnl = body.realized_pnl !== undefined && body.realized_pnl !== null ? parseFloat(body.realized_pnl) : null;
+      const updatedNarrative = body.ai_narrative_summary || null;
+
       updateResult = await sql`
         UPDATE paper_trades
-        SET status = ${uppercaseStatus}
+        SET status = ${uppercaseStatus},
+            stop_loss = COALESCE(${updatedSl}, stop_loss),
+            take_profit = COALESCE(${updatedTp}, take_profit),
+            realized_pnl = COALESCE(${updatedPnl}, realized_pnl),
+            ai_narrative_summary = COALESCE(${updatedNarrative}, ai_narrative_summary)
         WHERE id = ${trade_id}
         RETURNING *;
       `;

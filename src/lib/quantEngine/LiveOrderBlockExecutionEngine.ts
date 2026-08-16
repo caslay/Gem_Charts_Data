@@ -29,9 +29,11 @@ import {
 
 export interface LivePosition {
   id: string;
+  dbTradeId?: string | null;     // Persistent DB UUID from /api/trades
   orderBlockId: string;
   symbol: string;
   timeframe: string;
+  strategyName?: string;
   direction: 'LONG' | 'SHORT';
   status: 'OPEN' | 'STAGE_1_FILLED' | 'STAGE_2_FILLED' | 'CLOSED';
   entryPrice: number;
@@ -62,6 +64,7 @@ export interface LivePosition {
   exitReason: 'STOPPED_OUT' | 'STAGE_1_SCRATCH' | 'STAGE_2_WIN' | 'FULL_TP3_WIN' | null;
 
   orderBlock: InstitutionalOrderBlock;
+  isRehydrated?: boolean;
 }
 
 export interface LiveExecutionConfig extends OrderBlockScanConfig {
@@ -113,7 +116,7 @@ export const DEFAULT_LIVE_EXEC_CONFIG: LiveExecutionConfig = {
 };
 
 export type TradeEventCallback = (event: {
-  type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO';
+  type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO' | 'ROLLBACK' | 'REHYDRATED';
   position?: LivePosition;
   message: string;
 }) => void;
@@ -197,7 +200,7 @@ export class LiveOrderBlockExecutionEngine {
   }
 
   private emitEvent(
-    type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO',
+    type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO' | 'ROLLBACK' | 'REHYDRATED',
     position: LivePosition | undefined,
     message: string
   ) {
@@ -831,5 +834,233 @@ export class LiveOrderBlockExecutionEngine {
 
   public getInZoneTestingStates(): InZoneTestingState[] {
     return Array.from(this.inZoneTestingStates.values());
+  }
+
+  /**
+   * Links a persistent database trade ID (UUID) from /api/trades to an active position.
+   */
+  public setDbTradeId(positionId: string, dbTradeId: string) {
+    const pos = this.openPositions.get(positionId);
+    if (pos) {
+      pos.dbTradeId = dbTradeId;
+    }
+  }
+
+  /**
+   * Rollback a position if atomic database persistence or risk guard rejected the trade.
+   * Prevents ghost positions from existing in local state.
+   */
+  public rollbackPosition(positionId: string, reason: string) {
+    const pos = this.openPositions.get(positionId);
+    if (pos) {
+      this.openPositions.delete(positionId);
+      // Free zone in consumedZoneIds
+      this.consumedZoneIds.delete(pos.orderBlockId);
+      if (pos.orderBlock) {
+        pos.orderBlock.is_consumed = false;
+      }
+      this.emitEvent(
+        'ROLLBACK',
+        pos,
+        `⚠️ [ROLLBACK: GHOST POSITION PURGED] ${pos.direction} trade rolled back: ${reason}`
+      );
+    }
+  }
+
+  /**
+   * Rehydrates open active trades from the persistent database ledger on mount / refresh.
+   */
+  public rehydrateOpenPositions(dbTrades: any[]): LivePosition[] {
+    if (!Array.isArray(dbTrades) || dbTrades.length === 0) return [];
+
+    const rehydratedList: LivePosition[] = [];
+
+    for (const trade of dbTrades) {
+      if (trade.status !== 'OPEN') continue;
+
+      // Check if position is already tracked
+      const existing = Array.from(this.openPositions.values()).find(
+        p => p.dbTradeId === trade.id || p.id === `db_${trade.id}`
+      );
+      if (existing) continue;
+
+      const isLong = trade.direction === 'LONG';
+      const entryPrice = parseFloat(trade.entry_price);
+      const stopLoss = parseFloat(trade.stop_loss);
+      const takeProfit = parseFloat(trade.take_profit);
+      const risk = Math.abs(entryPrice - stopLoss) || 10;
+      const realizedPnl = trade.realized_pnl ? parseFloat(trade.realized_pnl) : 0;
+      const realizedR = parseFloat((realizedPnl / (this.config.fixedRiskUsd || 100)).toFixed(2));
+
+      // Reconstruct order block structure
+      const dummyOb: InstitutionalOrderBlock = {
+        id: trade.ipda_metrics?.orderBlockId || `ob_rehydrated_${trade.id}`,
+        type: isLong ? 'BULLISH' : 'BEARISH',
+        symbol: trade.symbol || this.config.symbol || 'ETHUSDC',
+        timeframe: trade.ipda_metrics?.timeframe || '15m',
+        origin_time: new Date(trade.opened_at || trade.created_at || trade.timestamp).getTime(),
+        formation_time: new Date(trade.opened_at || trade.created_at || trade.timestamp).getTime(),
+        origin_index: 0,
+        formation_index: 0,
+        candles_count: 1,
+        top: Math.max(entryPrice, stopLoss),
+        bottom: Math.min(entryPrice, stopLoss),
+        mean_threshold: (entryPrice + stopLoss) / 2,
+        range_height: Math.abs(entryPrice - stopLoss),
+        range_pct: (Math.abs(entryPrice - stopLoss) / Math.min(entryPrice, stopLoss)) * 100,
+        volume_total: 0,
+        taker_buy_vol_total: 0,
+        taker_sell_vol_total: 0,
+        volume_delta_total: 0,
+        gates: trade.ipda_metrics?.gates || {
+          gate1_liquidity_sweep: true,
+          sweep_type: 'SWING_LOW',
+          sweep_level: stopLoss,
+          sweep_candle_index: 0,
+          gate2_displacement_imbalance: true,
+          fvg_found: true,
+          fvg_top: null,
+          fvg_bottom: null,
+          fvg_type: isLong ? 'BISI' : 'SIBI',
+          displacement_body_ratio: 0.6,
+          displacement_volume_expansion: 1.5,
+          gate3_structure_break: true,
+          structure_break_type: 'MSS',
+          broken_structure_level: entryPrice,
+          gate4_dealing_range: true,
+          dealing_range_location: isLong ? 'DISCOUNT' : 'PREMIUM',
+          dealing_range_equilibrium: entryPrice,
+          dealing_range_high: takeProfit,
+          dealing_range_low: stopLoss,
+          all_gates_passed: true,
+          passed_gates_count: 4
+        },
+        quality_tier: trade.ipda_metrics?.quality_tier || 'A',
+        confluence_score: 85,
+        lifecycle_status: 'UNTESTED',
+        is_body_close_violated: false,
+        first_test_time: null,
+        first_test_index: null,
+        mitigation_time: null,
+        mitigation_index: null,
+        mitigation_price: null,
+        max_penetration_price: null,
+        max_retracement_depth_pct: null,
+        invalidation_time: null,
+        invalidation_index: null,
+        is_expired: false,
+        expiration_time: null,
+        is_fresh_mitigation: true,
+        is_consumed: true,
+        is_breaker: false,
+        breaker_flip_time: null,
+        is_breaker_expired: false,
+        breaker_expiration_time: null,
+        breaker_is_fresh: false,
+        breaker_trade_outcome: 'PENDING',
+        breaker_entry_price: null,
+        breaker_stop_loss: null,
+        breaker_tp: null,
+        breaker_realized_rr: 0,
+        breaker_retest_time: null,
+        breaker_bars_to_retest: null,
+        breaker_is_confirmed: false,
+        breaker_confirmation_type: 'NONE',
+        breaker_confirmation_time: null,
+        breaker_confirmation_index: null,
+        breaker_fvg_top: null,
+        breaker_fvg_bottom: null,
+        breaker_volume_expansion: null,
+        breaker_taker_delta: null,
+        breaker_dol_target: null,
+        breaker_dol_type: 'NONE',
+        breaker_veto_reason: null,
+        position_scaling_mode: 'THREE_STAGE_HARVEST',
+        simulated_entry_price: entryPrice,
+        simulated_stop_loss: stopLoss,
+        simulated_tp1: entryPrice + (isLong ? 1.0 * risk : -1.0 * risk),
+        simulated_tp2: entryPrice + (isLong ? 1.5 * risk : -1.5 * risk),
+        simulated_tp3: takeProfit,
+        dynamic_tp2_target: entryPrice + (isLong ? 1.5 * risk : -1.5 * risk),
+        is_tp1_filled: realizedR >= 0.4,
+        is_tp2_filled: realizedR >= 1.0,
+        is_tp3_filled: false,
+        tp1_hit_time: null,
+        tp1_hit_index: null,
+        tp2_hit_time: null,
+        tp2_hit_index: null,
+        tp3_hit_time: null,
+        tp3_hit_index: null,
+        is_be_active: realizedR >= 0.4,
+        trailing_stop_mode: 'STRUCTURAL_FVG_TRAIL',
+        active_trailing_sl: stopLoss,
+        active_ratchet_floor: null,
+        trailing_sl_source: 'INITIAL',
+        is_be_scratch: false,
+        is_structural_scratch: false,
+        stage_exit_type: 'PENDING',
+        simulated_outcome: 'PENDING',
+        realized_rr: realizedR,
+        max_favorable_excursion_r: 0,
+        max_adverse_excursion_r: 0,
+        bars_to_mitigation: null,
+        bars_to_outcome: null
+      };
+
+      const isTp1 = realizedR >= 0.4;
+      const isTp2 = realizedR >= 1.0;
+      const remainingAllocation = isTp2 ? 0.2 : (isTp1 ? 0.6 : 1.0);
+
+      const rehydratedPos: LivePosition = {
+        id: `db_${trade.id}`,
+        dbTradeId: trade.id,
+        orderBlockId: dummyOb.id,
+        symbol: trade.symbol || this.config.symbol || 'ETHUSDC',
+        timeframe: trade.ipda_metrics?.timeframe || '15m',
+        strategyName: trade.strategy_name || 'Auto OB Execution',
+        direction: isLong ? 'LONG' : 'SHORT',
+        status: isTp2 ? 'STAGE_2_FILLED' : (isTp1 ? 'STAGE_1_FILLED' : 'OPEN'),
+        entryPrice,
+        initialStopLoss: stopLoss,
+        activeStopLoss: stopLoss,
+        activeRatchetFloor: isTp2 ? (isLong ? entryPrice + 1.0 * risk : entryPrice - 1.0 * risk) : null,
+        trailingSlSource: isTp2 ? 'PROFIT_RATCHET_FLOOR' : (isTp1 ? 'FVG_CE' : 'INITIAL'),
+        tp1Price: entryPrice + (isLong ? 1.0 * risk : -1.0 * risk),
+        tp2Price: entryPrice + (isLong ? 1.5 * risk : -1.5 * risk),
+        tp3Price: takeProfit,
+        dynamicDolTarget: takeProfit,
+        risk,
+        allocatedAmount: parseFloat(trade.position_size || '1.0'),
+        remainingAllocation,
+        realizedR,
+        unrealizedR: 0,
+        isTp1Filled: isTp1,
+        isTp2Filled: isTp2,
+        isTp3Filled: false,
+        tp1HitTime: null,
+        tp2HitTime: null,
+        tp3HitTime: null,
+        openTime: new Date(trade.opened_at || trade.created_at || trade.timestamp).getTime(),
+        closeTime: null,
+        exitReason: null,
+        orderBlock: dummyOb,
+        isRehydrated: true
+      };
+
+      this.openPositions.set(rehydratedPos.id, rehydratedPos);
+      this.consumedZoneIds.add(dummyOb.id);
+      rehydratedList.push(rehydratedPos);
+
+      this.emitEvent(
+        'REHYDRATED',
+        rehydratedPos,
+        `🔄 [RE-HYDRATION] Restored active ${rehydratedPos.direction} position from DB (#${trade.id.slice(0, 8)}) @ $${entryPrice}`
+      );
+
+      // Stop once we hit maxOpenPositions cap
+      if (this.openPositions.size >= this.config.maxOpenPositions) break;
+    }
+
+    return rehydratedList;
   }
 }
