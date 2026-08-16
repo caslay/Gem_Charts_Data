@@ -291,6 +291,23 @@ export default function LiveOrderBlockModal({
                               {pos.timeframe.toUpperCase()}
                             </span>
 
+                            {pos.dbTradeId ? (
+                              <span className="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 text-[9px] font-bold flex items-center gap-1" title={pos.dbTradeId}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                <span>DB: #{pos.dbTradeId.slice(0, 8)}</span>
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-500/40 text-[9px] font-bold">
+                                SYNCING DB...
+                              </span>
+                            )}
+
+                            {pos.isRehydrated && (
+                              <span className="px-2 py-0.5 rounded bg-blue-950/80 text-blue-300 border border-blue-500/40 text-[9px] font-bold">
+                                RE-HYDRATED
+                              </span>
+                            )}
+
                             <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase flex items-center gap-1.5 ${
                               isLong
                                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
