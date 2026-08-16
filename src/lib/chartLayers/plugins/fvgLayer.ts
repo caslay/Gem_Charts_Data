@@ -4,6 +4,7 @@ import type { ChartLayer } from '../types';
 export const fvgLayer: ChartLayer = {
   id: 'fvg',
   name: 'Fair Value Gaps',
+  shortName: 'FVG',
   description: 'Unmitigated institutional FVG zones',
   icon: 'Layers',
   renderHtml(context) {

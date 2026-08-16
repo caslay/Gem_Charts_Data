@@ -344,9 +344,9 @@ export async function GET(req: Request) {
       const restingLiquidityPromise = fetchRestingLiquidity(symbol).catch(() => ({ BSL_Magnets: [], SSL_Magnets: [] }));
       const smartMoneyPromise = fetchSmartMoneySentiment(symbol).catch(() => ({ funding_rate_status: 'NEUTRAL', smart_money_divergence: false }));
 
-      // If init parameter is passed, fetch a minimum of 60 days of 15m candles (5760 candles)
-      const res15mPromise = isInit
-        ? fetchLargeHistory(symbol, '15m', 5760, endTime)
+      // Fetch 15m candles respecting user configured limit
+      const res15mPromise = (limit15m > 1500)
+        ? fetchLargeHistory(symbol, '15m', limit15m, endTime)
         : fetchJsonOrEmpty(urls['15m'], limit15m);
 
       let visualFetchPromise = Promise.resolve(null as any);
@@ -428,7 +428,7 @@ export async function GET(req: Request) {
 
     if (isOffline) {
       candles5m = generateMockCandles('5m', limit5m, undefined, symbol);
-      candles15m = generateMockCandles('15m', isInit ? 5760 : limit15m, undefined, symbol);
+      candles15m = generateMockCandles('15m', limit15m, undefined, symbol);
       candles1h = generateMockCandles('1h', limit1h, undefined, symbol);
       candles4h = generateMockCandles('4h', limit4h, undefined, symbol);
       candlesBtc5m = generateMockCandles('5m', 20, undefined, 'BTCUSDT');

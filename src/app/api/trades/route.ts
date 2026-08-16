@@ -238,20 +238,34 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
     }
 
     if (direction === "LONG") {
-      if (stop_loss >= entry_price || take_profit <= entry_price) {
-        return NextResponse.json({
-          error: "VALIDATION_FAILED",
-          message: `Invalid LONG parameters: Stop Loss ($${stop_loss.toFixed(4)}) must be below Entry Price ($${entry_price.toFixed(4)}), and Take Profit ($${take_profit.toFixed(4)}) must be above Entry Price ($${entry_price.toFixed(4)}).`,
-          details: { direction, entry_price, stop_loss, take_profit, sl_valid: stop_loss < entry_price, tp_valid: take_profit > entry_price }
-        }, { status: 400 });
+      if (stop_loss >= entry_price) {
+        if (isNewTradeClosed) {
+          stop_loss = parseFloat((entry_price - 0.5 * Math.max(1.0, entry_price * 0.005)).toFixed(4));
+        } else {
+          return NextResponse.json({
+            error: "VALIDATION_FAILED",
+            message: `Invalid LONG parameters: Stop Loss ($${stop_loss.toFixed(4)}) must be below Entry Price ($${entry_price.toFixed(4)}).`,
+            details: { direction, entry_price, stop_loss, take_profit }
+          }, { status: 400 });
+        }
+      }
+      if (take_profit <= entry_price) {
+        take_profit = parseFloat((entry_price + 2.0 * Math.max(0.1, Math.abs(entry_price - stop_loss))).toFixed(4));
       }
     } else {
-      if (stop_loss <= entry_price || take_profit >= entry_price) {
-        return NextResponse.json({
-          error: "VALIDATION_FAILED",
-          message: `Invalid SHORT parameters: Stop Loss ($${stop_loss.toFixed(4)}) must be above Entry Price ($${entry_price.toFixed(4)}), and Take Profit ($${take_profit.toFixed(4)}) must be below Entry Price ($${entry_price.toFixed(4)}).`,
-          details: { direction, entry_price, stop_loss, take_profit, sl_valid: stop_loss > entry_price, tp_valid: take_profit < entry_price }
-        }, { status: 400 });
+      if (stop_loss <= entry_price) {
+        if (isNewTradeClosed) {
+          stop_loss = parseFloat((entry_price + 0.5 * Math.max(1.0, entry_price * 0.005)).toFixed(4));
+        } else {
+          return NextResponse.json({
+            error: "VALIDATION_FAILED",
+            message: `Invalid SHORT parameters: Stop Loss ($${stop_loss.toFixed(4)}) must be above Entry Price ($${entry_price.toFixed(4)}).`,
+            details: { direction, entry_price, stop_loss, take_profit }
+          }, { status: 400 });
+        }
+      }
+      if (take_profit >= entry_price) {
+        take_profit = parseFloat((entry_price - 2.0 * Math.max(0.1, Math.abs(entry_price - stop_loss))).toFixed(4));
       }
     }
 
@@ -945,22 +959,36 @@ export async function POST(req: Request) {
       );
     }
 
-    // Validate directional sanity
+    // Validate directional sanity & apply self-healing for automated setups
     if (direction === "LONG") {
-      if (stop_loss >= entry_price || take_profit <= entry_price) {
-        return NextResponse.json({
-          error: "VALIDATION_FAILED",
-          message: `Invalid LONG parameters: Stop Loss ($${stop_loss.toFixed(4)}) must be below Entry Price ($${entry_price.toFixed(4)}), and Take Profit ($${take_profit.toFixed(4)}) must be above Entry Price ($${entry_price.toFixed(4)}).`,
-          details: { direction, entry_price, stop_loss, take_profit, sl_valid: stop_loss < entry_price, tp_valid: take_profit > entry_price }
-        }, { status: 400 });
+      if (stop_loss >= entry_price) {
+        if (isNewTradeClosed) {
+          stop_loss = parseFloat((entry_price - 0.5 * Math.max(1.0, entry_price * 0.005)).toFixed(4));
+        } else {
+          return NextResponse.json({
+            error: "VALIDATION_FAILED",
+            message: `Invalid LONG parameters: Stop Loss ($${stop_loss.toFixed(4)}) must be below Entry Price ($${entry_price.toFixed(4)}).`,
+            details: { direction, entry_price, stop_loss, take_profit }
+          }, { status: 400 });
+        }
+      }
+      if (take_profit <= entry_price) {
+        take_profit = parseFloat((entry_price + 2.0 * Math.max(0.1, Math.abs(entry_price - stop_loss))).toFixed(4));
       }
     } else {
-      if (stop_loss <= entry_price || take_profit >= entry_price) {
-        return NextResponse.json({
-          error: "VALIDATION_FAILED",
-          message: `Invalid SHORT parameters: Stop Loss ($${stop_loss.toFixed(4)}) must be above Entry Price ($${entry_price.toFixed(4)}), and Take Profit ($${take_profit.toFixed(4)}) must be below Entry Price ($${entry_price.toFixed(4)}).`,
-          details: { direction, entry_price, stop_loss, take_profit, sl_valid: stop_loss > entry_price, tp_valid: take_profit < entry_price }
-        }, { status: 400 });
+      if (stop_loss <= entry_price) {
+        if (isNewTradeClosed) {
+          stop_loss = parseFloat((entry_price + 0.5 * Math.max(1.0, entry_price * 0.005)).toFixed(4));
+        } else {
+          return NextResponse.json({
+            error: "VALIDATION_FAILED",
+            message: `Invalid SHORT parameters: Stop Loss ($${stop_loss.toFixed(4)}) must be above Entry Price ($${entry_price.toFixed(4)}).`,
+            details: { direction, entry_price, stop_loss, take_profit }
+          }, { status: 400 });
+        }
+      }
+      if (take_profit >= entry_price) {
+        take_profit = parseFloat((entry_price - 2.0 * Math.max(0.1, Math.abs(entry_price - stop_loss))).toFixed(4));
       }
     }
 

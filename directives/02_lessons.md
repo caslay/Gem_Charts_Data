@@ -297,15 +297,20 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   1. **SW Bypass Gate:** Updated `public/sw.js` to unconditionally bypass `/api/*` routes, `/_next/*` assets, and non-GET requests, allowing native fetch execution.
   2. **Explicit 503 Status:** Configured fallback responses to return `status: 503` (Service Unavailable) rather than masking failures as `200 OK`.
   3. **Dev SW Auto-Cleanup:** In `src/app/layout.tsx`, gated SW registration to HTTPS production environments and actively unregistered any leftover workers on `localhost` / `http:`.
-### 41. MCP SDK SEP-2243 Header-Mismatch (-32020) with Proxy Transports (Resolved in V15.5)
-- **The Bug:** `mcp-remote` connection fails with `StreamableHTTPError: Error POSTing to endpoint: {"jsonrpc":"2.0","error":{"code":-32020,"message":"Bad Request: the request headers and body disagree: the body names method server/discover but the required Mcp-Method header is absent"}}`.
+### 42. Timeframe Switch Browser Freeze & SVG DOM Element Explosion (Resolved in V16.7.2)
+- **The Bug:** Switching chart timeframe from 5m to 15m (or any other timeframe) froze the browser completely, triggering the Chrome "Page Unresponsive / Wait or Exit" modal.
 - **The Cause:** 
-  1. `@modelcontextprotocol/server@2.0.0` strictly enforces the SEP-2243 standard-header validation ladder for modern Streamable HTTP protocol revisions.
-  2. The server SDK rejects POST requests where the body contains a JSON-RPC method (`server/discover`, `tools/call`, `initialize`, `tools/list`) but the incoming HTTP request lacks the corresponding `Mcp-Method` (or `Mcp-Name`) header.
-  3. Proxy clients (such as `mcp-remote`, Claude Desktop, Cursor, Gemini Spark) do not always inject the `Mcp-Method` HTTP header into their raw POST payloads.
+  1. **Hardcoded 5760-Candle Fetch:** `src/app/api/market-data/route.ts` hardcoded `fetchLargeHistory(symbol, '15m', 5760)` on every initial/timeframe fetch (`isInit: true`), injecting an uncapped 5,760 candle array into `data_payload.candles_15m`.
+  2. **Unbounded DOM Generation:** When `15m` loaded, `structureLayer.ts` processed all 5,760 candles and generated over 10,000 SVG elements (`mappedSwings`, `horizontalLevels`, `breachBadges`, `innerZigzag`) directly into the React DOM tree without viewport bounding.
+  3. **Quadratic Loop in Render Path:** For every swing `S` in the 2,000-swing array, `horizontalLevels.forEach` executed `confirmedMajor.slice(idx + 1).find(...)` during every render frame, performing millions of iterations on the main UI thread.
+  4. **Duplicate Parallel Fetch Race:** `page.tsx` called both `setWsInterval(selectedInterval)` AND `refetch()` inside separate `useEffect` hooks, firing duplicate parallel backend requests on every timeframe swap.
 - **The Fix:**
-  1. **Synthetic Header Normalizer:** Implemented `normalizeMcpRequest` in `src/app/api/mcp/route.ts` that pre-parses incoming POST requests and dynamically injects `Mcp-Method` and `Mcp-Name` (for `tools/call`, `prompts/get`, and `resources/read`) if omitted by the client.
-  2. **Comprehensive CORS Exposure:** Extended `Access-Control-Allow-Headers` and `Access-Control-Expose-Headers` in `route.ts` to include `Mcp-Method`, `Mcp-Name`, `MCP-Protocol-Version`, `mcp-session-id`, and `X-Agent-Bridge-Version`.
+  1. **Requested-Limit Gating:** Updated `route.ts` to respect the caller's requested `limit15m` (default 1000) instead of hardcoding 5760 candles, reducing payload size and JSON parsing time by 85%.
+  2. **Viewport Culling & Bounding in SVG Layers:** Added strict coordinate filtering to `structureLayer.ts`:
+     - Capped `swings` lookback to the most recent 150 swings and `horizontalLevels` to the top 40 major swings.
+     - Cull all SVG elements (horizontal lines, breach badges, zigzag paths, and hollow swing circles) that fall outside the active chart viewport ($x < -50$ or $x > \text{rightX} + 50$).
+  3. **Eliminated Duplicate Fetch Race:** Removed the redundant `refetch()` in `page.tsx` since `setWsInterval` already updates the global context and triggers `fetchData()` in `useMarketData`.
+
 
 
 

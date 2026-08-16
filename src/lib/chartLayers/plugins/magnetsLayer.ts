@@ -3,6 +3,7 @@ import type { ChartLayer } from '../types';
 export const magnetsLayer: ChartLayer = {
   id: 'magnets',
   name: 'Liquidity Magnets',
+  shortName: 'LIQ',
   description: 'Resting order book liquidity levels (BSL/SSL)',
   icon: 'Magnet',
   renderChart(context) {

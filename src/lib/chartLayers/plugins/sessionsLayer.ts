@@ -4,6 +4,7 @@ import type { ChartLayer } from '../types';
 export const sessionsLayer: ChartLayer = {
   id: 'sessions',
   name: 'Session Ranges',
+  shortName: 'SESSION',
   description: 'Asian / London Killzone range boundaries',
   icon: 'Clock',
   renderChart(context) {

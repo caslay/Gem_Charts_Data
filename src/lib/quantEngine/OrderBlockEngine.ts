@@ -134,6 +134,7 @@ export interface InstitutionalOrderBlock {
   is_expired: boolean;
   expiration_time: number | null;
   is_fresh_mitigation: boolean;
+  is_consumed?: boolean; // Single-use trade execution safety flag
 
   // Breaker Block Inversion Pipeline (Phase 2, 3, 4, 5 & 6)
   is_breaker: boolean;
