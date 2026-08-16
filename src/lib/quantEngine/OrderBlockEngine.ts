@@ -130,11 +130,16 @@ export interface InstitutionalOrderBlock {
   invalidation_time: number | null;
   invalidation_index: number | null;
 
-  // Temporal Freshness (Phase 2)
+  // Temporal Freshness & Single-Use Safety
   is_expired: boolean;
   expiration_time: number | null;
   is_fresh_mitigation: boolean;
   is_consumed?: boolean; // Single-use trade execution safety flag
+
+  // Multi-Timeframe (MTF) & Structural Role Metadata
+  structural_weight?: '1H_MACRO_ANCHOR' | '15M_STRUCTURAL' | '5M_PRECISION_TRIGGER' | 'OTHER';
+  htf_alignment_status?: 'HTF_ALIGNED' | 'VETOED_COUNTER_HTF' | 'HTF_ANCHOR';
+  htf_veto_reason?: string | null;
 
   // Breaker Block Inversion Pipeline (Phase 2, 3, 4, 5 & 6)
   is_breaker: boolean;

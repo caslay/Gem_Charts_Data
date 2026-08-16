@@ -1,8 +1,39 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.7.2
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.8
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-16 (V16.7.2 — Timeframe Switching Performance & SVG DOM Viewport Culling)  
+> **Last Updated:** 2026-08-16 (V16.8 — Multi-Timeframe (MTF) Live Order Block & Breaker Execution Matrix)  
+
+## 🆕 V16.8 Changelog — Multi-Timeframe (MTF) Live Order Block & Breaker Execution Matrix (2026-08-16)
+
+### Summary
+Upgraded the **Live Order Block & Breaker Execution Engine** into a multi-timeframe background orchestrator that continuously ingests, validates, and routes trades across **5m, 15m, and 1h** intervals concurrently. Enforced a top-down Higher-Timeframe (HTF) Alignment Gatekeeper to veto counter-trend lower-timeframe entries without higher-timeframe sponsorship, and introduced a unified Multi-Timeframe Matrix Cockpit in `LiveOrderBlockModal.tsx`.
+
+### Key Features & Architectural Directives
+- **Multi-Timeframe Background Stream Ingestion (`LiveOrderBlockExecutionEngine.ts`):**
+  - Decoupled execution loop from the single visual chart timeframe.
+  - Ingests and maintains closed candle streams for standard institutional intervals (`5m`, `15m`, `1h`) concurrently.
+  - Evaluates zero look-ahead multi-gate validation pipelines independently on each timeframe's closed candle events.
+- **Universal Active Zone Registry & Structural Role Tagging:**
+  - Maintains `activeZonesByTimeframe: Map<string, InstitutionalOrderBlock[]>` alongside a unified flattened active pool.
+  - Automatically tags each zone with its structural weight:
+    - **1h:** `1H_MACRO_ANCHOR`
+    - **15m:** `15M_STRUCTURAL`
+    - **5m:** `5M_PRECISION_TRIGGER`
+  - Applies single-use consumption (`consumedZoneIds`) and lookback freshness pruning independently per timeframe (24 bars: 2h on 5m, 6h on 15m, 24h on 1h).
+- **Higher-Timeframe (HTF) Alignment Gatekeeper:**
+  - Enforces top-down confluence before routing 5m precision entries:
+    - 5m Bullish signals mandate 15m/1h Bullish trend, Macro Daily Bias Bullish, or HTF SSL Liquidity Sweep.
+    - 5m Bearish signals mandate 15m/1h Bearish trend, Macro Daily Bias Bearish, or HTF BSL Liquidity Sweep.
+    - Automatically vetoes counter-trend 5m entries lacking higher-timeframe sponsorship (`VETOED_COUNTER_HTF`).
+- **Live Modal Multi-Timeframe Active Matrix (`LiveOrderBlockModal.tsx`):**
+  - High-density matrix view in the **ZONES** tab with sub-filter pills: `ALL`, `5m Precision`, `15m Structural`, `1h Macro`.
+  - Comprehensive zone cards showing structural roles, 50% Mean Thresholds, validation gates, and HTF Alignment status (`[✓ HTF ALIGNED]` vs `[⚓ MACRO ANCHOR]` vs `[✕ VETOED: COUNTER-HTF]`).
+  - Active open position header displays origin timeframe (e.g. `15M LONG` / `5M SHORT`).
+- **Tick-Level Reactive Position Scaling:**
+  - 3-stage scaling (40% TP1 @ 1.0R, 40% TP2 @ 1.5R, 20% TP3 DOL Runner) and structural trailing stops operate continuously on live price ticks regardless of active chart interval.
+
+---
 
 ## 🆕 V16.7.2 Changelog — Timeframe Switching Performance & SVG DOM Viewport Culling (2026-08-16)
 

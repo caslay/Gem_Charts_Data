@@ -19,7 +19,11 @@ import {
   Repeat,
   Sliders,
   Flame,
-  CheckCheck
+  CheckCheck,
+  Filter,
+  Check,
+  Ban,
+  Anchor
 } from 'lucide-react';
 import { useLiveOrderBlockExecution } from '@/hooks/useLiveOrderBlockExecution';
 
@@ -39,6 +43,9 @@ export default function LiveOrderBlockModal({
     setEngineConfig,
     activePositions,
     activeZones,
+    activeZonesByTimeframe,
+    timeframeFilter,
+    setTimeframeFilter,
     closedLiveTrades,
     lastEventMessage,
     lastEventTime,
@@ -47,7 +54,8 @@ export default function LiveOrderBlockModal({
     testingStates,
     toggleAutoExecute,
     setScalingMode,
-    setTrailingMode
+    setTrailingMode,
+    setEnforceHtfAlignment
   } = useLiveOrderBlockExecution();
 
   const [activeTab, setActiveTab] = useState<'EXECUTION' | 'ZONES' | 'SETTINGS'>('EXECUTION');
@@ -64,6 +72,11 @@ export default function LiveOrderBlockModal({
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+
+  const count5m = activeZonesByTimeframe['5m']?.length || 0;
+  const count15m = activeZonesByTimeframe['15m']?.length || 0;
+  const count1h = activeZonesByTimeframe['1h']?.length || 0;
+  const totalZones = activeZones.length;
 
   const totalRealizedR = closedLiveTrades.reduce((acc, t) => acc + t.realizedR, 0);
   const winCount = closedLiveTrades.filter(t => t.realizedR > 0).length;
@@ -84,7 +97,7 @@ export default function LiveOrderBlockModal({
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-black uppercase tracking-wider text-foreground">
-                  Phase 7 Live Order Block & Breaker Execution Cockpit
+                  Multi-Timeframe Live Order Block & Breaker Matrix
                 </h2>
                 <span className="px-2 py-0.5 rounded-full bg-card border border-card-border text-[10px] font-bold text-cyan-400">
                   {symbol}
@@ -95,7 +108,7 @@ export default function LiveOrderBlockModal({
                 </span>
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Institutional 3-Stage scaling (40/40/20), single-use zone doctrine, and volumetric in-zone confirmation state machine.
+                Simultaneous background tracking across 5m, 15m & 1h with Top-Down HTF Alignment gating and 3-Stage scaling (40/40/20).
               </p>
             </div>
           </div>
@@ -164,7 +177,7 @@ export default function LiveOrderBlockModal({
                   : 'text-muted hover:text-foreground'
               }`}
             >
-              Active Resting Zones ({activeZones.length})
+              MTF Active Matrix ({totalZones})
             </button>
             <button
               onClick={() => setActiveTab('SETTINGS')}
@@ -208,10 +221,16 @@ export default function LiveOrderBlockModal({
                 </div>
 
                 <div className="bg-card/40 border border-card-border rounded-xl p-3 flex flex-col justify-between">
-                  <span className="text-[9px] uppercase text-muted font-bold">Fresh Resting Zones</span>
+                  <span className="text-[9px] uppercase text-muted font-bold">MTF Resting Matrix</span>
                   <div className="flex items-center justify-between mt-1">
-                    <span className="text-base font-black text-cyan-300">{activeZones.length}</span>
-                    <span className="text-[9px] text-slate-400">Single-Use</span>
+                    <div className="flex items-center gap-1 text-[11px] font-bold">
+                      <span className="text-amber-400">{count5m}·5m</span>
+                      <span className="text-slate-500">/</span>
+                      <span className="text-purple-400">{count15m}·15m</span>
+                      <span className="text-slate-500">/</span>
+                      <span className="text-cyan-400">{count1h}·1h</span>
+                    </div>
+                    <span className="text-[9px] text-slate-400">{totalZones} Total</span>
                   </div>
                 </div>
 
@@ -224,10 +243,12 @@ export default function LiveOrderBlockModal({
                 </div>
 
                 <div className="bg-card/40 border border-card-border rounded-xl p-3 flex flex-col justify-between">
-                  <span className="text-[9px] uppercase text-muted font-bold">Trailing Stop Engine</span>
+                  <span className="text-[9px] uppercase text-muted font-bold">HTF Alignment Gate</span>
                   <div className="flex items-center justify-between mt-1">
-                    <span className="text-[10px] font-bold text-accent">FVG 50% CE</span>
-                    <span className="text-[9px] text-emerald-400 font-bold">+1.0R Ratchet</span>
+                    <span className={`text-[10px] font-bold ${engineConfig.enforceHtfAlignment ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {engineConfig.enforceHtfAlignment ? 'STRICT 15m/1h' : 'PERMISSIVE'}
+                    </span>
+                    <span className="text-[9px] text-slate-400">Top-Down</span>
                   </div>
                 </div>
               </div>
@@ -262,6 +283,14 @@ export default function LiveOrderBlockModal({
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2.5">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                              pos.timeframe === '1h' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' :
+                              pos.timeframe === '15m' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' :
+                              'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            }`}>
+                              {pos.timeframe.toUpperCase()}
+                            </span>
+
                             <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase flex items-center gap-1.5 ${
                               isLong
                                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
@@ -344,8 +373,8 @@ export default function LiveOrderBlockModal({
               ) : (
                 <div className="py-8 text-center text-muted text-[11px] border border-dashed border-card-border rounded-xl bg-card/10 flex flex-col items-center justify-center gap-2">
                   <Shield className="w-8 h-8 text-muted opacity-40" />
-                  <span>Zero Active Trades. Scanning {activeZones.length} unconsumed Order Blocks & Breakers...</span>
-                  <span className="text-[9px] text-muted-foreground">Enforcing Single-Position Concurrency Cap (1 Max).</span>
+                  <span>Zero Active Trades. Scanning {totalZones} Multi-Timeframe Order Blocks & Breakers...</span>
+                  <span className="text-[9px] text-muted-foreground">Enforcing Top-Down Alignment and Single-Position Concurrency Cap (1 Max).</span>
                 </div>
               )}
 
@@ -363,42 +392,135 @@ export default function LiveOrderBlockModal({
 
           {activeTab === 'ZONES' && (
             <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between text-[10px] text-muted">
-                <span>Active Fresh Order Blocks & Breakers within 24-Bar Window ({activeZones.length})</span>
-                <span>Single-Use Enforced</span>
+              {/* ── Multi-Timeframe Sub-Filter Bar ─────────────────────────────── */}
+              <div className="flex items-center justify-between text-[10px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted text-[9px] uppercase font-bold flex items-center gap-1 mr-1">
+                    <Filter size={11} /> Filter:
+                  </span>
+                  <button
+                    onClick={() => setTimeframeFilter('ALL')}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition cursor-pointer ${
+                      timeframeFilter === 'ALL'
+                        ? 'bg-slate-700 text-white border border-slate-500'
+                        : 'bg-card/40 text-muted hover:text-foreground border border-card-border'
+                    }`}
+                  >
+                    ALL ({totalZones})
+                  </button>
+
+                  <button
+                    onClick={() => setTimeframeFilter('5m')}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition cursor-pointer ${
+                      timeframeFilter === '5m'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/60'
+                        : 'bg-card/40 text-muted hover:text-foreground border border-card-border'
+                    }`}
+                  >
+                    5m Precision ({count5m})
+                  </button>
+
+                  <button
+                    onClick={() => setTimeframeFilter('15m')}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition cursor-pointer ${
+                      timeframeFilter === '15m'
+                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/60'
+                        : 'bg-card/40 text-muted hover:text-foreground border border-card-border'
+                    }`}
+                  >
+                    15m Structural ({count15m})
+                  </button>
+
+                  <button
+                    onClick={() => setTimeframeFilter('1h')}
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition cursor-pointer ${
+                      timeframeFilter === '1h'
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/60'
+                        : 'bg-card/40 text-muted hover:text-foreground border border-card-border'
+                    }`}
+                  >
+                    1h Macro ({count1h})
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 text-[9px] text-muted">
+                  <span className="flex items-center gap-1 text-emerald-400 font-bold">
+                    <Check size={11} /> HTF Aligned
+                  </span>
+                  <span className="flex items-center gap-1 text-rose-400 font-bold">
+                    <Ban size={11} /> Vetoed
+                  </span>
+                </div>
               </div>
 
+              {/* ── Multi-Timeframe Matrix Grid ─────────────────────────────────── */}
               {activeZones.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {activeZones.map((zone) => {
                     const isBullish = zone.type === 'BULLISH';
+                    const isVetoed = zone.htf_alignment_status === 'VETOED_COUNTER_HTF';
+                    const is1h = zone.timeframe === '1h';
+                    const is15m = zone.timeframe === '15m';
+
                     return (
                       <div
                         key={zone.id}
-                        className="bg-card/40 border border-card-border rounded-xl p-3 flex flex-col justify-between gap-2"
+                        className={`border rounded-xl p-3.5 flex flex-col justify-between gap-2.5 transition-all ${
+                          isVetoed
+                            ? 'bg-rose-950/20 border-rose-500/30 opacity-75'
+                            : is1h
+                            ? 'bg-gradient-to-br from-card/70 via-slate-900/60 to-cyan-950/20 border-cyan-500/40'
+                            : is15m
+                            ? 'bg-gradient-to-br from-card/70 via-slate-900/60 to-purple-950/20 border-purple-500/40'
+                            : 'bg-gradient-to-br from-card/70 via-slate-900/60 to-amber-950/20 border-amber-500/40'
+                        }`}
                       >
+                        {/* Header Row: TF + Role + Direction + Alignment Badge */}
                         <div className="flex items-center justify-between">
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                            zone.is_breaker
-                              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                              : isBullish
-                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                              : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
-                          }`}>
-                            {zone.is_breaker ? '⚡ BREAKER' : `${zone.quality_tier} OB`} [{zone.type}]
-                          </span>
-                          <span className="text-[9px] text-muted">
-                            {zone.lifecycle_status}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                              is1h ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' :
+                              is15m ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' :
+                              'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                            }`}>
+                              {zone.timeframe.toUpperCase()}
+                            </span>
+
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                              zone.is_breaker
+                                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                                : isBullish
+                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                            }`}>
+                              {zone.is_breaker ? '⚡ BREAKER' : `${zone.quality_tier} OB`} [{zone.type}]
+                            </span>
+                          </div>
+
+                          {/* Alignment / Anchor Status */}
+                          {zone.htf_alignment_status === 'HTF_ANCHOR' ? (
+                            <span className="px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/30 text-[8px] font-bold flex items-center gap-1">
+                              <Anchor size={10} /> MACRO ANCHOR
+                            </span>
+                          ) : isVetoed ? (
+                            <span className="px-2 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-500/30 text-[8px] font-bold flex items-center gap-1">
+                              <Ban size={10} /> VETOED: COUNTER-HTF
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 text-[8px] font-bold flex items-center gap-1">
+                              <Check size={10} /> HTF ALIGNED
+                            </span>
+                          )}
                         </div>
 
-                        <div className="grid grid-cols-3 gap-1 text-[10px]">
+                        {/* Zone Boundaries: Top, 50% MT, Bottom */}
+                        <div className="grid grid-cols-3 gap-1.5 text-[10px] bg-background/50 p-2 rounded-lg border border-card-border/40">
                           <div>
                             <span className="text-[8px] text-muted uppercase">Top</span>
                             <div className="font-bold text-foreground">${zone.top.toFixed(2)}</div>
                           </div>
                           <div>
-                            <span className="text-[8px] text-cyan-400 uppercase">50% MT</span>
+                            <span className="text-[8px] text-cyan-400 uppercase font-bold">50% MT</span>
                             <div className="font-bold text-cyan-300">${zone.mean_threshold.toFixed(2)}</div>
                           </div>
                           <div>
@@ -407,9 +529,29 @@ export default function LiveOrderBlockModal({
                           </div>
                         </div>
 
+                        {/* Validation Gates Summary */}
+                        <div className="flex items-center gap-1.5 text-[8px] text-muted">
+                          <span className={`px-1.5 py-0.5 rounded border ${zone.gates?.gate1_liquidity_sweep ? 'text-emerald-300 border-emerald-500/30 bg-emerald-950/30' : 'text-slate-500 border-slate-700'}`}>
+                            G1: Sweep ({zone.gates?.sweep_type || 'NONE'})
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded border ${zone.gates?.gate2_displacement_imbalance ? 'text-emerald-300 border-emerald-500/30 bg-emerald-950/30' : 'text-slate-500 border-slate-700'}`}>
+                            G2: FVG ({zone.gates?.fvg_type || 'NONE'})
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded border ${zone.gates?.gate3_structure_break ? 'text-emerald-300 border-emerald-500/30 bg-emerald-950/30' : 'text-slate-500 border-slate-700'}`}>
+                            G3: {zone.gates?.structure_break_type || 'NONE'}
+                          </span>
+                        </div>
+
+                        {/* Footer Info */}
                         <div className="text-[8px] text-muted border-t border-card-border/40 pt-1.5 flex items-center justify-between">
                           <span>Origin: {new Date(zone.origin_time).toLocaleTimeString()}</span>
-                          <span>Confluence: {zone.confluence_score} pts</span>
+                          {zone.htf_veto_reason ? (
+                            <span className="text-rose-400 truncate max-w-[200px]" title={zone.htf_veto_reason}>
+                              {zone.htf_veto_reason}
+                            </span>
+                          ) : (
+                            <span>Confluence: <strong className="text-foreground">{zone.confluence_score} pts</strong></span>
+                          )}
                         </div>
                       </div>
                     );
@@ -417,7 +559,7 @@ export default function LiveOrderBlockModal({
                 </div>
               ) : (
                 <div className="py-8 text-center text-muted text-[11px] border border-dashed border-card-border rounded-xl bg-card/10">
-                  No active resting zones within lookback window.
+                  No active resting zones detected for selected timeframe filter ({timeframeFilter}).
                 </div>
               )}
             </div>
@@ -425,6 +567,30 @@ export default function LiveOrderBlockModal({
 
           {activeTab === 'SETTINGS' && (
             <div className="flex flex-col gap-4 max-w-xl mx-auto py-2">
+              {/* ── Higher-Timeframe Alignment Setting ────────────────────────── */}
+              <div className="bg-card/40 border border-card-border rounded-xl p-4 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Anchor className="w-4 h-4 text-cyan-400" />
+                    <div>
+                      <h4 className="font-bold text-foreground text-sm">Higher-Timeframe (HTF) Alignment</h4>
+                      <p className="text-[9px] text-muted">Veto counter-trend 5m precision entries unless sponsored by 15m/1h structure.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setEnforceHtfAlignment(!engineConfig.enforceHtfAlignment)}
+                    className={`px-3 py-1.5 rounded-lg border font-bold text-[10px] uppercase transition cursor-pointer ${
+                      engineConfig.enforceHtfAlignment
+                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                        : 'bg-card border-card-border text-muted hover:text-foreground'
+                    }`}
+                  >
+                    {engineConfig.enforceHtfAlignment ? 'ENABLED (STRICT)' : 'DISABLED (PERMISSIVE)'}
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Position Scaling Model ──────────────────────────────────── */}
               <div className="bg-card/40 border border-card-border rounded-xl p-4 flex flex-col gap-3">
                 <h4 className="font-bold text-foreground text-sm flex items-center gap-2">
                   <Sliders className="w-4 h-4 text-cyan-400" />
@@ -469,6 +635,7 @@ export default function LiveOrderBlockModal({
                 </div>
               </div>
 
+              {/* ── Trailing Stop Loss Logic ─────────────────────────────────── */}
               <div className="bg-card/40 border border-card-border rounded-xl p-4 flex flex-col gap-3">
                 <h4 className="font-bold text-foreground text-sm flex items-center gap-2">
                   <Shield className="w-4 h-4 text-emerald-400" />

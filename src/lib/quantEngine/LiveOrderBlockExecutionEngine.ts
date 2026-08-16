@@ -1,21 +1,19 @@
 /**
  * LiveOrderBlockExecutionEngine.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * Phase 7 Live Automated Execution Engine & Real-Time Position Manager.
+ * Phase 7 & 8 Multi-Timeframe (MTF) Live Automated Execution Engine & Position Manager.
  *
  * Capabilities:
+ *  - Multi-Timeframe Background Stream Ingestion (5m, 15m, 1h concurrently)
+ *  - Universal Active Zone Registry (activeZonesByTimeframe & allActiveZones)
+ *  - Structural Role Tagging (1h Macro Anchor, 15m Structural, 5m Precision Trigger)
+ *  - Higher-Timeframe (HTF) Directional Alignment Gatekeeper (vetoes counter-trend 5m entries)
  *  - Global Single-Position Concurrency Cap (maxOpenPositions: 1)
  *  - Zone Single-Use Doctrine (consumedZoneIds Set to eliminate multi-entry spam)
  *  - Mandatory Post-Trade Cooldown Timer (prevents rapid-fire stop-out loops)
- *  - Live In-Zone Volumetric Confirmation Gatekeeper:
- *      * 50% Mean Threshold (MT) body close defense
- *      * Volumetric rejection expansion (>= 1.25x Volume SMA) + Directional Taker Delta dominance
- *      * Active unmitigated Draw on Liquidity (DOL) target verification
- *  - Live 3-Stage Position Scaling & Profit-Locking Ratchet Router:
- *      * Tranche 1 (TP1 @ 1.0R - 40% Allocation): Banks partial profit, trails SL to FVG CE
- *      * Tranche 2 (TP2 @ 1.5R - 40% Allocation): Banks intermediate expansion, ratchets SL to +1.0R floor
- *      * Tranche 3 (TP3 / DOL Runner - 20% Allocation): Trails remaining inventory to macro DOL
- *  - Active Zone Garbage Collection & Expiry Pruning (max 24 bars lookback)
+ *  - Live In-Zone Volumetric Confirmation Gatekeeper (50% MT body defense, >= 1.25x Volume SMA)
+ *  - Live 3-Stage Position Scaling & Profit-Locking Ratchet Router (40% TP1, 40% TP2, 20% TP3 Runner)
+ *  - Active Zone Garbage Collection & Lookback Pruning per timeframe
  *  - Auto-Journaling Bridge for automated database trade persistence (/api/trades)
  * ─────────────────────────────────────────────────────────────────────────────
  */
@@ -74,6 +72,7 @@ export interface LiveExecutionConfig extends OrderBlockScanConfig {
   cooldownMs: number;
   requireInZoneConfirmation: boolean;
   volumeExpansionThreshold: number;
+  enforceHtfAlignment: boolean; // Enforce 15m/1h sponsorship before executing 5m trades
 }
 
 export const DEFAULT_LIVE_EXEC_CONFIG: LiveExecutionConfig = {
@@ -86,6 +85,7 @@ export const DEFAULT_LIVE_EXEC_CONFIG: LiveExecutionConfig = {
   cooldownMs: 60000,             // 60-second mandatory cooldown post trade close
   requireInZoneConfirmation: true,// Eliminate blind limit fills
   volumeExpansionThreshold: 1.25,// >= 1.25x Volume SMA requirement
+  enforceHtfAlignment: true,     // Veto counter-trend 5m signals
   strictTierAPlus: false,
   minQualityTier: 'ALL',
   maxBarsToMitigation: 24,       // Lookback limit for fresh zones
@@ -113,41 +113,80 @@ export const DEFAULT_LIVE_EXEC_CONFIG: LiveExecutionConfig = {
 };
 
 export type TradeEventCallback = (event: {
-  type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE';
+  type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO';
   position?: LivePosition;
   message: string;
 }) => void;
 
 export interface InZoneTestingState {
   zoneId: string;
+  timeframe: string;
   touchTime: number;
   touchPrice: number;
   status: 'AWAITING_IN_ZONE_CONFIRMATION' | 'CONFIRMED' | 'REJECTED';
 }
 
+export interface MacroMarketContext {
+  macroDailyBias?: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  dolDirection?: 'BULLISH' | 'BEARISH' | 'NONE';
+  bslMagnets?: number[];
+  sslMagnets?: number[];
+  localDealingRange?: any;
+}
+
+export const SUPPORTED_TIMEFRAMES = ['5m', '15m', '1h'] as const;
+export type SupportedTimeframe = typeof SUPPORTED_TIMEFRAMES[number];
+
 export class LiveOrderBlockExecutionEngine {
   private config: LiveExecutionConfig;
-  private orderBlockEngine: OrderBlockEngine;
-  private closedCandles: Candle[] = [];
-  private activeZones: InstitutionalOrderBlock[] = [];
+  private orderBlockEngines: Map<string, OrderBlockEngine> = new Map();
+  private closedCandlesByTimeframe: Map<string, Candle[]> = new Map();
+  private lastProcessedCandleTimes: Map<string, number> = new Map();
+
+  // Multi-Timeframe Active Zone Pool
+  private activeZonesByTimeframe: Map<string, InstitutionalOrderBlock[]> = new Map();
+  private allActiveZones: InstitutionalOrderBlock[] = [];
+
+  // Live Position Manager
   private openPositions: Map<string, LivePosition> = new Map();
   private closedPositions: LivePosition[] = [];
   private eventListeners: TradeEventCallback[] = [];
-  private lastProcessedCandleTime: number = 0;
 
   // Single-use zone doctrine and cooldown tracking
   private consumedZoneIds: Set<string> = new Set();
   private cooldownUntilTimestamp: number = 0;
   private inZoneTestingStates: Map<string, InZoneTestingState> = new Map();
+  private currentMacroContext: MacroMarketContext = {};
 
   constructor(customConfig?: Partial<LiveExecutionConfig>) {
     this.config = { ...DEFAULT_LIVE_EXEC_CONFIG, ...customConfig };
-    this.orderBlockEngine = new OrderBlockEngine(this.config);
+    this.initializeTimeframeEngines();
+  }
+
+  private initializeTimeframeEngines() {
+    this.orderBlockEngines.clear();
+    for (const tf of SUPPORTED_TIMEFRAMES) {
+      this.orderBlockEngines.set(
+        tf,
+        new OrderBlockEngine({
+          ...this.config,
+          timeframe: tf,
+          // Calibrate max bars to mitigation for each timeframe
+          maxBarsToMitigation: this.config.maxBarsToMitigation ?? 24
+        })
+      );
+      if (!this.closedCandlesByTimeframe.has(tf)) {
+        this.closedCandlesByTimeframe.set(tf, []);
+      }
+      if (!this.activeZonesByTimeframe.has(tf)) {
+        this.activeZonesByTimeframe.set(tf, []);
+      }
+    }
   }
 
   public updateConfig(newConfig: Partial<LiveExecutionConfig>) {
     this.config = { ...this.config, ...newConfig };
-    this.orderBlockEngine = new OrderBlockEngine(this.config);
+    this.initializeTimeframeEngines();
   }
 
   public subscribe(callback: TradeEventCallback): () => void {
@@ -158,7 +197,7 @@ export class LiveOrderBlockExecutionEngine {
   }
 
   private emitEvent(
-    type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE',
+    type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO',
     position: LivePosition | undefined,
     message: string
   ) {
@@ -172,102 +211,299 @@ export class LiveOrderBlockExecutionEngine {
   }
 
   /**
-   * Ingests a new closed candlestick event from the market data stream.
-   * Runs the zero look-ahead multi-gate validation pipeline and performs zone garbage collection.
+   * Ingests multi-timeframe candle streams (5m, 15m, 1h) concurrently.
+   * Runs the zero look-ahead multi-gate validation pipeline independently per timeframe.
    */
-  public onCandleClosed(candle: Candle, allHistoricalCandles?: Candle[]) {
-    if (candle.t <= this.lastProcessedCandleTime) return;
-    this.lastProcessedCandleTime = candle.t;
+  public onMultiTimeframeCandles(
+    timeframeCandles: {
+      '5m'?: Candle[];
+      '15m'?: Candle[];
+      '1h'?: Candle[];
+      [tf: string]: Candle[] | undefined;
+    },
+    macroContext?: MacroMarketContext
+  ) {
+    if (macroContext) {
+      this.currentMacroContext = { ...this.currentMacroContext, ...macroContext };
+    }
 
-    if (allHistoricalCandles && allHistoricalCandles.length > 0) {
-      this.closedCandles = [...allHistoricalCandles].sort((a, b) => a.t - b.t);
-    } else {
-      this.closedCandles.push(candle);
-      if (this.closedCandles.length > 300) {
-        this.closedCandles = this.closedCandles.slice(-300);
+    let hasUpdates = false;
+
+    for (const tf of SUPPORTED_TIMEFRAMES) {
+      const candles = timeframeCandles[tf];
+      if (!candles || candles.length === 0) continue;
+
+      const lastCandle = candles[candles.length - 1];
+      const lastProcessed = this.lastProcessedCandleTimes.get(tf) ?? 0;
+
+      if (lastCandle.t <= lastProcessed && this.closedCandlesByTimeframe.get(tf)?.length === candles.length) {
+        continue;
+      }
+
+      this.lastProcessedCandleTimes.set(tf, lastCandle.t);
+      this.closedCandlesByTimeframe.set(tf, [...candles].sort((a, b) => a.t - b.t));
+
+      // Get or create dedicated engine for this timeframe
+      let engine = this.orderBlockEngines.get(tf);
+      if (!engine) {
+        engine = new OrderBlockEngine({ ...this.config, timeframe: tf as any });
+        this.orderBlockEngines.set(tf, engine);
+      }
+
+      // Run Order Block detection on closed candles
+      const scanResult = engine.scanHistoricalOrderBlocks(candles);
+
+      // ── Active Zone Garbage Collection & Expiry Pruning per Timeframe ──
+      const timeframeMinutes = tf === '1h' ? 60 : tf === '15m' ? 15 : 5;
+      const maxLookbackMs = (this.config.maxBarsToMitigation ?? 24) * timeframeMinutes * 60 * 1000;
+      const now = lastCandle.t;
+
+      const validTfZones = scanResult.orderBlocks.filter(ob => {
+        // 1. Purge consumed zones (single-use doctrine)
+        if (this.consumedZoneIds.has(ob.id)) return false;
+
+        // 2. Purge stale zones exceeding timeframe lookback window
+        const ageMs = now - ob.origin_time;
+        if (ageMs > maxLookbackMs && ob.lifecycle_status === 'UNTESTED') return false;
+
+        // 3. Purge invalidated zones
+        if (
+          ob.lifecycle_status === 'ZONE_INVALIDATED' ||
+          ob.lifecycle_status === 'MEAN_THRESHOLD_VIOLATED' ||
+          ob.lifecycle_status === 'EXPIRED_STALE' ||
+          ob.lifecycle_status === 'BREAKER_EXPIRED' ||
+          ob.lifecycle_status === 'BREAKER_VETOED_NO_DOL' ||
+          ob.lifecycle_status === 'BREAKER_VETOED_VALUATION'
+        ) {
+          this.consumedZoneIds.add(ob.id);
+          return false;
+        }
+
+        // 4. Retain only valid resting or active breaker zones
+        return (
+          ob.lifecycle_status === 'UNTESTED' ||
+          ob.lifecycle_status === 'ACTIVE_BREAKER' ||
+          ob.lifecycle_status === 'BREAKER_CONFIRMED_ACTIVE'
+        );
+      });
+
+      // ── Assign Structural Weights & Evaluate HTF Alignment ──
+      const taggedZones = validTfZones.map(zone => {
+        const structural_weight: InstitutionalOrderBlock['structural_weight'] =
+          tf === '1h' ? '1H_MACRO_ANCHOR' :
+          tf === '15m' ? '15M_STRUCTURAL' :
+          '5M_PRECISION_TRIGGER';
+
+        const alignment = this.evaluateHtfAlignment(zone, tf, this.currentMacroContext);
+
+        return {
+          ...zone,
+          timeframe: tf,
+          structural_weight,
+          htf_alignment_status: alignment.status,
+          htf_veto_reason: alignment.reason,
+        };
+      });
+
+      this.activeZonesByTimeframe.set(tf, taggedZones);
+      hasUpdates = true;
+
+      // ── Evaluate In-Zone Testing Confirmations on Closed Candle ──
+      this.evaluateInZoneConfirmationsForTimeframe(tf, lastCandle);
+    }
+
+    if (hasUpdates) {
+      this.rebuildAllActiveZones();
+    }
+  }
+
+  /**
+   * Backwards-compatible single-candle ingestion.
+   */
+  public onCandleClosed(candle: Candle, allHistoricalCandles?: Candle[], timeframe: string = '15m') {
+    this.onMultiTimeframeCandles({
+      [timeframe]: allHistoricalCandles || [candle]
+    });
+  }
+
+  /**
+   * Evaluates Top-Down Higher-Timeframe (HTF) Alignment for a candidate zone.
+   * 1h is the Macro Anchor. 15m is the Structural Anchor. 5m is the Precision Trigger.
+   */
+  private evaluateHtfAlignment(
+    zone: InstitutionalOrderBlock,
+    timeframe: string,
+    macroContext: MacroMarketContext
+  ): { status: 'HTF_ALIGNED' | 'VETOED_COUNTER_HTF' | 'HTF_ANCHOR'; reason: string | null } {
+    // 1h zones are primary macro anchors
+    if (timeframe === '1h') {
+      return { status: 'HTF_ANCHOR', reason: null };
+    }
+
+    const isBullish = zone.is_breaker ? (zone.type === 'BEARISH') : (zone.type === 'BULLISH');
+    const macroBias = macroContext.macroDailyBias || 'NEUTRAL';
+    const dolDir = macroContext.dolDirection || 'NONE';
+
+    // 15m zones: aligned if not strictly opposing a confirmed macro bias
+    if (timeframe === '15m') {
+      if (isBullish && macroBias === 'BEARISH' && dolDir === 'BEARISH') {
+        // Counter-trend 15m trade against both daily bias and DOL
+        return {
+          status: 'VETOED_COUNTER_HTF',
+          reason: '15m Bullish setup counters prevailing Bearish Macro Daily Bias and Bearish DOL.'
+        };
+      }
+      if (!isBullish && macroBias === 'BULLISH' && dolDir === 'BULLISH') {
+        return {
+          status: 'VETOED_COUNTER_HTF',
+          reason: '15m Bearish setup counters prevailing Bullish Macro Daily Bias and Bullish DOL.'
+        };
+      }
+      return { status: 'HTF_ALIGNED', reason: null };
+    }
+
+    // 5m Precision Triggers: require explicit 15m/1h confluence or HTF liquidity sweep sponsorship
+    if (timeframe === '5m') {
+      const htf15mZones = this.activeZonesByTimeframe.get('15m') || [];
+      const htf1hZones = this.activeZonesByTimeframe.get('1h') || [];
+
+      const has15mSponsorship = htf15mZones.some(z => {
+        const zBull = z.is_breaker ? (z.type === 'BEARISH') : (z.type === 'BULLISH');
+        return zBull === isBullish && z.quality_tier !== 'UNVALIDATED';
+      });
+
+      const has1hSponsorship = htf1hZones.some(z => {
+        const zBull = z.is_breaker ? (z.type === 'BEARISH') : (z.type === 'BULLISH');
+        return zBull === isBullish;
+      });
+
+      const isMacroAligned = isBullish
+        ? (macroBias === 'BULLISH' || dolDir === 'BULLISH')
+        : (macroBias === 'BEARISH' || dolDir === 'BEARISH');
+
+      const isHtfSweepSponsored = zone.gates?.gate1_liquidity_sweep && (
+        zone.gates.sweep_type === 'PDH' ||
+        zone.gates.sweep_type === 'PDL' ||
+        zone.gates.sweep_type === 'ASIAN_HIGH' ||
+        zone.gates.sweep_type === 'ASIAN_LOW' ||
+        zone.gates.sweep_type === 'LONDON_HIGH' ||
+        zone.gates.sweep_type === 'LONDON_LOW' ||
+        zone.gates.sweep_type === 'BSL' ||
+        zone.gates.sweep_type === 'SSL'
+      );
+
+      // Gate check: 5m must have at least one valid higher-timeframe confluence vector
+      if (has15mSponsorship || has1hSponsorship || isMacroAligned || isHtfSweepSponsored) {
+        return { status: 'HTF_ALIGNED', reason: null };
+      }
+
+      if (this.config.enforceHtfAlignment) {
+        return {
+          status: 'VETOED_COUNTER_HTF',
+          reason: `5m ${zone.type} trigger lacks 15m/1h structural sponsorship or Macro Bias alignment.`
+        };
       }
     }
 
-    // Run Order Block Scan on strictly closed candles
-    const scanResult = this.orderBlockEngine.scanHistoricalOrderBlocks(this.closedCandles);
+    return { status: 'HTF_ALIGNED', reason: null };
+  }
 
-    // ── Active Zone Garbage Collection & Expiry Pruning ──
-    const maxLookbackMs = (this.config.maxBarsToMitigation ?? 24) * 15 * 60 * 1000;
-    const now = candle.t;
+  /**
+   * Rebuilds the unified active zone array across all timeframes.
+   */
+  private rebuildAllActiveZones() {
+    const combined: InstitutionalOrderBlock[] = [];
+    for (const tf of SUPPORTED_TIMEFRAMES) {
+      const zones = this.activeZonesByTimeframe.get(tf) || [];
+      combined.push(...zones);
+    }
 
-    this.activeZones = scanResult.orderBlocks.filter(ob => {
-      // 1. Purge consumed zones (single-use doctrine)
-      if (this.consumedZoneIds.has(ob.id)) return false;
+    // Sort priority:
+    // 1. HTF Aligned / Anchor before Vetoed
+    // 2. Higher Tier (A+ > A > B)
+    // 3. Higher Timeframe (1h > 15m > 5m)
+    // 4. Fresher origin timestamp
+    const tierWeight = (t: string) => t === 'A_PLUS' ? 3 : t === 'A' ? 2 : 1;
+    const tfWeight = (t: string) => t === '1h' ? 3 : t === '15m' ? 2 : 1;
 
-      // 2. Purge stale zones exceeding max lookback window
-      const ageMs = now - ob.origin_time;
-      if (ageMs > maxLookbackMs && ob.lifecycle_status === 'UNTESTED') return false;
+    this.allActiveZones = combined.sort((a, b) => {
+      const aVeto = a.htf_alignment_status === 'VETOED_COUNTER_HTF' ? 0 : 1;
+      const bVeto = b.htf_alignment_status === 'VETOED_COUNTER_HTF' ? 0 : 1;
+      if (aVeto !== bVeto) return bVeto - aVeto;
 
-      // 3. Purge invalidated zones
-      if (
-        ob.lifecycle_status === 'ZONE_INVALIDATED' ||
-        ob.lifecycle_status === 'MEAN_THRESHOLD_VIOLATED' ||
-        ob.lifecycle_status === 'EXPIRED_STALE' ||
-        ob.lifecycle_status === 'BREAKER_EXPIRED' ||
-        ob.lifecycle_status === 'BREAKER_VETOED_NO_DOL' ||
-        ob.lifecycle_status === 'BREAKER_VETOED_VALUATION'
-      ) {
-        this.consumedZoneIds.add(ob.id);
-        return false;
+      const aTier = tierWeight(a.quality_tier);
+      const bTier = tierWeight(b.quality_tier);
+      if (aTier !== bTier) return bTier - aTier;
+
+      const aTf = tfWeight(a.timeframe);
+      const bTf = tfWeight(b.timeframe);
+      if (aTf !== bTf) return bTf - aTf;
+
+      return b.origin_time - a.origin_time;
+    });
+  }
+
+  /**
+   * Evaluates In-Zone testing confirmations for zones of a specific timeframe upon candle close.
+   */
+  private evaluateInZoneConfirmationsForTimeframe(timeframe: string, candle: Candle) {
+    if (this.inZoneTestingStates.size === 0 || !this.config.autoExecute) return;
+    if (this.openPositions.size >= this.config.maxOpenPositions) return;
+
+    for (const [zoneId, testState] of this.inZoneTestingStates.entries()) {
+      if (testState.timeframe !== timeframe) continue;
+
+      const zone = this.allActiveZones.find(z => z.id === zoneId);
+      if (!zone || this.consumedZoneIds.has(zoneId)) {
+        this.inZoneTestingStates.delete(zoneId);
+        continue;
       }
 
-      // 4. Retain only valid resting or active breaker zones
-      return (
-        ob.lifecycle_status === 'UNTESTED' ||
-        ob.lifecycle_status === 'ACTIVE_BREAKER' ||
-        ob.lifecycle_status === 'BREAKER_CONFIRMED_ACTIVE'
-      );
-    });
+      // Check if zone was vetoed by HTF Gatekeeper
+      if (zone.htf_alignment_status === 'VETOED_COUNTER_HTF') {
+        this.emitEvent(
+          'HTF_VETO',
+          undefined,
+          `⛔ [HTF VETO] Trade on ${zone.timeframe} ${zone.type} OB blocked: ${zone.htf_veto_reason}`
+        );
+        this.consumedZoneIds.add(zoneId);
+        this.inZoneTestingStates.delete(zoneId);
+        continue;
+      }
 
-    // ── Evaluate In-Zone Testing Confirmations on Closed Candle ──
-    if (this.inZoneTestingStates.size > 0 && this.config.autoExecute && this.openPositions.size < this.config.maxOpenPositions) {
-      for (const [zoneId, testState] of this.inZoneTestingStates.entries()) {
-        const zone = this.activeZones.find(z => z.id === zoneId);
-        if (!zone || this.consumedZoneIds.has(zoneId)) {
-          this.inZoneTestingStates.delete(zoneId);
-          continue;
-        }
+      const isBullish = zone.is_breaker ? (zone.type === 'BEARISH') : (zone.type === 'BULLISH');
 
-        const isBullish = zone.is_breaker ? (zone.type === 'BEARISH') : (zone.type === 'BULLISH');
+      // Check Mean Threshold Respect: Candle body must not close beyond MT
+      const mtRespected = isBullish
+        ? candle.c >= zone.mean_threshold
+        : candle.c <= zone.mean_threshold;
 
-        // Check Mean Threshold Respect: Candle body must not close beyond MT
-        const mtRespected = isBullish
-          ? candle.c >= zone.mean_threshold
-          : candle.c <= zone.mean_threshold;
+      if (!mtRespected) {
+        this.consumedZoneIds.add(zoneId);
+        this.inZoneTestingStates.delete(zoneId);
+        continue;
+      }
 
-        if (!mtRespected) {
-          // Mean Threshold violated on closing basis -> invalidate & consume
-          this.consumedZoneIds.add(zoneId);
-          this.inZoneTestingStates.delete(zoneId);
-          continue;
-        }
+      // Check Volumetric Rejection Expansion & Directional Taker Delta
+      const volExp = this.verifyVolumetricConfirmation(timeframe, isBullish, candle);
 
-        // Check Volumetric Rejection Expansion & Taker Delta
-        const volExp = this.verifyVolumetricConfirmation(isBullish, candle);
-
-        if (volExp) {
-          testState.status = 'CONFIRMED';
-          this.openLivePosition(zone, candle.c, candle.t);
-          this.inZoneTestingStates.delete(zoneId);
-          if (this.openPositions.size >= this.config.maxOpenPositions) break;
-        }
+      if (volExp) {
+        testState.status = 'CONFIRMED';
+        this.openLivePosition(zone, candle.c, candle.t);
+        this.inZoneTestingStates.delete(zoneId);
+        if (this.openPositions.size >= this.config.maxOpenPositions) break;
       }
     }
   }
 
   /**
-   * Helper to verify volume expansion and directional taker delta dominance on closed rejection bar.
+   * Verifies volume expansion and directional taker delta dominance on closed rejection bar.
    */
-  private verifyVolumetricConfirmation(isBullish: boolean, candle: Candle): boolean {
-    if (!this.closedCandles || this.closedCandles.length < 10) return true;
+  private verifyVolumetricConfirmation(timeframe: string, isBullish: boolean, candle: Candle): boolean {
+    const candles = this.closedCandlesByTimeframe.get(timeframe);
+    if (!candles || candles.length < 10) return true;
 
-    // Calculate 10-bar Volume SMA
-    const recentBars = this.closedCandles.slice(-10);
+    const recentBars = candles.slice(-10);
     const avgVol = recentBars.reduce((sum, c) => sum + (c.v || 0), 0) / recentBars.length;
     const volRatio = (candle.v || 0) / Math.max(1, avgVol);
     const threshold = this.config.volumeExpansionThreshold ?? 1.25;
@@ -280,8 +516,7 @@ export class LiveOrderBlockExecutionEngine {
   }
 
   /**
-   * Evaluates live incoming real-time price ticks.
-   * Enforces single-position concurrency cap, single-use zone doctrine, in-zone confirmation, and cooldown.
+   * Evaluates live incoming real-time price ticks across all active multi-timeframe zones.
    */
   public onPriceTick(tickPrice: number, tickTime: number = Date.now()): {
     activePositions: LivePosition[];
@@ -290,21 +525,22 @@ export class LiveOrderBlockExecutionEngine {
     if (!tickPrice || tickPrice <= 0) {
       return {
         activePositions: Array.from(this.openPositions.values()),
-        activeZones: this.activeZones
+        activeZones: this.allActiveZones
       };
     }
 
     const isCoolingDown = tickTime < this.cooldownUntilTimestamp;
 
-    // ── 1. Evaluate Entry Triggers on Resting Zones ──
+    // ── 1. Evaluate Entry Triggers on Resting Multi-Timeframe Zones ──
     if (
       this.config.autoExecute &&
       this.openPositions.size < this.config.maxOpenPositions &&
       !isCoolingDown
     ) {
-      for (const zone of this.activeZones) {
-        // Enforce Single-Use Doctrine: Skip consumed zones or active positions
+      for (const zone of this.allActiveZones) {
+        // Enforce Single-Use Doctrine and skip VETOED zones
         if (this.consumedZoneIds.has(zone.id) || this.openPositions.has(zone.id)) continue;
+        if (zone.htf_alignment_status === 'VETOED_COUNTER_HTF') continue;
 
         const isBullish = zone.is_breaker ? (zone.type === 'BEARISH') : (zone.type === 'BULLISH');
         const entryPrice = this.config.entryMode === 'MEAN_THRESHOLD' ? zone.mean_threshold : (isBullish ? zone.top : zone.bottom);
@@ -327,10 +563,10 @@ export class LiveOrderBlockExecutionEngine {
 
         if (isTouched) {
           if (this.config.requireInZoneConfirmation) {
-            // Transition to Awaiting In-Zone Confirmation
             if (!this.inZoneTestingStates.has(zone.id)) {
               this.inZoneTestingStates.set(zone.id, {
                 zoneId: zone.id,
+                timeframe: zone.timeframe,
                 touchTime: tickTime,
                 touchPrice: tickPrice,
                 status: 'AWAITING_IN_ZONE_CONFIRMATION'
@@ -338,11 +574,10 @@ export class LiveOrderBlockExecutionEngine {
               this.emitEvent(
                 'CONFIRMATION_PENDING',
                 undefined,
-                `⏳ [IN-ZONE TEST] Price entered ${zone.quality_tier} ${zone.type} zone @ $${tickPrice}. Awaiting rejection candle & volume confirmation...`
+                `⏳ [${zone.timeframe.toUpperCase()} IN-ZONE TEST] Price entered ${zone.quality_tier} ${zone.type} zone @ $${tickPrice}. Awaiting ${zone.timeframe} rejection candle & volume confirmation...`
               );
             }
           } else {
-            // Direct immediate fill mode (if confirmation requirement disabled)
             this.openLivePosition(zone, tickPrice, tickTime);
             if (this.openPositions.size >= this.config.maxOpenPositions) break;
           }
@@ -350,66 +585,71 @@ export class LiveOrderBlockExecutionEngine {
       }
     }
 
-    // ── 2. Manage Active 3-Stage Positions & Ratchets ──
+    // ── 2. Manage Active Open Positions (Scaling & Trailing Stops) ──
     for (const [posId, pos] of this.openPositions.entries()) {
-      this.updatePositionTick(pos, tickPrice, tickTime);
+      this.updatePositionState(pos, tickPrice, tickTime);
       if (pos.status === 'CLOSED') {
-        this.openPositions.delete(posId);
         this.closedPositions.push(pos);
-
-        // Activate post-trade cooldown timer to kill rapid-fire machine-gun loops
+        this.openPositions.delete(posId);
+        // Activate mandatory cooldown period
         this.cooldownUntilTimestamp = tickTime + (this.config.cooldownMs ?? 60000);
         this.emitEvent(
           'COOLDOWN_ACTIVE',
           pos,
-          `⏸️ [TRADE COOLDOWN] Mandatory ${(this.config.cooldownMs ?? 60000) / 1000}s cooldown active. Preventing machine-gun re-entries.`
+          `⏱️ [COOLDOWN] Trade completed. 60-second execution cooldown active to prevent rapid-fire loops.`
         );
       }
     }
 
     return {
       activePositions: Array.from(this.openPositions.values()),
-      activeZones: this.activeZones
+      activeZones: this.allActiveZones
     };
   }
 
-  private openLivePosition(zone: InstitutionalOrderBlock, currentPrice: number, time: number) {
-    // Strict Safety Guard: Do not exceed maxOpenPositions or open consumed zones
+  /**
+   * Opens a new live position on confirmed zone trigger.
+   */
+  private openLivePosition(zone: InstitutionalOrderBlock, fillPrice: number, time: number) {
     if (this.openPositions.size >= this.config.maxOpenPositions) return;
-    if (this.consumedZoneIds.has(zone.id)) return;
 
-    // Mark zone as CONSUMED immediately (Single-Use Doctrine)
+    // Single-use doctrine: immediately flag zone as consumed
     this.consumedZoneIds.add(zone.id);
     zone.is_consumed = true;
 
     const isBullish = zone.is_breaker ? (zone.type === 'BEARISH') : (zone.type === 'BULLISH');
     const direction: 'LONG' | 'SHORT' = isBullish ? 'LONG' : 'SHORT';
-    const trailingBuf = this.config.trailingBuffer ?? 0.05;
+
+    const entryPrice = fillPrice;
+    let initialStopLoss = isBullish ? zone.bottom : zone.top;
+    if (zone.is_breaker && zone.breaker_stop_loss) {
+      initialStopLoss = zone.breaker_stop_loss;
+    }
+
+    const risk = Math.abs(entryPrice - initialStopLoss);
+    if (risk <= 0) return;
+
     const tp1Mult = this.config.tp1Multiple ?? 1.0;
     const tp2Mult = this.config.tp2Multiple ?? 1.5;
-    const targetReward = this.config.targetRewardRatio ?? 2.5;
+    const targetR = this.config.targetRewardRatio ?? 2.5;
 
-    const entryPrice = parseFloat(currentPrice.toFixed(4));
-    const initialStopLoss = zone.is_breaker
-      ? (zone.breaker_stop_loss || (isBullish ? zone.bottom - trailingBuf : zone.top + trailingBuf))
-      : zone.simulated_stop_loss;
-
-    const risk = Math.max(0.1, Math.abs(entryPrice - initialStopLoss));
     const tp1Price = isBullish
       ? parseFloat((entryPrice + tp1Mult * risk).toFixed(4))
       : parseFloat((entryPrice - tp1Mult * risk).toFixed(4));
+
     const tp2Price = isBullish
       ? parseFloat((entryPrice + tp2Mult * risk).toFixed(4))
       : parseFloat((entryPrice - tp2Mult * risk).toFixed(4));
-    const tp3Price = isBullish
-      ? parseFloat((entryPrice + targetReward * risk).toFixed(4))
-      : parseFloat((entryPrice - targetReward * risk).toFixed(4));
 
-    const newPos: LivePosition = {
-      id: `POS_${zone.id}_${time}`,
+    const tp3Price = isBullish
+      ? parseFloat((entryPrice + targetR * risk).toFixed(4))
+      : parseFloat((entryPrice - targetR * risk).toFixed(4));
+
+    const newPosition: LivePosition = {
+      id: `live_pos_${Date.now()}_${zone.id}`,
       orderBlockId: zone.id,
       symbol: this.config.symbol || 'ETHUSDC',
-      timeframe: this.config.timeframe || '15m',
+      timeframe: zone.timeframe,
       direction,
       status: 'OPEN',
       entryPrice,
@@ -420,7 +660,7 @@ export class LiveOrderBlockExecutionEngine {
       tp1Price,
       tp2Price,
       tp3Price,
-      dynamicDolTarget: zone.breaker_dol_target || zone.dynamic_tp2_target || null,
+      dynamicDolTarget: zone.breaker_dol_target || null,
       risk,
       allocatedAmount: 1.0,
       remainingAllocation: 1.0,
@@ -435,34 +675,41 @@ export class LiveOrderBlockExecutionEngine {
       openTime: time,
       closeTime: null,
       exitReason: null,
-      orderBlock: zone,
+      orderBlock: zone
     };
 
-    this.openPositions.set(zone.id, newPos);
-    this.emitEvent('ORDER_OPENED', newPos, `🚀 [LIVE EXECUTION] Opened ${direction} position on ${newPos.symbol} @ $${entryPrice} (Zone ${zone.id} marked CONSUMED)`);
+    this.openPositions.set(newPosition.id, newPosition);
+
+    this.emitEvent(
+      'ORDER_OPENED',
+      newPosition,
+      `🚀 [${zone.timeframe.toUpperCase()} ORDER OPENED] ${direction} @ $${entryPrice} | SL: $${initialStopLoss} | TP1: $${tp1Price} (40%) | TP2: $${tp2Price} (40%) | TP3: $${tp3Price} (20% Runner)`
+    );
   }
 
-  private updatePositionTick(pos: LivePosition, currentPrice: number, time: number) {
+  /**
+   * Updates an open position state machine on live tick.
+   */
+  private updatePositionState(pos: LivePosition, currentPrice: number, time: number) {
     const isLong = pos.direction === 'LONG';
+    const rawR = isLong
+      ? (currentPrice - pos.entryPrice) / pos.risk
+      : (pos.entryPrice - currentPrice) / pos.risk;
+
+    pos.unrealizedR = parseFloat((rawR * pos.remainingAllocation).toFixed(2));
+
+    const hitTP1 = isLong ? (currentPrice >= pos.tp1Price) : (currentPrice <= pos.tp1Price);
+    const hitTP2 = isLong ? (currentPrice >= pos.tp2Price) : (currentPrice <= pos.tp2Price);
+    const hitTP3 = isLong ? (currentPrice >= pos.tp3Price) : (currentPrice <= pos.tp3Price);
+    const hitSL = isLong ? (currentPrice <= pos.activeStopLoss) : (currentPrice >= pos.activeStopLoss);
+
     const tp1Weight = this.config.tp1Ratio ?? 0.40;
     const tp2Weight = this.config.tp2Ratio ?? 0.40;
     const tp3Weight = this.config.tp3Ratio ?? 0.20;
     const tp1Mult = this.config.tp1Multiple ?? 1.0;
     const tp2Mult = this.config.tp2Multiple ?? 1.5;
-    const trailingBuf = this.config.trailingBuffer ?? 0.05;
 
-    // Calculate current open unrealized R on active position
-    const currentPriceDeltaR = isLong
-      ? (currentPrice - pos.entryPrice) / pos.risk
-      : (pos.entryPrice - currentPrice) / pos.risk;
-    pos.unrealizedR = parseFloat((currentPriceDeltaR * pos.remainingAllocation).toFixed(2));
-
-    const hitSL = isLong ? (currentPrice <= pos.activeStopLoss) : (currentPrice >= pos.activeStopLoss);
-    const hitTP1 = isLong ? (currentPrice >= pos.tp1Price) : (currentPrice <= pos.tp1Price);
-    const hitTP2 = isLong ? (currentPrice >= pos.tp2Price) : (currentPrice <= pos.tp2Price);
-    const hitTP3 = isLong ? (currentPrice >= pos.tp3Price) : (currentPrice <= pos.tp3Price);
-
-    // ── STAGE 1 HARVEST: Scale 40% @ 1.0R + Trail SL to FVG CE ──
+    // ── STAGE 1 HARVEST: Scale 40% @ 1.0R & Trail SL to FVG CE ──
     if (hitTP1 && !pos.isTp1Filled) {
       pos.isTp1Filled = true;
       pos.tp1HitTime = time;
@@ -470,32 +717,24 @@ export class LiveOrderBlockExecutionEngine {
       pos.remainingAllocation = parseFloat((pos.remainingAllocation - tp1Weight).toFixed(2));
       pos.realizedR = parseFloat((pos.realizedR + (tp1Weight * tp1Mult)).toFixed(2));
 
-      if (this.config.trailingStopMode === 'STRUCTURAL_FVG_TRAIL') {
-        let trailLevel = pos.entryPrice;
-        let trailSource: 'FVG_CE' | 'SWING_PIVOT' | 'BREAKEVEN' = 'BREAKEVEN';
+      // Structural FVG Consequent Encroachment (50% CE) Trailing Stop
+      let trailingSl = pos.entryPrice;
+      let slSource: LivePosition['trailingSlSource'] = 'BREAKEVEN';
 
-        if (pos.orderBlock.gates.fvg_found && typeof pos.orderBlock.gates.fvg_top === 'number' && typeof pos.orderBlock.gates.fvg_bottom === 'number') {
-          const fvgCe = (pos.orderBlock.gates.fvg_top + pos.orderBlock.gates.fvg_bottom) / 2;
-          trailLevel = isLong ? (fvgCe - trailingBuf) : (fvgCe + trailingBuf);
-          trailSource = 'FVG_CE';
-        } else {
-          trailLevel = isLong ? (pos.entryPrice - 0.5 * pos.risk) : (pos.entryPrice + 0.5 * pos.risk);
-          trailSource = 'SWING_PIVOT';
-        }
-
-        const guaranteedStop = isLong ? (pos.entryPrice - 0.5 * pos.risk) : (pos.entryPrice + 0.5 * pos.risk);
-        pos.activeStopLoss = isLong ? Math.max(trailLevel, guaranteedStop) : Math.min(trailLevel, guaranteedStop);
-        pos.trailingSlSource = trailSource;
-      } else {
-        pos.activeStopLoss = pos.entryPrice;
-        pos.trailingSlSource = 'BREAKEVEN';
+      if (pos.orderBlock.gates.fvg_top && pos.orderBlock.gates.fvg_bottom) {
+        const ce = (pos.orderBlock.gates.fvg_top + pos.orderBlock.gates.fvg_bottom) / 2;
+        trailingSl = isLong ? Math.max(pos.entryPrice, ce) : Math.min(pos.entryPrice, ce);
+        slSource = 'FVG_CE';
       }
 
-      this.emitEvent('STAGE_1_HARVEST', pos, `🌾 [STAGE 1 HARVEST] Scaled 40% @ 1.0R (+$0.4R secured). SL trailed to ${pos.trailingSlSource} ($${pos.activeStopLoss})`);
+      pos.activeStopLoss = parseFloat(trailingSl.toFixed(4));
+      pos.trailingSlSource = slSource;
+
+      this.emitEvent('STAGE_1_HARVEST', pos, `💰 [STAGE 1 HARVEST] Scaled 40% @ 1.0R (+0.4R secured). SL trailed to ${slSource} ($${pos.activeStopLoss})`);
       return;
     }
 
-    // ── STAGE 2 HARVEST: Scale 40% @ 1.5R + Ratchet SL to +1.0R Floor ──
+    // ── STAGE 2 HARVEST: Scale 40% @ 1.5R & Ratchet SL to +1.0R Floor ──
     if (hitTP2 && pos.isTp1Filled && !pos.isTp2Filled) {
       pos.isTp2Filled = true;
       pos.tp2HitTime = time;
@@ -556,13 +795,25 @@ export class LiveOrderBlockExecutionEngine {
     }
   }
 
-  // ── Getters ──
+  // ── Public Accessors & Matrix Getters ──
+
   public getActivePositions(): LivePosition[] {
     return Array.from(this.openPositions.values());
   }
 
-  public getActiveZones(): InstitutionalOrderBlock[] {
-    return this.activeZones;
+  public getActiveZones(timeframeFilter?: 'ALL' | '5m' | '15m' | '1h'): InstitutionalOrderBlock[] {
+    if (!timeframeFilter || timeframeFilter === 'ALL') {
+      return this.allActiveZones;
+    }
+    return this.activeZonesByTimeframe.get(timeframeFilter) || [];
+  }
+
+  public getActiveZonesByTimeframe(): Record<string, InstitutionalOrderBlock[]> {
+    const res: Record<string, InstitutionalOrderBlock[]> = {};
+    for (const tf of SUPPORTED_TIMEFRAMES) {
+      res[tf] = this.activeZonesByTimeframe.get(tf) || [];
+    }
+    return res;
   }
 
   public getClosedPositions(): LivePosition[] {

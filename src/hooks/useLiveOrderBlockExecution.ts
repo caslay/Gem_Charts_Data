@@ -7,7 +7,8 @@ import {
   LivePosition,
   LiveExecutionConfig,
   DEFAULT_LIVE_EXEC_CONFIG,
-  InZoneTestingState
+  InZoneTestingState,
+  MacroMarketContext
 } from '@/lib/quantEngine/LiveOrderBlockExecutionEngine';
 import { InstitutionalOrderBlock } from '@/lib/quantEngine/OrderBlockEngine';
 
@@ -24,6 +25,12 @@ export function useLiveOrderBlockExecution(initialConfig?: Partial<LiveExecution
   const engineRef = useRef<LiveOrderBlockExecutionEngine | null>(null);
   const [activePositions, setActivePositions] = useState<LivePosition[]>([]);
   const [activeZones, setActiveZones] = useState<InstitutionalOrderBlock[]>([]);
+  const [activeZonesByTimeframe, setActiveZonesByTimeframe] = useState<Record<string, InstitutionalOrderBlock[]>>({
+    '5m': [],
+    '15m': [],
+    '1h': []
+  });
+  const [timeframeFilter, setTimeframeFilter] = useState<'ALL' | '5m' | '15m' | '1h'>('ALL');
   const [closedLiveTrades, setClosedLiveTrades] = useState<LivePosition[]>([]);
   const [lastEventMessage, setLastEventMessage] = useState<string>('');
   const [lastEventTime, setLastEventTime] = useState<number>(0);
@@ -56,8 +63,8 @@ export function useLiveOrderBlockExecution(initialConfig?: Partial<LiveExecution
           const payload = {
             symbol: event.position.symbol,
             direction: event.position.direction,
-            strategy_name: `Phase 7 OB Live (${event.position.orderBlock.quality_tier})`,
-            ai_narrative_summary: `[Phase 7 Live 3-Stage Position] ${event.message}`,
+            strategy_name: `Phase 7 MTF OB Live (${event.position.timeframe.toUpperCase()} ${event.position.orderBlock.quality_tier})`,
+            ai_narrative_summary: `[Phase 7 MTF Live 3-Stage Position] ${event.message}`,
             entry_price: event.position.entryPrice,
             stop_loss: event.position.initialStopLoss,
             take_profit: event.position.tp3Price,
@@ -67,6 +74,9 @@ export function useLiveOrderBlockExecution(initialConfig?: Partial<LiveExecution
             exit_reason: event.position.exitReason,
             closed_at: new Date(event.position.closeTime || Date.now()).toISOString(),
             ipda_metrics: {
+              timeframe: event.position.timeframe,
+              structural_weight: event.position.orderBlock.structural_weight,
+              htf_alignment: event.position.orderBlock.htf_alignment_status,
               gates: event.position.orderBlock.gates,
               quality_tier: event.position.orderBlock.quality_tier,
               stage_exit: event.position.exitReason,
@@ -90,22 +100,40 @@ export function useLiveOrderBlockExecution(initialConfig?: Partial<LiveExecution
     };
   }, [engineConfig.fixedRiskUsd]);
 
-  // Ingest closed candles from marketData
+  // Ingest multi-timeframe closed candle streams (5m, 15m, 1h) concurrently from marketData
   useEffect(() => {
     if (!engineRef.current || !marketData) return;
 
-    const payloadCandles = (marketData as any)?.candles ||
-      (marketData as any)?.all_candles ||
-      marketData?.data_payload?.candles_15m ||
-      marketData?.data_payload?.candles_5m ||
-      [];
-    if (payloadCandles.length > 0) {
-      const lastCandle = payloadCandles[payloadCandles.length - 1];
-      engineRef.current.onCandleClosed(lastCandle, payloadCandles);
-      setActiveZones([...engineRef.current.getActiveZones()]);
-      setTestingStates([...engineRef.current.getInZoneTestingStates()]);
-    }
-  }, [marketData]);
+    const payload = marketData.data_payload || {};
+    const candles5m = payload.candles_5m;
+    const candles15m = payload.candles_15m;
+    const candles1h = payload.candles_1h;
+
+    const ipda = marketData.ipda_metrics || {};
+    const orderFlow = ipda.order_flow_engine || (marketData as any).order_flow_engine || {};
+    const restingPools = orderFlow.resting_liquidity_pools || {};
+
+    const macroContext: MacroMarketContext = {
+      macroDailyBias: ipda.macro_daily_bias,
+      dolDirection: ipda.dol_direction,
+      bslMagnets: restingPools.BSL_Magnets,
+      sslMagnets: restingPools.SSL_Magnets,
+      localDealingRange: ipda.pricing_context?.local_dealing_range
+    };
+
+    engineRef.current.onMultiTimeframeCandles(
+      {
+        '5m': candles5m,
+        '15m': candles15m,
+        '1h': candles1h
+      },
+      macroContext
+    );
+
+    setActiveZones([...engineRef.current.getActiveZones(timeframeFilter)]);
+    setActiveZonesByTimeframe({ ...engineRef.current.getActiveZonesByTimeframe() });
+    setTestingStates([...engineRef.current.getInZoneTestingStates()]);
+  }, [marketData, timeframeFilter]);
 
   // Process live incoming price ticks
   useEffect(() => {
@@ -113,11 +141,12 @@ export function useLiveOrderBlockExecution(initialConfig?: Partial<LiveExecution
 
     const res = engineRef.current.onPriceTick(livePrice, Date.now());
     setActivePositions([...res.activePositions]);
-    setActiveZones([...res.activeZones]);
+    setActiveZones([...engineRef.current.getActiveZones(timeframeFilter)]);
+    setActiveZonesByTimeframe({ ...engineRef.current.getActiveZonesByTimeframe() });
     setClosedLiveTrades([...engineRef.current.getClosedPositions()]);
     setCooldownRemainingSec(engineRef.current.getCooldownRemainingSec());
     setTestingStates([...engineRef.current.getInZoneTestingStates()]);
-  }, [livePrice]);
+  }, [livePrice, timeframeFilter]);
 
   // Timer interval to smoothly update cooldown ticker
   useEffect(() => {
@@ -142,11 +171,18 @@ export function useLiveOrderBlockExecution(initialConfig?: Partial<LiveExecution
     setEngineConfig(prev => ({ ...prev, trailingStopMode: mode }));
   }, []);
 
+  const setEnforceHtfAlignment = useCallback((enabled: boolean) => {
+    setEngineConfig(prev => ({ ...prev, enforceHtfAlignment: enabled }));
+  }, []);
+
   return {
     engineConfig,
     setEngineConfig,
     activePositions,
     activeZones,
+    activeZonesByTimeframe,
+    timeframeFilter,
+    setTimeframeFilter,
     closedLiveTrades,
     lastEventMessage,
     lastEventTime,
@@ -155,6 +191,7 @@ export function useLiveOrderBlockExecution(initialConfig?: Partial<LiveExecution
     testingStates,
     toggleAutoExecute,
     setScalingMode,
-    setTrailingMode
+    setTrailingMode,
+    setEnforceHtfAlignment
   };
 }
