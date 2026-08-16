@@ -171,7 +171,12 @@ export async function POST(req: Request) {
           enable_breaker_simulation = true,
           max_breaker_retest_bars = 20,
           enable_dynamic_management = true,
+          position_scaling_mode = "THREE_STAGE_HARVEST",
+          tp1_ratio = 0.40,
+          tp2_ratio = 0.40,
+          tp3_ratio = 0.20,
           tp1_multiple = 1.0,
+          tp2_multiple = 1.5,
           require_breaker_confirmation = true,
           require_breaker_dol = true,
           require_breaker_volumetric = true,
@@ -183,7 +188,7 @@ export async function POST(req: Request) {
           aggregate_consecutive = true,
           max_consecutive_lookback = 5,
           entry_mode = "BOUNDARY",
-          target_rr = 2.0,
+          target_rr = 2.5,
         } = body;
 
         if (!start_date || !end_date) {
@@ -229,7 +234,7 @@ export async function POST(req: Request) {
           message: `Successfully loaded ${candles.length} historical candles. Executing multi-gate Order Block detection & aggregation engine...`
         });
 
-        // Configure Engine with Phase 2, 3, 4 & 5 parameters
+        // Configure Engine with Phase 2-6 parameters
         const scanConfig: OrderBlockScanConfig = {
           symbol,
           timeframe,
@@ -239,7 +244,12 @@ export async function POST(req: Request) {
           enableBreakerSimulation: enable_breaker_simulation,
           maxBreakerRetestBars: max_breaker_retest_bars,
           enableDynamicManagement: enable_dynamic_management,
+          positionScalingMode: position_scaling_mode,
+          tp1Ratio: tp1_ratio,
+          tp2Ratio: tp2_ratio,
+          tp3Ratio: tp3_ratio,
           tp1Multiple: tp1_multiple,
+          tp2Multiple: tp2_multiple,
           requireBreakerConfirmation: require_breaker_confirmation,
           requireBreakerDOL: require_breaker_dol,
           requireBreakerVolumetric: require_breaker_volumetric,

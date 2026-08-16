@@ -1,8 +1,31 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.4
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.5
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-16 (V16.4 — Phase 5 Institutional Expectancy Expansion & Structural Trailing Engine)  
+> **Last Updated:** 2026-08-16 (V16.5 — Phase 6 Multi-Stage Institutional Harvest & Position Runner Engine)  
+
+## 🆕 V16.5 Changelog — Phase 6 Multi-Stage Institutional Harvest & Position Runner Engine (2026-08-16)
+
+### Summary
+Engineered **Phase 6 Multi-Stage Institutional Harvest & Position Runner Architecture** across the Quant Lab backtesting pipeline and `OrderBlockEngine.ts`. Upgrades the trade management state machine to implement a 3-stage tiered scaling architecture (40% at 1.0R, 40% at 1.5R, and 20% DOL Runner) with dynamic profit-locking ratchets (+1.0R floor), calibrated volumetric breaker confirmations, and comparative multi-stage expectancy analytics.
+
+### Key Features & Architectural Directives
+- **3-Stage Position Scaling State Machine (40% / 40% / 20% Allocation):**
+  - **Tranche 1 (TP1 @ 1.0R - 40% Allocation):** Banks partial profit ($+0.4R$ secured) upon initial displacement and activates the structural trailing stop anchored to displacement FVG Consequent Encroachment (50% CE).
+  - **Tranche 2 (TP2 @ 1.5R - 40% Allocation):** Captures intermediate internal range liquidity (IRL), secures $+0.6R$ ($+1.0R$ cumulative on 80% position), and immediately ratchets the active trailing Stop Loss to a guaranteed $+1.0R$ structural profit floor.
+  - **Tranche 3 (TP3 / DOL Runner - 20% Allocation):** Trails remaining 20% inventory to macro Draw on Liquidity targets (BSL/SSL pools, PDH/PDL, session extremes, or fixed target reward ratio $\ge 2.5R - 5.0R$).
+- **Calibrated Breaker Block Volumetric Confirmation:**
+  - Mandates both volume expansion factor ($\ge 1.25\times$ Volume SMA) **AND** directional taker volume delta dominance on the rejection bar.
+  - Structural invalidations (`MT_BODY_CLOSE_VIOLATED`) and confirmation timeouts (`CONFIRMATION_TIMEOUT`) cleanly filter low-conviction retests.
+- **Phase 6 Multi-Stage Telemetry & Comparative Analytics:**
+  - **Stage Fill Distributions:** Tracks Stage 1 (TP1), Stage 2 (TP2), and Stage 3 (DOL) fill counts and conversion rates.
+  - **Multi-Stage Expected Value ($\text{EV}$) Matrix:** Computes and compares mathematical $\text{EV}$ across 3-Stage Harvest, 2-Stage Dynamic, and Single-Stage (All-or-Nothing) execution models.
+- **Quant Lab Workspace UI Upgrades (`src/app/quant-lab/page.tsx`):**
+  - Added Phase 6 config controls: Position Scaling Architecture selector (`THREE_STAGE_HARVEST`, `TWO_STAGE_DYNAMIC`, `SINGLE_STAGE`), Stage 2 Multiple selector (`1.3R`, `1.5R`, `1.8R`, `2.0R`), and Stage 3 Target R:R selector.
+  - Upgraded Telemetry Matrix Card 1 to display Stage 1/2/3 fill rates, 3-Stage vs 2-Stage vs 1-Stage EV comparisons, and Expectancy Expansion Delta.
+  - Enriched Inspector Drawer with stage-by-stage tranche execution logs, timestamps, and active ratchet floor levels.
+
+---
 
 ## 🆕 V16.4 Changelog — Phase 5 Institutional Expectancy Expansion & Structural Trailing Engine (2026-08-16)
 

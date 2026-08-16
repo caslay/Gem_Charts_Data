@@ -128,6 +128,11 @@ export default function QuantLabPage() {
   const [obMaxBreakerRetestBars, setObMaxBreakerRetestBars] = useState(20);
   const [obEnableDynamicMgmt, setObEnableDynamicMgmt] = useState(true);
   const [obTp1Multiple, setObTp1Multiple] = useState(1.0);
+  const [obTp2Multiple, setObTp2Multiple] = useState(1.5);
+  const [obPositionScalingMode, setObPositionScalingMode] = useState<"THREE_STAGE_HARVEST" | "TWO_STAGE_DYNAMIC" | "SINGLE_STAGE">("THREE_STAGE_HARVEST");
+  const [obTp1Ratio, setObTp1Ratio] = useState(0.40);
+  const [obTp2Ratio, setObTp2Ratio] = useState(0.40);
+  const [obTp3Ratio, setObTp3Ratio] = useState(0.20);
   const [obTrailingStopMode, setObTrailingStopMode] = useState<"STRUCTURAL_FVG_TRAIL" | "STATIC_BREAKEVEN">("STRUCTURAL_FVG_TRAIL");
   const [obTrailingBuffer, setObTrailingBuffer] = useState(0.05);
   const [obDynamicDolTp2Scaling, setObDynamicDolTp2Scaling] = useState(true);
@@ -139,7 +144,7 @@ export default function QuantLabPage() {
   const [obAggregateConsecutive, setObAggregateConsecutive] = useState(true);
   const [obMaxConsecutive, setObMaxConsecutive] = useState(5);
   const [obEntryMode, setObEntryMode] = useState<"BOUNDARY" | "MEAN_THRESHOLD">("BOUNDARY");
-  const [obTargetRr, setObTargetRr] = useState(2.0);
+  const [obTargetRr, setObTargetRr] = useState(2.5);
 
   const [obScansList, setObScansList] = useState<StoredObScan[]>([]);
   const [selectedObScan, setSelectedObScan] = useState<StoredObScan | null>(null);
@@ -303,7 +308,12 @@ export default function QuantLabPage() {
           enable_breaker_simulation: obEnableBreakerSim,
           max_breaker_retest_bars: obMaxBreakerRetestBars,
           enable_dynamic_management: obEnableDynamicMgmt,
+          position_scaling_mode: obPositionScalingMode,
+          tp1_ratio: obTp1Ratio,
+          tp2_ratio: obTp2Ratio,
+          tp3_ratio: obTp3Ratio,
           tp1_multiple: obTp1Multiple,
+          tp2_multiple: obTp2Multiple,
           require_breaker_confirmation: obRequireBreakerConfirmation,
           require_breaker_dol: obRequireBreakerDOL,
           require_breaker_volumetric: obRequireBreakerVolumetric,
@@ -1356,6 +1366,87 @@ export default function QuantLabPage() {
                   </div>
                 </div>
 
+                {/* Phase 6 Multi-Stage Institutional Harvest & Position Runner Controls */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-slate-800/40 pt-4 mb-5">
+                  {/* Position Scaling Mode */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                      <span>Scaling Architecture</span>
+                      <span className="text-[8px] text-cyan-400 font-bold">3-STAGE TRANCHES</span>
+                    </label>
+                    <select
+                      value={obPositionScalingMode}
+                      onChange={(e) => setObPositionScalingMode(e.target.value as any)}
+                      className="w-full text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500/50 outline-none rounded text-cyan-300"
+                    >
+                      <option value="THREE_STAGE_HARVEST">🌾 3-Stage Harvest (40% / 40% / 20%)</option>
+                      <option value="TWO_STAGE_DYNAMIC">⚖️ 2-Stage Dynamic (50% / 50%)</option>
+                      <option value="SINGLE_STAGE">🎯 Single Stage (All-or-Nothing)</option>
+                    </select>
+                  </div>
+
+                  {/* Stage 2 Multiple */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                      <span>Stage 2 TP2 Multiple</span>
+                      <span className="text-[8px] text-emerald-400 font-bold">{obTp2Multiple}R (+1.0R FLOOR)</span>
+                    </label>
+                    <div className="grid grid-cols-4 gap-1 font-mono text-[10px]">
+                      {[1.3, 1.5, 1.8, 2.0].map(mult => (
+                        <button
+                          key={mult}
+                          type="button"
+                          onClick={() => setObTp2Multiple(mult)}
+                          className={`py-1.5 rounded border font-bold transition ${
+                            obTp2Multiple === mult
+                              ? "bg-emerald-950/40 border-emerald-500/50 text-emerald-300"
+                              : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                          }`}
+                        >
+                          {mult}R
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Tranche Allocation Matrix */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                      <span>Tranche Allocation</span>
+                      <span className="text-[8px] text-purple-400 font-bold">40% • 40% • 20%</span>
+                    </label>
+                    <div className="w-full py-1.5 px-2.5 rounded font-mono text-[10px] font-bold border border-slate-800 bg-slate-950 text-slate-400 flex items-center justify-between">
+                      <span className="text-cyan-300">TP1: 40%</span>
+                      <span className="text-emerald-300">TP2: 40%</span>
+                      <span className="text-purple-300">Runner: 20%</span>
+                    </div>
+                  </div>
+
+                  {/* Stage 3 Target R:R / DOL Multiple */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                      <span>Stage 3 Target R:R</span>
+                      <span className="text-[8px] text-amber-400 font-bold">{obTargetRr}R+ (DOL)</span>
+                    </label>
+                    <div className="grid grid-cols-4 gap-1 font-mono text-[10px]">
+                      {[2.0, 2.5, 3.0, 4.0].map(rr => (
+                        <button
+                          key={rr}
+                          type="button"
+                          onClick={() => setObTargetRr(rr)}
+                          className={`py-1.5 rounded border font-bold transition ${
+                            obTargetRr === rr
+                              ? "bg-amber-950/40 border-amber-500/50 text-amber-300"
+                              : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                          }`}
+                        >
+                          {rr}R
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 {/* Scan Trigger Action */}
                 <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-800/40 pt-4 gap-4">
                   <div className="font-mono text-left">
@@ -1533,46 +1624,46 @@ export default function QuantLabPage() {
                   </div>
 
                   {/* ───────────────────────────────────────────────────────── */}
-                  {/* PHASE 2, 3, 4 & 5: COMPARATIVE PERFORMANCE & MATRIX       */}
+                  {/* PHASE 2, 3, 4, 5 & 6: COMPARATIVE PERFORMANCE MATRIX      */}
                   {/* ───────────────────────────────────────────────────────── */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-6 font-mono text-left">
-                    {/* Matrix 1: Phase 5 Structural Trailing & Net Expectancy HUD */}
+                    {/* Matrix 1: Phase 6 Multi-Stage Harvest & Net Expectancy HUD */}
                     <div className="border border-cyan-500/30 bg-gradient-to-br from-slate-950/90 to-cyan-950/20 rounded-lg p-3.5 flex flex-col justify-between shadow-sm shadow-cyan-500/5">
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[9px] uppercase font-bold text-cyan-300 flex items-center gap-1">
                             <Shield className="w-3.5 h-3.5 text-cyan-400" />
-                            Structural Trailing & EV
+                            3-Stage Harvest & EV
                           </span>
                           <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-cyan-500/20 text-cyan-300">
-                            {selectedObScan.telemetry_summary.full_tp2_conversion_rate_pct ?? "0"}% TP2 CONV
+                            {selectedObScan.telemetry_summary.stage_1_fill_rate_pct ?? "0"}% S1 • {selectedObScan.telemetry_summary.stage_2_fill_rate_pct ?? "0"}% S2
                           </span>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-[10px] my-2">
                           <div className="bg-slate-950/60 border border-slate-800/80 rounded p-2">
-                            <span className="text-[8px] text-slate-500 uppercase block">Adjusted Win Rate</span>
+                            <span className="text-[8px] text-slate-500 uppercase block">Tranche Fills</span>
                             <span className="text-xs font-bold text-cyan-300 block">
-                              {selectedObScan.telemetry_summary.adjusted_win_rate_pct ?? "0"}%
+                              {selectedObScan.telemetry_summary.stage_3_fill_rate_pct ?? "0"}% S3 Runner
                             </span>
                             <span className="text-[8px] text-slate-400">
-                              {selectedObScan.telemetry_summary.full_tp2_win_count ?? 0} Full Wins • {selectedObScan.telemetry_summary.be_scratch_win_count + (selectedObScan.telemetry_summary.structural_scratch_win_count ?? 0)} Scratches
+                              S1: {selectedObScan.telemetry_summary.stage_1_fill_count ?? 0} • S2: {selectedObScan.telemetry_summary.stage_2_fill_count ?? 0} • S3: {selectedObScan.telemetry_summary.stage_3_fill_count ?? 0}
                             </span>
                           </div>
                           <div className="bg-cyan-950/30 border border-cyan-500/40 rounded p-2">
-                            <span className="text-[8px] text-cyan-300 uppercase block">Net Expectancy (EV)</span>
+                            <span className="text-[8px] text-cyan-300 uppercase block">3-Stage Expectancy</span>
                             <span className="text-xs font-bold text-emerald-400 block">
-                              {selectedObScan.telemetry_summary.expected_value_r > 0 ? "+" : ""}{selectedObScan.telemetry_summary.expected_value_r ?? "0"}R
+                              {selectedObScan.telemetry_summary.three_stage_ev_r > 0 ? "+" : ""}{selectedObScan.telemetry_summary.three_stage_ev_r ?? "0"}R EV
                             </span>
                             <span className="text-[8px] text-cyan-400 font-bold">
-                              {selectedObScan.telemetry_summary.expectancy_expansion_delta_r >= 0 ? "+" : ""}{selectedObScan.telemetry_summary.expectancy_expansion_delta_r ?? 0}R Δ vs Static BE
+                              2-Stg: {selectedObScan.telemetry_summary.two_stage_ev_r > 0 ? "+" : ""}{selectedObScan.telemetry_summary.two_stage_ev_r ?? 0}R • 1-Stg: {selectedObScan.telemetry_summary.single_stage_ev_r > 0 ? "+" : ""}{selectedObScan.telemetry_summary.single_stage_ev_r ?? 0}R
                             </span>
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center justify-between border-t border-slate-800/40 pt-2 text-[9px]">
-                        <span className="text-slate-400">Structural Trailing Scratches:</span>
-                        <span className="font-bold text-cyan-300">
-                          {selectedObScan.telemetry_summary.structural_scratch_win_count ?? 0} ({selectedObScan.telemetry_summary.structural_scratch_win_rate_pct ?? 0}%) • Runner Avg: {selectedObScan.telemetry_summary.avg_runner_realized_rr ?? 0}R
+                        <span className="text-slate-400">EV Expansion Delta:</span>
+                        <span className="font-bold text-emerald-400">
+                          {selectedObScan.telemetry_summary.expectancy_expansion_delta_r >= 0 ? "+" : ""}{selectedObScan.telemetry_summary.expectancy_expansion_delta_r ?? 0}R vs 2-Stage • Adj WR: {selectedObScan.telemetry_summary.adjusted_win_rate_pct ?? 0}%
                         </span>
                       </div>
                     </div>
@@ -2598,8 +2689,8 @@ export default function QuantLabPage() {
                   <span className="font-bold text-white">${inspectedOb.simulated_entry_price} / ${inspectedOb.simulated_stop_loss}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 text-[8px] uppercase block">TP1 (1.0R / 50%) • TP2 Target</span>
-                  <span className="font-bold text-emerald-400">${inspectedOb.simulated_tp1} • ${inspectedOb.simulated_tp2} {inspectedOb.dynamic_tp2_target !== inspectedOb.simulated_tp2 ? `(DOL: $${inspectedOb.dynamic_tp2_target})` : ""}</span>
+                  <span className="text-slate-500 text-[8px] uppercase block">TP1 (40%) • TP2 (40%) • TP3 (20%)</span>
+                  <span className="font-bold text-emerald-400">${inspectedOb.simulated_tp1} • ${inspectedOb.simulated_tp2} • ${inspectedOb.simulated_tp3}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 text-[8px] uppercase block">Simulated Trade Outcome</span>
@@ -2612,16 +2703,17 @@ export default function QuantLabPage() {
                       ? "text-rose-400"
                       : "text-slate-400"
                   }`}>
-                    {inspectedOb.simulated_outcome} ({inspectedOb.realized_rr > 0 ? "+" : ""}{inspectedOb.realized_rr}R)
+                    {inspectedOb.stage_exit_type ?? inspectedOb.simulated_outcome} ({inspectedOb.realized_rr > 0 ? "+" : ""}{inspectedOb.realized_rr}R)
                   </span>
                 </div>
               </div>
 
               {inspectedOb.is_be_active && (
-                <div className="border-t border-slate-800/60 pt-2.5 mt-2 flex flex-wrap items-center justify-between text-[9px] text-slate-400">
-                  <span>TP1 Partial Hit: <strong className="text-emerald-400">{inspectedOb.tp1_hit_time ? new Date(inspectedOb.tp1_hit_time).toLocaleTimeString() : "Yes"} (+0.5R locked)</strong></span>
+                <div className="border-t border-slate-800/60 pt-2.5 mt-2 flex flex-wrap items-center justify-between text-[9px] text-slate-400 gap-y-1.5">
+                  <span>Tranche 1 (40% @ 1.0R): <strong className="text-emerald-400">{inspectedOb.tp1_hit_time ? `${new Date(inspectedOb.tp1_hit_time).toLocaleTimeString()} (+0.4R)` : "—"}</strong></span>
+                  <span>Tranche 2 (40% @ 1.5R): <strong className={inspectedOb.is_tp2_filled ? "text-emerald-400" : "text-slate-500"}>{inspectedOb.tp2_hit_time ? `${new Date(inspectedOb.tp2_hit_time).toLocaleTimeString()} (+0.6R)` : "Pending"}</strong></span>
+                  <span>Tranche 3 (20% DOL): <strong className={inspectedOb.is_tp3_filled ? "text-purple-400" : "text-slate-500"}>{inspectedOb.is_tp3_filled ? `Filled (${inspectedOb.realized_rr}R Total)` : "Trailing"}</strong></span>
                   <span>Active SL Trail: <strong className="text-cyan-300">${inspectedOb.active_trailing_sl ?? inspectedOb.simulated_entry_price} ({inspectedOb.trailing_sl_source ?? "BREAKEVEN"})</strong></span>
-                  <span>Runner Status: <strong className={inspectedOb.is_be_scratch ? "text-cyan-300" : inspectedOb.is_structural_scratch ? "text-cyan-400" : "text-emerald-400"}>{inspectedOb.is_structural_scratch ? `Structural Trail Scratch (+${inspectedOb.realized_rr}R Net)` : inspectedOb.is_be_scratch ? "Scratched at BE (+0.5R Net)" : "Achieved Full TP2 Target"}</strong></span>
                 </div>
               )}
             </div>
