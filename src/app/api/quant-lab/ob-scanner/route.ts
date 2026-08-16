@@ -176,6 +176,10 @@ export async function POST(req: Request) {
           require_breaker_dol = true,
           require_breaker_volumetric = true,
           breaker_session_filter = "ALL",
+          trailing_stop_mode = "STRUCTURAL_FVG_TRAIL",
+          trailing_buffer = 0.05,
+          adaptive_breaker_confirmation = true,
+          dynamic_dol_tp2_scaling = true,
           aggregate_consecutive = true,
           max_consecutive_lookback = 5,
           entry_mode = "BOUNDARY",
@@ -225,7 +229,7 @@ export async function POST(req: Request) {
           message: `Successfully loaded ${candles.length} historical candles. Executing multi-gate Order Block detection & aggregation engine...`
         });
 
-        // Configure Engine with Phase 2, 3 & 4 parameters
+        // Configure Engine with Phase 2, 3, 4 & 5 parameters
         const scanConfig: OrderBlockScanConfig = {
           symbol,
           timeframe,
@@ -240,6 +244,10 @@ export async function POST(req: Request) {
           requireBreakerDOL: require_breaker_dol,
           requireBreakerVolumetric: require_breaker_volumetric,
           breakerSessionFilter: breaker_session_filter,
+          trailingStopMode: trailing_stop_mode,
+          trailingBuffer: trailing_buffer,
+          adaptiveBreakerConfirmation: adaptive_breaker_confirmation,
+          dynamicDolTp2Scaling: dynamic_dol_tp2_scaling,
           aggregateConsecutiveCandles: aggregate_consecutive,
           maxConsecutiveLookback: max_consecutive_lookback,
           entryMode: entry_mode,

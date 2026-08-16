@@ -1,8 +1,38 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.3
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.4
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-16 (V16.3 — Phase 4 Confirmation-Gated Breaker & Liquidity Engine)  
+> **Last Updated:** 2026-08-16 (V16.4 — Phase 5 Institutional Expectancy Expansion & Structural Trailing Engine)  
+
+## 🆕 V16.4 Changelog — Phase 5 Institutional Expectancy Expansion & Structural Trailing Engine (2026-08-16)
+
+### Summary
+Engineered **Phase 5 Institutional Expectancy Expansion & Structural Trailing Architecture** across the Quant Lab backtesting pipeline and `OrderBlockEngine.ts`. Replaces premature static breakeven stops with dynamic structural trailing (anchored to Fair Value Gap Consequent Encroachment and local swing pivots), activates adaptive dual-mode Breaker Block confirmations, and scales runner targets dynamically to macro Draw on Liquidity (DOL) levels.
+
+### Key Features & Architectural Directives
+- **Structural Trailing Stop Engine (Breathing Room Model):**
+  - Configurable trailing modes: `STRUCTURAL_FVG_TRAIL` (default) vs. `STATIC_BREAKEVEN`.
+  - When price reaches TP1 ($1.0R$), secures 50% partial position ($+0.5R$ banked).
+  - In `STRUCTURAL_FVG_TRAIL` mode:
+    - Instead of snapping the stop loss strictly to entry ($0.0R$), trails to the **Consequent Encroachment (50% midpoint)** of the nearest displacement FVG or the in-zone rejection swing pivot.
+    - Mathematical downside risk boundary: Enforces runner stop $\ge \text{entry} - 0.5 \times \text{risk}$, guaranteeing the overall net trade outcome is never negative ($\text{Net Realized R} \ge 0.0R$).
+    - Dynamic ratcheting: As price advances past $+1.5R$, trails the active stop higher along newly printed swing lows (Long) or lower swing highs (Short) to lock in runner gains.
+- **Calibrated Breaker Block Confirmation State Machine:**
+  - Enforces strict Mean Threshold (MT) body close defense.
+  - Adaptive dual confirmation pathways: authorizes entry via **either** in-zone FVG formation (**BISI/SIBI**) **or** energetic volume expansion ($\ge 1.25\times$ Volume SMA with taker delta dominance) within an adaptive 3-to-6 bar window.
+  - Distinct veto reason taxonomy: `MT_BODY_CLOSE_VIOLATED` vs. `CONFIRMATION_TIMEOUT` vs. `NO_UNMITIGATED_DOL_TARGET`.
+- **Dynamic TP2 Runner Expansion (DOL Scaling):**
+  - Anchors Take Profit 2 (TP2) directly to active unmitigated Draw on Liquidity (BSL/SSL) levels when available and favorable, capturing outsized extension moves ($3.0R - 6.0R+$).
+- **Phase 5 Telemetry & UI Dashboard:**
+  - **Full TP2 Conversion Rate %:** Tracks the percentage of TP1-hit setups that successfully run to full TP2 targets.
+  - **Structural Scratches vs. Full Wins:** Detailed P&L distribution of full wins vs. structural trailing scratches ($+0.2R$ to $+0.8R$) vs. breakeven scratches ($+0.5R$).
+  - **Expectancy Expansion Delta ($\text{EV}_{\text{Structural}} - \text{EV}_{\text{Static}}$):** Measures net mathematical expectancy gains in R-multiples.
+- **Quant Lab Workspace UI Upgrades (`src/app/quant-lab/page.tsx`):**
+  - Added Phase 5 config controls: Trailing Stop Mode selector (`STRUCTURAL_FVG_TRAIL` / `STATIC_BREAKEVEN`), Dynamic DOL TP2 Scaling toggle, Adaptive Breaker Gate toggle, and Trail Buffer Offset selector.
+  - Upgraded Telemetry Matrix Card 1 to display Full TP2 Conversion Rate %, Net Expectancy, and Expectancy Expansion Delta.
+  - Enriched Inspector Drawer to display active trailing stop source (`FVG_CE` / `SWING_PIVOT`), trailing stop price level, and DOL scaled targets.
+
+---
 
 ## 🆕 V16.3 Changelog — Phase 4 Confirmation-Gated Breaker & Liquidity Engine (2026-08-16)
 

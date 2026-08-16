@@ -19,6 +19,7 @@ import {
   RefreshCw,
   TrendingUp,
   Layers,
+  Shield,
   ShieldCheck,
   Zap,
   Filter,
@@ -127,6 +128,10 @@ export default function QuantLabPage() {
   const [obMaxBreakerRetestBars, setObMaxBreakerRetestBars] = useState(20);
   const [obEnableDynamicMgmt, setObEnableDynamicMgmt] = useState(true);
   const [obTp1Multiple, setObTp1Multiple] = useState(1.0);
+  const [obTrailingStopMode, setObTrailingStopMode] = useState<"STRUCTURAL_FVG_TRAIL" | "STATIC_BREAKEVEN">("STRUCTURAL_FVG_TRAIL");
+  const [obTrailingBuffer, setObTrailingBuffer] = useState(0.05);
+  const [obDynamicDolTp2Scaling, setObDynamicDolTp2Scaling] = useState(true);
+  const [obAdaptiveBreakerConfirmation, setObAdaptiveBreakerConfirmation] = useState(true);
   const [obRequireBreakerConfirmation, setObRequireBreakerConfirmation] = useState(true);
   const [obRequireBreakerDOL, setObRequireBreakerDOL] = useState(true);
   const [obRequireBreakerVolumetric, setObRequireBreakerVolumetric] = useState(true);
@@ -303,6 +308,10 @@ export default function QuantLabPage() {
           require_breaker_dol: obRequireBreakerDOL,
           require_breaker_volumetric: obRequireBreakerVolumetric,
           breaker_session_filter: obBreakerSessionFilter,
+          trailing_stop_mode: obTrailingStopMode,
+          trailing_buffer: obTrailingBuffer,
+          adaptive_breaker_confirmation: obAdaptiveBreakerConfirmation,
+          dynamic_dol_tp2_scaling: obDynamicDolTp2Scaling,
           aggregate_consecutive: obAggregateConsecutive,
           max_consecutive_lookback: obMaxConsecutive,
           entry_mode: obEntryMode,
@@ -1263,6 +1272,90 @@ export default function QuantLabPage() {
                   </div>
                 </div>
 
+                {/* Phase 5 Structural Trailing Stop & Expectancy Expansion Controls */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-slate-800/40 pt-4 mb-5">
+                  {/* Trailing Stop Mode (Breathing Room Model) */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                      <span>Trailing Stop Mode</span>
+                      <span className="text-[8px] text-cyan-400 font-bold">STAGE 2 TRAIL</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setObTrailingStopMode(obTrailingStopMode === "STRUCTURAL_FVG_TRAIL" ? "STATIC_BREAKEVEN" : "STRUCTURAL_FVG_TRAIL")}
+                      className={`w-full py-1.5 px-2 rounded font-mono text-[10px] font-bold border transition ${
+                        obTrailingStopMode === "STRUCTURAL_FVG_TRAIL"
+                          ? "bg-cyan-950/50 border-cyan-500/60 text-cyan-300"
+                          : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-300"
+                      }`}
+                    >
+                      {obTrailingStopMode === "STRUCTURAL_FVG_TRAIL" ? "🌊 STRUCTURAL FVG (BREATHING ROOM)" : "🔒 STATIC BREAKEVEN (0.0R)"}
+                    </button>
+                  </div>
+
+                  {/* Dynamic DOL TP2 Scaling */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                      <span>Dynamic DOL TP2 Scaling</span>
+                      <span className="text-[8px] text-emerald-400 font-bold">EXPANSION</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setObDynamicDolTp2Scaling(!obDynamicDolTp2Scaling)}
+                      className={`w-full py-1.5 px-2 rounded font-mono text-[10px] font-bold border transition ${
+                        obDynamicDolTp2Scaling
+                          ? "bg-emerald-950/50 border-emerald-500/60 text-emerald-300"
+                          : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                      }`}
+                    >
+                      {obDynamicDolTp2Scaling ? "🚀 DOL SCALED TP2 (CAPTURE RUNNERS)" : "STATIC TP2 MULTIPLE"}
+                    </button>
+                  </div>
+
+                  {/* Adaptive Breaker Confirmation */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                      <span>Adaptive Breaker Gate</span>
+                      <span className="text-[8px] text-purple-400 font-bold">FVG OR VOL EXP</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setObAdaptiveBreakerConfirmation(!obAdaptiveBreakerConfirmation)}
+                      className={`w-full py-1.5 px-2 rounded font-mono text-[10px] font-bold border transition ${
+                        obAdaptiveBreakerConfirmation
+                          ? "bg-purple-950/50 border-purple-500/60 text-purple-300"
+                          : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                      }`}
+                    >
+                      {obAdaptiveBreakerConfirmation ? "⚡ ADAPTIVE (FVG OR VOL ≥1.25x)" : "STRICT (FVG MANDATED)"}
+                    </button>
+                  </div>
+
+                  {/* Trailing Buffer Offset */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                      <span>Trail Buffer Offset</span>
+                      <span className="text-[8px] text-amber-400 font-bold">±${obTrailingBuffer}</span>
+                    </label>
+                    <div className="grid grid-cols-4 gap-1 font-mono text-[10px]">
+                      {[0.02, 0.05, 0.10, 0.20].map(buf => (
+                        <button
+                          key={buf}
+                          type="button"
+                          onClick={() => setObTrailingBuffer(buf)}
+                          className={`py-1.5 rounded border font-bold transition ${
+                            obTrailingBuffer === buf
+                              ? "bg-amber-950/40 border-amber-500/50 text-amber-300"
+                              : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                          }`}
+                        >
+                          {buf}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
                 {/* Scan Trigger Action */}
                 <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-800/40 pt-4 gap-4">
                   <div className="font-mono text-left">
@@ -1440,19 +1533,19 @@ export default function QuantLabPage() {
                   </div>
 
                   {/* ───────────────────────────────────────────────────────── */}
-                  {/* PHASE 2 & 3: COMPARATIVE PERFORMANCE & EXPECTANCY MATRIX  */}
+                  {/* PHASE 2, 3, 4 & 5: COMPARATIVE PERFORMANCE & MATRIX       */}
                   {/* ───────────────────────────────────────────────────────── */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-6 font-mono text-left">
-                    {/* Matrix 1: Phase 3 Dynamic Trade Management & Net Expectancy */}
+                    {/* Matrix 1: Phase 5 Structural Trailing & Net Expectancy HUD */}
                     <div className="border border-cyan-500/30 bg-gradient-to-br from-slate-950/90 to-cyan-950/20 rounded-lg p-3.5 flex flex-col justify-between shadow-sm shadow-cyan-500/5">
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[9px] uppercase font-bold text-cyan-300 flex items-center gap-1">
-                            <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-                            Dynamic Management & EV
+                            <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                            Structural Trailing & EV
                           </span>
                           <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-cyan-500/20 text-cyan-300">
-                            TP1 / BE TRAIL
+                            {selectedObScan.telemetry_summary.full_tp2_conversion_rate_pct ?? "0"}% TP2 CONV
                           </span>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-[10px] my-2">
@@ -1462,24 +1555,24 @@ export default function QuantLabPage() {
                               {selectedObScan.telemetry_summary.adjusted_win_rate_pct ?? "0"}%
                             </span>
                             <span className="text-[8px] text-slate-400">
-                              Full Wins + BE Wins
+                              {selectedObScan.telemetry_summary.full_tp2_win_count ?? 0} Full Wins • {selectedObScan.telemetry_summary.be_scratch_win_count + (selectedObScan.telemetry_summary.structural_scratch_win_count ?? 0)} Scratches
                             </span>
                           </div>
-                          <div className="bg-cyan-950/30 border border-cyan-500/30 rounded p-2">
+                          <div className="bg-cyan-950/30 border border-cyan-500/40 rounded p-2">
                             <span className="text-[8px] text-cyan-300 uppercase block">Net Expectancy (EV)</span>
                             <span className="text-xs font-bold text-emerald-400 block">
                               {selectedObScan.telemetry_summary.expected_value_r > 0 ? "+" : ""}{selectedObScan.telemetry_summary.expected_value_r ?? "0"}R
                             </span>
                             <span className="text-[8px] text-cyan-400 font-bold">
-                              Per Closed Trade
+                              {selectedObScan.telemetry_summary.expectancy_expansion_delta_r >= 0 ? "+" : ""}{selectedObScan.telemetry_summary.expectancy_expansion_delta_r ?? 0}R Δ vs Static BE
                             </span>
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center justify-between border-t border-slate-800/40 pt-2 text-[9px]">
-                        <span className="text-slate-400">BE Scratches (+0.5R):</span>
+                        <span className="text-slate-400">Structural Trailing Scratches:</span>
                         <span className="font-bold text-cyan-300">
-                          {selectedObScan.telemetry_summary.be_scratch_win_count ?? 0} ({selectedObScan.telemetry_summary.be_scratch_win_rate_pct ?? 0}%)
+                          {selectedObScan.telemetry_summary.structural_scratch_win_count ?? 0} ({selectedObScan.telemetry_summary.structural_scratch_win_rate_pct ?? 0}%) • Runner Avg: {selectedObScan.telemetry_summary.avg_runner_realized_rr ?? 0}R
                         </span>
                       </div>
                     </div>
@@ -2506,7 +2599,7 @@ export default function QuantLabPage() {
                 </div>
                 <div>
                   <span className="text-slate-500 text-[8px] uppercase block">TP1 (1.0R / 50%) • TP2 Target</span>
-                  <span className="font-bold text-emerald-400">${inspectedOb.simulated_tp1} • ${inspectedOb.simulated_tp2}</span>
+                  <span className="font-bold text-emerald-400">${inspectedOb.simulated_tp1} • ${inspectedOb.simulated_tp2} {inspectedOb.dynamic_tp2_target !== inspectedOb.simulated_tp2 ? `(DOL: $${inspectedOb.dynamic_tp2_target})` : ""}</span>
                 </div>
                 <div>
                   <span className="text-slate-500 text-[8px] uppercase block">Simulated Trade Outcome</span>
@@ -2527,8 +2620,8 @@ export default function QuantLabPage() {
               {inspectedOb.is_be_active && (
                 <div className="border-t border-slate-800/60 pt-2.5 mt-2 flex flex-wrap items-center justify-between text-[9px] text-slate-400">
                   <span>TP1 Partial Hit: <strong className="text-emerald-400">{inspectedOb.tp1_hit_time ? new Date(inspectedOb.tp1_hit_time).toLocaleTimeString() : "Yes"} (+0.5R locked)</strong></span>
-                  <span>Active SL Trail: <strong className="text-cyan-300">${inspectedOb.simulated_entry_price} (Breakeven)</strong></span>
-                  <span>Runner Status: <strong className={inspectedOb.is_be_scratch ? "text-cyan-300" : "text-emerald-400"}>{inspectedOb.is_be_scratch ? "Scratched at BE (+0.5R Net)" : "Achieved Full TP2 Target"}</strong></span>
+                  <span>Active SL Trail: <strong className="text-cyan-300">${inspectedOb.active_trailing_sl ?? inspectedOb.simulated_entry_price} ({inspectedOb.trailing_sl_source ?? "BREAKEVEN"})</strong></span>
+                  <span>Runner Status: <strong className={inspectedOb.is_be_scratch ? "text-cyan-300" : inspectedOb.is_structural_scratch ? "text-cyan-400" : "text-emerald-400"}>{inspectedOb.is_structural_scratch ? `Structural Trail Scratch (+${inspectedOb.realized_rr}R Net)` : inspectedOb.is_be_scratch ? "Scratched at BE (+0.5R Net)" : "Achieved Full TP2 Target"}</strong></span>
                 </div>
               )}
             </div>

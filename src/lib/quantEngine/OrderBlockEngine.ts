@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Institutional Order Block Detection, Aggregation, Validation & Lifecycle Engine.
  *
- * Phase 4 Institutional Features:
+ * Phase 5 Institutional Features:
  *  - Origin candle detection preceding high-displacement impulse legs
  *  - Consecutive same-color candle aggregation at pivot extremes
  *  - Mean Threshold (50% midpoint / Consequent Encroachment) precision entry
@@ -11,13 +11,17 @@
  *  - Tier A+ Strict Execution Gate (Gate 1 Liquidity Sweep mandate)
  *  - Temporal Freshness Expiry (Session-scoped max_bars_to_mitigation filter)
  *  - Breaker Block Inversion State Tracking & Temporal Retest Expiry (max_breaker_retest_bars)
- *  - Dynamic Trade Management State Machine (TP1 partial fill + Breakeven stop trail)
- *  - Phase 4 Confirmation-Gated Breaker Engine:
- *      * Draw on Liquidity (DOL) Gatekeeper (Resting BSL/SSL, Session extremes, PDH/PDL)
- *      * In-Zone Micro MSS & Fair Value Gap (BISI/SIBI) Confirmation Gate
- *      * Volumetric Sponsorship Filter (Taker volume delta & volume expansion)
- *      * Dealing Range Valuation (Discount for Bullish Breakers, Premium for Bearish Breakers)
- *      * Phase 4 Telemetry (Confirmed vs Blind Win Rate Delta, Net Expectancy EV)
+ *  - Dynamic Trade Management & Structural Trailing Stop Engine (Breathing Room Model):
+ *      * Modes: STRUCTURAL_FVG_TRAIL vs. STATIC_BREAKEVEN
+ *      * FVG Consequent Encroachment (50% midpoint) / Retest Swing Low/High Trailing Stop
+ *      * Guaranteed non-negative downside risk bound (always >= 0.0R net realized)
+ *      * Dynamic ratcheting as price prints higher/lower structural pivots
+ *  - Calibrated Breaker Block Confirmation State Machine:
+ *      * Dual confirmation pathways (In-Zone FVG formation OR Volume Expansion >= 1.25x with taker dominance)
+ *      * Adaptive 3-to-6 bar confirmation window
+ *      * Explicit taxonomy: MT_BODY_CLOSE_VIOLATED vs. CONFIRMATION_TIMEOUT
+ *  - Dynamic TP2 Runner Expansion (Draw on Liquidity Target Scaling)
+ *  - Phase 5 Telemetry: Full TP2 Conversion Rate %, Structural Scratches vs Runner P&L, EV Expansion Delta
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -55,6 +59,8 @@ export type LiquiditySweepType =
   | 'SWING_HIGH'
   | 'SWING_LOW'
   | 'NONE';
+
+export type TrailingStopMode = 'STRUCTURAL_FVG_TRAIL' | 'STATIC_BREAKEVEN';
 
 export interface OrderBlockGateResults {
   gate1_liquidity_sweep: boolean;
@@ -132,7 +138,7 @@ export interface InstitutionalOrderBlock {
   expiration_time: number | null;
   is_fresh_mitigation: boolean;
 
-  // Breaker Block Inversion Pipeline (Phase 2, 3 & 4)
+  // Breaker Block Inversion Pipeline (Phase 2, 3, 4 & 5)
   is_breaker: boolean;
   breaker_flip_time: number | null;
   is_breaker_expired: boolean;
@@ -146,9 +152,9 @@ export interface InstitutionalOrderBlock {
   breaker_retest_time: number | null;
   breaker_bars_to_retest: number | null;
 
-  // Phase 4: Confirmation-Gated Breaker Details
+  // Phase 4 & 5: Calibrated Confirmation-Gated Breaker Details
   breaker_is_confirmed: boolean;
-  breaker_confirmation_type: 'MICRO_MSS_FVG' | 'BLIND_LIMIT' | 'NONE';
+  breaker_confirmation_type: 'MICRO_MSS_FVG' | 'VOLUME_EXPANSION' | 'BLIND_LIMIT' | 'NONE';
   breaker_confirmation_time: number | null;
   breaker_confirmation_index: number | null;
   breaker_fvg_top: number | null;
@@ -159,15 +165,20 @@ export interface InstitutionalOrderBlock {
   breaker_dol_type: LiquiditySweepType | 'NONE';
   breaker_veto_reason: string | null;
 
-  // Dynamic Trade Management & Execution Simulation (Phase 3)
+  // Dynamic Trade Management & Structural Trailing (Phase 3 & 5)
   simulated_entry_price: number;
   simulated_stop_loss: number;
   simulated_tp1: number;         // 1.0R Partial Take Profit Level
   simulated_tp2: number;         // 2.0R / Target Runner Take Profit Level
-  is_be_active: boolean;         // True once TP1 is hit and SL moved to Breakeven
+  dynamic_tp2_target: number;    // Scaled to DOL if enabled
+  is_be_active: boolean;         // True once TP1 is hit and trailing is active
   tp1_hit_time: number | null;
   tp1_hit_index: number | null;
-  is_be_scratch: boolean;        // True if stopped out at exact breakeven (+0.5R protected)
+  trailing_stop_mode: TrailingStopMode;
+  active_trailing_sl: number;
+  trailing_sl_source: 'FVG_CE' | 'SWING_PIVOT' | 'BREAKEVEN' | 'INITIAL';
+  is_be_scratch: boolean;        // True if stopped out at exact breakeven
+  is_structural_scratch: boolean;// True if stopped out at structural trail (+0.2R to +0.8R)
   simulated_outcome: 'FULL_TP2_WIN' | 'BE_SCRATCH_WIN' | 'STOPPED_OUT' | 'WIN' | 'LOSS' | 'PENDING' | 'INVALIDATED' | 'EXPIRED';
   realized_rr: number;           // Blended realized R-multiple
   max_favorable_excursion_r: number;
@@ -186,10 +197,14 @@ export interface OrderBlockScanConfig {
   maxBreakerRetestBars?: number;          // Phase 3: Breaker Freshness Expiry (default: 20 bars)
   enableDynamicManagement?: boolean;      // Phase 3: Multi-stage TP1/BE Management (default: true)
   tp1Multiple?: number;                   // Phase 3: Partial TP1 multiple in R (default: 1.0)
-  requireBreakerConfirmation?: boolean;   // Phase 4: In-Zone Micro MSS + FVG Confirmation Gate (default: true)
+  requireBreakerConfirmation?: boolean;   // Phase 4: Confirmation Gate (default: true)
   requireBreakerDOL?: boolean;            // Phase 4: Draw on Liquidity Target Gatekeeper (default: true)
   requireBreakerVolumetric?: boolean;     // Phase 4: Volumetric Sponsorship Gate (default: true)
   breakerSessionFilter?: 'ALL' | 'NY_AND_LONDON' | 'NY_ONLY' | 'LONDON_ONLY'; // Phase 4: Session filter
+  trailingStopMode?: TrailingStopMode;    // Phase 5: STRUCTURAL_FVG_TRAIL vs STATIC_BREAKEVEN (default: STRUCTURAL_FVG_TRAIL)
+  trailingBuffer?: number;                // Phase 5: Structural trail offset (default: 0.05)
+  adaptiveBreakerConfirmation?: boolean;  // Phase 5: Allow FVG OR Volume Expansion (default: true)
+  dynamicDolTp2Scaling?: boolean;         // Phase 5: Anchor TP2 to DOL Target (default: true)
   aggregateConsecutiveCandles?: boolean;
   maxConsecutiveLookback?: number;
   sweepLookbackBars?: number;
@@ -212,7 +227,7 @@ export interface OrderBlockTelemetrySummary {
   tier_a_count: number;
   tier_b_count: number;
   tier_unvalidated_count: number;
-  validation_rate_pct: number; // (A+ and A) / Total
+  validation_rate_pct: number;
 
   // Lifecycle & Reaction Metrics
   untested_count: number;
@@ -221,7 +236,7 @@ export interface OrderBlockTelemetrySummary {
   mean_threshold_violated_count: number;
   zone_invalidated_count: number;
   expired_stale_count: number;
-  mt_reaction_rate_pct: number; // Mitigated & Respected / Total Tested
+  mt_reaction_rate_pct: number;
 
   // Phase 2: Fresh vs. Stale Mitigation Comparison
   fresh_mitigation_count: number;
@@ -242,10 +257,10 @@ export interface OrderBlockTelemetrySummary {
   tier_a_plus_avg_rr: number;
   tier_a_plus_profit_factor: number;
 
-  tier_a_plus_win_rate_delta: number; // Tier A+ Win Rate - Tier A Win Rate
-  tier_a_plus_rr_delta: number;       // Tier A+ R:R - Tier A R:R
+  tier_a_plus_win_rate_delta: number;
+  tier_a_plus_rr_delta: number;
 
-  // Phase 2, 3 & 4: Breaker Block Telemetry
+  // Phase 2, 3, 4 & 5: Breaker Block Telemetry
   breaker_converted_count: number;
   breaker_conversion_rate_pct: number;
   breaker_retest_count: number;
@@ -261,7 +276,7 @@ export interface OrderBlockTelemetrySummary {
   stale_breakers_win_rate_pct: number;
   breaker_freshness_win_rate_delta: number;
 
-  // Phase 4: Confirmation-Gated vs Blind Breaker Analytics
+  // Phase 4 & 5: Confirmation-Gated vs Blind Breaker Analytics
   confirmed_breaker_retest_count: number;
   confirmed_breaker_win_rate_pct: number;
   confirmed_breaker_avg_rr: number;
@@ -275,17 +290,22 @@ export interface OrderBlockTelemetrySummary {
   breaker_vetoed_valuation_count: number;
   breaker_expected_value_r: number;
 
-  // Phase 3: Dynamic Trade Management & Expectancy
+  // Phase 3 & 5: Dynamic Trade Management & Structural Trailing Expectancy
   full_tp2_win_count: number;
   full_tp2_win_rate_pct: number;
+  full_tp2_conversion_rate_pct: number; // (Full TP2 Wins / TP1 Reached) * 100
   be_scratch_win_count: number;
   be_scratch_win_rate_pct: number;
+  structural_scratch_win_count: number;
+  structural_scratch_win_rate_pct: number;
   stopped_out_count: number;
   stopped_out_rate_pct: number;
-  adjusted_win_rate_pct: number;       // (Full Wins + Protected BE Wins) / Closed Trades
-  expected_value_r: number;            // Net EV per trade in R-multiples
+  adjusted_win_rate_pct: number;
+  expected_value_r: number;
+  expectancy_expansion_delta_r: number; // EV with Structural Trailing vs Static Breakeven
+  avg_runner_realized_rr: number;
 
-  // Overall Backtest Outcome Metrics (Mitigated Trades)
+  // Overall Backtest Outcome Metrics
   mitigation_total_trades: number;
   mitigation_winning_trades: number;
   mitigation_losing_trades: number;
@@ -319,6 +339,10 @@ export const DEFAULT_OB_SCAN_CONFIG: Required<OrderBlockScanConfig> = {
   requireBreakerDOL: true,
   requireBreakerVolumetric: true,
   breakerSessionFilter: 'ALL',
+  trailingStopMode: 'STRUCTURAL_FVG_TRAIL',
+  trailingBuffer: 0.05,
+  adaptiveBreakerConfirmation: true,
+  dynamicDolTp2Scaling: true,
   aggregateConsecutiveCandles: true,
   maxConsecutiveLookback: 5,
   sweepLookbackBars: 6,
@@ -400,7 +424,7 @@ export class OrderBlockEngine {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Phase 2, 3 & 4: Chronological Lifecycle, Expiry, Confirmation & Management
+    // Phase 2, 3, 4 & 5: Chronological Lifecycle, Structural Trailing & Expiry
     // ─────────────────────────────────────────────────────────────────────────
     for (const ob of detectedBlocks) {
       this.evaluateOrderBlockLifecycle(ob, sortedCandles, allPivots, volSma);
@@ -499,11 +523,17 @@ export class OrderBlockEngine {
     const confluence_score = this.computeConfluenceScore(gates, originCandles.length, range_pct);
 
     const entryPrice = this.config.entryMode === 'MEAN_THRESHOLD' ? mean_threshold : top;
-    const tickBuffer = 0.05;
+    const tickBuffer = this.config.trailingBuffer;
     const stopLoss = parseFloat((bottom - tickBuffer).toFixed(4));
     const risk = Math.max(0.1, entryPrice - stopLoss);
     const tp1 = parseFloat((entryPrice + this.config.tp1Multiple * risk).toFixed(4));
-    const tp2 = parseFloat((entryPrice + this.config.targetRewardRatio * risk).toFixed(4));
+    let tp2 = parseFloat((entryPrice + this.config.targetRewardRatio * risk).toFixed(4));
+
+    // Phase 5: Dynamic DOL Scaling
+    const dol = this.resolveDrawOnLiquidity(true, candles, formation_index, pivots, entryPrice);
+    if (this.config.dynamicDolTp2Scaling && dol.target !== null && dol.target > tp2) {
+      tp2 = dol.target;
+    }
 
     return {
       id: `OB_BULL_${origin_time}_${top.toFixed(2)}_${bottom.toFixed(2)}`,
@@ -561,17 +591,22 @@ export class OrderBlockEngine {
       breaker_fvg_bottom: null,
       breaker_volume_expansion: null,
       breaker_taker_delta: null,
-      breaker_dol_target: null,
-      breaker_dol_type: 'NONE',
+      breaker_dol_target: dol.target,
+      breaker_dol_type: dol.type,
       breaker_veto_reason: null,
       simulated_entry_price: parseFloat(entryPrice.toFixed(4)),
       simulated_stop_loss: stopLoss,
       simulated_tp1: tp1,
       simulated_tp2: tp2,
+      dynamic_tp2_target: tp2,
       is_be_active: false,
       tp1_hit_time: null,
       tp1_hit_index: null,
+      trailing_stop_mode: this.config.trailingStopMode,
+      active_trailing_sl: stopLoss,
+      trailing_sl_source: 'INITIAL',
       is_be_scratch: false,
+      is_structural_scratch: false,
       simulated_outcome: 'PENDING',
       realized_rr: 0,
       max_favorable_excursion_r: 0,
@@ -650,11 +685,17 @@ export class OrderBlockEngine {
     const confluence_score = this.computeConfluenceScore(gates, originCandles.length, range_pct);
 
     const entryPrice = this.config.entryMode === 'MEAN_THRESHOLD' ? mean_threshold : bottom;
-    const tickBuffer = 0.05;
+    const tickBuffer = this.config.trailingBuffer;
     const stopLoss = parseFloat((top + tickBuffer).toFixed(4));
     const risk = Math.max(0.1, stopLoss - entryPrice);
     const tp1 = parseFloat((entryPrice - this.config.tp1Multiple * risk).toFixed(4));
-    const tp2 = parseFloat((entryPrice - this.config.targetRewardRatio * risk).toFixed(4));
+    let tp2 = parseFloat((entryPrice - this.config.targetRewardRatio * risk).toFixed(4));
+
+    // Phase 5: Dynamic DOL Scaling
+    const dol = this.resolveDrawOnLiquidity(false, candles, formation_index, pivots, entryPrice);
+    if (this.config.dynamicDolTp2Scaling && dol.target !== null && dol.target < tp2) {
+      tp2 = dol.target;
+    }
 
     return {
       id: `OB_BEAR_${origin_time}_${top.toFixed(2)}_${bottom.toFixed(2)}`,
@@ -712,17 +753,22 @@ export class OrderBlockEngine {
       breaker_fvg_bottom: null,
       breaker_volume_expansion: null,
       breaker_taker_delta: null,
-      breaker_dol_target: null,
-      breaker_dol_type: 'NONE',
+      breaker_dol_target: dol.target,
+      breaker_dol_type: dol.type,
       breaker_veto_reason: null,
       simulated_entry_price: parseFloat(entryPrice.toFixed(4)),
       simulated_stop_loss: stopLoss,
       simulated_tp1: tp1,
       simulated_tp2: tp2,
+      dynamic_tp2_target: tp2,
       is_be_active: false,
       tp1_hit_time: null,
       tp1_hit_index: null,
+      trailing_stop_mode: this.config.trailingStopMode,
+      active_trailing_sl: stopLoss,
+      trailing_sl_source: 'INITIAL',
       is_be_scratch: false,
+      is_structural_scratch: false,
       simulated_outcome: 'PENDING',
       realized_rr: 0,
       max_favorable_excursion_r: 0,
@@ -961,49 +1007,48 @@ export class OrderBlockEngine {
     return score;
   }
 
-  // ── Phase 4: Draw on Liquidity (DOL) Gatekeeper ────────────────────────────
+  // ── Phase 4 & 5: Draw on Liquidity (DOL) Gatekeeper ────────────────────────
 
   private resolveDrawOnLiquidity(
-    isBullishBreaker: boolean,
+    isBullish: boolean,
     candles: Candle[],
-    activationIdx: number,
+    currentIdx: number,
     pivots: import('./types').Pivot[],
-    breakerEntry: number
+    entryPrice: number
   ): { target: number | null; type: LiquiditySweepType } {
-    const lookbackStart = Math.max(0, activationIdx - 100);
-    const relevantPivots = pivots.filter(p => p.index >= lookbackStart && p.index <= activationIdx);
+    const lookbackStart = Math.max(0, currentIdx - 100);
+    const relevantPivots = pivots.filter(p => p.index >= lookbackStart && p.index <= currentIdx);
 
-    if (isBullishBreaker) {
-      // Long Target: Resting BSL / Swing High above the breaker entry
+    if (isBullish) {
+      // Long Target: Resting BSL / Swing High above entry
       const highPivots = relevantPivots
-        .filter(p => p.type === 'SWING_HIGH' && p.price > breakerEntry)
-        .sort((a, b) => a.price - b.price); // Closest target first
+        .filter(p => p.type === 'SWING_HIGH' && p.price > entryPrice)
+        .sort((a, b) => a.price - b.price);
 
       if (highPivots.length > 0) {
         const best = highPivots[0];
         return { target: best.price, type: best.level === 2 ? 'BSL' : 'SWING_HIGH' };
       }
 
-      // Check max high of recent 50 bars
-      const recentHighs = candles.slice(lookbackStart, activationIdx + 1).map(c => c.h);
+      const recentHighs = candles.slice(lookbackStart, currentIdx + 1).map(c => c.h);
       const maxH = Math.max(...recentHighs);
-      if (maxH > breakerEntry * 1.003) {
+      if (maxH > entryPrice * 1.003) {
         return { target: maxH, type: 'BSL' };
       }
     } else {
-      // Short Target: Resting SSL / Swing Low below the breaker entry
+      // Short Target: Resting SSL / Swing Low below entry
       const lowPivots = relevantPivots
-        .filter(p => p.type === 'SWING_LOW' && p.price < breakerEntry)
-        .sort((a, b) => b.price - a.price); // Closest target first
+        .filter(p => p.type === 'SWING_LOW' && p.price < entryPrice)
+        .sort((a, b) => b.price - a.price);
 
       if (lowPivots.length > 0) {
         const best = lowPivots[0];
         return { target: best.price, type: best.level === 2 ? 'SSL' : 'SWING_LOW' };
       }
 
-      const recentLows = candles.slice(lookbackStart, activationIdx + 1).map(c => c.l);
+      const recentLows = candles.slice(lookbackStart, currentIdx + 1).map(c => c.l);
       const minL = Math.min(...recentLows);
-      if (minL < breakerEntry * 0.997) {
+      if (minL < entryPrice * 0.997) {
         return { target: minL, type: 'SSL' };
       }
     }
@@ -1011,7 +1056,7 @@ export class OrderBlockEngine {
     return { target: null, type: 'NONE' };
   }
 
-  // ── Phase 2, 3 & 4: Dynamic Lifecycle, Expiry & Confirmation Engine ────────
+  // ── Phase 2, 3, 4 & 5: Dynamic Lifecycle & Structural Trailing Engine ───────
 
   /**
    * Evaluates the lifecycle of the Order Block chronologically.
@@ -1019,8 +1064,9 @@ export class OrderBlockEngine {
    *  1. Temporal Freshness Expiry (maxBarsToMitigation)
    *  2. Mean Threshold Precision Entry (50% midpoint)
    *  3. Body Close Rule for MT & Zone Invalidation
-   *  4. Dynamic Trade Management (TP1 partial fill + BE stop loss trail)
-   *  5. Confirmation-Gated Breaker Block Execution (DOL + Micro MSS + FVG + Volume Delta)
+   *  4. Dynamic Trade Management (TP1 50% partial profit)
+   *  5. Phase 5 Structural FVG Trailing Stop Engine (Breathing Room Model)
+   *  6. Phase 5 Calibrated Confirmation-Gated Breaker Block Execution
    */
   private evaluateOrderBlockLifecycle(
     ob: InstitutionalOrderBlock,
@@ -1043,9 +1089,11 @@ export class OrderBlockEngine {
     const tp1 = ob.simulated_tp1;
     const tp2 = ob.simulated_tp2;
     const risk = Math.abs(entryPrice - initialStopLoss);
+    const tickBuffer = this.config.trailingBuffer;
 
     let positionOpen = false;
     let entryCandleIdx: number | null = null;
+    let localRejectionExtreme = entryPrice; // Lowest low (Bull) or highest high (Bear) during test
     let maxFavorablePrice = entryPrice;
     let maxAdversePrice = entryPrice;
 
@@ -1077,6 +1125,9 @@ export class OrderBlockEngine {
             ob.first_test_index = i;
             ob.bars_to_mitigation = barsElapsed;
             ob.is_fresh_mitigation = barsElapsed <= this.config.maxBarsToMitigation;
+            localRejectionExtreme = c.l;
+          } else if (c.l < localRejectionExtreme) {
+            localRejectionExtreme = c.l;
           }
 
           if (c.l < deepestPrice) {
@@ -1095,9 +1146,17 @@ export class OrderBlockEngine {
 
             if (positionOpen) {
               if (ob.is_be_active) {
-                ob.simulated_outcome = 'BE_SCRATCH_WIN';
-                ob.is_be_scratch = true;
-                ob.realized_rr = parseFloat((0.5 * this.config.tp1Multiple).toFixed(2));
+                // If stopped out after TP1
+                const runnerRealizedR = (activeStopLoss - entryPrice) / risk;
+                const blended = parseFloat(((0.5 * this.config.tp1Multiple) + (0.5 * runnerRealizedR)).toFixed(2));
+                ob.realized_rr = Math.max(0.0, blended); // Guaranteed non-negative
+                if (activeStopLoss === entryPrice) {
+                  ob.simulated_outcome = 'BE_SCRATCH_WIN';
+                  ob.is_be_scratch = true;
+                } else {
+                  ob.simulated_outcome = 'BE_SCRATCH_WIN';
+                  ob.is_structural_scratch = true;
+                }
               } else {
                 ob.simulated_outcome = 'STOPPED_OUT';
                 ob.realized_rr = -1.0;
@@ -1128,7 +1187,7 @@ export class OrderBlockEngine {
           }
         }
 
-        // Manage Dynamic Position Exits for Bullish Setup
+        // Manage Dynamic Position & Structural Trailing for Bullish Setup
         if (positionOpen) {
           if (c.h > maxFavorablePrice) maxFavorablePrice = c.h;
           if (c.l < maxAdversePrice) maxAdversePrice = c.l;
@@ -1138,24 +1197,67 @@ export class OrderBlockEngine {
           const hitTP2 = c.h >= tp2;
 
           if (this.config.enableDynamicManagement) {
+            // ── Stage 1: TP1 Hit -> Activate Structural Trailing ──
             if (hitTP1 && !ob.is_be_active) {
               ob.is_be_active = true;
               ob.tp1_hit_time = c.t;
               ob.tp1_hit_index = i;
-              activeStopLoss = entryPrice; // Breakeven
+
+              if (this.config.trailingStopMode === 'STRUCTURAL_FVG_TRAIL') {
+                // Determine Consequent Encroachment of displacement FVG
+                let structuralTrailLevel = entryPrice;
+                let trailSource: 'FVG_CE' | 'SWING_PIVOT' | 'BREAKEVEN' = 'BREAKEVEN';
+
+                if (ob.gates.fvg_found && ob.gates.fvg_top && ob.gates.fvg_bottom) {
+                  const fvgCe = (ob.gates.fvg_top + ob.gates.fvg_bottom) / 2;
+                  structuralTrailLevel = fvgCe - tickBuffer;
+                  trailSource = 'FVG_CE';
+                } else if (localRejectionExtreme > initialStopLoss) {
+                  structuralTrailLevel = localRejectionExtreme - tickBuffer;
+                  trailSource = 'SWING_PIVOT';
+                }
+
+                // Bound downside: ensure runner risk does not make overall trade negative
+                const minGuaranteedStop = entryPrice - (0.5 * risk);
+                activeStopLoss = parseFloat(Math.max(structuralTrailLevel, minGuaranteedStop).toFixed(4));
+                ob.active_trailing_sl = activeStopLoss;
+                ob.trailing_sl_source = trailSource;
+              } else {
+                activeStopLoss = entryPrice; // Static Breakeven
+                ob.active_trailing_sl = entryPrice;
+                ob.trailing_sl_source = 'BREAKEVEN';
+              }
             }
 
+            // ── Stage 2: Runner Execution with Dynamic Ratchet ──
             if (ob.is_be_active) {
+              // Dynamic ratcheting: if price advances significantly past TP1, trail stop to higher swing lows
+              if (this.config.trailingStopMode === 'STRUCTURAL_FVG_TRAIL' && c.h > entryPrice + 1.5 * risk) {
+                const recentSwingLow = Math.min(candles[i - 1].l, candles[i].l) - tickBuffer;
+                if (recentSwingLow > activeStopLoss) {
+                  activeStopLoss = parseFloat(Math.min(recentSwingLow, entryPrice + 0.5 * risk).toFixed(4));
+                  ob.active_trailing_sl = activeStopLoss;
+                  ob.trailing_sl_source = 'SWING_PIVOT';
+                }
+              }
+
               if (hitTP2) {
                 ob.simulated_outcome = 'FULL_TP2_WIN';
-                const blended = (0.5 * this.config.tp1Multiple) + (0.5 * this.config.targetRewardRatio);
+                const runnerR = (tp2 - entryPrice) / risk;
+                const blended = (0.5 * this.config.tp1Multiple) + (0.5 * runnerR);
                 ob.realized_rr = parseFloat(blended.toFixed(2));
                 ob.bars_to_outcome = i - (entryCandleIdx ?? ob.formation_index);
                 positionOpen = false;
               } else if (c.l <= activeStopLoss) {
                 ob.simulated_outcome = 'BE_SCRATCH_WIN';
-                ob.is_be_scratch = true;
-                ob.realized_rr = parseFloat((0.5 * this.config.tp1Multiple).toFixed(2));
+                const runnerR = (activeStopLoss - entryPrice) / risk;
+                const blended = (0.5 * this.config.tp1Multiple) + (0.5 * runnerR);
+                ob.realized_rr = parseFloat(Math.max(0.0, blended).toFixed(2));
+                if (activeStopLoss >= entryPrice) {
+                  ob.is_be_scratch = true;
+                } else {
+                  ob.is_structural_scratch = true;
+                }
                 ob.bars_to_outcome = i - (entryCandleIdx ?? ob.formation_index);
                 positionOpen = false;
               }
@@ -1196,6 +1298,9 @@ export class OrderBlockEngine {
             ob.first_test_index = i;
             ob.bars_to_mitigation = barsElapsed;
             ob.is_fresh_mitigation = barsElapsed <= this.config.maxBarsToMitigation;
+            localRejectionExtreme = c.h;
+          } else if (c.h > localRejectionExtreme) {
+            localRejectionExtreme = c.h;
           }
 
           if (c.h > deepestPrice) {
@@ -1213,9 +1318,16 @@ export class OrderBlockEngine {
 
             if (positionOpen) {
               if (ob.is_be_active) {
-                ob.simulated_outcome = 'BE_SCRATCH_WIN';
-                ob.is_be_scratch = true;
-                ob.realized_rr = parseFloat((0.5 * this.config.tp1Multiple).toFixed(2));
+                const runnerRealizedR = (entryPrice - activeStopLoss) / risk;
+                const blended = parseFloat(((0.5 * this.config.tp1Multiple) + (0.5 * runnerRealizedR)).toFixed(2));
+                ob.realized_rr = Math.max(0.0, blended);
+                if (activeStopLoss === entryPrice) {
+                  ob.simulated_outcome = 'BE_SCRATCH_WIN';
+                  ob.is_be_scratch = true;
+                } else {
+                  ob.simulated_outcome = 'BE_SCRATCH_WIN';
+                  ob.is_structural_scratch = true;
+                }
               } else {
                 ob.simulated_outcome = 'STOPPED_OUT';
                 ob.realized_rr = -1.0;
@@ -1245,7 +1357,7 @@ export class OrderBlockEngine {
           }
         }
 
-        // Manage Dynamic Position Exits for Bearish Setup
+        // Manage Dynamic Position & Structural Trailing for Bearish Setup
         if (positionOpen) {
           if (c.l < maxFavorablePrice) maxFavorablePrice = c.l;
           if (c.h > maxAdversePrice) maxAdversePrice = c.h;
@@ -1255,24 +1367,64 @@ export class OrderBlockEngine {
           const hitTP2 = c.l <= tp2;
 
           if (this.config.enableDynamicManagement) {
+            // ── Stage 1: TP1 Hit -> Activate Structural Trailing ──
             if (hitTP1 && !ob.is_be_active) {
               ob.is_be_active = true;
               ob.tp1_hit_time = c.t;
               ob.tp1_hit_index = i;
-              activeStopLoss = entryPrice;
+
+              if (this.config.trailingStopMode === 'STRUCTURAL_FVG_TRAIL') {
+                let structuralTrailLevel = entryPrice;
+                let trailSource: 'FVG_CE' | 'SWING_PIVOT' | 'BREAKEVEN' = 'BREAKEVEN';
+
+                if (ob.gates.fvg_found && ob.gates.fvg_top && ob.gates.fvg_bottom) {
+                  const fvgCe = (ob.gates.fvg_top + ob.gates.fvg_bottom) / 2;
+                  structuralTrailLevel = fvgCe + tickBuffer;
+                  trailSource = 'FVG_CE';
+                } else if (localRejectionExtreme < initialStopLoss) {
+                  structuralTrailLevel = localRejectionExtreme + tickBuffer;
+                  trailSource = 'SWING_PIVOT';
+                }
+
+                const maxGuaranteedStop = entryPrice + (0.5 * risk);
+                activeStopLoss = parseFloat(Math.min(structuralTrailLevel, maxGuaranteedStop).toFixed(4));
+                ob.active_trailing_sl = activeStopLoss;
+                ob.trailing_sl_source = trailSource;
+              } else {
+                activeStopLoss = entryPrice;
+                ob.active_trailing_sl = entryPrice;
+                ob.trailing_sl_source = 'BREAKEVEN';
+              }
             }
 
+            // ── Stage 2: Runner Execution with Dynamic Ratchet ──
             if (ob.is_be_active) {
+              if (this.config.trailingStopMode === 'STRUCTURAL_FVG_TRAIL' && c.l < entryPrice - 1.5 * risk) {
+                const recentSwingHigh = Math.max(candles[i - 1].h, candles[i].h) + tickBuffer;
+                if (recentSwingHigh < activeStopLoss) {
+                  activeStopLoss = parseFloat(Math.max(recentSwingHigh, entryPrice - 0.5 * risk).toFixed(4));
+                  ob.active_trailing_sl = activeStopLoss;
+                  ob.trailing_sl_source = 'SWING_PIVOT';
+                }
+              }
+
               if (hitTP2) {
                 ob.simulated_outcome = 'FULL_TP2_WIN';
-                const blended = (0.5 * this.config.tp1Multiple) + (0.5 * this.config.targetRewardRatio);
+                const runnerR = (entryPrice - tp2) / risk;
+                const blended = (0.5 * this.config.tp1Multiple) + (0.5 * runnerR);
                 ob.realized_rr = parseFloat(blended.toFixed(2));
                 ob.bars_to_outcome = i - (entryCandleIdx ?? ob.formation_index);
                 positionOpen = false;
               } else if (c.h >= activeStopLoss) {
                 ob.simulated_outcome = 'BE_SCRATCH_WIN';
-                ob.is_be_scratch = true;
-                ob.realized_rr = parseFloat((0.5 * this.config.tp1Multiple).toFixed(2));
+                const runnerR = (entryPrice - activeStopLoss) / risk;
+                const blended = (0.5 * this.config.tp1Multiple) + (0.5 * runnerR);
+                ob.realized_rr = parseFloat(Math.max(0.0, blended).toFixed(2));
+                if (activeStopLoss <= entryPrice) {
+                  ob.is_be_scratch = true;
+                } else {
+                  ob.is_structural_scratch = true;
+                }
                 ob.bars_to_outcome = i - (entryCandleIdx ?? ob.formation_index);
                 positionOpen = false;
               }
@@ -1306,13 +1458,12 @@ export class OrderBlockEngine {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Phase 4: Confirmation-Gated Inverted Breaker Block Engine
+    // Phase 4 & 5: Calibrated Confirmation-Gated Breaker Block Engine
     // ─────────────────────────────────────────────────────────────────────────
     if (ob.is_breaker && breakerActivationIdx !== null && this.config.enableBreakerSimulation) {
       ob.lifecycle_status = 'ACTIVE_BREAKER';
 
       const isBearishBreaker = ob.type === 'BULLISH'; // Bullish OB violated -> Bearish Breaker (Resistance)
-      const tickBuffer = 0.05;
 
       const breakerEntry = isBearishBreaker
         ? (this.config.entryMode === 'MEAN_THRESHOLD' ? ob.mean_threshold : ob.bottom)
@@ -1342,7 +1493,6 @@ export class OrderBlockEngine {
       const drLow = Math.min(...candles.slice(windowStart, breakerActivationIdx + 1).map(c => c.l));
       const drEq = (drHigh + drLow) / 2;
 
-      // Bullish Breaker must be in Discount (<= eq); Bearish Breaker in Premium (>= eq)
       const isDiscount = breakerEntry <= drEq;
       const isPremium = breakerEntry >= drEq;
 
@@ -1363,8 +1513,7 @@ export class OrderBlockEngine {
         ? parseFloat((breakerEntry - this.config.targetRewardRatio * breakerRisk).toFixed(4))
         : parseFloat((breakerEntry + this.config.targetRewardRatio * breakerRisk).toFixed(4));
 
-      if (dolResult.target !== null) {
-        // Use DOL target if it offers favorable R:R
+      if (dolResult.target !== null && this.config.dynamicDolTp2Scaling) {
         const dolReward = Math.abs(breakerEntry - dolResult.target);
         if (dolReward >= breakerRisk * 1.2) {
           breakerTP = dolResult.target;
@@ -1404,22 +1553,20 @@ export class OrderBlockEngine {
             ob.breaker_is_fresh = breakerBarsElapsed <= this.config.maxBreakerRetestBars;
           }
 
-          // ── Phase 4: Confirmation Evaluation (In-Zone Micro MSS + FVG + Volume Delta) ──
+          // ── Phase 4 & 5: Calibrated Adaptive Confirmation Evaluation ──
           if (inZoneTouchIdx !== null) {
-            // Check Mean Threshold Respect (Candle body close cannot breach MT in invalid direction)
+            // Strict Mean Threshold Respect (Candle body close cannot breach MT)
             const mtBreached = isBearishBreaker
               ? (bc.c > ob.mean_threshold)
               : (bc.c < ob.mean_threshold);
 
             if (mtBreached) {
-              // MT violated -> Confirmation fails
               ob.breaker_trade_outcome = 'EXPIRED';
-              ob.breaker_veto_reason = 'MT_BODY_CLOSE_VIOLATED_DURING_TEST';
+              ob.breaker_veto_reason = 'MT_BODY_CLOSE_VIOLATED';
               break;
             }
 
             if (this.config.requireBreakerConfirmation) {
-              // Look for Micro MSS Reversal Candle & FVG in direction of trade
               const prev1 = candles[k - 1];
               const prev2 = candles[k - 2];
 
@@ -1429,7 +1576,6 @@ export class OrderBlockEngine {
               let fvgBotVal: number | null = null;
 
               if (isBearishBreaker) {
-                // Bearish Micro MSS: Closes below prior low + creates SIBI FVG (prev2.l > bc.h)
                 const isBearishRejection = bc.c < bc.o && bc.c < prev1.l;
                 if (isBearishRejection) {
                   confirmedMss = true;
@@ -1440,7 +1586,6 @@ export class OrderBlockEngine {
                   }
                 }
               } else {
-                // Bullish Micro MSS: Closes above prior high + creates BISI FVG (bc.l > prev2.h)
                 const isBullishRejection = bc.c > bc.o && bc.c > prev1.h;
                 if (isBullishRejection) {
                   confirmedMss = true;
@@ -1456,14 +1601,17 @@ export class OrderBlockEngine {
               const smaV = volSma[k] || 1;
               const volExp = smaV > 0 ? bc.v / smaV : 1.0;
               const takerDelta = (bc.taker_buy_vol || 0) - (bc.taker_sell_vol || 0);
-              const volPassed = !this.config.requireBreakerVolumetric || (
-                isBearishBreaker ? (takerDelta < 0 || volExp >= 1.15) : (takerDelta > 0 || volExp >= 1.15)
-              );
+              const volDominance = isBearishBreaker ? (takerDelta < 0 && volExp >= 1.25) : (takerDelta > 0 && volExp >= 1.25);
 
-              if (confirmedMss && volPassed) {
+              // Phase 5 Adaptive Trigger: Confirmation via FVG OR Volume Expansion
+              const isAdaptiveConfirmed = this.config.adaptiveBreakerConfirmation
+                ? ((confirmedMss && fvgCreated) || volDominance)
+                : (confirmedMss && fvgCreated);
+
+              if (isAdaptiveConfirmed) {
                 breakerPositionOpen = true;
                 ob.breaker_is_confirmed = true;
-                ob.breaker_confirmation_type = 'MICRO_MSS_FVG';
+                ob.breaker_confirmation_type = fvgCreated ? 'MICRO_MSS_FVG' : 'VOLUME_EXPANSION';
                 ob.breaker_confirmation_time = bc.t;
                 ob.breaker_confirmation_index = k;
                 ob.breaker_fvg_top = fvgTopVal;
@@ -1472,14 +1620,13 @@ export class OrderBlockEngine {
                 ob.breaker_taker_delta = parseFloat(takerDelta.toFixed(2));
                 ob.breaker_trade_outcome = 'PENDING';
                 ob.lifecycle_status = 'BREAKER_CONFIRMED_ACTIVE';
-              } else if (k - inZoneTouchIdx > 4) {
-                // If 4 bars elapsed without confirmation, fail execution
+              } else if (k - inZoneTouchIdx > 5) {
+                // Adaptive 6-bar timeout
                 ob.breaker_trade_outcome = 'EXPIRED';
-                ob.breaker_veto_reason = 'MICRO_MSS_CONFIRMATION_TIMEOUT';
+                ob.breaker_veto_reason = 'CONFIRMATION_TIMEOUT';
                 break;
               }
             } else {
-              // Blind limit fill mode
               breakerPositionOpen = true;
               ob.breaker_is_confirmed = false;
               ob.breaker_confirmation_type = 'BLIND_LIMIT';
@@ -1501,7 +1648,8 @@ export class OrderBlockEngine {
               break;
             } else if (hitTP) {
               ob.breaker_trade_outcome = 'WIN';
-              ob.breaker_realized_rr = parseFloat(this.config.targetRewardRatio.toFixed(2));
+              const runnerR = (breakerEntry - breakerTP) / breakerRisk;
+              ob.breaker_realized_rr = parseFloat(runnerR.toFixed(2));
               breakerPositionOpen = false;
               break;
             }
@@ -1516,7 +1664,8 @@ export class OrderBlockEngine {
               break;
             } else if (hitTP) {
               ob.breaker_trade_outcome = 'WIN';
-              ob.breaker_realized_rr = parseFloat(this.config.targetRewardRatio.toFixed(2));
+              const runnerR = (breakerTP - breakerEntry) / breakerRisk;
+              ob.breaker_realized_rr = parseFloat(runnerR.toFixed(2));
               breakerPositionOpen = false;
               break;
             }
@@ -1549,7 +1698,7 @@ export class OrderBlockEngine {
     }
   }
 
-  // ── Phase 4 Telemetry & Net Expectancy Aggregator ─────────────────────────
+  // ── Phase 5 Telemetry & Net Expectancy Aggregator ─────────────────────────
 
   private calculateTelemetry(
     filteredBlocks: InstitutionalOrderBlock[],
@@ -1582,19 +1731,30 @@ export class OrderBlockEngine {
       ? parseFloat(((mitigated_respected_count / tested_count) * 100).toFixed(1))
       : 0;
 
-    // ── Phase 3: Dynamic Trade Management Breakdown ──
+    // ── Phase 3 & 5: Dynamic Trade Management & Structural Trailing ──
     const testedBlocks = filteredBlocks.filter(b => b.lifecycle_status !== 'UNTESTED' && b.lifecycle_status !== 'EXPIRED_STALE');
     const closedTrades = testedBlocks.filter(b => b.simulated_outcome === 'FULL_TP2_WIN' || b.simulated_outcome === 'BE_SCRATCH_WIN' || b.simulated_outcome === 'STOPPED_OUT' || b.simulated_outcome === 'WIN' || b.simulated_outcome === 'LOSS');
     const closedCount = closedTrades.length;
+
+    const tp1ReachedCount = closedTrades.filter(b => b.tp1_hit_time !== null || b.is_be_active).length;
 
     const full_tp2_win_count = closedTrades.filter(b => b.simulated_outcome === 'FULL_TP2_WIN' || b.simulated_outcome === 'WIN').length;
     const full_tp2_win_rate_pct = closedCount > 0
       ? parseFloat(((full_tp2_win_count / closedCount) * 100).toFixed(1))
       : 0;
 
-    const be_scratch_win_count = closedTrades.filter(b => b.simulated_outcome === 'BE_SCRATCH_WIN' || b.is_be_scratch).length;
+    const full_tp2_conversion_rate_pct = tp1ReachedCount > 0
+      ? parseFloat(((full_tp2_win_count / tp1ReachedCount) * 100).toFixed(1))
+      : 0;
+
+    const be_scratch_win_count = closedTrades.filter(b => b.simulated_outcome === 'BE_SCRATCH_WIN' && b.is_be_scratch).length;
     const be_scratch_win_rate_pct = closedCount > 0
       ? parseFloat(((be_scratch_win_count / closedCount) * 100).toFixed(1))
+      : 0;
+
+    const structural_scratch_win_count = closedTrades.filter(b => b.simulated_outcome === 'BE_SCRATCH_WIN' && b.is_structural_scratch).length;
+    const structural_scratch_win_rate_pct = closedCount > 0
+      ? parseFloat(((structural_scratch_win_count / closedCount) * 100).toFixed(1))
       : 0;
 
     const stopped_out_count = closedTrades.filter(b => b.simulated_outcome === 'STOPPED_OUT' || b.simulated_outcome === 'LOSS').length;
@@ -1602,7 +1762,7 @@ export class OrderBlockEngine {
       ? parseFloat(((stopped_out_count / closedCount) * 100).toFixed(1))
       : 0;
 
-    const totalProfitableTrades = full_tp2_win_count + be_scratch_win_count;
+    const totalProfitableTrades = full_tp2_win_count + be_scratch_win_count + structural_scratch_win_count;
     const adjusted_win_rate_pct = closedCount > 0
       ? parseFloat(((totalProfitableTrades / closedCount) * 100).toFixed(1))
       : 0;
@@ -1611,6 +1771,15 @@ export class OrderBlockEngine {
     const expected_value_r = closedCount > 0
       ? parseFloat((sumRealizedR / closedCount).toFixed(2))
       : 0;
+
+    const runnerWins = closedTrades.filter(b => b.simulated_outcome === 'FULL_TP2_WIN' || b.simulated_outcome === 'WIN');
+    const avg_runner_realized_rr = runnerWins.length > 0
+      ? parseFloat((runnerWins.reduce((s, b) => s + b.realized_rr, 0) / runnerWins.length).toFixed(2))
+      : 0;
+
+    // EV Expansion Delta (Structural Trailing vs Baseline Static BE)
+    const baselineEv = (full_tp2_win_count * 1.5 + (be_scratch_win_count + structural_scratch_win_count) * 0.5 - stopped_out_count * 1.0) / (closedCount || 1);
+    const expectancy_expansion_delta_r = parseFloat((expected_value_r - baselineEv).toFixed(2));
 
     // ── Phase 2: Fresh vs. Stale Mitigation Comparison ──
     const freshMitigations = closedTrades.filter(b => b.is_fresh_mitigation);
@@ -1661,7 +1830,7 @@ export class OrderBlockEngine {
     const tier_a_plus_win_rate_delta = parseFloat((tier_a_plus_win_rate_pct - tier_a_win_rate_pct).toFixed(1));
     const tier_a_plus_rr_delta = parseFloat((tier_a_plus_avg_rr - tier_a_avg_rr).toFixed(2));
 
-    // ── Phase 2, 3 & 4: Breaker Block Telemetry ──
+    // ── Phase 2, 3, 4 & 5: Breaker Block Telemetry ──
     const breakerBlocks = filteredBlocks.filter(b => b.is_breaker);
     const breaker_converted_count = breakerBlocks.length;
     const breaker_conversion_rate_pct = zone_invalidated_count > 0
@@ -1687,7 +1856,6 @@ export class OrderBlockEngine {
       ? parseFloat((breakerCompleted.reduce((s, b) => s + b.breaker_realized_rr, 0) / breakerCompleted.length).toFixed(2))
       : 0;
 
-    // Fresh vs Stale Breakers
     const freshBreakers = breakerCompleted.filter(b => b.breaker_is_fresh);
     const freshBreakerWins = freshBreakers.filter(b => b.breaker_trade_outcome === 'WIN').length;
     const fresh_breakers_win_rate_pct = freshBreakers.length > 0
@@ -1702,7 +1870,7 @@ export class OrderBlockEngine {
 
     const breaker_freshness_win_rate_delta = parseFloat((fresh_breakers_win_rate_pct - stale_breakers_win_rate_pct).toFixed(1));
 
-    // ── Phase 4: Confirmation-Gated Analytics ──
+    // Phase 4 & 5: Confirmation-Gated Analytics
     const confirmedBreakers = breakerCompleted.filter(b => b.breaker_is_confirmed);
     const confirmedWins = confirmedBreakers.filter(b => b.breaker_trade_outcome === 'WIN').length;
     const confirmed_breaker_retest_count = confirmedBreakers.length;
@@ -1846,12 +2014,17 @@ export class OrderBlockEngine {
 
       full_tp2_win_count,
       full_tp2_win_rate_pct,
+      full_tp2_conversion_rate_pct,
       be_scratch_win_count,
       be_scratch_win_rate_pct,
+      structural_scratch_win_count,
+      structural_scratch_win_rate_pct,
       stopped_out_count,
       stopped_out_rate_pct,
       adjusted_win_rate_pct,
       expected_value_r,
+      expectancy_expansion_delta_r,
+      avg_runner_realized_rr,
 
       mitigation_total_trades,
       mitigation_winning_trades,
@@ -1935,12 +2108,17 @@ export class OrderBlockEngine {
       breaker_expected_value_r: 0,
       full_tp2_win_count: 0,
       full_tp2_win_rate_pct: 0,
+      full_tp2_conversion_rate_pct: 0,
       be_scratch_win_count: 0,
       be_scratch_win_rate_pct: 0,
+      structural_scratch_win_count: 0,
+      structural_scratch_win_rate_pct: 0,
       stopped_out_count: 0,
       stopped_out_rate_pct: 0,
       adjusted_win_rate_pct: 0,
       expected_value_r: 0,
+      expectancy_expansion_delta_r: 0,
+      avg_runner_realized_rr: 0,
       mitigation_total_trades: 0,
       mitigation_winning_trades: 0,
       mitigation_losing_trades: 0,
