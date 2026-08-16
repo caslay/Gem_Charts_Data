@@ -174,10 +174,27 @@ export async function autoExecuteTradeIfNeeded(
           console.error("[AutoExecute] Storage update error:", e);
         }
       }
+      setup.isAutoOpened = true;
       return true;
+    } else {
+      const errJson = await res.json().catch(() => ({}));
+      console.warn(`[AutoExecute] Trade POST rejected (${res.status}):`, errJson);
+      if (typeof window !== "undefined") {
+        try {
+          const storageKey = isBacktest ? "gem_quant_backtest_setup_history" : "gem_quant_setup_history";
+          const raw = localStorage.getItem(storageKey);
+          let history = raw ? JSON.parse(raw) : {};
+          const existing = typeof history[setup.setupKey] === "object" ? history[setup.setupKey] : { status: setup.status };
+          history[setup.setupKey] = { ...existing, autoOpened: true, lastError: errJson?.error || res.statusText };
+          localStorage.setItem(storageKey, JSON.stringify(history));
+        } catch {}
+      }
+      setup.isAutoOpened = true;
+      return false;
     }
   } catch (err) {
     console.error("[AutoExecute] Trade POST error:", err);
+    setup.isAutoOpened = true;
   }
   return false;
 }

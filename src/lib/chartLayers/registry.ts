@@ -4,6 +4,7 @@ import { magnetsLayer } from './plugins/magnetsLayer';
 import { sessionsLayer } from './plugins/sessionsLayer';
 import { displacementLayer } from './plugins/displacementLayer';
 import { structureLayer } from './plugins/structureLayer';
+import { orderBlockLayer } from './plugins/orderBlockLayer';
 
 class LayerRegistry {
   private layers = new Map<string, ChartLayer>();
@@ -15,6 +16,7 @@ class LayerRegistry {
     this.register(sessionsLayer);
     this.register(displacementLayer);
     this.register(structureLayer);
+    this.register(orderBlockLayer);
   }
 
   /**
@@ -40,4 +42,4 @@ class LayerRegistry {
 }
 
 export const registry = new LayerRegistry();
-export { fvgLayer, magnetsLayer, sessionsLayer, displacementLayer, structureLayer };
+export { fvgLayer, magnetsLayer, sessionsLayer, displacementLayer, structureLayer, orderBlockLayer };

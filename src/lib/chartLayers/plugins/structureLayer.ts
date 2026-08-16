@@ -19,6 +19,7 @@ interface MappedSegment extends ZigZagSegment {
 export const structureLayer: ChartLayer = {
   id: 'structure',
   name: 'Market Structure',
+  shortName: 'MARKET',
   description: 'Bloomberg-style horizontal ceilings/floors, dealing range boxes, and unconfirmed expansion rays',
   icon: 'Activity',
   renderHtml(context) {
@@ -83,7 +84,7 @@ export const structureLayer: ChartLayer = {
       : (themeSettings?.light_accent || '#4f46e5');
     // 3. Pixel Coordinate Conversion — Map swings to SVG coordinates
     const mappedSwings: MappedPoint[] = [];
-    const swings = analysis.swings || [];
+    const swings = (analysis.swings || []).slice(-150); // Cap to last 150 swings for ultra-responsive rendering
 
     for (let i = 0; i < swings.length; i++) {
       const pt = swings[i];
@@ -104,7 +105,8 @@ export const structureLayer: ChartLayer = {
     // Isolate confirmed major and internal swings and sort chronologically
     const confirmedMajor = mappedSwings
       .filter((s) => (s.grade === 'MAJOR' || s.grade === 'INTERNAL') && s.confirmed !== false)
-      .sort((a, b) => a.t - b.t);
+      .sort((a, b) => a.t - b.t)
+      .slice(-40); // Limit horizontal levels to top 40 recent major swings
 
     // ─── 1. Implement Horizontal Price Ceilings / Floors ───
     const horizontalLevels: React.ReactElement[] = [];
@@ -125,6 +127,9 @@ export const structureLayer: ChartLayer = {
 
       const xEnd = breachSwing ? breachSwing.x : rightX;
       
+      // Viewport culling: Skip horizontal levels completely off-screen
+      if (xEnd < -50 || S.x > rightX + 50) return;
+
       // Visual Separation: Check if this Level 2 swing is a Parent range boundary or an Internal wave
       const color = isInternal
         ? (S.type === 'HIGH' ? swingHighInternalColor : swingLowInternalColor)
@@ -134,7 +139,7 @@ export const structureLayer: ChartLayer = {
       horizontalLevels.push(
         React.createElement('line', {
           key: `hz-level-line-${idx}`,
-          x1: S.x,
+          x1: Math.max(0, S.x),
           y1: S.y,
           x2: xEnd,
           y2: S.y,
@@ -145,38 +150,42 @@ export const structureLayer: ChartLayer = {
       );
 
       // Draw structural label
-      horizontalLevels.push(
-        React.createElement(
-          'text',
-          {
-            key: `hz-level-label-${idx}`,
-            x: S.x + 4,
-            y: S.type === 'HIGH' ? S.y - 4 : S.y + 10,
-            fill: color,
-            fontSize: '6.5',
-            fontFamily: 'monospace',
-            fontWeight: 'bold',
-          },
-          isInternal
-            ? (S.type === 'HIGH' ? 'INT HIGH' : 'INT LOW')
-            : (S.type === 'HIGH' ? 'MAJOR HIGH' : 'MAJOR LOW')
-        )
-      );
+      if (S.x >= -50 && S.x <= rightX) {
+        horizontalLevels.push(
+          React.createElement(
+            'text',
+            {
+              key: `hz-level-label-${idx}`,
+              x: Math.max(4, S.x + 4),
+              y: S.type === 'HIGH' ? S.y - 4 : S.y + 10,
+              fill: color,
+              fontSize: '6.5',
+              fontFamily: 'monospace',
+              fontWeight: 'bold',
+            },
+            isInternal
+              ? (S.type === 'HIGH' ? 'INT HIGH' : 'INT LOW')
+              : (S.type === 'HIGH' ? 'MAJOR HIGH' : 'MAJOR LOW')
+          )
+        );
+      }
     });
 
     // ─── 2. Implement BOS/MSS Horizontal Breach Badges ───
     const breachBadges: React.ReactElement[] = [];
     if (showMajor) {
       // 2a. Major Swings Breaks
-      for (const seg of analysis.zigzag) {
+      const recentZigzag = (analysis.zigzag || []).slice(-50);
+      for (const seg of recentZigzag) {
         if (seg.label === 'BOS' || seg.label === 'MSS') {
           const toX = timeScale.timeToCoordinate(Math.floor(seg.to.t / 1000) as any);
+          if (toX === null || toX < -50 || toX > rightX + 50) continue;
           
           // Use the EXACT broken structural level for the badge, not the leg origin
           const brokenPrice = seg.brokenLevel ?? seg.from.price;
           const levelY = series.priceToCoordinate(brokenPrice);
 
-          if (toX !== null && levelY !== null) {
+          if (levelY !== null) {
             let badgeColor: string;
             let badgeLabel: string = seg.label;
 
@@ -228,13 +237,17 @@ export const structureLayer: ChartLayer = {
           }
         }
       }
+    }
 
-      // 2b. Internal Structure Breaks (iMSS & iBOS) (governed by showIstr & volatility gate)
-      if (showIstr && !isVolatilitySuppressed && analysis.internalZigzag) {
-        for (const seg of analysis.internalZigzag) {
-          if (seg.label === 'MSS' || seg.label === 'BOS') {
+    // 2b. Internal Structure Breaks (iMSS & iBOS) (governed by showIstr & volatility gate)
+    if (showIstr && !isVolatilitySuppressed && analysis.internalZigzag) {
+      const recentInternalZigzag = (analysis.internalZigzag || []).slice(-50);
+      for (const seg of recentInternalZigzag) {
+        if (seg.label === 'MSS' || seg.label === 'BOS') {
+          const toX = timeScale.timeToCoordinate(Math.floor(seg.to.t / 1000) as any);
+            if (toX === null || toX < -50 || toX > rightX + 50) continue;
+
             const rawFromX = timeScale.timeToCoordinate(Math.floor(seg.from.t / 1000) as any);
-            const toX = timeScale.timeToCoordinate(Math.floor(seg.to.t / 1000) as any);
             const brokenPrice = seg.brokenLevel ?? seg.from.price;
             const levelY = series.priceToCoordinate(brokenPrice);
 
@@ -308,7 +321,6 @@ export const structureLayer: ChartLayer = {
           }
         }
       }
-    }
 
     // ─── 2c. Implement Equal Highs & Equal Lows (SMT Traps) ───
     const smtLevels: React.ReactElement[] = [];
@@ -548,6 +560,7 @@ export const structureLayer: ChartLayer = {
           .filter((s) => {
             if (s.grade !== 'MAJOR') return false;
             if (s.confirmed === false) return false; // Hide candidate/unconfirmed circles
+            if (s.x < -50 || s.x > rightX + 50) return false; // Viewport culling
             const isInternal = s.structure_type === 'INTERNAL';
             if (isInternal) {
               return showInternalSwings && !isVolatilitySuppressed;
@@ -580,7 +593,7 @@ export const structureLayer: ChartLayer = {
         // C. Plot Inner Swings (Small Diamonds at Level 1 Multi-Scale Swings)
         showInner &&
           mappedSwings
-            .filter((s) => s.grade === 'INNER')
+            .filter((s) => s.grade === 'INNER' && s.x >= -50 && s.x <= rightX + 50)
             .map((pt, idx) => {
               const pointsStr = `${pt.x},${pt.y - 3.5} ${pt.x + 3.5},${pt.y} ${pt.x},${pt.y + 3.5} ${pt.x - 3.5},${pt.y}`;
               return React.createElement('polygon', {

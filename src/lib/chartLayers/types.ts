@@ -33,6 +33,8 @@ export interface ChartLayer {
   id: string;
   /** Human-readable display label */
   name: string;
+  /** Optional compact HUD label (e.g. 'OB', 'FVG', 'LIQ') */
+  shortName?: string;
   /** Short explanatory description */
   description: string;
   /** Lucide icon name for HUD rendering (e.g. 'Layers') */

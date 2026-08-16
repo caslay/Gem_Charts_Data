@@ -13,6 +13,9 @@ import { useTheme } from 'next-themes';
 import { registry } from '@/lib/chartLayers/registry';
 import { useLayerStore } from '@/lib/chartLayers/store';
 import ChartLayerHud from './ChartLayerHud';
+import { useDrawings } from '@/hooks/useDrawings';
+import DrawingCanvasOverlay from './drawings/DrawingCanvasOverlay';
+import DrawingToolbar from './drawings/DrawingToolbar';
 // Imports of detectActiveFVGs, mapAndConsolidateFVGs, and analyzeMarketStructure removed to prevent main-thread blocking calculations
 
 function findCandleByTime(candles: Candle[] | undefined, targetSec: number): Candle | undefined {
@@ -58,6 +61,7 @@ interface ChartProps {
   onManualPricesChange?: (entry: number, tp: number, sl: number) => void;
   openTrades?: any[];
   onUpdateTradeLevels?: (tradeId: string, tp: number | null, sl: number | null) => Promise<void>;
+  symbol?: string;
 }
 
 export default function Chart({
@@ -83,6 +87,7 @@ export default function Chart({
   onManualPricesChange,
   openTrades = [],
   onUpdateTradeLevels,
+  symbol = 'ETHUSDC',
 }: ChartProps) {
   const { theme } = useTheme();
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -151,6 +156,32 @@ export default function Chart({
   useEffect(() => {
     isInitialLoad.current = true;
   }, [interval]);
+
+  // ── User Drawing Tools Suite ──────────────────────────────────────────────
+  const {
+    drawings: userDrawings,
+    selectedDrawingId: selectedDrawingId,
+    activeTool: activeDrawingTool,
+    toolStyles: drawingToolStyles,
+    isGlobalVisible: isDrawingsVisible,
+    setActiveTool: setActiveDrawingTool,
+    setSelectedDrawingId: setSelectedDrawingId,
+    setToolStyle: setDrawingToolStyle,
+    updateSelectedDrawingStyle,
+    addDrawing: addUserDrawing,
+    updateDrawing: updateUserDrawing,
+    deleteDrawing: deleteUserDrawing,
+    clearDrawings: clearUserDrawings,
+    duplicateDrawing: duplicateUserDrawing,
+    toggleLock: toggleDrawingLock,
+    toggleGlobalVisibility: toggleDrawingsVisibility,
+    undo: undoDrawing,
+    redo: redoDrawing,
+  } = useDrawings({
+    symbol,
+    interval,
+    enabled: true,
+  });
 
   // ── Phase 1: Alerts State & Interaction Refs ──────────────────────────────
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -1979,7 +2010,7 @@ export default function Chart({
         ref={chartContainerRef}
         className="w-full h-full absolute inset-0"
         style={{
-          cursor: activeDragLine || activeDragTradeLine ? 'ns-resize' : isManualTradingActive ? 'crosshair' : 'default'
+          cursor: activeDrawingTool !== 'CURSOR' ? 'crosshair' : activeDragLine || activeDragTradeLine ? 'ns-resize' : isManualTradingActive ? 'crosshair' : 'default'
         }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
@@ -2133,6 +2164,52 @@ export default function Chart({
 
       {/* Persistent Layer Visibility Control HUD Panel */}
       <ChartLayerHud />
+
+      {/* Interactive User Drawing Canvas Overlay */}
+      <DrawingCanvasOverlay
+        chart={chartRef.current}
+        series={seriesRef.current}
+        candles={localCandles}
+        drawings={userDrawings}
+        selectedDrawingId={selectedDrawingId}
+        activeTool={activeDrawingTool}
+        isGlobalVisible={isDrawingsVisible}
+        toolStyles={drawingToolStyles}
+        onAddDrawing={addUserDrawing}
+        onUpdateDrawing={updateUserDrawing}
+        onSelectDrawing={setSelectedDrawingId}
+        onDeleteDrawing={deleteUserDrawing}
+        onDuplicateDrawing={duplicateUserDrawing}
+        onToggleLock={toggleDrawingLock}
+        onUpdateStyle={updateSelectedDrawingStyle}
+        symbol={symbol}
+        interval={interval}
+      />
+
+      {/* Floating Drawing Tool Suite Dock */}
+      <DrawingToolbar
+        activeTool={activeDrawingTool}
+        onSelectTool={setActiveDrawingTool}
+        activeColor={drawingToolStyles[activeDrawingTool === 'CURSOR' ? 'LINE' : activeDrawingTool]?.strokeColor || '#38bdf8'}
+        onChangeColor={(hex) => {
+          if (activeDrawingTool === 'CURSOR') {
+            setDrawingToolStyle('LINE', { strokeColor: hex });
+            setDrawingToolStyle('RECTANGLE', { strokeColor: hex, fillColor: hex });
+            setDrawingToolStyle('FREEHAND', { strokeColor: hex });
+          } else {
+            setDrawingToolStyle(activeDrawingTool, {
+              strokeColor: hex,
+              ...(activeDrawingTool === 'RECTANGLE' ? { fillColor: hex } : {}),
+            });
+          }
+        }}
+        isGlobalVisible={isDrawingsVisible}
+        onToggleVisibility={toggleDrawingsVisibility}
+        onUndo={undoDrawing}
+        onRedo={redoDrawing}
+        onClearAll={clearUserDrawings}
+        drawingCount={userDrawings.length}
+      />
 
       {/* Dynamic DOM Overlays */}
       <div className="absolute right-0 top-0 bottom-0 w-28 pointer-events-none z-10 overflow-hidden">

@@ -1,15 +1,55 @@
 {
   "version": "1.0.0",
   "symbol": "ETHUSDC.p",
-  "lastUpdated": "2026-08-15T18:02:15.000Z",
+  "lastUpdated": "2026-08-16T20:45:31.742Z",
   "stats": {
-    "totalSetups": 24,
+    "totalSetups": 26,
     "success": 0,
     "stopOut": 4,
     "noTrigger": 0,
     "winRate": 0
   },
   "entries": [
+    {
+      "id": "ETH-20260816-1878",
+      "date": "2026-08-16",
+      "time": "20:45",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Execution engine is PAUSED due to active DEAD",
+      "htfDol": "Dealing Range High ($1,889.98) & PWH ($1,940.98) / Local SSL ($1,876.70)",
+      "smtStatus": "NO_SMT_DIVERGENCE — BTC and ETH moving in lockstep; M5/M15 SMT absent",
+      "orderFlowState": "RISING_AGAINST_PRICE",
+      "entryRange": [
+        1878.03,
+        1880.82
+      ],
+      "invalidation": 1876.7,
+      "tp1": 1885.46,
+      "tp2": 1889.98,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1881.37 | HTF Bullish Structure / Local Discount Pullback"
+    },
+    {
+      "id": "ETH-20260816-1876",
+      "date": "2026-08-16",
+      "time": "20:05",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Execution Stand Down Protocol Active: Tempora",
+      "htfDol": "Anchor Swing High ($1,889.98) & PDH ($1,884.37) | SSL Magnets at $1,876.27 / $1,873.24",
+      "smtStatus": "NO_SMT_DIVERGENCE — ETH and BTC structurally synced across M5 and M15 timeframes",
+      "orderFlowState": "RISING_AGAINST_PRICE",
+      "entryRange": [
+        1876.5,
+        1878
+      ],
+      "invalidation": 1871.6,
+      "tp1": 1884.37,
+      "tp2": 1889.98,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,883.12 | HTF Bullish Expansion / Local Range Equilibrium"
+    },
     {
       "id": "ETH-20260815-1881",
       "date": "2026-08-15",

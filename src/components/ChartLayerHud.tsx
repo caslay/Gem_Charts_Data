@@ -22,39 +22,43 @@ export default function ChartLayerHud() {
     <div className="absolute top-4 right-20 z-20 flex items-center gap-2">
       {/* Floating Glass Capsule HUD Container */}
       <div
-        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all duration-300 bg-card/85 backdrop-blur-md border-card-border shadow-2xl ${isOpen ? 'max-w-[700px] opacity-100' : 'max-w-[42px] overflow-hidden'
-          }`}
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all duration-300 bg-card/85 backdrop-blur-md border-card-border shadow-2xl ${
+          isOpen ? 'max-w-[1200px] opacity-100' : 'max-w-[42px] overflow-hidden'
+        }`}
       >
         {/* Toggle Collapse Button */}
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className={`p-1.5 rounded hover:bg-card-border/20 transition-colors text-muted hover:text-foreground cursor-pointer ${isOpen ? 'rotate-90' : 'rotate-0'
-            } duration-300`}
+          className={`p-1.5 rounded hover:bg-card-border/20 transition-colors text-muted hover:text-foreground cursor-pointer ${
+            isOpen ? 'rotate-90' : 'rotate-0'
+          } duration-300`}
           title="Layer Configuration"
         >
           <Icons.Layers size={14} />
         </button>
 
         {isOpen && (
-          <div className="flex items-center gap-2.5 pl-2 border-l border-card-border animate-[fadeIn_0.2s_ease-out] whitespace-nowrap">
+          <div className="flex items-center gap-2 pl-2 border-l border-card-border animate-[fadeIn_0.2s_ease-out] whitespace-nowrap">
             {layers.map((layer) => {
               const isVisible = visibility[layer.id] !== false;
               // Dynamically resolve icon from Lucide
               const IconComponent = (Icons as any)[layer.icon] || Icons.HelpCircle;
               const isStructure = layer.id === 'structure';
+              const label = layer.shortName || layer.name.split(' ')[0].toUpperCase();
 
               return (
                 <div key={layer.id} className="flex items-center gap-1.5">
                   <button
                     onClick={() => toggleVisibility(layer.id)}
-                    className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-mono font-bold tracking-wider transition-all duration-200 cursor-pointer ${isVisible
-                      ? 'bg-accent/15 border border-accent/40 text-accent shadow-[0_0_8px_rgba(168,85,247,0.15)]'
-                      : 'bg-card-border/10 border border-card-border/30 text-muted hover:bg-card-border/20 hover:text-foreground'
-                      }`}
+                    className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-mono font-bold tracking-wider transition-all duration-200 cursor-pointer ${
+                      isVisible
+                        ? 'bg-accent/15 border border-accent/40 text-accent shadow-[0_0_8px_rgba(168,85,247,0.15)]'
+                        : 'bg-card-border/10 border border-card-border/30 text-muted hover:bg-card-border/20 hover:text-foreground'
+                    }`}
                     title={`${layer.name}: ${layer.description}`}
                   >
                     <IconComponent size={10} />
-                    <span>{layer.name.split(' ')[0].toUpperCase()}</span>
+                    <span>{label}</span>
                   </button>
 
                   {isStructure && isVisible && (

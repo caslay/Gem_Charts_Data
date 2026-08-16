@@ -4,6 +4,7 @@ import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
 export const displacementLayer: ChartLayer = {
   id: 'displacement',
   name: 'Displacement Signals',
+  shortName: 'DISP',
   description: 'MSS, Institutional Sponsorship, and SMT divergence markers',
   icon: 'TrendingUp',
   renderChart(context) {

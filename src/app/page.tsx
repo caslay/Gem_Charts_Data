@@ -14,6 +14,8 @@ import DashboardMetrics from '@/components/DashboardMetrics';
 import ManualOrderPanel from '@/components/ManualOrderPanel';
 import OrderFlowTimelineRibbon from '@/components/OrderFlowTimelineRibbon';
 import OrderFlowTimelineModal from '@/components/modals/OrderFlowTimelineModal';
+import LiveOrderBlockModal from '@/components/modals/LiveOrderBlockModal';
+import { useLiveOrderBlockExecution } from '@/hooks/useLiveOrderBlockExecution';
 import { calculateATR } from '@/lib/riskEngine';
 import { safeParseAiJson } from '@/lib/aiJsonParser';
 
@@ -42,6 +44,7 @@ export default function Home() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSoundSettingsOpen, setIsSoundSettingsOpen] = useState(false);
   const [isOrderFlowModalOpen, setIsOrderFlowModalOpen] = useState(false);
+  const [isLiveOBModalOpen, setIsLiveOBModalOpen] = useState(false);
   const [commandCenterTab, setCommandCenterTab] = useState<'strategy' | 'audio'>('strategy');
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
 
@@ -307,15 +310,10 @@ export default function Home() {
 
   // Strategy Execution Engine — runs silently in the background
 
-  // Sync localized selection with global WebSocket context interval
+  // Sync localized selection with global WebSocket context interval (automatically triggers data fetch)
   useEffect(() => {
     setWsInterval(selectedInterval);
   }, [selectedInterval, setWsInterval]);
-
-  // Fetch fresh historical candles when selectedInterval changes or Home mounts
-  useEffect(() => {
-    refetch();
-  }, [selectedInterval, refetch]);
 
   const getChartData = useCallback(() => {
     if (!data || !data.data_payload) return EMPTY_CANDLES;
@@ -413,6 +411,7 @@ export default function Home() {
             timeline={data?.ipda_metrics?.order_flow_engine?.state_timeline}
             livePrice={livePrice}
             onOpenModal={() => setIsOrderFlowModalOpen(true)}
+            onOpenLiveOBModal={() => setIsLiveOBModalOpen(true)}
           />
         </div>
 
@@ -451,6 +450,7 @@ export default function Home() {
                 onManualPricesChange={handleManualPricesChange}
                 openTrades={openTrades}
                 onUpdateTradeLevels={handleUpdateTradeLevels}
+                symbol="ETHUSDC"
               />
               {isManualTradingActive && (
                 <ManualOrderPanel
@@ -521,8 +521,17 @@ export default function Home() {
         livePrice={livePrice}
         symbol="ETHUSDC.p"
       />
+
+      {/* Phase 7 Live Order Block & Breaker Execution Modal */}
+      <LiveOrderBlockModal
+        isOpen={isLiveOBModalOpen}
+        onClose={() => setIsLiveOBModalOpen(false)}
+        symbol="ETHUSDC.p"
+      />
+
       {/* Decoupled Leaf Runners */}
       <StrategyEvaluatorRunner />
+      <LiveOrderBlockExecutionRunner />
       <PendingOrdersManager
         pendingOrders={pendingOrders}
         setPendingOrders={setPendingOrders}
@@ -530,6 +539,12 @@ export default function Home() {
       />
     </main>
   );
+}
+
+// Dedicated leaf component to run live Order Block execution engine in background 24/7
+function LiveOrderBlockExecutionRunner() {
+  useLiveOrderBlockExecution();
+  return null;
 }
 
 // Dedicated leaf component to run strategy evaluator in isolation, avoiding parent re-renders on price ticks
