@@ -127,6 +127,10 @@ export default function QuantLabPage() {
   const [obMaxBreakerRetestBars, setObMaxBreakerRetestBars] = useState(20);
   const [obEnableDynamicMgmt, setObEnableDynamicMgmt] = useState(true);
   const [obTp1Multiple, setObTp1Multiple] = useState(1.0);
+  const [obRequireBreakerConfirmation, setObRequireBreakerConfirmation] = useState(true);
+  const [obRequireBreakerDOL, setObRequireBreakerDOL] = useState(true);
+  const [obRequireBreakerVolumetric, setObRequireBreakerVolumetric] = useState(true);
+  const [obBreakerSessionFilter, setObBreakerSessionFilter] = useState<"ALL" | "NY_AND_LONDON" | "NY_ONLY" | "LONDON_ONLY">("ALL");
   const [obAggregateConsecutive, setObAggregateConsecutive] = useState(true);
   const [obMaxConsecutive, setObMaxConsecutive] = useState(5);
   const [obEntryMode, setObEntryMode] = useState<"BOUNDARY" | "MEAN_THRESHOLD">("BOUNDARY");
@@ -295,6 +299,10 @@ export default function QuantLabPage() {
           max_breaker_retest_bars: obMaxBreakerRetestBars,
           enable_dynamic_management: obEnableDynamicMgmt,
           tp1_multiple: obTp1Multiple,
+          require_breaker_confirmation: obRequireBreakerConfirmation,
+          require_breaker_dol: obRequireBreakerDOL,
+          require_breaker_volumetric: obRequireBreakerVolumetric,
+          breaker_session_filter: obBreakerSessionFilter,
           aggregate_consecutive: obAggregateConsecutive,
           max_consecutive_lookback: obMaxConsecutive,
           entry_mode: obEntryMode,
@@ -1089,7 +1097,7 @@ export default function QuantLabPage() {
                 </div>
 
                 {/* Phase 2 & 3 Institutional Execution & Trade Management Gates */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-slate-800/40 pt-4 mb-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-slate-800/40 pt-4 mb-4">
                   {/* Freshness Window Limit */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
@@ -1174,6 +1182,84 @@ export default function QuantLabPage() {
                     >
                       {obEnableDynamicMgmt ? "🛡️ ACTIVE (SCALE 50% & BE TRAIL)" : "OFF (ALL-OR-NOTHING)"}
                     </button>
+                  </div>
+                </div>
+
+                {/* Phase 4 Institutional Breaker Confirmation & DOL Gates */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-slate-800/40 pt-4 mb-5">
+                  {/* Micro MSS + FVG Confirmation Gate */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                      <span>In-Zone Micro MSS Gate</span>
+                      <span className="text-[8px] text-purple-400 font-bold">REVERSAL SHIFT</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setObRequireBreakerConfirmation(!obRequireBreakerConfirmation)}
+                      className={`w-full py-1.5 px-2 rounded font-mono text-[10px] font-bold border transition ${
+                        obRequireBreakerConfirmation
+                          ? "bg-purple-950/50 border-purple-500/60 text-purple-300"
+                          : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                      }`}
+                    >
+                      {obRequireBreakerConfirmation ? "🎯 CONFIRMED (MSS + FVG REQUIRED)" : "BLIND (INSTANT TOUCH FILL)"}
+                    </button>
+                  </div>
+
+                  {/* Draw on Liquidity (DOL) Gatekeeper */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                      <span>Draw on Liquidity (DOL)</span>
+                      <span className="text-[8px] text-emerald-400 font-bold">BSL/SSL TARGET</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setObRequireBreakerDOL(!obRequireBreakerDOL)}
+                      className={`w-full py-1.5 px-2 rounded font-mono text-[10px] font-bold border transition ${
+                        obRequireBreakerDOL
+                          ? "bg-emerald-950/50 border-emerald-500/60 text-emerald-300"
+                          : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                      }`}
+                    >
+                      {obRequireBreakerDOL ? "🧲 ACTIVE (MANDATE DOL TARGET)" : "OFF (STATIC R:R ONLY)"}
+                    </button>
+                  </div>
+
+                  {/* Volumetric Sponsorship Gate */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                      <span>Volumetric Sponsorship</span>
+                      <span className="text-[8px] text-cyan-400 font-bold">DELTA & EXP</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setObRequireBreakerVolumetric(!obRequireBreakerVolumetric)}
+                      className={`w-full py-1.5 px-2 rounded font-mono text-[10px] font-bold border transition ${
+                        obRequireBreakerVolumetric
+                          ? "bg-cyan-950/50 border-cyan-500/60 text-cyan-300"
+                          : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                      }`}
+                    >
+                      {obRequireBreakerVolumetric ? "⚡ ACTIVE (TAKER DELTA ≥1.15x)" : "OFF (PRICE ONLY)"}
+                    </button>
+                  </div>
+
+                  {/* Session Alignment Filter */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                      <span>Session Alignment</span>
+                      <span className="text-[8px] text-amber-400 font-bold">ICT MACROS</span>
+                    </label>
+                    <select
+                      value={obBreakerSessionFilter}
+                      onChange={(e) => setObBreakerSessionFilter(e.target.value as any)}
+                      className="w-full text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-purple-500/50 outline-none rounded text-slate-300"
+                    >
+                      <option value="ALL">All Trading Hours</option>
+                      <option value="NY_AND_LONDON">NY & London Sessions Only</option>
+                      <option value="NY_ONLY">New York Session (12-20 UTC)</option>
+                      <option value="LONDON_ONLY">London Session (07-11 UTC)</option>
+                    </select>
                   </div>
                 </div>
 
@@ -1481,42 +1567,43 @@ export default function QuantLabPage() {
                     </div>
 
                     {/* Matrix 4: Inverted Breaker Block Engine */}
-                    <div className="border border-purple-500/20 bg-gradient-to-br from-slate-950/80 to-purple-950/10 rounded-lg p-3.5 flex flex-col justify-between">
+                    {/* Matrix 4: Phase 4 Confirmation-Gated Breaker Engine */}
+                    <div className="border border-purple-500/30 bg-gradient-to-br from-slate-950/80 to-purple-950/20 rounded-lg p-3.5 flex flex-col justify-between">
                       <div>
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-[9px] uppercase font-bold text-purple-400 flex items-center gap-1">
                             <Repeat className="w-3 h-3 text-purple-400" />
-                            Inverted Breaker Retests
+                            Confirmed vs Blind Breakers
                           </span>
                           <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-purple-500/20 text-purple-300">
-                            ≤{selectedObScan.telemetry_summary.breaker_expired_count > 0 ? "20B" : "INVERSION"}
+                            MICRO MSS + DOL
                           </span>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-[10px] my-2">
-                          <div className="bg-slate-950/60 border border-slate-800/80 rounded p-2">
-                            <span className="text-[8px] text-slate-500 uppercase block">Retest Rate</span>
-                            <span className="text-xs font-bold text-slate-200 block">
-                              {selectedObScan.telemetry_summary.breaker_retest_rate_pct ?? "0"}%
-                            </span>
-                            <span className="text-[8px] text-slate-400">
-                              {selectedObScan.telemetry_summary.breaker_retest_count} Retested
-                            </span>
-                          </div>
-                          <div className="bg-purple-950/30 border border-purple-500/30 rounded p-2">
-                            <span className="text-[8px] text-purple-300 uppercase block">Breaker Win Rate</span>
+                          <div className="bg-purple-950/30 border border-purple-500/40 rounded p-2">
+                            <span className="text-[8px] text-purple-300 uppercase block">Confirmed WR%</span>
                             <span className="text-xs font-bold text-purple-300 block">
-                              {selectedObScan.telemetry_summary.breaker_win_rate_pct ?? "0"}% WR
+                              {selectedObScan.telemetry_summary.confirmed_breaker_win_rate_pct ?? "0"}% WR
                             </span>
                             <span className="text-[8px] text-purple-400 font-bold">
-                              {selectedObScan.telemetry_summary.breaker_avg_rr ?? "0"}R
+                              {selectedObScan.telemetry_summary.confirmed_breaker_avg_rr ?? "0"}R ({selectedObScan.telemetry_summary.confirmed_breaker_retest_count ?? 0} fills)
+                            </span>
+                          </div>
+                          <div className="bg-slate-950/60 border border-slate-800/80 rounded p-2">
+                            <span className="text-[8px] text-slate-500 uppercase block">Blind Limit WR%</span>
+                            <span className="text-xs font-bold text-slate-400 block">
+                              {selectedObScan.telemetry_summary.blind_breaker_win_rate_pct ?? "0"}% WR
+                            </span>
+                            <span className="text-[8px] text-slate-500">
+                              {selectedObScan.telemetry_summary.blind_breaker_avg_rr ?? "0"}R ({selectedObScan.telemetry_summary.blind_breaker_retest_count ?? 0} fills)
                             </span>
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center justify-between border-t border-slate-800/40 pt-2 text-[9px]">
-                        <span className="text-slate-400">Expired Breakers:</span>
-                        <span className="font-bold text-purple-400">
-                          {selectedObScan.telemetry_summary.breaker_expired_count ?? 0} Bypassed
+                        <span className="text-slate-400">Confirmation Delta:</span>
+                        <span className="font-bold text-purple-300">
+                          {selectedObScan.telemetry_summary.breaker_confirmation_win_rate_delta > 0 ? "+" : ""}{selectedObScan.telemetry_summary.breaker_confirmation_win_rate_delta ?? 0}% WR ({selectedObScan.telemetry_summary.breaker_vetoed_count ?? 0} Vetoed)
                         </span>
                       </div>
                     </div>
@@ -2446,7 +2533,7 @@ export default function QuantLabPage() {
               )}
             </div>
 
-            {/* Inverted Breaker Block Execution Blueprint (Phase 2) */}
+            {/* Inverted Breaker Block Execution Blueprint (Phase 4 Confirmation-Gated) */}
             {inspectedOb.is_breaker && (
               <div className="border border-purple-500/30 bg-purple-950/15 rounded-lg p-4 mb-4 font-mono text-[10px]">
                 <div className="flex items-center justify-between mb-2.5">
@@ -2454,16 +2541,23 @@ export default function QuantLabPage() {
                     <Repeat className="w-3.5 h-3.5 text-purple-400" />
                     <span>Inverted Breaker Block Execution Blueprint</span>
                   </h4>
-                  <span className="px-2 py-0.5 rounded text-[8px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                    {inspectedOb.type === "BULLISH" ? "BEARISH BREAKER (RESISTANCE)" : "BULLISH BREAKER (SUPPORT)"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {inspectedOb.breaker_is_confirmed && (
+                      <span className="px-2 py-0.5 rounded text-[8px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        ✓ CONFIRMED (MICRO MSS)
+                      </span>
+                    )}
+                    <span className="px-2 py-0.5 rounded text-[8px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      {inspectedOb.type === "BULLISH" ? "BEARISH BREAKER (RESISTANCE)" : "BULLISH BREAKER (SUPPORT)"}
+                    </span>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-slate-300">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-slate-300 mb-3">
                   <div>
                     <span className="text-slate-500 text-[8px] uppercase block">Breaker Retest Status</span>
-                    <span className={`font-bold ${inspectedOb.breaker_trade_outcome === "WIN" ? "text-purple-300" : inspectedOb.breaker_trade_outcome === "LOSS" ? "text-rose-400" : "text-slate-400"}`}>
-                      {inspectedOb.breaker_trade_outcome} {inspectedOb.breaker_realized_rr !== 0 ? `(${inspectedOb.breaker_realized_rr > 0 ? "+" : ""}${inspectedOb.breaker_realized_rr}R)` : ""}
+                    <span className={`font-bold ${inspectedOb.breaker_trade_outcome === "WIN" ? "text-purple-300" : inspectedOb.breaker_trade_outcome === "LOSS" ? "text-rose-400" : inspectedOb.breaker_trade_outcome === "EXPIRED" ? "text-amber-400" : "text-slate-400"}`}>
+                      {inspectedOb.breaker_trade_outcome} {inspectedOb.breaker_realized_rr !== 0 ? `(${inspectedOb.breaker_realized_rr > 0 ? "+" : ""}{inspectedOb.breaker_realized_rr}R)` : ""}
                     </span>
                   </div>
                   <div>
@@ -2475,18 +2569,43 @@ export default function QuantLabPage() {
                     <span className="font-bold text-purple-300">${inspectedOb.breaker_stop_loss ?? "—"} / ${inspectedOb.breaker_tp ?? "—"}</span>
                   </div>
                   <div>
+                    <span className="text-slate-500 text-[8px] uppercase block">Draw on Liquidity (DOL)</span>
+                    <span className="font-bold text-emerald-400">
+                      {inspectedOb.breaker_dol_target ? `$${inspectedOb.breaker_dol_target} (${inspectedOb.breaker_dol_type})` : "Standard Target R:R"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 text-[8px] uppercase block">Confirmation Gate</span>
+                    <span className={`font-bold ${inspectedOb.breaker_is_confirmed ? "text-emerald-400" : inspectedOb.breaker_veto_reason ? "text-rose-400" : "text-slate-400"}`}>
+                      {inspectedOb.breaker_is_confirmed ? "MICRO MSS + FVG CONFIRMED" : inspectedOb.breaker_veto_reason ? `VETO: ${inspectedOb.breaker_veto_reason}` : inspectedOb.breaker_confirmation_type}
+                    </span>
+                  </div>
+                  <div>
                     <span className="text-slate-500 text-[8px] uppercase block">Bars to Inversion Retest</span>
                     <span className="font-bold text-slate-200">{inspectedOb.breaker_bars_to_retest ? `${inspectedOb.breaker_bars_to_retest} bars` : "No Retest"}</span>
                   </div>
-                  <div>
-                    <span className="text-slate-500 text-[8px] uppercase block">Breaker Flip Time</span>
-                    <span className="text-slate-300">{inspectedOb.breaker_flip_time ? new Date(inspectedOb.breaker_flip_time).toLocaleTimeString() : "—"}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 text-[8px] uppercase block">Retest Time</span>
-                    <span className="text-slate-300">{inspectedOb.breaker_retest_time ? new Date(inspectedOb.breaker_retest_time).toLocaleTimeString() : "—"}</span>
-                  </div>
                 </div>
+
+                {inspectedOb.breaker_is_confirmed && (
+                  <div className="border-t border-purple-500/20 pt-2.5 mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[9px] text-purple-200">
+                    <div>
+                      <span className="text-slate-500 block text-[7px] uppercase">Confirmation Time</span>
+                      <span>{inspectedOb.breaker_confirmation_time ? new Date(inspectedOb.breaker_confirmation_time).toLocaleTimeString() : "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[7px] uppercase">Confirmed FVG Range</span>
+                      <span>{inspectedOb.breaker_fvg_top ? `$${inspectedOb.breaker_fvg_top} - $${inspectedOb.breaker_fvg_bottom}` : "Structural"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[7px] uppercase">Vol Expansion</span>
+                      <span className="font-bold text-cyan-300">{inspectedOb.breaker_volume_expansion ? `${inspectedOb.breaker_volume_expansion}x` : "—"}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block text-[7px] uppercase">Taker Delta</span>
+                      <span className="font-bold text-emerald-400">{inspectedOb.breaker_taker_delta ? `${inspectedOb.breaker_taker_delta > 0 ? "+" : ""}${inspectedOb.breaker_taker_delta}` : "—"}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

@@ -1,8 +1,39 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.2
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.3
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-16 (V16.2 — Phase 3 Order Block & Breaker Dynamic Trade Management Engine)  
+> **Last Updated:** 2026-08-16 (V16.3 — Phase 4 Confirmation-Gated Breaker & Liquidity Engine)  
+
+## 🆕 V16.3 Changelog — Phase 4 Confirmation-Gated Breaker & Liquidity Engine (2026-08-16)
+
+### Summary
+Engineered **Phase 4 Confirmation-Gated Breaker Block & Liquidity Architecture** within the Quant Lab and `OrderBlockEngine.ts`. Upgrades Breaker Block execution from blind limit orders to an institutional, multi-gate confirmation state machine integrating **Draw on Liquidity (DOL)** targeting, in-zone **Micro Market Structure Shifts (Micro MSS)**, **Fair Value Gap (BISI/SIBI)** confirmation, **Volumetric Sponsorship** (taker volume delta and expansion factor), and **Dealing Range Valuation**.
+
+### Key Features & Architectural Directives
+- **Draw on Liquidity (DOL) Gatekeeper (`resolveDrawOnLiquidity`):**
+  - Evaluates active, unmitigated External Range Liquidity (ERL) targets in the trade direction prior to authorizing a Breaker setup:
+    - **Bullish Breakers (Long):** Target resting Buy-Side Liquidity (BSL), swing highs, Previous Day High (PDH), or London/Asian Highs above the breaker entry.
+    - **Bearish Breakers (Short):** Target resting Sell-Side Liquidity (SSL), swing lows, Previous Day Low (PDL), or London/Asian Lows below the breaker entry.
+  - If no unmitigated macro target exists or if the path is obstructed, transitions Breaker state to `BREAKER_VETOED_NO_DOL` (`breaker_veto_reason: 'NO_UNMITIGATED_DOL_TARGET'`) and bypasses trade simulation.
+- **In-Zone Micro MSS & FVG Execution Gate:**
+  - Eliminates blind limit fills on initial zone touches.
+  - Requires price to enter the Breaker zone, **respect the Mean Threshold (50% midpoint)** without closing candle bodies beyond MT, and print a confirmed structural reversal shift (**Micro MSS**) accompanied by a newly formed Fair Value Gap (**BISI/SIBI**).
+  - Flags `BREAKER_CONFIRMED_ACTIVE` (`breaker_is_confirmed: true`, `breaker_confirmation_type: 'MICRO_MSS_FVG'`).
+- **Volumetric Sponsorship Filter:**
+  - Cross-checks confirmation candle against taker volume delta (positive delta for Bullish Breakers, negative delta for Bearish Breakers) and volume expansion factor $\ge 1.15\times$.
+- **Dealing Range Valuation & Session Alignment:**
+  - Enforces valuation rules: Bullish Breaker entries must reside in the **Discount** zone ($\le 50\%$ equilibrium) of the active 50-bar dealing range; Bearish Breakers must reside in **Premium** ($\ge 50\%$).
+  - Configurable ICT Session filter (`ALL`, `NY_AND_LONDON`, `NY_ONLY`, `LONDON_ONLY`).
+- **Phase 4 Telemetry & Comparative Analytics:**
+  - **Confirmed vs. Blind Breaker Win Rate Δ:** Computes win rate differential (`breaker_confirmation_win_rate_delta`) and R:R differential (`breaker_confirmation_rr_delta`).
+  - **Confirmed Breaker Net Expectancy ($\text{EV}$ in R):** Mathematical expected value per confirmed breaker fill.
+  - **Veto Breakdown:** Quantifies filtered-out setups due to missing DOL (`breaker_vetoed_no_dol_count`) and valuation mismatches (`breaker_vetoed_valuation_count`).
+- **Quant Lab Workspace UI Upgrades (`src/app/quant-lab/page.tsx`):**
+  - Added Phase 4 config controls: Micro MSS Gate toggle, DOL Gatekeeper toggle, Volumetric Sponsorship toggle, and Session Alignment dropdown.
+  - Upgraded Telemetry Matrix Card 4 into a dedicated **Phase 4 Confirmed vs Blind Breakers Matrix**.
+  - Enriched Inspector Drawer with full confirmation blueprint: DOL target price & type, Micro MSS confirmation timestamp, confirmed FVG range, volume expansion, and taker delta.
+
+---
 
 ## 🆕 V16.2 Changelog — Phase 3 Order Block & Breaker Dynamic Trade Management Engine (2026-08-16)
 

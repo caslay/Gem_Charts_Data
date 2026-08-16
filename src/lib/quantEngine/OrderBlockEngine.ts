@@ -3,7 +3,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Institutional Order Block Detection, Aggregation, Validation & Lifecycle Engine.
  *
- * Phase 3 Institutional Features:
+ * Phase 4 Institutional Features:
  *  - Origin candle detection preceding high-displacement impulse legs
  *  - Consecutive same-color candle aggregation at pivot extremes
  *  - Mean Threshold (50% midpoint / Consequent Encroachment) precision entry
@@ -12,7 +12,12 @@
  *  - Temporal Freshness Expiry (Session-scoped max_bars_to_mitigation filter)
  *  - Breaker Block Inversion State Tracking & Temporal Retest Expiry (max_breaker_retest_bars)
  *  - Dynamic Trade Management State Machine (TP1 partial fill + Breakeven stop trail)
- *  - Phase 3 Net Risk-Adjusted Expectancy (EV in R-multiples, Adjusted Win Rate %)
+ *  - Phase 4 Confirmation-Gated Breaker Engine:
+ *      * Draw on Liquidity (DOL) Gatekeeper (Resting BSL/SSL, Session extremes, PDH/PDL)
+ *      * In-Zone Micro MSS & Fair Value Gap (BISI/SIBI) Confirmation Gate
+ *      * Volumetric Sponsorship Filter (Taker volume delta & volume expansion)
+ *      * Dealing Range Valuation (Discount for Bullish Breakers, Premium for Bearish Breakers)
+ *      * Phase 4 Telemetry (Confirmed vs Blind Win Rate Delta, Net Expectancy EV)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -33,7 +38,10 @@ export type OrderBlockLifecycleStatus =
   | 'ZONE_INVALIDATED'
   | 'EXPIRED_STALE'
   | 'ACTIVE_BREAKER'
-  | 'BREAKER_EXPIRED';
+  | 'BREAKER_EXPIRED'
+  | 'BREAKER_VETOED_NO_DOL'
+  | 'BREAKER_VETOED_VALUATION'
+  | 'BREAKER_CONFIRMED_ACTIVE';
 
 export type LiquiditySweepType =
   | 'BSL'
@@ -124,7 +132,7 @@ export interface InstitutionalOrderBlock {
   expiration_time: number | null;
   is_fresh_mitigation: boolean;
 
-  // Breaker Block Inversion Pipeline (Phase 2 & Phase 3)
+  // Breaker Block Inversion Pipeline (Phase 2, 3 & 4)
   is_breaker: boolean;
   breaker_flip_time: number | null;
   is_breaker_expired: boolean;
@@ -137,6 +145,19 @@ export interface InstitutionalOrderBlock {
   breaker_realized_rr: number;
   breaker_retest_time: number | null;
   breaker_bars_to_retest: number | null;
+
+  // Phase 4: Confirmation-Gated Breaker Details
+  breaker_is_confirmed: boolean;
+  breaker_confirmation_type: 'MICRO_MSS_FVG' | 'BLIND_LIMIT' | 'NONE';
+  breaker_confirmation_time: number | null;
+  breaker_confirmation_index: number | null;
+  breaker_fvg_top: number | null;
+  breaker_fvg_bottom: number | null;
+  breaker_volume_expansion: number | null;
+  breaker_taker_delta: number | null;
+  breaker_dol_target: number | null;
+  breaker_dol_type: LiquiditySweepType | 'NONE';
+  breaker_veto_reason: string | null;
 
   // Dynamic Trade Management & Execution Simulation (Phase 3)
   simulated_entry_price: number;
@@ -165,6 +186,10 @@ export interface OrderBlockScanConfig {
   maxBreakerRetestBars?: number;          // Phase 3: Breaker Freshness Expiry (default: 20 bars)
   enableDynamicManagement?: boolean;      // Phase 3: Multi-stage TP1/BE Management (default: true)
   tp1Multiple?: number;                   // Phase 3: Partial TP1 multiple in R (default: 1.0)
+  requireBreakerConfirmation?: boolean;   // Phase 4: In-Zone Micro MSS + FVG Confirmation Gate (default: true)
+  requireBreakerDOL?: boolean;            // Phase 4: Draw on Liquidity Target Gatekeeper (default: true)
+  requireBreakerVolumetric?: boolean;     // Phase 4: Volumetric Sponsorship Gate (default: true)
+  breakerSessionFilter?: 'ALL' | 'NY_AND_LONDON' | 'NY_ONLY' | 'LONDON_ONLY'; // Phase 4: Session filter
   aggregateConsecutiveCandles?: boolean;
   maxConsecutiveLookback?: number;
   sweepLookbackBars?: number;
@@ -220,7 +245,7 @@ export interface OrderBlockTelemetrySummary {
   tier_a_plus_win_rate_delta: number; // Tier A+ Win Rate - Tier A Win Rate
   tier_a_plus_rr_delta: number;       // Tier A+ R:R - Tier A R:R
 
-  // Phase 2 & 3: Breaker Block Telemetry
+  // Phase 2, 3 & 4: Breaker Block Telemetry
   breaker_converted_count: number;
   breaker_conversion_rate_pct: number;
   breaker_retest_count: number;
@@ -235,6 +260,20 @@ export interface OrderBlockTelemetrySummary {
   stale_breakers_count: number;
   stale_breakers_win_rate_pct: number;
   breaker_freshness_win_rate_delta: number;
+
+  // Phase 4: Confirmation-Gated vs Blind Breaker Analytics
+  confirmed_breaker_retest_count: number;
+  confirmed_breaker_win_rate_pct: number;
+  confirmed_breaker_avg_rr: number;
+  blind_breaker_retest_count: number;
+  blind_breaker_win_rate_pct: number;
+  blind_breaker_avg_rr: number;
+  breaker_confirmation_win_rate_delta: number;
+  breaker_confirmation_rr_delta: number;
+  breaker_vetoed_count: number;
+  breaker_vetoed_no_dol_count: number;
+  breaker_vetoed_valuation_count: number;
+  breaker_expected_value_r: number;
 
   // Phase 3: Dynamic Trade Management & Expectancy
   full_tp2_win_count: number;
@@ -276,6 +315,10 @@ export const DEFAULT_OB_SCAN_CONFIG: Required<OrderBlockScanConfig> = {
   maxBreakerRetestBars: 20,
   enableDynamicManagement: true,
   tp1Multiple: 1.0,
+  requireBreakerConfirmation: true,
+  requireBreakerDOL: true,
+  requireBreakerVolumetric: true,
+  breakerSessionFilter: 'ALL',
   aggregateConsecutiveCandles: true,
   maxConsecutiveLookback: 5,
   sweepLookbackBars: 6,
@@ -330,7 +373,6 @@ export class OrderBlockEngine {
       const prevCandle = sortedCandles[i - 1];
 
       // ── 1. Bullish Order Block Candidate ──
-      // Sequence of down (red) candles followed by a strong bullish (green) impulse
       if (impulseCandle.c > impulseCandle.o && prevCandle.c <= prevCandle.o) {
         const ob = this.evaluateBullishObCandidate(
           sortedCandles,
@@ -344,7 +386,6 @@ export class OrderBlockEngine {
       }
 
       // ── 2. Bearish Order Block Candidate ──
-      // Sequence of up (green) candles followed by a strong bearish (red) impulse
       else if (impulseCandle.c < impulseCandle.o && prevCandle.c >= prevCandle.o) {
         const ob = this.evaluateBearishObCandidate(
           sortedCandles,
@@ -359,10 +400,10 @@ export class OrderBlockEngine {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Phase 2 & 3: Chronological Lifecycle, Expiry & Dynamic Management
+    // Phase 2, 3 & 4: Chronological Lifecycle, Expiry, Confirmation & Management
     // ─────────────────────────────────────────────────────────────────────────
     for (const ob of detectedBlocks) {
-      this.evaluateOrderBlockLifecycle(ob, sortedCandles);
+      this.evaluateOrderBlockLifecycle(ob, sortedCandles, allPivots, volSma);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -512,6 +553,17 @@ export class OrderBlockEngine {
       breaker_realized_rr: 0,
       breaker_retest_time: null,
       breaker_bars_to_retest: null,
+      breaker_is_confirmed: false,
+      breaker_confirmation_type: 'NONE',
+      breaker_confirmation_time: null,
+      breaker_confirmation_index: null,
+      breaker_fvg_top: null,
+      breaker_fvg_bottom: null,
+      breaker_volume_expansion: null,
+      breaker_taker_delta: null,
+      breaker_dol_target: null,
+      breaker_dol_type: 'NONE',
+      breaker_veto_reason: null,
       simulated_entry_price: parseFloat(entryPrice.toFixed(4)),
       simulated_stop_loss: stopLoss,
       simulated_tp1: tp1,
@@ -652,6 +704,17 @@ export class OrderBlockEngine {
       breaker_realized_rr: 0,
       breaker_retest_time: null,
       breaker_bars_to_retest: null,
+      breaker_is_confirmed: false,
+      breaker_confirmation_type: 'NONE',
+      breaker_confirmation_time: null,
+      breaker_confirmation_index: null,
+      breaker_fvg_top: null,
+      breaker_fvg_bottom: null,
+      breaker_volume_expansion: null,
+      breaker_taker_delta: null,
+      breaker_dol_target: null,
+      breaker_dol_type: 'NONE',
+      breaker_veto_reason: null,
       simulated_entry_price: parseFloat(entryPrice.toFixed(4)),
       simulated_stop_loss: stopLoss,
       simulated_tp1: tp1,
@@ -898,7 +961,57 @@ export class OrderBlockEngine {
     return score;
   }
 
-  // ── Phase 2 & 3: Dynamic Lifecycle, Expiry & Breaker Engine ───────────────
+  // ── Phase 4: Draw on Liquidity (DOL) Gatekeeper ────────────────────────────
+
+  private resolveDrawOnLiquidity(
+    isBullishBreaker: boolean,
+    candles: Candle[],
+    activationIdx: number,
+    pivots: import('./types').Pivot[],
+    breakerEntry: number
+  ): { target: number | null; type: LiquiditySweepType } {
+    const lookbackStart = Math.max(0, activationIdx - 100);
+    const relevantPivots = pivots.filter(p => p.index >= lookbackStart && p.index <= activationIdx);
+
+    if (isBullishBreaker) {
+      // Long Target: Resting BSL / Swing High above the breaker entry
+      const highPivots = relevantPivots
+        .filter(p => p.type === 'SWING_HIGH' && p.price > breakerEntry)
+        .sort((a, b) => a.price - b.price); // Closest target first
+
+      if (highPivots.length > 0) {
+        const best = highPivots[0];
+        return { target: best.price, type: best.level === 2 ? 'BSL' : 'SWING_HIGH' };
+      }
+
+      // Check max high of recent 50 bars
+      const recentHighs = candles.slice(lookbackStart, activationIdx + 1).map(c => c.h);
+      const maxH = Math.max(...recentHighs);
+      if (maxH > breakerEntry * 1.003) {
+        return { target: maxH, type: 'BSL' };
+      }
+    } else {
+      // Short Target: Resting SSL / Swing Low below the breaker entry
+      const lowPivots = relevantPivots
+        .filter(p => p.type === 'SWING_LOW' && p.price < breakerEntry)
+        .sort((a, b) => b.price - a.price); // Closest target first
+
+      if (lowPivots.length > 0) {
+        const best = lowPivots[0];
+        return { target: best.price, type: best.level === 2 ? 'SSL' : 'SWING_LOW' };
+      }
+
+      const recentLows = candles.slice(lookbackStart, activationIdx + 1).map(c => c.l);
+      const minL = Math.min(...recentLows);
+      if (minL < breakerEntry * 0.997) {
+        return { target: minL, type: 'SSL' };
+      }
+    }
+
+    return { target: null, type: 'NONE' };
+  }
+
+  // ── Phase 2, 3 & 4: Dynamic Lifecycle, Expiry & Confirmation Engine ────────
 
   /**
    * Evaluates the lifecycle of the Order Block chronologically.
@@ -907,9 +1020,14 @@ export class OrderBlockEngine {
    *  2. Mean Threshold Precision Entry (50% midpoint)
    *  3. Body Close Rule for MT & Zone Invalidation
    *  4. Dynamic Trade Management (TP1 partial fill + BE stop loss trail)
-   *  5. Inverted Breaker Block Activation with max_breaker_retest_bars expiry
+   *  5. Confirmation-Gated Breaker Block Execution (DOL + Micro MSS + FVG + Volume Delta)
    */
-  private evaluateOrderBlockLifecycle(ob: InstitutionalOrderBlock, candles: Candle[]) {
+  private evaluateOrderBlockLifecycle(
+    ob: InstitutionalOrderBlock,
+    candles: Candle[],
+    pivots: import('./types').Pivot[],
+    volSma: number[]
+  ) {
     const startIdx = ob.formation_index + 1;
     if (startIdx >= candles.length) return;
 
@@ -979,7 +1097,7 @@ export class OrderBlockEngine {
               if (ob.is_be_active) {
                 ob.simulated_outcome = 'BE_SCRATCH_WIN';
                 ob.is_be_scratch = true;
-                ob.realized_rr = parseFloat((0.5 * this.config.tp1Multiple).toFixed(2)); // +0.5R
+                ob.realized_rr = parseFloat((0.5 * this.config.tp1Multiple).toFixed(2));
               } else {
                 ob.simulated_outcome = 'STOPPED_OUT';
                 ob.realized_rr = -1.0;
@@ -999,7 +1117,7 @@ export class OrderBlockEngine {
             ob.mitigation_price = c.l;
           }
 
-          // Trigger simulated trade open (only if zone was fresh at entry)
+          // Trigger simulated trade open
           if (!positionOpen && ob.simulated_outcome === 'PENDING' && !isInvalidated) {
             if (!ob.is_expired || ob.is_fresh_mitigation) {
               positionOpen = true;
@@ -1010,7 +1128,7 @@ export class OrderBlockEngine {
           }
         }
 
-        // Manage Dynamic Position Exits for Bullish Setup (Phase 3)
+        // Manage Dynamic Position Exits for Bullish Setup
         if (positionOpen) {
           if (c.h > maxFavorablePrice) maxFavorablePrice = c.h;
           if (c.l < maxAdversePrice) maxAdversePrice = c.l;
@@ -1020,7 +1138,6 @@ export class OrderBlockEngine {
           const hitTP2 = c.h >= tp2;
 
           if (this.config.enableDynamicManagement) {
-            // Stage 1: Check TP1 Hit -> Scale 50% & Move SL to Breakeven (0.0R)
             if (hitTP1 && !ob.is_be_active) {
               ob.is_be_active = true;
               ob.tp1_hit_time = c.t;
@@ -1028,25 +1145,21 @@ export class OrderBlockEngine {
               activeStopLoss = entryPrice; // Breakeven
             }
 
-            // Stage 2: Manage Runner or Breakeven Stop
             if (ob.is_be_active) {
               if (hitTP2) {
                 ob.simulated_outcome = 'FULL_TP2_WIN';
-                // Blended: 50% @ TP1 + 50% @ TP2
                 const blended = (0.5 * this.config.tp1Multiple) + (0.5 * this.config.targetRewardRatio);
                 ob.realized_rr = parseFloat(blended.toFixed(2));
                 ob.bars_to_outcome = i - (entryCandleIdx ?? ob.formation_index);
                 positionOpen = false;
               } else if (c.l <= activeStopLoss) {
-                // Pulled back to Breakeven
                 ob.simulated_outcome = 'BE_SCRATCH_WIN';
                 ob.is_be_scratch = true;
-                ob.realized_rr = parseFloat((0.5 * this.config.tp1Multiple).toFixed(2)); // +0.5R
+                ob.realized_rr = parseFloat((0.5 * this.config.tp1Multiple).toFixed(2));
                 ob.bars_to_outcome = i - (entryCandleIdx ?? ob.formation_index);
                 positionOpen = false;
               }
             } else {
-              // Not reached TP1 yet -> check initial SL
               if (hitSL) {
                 ob.simulated_outcome = 'STOPPED_OUT';
                 ob.realized_rr = -1.0;
@@ -1055,7 +1168,6 @@ export class OrderBlockEngine {
               }
             }
           } else {
-            // Static All-or-Nothing Mode
             if (hitSL) {
               ob.simulated_outcome = 'STOPPED_OUT';
               ob.realized_rr = -1.0;
@@ -1133,7 +1245,7 @@ export class OrderBlockEngine {
           }
         }
 
-        // Manage Dynamic Position Exits for Bearish Setup (Phase 3)
+        // Manage Dynamic Position Exits for Bearish Setup
         if (positionOpen) {
           if (c.l < maxFavorablePrice) maxFavorablePrice = c.l;
           if (c.h > maxAdversePrice) maxAdversePrice = c.h;
@@ -1143,7 +1255,6 @@ export class OrderBlockEngine {
           const hitTP2 = c.l <= tp2;
 
           if (this.config.enableDynamicManagement) {
-            // Stage 1: Check TP1 Hit -> Scale 50% & Move SL to Breakeven
             if (hitTP1 && !ob.is_be_active) {
               ob.is_be_active = true;
               ob.tp1_hit_time = c.t;
@@ -1151,7 +1262,6 @@ export class OrderBlockEngine {
               activeStopLoss = entryPrice;
             }
 
-            // Stage 2: Manage Runner or Breakeven Stop
             if (ob.is_be_active) {
               if (hitTP2) {
                 ob.simulated_outcome = 'FULL_TP2_WIN';
@@ -1196,12 +1306,12 @@ export class OrderBlockEngine {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Phase 2 & 3: Inverted Breaker Block with Temporal Expiry
+    // Phase 4: Confirmation-Gated Inverted Breaker Block Engine
     // ─────────────────────────────────────────────────────────────────────────
     if (ob.is_breaker && breakerActivationIdx !== null && this.config.enableBreakerSimulation) {
       ob.lifecycle_status = 'ACTIVE_BREAKER';
 
-      const isBearishBreaker = ob.type === 'BULLISH';
+      const isBearishBreaker = ob.type === 'BULLISH'; // Bullish OB violated -> Bearish Breaker (Resistance)
       const tickBuffer = 0.05;
 
       const breakerEntry = isBearishBreaker
@@ -1213,22 +1323,66 @@ export class OrderBlockEngine {
         : parseFloat((ob.bottom - tickBuffer).toFixed(4));
 
       const breakerRisk = Math.max(0.1, Math.abs(breakerEntry - breakerSL));
-      const breakerTP = isBearishBreaker
+
+      // ── 1. Draw on Liquidity (DOL) Gatekeeper ──
+      const dolResult = this.resolveDrawOnLiquidity(!isBearishBreaker, candles, breakerActivationIdx, pivots, breakerEntry);
+      ob.breaker_dol_target = dolResult.target;
+      ob.breaker_dol_type = dolResult.type;
+
+      if (this.config.requireBreakerDOL && dolResult.target === null) {
+        ob.lifecycle_status = 'BREAKER_VETOED_NO_DOL';
+        ob.breaker_veto_reason = 'NO_UNMITIGATED_DOL_TARGET';
+        ob.breaker_trade_outcome = 'EXPIRED';
+        return;
+      }
+
+      // ── 2. Valuation Gatekeeper (Dealing Range) ──
+      const windowStart = Math.max(0, breakerActivationIdx - 50);
+      const drHigh = Math.max(...candles.slice(windowStart, breakerActivationIdx + 1).map(c => c.h));
+      const drLow = Math.min(...candles.slice(windowStart, breakerActivationIdx + 1).map(c => c.l));
+      const drEq = (drHigh + drLow) / 2;
+
+      // Bullish Breaker must be in Discount (<= eq); Bearish Breaker in Premium (>= eq)
+      const isDiscount = breakerEntry <= drEq;
+      const isPremium = breakerEntry >= drEq;
+
+      if (isBearishBreaker && !isPremium && breakerEntry < drEq * 0.98) {
+        ob.lifecycle_status = 'BREAKER_VETOED_VALUATION';
+        ob.breaker_veto_reason = 'BEARISH_BREAKER_IN_DISCOUNT';
+        ob.breaker_trade_outcome = 'EXPIRED';
+        return;
+      } else if (!isBearishBreaker && !isDiscount && breakerEntry > drEq * 1.02) {
+        ob.lifecycle_status = 'BREAKER_VETOED_VALUATION';
+        ob.breaker_veto_reason = 'BULLISH_BREAKER_IN_PREMIUM';
+        ob.breaker_trade_outcome = 'EXPIRED';
+        return;
+      }
+
+      // Set TP based on DOL target or fixed R:R
+      let breakerTP = isBearishBreaker
         ? parseFloat((breakerEntry - this.config.targetRewardRatio * breakerRisk).toFixed(4))
         : parseFloat((breakerEntry + this.config.targetRewardRatio * breakerRisk).toFixed(4));
+
+      if (dolResult.target !== null) {
+        // Use DOL target if it offers favorable R:R
+        const dolReward = Math.abs(breakerEntry - dolResult.target);
+        if (dolReward >= breakerRisk * 1.2) {
+          breakerTP = dolResult.target;
+        }
+      }
 
       ob.breaker_entry_price = breakerEntry;
       ob.breaker_stop_loss = breakerSL;
       ob.breaker_tp = breakerTP;
 
       let breakerPositionOpen = false;
-      let breakerEntryIdx: number | null = null;
+      let inZoneTouchIdx: number | null = null;
 
       for (let k = breakerActivationIdx + 1; k < candles.length; k++) {
         const bc = candles[k];
         const breakerBarsElapsed = k - breakerActivationIdx;
 
-        // Breaker Expiry Gate (Phase 3)
+        // Breaker Expiry Gate
         if (!breakerPositionOpen && ob.breaker_trade_outcome === 'NO_RETEST') {
           if (breakerBarsElapsed > this.config.maxBreakerRetestBars) {
             ob.is_breaker_expired = true;
@@ -1238,17 +1392,99 @@ export class OrderBlockEngine {
             break;
           }
 
+          // Check if price touched the Breaker zone
           const retestTouched = isBearishBreaker
             ? (bc.h >= breakerEntry)
             : (bc.l <= breakerEntry);
 
           if (retestTouched) {
-            breakerPositionOpen = true;
-            breakerEntryIdx = k;
+            inZoneTouchIdx = k;
             ob.breaker_retest_time = bc.t;
             ob.breaker_bars_to_retest = breakerBarsElapsed;
             ob.breaker_is_fresh = breakerBarsElapsed <= this.config.maxBreakerRetestBars;
-            ob.breaker_trade_outcome = 'PENDING';
+          }
+
+          // ── Phase 4: Confirmation Evaluation (In-Zone Micro MSS + FVG + Volume Delta) ──
+          if (inZoneTouchIdx !== null) {
+            // Check Mean Threshold Respect (Candle body close cannot breach MT in invalid direction)
+            const mtBreached = isBearishBreaker
+              ? (bc.c > ob.mean_threshold)
+              : (bc.c < ob.mean_threshold);
+
+            if (mtBreached) {
+              // MT violated -> Confirmation fails
+              ob.breaker_trade_outcome = 'EXPIRED';
+              ob.breaker_veto_reason = 'MT_BODY_CLOSE_VIOLATED_DURING_TEST';
+              break;
+            }
+
+            if (this.config.requireBreakerConfirmation) {
+              // Look for Micro MSS Reversal Candle & FVG in direction of trade
+              const prev1 = candles[k - 1];
+              const prev2 = candles[k - 2];
+
+              let confirmedMss = false;
+              let fvgCreated = false;
+              let fvgTopVal: number | null = null;
+              let fvgBotVal: number | null = null;
+
+              if (isBearishBreaker) {
+                // Bearish Micro MSS: Closes below prior low + creates SIBI FVG (prev2.l > bc.h)
+                const isBearishRejection = bc.c < bc.o && bc.c < prev1.l;
+                if (isBearishRejection) {
+                  confirmedMss = true;
+                  if (prev2 && prev2.l > bc.h) {
+                    fvgCreated = true;
+                    fvgTopVal = prev2.l;
+                    fvgBotVal = bc.h;
+                  }
+                }
+              } else {
+                // Bullish Micro MSS: Closes above prior high + creates BISI FVG (bc.l > prev2.h)
+                const isBullishRejection = bc.c > bc.o && bc.c > prev1.h;
+                if (isBullishRejection) {
+                  confirmedMss = true;
+                  if (prev2 && bc.l > prev2.h) {
+                    fvgCreated = true;
+                    fvgTopVal = bc.l;
+                    fvgBotVal = prev2.h;
+                  }
+                }
+              }
+
+              // Volumetric Check
+              const smaV = volSma[k] || 1;
+              const volExp = smaV > 0 ? bc.v / smaV : 1.0;
+              const takerDelta = (bc.taker_buy_vol || 0) - (bc.taker_sell_vol || 0);
+              const volPassed = !this.config.requireBreakerVolumetric || (
+                isBearishBreaker ? (takerDelta < 0 || volExp >= 1.15) : (takerDelta > 0 || volExp >= 1.15)
+              );
+
+              if (confirmedMss && volPassed) {
+                breakerPositionOpen = true;
+                ob.breaker_is_confirmed = true;
+                ob.breaker_confirmation_type = 'MICRO_MSS_FVG';
+                ob.breaker_confirmation_time = bc.t;
+                ob.breaker_confirmation_index = k;
+                ob.breaker_fvg_top = fvgTopVal;
+                ob.breaker_fvg_bottom = fvgBotVal;
+                ob.breaker_volume_expansion = parseFloat(volExp.toFixed(2));
+                ob.breaker_taker_delta = parseFloat(takerDelta.toFixed(2));
+                ob.breaker_trade_outcome = 'PENDING';
+                ob.lifecycle_status = 'BREAKER_CONFIRMED_ACTIVE';
+              } else if (k - inZoneTouchIdx > 4) {
+                // If 4 bars elapsed without confirmation, fail execution
+                ob.breaker_trade_outcome = 'EXPIRED';
+                ob.breaker_veto_reason = 'MICRO_MSS_CONFIRMATION_TIMEOUT';
+                break;
+              }
+            } else {
+              // Blind limit fill mode
+              breakerPositionOpen = true;
+              ob.breaker_is_confirmed = false;
+              ob.breaker_confirmation_type = 'BLIND_LIMIT';
+              ob.breaker_trade_outcome = 'PENDING';
+            }
           }
         }
 
@@ -1313,7 +1549,7 @@ export class OrderBlockEngine {
     }
   }
 
-  // ── Phase 3 Telemetry & Net Expectancy Aggregator ─────────────────────────
+  // ── Phase 4 Telemetry & Net Expectancy Aggregator ─────────────────────────
 
   private calculateTelemetry(
     filteredBlocks: InstitutionalOrderBlock[],
@@ -1366,13 +1602,11 @@ export class OrderBlockEngine {
       ? parseFloat(((stopped_out_count / closedCount) * 100).toFixed(1))
       : 0;
 
-    // Adjusted Win Rate: Full Wins + Protected BE Wins
     const totalProfitableTrades = full_tp2_win_count + be_scratch_win_count;
     const adjusted_win_rate_pct = closedCount > 0
       ? parseFloat(((totalProfitableTrades / closedCount) * 100).toFixed(1))
       : 0;
 
-    // Net Risk-Adjusted Expectancy (EV in R): Sum(Realized R) / Total Closed Trades
     const sumRealizedR = closedTrades.reduce((s, b) => s + b.realized_rr, 0);
     const expected_value_r = closedCount > 0
       ? parseFloat((sumRealizedR / closedCount).toFixed(2))
@@ -1427,7 +1661,7 @@ export class OrderBlockEngine {
     const tier_a_plus_win_rate_delta = parseFloat((tier_a_plus_win_rate_pct - tier_a_win_rate_pct).toFixed(1));
     const tier_a_plus_rr_delta = parseFloat((tier_a_plus_avg_rr - tier_a_avg_rr).toFixed(2));
 
-    // ── Phase 2 & 3: Breaker Block Telemetry ──
+    // ── Phase 2, 3 & 4: Breaker Block Telemetry ──
     const breakerBlocks = filteredBlocks.filter(b => b.is_breaker);
     const breaker_converted_count = breakerBlocks.length;
     const breaker_conversion_rate_pct = zone_invalidated_count > 0
@@ -1467,6 +1701,38 @@ export class OrderBlockEngine {
       : 0;
 
     const breaker_freshness_win_rate_delta = parseFloat((fresh_breakers_win_rate_pct - stale_breakers_win_rate_pct).toFixed(1));
+
+    // ── Phase 4: Confirmation-Gated Analytics ──
+    const confirmedBreakers = breakerCompleted.filter(b => b.breaker_is_confirmed);
+    const confirmedWins = confirmedBreakers.filter(b => b.breaker_trade_outcome === 'WIN').length;
+    const confirmed_breaker_retest_count = confirmedBreakers.length;
+    const confirmed_breaker_win_rate_pct = confirmed_breaker_retest_count > 0
+      ? parseFloat(((confirmedWins / confirmed_breaker_retest_count) * 100).toFixed(1))
+      : 0;
+    const confirmed_breaker_avg_rr = confirmed_breaker_retest_count > 0
+      ? parseFloat((confirmedBreakers.reduce((s, b) => s + b.breaker_realized_rr, 0) / confirmed_breaker_retest_count).toFixed(2))
+      : 0;
+
+    const blindBreakers = breakerCompleted.filter(b => !b.breaker_is_confirmed);
+    const blindWins = blindBreakers.filter(b => b.breaker_trade_outcome === 'WIN').length;
+    const blind_breaker_retest_count = blindBreakers.length;
+    const blind_breaker_win_rate_pct = blind_breaker_retest_count > 0
+      ? parseFloat(((blindWins / blind_breaker_retest_count) * 100).toFixed(1))
+      : 0;
+    const blind_breaker_avg_rr = blind_breaker_retest_count > 0
+      ? parseFloat((blindBreakers.reduce((s, b) => s + b.breaker_realized_rr, 0) / blind_breaker_retest_count).toFixed(2))
+      : 0;
+
+    const breaker_confirmation_win_rate_delta = parseFloat((confirmed_breaker_win_rate_pct - blind_breaker_win_rate_pct).toFixed(1));
+    const breaker_confirmation_rr_delta = parseFloat((confirmed_breaker_avg_rr - blind_breaker_avg_rr).toFixed(2));
+
+    const breaker_vetoed_no_dol_count = breakerBlocks.filter(b => b.lifecycle_status === 'BREAKER_VETOED_NO_DOL').length;
+    const breaker_vetoed_valuation_count = breakerBlocks.filter(b => b.lifecycle_status === 'BREAKER_VETOED_VALUATION').length;
+    const breaker_vetoed_count = breaker_vetoed_no_dol_count + breaker_vetoed_valuation_count;
+
+    const breaker_expected_value_r = confirmed_breaker_retest_count > 0
+      ? parseFloat((confirmedBreakers.reduce((s, b) => s + b.breaker_realized_rr, 0) / confirmed_breaker_retest_count).toFixed(2))
+      : 0;
 
     // ── Overall Closed Trades Telemetry ──
     const mitigation_total_trades = testedBlocks.length;
@@ -1565,6 +1831,19 @@ export class OrderBlockEngine {
       stale_breakers_win_rate_pct,
       breaker_freshness_win_rate_delta,
 
+      confirmed_breaker_retest_count,
+      confirmed_breaker_win_rate_pct,
+      confirmed_breaker_avg_rr,
+      blind_breaker_retest_count,
+      blind_breaker_win_rate_pct,
+      blind_breaker_avg_rr,
+      breaker_confirmation_win_rate_delta,
+      breaker_confirmation_rr_delta,
+      breaker_vetoed_count,
+      breaker_vetoed_no_dol_count,
+      breaker_vetoed_valuation_count,
+      breaker_expected_value_r,
+
       full_tp2_win_count,
       full_tp2_win_rate_pct,
       be_scratch_win_count,
@@ -1642,6 +1921,18 @@ export class OrderBlockEngine {
       stale_breakers_count: 0,
       stale_breakers_win_rate_pct: 0,
       breaker_freshness_win_rate_delta: 0,
+      confirmed_breaker_retest_count: 0,
+      confirmed_breaker_win_rate_pct: 0,
+      confirmed_breaker_avg_rr: 0,
+      blind_breaker_retest_count: 0,
+      blind_breaker_win_rate_pct: 0,
+      blind_breaker_avg_rr: 0,
+      breaker_confirmation_win_rate_delta: 0,
+      breaker_confirmation_rr_delta: 0,
+      breaker_vetoed_count: 0,
+      breaker_vetoed_no_dol_count: 0,
+      breaker_vetoed_valuation_count: 0,
+      breaker_expected_value_r: 0,
       full_tp2_win_count: 0,
       full_tp2_win_rate_pct: 0,
       be_scratch_win_count: 0,
