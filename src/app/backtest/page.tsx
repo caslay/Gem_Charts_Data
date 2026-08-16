@@ -1102,6 +1102,7 @@ export default function BacktestPage() {
                       }}
                       openTrades={backtestTrades.filter((t) => t.status === 'OPEN')}
                       onUpdateTradeLevels={handleUpdateBacktestTradeLevels}
+                      symbol="ETHUSDC"
                     />
                   )
                   : (

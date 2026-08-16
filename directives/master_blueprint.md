@@ -1,8 +1,165 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V15.4
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.2
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-15 (V15.4 — Remote MCP Server & OAuth 2.0 Provider)  
+> **Last Updated:** 2026-08-16 (V16.2 — Phase 3 Order Block & Breaker Dynamic Trade Management Engine)  
+
+## 🆕 V16.2 Changelog — Phase 3 Order Block & Breaker Dynamic Trade Management Engine (2026-08-16)
+
+### Summary
+Engineered **Phase 3 Dynamic Trade Management & Net Expectancy Architecture** for Order Blocks and Breakers. Implements a multi-stage execution state machine (scaling out 50% partial profit at TP1 and moving active Stop Loss to Breakeven $0.0R$), introduces a temporal freshness expiry gate for inverted Breakers (`max_breaker_retest_bars`), and calculates net risk-adjusted mathematical expectancy (Expected Value $\text{EV}$ in R-multiples) and Adjusted Strategy Win Rate %.
+
+### Key Features & Architectural Directives
+- **Dynamic Trade Management State Machine (`OrderBlockEngine.ts`):**
+  - Configurable `enableDynamicManagement` toggle (default: true) and `tp1Multiple` (default: $1.0R$).
+  - **TP1 / Breakeven Rule:** When price reaches TP1 ($1.0R$), locks in 50% partial profit ($+0.5R$) and immediately moves active Stop Loss to the exact entry price ($0.0R$ Breakeven).
+  - **Runner Management:** Remaining 50% trails to TP2 Target (configurable: $1.5R$, $2.0R$, $2.5R$, $3.0R$, $4.0R$).
+  - **Blended Realized R:R Math:**
+    - **Full TP2 Win (`FULL_TP2_WIN`):** $0.5 \times 1.0R + 0.5 \times \text{TP2} = +1.5R$ (for 2.0R target).
+    - **BE Scratch Win (`BE_SCRATCH_WIN`):** $0.5 \times 1.0R + 0.5 \times 0.0R = +0.5R$ (risk-free secured profit).
+    - **Stopped Out (`STOPPED_OUT`):** Full $-1.0R$ loss when stopped out prior to TP1.
+- **Breaker Freshness Expiry Filter (`max_breaker_retest_bars`):**
+  - Configurable threshold (default: 20 bars).
+  - If an inverted Breaker is not retested within 20 bars after structural invalidation, transitions to `BREAKER_EXPIRED` (`is_breaker_expired: true`, `breaker_trade_outcome: 'EXPIRED'`) and is bypassed from trade simulation.
+- **Phase 3 Net Expectancy & Telemetry:**
+  - **Adjusted Strategy Win Rate %:** $\frac{\text{Full TP2 Wins} + \text{BE Scratch Wins}}{\text{Total Closed Trades}} \times 100$.
+  - **Net Risk-Adjusted Expectancy ($\text{EV}$ in R):**
+    $$\text{EV (R)} = \frac{\sum \text{Realized R:R}}{\text{Total Closed Trades}}$$
+  - **BE Scratch Win Rate %:** Tracks percentage of trades converted from potential full losses into risk-free $+0.5R$ scratches.
+  - **Fresh vs. Stale Breakers Matrix:** Computes win rate delta for fresh retests ($\le 20$ bars) vs. stale retests.
+- **Quant Lab Workspace UI Upgrades (`src/app/quant-lab/page.tsx`):**
+  - Config Panel: Added Dynamic TP1/BE toggle, Breaker Retest Bars selector (`10B`, `20B`, `30B`, `50B`), and TP2 Multiple dropdown.
+  - Telemetry HUD: Added 4-card matrix including dedicated **Dynamic Management & Net Expectancy HUD Card**.
+  - High-Density Table: Added `FULL_TP2_WIN`, `BE_SCRATCH_WIN`, `STOPPED_OUT`, and `BREAKER_EXPIRED` status pills and filter selectors.
+  - Inspector Drawer: Displays multi-stage trade execution telemetry with exact TP1 hit times, BE trail locks, and runner outcomes.
+
+---
+
+## 🆕 V16.1 Changelog — Phase 2 Institutional Order Block & Breaker Filtering Engine (2026-08-16)
+
+### Summary
+Engineered **Phase 2 Institutional Enhancements** to the Order Block & Breaker detection and backtest filtering pipeline. Eliminates stale mitigations via configurable session-scoped freshness expiry (`max_bars_to_mitigation`), enforces strict **Tier A+ execution gating** (Gate 1 Liquidity Sweep mandate), activates high-precision **Mean Threshold (50%) precision entry mode** to halve risk distances, and introduces a full **Breaker Block Inversion State Machine & Retest Simulation Engine** with comparative performance reporting matrices.
+
+### Key Features & Architectural Directives
+- **Temporal Freshness Expiry Filter (`OrderBlockEngine.ts`):**
+  - Configurable `maxBarsToMitigation` parameter (default: 24 bars, equivalent to 6 hours on a 15m timeframe).
+  - Chronologically flags untested zones exceeding this age as `EXPIRED_STALE` (`is_expired: true`, `expiration_time: timestamp`), bypassing low-probability stale mitigations from trade simulation.
+- **Tier A+ Strict Execution Gate (Sweep Mandate):**
+  - Enforces `gate1_liquidity_sweep === true` (BSL, SSL, Asian High/Low, London High/Low, or PDH/PDL sweeps) as a mandatory requirement for trade sponsorship.
+- **Mean Threshold (50% Midpoint) Precision Entry Mode:**
+  - Simulates entry at `mean_threshold = (top + bottom) / 2` rather than the proximal outer boundary.
+  - Keeps stop loss pinned to the structural invalidation boundary (`bottom/top ± tickBuffer`), cutting risk distance in half and scaling realized R:R and profit factor.
+- **Inverted Breaker Block State Machine & Retest Engine:**
+  - When an Order Block is invalidated by a confirmed candle body close beyond its extreme (`c.c < bottom` for Bullish, `c.c > top` for Bearish), transitions state to `ACTIVE_BREAKER` (`is_breaker: true`, `breaker_flip_time: timestamp`).
+  - Automatically simulates inverted retest execution in the direction of the structural breach:
+    - **Bearish Breaker** (from Bullish OB): Short entry on upward retest into `ob.bottom`/`mean_threshold`, SL placed at `ob.top + buffer`.
+    - **Bullish Breaker** (from Bearish OB): Long entry on downward retest into `ob.top`/`mean_threshold`, SL placed at `ob.bottom - buffer`.
+  - Tracks Breaker trade metrics: `breaker_trade_outcome`, `breaker_entry_price`, `breaker_stop_loss`, `breaker_tp`, `breaker_realized_rr`, `breaker_retest_time`, and `breaker_bars_to_retest`.
+- **Phase 2 Comparative Telemetry & Reporting Matrix:**
+  - **Tier A vs. Tier A+ Confluence Matrix:** Computes Win Rate Δ (`tier_a_plus_win_rate_delta`), Realized R:R Δ (`tier_a_plus_rr_delta`), and Profit Factor comparison between 3-Gate (Tier A) and 4-Gate Sweep-mandated (Tier A+) setups.
+  - **Fresh vs. Stale Mitigations Matrix:** Compares Win Rate % and average R:R for fresh tests ($\le 24$ bars) versus stale tests ($> 24$ bars), displaying count of bypassed stale zones.
+  - **Breaker Inversion Telemetry:** Tracks Breaker Conversion Count, Inversion Retest Rate %, Breaker Win Rate %, and Breaker Realized R:R.
+- **Quant Lab UI Upgrades (`src/app/quant-lab/page.tsx`):**
+  - Integrated freshness limit selector (`12B`, `24B`, `48B`, `96B`), Tier A+ Strict Gate toggle, and Breaker Inversion toggle.
+  - Added 3-card Phase 2 Comparative Telemetry Dashboard (Confluence Matrix, Fresh vs Stale, Breaker Retests).
+  - Enriched high-density table and inspector modal with freshness indicators, Breaker outcome badges, and detailed Inverted Breaker Trade blueprints.
+
+---
+
+## 🆕 V16.0 Changelog — Deep Historical Order Block Detection & Filtering Engine (2026-08-16)
+
+### Summary
+Engineered an institutional-grade, deep historical **Order Block Detection, Multi-Gate Validation & Lifecycle State Machine** within the Quant Lab architecture. Evaluates historical price action step-by-step with **zero forward-looking data/look-ahead bias**, groups consecutive same-color origin candles into macroeconomic Order Block zones, enforces the **Body Close Rule** for Mean Threshold penetrations and Breaker Block transitions, and produces surgical backtest telemetry with 1-click dataset export (`.json` & `.csv`).
+
+### Key Features & Architectural Directives
+- **Zero Look-Ahead Chronological Engine (`src/lib/quantEngine/OrderBlockEngine.ts`):**
+  - **Consecutive Candle Aggregation:** Detects sequences of 1, 2, 3+ same-color candles at pivot extremes prior to high-displacement impulse moves, aggregating them into unified macroeconomic zones (`top`, `bottom`, `mean_threshold` = 50% midpoint).
+  - **4-Gate Multi-Gate Institutional Validation Filter:**
+    - **Gate 1 (Liquidity Sweep):** Verifies prior sweeps of major structural swings, session extremes (Asian/London High/Low), or PDH/PDL within lookback.
+    - **Gate 2 (Displacement & FVG):** Verifies displacement strength (body ratio $\ge 0.55$, volume expansion $\ge 1.35\times$) with confirmed active BISI/SIBI Fair Value Gaps.
+    - **Gate 3 (MSS / BOS Structure Break):** Verifies that the impulse leg fractured opposing structural swing extremes.
+    - **Gate 4 (Dealing Range Location):** Enforces Bullish OBs $\in$ Discount ($\le 50\%$ equilibrium) and Bearish OBs $\in$ Premium ($\ge 50\%$ equilibrium).
+  - **Quality Tier Grading:** Categorizes blocks into `A_PLUS` (4/4 gates passed), `A` (3/4 gates), `B` (2/4 gates), and `UNVALIDATED`.
+  - **Lifecycle State Machine & Body Close Rule:**
+    - Tracks states: `UNTESTED`, `MITIGATED_RESPECTED`, `MEAN_THRESHOLD_VIOLATED` (candle body close beyond MT), and `ZONE_INVALIDATED` (body close beyond zone extreme with inverted **Breaker Block** flip).
+    - Wick penetrations of MT remain valid; only candle body closes beyond MT compromise the block.
+  - **Simulated Trade Telemetry:** Automatically tracks Entry (Boundary or MT), Stop Loss, TP1 (1:1), and TP2 (1:2 / Target), calculating Win Rate %, Mean Retracement Reaction Rate %, Realized R:R, MFE, and MAE.
+- **Deep Historical Ingestion API (`src/app/api/quant-lab/ob-scanner/route.ts`):**
+  - High-performance multi-month paginated Binance Futures ingestion (`fetchPagedKlines` across `5m`, `15m`, `1h`, `4h`) with rate-limit pacing and offline simulation fallback.
+  - Server-Sent Events (SSE) streaming progress and complete scan persistence in Neon PostgreSQL (`quant_lab_ob_scans` table).
+- **Scan Management Route (`src/app/api/quant-lab/ob-scans/route.ts`):**
+  - `GET` & `DELETE` endpoints for historical scan run retrieval and management.
+- **Quant Lab Workspace UI Upgrade (`src/app/quant-lab/page.tsx`):**
+  - Dual-mode switcher ("Institutional OB Scanner" vs "Strategy Backtest").
+  - Configuration panel with quick lookback presets (30D, 60D, 90D, 180D), multi-gate threshold selection, and consecutive aggregation toggles.
+  - Live Processing HUD with streaming metrics.
+  - Institutional Telemetry Cards (Total Detected, Validation Rate %, MT Reaction Rate %, Mitigation Win Rate %, Realized R:R, Breaker Conversions).
+  - Interactive Filter Bar & High-Density Table with Direction, Tier, Lifecycle, Outcome filters and search.
+  - Clickable OB Inspector Modal with quantitative breakdown of all 4 gates and simulated trade blueprint.
+  - 1-Click Export buttons: `Export Validated OB Dataset (.json)` and `Export Telemetry Report (.csv)`.
+
+### New Files
+| File | Purpose |
+|---|---|
+| `src/lib/quantEngine/OrderBlockEngine.ts` | Pure algorithmic Order Block engine, 4-gate validation, lifecycle state machine, and telemetry aggregator |
+| `src/lib/orderBlockEngine.ts` | Root export bridge for OrderBlockEngine |
+| `src/app/api/quant-lab/ob-scanner/route.ts` | SSE streaming historical ingestion and multi-gate scanning API endpoint |
+| `src/app/api/quant-lab/ob-scans/route.ts` | GET and DELETE API endpoints for persisted OB scan runs |
+
+### Modified Files
+| File | Change |
+|---|---|
+| `src/lib/quantEngine/index.ts` | Exported `OrderBlockEngine` from quant engine barrel |
+| `src/lib/quantEngine/LiquidityEngine.ts` | Integrated `OrderBlockEngine` and exposed `institutionalOrderBlocks` |
+| `src/app/quant-lab/page.tsx` | Upgraded to dual-mode workspace with full OB Scanner, telemetry HUD, filter table, inspector, and JSON/CSV dataset export |
+
+---
+
+
+### Summary
+Engineered a high-performance (60+ FPS), persistent **User Drawing Tool Suite** on top of the Lightweight Charts charting canvas. Users can draw, select, move, resize, recolor, and delete custom shapes (**Lines**, **Rectangles / Boxes**, and **Freehand / Brush**) with mathematical anchoring to Price and Timestamp coordinates, instant `localStorage` hydration, and debounced database persistence (`/api/drawings`).
+
+### Key Features & Architectural Directives
+- **Drawing Data Schema & Partitioned State (`src/lib/drawings/types.ts` & `store.ts`):**
+  - Defined unified interface `UserDrawing` (unique ID, type `'LINE' | 'RECTANGLE' | 'FREEHAND'`, anchor points array `{ price: number, time: number }`, style options `strokeColor, fillColor, opacity, lineWidth, lineStyle`, `symbol`, `interval`, `locked`, `visible`).
+  - Managed in a dedicated Zustand store with partitioned state by market symbol and timeframe, supporting multi-step undo/redo history stacks (`undo()`, `redo()`).
+- **Bidirectional Coordinate Conversion Engine (`src/lib/drawings/coordinates.ts`):**
+  - Bidirectional mapping between price/time coordinates and viewport pixels.
+  - Smooth extrapolation for historical scroll and future whitespace projection (`logicalToCoordinate` / `coordinateToLogical`).
+  - Price tick rounding and millisecond timestamp matching candle standard format `c.t`.
+- **Interactive Vector Manipulation Layer (`src/components/drawings/DrawingCanvasOverlay.tsx`):**
+  - Full SVG overlay mounted over Lightweight Charts canvas.
+  - Creation mechanics: Click-and-drag line, rectangle boxes with fill/stroke, and smoothed freehand paths with distance threshold sampling.
+  - Handle system: Endpoints for lines, 4 corner handles for rectangles (`TL`, `TR`, `BL`, `BR`), and bounding box scaling handles for freehand.
+  - Translation: Dragging shape body translates all points across price and time.
+  - Chart isolation: Automatic disabling of chart panning/zooming during active shape dragging (`chart.applyOptions({ handleScroll: false, handleScale: false })`).
+- **Floating Toolbar & Context Badge (`DrawingToolbar.tsx` & `DrawingContextBadge.tsx`):**
+  - Docked glassmorphic left toolbar with tool mode selectors (`CURSOR`, `LINE`, `RECTANGLE`, `FREEHAND`), active color preview, global visibility toggle, undo, redo, clear all, and hotkey tooltips (`V`, `L`, `R`, `B`, `Delete`, `Escape`, `Ctrl+Z`, `Ctrl+Y`).
+  - Dynamic floating context badge attached to selected shape with Stroke Color Palette presets, Fill Color & Opacity slider, Line Width selector (1-6px), Line Style (solid, dashed, dotted), Duplicate, Lock/Unlock, and Delete.
+- **Persistence & Network Optimization (`src/app/api/drawings/route.ts` & `useDrawings.ts`):**
+  - Instant `localStorage` rehydration on page loads.
+  - Debounced database persistence (600ms on drag release/pointer up) against PostgreSQL `user_drawings` table with in-memory offline fallback.
+
+### New Files
+| File | Purpose |
+|---|---|
+| `src/lib/drawings/types.ts` | Data schemas, tool modes, style options, and presets |
+| `src/lib/drawings/coordinates.ts` | Bidirectional Price/Time to viewport pixel conversion engine |
+| `src/lib/drawings/store.ts` | Zustand store with partitioned state, undo/redo history, and persistence |
+| `src/hooks/useDrawings.ts` | React hook with initial hydration, debounced API sync, and keyboard shortcuts |
+| `src/app/api/drawings/route.ts` | Database API route (GET, POST, DELETE) with in-memory fallback |
+| `src/components/drawings/DrawingCanvasOverlay.tsx` | High-performance SVG interactive vector manipulation layer |
+| `src/components/drawings/DrawingToolbar.tsx` | Glassmorphic floating drawing toolbar dock |
+| `src/components/drawings/DrawingContextBadge.tsx` | Floating customization action bar for selected shapes |
+
+### Modified Files
+| File | Change |
+|---|---|
+| `src/components/Chart.tsx` | Mounted `DrawingCanvasOverlay` and `DrawingToolbar`; connected coordinate synchronization |
+| `src/app/page.tsx` | Passed `symbol="ETHUSDC"` prop to `Chart` |
+| `src/app/backtest/page.tsx` | Passed `symbol="ETHUSDC"` prop to `Chart` |
+
+---
 
 ## 🆕 V15.4 Changelog — Remote MCP Server Endpoint & OAuth 2.0 Provider (2026-08-15)
 

@@ -451,6 +451,7 @@ export default function Home() {
                 onManualPricesChange={handleManualPricesChange}
                 openTrades={openTrades}
                 onUpdateTradeLevels={handleUpdateTradeLevels}
+                symbol="ETHUSDC"
               />
               {isManualTradingActive && (
                 <ManualOrderPanel

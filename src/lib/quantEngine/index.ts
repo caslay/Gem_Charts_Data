@@ -3,3 +3,5 @@ export * from './PivotEngine';
 export * from './SMCStateEngine';
 export * from './LiquidityEngine';
 export * from './MarketStructureAPI';
+export * from './OrderBlockEngine';
+

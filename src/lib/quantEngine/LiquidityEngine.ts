@@ -1,4 +1,5 @@
 import { Candle, detectActiveFVGs, mapAndConsolidateFVGs } from '../fvgEngine';
+import { OrderBlockEngine, InstitutionalOrderBlock } from './OrderBlockEngine';
 
 export interface OrderBlock {
   type: 'BULLISH' | 'BEARISH';
@@ -11,6 +12,7 @@ export interface OrderBlock {
 
 export class LiquidityEngine {
   public activeOrderBlocks: OrderBlock[] = [];
+  public institutionalOrderBlocks: InstitutionalOrderBlock[] = [];
   public activeFVGs: any[] = [];
   
   // FIFO processing for Order Blocks
@@ -18,8 +20,11 @@ export class LiquidityEngine {
     // 1. Detect FVGs using the existing fvgEngine (robust wick-mitigation)
     this.activeFVGs = mapAndConsolidateFVGs([{ fvgs: detectActiveFVGs(candles, true), timeframe: 'raw' }]);
 
-    // 2. Simple Volumetric Order Block Detection
-    this.activeOrderBlocks = [];
+    // 2. High-precision Institutional Order Block Detection
+    const obEngine = new OrderBlockEngine();
+    const { orderBlocks } = obEngine.scanHistoricalOrderBlocks(candles);
+    this.institutionalOrderBlocks = orderBlocks;
+
     
     for (let i = 2; i < candles.length - 1; i++) {
       const prev = candles[i - 1];
