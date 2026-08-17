@@ -777,8 +777,10 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
       // Fire global toast notification (zero latency — direct call)
       if (triggerSmartAlert) {
         triggerSmartAlert(
-          'STRATEGY_MATCHED' as any,
-          `[SYSTEM: STRATEGY_MATCHED → ${strategy.name}]`
+          'STRATEGY_MATCHED',
+          `[SYSTEM: STRATEGY_MATCHED → ${strategy.name}]`,
+          '/audio/fvg_alert.mp3',
+          'STRATEGY_ARCHITECT'
         );
       }
 
@@ -791,9 +793,10 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
       if (activeTradeNamesRef.current.has(strategy.name)) {
         if (triggerSmartAlert) {
           triggerSmartAlert(
-            'RISK_OVERRIDE' as any,
+            'RISK_OVERRIDE',
             `[SYSTEM: ENTRY_BLOCKED → ${strategy.name}: One-Trade Rule. Close the active position first.]`,
-            '/audio/fvg_alert.mp3'
+            '/audio/fvg_alert.mp3',
+            'RISK_MANAGEMENT'
           );
         }
         continue;
@@ -831,9 +834,10 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
 
           if (triggerSmartAlert) {
             triggerSmartAlert(
-              'RISK_OVERRIDE' as any,
+              'RISK_OVERRIDE',
               `[SYSTEM: TRADE_FAILED → ${strategy.name}: ${json.error || 'Inefficient RR < 2.0'}]`,
-              '/audio/fvg_alert.mp3'
+              '/audio/fvg_alert.mp3',
+              'RISK_MANAGEMENT'
             );
           }
         } else {
@@ -854,9 +858,10 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
 
           if (triggerSmartAlert) {
             triggerSmartAlert(
-              'FLOW_STATE' as any,
+              'STRATEGY_MATCHED',
               `[SYSTEM: JOURNAL_LOGGED → ${strategy.name} trade successfully posted to Journal @ $${json.execution_parameters?.entry_price || livePrice}]`,
-              '/audio/flow_state.wav'
+              '/audio/fvg_alert.mp3',
+              'STRATEGY_ARCHITECT'
             );
           }
 

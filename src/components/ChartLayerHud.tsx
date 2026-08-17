@@ -44,6 +44,7 @@ export default function ChartLayerHud() {
               // Dynamically resolve icon from Lucide
               const IconComponent = (Icons as any)[layer.icon] || Icons.HelpCircle;
               const isStructure = layer.id === 'structure';
+              const isOrderBlocks = layer.id === 'order_blocks';
               const label = layer.shortName || layer.name.split(' ')[0].toUpperCase();
 
               return (
@@ -60,6 +61,37 @@ export default function ChartLayerHud() {
                     <IconComponent size={10} />
                     <span>{label}</span>
                   </button>
+
+                  {isOrderBlocks && isVisible && (
+                    <div className="flex items-center gap-1 px-1 py-0.5 rounded bg-card-border/10 border border-card-border/20 animate-[fadeIn_0.15s_ease-out]">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleVisibility('order_blocks_labels');
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold transition-all cursor-pointer ${visibility.order_blocks_labels !== false
+                          ? 'bg-cyan-500/20 border border-cyan-500/40 text-cyan-400 shadow-[0_0_6px_rgba(6,182,212,0.15)]'
+                          : 'text-muted hover:text-foreground bg-transparent border border-transparent'
+                          }`}
+                        title="Toggle Micro-Pill Labels"
+                      >
+                        TAGS
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleVisibility('order_blocks_mt');
+                        }}
+                        className={`px-1.5 py-0.5 rounded text-[8px] font-mono font-bold transition-all cursor-pointer ${visibility.order_blocks_mt !== false
+                          ? 'bg-purple-500/20 border border-purple-500/40 text-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.15)]'
+                          : 'text-muted hover:text-foreground bg-transparent border border-transparent'
+                          }`}
+                        title="Toggle 50% Mean Threshold Line"
+                      >
+                        MT
+                      </button>
+                    </div>
+                  )}
 
                   {isStructure && isVisible && (
                     <div className="flex items-center gap-1 px-1 py-0.5 rounded bg-card-border/10 border border-card-border/20 animate-[fadeIn_0.15s_ease-out]">

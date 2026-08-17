@@ -3,9 +3,23 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 // Define the alert structure for the frontend UI
 export interface SmartAlert {
   id: string;
-  type: 'PURGE' | 'DEAD_ZONE' | 'RISK_OVERRIDE' | 'SMT_TRAP' | 'PRICING_SHIFT' | 'OBJECTIVE_UPDATE' | 'FLOW_STATE' | 'SESSION_TRANSITION' | 'STRATEGY_MATCHED';
+  type:
+    | 'PURGE'
+    | 'DEAD_ZONE'
+    | 'RISK_OVERRIDE'
+    | 'SMT_TRAP'
+    | 'PRICING_SHIFT'
+    | 'OBJECTIVE_UPDATE'
+    | 'FLOW_STATE'
+    | 'SESSION_TRANSITION'
+    | 'STRATEGY_MATCHED'
+    | 'LIVE_OB_DETECTED'
+    | 'IN_ZONE_CONFIRMATION_PENDING'
+    | 'AUTO_ORDER_ROUTED'
+    | 'STAGE_FILL';
   message: string;
   timestamp: number;
+  sourceTag?: 'AUTONOMOUS_OB' | 'STRATEGY_ARCHITECT' | 'MARKET_STRUCTURE' | 'RISK_MANAGEMENT' | string;
 }
 
 export interface SignalAlertsEnabled {
@@ -18,6 +32,11 @@ export interface SignalAlertsEnabled {
   SWEEP_ALERT: boolean;
   FLOW_STATE_CHANGE: boolean;
   DEAD_ZONE_ENTER: boolean;
+  STRATEGY_MATCHED?: boolean;
+  LIVE_OB_DETECTED?: boolean;
+  IN_ZONE_CONFIRMATION_PENDING?: boolean;
+  AUTO_ORDER_ROUTED?: boolean;
+  STAGE_FILL?: boolean;
 }
 
 export interface SignalAlerts {
@@ -30,6 +49,11 @@ export interface SignalAlerts {
   SWEEP_ALERT: string;
   FLOW_STATE_CHANGE: string;
   DEAD_ZONE_ENTER: string;
+  STRATEGY_MATCHED?: string;
+  LIVE_OB_DETECTED?: string;
+  IN_ZONE_CONFIRMATION_PENDING?: string;
+  AUTO_ORDER_ROUTED?: string;
+  STAGE_FILL?: string;
 }
 
 const ALERT_TYPE_TO_SIGNAL_KEY: Record<SmartAlert['type'], keyof SignalAlertsEnabled> = {
@@ -39,9 +63,13 @@ const ALERT_TYPE_TO_SIGNAL_KEY: Record<SmartAlert['type'], keyof SignalAlertsEna
   SMT_TRAP: 'SMT_TRAP_ACTIVE',
   PRICING_SHIFT: 'PRICING_SHIFT',
   OBJECTIVE_UPDATE: 'DOL_EXHAUSTED',
-  FLOW_STATE: 'DISPLACEMENT_CONFIRMED',
+  FLOW_STATE: 'FLOW_STATE_CHANGE',
   SESSION_TRANSITION: 'SESSION_TRANSITION',
-  STRATEGY_MATCHED: 'DISPLACEMENT_CONFIRMED',
+  STRATEGY_MATCHED: 'STRATEGY_MATCHED',
+  LIVE_OB_DETECTED: 'LIVE_OB_DETECTED',
+  IN_ZONE_CONFIRMATION_PENDING: 'IN_ZONE_CONFIRMATION_PENDING',
+  AUTO_ORDER_ROUTED: 'AUTO_ORDER_ROUTED',
+  STAGE_FILL: 'STAGE_FILL',
 };
 
 export function useLiveAlerts(
@@ -92,7 +120,12 @@ export function useLiveAlerts(
     return false;
   }, []);
 
-  const triggerAlert = useCallback((type: SmartAlert['type'], message: string, soundPath?: string) => {
+  const triggerAlert = useCallback((
+    type: SmartAlert['type'],
+    message: string,
+    soundPath?: string,
+    sourceTag?: SmartAlert['sourceTag']
+  ) => {
     // 🛑 AUDIT GATE: Check if alert type is enabled in user settings
     const signalKey = ALERT_TYPE_TO_SIGNAL_KEY[type];
     const enabledMap = signalAlertsEnabledRef.current;
@@ -101,12 +134,21 @@ export function useLiveAlerts(
       return;
     }
 
+    // Default source tagging based on event taxonomy if not provided
+    const resolvedSourceTag = sourceTag || (
+      type === 'STRATEGY_MATCHED' ? 'STRATEGY_ARCHITECT' :
+      (type === 'LIVE_OB_DETECTED' || type === 'IN_ZONE_CONFIRMATION_PENDING' || type === 'AUTO_ORDER_ROUTED' || type === 'STAGE_FILL') ? 'AUTONOMOUS_OB' :
+      type === 'RISK_OVERRIDE' ? 'RISK_MANAGEMENT' :
+      'MARKET_STRUCTURE'
+    );
+
     setActiveAlerts((prev) => {
       const newAlert: SmartAlert = {
         id: `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         type,
         message,
         timestamp: Date.now(),
+        sourceTag: resolvedSourceTag,
       };
       // Keep only the most recent 10 alerts
       return [newAlert, ...prev].slice(0, 10);

@@ -1,8 +1,68 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.9
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.11
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-17 (V16.9 — Live Automated Trade Persistence & Database Journal Re-hydration)  
+> **Last Updated:** 2026-08-17 (V16.11 — Order Block Visual Minimalist Overhaul & Interactive Inspector)  
+
+## 🆕 V16.11 Changelog — Order Block Visual Minimalist Overhaul & Interactive Inspector (2026-08-17)
+
+### Summary
+Overhauled the visual rendering of the **Order Block & Breaker Chart Layer** to eliminate chart clutter and text-label pollution. Replaced verbose canvas badges with compact, non-intrusive micro-pills (`⚡ BB`, `🟢 OB`, `🔴 OB`), lowered box fill opacities to subtle 5% alpha for pristine candlestick legibility, rendered high-contrast 50% Mean Threshold (MT) dashed midlines, and introduced an interactive click-to-inspect glassmorphic Zone Inspector Popover detailing 4-gate validation metrics, liquidity sweeps, displacement volume multiples, and exact price levels.
+
+### Key Features & Architectural Directives
+- **Typography & Label De-Cluttering (`OrderBlockOverlay.tsx`):**
+  - Eliminated wide, text-heavy floating canvas badges.
+  - Replaced with sleek, direction-explicit micro-pills anchored to the origin edge:
+    - Bullish OB: `🟢 BULL OB` / `🟢 A+ BULL OB`
+    - Bearish OB: `🔴 BEAR OB` / `🔴 A+ BEAR OB`
+    - Bullish Breaker: `⚡🟢 BULL BB`
+    - Bearish Breaker: `⚡🔴 BEAR BB`
+  - Added sub-toggle controls (`order_blocks_labels`, `order_blocks_mt`) in the Layer HUD and store.
+- **Direction-Driven Border Colors & Rapid Visual Scanning:**
+  - **Crisp Green/Emerald Border (`#10b981` / `#34d399`):** Instantly identifies all **BULLISH** structures (both Bullish OBs and Bullish Breakers).
+  - **Crisp Red/Rose Border (`#f43f5e` / `#fb7185`):** Instantly identifies all **BEARISH** structures (both Bearish OBs and Bearish Breakers).
+  - Breaker Blocks feature violet-accented Mean Threshold midlines (`#c084fc`) to distinguish structural inversions.
+  - Zone fills maintained at subtle 5% alpha (`0.05` opacity) for 100% candle and wick transparency.
+  - High-contrast 50% Mean Threshold dashed horizontal line across the zone length with dedicated micro-tag.
+- **Interactive Click-to-Inspect Workflow:**
+  - Hover: Subtle border brightness boost and pointer cursor feedback.
+  - Click: Selects the zone with an active glowing cyan outline (`ring-2 ring-cyan-400 shadow-[0_0_20px_rgba(6,182,212,0.45)]`) and opens the glassmorphic **Zone Inspector Popover**.
+  - **Zone Inspector Popover Diagnostics:**
+    - Zone Type, Timeframe, Quality Tier badge (`A+`, `A`, `B`), Confluence Score (0-100), Origin Time.
+    - Price Geometry: Top ($), 50% MT Midline ($), Bottom ($), Range Height ($ & %).
+    - 4-Gate Breakdown: Liquidity Sweep (Swept level), Displacement & FVG (Volume multiplier, body ratio, FVG coordinates), Structural Shift (MSS/BOS), Dealing Range (Premium/Discount).
+    - Institutional Context: DOL Target, Structural Weight, Lifecycle State (`UNTESTED`, `ACTIVE_BREAKER`, `MITIGATED`).
+- **Clean Box Truncation:**
+  - Mitigated, breached, or invalidated zones terminate cleanly at their breach timestamp rather than stacking endlessly across future price action.
+
+---
+
+## 🆕 V16.10 Changelog — Live Alert Bus & Event Channel Isolation Audit (2026-08-17)
+
+### Summary
+Decoupled the Autonomous Order Block / Breaker execution alerts from the Custom Equation Builder (`STRATEGY_MATCHED`) pipeline. Established explicit, isolated event types across the notification dispatcher (`useLiveAlerts.ts`), implemented dedicated visual aesthetics and audio signatures with accurate source tagging (`SmartAlertsToast.tsx`), and verified complete channel isolation and zero cross-contamination via an automated verification test suite (`scratch/test_alert_bus_isolation.ts`).
+
+### Key Features & Architectural Directives
+- **Event Bus Taxonomy & Channel Segregation (`useLiveAlerts.ts` & `useMarketData.ts`):**
+  - **`LIVE_OB_DETECTED`:** Autonomous structural detection on candle close.
+  - **`IN_ZONE_CONFIRMATION_PENDING`:** Live price testing an active zone awaiting volume/MSS shift.
+  - **`AUTO_ORDER_ROUTED`:** Automated execution entry routing (3-stage position open).
+  - **`STAGE_FILL`:** 40/40/20 tranche scaling (Stage 1 @ 1.0R, Stage 2 @ 1.5R, Stage 3 DOL Runner) and ratchet updates.
+  - **`STRATEGY_MATCHED`:** Reserved strictly for custom user-built equations from the Strategy Architect. Decoupled from `DISPLACEMENT_CONFIRMED`.
+- **Visual & Audio Signature Decoupling (`SmartAlertsToast.tsx` & `SettingsModal.tsx`):**
+  - **Autonomous OB Pipeline:** High-priority institutional execution aesthetic with deep obsidian/emerald styling, neon cyan/emerald reticles, dedicated execution chimes (`/audio/sweep_alert.mp3`, `/audio/objective_update.wav`, `/audio/flow_state.wav`), and explicit badges:
+    - `⚡ AUTONOMOUS EXECUTION`
+    - `💰 TRANCHE SCALE (40/40/20)`
+    - `🏛️ LIVE OB DETECTED`
+    - `⏳ IN-ZONE CONFIRMATION PENDING`
+  - **Custom Strategy Builder:** Distinct modular brutalist black container with `#50ffaf` mint-green accent border, animated crosshair, and separate alert sound (`/audio/fvg_alert.mp3`), tagged `🎯 STRATEGY ARCHITECT`.
+  - **Accurate Source Tagging:** Each toast displays an explicit badge identifying origin (`AUTONOMOUS_OB`, `STRATEGY_ARCHITECT`, `MARKET_STRUCTURE`, `RISK_MANAGEMENT`).
+- **Database Journaling Decoupling (`useLiveOrderBlockExecution.ts` & `useStrategyEvaluator.ts`):**
+  - Live autonomous tranche executions emit database journal payloads strictly under `strategy_name: Auto OB Execution (...)`, while custom equation matches emit under `strategy_name: <custom_name>` without cross-triggering toasts.
+- **Automated Verification Test Suite (`scratch/test_alert_bus_isolation.ts`):**
+  - 22/22 unit and integration assertions passing with zero errors, verifying 100% channel isolation across OB detection, in-zone testing, order routing, tranche scale-outs, and custom strategy evaluation matches.
+
+---
 
 ## 🆕 V16.9 Changelog — Live Automated Trade Persistence & Database Journal Re-hydration (2026-08-17)
 

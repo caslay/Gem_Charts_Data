@@ -116,7 +116,7 @@ export const DEFAULT_LIVE_EXEC_CONFIG: LiveExecutionConfig = {
 };
 
 export type TradeEventCallback = (event: {
-  type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO' | 'ROLLBACK' | 'REHYDRATED';
+  type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO' | 'ROLLBACK' | 'REHYDRATED' | 'LIVE_OB_DETECTED';
   position?: LivePosition;
   message: string;
 }) => void;
@@ -149,6 +149,7 @@ export class LiveOrderBlockExecutionEngine {
   // Multi-Timeframe Active Zone Pool
   private activeZonesByTimeframe: Map<string, InstitutionalOrderBlock[]> = new Map();
   private allActiveZones: InstitutionalOrderBlock[] = [];
+  private knownZoneIds: Set<string> = new Set();
 
   // Live Position Manager
   private openPositions: Map<string, LivePosition> = new Map();
@@ -200,7 +201,7 @@ export class LiveOrderBlockExecutionEngine {
   }
 
   private emitEvent(
-    type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO' | 'ROLLBACK' | 'REHYDRATED',
+    type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO' | 'ROLLBACK' | 'REHYDRATED' | 'LIVE_OB_DETECTED',
     position: LivePosition | undefined,
     message: string
   ) {
@@ -310,6 +311,21 @@ export class LiveOrderBlockExecutionEngine {
 
       this.activeZonesByTimeframe.set(tf, taggedZones);
       hasUpdates = true;
+
+      // ── Detect & Emit Newly Formed Valid Order Blocks ──
+      for (const zone of taggedZones) {
+        if (!this.knownZoneIds.has(zone.id)) {
+          this.knownZoneIds.add(zone.id);
+          const isFresh = (lastCandle.t - zone.origin_time) <= maxLookbackMs;
+          if (isFresh) {
+            this.emitEvent(
+              'LIVE_OB_DETECTED',
+              undefined,
+              `🏛️ [${tf.toUpperCase()} OB DETECTED] Valid ${zone.quality_tier} ${zone.type} formed @ MT $${zone.mean_threshold.toFixed(2)} (${zone.structural_weight})`
+            );
+          }
+        }
+      }
 
       // ── Evaluate In-Zone Testing Confirmations on Closed Candle ──
       this.evaluateInZoneConfirmationsForTimeframe(tf, lastCandle);

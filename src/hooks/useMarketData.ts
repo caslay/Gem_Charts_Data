@@ -18,6 +18,11 @@ export interface SignalAlerts {
   SWEEP_ALERT: string;
   FLOW_STATE_CHANGE: string;
   DEAD_ZONE_ENTER: string;
+  STRATEGY_MATCHED?: string;
+  LIVE_OB_DETECTED?: string;
+  IN_ZONE_CONFIRMATION_PENDING?: string;
+  AUTO_ORDER_ROUTED?: string;
+  STAGE_FILL?: string;
 }
 
 export interface SignalAlertsEnabled {
@@ -30,6 +35,11 @@ export interface SignalAlertsEnabled {
   SWEEP_ALERT: boolean;
   FLOW_STATE_CHANGE: boolean;
   DEAD_ZONE_ENTER: boolean;
+  STRATEGY_MATCHED?: boolean;
+  LIVE_OB_DETECTED?: boolean;
+  IN_ZONE_CONFIRMATION_PENDING?: boolean;
+  AUTO_ORDER_ROUTED?: boolean;
+  STAGE_FILL?: boolean;
 }
 
 const DEFAULT_SIGNAL_ALERTS: SignalAlerts = {
@@ -42,6 +52,11 @@ const DEFAULT_SIGNAL_ALERTS: SignalAlerts = {
   SWEEP_ALERT: "sweep_alert.mp3",
   FLOW_STATE_CHANGE: "flow_state.wav",
   DEAD_ZONE_ENTER: "dead_zone.mp3",
+  STRATEGY_MATCHED: "fvg_alert.mp3",
+  LIVE_OB_DETECTED: "flow_state.wav",
+  IN_ZONE_CONFIRMATION_PENDING: "session_transition.wav",
+  AUTO_ORDER_ROUTED: "sweep_alert.mp3",
+  STAGE_FILL: "objective_update.wav",
 };
 
 const DEFAULT_SIGNAL_ALERTS_ENABLED: SignalAlertsEnabled = {
@@ -54,6 +69,11 @@ const DEFAULT_SIGNAL_ALERTS_ENABLED: SignalAlertsEnabled = {
   SWEEP_ALERT: true,
   FLOW_STATE_CHANGE: true,
   DEAD_ZONE_ENTER: true,
+  STRATEGY_MATCHED: true,
+  LIVE_OB_DETECTED: true,
+  IN_ZONE_CONFIRMATION_PENDING: true,
+  AUTO_ORDER_ROUTED: true,
+  STAGE_FILL: true,
 };
 
 export interface ThemeSettings {
