@@ -303,7 +303,11 @@ export function calculateOrderFlowStats(
 
   const oneDayAgo = nowMs - 24 * 60 * 60 * 1000;
 
-  const allRecords: OrderFlowStateRecord[] = [...history];
+  const validHistory = activeState
+    ? history.filter((h) => h.entered_at < activeState.entered_at)
+    : history;
+
+  const allRecords: OrderFlowStateRecord[] = [...validHistory];
   if (activeState) {
     const elapsed = Math.max(1, Math.round((nowMs - activeState.entered_at) / 1000));
     allRecords.push({
@@ -350,7 +354,7 @@ export function calculateOrderFlowStats(
   }
 
   return {
-    total_transitions: history.length + (activeState ? 1 : 0),
+    total_transitions: allRecords.length,
     time_in_buy_sponsorship_sec: buySec,
     time_in_short_sponsorship_sec: shortSec,
     time_in_liquidation_sec: liqSec,

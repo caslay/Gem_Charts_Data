@@ -1,15 +1,35 @@
 {
   "version": "1.0.0",
   "symbol": "ETHUSDC.p",
-  "lastUpdated": "2026-08-17T15:33:25.199Z",
+  "lastUpdated": "2026-08-17T15:49:57.292Z",
   "stats": {
-    "totalSetups": 31,
+    "totalSetups": 32,
     "success": 0,
     "stopOut": 4,
     "noTrigger": 0,
     "winRate": 0
   },
   "entries": [
+    {
+      "id": "ETH-20260817-1908",
+      "date": "2026-08-17",
+      "time": "15:49",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Execution prohibited due to active DEAD_ZONE ",
+      "htfDol": "PWH ($1,929.77) & SSL Liquidity Pool ($1,889.00)",
+      "smtStatus": "NONE — SMT Decoupled between ETH and BTC at current session highs",
+      "orderFlowState": "RISING_AGAINST_PRICE",
+      "entryRange": [
+        1908.4,
+        1910.36
+      ],
+      "invalidation": 1911.2,
+      "tp1": 1900.4,
+      "tp2": 1889,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $1,910.36 | Local Premium Expansion / DEAD_ZONE Stand Down"
+    },
     {
       "id": "ETH-20260817-1903",
       "date": "2026-08-17",

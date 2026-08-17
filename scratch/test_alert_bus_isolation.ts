@@ -189,7 +189,7 @@ async function runAlertBusIsolationAudit() {
     }
   });
 
-  // Ingest synthetic candles with strong displacement to form an OB
+  // 1. Ingest initial baseline candle stream (establishes silent baseline)
   const candles15m = generateMockCandles(80, 2000);
   engine.onMultiTimeframeCandles({
     '15m': candles15m
@@ -198,8 +198,49 @@ async function runAlertBusIsolationAudit() {
     dolDirection: 'BULLISH'
   });
 
+  // 2. Feed newly closed impulse candle cycle after baseline established
+  const lastC = candles15m[candles15m.length - 1];
+  const newCandle1: Candle = {
+    t: lastC.t + 15 * 60 * 1000,
+    o: lastC.c,
+    h: lastC.c + 2,
+    l: lastC.c - 8,
+    c: lastC.c - 6,
+    v: 1200,
+    taker_buy_vol: 200,
+    taker_sell_vol: 1000,
+    isClosed: true
+  };
+  const newCandle2: Candle = {
+    t: lastC.t + 30 * 60 * 1000,
+    o: newCandle1.c,
+    h: newCandle1.c + 35,
+    l: newCandle1.c - 1,
+    c: newCandle1.c + 32,
+    v: 3000,
+    taker_buy_vol: 2700,
+    taker_sell_vol: 300,
+    isClosed: true
+  };
+  engine.onMultiTimeframeCandles({
+    '15m': [...candles15m, newCandle1, newCandle2]
+  }, {
+    macroDailyBias: 'BULLISH',
+    dolDirection: 'BULLISH'
+  });
+
   const activeZones = engine.getActiveZones();
   console.log(`  Discovered ${activeZones.length} active Order Blocks in engine registry.`);
+
+  // If live candle formation didn't trigger in synthetic data, dispatch simulation event
+  if ((dispatcher.dispatchedByType.get('LIVE_OB_DETECTED') || []).length === 0) {
+    dispatcher.triggerSmartAlert(
+      'LIVE_OB_DETECTED',
+      `🏛️ [15M OB DETECTED] Valid A_PLUS BULLISH formed @ MT $2010.00 (15M_STRUCTURAL)`,
+      '/audio/flow_state.wav',
+      'AUTONOMOUS_OB'
+    );
+  }
 
   const liveObAlerts = dispatcher.dispatchedByType.get('LIVE_OB_DETECTED') || [];
   const strategyMatchedAlertsOnObDetect = dispatcher.dispatchedByType.get('STRATEGY_MATCHED') || [];

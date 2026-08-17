@@ -278,7 +278,7 @@ export default function OrderBlockOverlay({ context }: OrderBlockOverlayProps) {
                 }}
                 title="Click to view quantitative diagnostics"
               >
-                <span class="font-weight-400">{microTag}</span>
+                <span className="font-normal">{microTag}</span>
               </div>
             )}
           </React.Fragment>

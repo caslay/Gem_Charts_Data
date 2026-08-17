@@ -101,6 +101,10 @@ export function useLiveAlerts(
     signalAlertsRef.current = signalAlerts;
   }, [signalAlertsEnabled, signalAlerts]);
 
+  const messageCooldownsRef = useRef<Map<string, number>>(new Map());
+  const lastDesktopNotificationTimeRef = useRef<number>(0);
+  const lastAudioPlayTimeRef = useRef<number>(0);
+
   // Request Notification permission
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -134,6 +138,21 @@ export function useLiveAlerts(
       return;
     }
 
+    // 🛑 ANTI-SPAM DEDUPLICATION: Suppress identical alert messages within 15 seconds
+    const now = Date.now();
+    const lastMessageTime = messageCooldownsRef.current.get(message) || 0;
+    if (now - lastMessageTime < 15000) {
+      return;
+    }
+    messageCooldownsRef.current.set(message, now);
+
+    // Garbage-collect message cooldowns map periodically
+    if (messageCooldownsRef.current.size > 200) {
+      for (const [k, v] of messageCooldownsRef.current.entries()) {
+        if (now - v > 60000) messageCooldownsRef.current.delete(k);
+      }
+    }
+
     // Default source tagging based on event taxonomy if not provided
     const resolvedSourceTag = sourceTag || (
       type === 'STRATEGY_MATCHED' ? 'STRATEGY_ARCHITECT' :
@@ -155,8 +174,13 @@ export function useLiveAlerts(
     });
 
     if (typeof window !== 'undefined') {
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification("Flow-State Alert", { body: message });
+      // 🛑 DESKTOP NOTIFICATION GATE: Only send OS banners for high-priority executions
+      const isHighPriorityExecution = type === 'AUTO_ORDER_ROUTED' || type === 'STAGE_FILL' || type === 'STRATEGY_MATCHED' || type === 'OBJECTIVE_UPDATE';
+      if ('Notification' in window && Notification.permission === 'granted' && isHighPriorityExecution) {
+        if (now - lastDesktopNotificationTimeRef.current >= 4000) {
+          lastDesktopNotificationTimeRef.current = now;
+          new Notification("Flow-State Alert", { body: message });
+        }
       }
       
       // Resolve custom sound file from signalAlerts map if available
@@ -164,14 +188,18 @@ export function useLiveAlerts(
       const finalSoundPath = mappedSoundFile ? `/audio/${mappedSoundFile}` : soundPath;
 
       if (finalSoundPath) {
-        const audio = new Audio(finalSoundPath);
-        audio.play().catch(e => {
-          if (e.name === 'NotAllowedError') {
-            console.log('[Audio] Playback blocked by browser autoplay policy until user interacts.');
-          } else {
-            console.error('Audio play error:', e);
-          }
-        });
+        // Audio Chime Throttle: Minimum 600ms gap between chimes to prevent audio screech bursts
+        if (now - lastAudioPlayTimeRef.current >= 600) {
+          lastAudioPlayTimeRef.current = now;
+          const audio = new Audio(finalSoundPath);
+          audio.play().catch(e => {
+            if (e.name === 'NotAllowedError') {
+              console.log('[Audio] Playback blocked by browser autoplay policy until user interacts.');
+            } else {
+              console.error('Audio play error:', e);
+            }
+          });
+        }
       }
     }
   }, []);

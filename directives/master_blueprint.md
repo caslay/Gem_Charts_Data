@@ -1,8 +1,25 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.11
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.12
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-17 (V16.11 — Order Block Visual Minimalist Overhaul & Interactive Inspector)  
+> **Last Updated:** 2026-08-17 (V16.12 — Order Flow Footprint & Timeline Synchronization)  
+
+## 🆕 V16.12 Changelog — Order Flow Footprint & Timeline Synchronization (2026-08-17)
+
+### Summary
+Audited and resolved the synchronization discrepancy between the Order Flow Timeline Ribbon above the chart and Card 6 in the right sidebar. Extracted a unified single-source-of-truth segment aggregation helper (`getUnifiedTimelineSegments`), synchronized live active-state duration timers (`liveOfDurationSec`), strictly deduplicated overlapping historical timestamps in `calculateOrderFlowStats`, and harmonized transition counts across all chart and sidebar views.
+
+### Key Features & Architectural Directives
+- **Single-Source-of-Truth Timeline Segment Aggregation (`getUnifiedTimelineSegments`):**
+  - Harmonized `OrderFlowTimelineRibbon.tsx`, `Sidebar.tsx`, `BacktestSidebar.tsx`, and `OrderFlowTimelineModal.tsx`.
+  - Merges confirmed historical transitions strictly prior to `active_state.entered_at` with the active ongoing state.
+  - Guarantees that the number of rendered timeline bars matches the displayed transition count 100%.
+- **Live Active-State Duration Ticker Synchronization:**
+  - Added live ticking counter (`liveOfDurationSec`) in `Sidebar.tsx`, ensuring the active regime timer ticks dynamically in real-time in lockstep with the top ribbon rather than displaying a static server snapshot.
+- **Server-Side Transition Deduplication (`orderFlowEngine.ts`):**
+  - Updated `calculateOrderFlowStats` to filter `history` strictly prior to `active_state.entered_at`, eliminating double-counted active records and guaranteeing `stats.total_transitions === allRecords.length`.
+
+---
 
 ## 🆕 V16.11 Changelog — Order Block Visual Minimalist Overhaul & Interactive Inspector (2026-08-17)
 
