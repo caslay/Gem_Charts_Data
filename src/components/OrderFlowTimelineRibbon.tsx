@@ -113,6 +113,56 @@ export function formatDuration(seconds: number | null | undefined): string {
   return `${mins.toString().padStart(2, '0')}:${remSec.toString().padStart(2, '0')}`;
 }
 
+export function getUnifiedTimelineSegments(
+  timeline?: OrderFlowTimelineSummary | null,
+  livePrice?: number | null,
+  liveDurationSec?: number,
+  maxHistoryCount: number = 50
+): { segments: OrderFlowStateRecord[]; totalTransitions: number } {
+  if (!timeline) return { segments: [], totalTransitions: 0 };
+  const activeState = timeline.active_state || null;
+  const history = timeline.history || [];
+
+  const validHistory = activeState
+    ? history.filter((h) => h.entered_at < activeState.entered_at)
+    : history;
+
+  const seenEnteredAt = new Set<number>();
+  const recs: OrderFlowStateRecord[] = [];
+
+  const sliceSource = maxHistoryCount > 0 ? validHistory.slice(-maxHistoryCount) : validHistory;
+  for (const h of sliceSource) {
+    if (!seenEnteredAt.has(h.entered_at)) {
+      seenEnteredAt.add(h.entered_at);
+      recs.push(h);
+    }
+  }
+
+  if (activeState) {
+    const activeEnriched: OrderFlowStateRecord = {
+      ...activeState,
+      duration_seconds: liveDurationSec || activeState.duration_seconds || 1,
+      exit_price: livePrice ?? activeState.exit_price ?? activeState.entry_price,
+      price_change: livePrice ? parseFloat((livePrice - activeState.entry_price).toFixed(2)) : activeState.price_change,
+      price_change_pct: livePrice ? parseFloat((((livePrice - activeState.entry_price) / activeState.entry_price) * 100).toFixed(3)) : activeState.price_change_pct,
+    };
+
+    if (seenEnteredAt.has(activeState.entered_at)) {
+      const idx = recs.findIndex((r) => r.entered_at === activeState.entered_at);
+      if (idx !== -1) {
+        recs[idx] = activeEnriched;
+      }
+    } else {
+      recs.push(activeEnriched);
+    }
+  }
+
+  recs.sort((a, b) => a.entered_at - b.entered_at);
+
+  const totalTransitions = validHistory.length + (activeState ? 1 : 0);
+  return { segments: recs, totalTransitions };
+}
+
 export function formatTimeCairo(ms: number | null | undefined): string {
   if (!ms) return '---';
   try {
@@ -150,7 +200,6 @@ export default function OrderFlowTimelineRibbon({
   const [liveDurationSec, setLiveDurationSec] = useState<number>(0);
 
   const activeState = timeline?.active_state || null;
-  const history = timeline?.history || [];
 
   // Update live duration ticker every second
   useEffect(() => {
@@ -169,44 +218,10 @@ export default function OrderFlowTimelineRibbon({
     return () => clearInterval(interval);
   }, [activeState?.entered_at, activeState?.duration_seconds, isBacktest]);
 
-  // Combine visible history (last 16-24 segments) + active state, strictly deduplicating and sorting chronologically
-  const allSegments = useMemo(() => {
-    const recs: OrderFlowStateRecord[] = [];
-    const seenEnteredAt = new Set<number>();
-
-    const validHistory = activeState
-      ? history.filter((h) => h.entered_at < activeState.entered_at)
-      : history;
-
-    for (const h of validHistory.slice(-20)) {
-      if (!seenEnteredAt.has(h.entered_at)) {
-        seenEnteredAt.add(h.entered_at);
-        recs.push(h);
-      }
-    }
-
-    if (activeState) {
-      const activeEnriched: OrderFlowStateRecord = {
-        ...activeState,
-        duration_seconds: liveDurationSec || activeState.duration_seconds || 1,
-        exit_price: livePrice ?? activeState.exit_price ?? activeState.entry_price,
-        price_change: livePrice ? parseFloat((livePrice - activeState.entry_price).toFixed(2)) : activeState.price_change,
-        price_change_pct: livePrice ? parseFloat((((livePrice - activeState.entry_price) / activeState.entry_price) * 100).toFixed(3)) : activeState.price_change_pct,
-      };
-
-      if (seenEnteredAt.has(activeState.entered_at)) {
-        const idx = recs.findIndex((r) => r.entered_at === activeState.entered_at);
-        if (idx !== -1) {
-          recs[idx] = activeEnriched;
-        }
-      } else {
-        recs.push(activeEnriched);
-      }
-    }
-
-    recs.sort((a, b) => a.entered_at - b.entered_at);
-    return recs;
-  }, [history, activeState, liveDurationSec, livePrice]);
+  // Combine visible history (last 20 segments) + active state, strictly deduplicating and sorting chronologically
+  const { segments: allSegments, totalTransitions } = useMemo(() => {
+    return getUnifiedTimelineSegments(timeline, livePrice, liveDurationSec, 20);
+  }, [timeline, livePrice, liveDurationSec]);
 
   // Compute total duration to determine percentage flex widths with min/max clamps
   const totalDuration = useMemo(() => {

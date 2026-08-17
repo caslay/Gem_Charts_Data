@@ -941,6 +941,11 @@ export default function SettingsPage() {
 
                   <div className="space-y-3 px-1.5 max-h-[350px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-card-border scrollbar-track-transparent">
                     {[
+                      { key: "AUTO_ORDER_ROUTED", label: "Auto OB Order Routed", desc: "Fires when autonomous 3-stage position is opened" },
+                      { key: "STAGE_FILL", label: "Tranche Scale Fill (40/40/20)", desc: "Fires when Stage 1/2/3 scaling or ratchet update occurs" },
+                      { key: "LIVE_OB_DETECTED", label: "Live OB Structural Detection", desc: "Fires when a new institutional Order Block confirms on candle close" },
+                      { key: "IN_ZONE_CONFIRMATION_PENDING", label: "In-Zone Volumetric Test", desc: "Fires when live price enters an active zone awaiting confirmation" },
+                      { key: "STRATEGY_MATCHED", label: "Strategy Architect Match", desc: "Fires when custom user-built equations match condition gates" },
                       { key: "FVG_DETECTION", label: "FVG Imbalance Detection", desc: "Fires when a new Fair Value Gap forms" },
                       { key: "DISPLACEMENT_CONFIRMED", label: "Displacement Sponsorship", desc: "Fires when institutional displacement acts" },
                       { key: "SMT_TRAP_ACTIVE", label: "SMT Divergence Trap", desc: "Fires when Equal Highs/Lows are engineered" },

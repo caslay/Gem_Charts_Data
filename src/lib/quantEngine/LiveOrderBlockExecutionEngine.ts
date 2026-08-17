@@ -116,7 +116,7 @@ export const DEFAULT_LIVE_EXEC_CONFIG: LiveExecutionConfig = {
 };
 
 export type TradeEventCallback = (event: {
-  type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO' | 'ROLLBACK' | 'REHYDRATED';
+  type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO' | 'ROLLBACK' | 'REHYDRATED' | 'LIVE_OB_DETECTED';
   position?: LivePosition;
   message: string;
 }) => void;
@@ -149,17 +149,20 @@ export class LiveOrderBlockExecutionEngine {
   // Multi-Timeframe Active Zone Pool
   private activeZonesByTimeframe: Map<string, InstitutionalOrderBlock[]> = new Map();
   private allActiveZones: InstitutionalOrderBlock[] = [];
+  private knownZoneIds: Set<string> = new Set();
 
   // Live Position Manager
   private openPositions: Map<string, LivePosition> = new Map();
   private closedPositions: LivePosition[] = [];
   private eventListeners: TradeEventCallback[] = [];
 
-  // Single-use zone doctrine and cooldown tracking
+  // Single-use zone doctrine, alert throttling, and cooldown tracking
   private consumedZoneIds: Set<string> = new Set();
   private cooldownUntilTimestamp: number = 0;
   private inZoneTestingStates: Map<string, InZoneTestingState> = new Map();
   private currentMacroContext: MacroMarketContext = {};
+  private isBaselineEstablished: boolean = false;
+  private lastInZoneAlertTimes: Map<string, number> = new Map();
 
   constructor(customConfig?: Partial<LiveExecutionConfig>) {
     this.config = { ...DEFAULT_LIVE_EXEC_CONFIG, ...customConfig };
@@ -200,7 +203,7 @@ export class LiveOrderBlockExecutionEngine {
   }
 
   private emitEvent(
-    type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO' | 'ROLLBACK' | 'REHYDRATED',
+    type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO' | 'ROLLBACK' | 'REHYDRATED' | 'LIVE_OB_DETECTED',
     position: LivePosition | undefined,
     message: string
   ) {
@@ -311,8 +314,31 @@ export class LiveOrderBlockExecutionEngine {
       this.activeZonesByTimeframe.set(tf, taggedZones);
       hasUpdates = true;
 
+      // ── Detect & Emit Newly Formed Valid Order Blocks ──
+      for (const zone of taggedZones) {
+        if (!this.knownZoneIds.has(zone.id)) {
+          this.knownZoneIds.add(zone.id);
+          // Only alert for freshly formed blocks that closed on this exact candle cycle after baseline established
+          if (this.isBaselineEstablished) {
+            const isFreshFormed = (lastCandle.t - zone.formation_time) <= 120000;
+            if (isFreshFormed) {
+              this.emitEvent(
+                'LIVE_OB_DETECTED',
+                undefined,
+                `🏛️ [${tf.toUpperCase()} OB DETECTED] Valid ${zone.quality_tier} ${zone.type} formed @ MT $${zone.mean_threshold.toFixed(2)} (${zone.structural_weight})`
+              );
+            }
+          }
+        }
+      }
+
       // ── Evaluate In-Zone Testing Confirmations on Closed Candle ──
       this.evaluateInZoneConfirmationsForTimeframe(tf, lastCandle);
+    }
+
+    // Mark baseline as established after initial scan pass completes
+    if (!this.isBaselineEstablished) {
+      this.isBaselineEstablished = true;
     }
 
     if (hasUpdates) {
@@ -574,11 +600,17 @@ export class LiveOrderBlockExecutionEngine {
                 touchPrice: tickPrice,
                 status: 'AWAITING_IN_ZONE_CONFIRMATION'
               });
-              this.emitEvent(
-                'CONFIRMATION_PENDING',
-                undefined,
-                `⏳ [${zone.timeframe.toUpperCase()} IN-ZONE TEST] Price entered ${zone.quality_tier} ${zone.type} zone @ $${tickPrice}. Awaiting ${zone.timeframe} rejection candle & volume confirmation...`
-              );
+
+              // Throttle: Alert at most once per 10 minutes (600,000ms) for the same zone
+              const lastAlert = this.lastInZoneAlertTimes.get(zone.id) || 0;
+              if (tickTime - lastAlert >= 600000) {
+                this.lastInZoneAlertTimes.set(zone.id, tickTime);
+                this.emitEvent(
+                  'CONFIRMATION_PENDING',
+                  undefined,
+                  `⏳ [${zone.timeframe.toUpperCase()} IN-ZONE TEST] Price entered ${zone.quality_tier} ${zone.type} zone @ $${tickPrice}. Awaiting ${zone.timeframe} rejection candle & volume confirmation...`
+                );
+              }
             }
           } else {
             this.openLivePosition(zone, tickPrice, tickTime);

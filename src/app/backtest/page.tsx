@@ -82,7 +82,7 @@ export default function BacktestPage() {
     setActiveAlerts((prev) => prev.filter((a) => a.id !== id));
   }, []);
 
-  const triggerSmartAlert = useCallback((type: any, message: string, soundPath?: string) => {
+  const triggerSmartAlert = useCallback((type: any, message: string, soundPath?: string, sourceTag?: string) => {
     // Audit gate: check if signal type is enabled
     if (signalAlertsEnabled) {
       const isTypeEnabled = (type === 'PURGE' && signalAlertsEnabled.SWEEP_ALERT !== false) ||
@@ -91,9 +91,13 @@ export default function BacktestPage() {
         (type === 'SMT_TRAP' && signalAlertsEnabled.SMT_TRAP_ACTIVE !== false) ||
         (type === 'PRICING_SHIFT' && signalAlertsEnabled.PRICING_SHIFT !== false) ||
         (type === 'OBJECTIVE_UPDATE' && signalAlertsEnabled.DOL_EXHAUSTED !== false) ||
-        (type === 'FLOW_STATE' && signalAlertsEnabled.DISPLACEMENT_CONFIRMED !== false) ||
+        (type === 'FLOW_STATE' && signalAlertsEnabled.FLOW_STATE_CHANGE !== false) ||
         (type === 'SESSION_TRANSITION' && signalAlertsEnabled.SESSION_TRANSITION !== false) ||
-        (type === 'STRATEGY_MATCHED' && signalAlertsEnabled.DISPLACEMENT_CONFIRMED !== false);
+        (type === 'STRATEGY_MATCHED' && signalAlertsEnabled.STRATEGY_MATCHED !== false) ||
+        (type === 'LIVE_OB_DETECTED' && signalAlertsEnabled.LIVE_OB_DETECTED !== false) ||
+        (type === 'IN_ZONE_CONFIRMATION_PENDING' && signalAlertsEnabled.IN_ZONE_CONFIRMATION_PENDING !== false) ||
+        (type === 'AUTO_ORDER_ROUTED' && signalAlertsEnabled.AUTO_ORDER_ROUTED !== false) ||
+        (type === 'STAGE_FILL' && signalAlertsEnabled.STAGE_FILL !== false);
 
       if (!isTypeEnabled) {
         console.log(`[Backtest] Alert '${type}' suppressed per user settings.`);
@@ -101,12 +105,20 @@ export default function BacktestPage() {
       }
     }
 
+    const resolvedSourceTag = sourceTag || (
+      type === 'STRATEGY_MATCHED' ? 'STRATEGY_ARCHITECT' :
+      (type === 'LIVE_OB_DETECTED' || type === 'IN_ZONE_CONFIRMATION_PENDING' || type === 'AUTO_ORDER_ROUTED' || type === 'STAGE_FILL') ? 'AUTONOMOUS_OB' :
+      type === 'RISK_OVERRIDE' ? 'RISK_MANAGEMENT' :
+      'MARKET_STRUCTURE'
+    );
+
     setActiveAlerts((prev) => {
       const newAlert: SmartAlert = {
         id: `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         type,
         message,
         timestamp: Date.now(),
+        sourceTag: resolvedSourceTag,
       };
       return [newAlert, ...prev].slice(0, 10);
     });

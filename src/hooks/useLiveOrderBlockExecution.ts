@@ -11,6 +11,7 @@ import {
   MacroMarketContext
 } from '@/lib/quantEngine/LiveOrderBlockExecutionEngine';
 import { InstitutionalOrderBlock } from '@/lib/quantEngine/OrderBlockEngine';
+import type { SmartAlert } from '@/hooks/useLiveAlerts';
 
 // Global singleton instance ensures synchronous background processing across all page components & modals
 let sharedEngineInstance: LiveOrderBlockExecutionEngine | null = null;
@@ -22,10 +23,15 @@ function getSharedEngine(config: LiveExecutionConfig): LiveOrderBlockExecutionEn
   return sharedEngineInstance;
 }
 
-export function useLiveOrderBlockExecution(initialConfig?: Partial<LiveExecutionConfig>) {
-  const { data: marketData, wsStatus } = useMarketDataContext();
+export function useLiveOrderBlockExecution(
+  initialConfig?: Partial<LiveExecutionConfig>,
+  triggerAlertOverride?: (type: SmartAlert['type'], message: string, soundPath?: string, sourceTag?: string) => void
+) {
+  const { data: marketData, wsStatus, triggerSmartAlert } = useMarketDataContext();
   const { livePrice } = useMarketDataLiveContext();
   const isConnected = wsStatus === 'OPEN';
+
+  const dispatchAlert = triggerAlertOverride || triggerSmartAlert;
 
   const [engineConfig, setEngineConfig] = useState<LiveExecutionConfig>({
     ...DEFAULT_LIVE_EXEC_CONFIG,
@@ -103,6 +109,17 @@ export function useLiveOrderBlockExecution(initialConfig?: Partial<LiveExecution
       setLastEventTime(Date.now());
 
       const pos = event.position;
+
+      // ── Event Bus Channel Dispatches (Strictly Autonomous OB Pipeline) ──
+      if (event.type === 'LIVE_OB_DETECTED') {
+        dispatchAlert?.('LIVE_OB_DETECTED', event.message, '/audio/flow_state.wav', 'AUTONOMOUS_OB');
+      } else if (event.type === 'CONFIRMATION_PENDING') {
+        dispatchAlert?.('IN_ZONE_CONFIRMATION_PENDING', event.message, '/audio/session_transition.wav', 'AUTONOMOUS_OB');
+      } else if (event.type === 'ORDER_OPENED') {
+        dispatchAlert?.('AUTO_ORDER_ROUTED', event.message, '/audio/sweep_alert.mp3', 'AUTONOMOUS_OB');
+      } else if (event.type === 'STAGE_1_HARVEST' || event.type === 'STAGE_2_HARVEST' || event.type === 'STAGE_3_RUNNER') {
+        dispatchAlert?.('STAGE_FILL', event.message, '/audio/objective_update.wav', 'AUTONOMOUS_OB');
+      }
 
       // ── A. Atomic Trade Entry: POST /api/trades with Rollback Guard ──
       if (event.type === 'ORDER_OPENED' && pos) {

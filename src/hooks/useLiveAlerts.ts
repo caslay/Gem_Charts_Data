@@ -3,9 +3,23 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 // Define the alert structure for the frontend UI
 export interface SmartAlert {
   id: string;
-  type: 'PURGE' | 'DEAD_ZONE' | 'RISK_OVERRIDE' | 'SMT_TRAP' | 'PRICING_SHIFT' | 'OBJECTIVE_UPDATE' | 'FLOW_STATE' | 'SESSION_TRANSITION' | 'STRATEGY_MATCHED';
+  type:
+    | 'PURGE'
+    | 'DEAD_ZONE'
+    | 'RISK_OVERRIDE'
+    | 'SMT_TRAP'
+    | 'PRICING_SHIFT'
+    | 'OBJECTIVE_UPDATE'
+    | 'FLOW_STATE'
+    | 'SESSION_TRANSITION'
+    | 'STRATEGY_MATCHED'
+    | 'LIVE_OB_DETECTED'
+    | 'IN_ZONE_CONFIRMATION_PENDING'
+    | 'AUTO_ORDER_ROUTED'
+    | 'STAGE_FILL';
   message: string;
   timestamp: number;
+  sourceTag?: 'AUTONOMOUS_OB' | 'STRATEGY_ARCHITECT' | 'MARKET_STRUCTURE' | 'RISK_MANAGEMENT' | string;
 }
 
 export interface SignalAlertsEnabled {
@@ -18,6 +32,11 @@ export interface SignalAlertsEnabled {
   SWEEP_ALERT: boolean;
   FLOW_STATE_CHANGE: boolean;
   DEAD_ZONE_ENTER: boolean;
+  STRATEGY_MATCHED?: boolean;
+  LIVE_OB_DETECTED?: boolean;
+  IN_ZONE_CONFIRMATION_PENDING?: boolean;
+  AUTO_ORDER_ROUTED?: boolean;
+  STAGE_FILL?: boolean;
 }
 
 export interface SignalAlerts {
@@ -30,6 +49,11 @@ export interface SignalAlerts {
   SWEEP_ALERT: string;
   FLOW_STATE_CHANGE: string;
   DEAD_ZONE_ENTER: string;
+  STRATEGY_MATCHED?: string;
+  LIVE_OB_DETECTED?: string;
+  IN_ZONE_CONFIRMATION_PENDING?: string;
+  AUTO_ORDER_ROUTED?: string;
+  STAGE_FILL?: string;
 }
 
 const ALERT_TYPE_TO_SIGNAL_KEY: Record<SmartAlert['type'], keyof SignalAlertsEnabled> = {
@@ -39,9 +63,13 @@ const ALERT_TYPE_TO_SIGNAL_KEY: Record<SmartAlert['type'], keyof SignalAlertsEna
   SMT_TRAP: 'SMT_TRAP_ACTIVE',
   PRICING_SHIFT: 'PRICING_SHIFT',
   OBJECTIVE_UPDATE: 'DOL_EXHAUSTED',
-  FLOW_STATE: 'DISPLACEMENT_CONFIRMED',
+  FLOW_STATE: 'FLOW_STATE_CHANGE',
   SESSION_TRANSITION: 'SESSION_TRANSITION',
-  STRATEGY_MATCHED: 'DISPLACEMENT_CONFIRMED',
+  STRATEGY_MATCHED: 'STRATEGY_MATCHED',
+  LIVE_OB_DETECTED: 'LIVE_OB_DETECTED',
+  IN_ZONE_CONFIRMATION_PENDING: 'IN_ZONE_CONFIRMATION_PENDING',
+  AUTO_ORDER_ROUTED: 'AUTO_ORDER_ROUTED',
+  STAGE_FILL: 'STAGE_FILL',
 };
 
 export function useLiveAlerts(
@@ -73,6 +101,10 @@ export function useLiveAlerts(
     signalAlertsRef.current = signalAlerts;
   }, [signalAlertsEnabled, signalAlerts]);
 
+  const messageCooldownsRef = useRef<Map<string, number>>(new Map());
+  const lastDesktopNotificationTimeRef = useRef<number>(0);
+  const lastAudioPlayTimeRef = useRef<number>(0);
+
   // Request Notification permission
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -92,7 +124,12 @@ export function useLiveAlerts(
     return false;
   }, []);
 
-  const triggerAlert = useCallback((type: SmartAlert['type'], message: string, soundPath?: string) => {
+  const triggerAlert = useCallback((
+    type: SmartAlert['type'],
+    message: string,
+    soundPath?: string,
+    sourceTag?: SmartAlert['sourceTag']
+  ) => {
     // 🛑 AUDIT GATE: Check if alert type is enabled in user settings
     const signalKey = ALERT_TYPE_TO_SIGNAL_KEY[type];
     const enabledMap = signalAlertsEnabledRef.current;
@@ -101,20 +138,49 @@ export function useLiveAlerts(
       return;
     }
 
+    // 🛑 ANTI-SPAM DEDUPLICATION: Suppress identical alert messages within 15 seconds
+    const now = Date.now();
+    const lastMessageTime = messageCooldownsRef.current.get(message) || 0;
+    if (now - lastMessageTime < 15000) {
+      return;
+    }
+    messageCooldownsRef.current.set(message, now);
+
+    // Garbage-collect message cooldowns map periodically
+    if (messageCooldownsRef.current.size > 200) {
+      for (const [k, v] of messageCooldownsRef.current.entries()) {
+        if (now - v > 60000) messageCooldownsRef.current.delete(k);
+      }
+    }
+
+    // Default source tagging based on event taxonomy if not provided
+    const resolvedSourceTag = sourceTag || (
+      type === 'STRATEGY_MATCHED' ? 'STRATEGY_ARCHITECT' :
+      (type === 'LIVE_OB_DETECTED' || type === 'IN_ZONE_CONFIRMATION_PENDING' || type === 'AUTO_ORDER_ROUTED' || type === 'STAGE_FILL') ? 'AUTONOMOUS_OB' :
+      type === 'RISK_OVERRIDE' ? 'RISK_MANAGEMENT' :
+      'MARKET_STRUCTURE'
+    );
+
     setActiveAlerts((prev) => {
       const newAlert: SmartAlert = {
         id: `${type}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
         type,
         message,
         timestamp: Date.now(),
+        sourceTag: resolvedSourceTag,
       };
       // Keep only the most recent 10 alerts
       return [newAlert, ...prev].slice(0, 10);
     });
 
     if (typeof window !== 'undefined') {
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification("Flow-State Alert", { body: message });
+      // 🛑 DESKTOP NOTIFICATION GATE: Only send OS banners for high-priority executions
+      const isHighPriorityExecution = type === 'AUTO_ORDER_ROUTED' || type === 'STAGE_FILL' || type === 'STRATEGY_MATCHED' || type === 'OBJECTIVE_UPDATE';
+      if ('Notification' in window && Notification.permission === 'granted' && isHighPriorityExecution) {
+        if (now - lastDesktopNotificationTimeRef.current >= 4000) {
+          lastDesktopNotificationTimeRef.current = now;
+          new Notification("Flow-State Alert", { body: message });
+        }
       }
       
       // Resolve custom sound file from signalAlerts map if available
@@ -122,14 +188,18 @@ export function useLiveAlerts(
       const finalSoundPath = mappedSoundFile ? `/audio/${mappedSoundFile}` : soundPath;
 
       if (finalSoundPath) {
-        const audio = new Audio(finalSoundPath);
-        audio.play().catch(e => {
-          if (e.name === 'NotAllowedError') {
-            console.log('[Audio] Playback blocked by browser autoplay policy until user interacts.');
-          } else {
-            console.error('Audio play error:', e);
-          }
-        });
+        // Audio Chime Throttle: Minimum 600ms gap between chimes to prevent audio screech bursts
+        if (now - lastAudioPlayTimeRef.current >= 600) {
+          lastAudioPlayTimeRef.current = now;
+          const audio = new Audio(finalSoundPath);
+          audio.play().catch(e => {
+            if (e.name === 'NotAllowedError') {
+              console.log('[Audio] Playback blocked by browser autoplay policy until user interacts.');
+            } else {
+              console.error('Audio play error:', e);
+            }
+          });
+        }
       }
     }
   }, []);

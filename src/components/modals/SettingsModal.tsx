@@ -358,6 +358,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {[
+                  { key: 'AUTO_ORDER_ROUTED', label: 'Auto OB Order Routed', desc: 'Fires when autonomous 3-stage position is opened' },
+                  { key: 'STAGE_FILL', label: 'Tranche Scale Fill (40/40/20)', desc: 'Fires when Stage 1/2/3 scaling or ratchet update occurs' },
+                  { key: 'LIVE_OB_DETECTED', label: 'Live OB Detection', desc: 'Fires when a new institutional Order Block confirms on candle close' },
+                  { key: 'IN_ZONE_CONFIRMATION_PENDING', label: 'In-Zone Test Pending', desc: 'Fires when live price enters an active zone awaiting volume confirmation' },
+                  { key: 'STRATEGY_MATCHED', label: 'Strategy Architect Match', desc: 'Fires when custom user-built equations match condition gates' },
                   { key: 'FVG_DETECTION', label: 'FVG Detection', desc: 'Fires when a new Fair Value Gap forms' },
                   { key: 'DISPLACEMENT_CONFIRMED', label: 'Displacement', desc: 'Fires when institutional sponsorship acts' },
                   { key: 'SMT_TRAP_ACTIVE', label: 'SMT Trap Active', desc: 'Fires when Equal Highs/Lows are engineered' },

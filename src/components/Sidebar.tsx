@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, memo, useMemo } from 'react';
+import { useState, memo, useMemo, useEffect } from 'react';
 import { SYSTEM_VERSION } from '@/lib/version';
 import { safeParseAiJson } from '@/lib/aiJsonParser';
 import {
@@ -30,7 +30,7 @@ import HudModal from './modals/HudModal';
 import PotentialTradesModal from './modals/PotentialTradesModal';
 import SelfCorrectionModal from './modals/SelfCorrectionModal';
 import OrderFlowTimelineModal from './modals/OrderFlowTimelineModal';
-import { getStateMetadata, formatDuration } from './OrderFlowTimelineRibbon';
+import { getStateMetadata, formatDuration, getUnifiedTimelineSegments } from './OrderFlowTimelineRibbon';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
 import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 import { calculateATR } from '@/lib/riskEngine';
@@ -327,6 +327,24 @@ const Sidebar = memo(function Sidebar({
   // ── AMT Value Area Calculation ──
   const candles15m = data?.data_payload?.candles_15m || [];
   const { vah, val, poc } = useMemo(() => calculateValueArea(candles15m), [candles15m]);
+
+  // ── Live Order Flow Active State Duration Ticker ──
+  const [liveOfDurationSec, setLiveOfDurationSec] = useState<number>(0);
+  const activeOfState = data?.ipda_metrics?.order_flow_engine?.state_timeline?.active_state;
+
+  useEffect(() => {
+    if (!activeOfState?.entered_at) {
+      setLiveOfDurationSec(0);
+      return;
+    }
+    const update = () => {
+      const diff = Math.max(0, Math.round((Date.now() - activeOfState.entered_at) / 1000));
+      setLiveOfDurationSec(diff);
+    };
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [activeOfState?.entered_at]);
 
   // ── Parse AI analysis response ──
   let parsedAiResponse: any = null;
@@ -902,48 +920,59 @@ const Sidebar = memo(function Sidebar({
                   {(() => {
                     const activeSt = orderFlow?.state_timeline?.active_state;
                     const meta = activeSt ? getStateMetadata(activeSt.state) : getStateMetadata(orderFlow?.open_interest_trend || 'NEUTRAL');
+                    const { segments, totalTransitions } = getUnifiedTimelineSegments(orderFlow?.state_timeline, livePrice, liveOfDurationSec, 10);
+                    const totalDur = segments.reduce((acc, s) => acc + Math.max(15, s.duration_seconds || 60), 0);
+
                     return (
-                      <div className={`p-2.5 rounded-lg border ${meta.colorBorder} ${meta.colorBgMuted} space-y-1`}>
-                        <div className="flex justify-between items-center text-[10px]">
-                          <span className="text-muted uppercase font-bold">OI State Machine:</span>
-                          <span className={`font-black uppercase tracking-wider ${meta.colorText}`}>
-                            {meta.label}
-                          </span>
-                        </div>
-                        <div className="flex justify-between items-center text-[9px] text-muted-foreground">
-                          <span>{meta.description}</span>
-                          {activeSt?.duration_seconds !== undefined && (
-                            <span className="font-mono font-bold text-foreground">
-                              {formatDuration(activeSt.duration_seconds)}
+                      <>
+                        <div className={`p-2.5 rounded-lg border ${meta.colorBorder} ${meta.colorBgMuted} space-y-1`}>
+                          <div className="flex justify-between items-center text-[10px]">
+                            <span className="text-muted uppercase font-bold">OI State Machine:</span>
+                            <span className={`font-black uppercase tracking-wider ${meta.colorText}`}>
+                              {meta.label}
                             </span>
-                          )}
+                          </div>
+                          <div className="flex justify-between items-center text-[9px] text-muted-foreground">
+                            <span>{meta.description}</span>
+                            {activeSt && (
+                              <span className="font-mono font-bold text-foreground">
+                                {formatDuration(liveOfDurationSec || activeSt.duration_seconds)}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
+
+                        {/* Mini Timeline Ribbon Preview */}
+                        {segments.length > 0 && (
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center text-[9px] text-muted font-bold uppercase">
+                              <span>Recent Transitions:</span>
+                              <span className="text-foreground font-bold">{totalTransitions} logged</span>
+                            </div>
+                            <div className="w-full h-2.5 rounded-sm overflow-hidden flex gap-[1px] bg-background/60 p-0.5 border border-card-border/60 shadow-inner">
+                              {segments.map((seg: any, idx: number) => {
+                                const segMeta = getStateMetadata(seg.state);
+                                const isLatest = idx === segments.length - 1;
+                                const dur = Math.max(15, seg.duration_seconds || 60);
+                                const flexPct = totalDur > 0 ? (dur / totalDur) * 100 : 100 / segments.length;
+
+                                return (
+                                  <div
+                                    key={`sidebar-mini-seg-${seg.id || seg.entered_at}-${idx}`}
+                                    style={{ flex: `max(1, ${flexPct})` }}
+                                    className={`h-full rounded-[1px] transition-all ${segMeta.colorBg} ${
+                                      isLatest ? 'animate-pulse ring-1 ring-white/60 opacity-100' : 'opacity-80 hover:opacity-100'
+                                    }`}
+                                    title={`${segMeta.label} (${formatDuration(seg.duration_seconds)})`}
+                                  />
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </>
                     );
                   })()}
-
-                  {/* Mini Timeline Ribbon Preview */}
-                  {orderFlow?.state_timeline?.history && orderFlow.state_timeline.history.length > 0 && (
-                    <div className="space-y-1">
-                      <div className="flex justify-between items-center text-[9px] text-muted font-bold uppercase">
-                        <span>Recent Transitions:</span>
-                        <span>{orderFlow.state_timeline.history.length} logged</span>
-                      </div>
-                      <div className="w-full h-2 rounded-sm overflow-hidden flex gap-[1px] bg-background/60 p-0.5 border border-card-border/60">
-                        {orderFlow.state_timeline.history.slice(-10).map((seg: any, idx: number) => {
-                          const meta = getStateMetadata(seg.state);
-                          return (
-                            <div
-                              key={`sidebar-mini-seg-${seg.id || seg.entered_at}-${idx}`}
-                              style={{ flex: Math.max(1, seg.duration_seconds || 30) }}
-                              className={`h-full rounded-[1px] ${meta.colorBg} opacity-80`}
-                              title={`${meta.label} (${formatDuration(seg.duration_seconds)})`}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
 
                   <div className="flex justify-between items-center">
                     <span className="text-[11px] lg:text-xs text-muted font-bold">Displacement</span>
