@@ -1,8 +1,38 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.16
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.17
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-18 (V16.16 — Sweep & Reclaim Quantitative Detection & Backtest Suite)  
+> **Last Updated:** 2026-08-18 (V16.17 — Automated Strategy Execution Engine with Dynamic 2% Compounding & Multi-Stage Lifecycle)  
+
+## 🆕 V16.17 Changelog — Automated Strategy Execution Engine with Dynamic 2% Compounding & Multi-Stage Lifecycle (2026-08-18)
+
+### Summary
+Architected, implemented, and verified the **Automated Strategy Execution Engine** (`AutomatedStrategyExecutionEngine.ts`) with Dynamic 2% Compounding Risk Sizing, Resting Limit Order Routing, 3-Stage Position Harvest Lifecycle (40% TP1 @ 1.0R, 40% TP2 @ 1.5R, 20% TP3 DOL Runner), Dynamic Trailing Stop & Profit-Locking Ratchet State Machine, Multi-Position Safety Guardrails, Full-Duplex PostgreSQL Trade Journal Persistence, and Real-Time Dashboard Execution Telemetry HUD (`AutomatedExecutionHUD.tsx`).
+
+### Key Features & Architectural Directives
+- **Dynamic 2% Compounding Position Sizer:**
+  - Dynamically queries active portfolio equity ($E$) from `/api/account` prior to calculating trade parameters.
+  - Fixes maximum trade risk to exactly 2.0% ($1.0R = E \times 0.02$).
+  - Calculates position contract size: $\text{Size} = \text{Risk USD} / |\text{Entry} - \text{Stop Loss}|$, with zero-distance guards and lot precision rounding down (min 0.001 ETH, clamped to exchange boundaries).
+- **3-Stage Harvest & Ratchet State Machine:**
+  - Position lifecycle: `PENDING_LIMIT_ENTRY` $\to$ `OPEN` $\to$ `STAGE_1_FILLED` (40% @ 1.0R) $\to$ `STAGE_2_FILLED` (40% @ 1.5R) $\to$ `STAGE_3_RUNNER` (20% @ DOL) $\to$ `CLOSED`.
+  - Resting limit order routing: Executes limit entries on price touch of precision levels (50% Mean Threshold or FVG 50% CE).
+  - Trailing Stop Rules:
+    - **Stage 1 Fill (1.0R):** Advances active SL to displacement FVG 50% CE or Breakeven (capping runner risk so net trade $\text{P\&L} \ge 0.0R$).
+    - **Stage 2 Fill (1.5R):** Immediately ratchets active SL to a guaranteed $+1.0R$ structural profit floor.
+    - **Stage 3 Runner:** Trails local swing pivots toward macro Draw on Liquidity (DOL).
+- **Multi-Position Safety Guardrails:**
+  - Strict Single-Position Concurrency Cap (`maxOpenPositions: 1`).
+  - Directional Conflict Veto (rejects opposing hedging positions).
+  - Mandatory 60s post-trade cooldown and single-use zone consumption doctrine.
+- **Full-Duplex Trade Journal Persistence & Rehydration (`useAutomatedStrategyExecution.ts`):**
+  - **Atomic Open:** `POST /api/trades` with entry price, dynamic risk USD, position size, and target coordinates.
+  - **Progressive Stage Updates:** `PATCH /api/trades` upon Stage 1 and Stage 2 fills to persist updated trailing stop coordinates and accrued realized P&L.
+  - **Atomic Closure:** `PATCH /api/trades` with final exit price, close timestamp, total realized P&L, and final ROI %.
+  - **Global UI Event Bus:** Dispatches `trades-refresh` custom event on every state change to keep JournalTable, HUDs, and metrics in sync without page reloads.
+  - **On-Mount Rehydration:** Restores open positions and active ratchet floors on application load without re-emitting duplicate fill events.
+- **Dashboard Telemetry HUD (`AutomatedExecutionHUD.tsx`):**
+  - Displays dynamic risk metrics, 3-stage tranche ladders, active ratchet status, resting limit order queues, and manual emergency controls (Market Close, Breakeven SL lock).
 
 ## 🆕 V16.16 Changelog — Sweep & Reclaim Quantitative Scanner Tuning & 3-Stage Harvest Engine (2026-08-18)
 
