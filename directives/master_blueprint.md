@@ -4,30 +4,32 @@
 > **Generated:** 2026-05-30  
 > **Last Updated:** 2026-08-18 (V16.16 — Sweep & Reclaim Quantitative Detection & Backtest Suite)  
 
-## 🆕 V16.16 Changelog — Sweep & Reclaim (Failed Signal Reversal) Detection & Backtest Suite (2026-08-18)
+## 🆕 V16.16 Changelog — Sweep & Reclaim Quantitative Scanner Tuning & 3-Stage Harvest Engine (2026-08-18)
 
 ### Summary
-Architected and implemented a dedicated **Sweep & Reclaim (Failed Signal Reversal)** quantitative detection and backtest suite inside the Quant Lab workspace, matching the institutional standards of the existing Order Block and Breaker Block pipelines. Built a deterministic 4-phase chronological state engine (`SweepReclaimEngine.ts`), high-throughput Server-Sent Events (SSE) streaming API route (`/api/quant-lab/sweep-reclaim-scanner`), self-healing Neon PostgreSQL scan ledger (`quant_lab_sr_scans`), dedicated Quant Lab workspace UI components (`SweepReclaimWorkspace.tsx` & `SweepReclaimSidebarList.tsx`), comprehensive quantitative telemetry (4-Phase Funnel, Reclaim Rate %, Retest Win Rate %, Realized R:R, Profit Factor, Expected Value, MFE/MAE), interactive 4-phase Setup Inspector Modal, and one-click JSON/CSV dataset export triggers with guaranteed Zero Look-Ahead Parity.
+Upgraded the **Sweep & Reclaim (Failed Signal Reversal)** quantitative detection and backtesting suite across the Quant Engine, Next.js streaming API layer, and Quant Lab Workspace UI. Integrated multi-timeframe liquidity anchors (Session Extremes: Asian High/Low, London High/Low, Previous Day High/Low PDH/PDL, and Major/Internal Pivots), strict volumetric displacement reclaim gating (candle body ratio $\ge 0.55$, directional taker delta dominance $\ge 51.5\%$, and displacement Fair Value Gap 50% Consequent Encroachment calculation), the optimized **3-Stage Harvest & Trailing Execution State Machine** (40% @ 1.0R with FVG CE trailing stop, 40% @ 1.5R with +1.0R profit ratchet floor, and 20% DOL runner), and rich Quant Lab Workspace telemetry and configuration controls.
 
 ### Key Features & Architectural Directives
-- **Deterministic 4-Phase State Engine (`SweepReclaimEngine.ts`):**
-  - **Phase 1 (Anchor Origin):** Identifies horizontal support/resistance shelves using color-locked swing pivots (`PivotEngine` with Major/Internal/Inner hierarchy).
-  - **Phase 2 (Liquidity Sweep / Failed Signal):** Detects price breaking through the anchor shelf to purge external liquidity (SSL for Bullish setups, BSL for Bearish setups) within a configurable freshness window (`max_bars_anchor_to_sweep`).
-  - **Phase 3 (Displacement Reclaim):** Verifies aggressive reversal with a confirmed candle body close back inside the anchor shelf (MSS / Inversion) within `max_bars_sweep_to_reclaim`, with optional volume expansion gating.
-  - **Phase 4 (Retest & Execution Simulation):** On subsequent closed candles (strictly after reclaim confirmation), detects pullback into the reclaimed shelf with ICT body defense validation, simulating entry at shelf, Stop Loss pinned behind the absolute sweep extreme (plus volatility buffer), and multi-stage scaling (TP1: 1.0R–1.5R, TP2: 2.0R–4.0R / DOL).
-- **Multi-Stage Position Management & Telemetry Suite:**
-  - Multi-stage position scaling with configurable TP1/TP2 ratios (default: 50% / 50%), breakeven ratcheting upon TP1 fill, and continuous MFE (Maximum Favorable Excursion) & MAE (Maximum Adverse Excursion) tracking in both R-multiples and USD.
-  - Computes comprehensive quantitative metrics: Total Anchors, Total Sweeps, Total Reclaims, Total Retests, Sweep Rate %, Reclaim Rate %, Retest Rate %, Retest Win Rate %, Average Realized R:R, Profit Factor, Expected Value $E[R]$, Average MFE/MAE, Stage 1/2 fill distributions, and Bullish vs Bearish breakdown.
-- **High-Throughput Streaming Backend (`/api/quant-lab/sweep-reclaim-scanner` & `/api/quant-lab/sr-scans`):**
-  - Next.js Route Handler supporting real-time Server-Sent Events (SSE) streaming with rate-paced Binance kline fetching and automatic offline simulation generator fallback.
-  - Self-healing PostgreSQL database table `quant_lab_sr_scans` storing scan metadata, telemetry summaries, and complete setup lifecycle payloads.
-- **Quant Lab Workspace UI Integration (`quant-lab/page.tsx`, `SweepReclaimWorkspace.tsx`, `SweepReclaimSidebarList.tsx`):**
-  - Integrated dedicated **SWEEP & RECLAIM SCANNER** navigation tab in Quant Lab.
-  - Interactive parameter controls (Date ranges, Lookback windows, Max bars to reclaim/retest, TP1/TP2 multiples, Trailing BE toggle, ATR buffers).
-  - Real-time SSE streaming progress HUD, 4-Phase conversion funnel cards, filterable setup table (by Direction, Status, Outcome, Search), clickable 4-phase Setup Inspector Modal, and one-click JSON and CSV dataset download triggers.
-- **Zero Look-Ahead Parity & Build Health:**
-  - Historical scanning operates strictly on confirmed candle closes (`isClosed === true`) in forward chronological sequence ($t = 0 \to N$).
-  - Full TypeScript type safety with 0 compiler errors across the workspace.
+- **Multi-Timeframe Liquidity Anchor Pipeline (`SweepReclaimEngine.ts`):**
+  - Extracts and caches reference horizontal boundaries across multiple scales:
+    - **Asian Session High/Low (00:00–07:00 UTC):** Confirmed at 07:00 UTC for intraday sweeps.
+    - **London Session High/Low (07:00–12:00 UTC):** Confirmed at 12:00 UTC for NY session sweeps.
+    - **Previous Day High/Low (PDH/PDL):** Extracted per UTC calendar day $D-1$, active on day $D$.
+    - **Color-Locked Swings (`PivotEngine`):** Major and Internal pivot highs and lows.
+  - Zero look-ahead bias: Session boundaries are activated strictly on closed historical intervals.
+- **Volumetric Displacement Reclaim Gating (Phase 3):**
+  - **Candle Body-to-Range Gate:** Requires reclaim candle body ratio $|c - o| / (h - l) \ge 0.55$.
+  - **Directional Taker Delta Dominance Gate:** Verifies taker buy volume delta $\ge 51.5\%$ of total bar volume for Bullish setups ($\ge 51.5\%$ taker sell volume for Bearish setups).
+  - **Displacement FVG Tracking:** Detects active BISI/SIBI Fair Value Gaps formed during the reclaim impulse, calculating 50% Consequent Encroachment (`reclaim_fvg_ce`), falling back to the anchor shelf if no gap is formed.
+- **3-Stage Harvest & Trailing Execution State Machine (Phase 4):**
+  - **Limit Entry Modeling:** Evaluated at the displacement FVG 50% CE (or reclaimed shelf) with Stop Loss pinned behind the absolute sweep extreme (plus volatility buffer).
+  - **Tranche 1 (40% @ 1.0R):** Records partial fill and activates the structural trailing stop anchored to the displacement FVG 50% CE (guaranteeing net realized trade $\text{P\&L} \ge 0.0R$).
+  - **Tranche 2 (40% @ 1.5R):** Records partial fill and immediately ratchets active SL to a guaranteed $+1.0R$ profit floor.
+  - **Tranche 3 (20% DOL Runner):** Trails remaining position inventory along confirmed local swing pivots targeting active macro Draw on Liquidity levels.
+- **Quant Lab Workspace UI Controls & Telemetry Dashboard (`SweepReclaimWorkspace.tsx`):**
+  - Interactive parameter controls: Multi-timeframe Anchor selection (Pivots, Asian H/L, London H/L, PDH/PDL), Volumetric Delta Dominance slider (50.0%–60.0%), Body Ratio input (0.40–0.75), Stage 2 Target selector (1.3R–2.0R), and Entry Mode selector (FVG CE vs Reclaim Level).
+  - Telemetry HUD: 4-Phase Conversion Funnel Card, 3-Stage Harvest Tranche Distribution (Stage 1, Stage 2, Stage 3 fills), Scratch vs Win analytics, Risk-Adjusted EV $E[R]$, and Profit Factor.
+  - Interactive setup table and 4-Phase Lifecycle Inspector Modal with full tranche progression details.
 
 ### Summary
 Upgraded the market data pipeline to resolve Multi-Timeframe Signal Fragmentation and Stale State Reactivity, eliminating the need for manual page refreshes or interval switching. Implemented a combined Multi-Stream WebSocket listener (`1m`, `5m`, `15m`, `1h`), a Two-Speed Event Pipeline (Tick-Speed vs Candle-Speed), the Universal `MTFTelemetryEngine` calculating real-time structure, 3-bar OLS displacement, order flow regimes, and active order blocks across all timeframes concurrently, the Consolidated `MTFStatusRadar` HUD widget, and an MTF background alert notification bus with debouncing.

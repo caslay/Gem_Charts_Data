@@ -701,16 +701,19 @@ export default function QuantLabPage() {
     if (!selectedSrScan || !selectedSrScan.setups) return;
 
     const headers = [
-      "ID", "Type", "AnchorTime", "AnchorLevel", "SweepTime", "SweepPrice",
-      "SweepDepthUsd", "SweepDepthPct", "ReclaimTime", "ReclaimClosePrice",
-      "VolExpansion", "RetestTime", "EntryPrice", "StopLoss", "TP1Target",
-      "TP2Target", "BodyDefensePassed", "Outcome", "RealizedRR", "MFE_R", "MAE_R",
-      "BarsAnchorToSweep", "BarsSweepToReclaim", "BarsReclaimToRetest", "BarsToOutcome"
+      "ID", "Type", "AnchorType", "AnchorName", "AnchorTime", "AnchorLevel",
+      "SweepTime", "SweepPrice", "SweepDepthUsd", "SweepDepthPct",
+      "ReclaimTime", "ReclaimClosePrice", "DeltaDominancePct", "BodyRatioPct", "FvgCE",
+      "RetestTime", "EntryMode", "EntryPrice", "StopLoss", "Stage1Target", "Stage2Target", "Stage3Target",
+      "BodyDefensePassed", "Outcome", "StageExitType", "RealizedRR", "MFE_R", "MAE_R",
+      "TrailingSlSource", "ActiveTrailingSl", "BarsAnchorToSweep", "BarsSweepToReclaim", "BarsReclaimToRetest", "BarsToOutcome"
     ];
 
     const rows = selectedSrScan.setups.map((s) => [
       s.id,
       s.type,
+      s.anchor_type,
+      `"${s.anchor_name.replace(/"/g, '""')}"`,
       new Date(s.anchor_time).toISOString(),
       s.anchor_level,
       s.sweep_time ? new Date(s.sweep_time).toISOString() : "N/A",
@@ -719,17 +722,24 @@ export default function QuantLabPage() {
       s.sweep_depth_pct ?? "N/A",
       s.reclaim_time ? new Date(s.reclaim_time).toISOString() : "N/A",
       s.reclaim_close_price ?? "N/A",
-      s.reclaim_volume_expansion ?? "N/A",
+      s.reclaim_delta_dominance_pct ?? "N/A",
+      s.reclaim_body_ratio ?? "N/A",
+      s.reclaim_fvg_ce ?? "N/A",
       s.retest_time ? new Date(s.retest_time).toISOString() : "N/A",
+      s.entry_mode ?? "FVG_CE",
       s.entry_price,
       s.stop_loss,
-      s.tp1_target,
-      s.tp2_target,
+      s.stage1_target,
+      s.stage2_target,
+      s.stage3_target,
       s.body_defense_passed ? "PASS" : "FAIL",
       s.simulated_outcome,
+      s.stage_exit_type ?? "N/A",
       s.realized_rr,
       s.mfe_r,
       s.mae_r,
+      s.trailing_sl_source ?? "INITIAL",
+      s.active_trailing_sl ?? s.stop_loss,
       s.bars_anchor_to_sweep ?? "N/A",
       s.bars_sweep_to_reclaim ?? "N/A",
       s.bars_reclaim_to_retest ?? "N/A",

@@ -171,19 +171,22 @@ export async function POST(req: Request) {
           timeframe = "15m",
           start_date, // YYYY-MM-DD
           end_date,   // YYYY-MM-DD
+          anchor_types = ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL'],
           lookback_major = 15,
           lookback_internal = 5,
           max_bars_anchor_to_sweep = 30,
           max_bars_sweep_to_reclaim = 12,
           max_bars_to_retest = 24,
-          tp1_multiple = 1.2,
-          tp2_multiple = 2.5,
-          tp1_ratio = 0.50,
-          tp2_ratio = 0.50,
-          enable_trailing_be = true,
+          delta_dominance_threshold = 51.5,
+          body_ratio_threshold = 0.55,
+          stage1_multiple = 1.0,
+          stage2_multiple = 1.5,
+          stage3_multiple = 3.0,
+          entry_mode = "FVG_CE",
+          enable_structural_trail = true,
+          enable_profit_ratchet = true,
           min_sweep_depth_atr = 0.10,
           sl_buffer_atr = 0.15,
-          require_displacement = false,
         } = body;
 
         if (!start_date || !end_date) {
@@ -226,26 +229,29 @@ export async function POST(req: Request) {
 
         sendChunk({
           type: "status",
-          message: `Successfully loaded ${candles.length} historical candles. Executing 4-Phase Sweep & Reclaim state engine...`
+          message: `Successfully loaded ${candles.length} historical candles. Executing multi-timeframe 4-Phase Sweep & Reclaim state engine...`
         });
 
         // Configure Engine parameters
         const scanConfig: SweepReclaimScanConfig = {
           symbol,
           timeframe,
+          anchorTypes: anchor_types,
           lookbackMajor: lookback_major,
           lookbackInternal: lookback_internal,
           maxBarsAnchorToSweep: max_bars_anchor_to_sweep,
           maxBarsSweepToReclaim: max_bars_sweep_to_reclaim,
           maxBarsToRetest: max_bars_to_retest,
-          tp1Multiple: tp1_multiple,
-          tp2Multiple: tp2_multiple,
-          tp1Ratio: tp1_ratio,
-          tp2Ratio: tp2_ratio,
-          enableTrailingBe: enable_trailing_be,
+          deltaDominanceThreshold: delta_dominance_threshold,
+          bodyRatioThreshold: body_ratio_threshold,
+          stage1Multiple: stage1_multiple,
+          stage2Multiple: stage2_multiple,
+          stage3Multiple: stage3_multiple,
+          entryMode: entry_mode,
+          enableStructuralTrail: enable_structural_trail,
+          enableProfitRatchet: enable_profit_ratchet,
           minSweepDepthAtrMultiplier: min_sweep_depth_atr,
           slBufferAtrMultiplier: sl_buffer_atr,
-          requireDisplacementReclaim: require_displacement,
         };
 
         const engine = new SweepReclaimEngine(scanConfig);
