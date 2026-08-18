@@ -156,7 +156,11 @@ export const sessionsLayer: ChartLayer = {
     const barSpacing = timeScale.options().barSpacing || 6;
     const boxes: React.ReactNode[] = [];
 
-    // Helper to render box group
+    const lastCandle = activeCandles[activeCandles.length - 1];
+    const rightCoord = timeScale.timeToCoordinate(Math.floor(lastCandle.t / 1000) as any);
+    const rightX = rightCoord !== null ? rightCoord + 300 : 2500;
+
+    // Helper to render box group with viewport culling
     const renderBox = (group: SessionGroup, type: 'cairo' | 'london', idx: number) => {
       const xStart = timeScale.timeToCoordinate(Math.floor(group.firstCandle.t / 1000) as any);
       const xEnd = timeScale.timeToCoordinate(Math.floor(group.lastCandle.t / 1000) as any);
@@ -167,6 +171,10 @@ export const sessionsLayer: ChartLayer = {
         // Enclose the candles perfectly by expanding left/right by half-bar spacing
         const fromX = xStart - barSpacing / 2;
         const toX = xEnd + barSpacing / 2;
+
+        // Viewport culling: cull session boxes outside the visible chart window
+        if (toX < -50 || fromX > rightX + 50) return;
+
         const width = toX - fromX;
         const height = yLow - yHigh;
 

@@ -545,13 +545,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
                           <span className="text-[11px] font-bold text-foreground font-sans">1m Candle Limit</span>
-                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit1m ?? 1000}</span>
+                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit1m ?? 350}</span>
                         </div>
                         <input
                           type="number"
-                          min="100"
+                          min="50"
                           max="1500"
-                          value={engineSettings?.candlesLimit1m ?? 1000}
+                          value={engineSettings?.candlesLimit1m ?? 350}
                           onChange={(e) => {
                             const val = parseInt(e.target.value, 10);
                             if (!isNaN(val)) {
@@ -560,7 +560,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           }}
                           onBlur={(e) => {
                             const val = parseInt(e.target.value, 10);
-                            const clamped = isNaN(val) ? 1000 : Math.max(100, Math.min(1500, val));
+                            const clamped = isNaN(val) ? 350 : Math.max(50, Math.min(1500, val));
                             updateEngineSettings && updateEngineSettings({ candlesLimit1m: clamped });
                           }}
                           className="w-full bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-3 py-2 text-xs font-bold text-foreground rounded-lg font-mono shadow-sm"
@@ -571,13 +571,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
                           <span className="text-[11px] font-bold text-foreground font-sans">5m Candle Limit</span>
-                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit5m ?? 1000}</span>
+                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit5m ?? 350}</span>
                         </div>
                         <input
                           type="number"
-                          min="100"
+                          min="50"
                           max="1500"
-                          value={engineSettings?.candlesLimit5m ?? 1000}
+                          value={engineSettings?.candlesLimit5m ?? 350}
                           onChange={(e) => {
                             const val = parseInt(e.target.value, 10);
                             if (!isNaN(val)) {
@@ -586,7 +586,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           }}
                           onBlur={(e) => {
                             const val = parseInt(e.target.value, 10);
-                            const clamped = isNaN(val) ? 1000 : Math.max(100, Math.min(1500, val));
+                            const clamped = isNaN(val) ? 350 : Math.max(50, Math.min(1500, val));
                             updateEngineSettings && updateEngineSettings({ candlesLimit5m: clamped });
                           }}
                           className="w-full bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-3 py-2 text-xs font-bold text-foreground rounded-lg font-mono shadow-sm"
@@ -597,13 +597,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
                           <span className="text-[11px] font-bold text-foreground font-sans">15m Candle Limit</span>
-                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit15m ?? 1000}</span>
+                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit15m ?? 250}</span>
                         </div>
                         <input
                           type="number"
-                          min="100"
+                          min="50"
                           max="1500"
-                          value={engineSettings?.candlesLimit15m ?? 1000}
+                          value={engineSettings?.candlesLimit15m ?? 250}
                           onChange={(e) => {
                             const val = parseInt(e.target.value, 10);
                             if (!isNaN(val)) {
@@ -612,7 +612,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           }}
                           onBlur={(e) => {
                             const val = parseInt(e.target.value, 10);
-                            const clamped = isNaN(val) ? 1000 : Math.max(100, Math.min(1500, val));
+                            const clamped = isNaN(val) ? 250 : Math.max(50, Math.min(1500, val));
                             updateEngineSettings && updateEngineSettings({ candlesLimit15m: clamped });
                           }}
                           className="w-full bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-3 py-2 text-xs font-bold text-foreground rounded-lg font-mono shadow-sm"
@@ -623,13 +623,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
                           <span className="text-[11px] font-bold text-foreground font-sans">1h Candle Limit</span>
-                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit1h ?? 1000}</span>
+                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit1h ?? 120}</span>
                         </div>
                         <input
                           type="number"
-                          min="100"
+                          min="30"
                           max="1500"
-                          value={engineSettings?.candlesLimit1h ?? 1000}
+                          value={engineSettings?.candlesLimit1h ?? 120}
                           onChange={(e) => {
                             const val = parseInt(e.target.value, 10);
                             if (!isNaN(val)) {
@@ -638,7 +638,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           }}
                           onBlur={(e) => {
                             const val = parseInt(e.target.value, 10);
-                            const clamped = isNaN(val) ? 1000 : Math.max(100, Math.min(1500, val));
+                            const clamped = isNaN(val) ? 120 : Math.max(30, Math.min(1500, val));
                             updateEngineSettings && updateEngineSettings({ candlesLimit1h: clamped });
                           }}
                           className="w-full bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-3 py-2 text-xs font-bold text-foreground rounded-lg font-mono shadow-sm"
@@ -649,13 +649,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
                           <span className="text-[11px] font-bold text-foreground font-sans">4h Candle Limit</span>
-                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit4h ?? 1000}</span>
+                          <span className="text-[11px] font-mono font-bold text-accent">{engineSettings?.candlesLimit4h ?? 80}</span>
                         </div>
                         <input
                           type="number"
-                          min="100"
+                          min="20"
                           max="1500"
-                          value={engineSettings?.candlesLimit4h ?? 1000}
+                          value={engineSettings?.candlesLimit4h ?? 80}
                           onChange={(e) => {
                             const val = parseInt(e.target.value, 10);
                             if (!isNaN(val)) {
@@ -664,14 +664,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                           }}
                           onBlur={(e) => {
                             const val = parseInt(e.target.value, 10);
-                            const clamped = isNaN(val) ? 1000 : Math.max(100, Math.min(1500, val));
+                            const clamped = isNaN(val) ? 80 : Math.max(20, Math.min(1500, val));
                             updateEngineSettings && updateEngineSettings({ candlesLimit4h: clamped });
                           }}
                           className="w-full bg-background/60 border border-card-border/80 focus:border-accent focus:outline-none px-3 py-2 text-xs font-bold text-foreground rounded-lg font-mono shadow-sm"
                         />
                       </div>
                     </div>
-                    <span className="block text-[10px] text-muted italic font-sans leading-relaxed">Configure the historical lookback candle counts for each timeframe independently (min 100, max 1500).</span>
+                    <span className="block text-[10px] text-muted italic font-sans leading-relaxed">Configure the historical lookback candle counts for each timeframe independently (min 20, max 1500).</span>
                   </div>
 
                   {/* Group E: Data Stream Features & Payloads */}
