@@ -116,8 +116,8 @@ export class MarketStructureAPI {
       confirmed: pt.confirmed
     }));
 
-    // Pass all swings to the UI layer
-    const swings = [...majorSwings, ...internalSwings, ...innerSwingsRaw];
+    // Pass all swings to the UI layer in strict chronological order
+    const swings = [...majorSwings, ...internalSwings, ...innerSwingsRaw].sort((a, b) => a.t - b.t);
 
     // Macro Dealing Range
     const dealingRange = this.buildDealingRange(majorSwings, currentPrice, stateEngine, normalizedCandles);
@@ -128,14 +128,14 @@ export class MarketStructureAPI {
       dealingRange.anchor_low_swing?.t ?? Infinity
     );
 
-    // Filter candidate internal swings strictly to exclude previous-cycle internal swings
+    // Filter candidate internal swings strictly to exclude previous-cycle internal swings for Dealing Range
     const activeInternalSwings = majorRangeStartTime !== Infinity
       ? internalSwings.filter(s => s.t >= majorRangeStartTime)
       : internalSwings;
 
     // Build ZigZag Arrays — each level uses its OWN dedicated state engine (FIX BUG-2 + GAP-4)
     const zigzag         = this.buildZigZag(majorSwings,          stateEngine);            // MAJOR
-    const internalZigzag = this.buildZigZag(activeInternalSwings, innerStateEngine, true);  // INTERNAL
+    const internalZigzag = this.buildZigZag(internalSwings,        innerStateEngine, true);  // INTERNAL (all internalSwings for full historical chart coverage)
     const innerZigzag    = this.buildZigZag(innerSwingsRaw,        microStateEngine, true); // INNER (was sharing innerStateEngine — now isolated)
 
     const latestMSS = zigzag.filter(z => z.label === 'MSS').slice(-1)[0] ?? null;

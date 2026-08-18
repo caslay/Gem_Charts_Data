@@ -82,7 +82,7 @@ export default function OrderBlockOverlay({ context }: OrderBlockOverlayProps) {
     if (!scanResult) {
       const engine = new OrderBlockEngine({
         symbol: data?.ticker || 'ETHUSDC',
-        timeframe: '15m',
+        timeframe: (data as any)?.interval || (context as any)?.interval || '5m',
         minQualityTier: 'ALL',
         strictTierAPlus: false,
         enableBreakerSimulation: true,

@@ -155,9 +155,9 @@ export function checkPerfectMovementSetup(
       if (londonLow > 0 && c.l <= londonLow + sweepTolerance && c.c > londonLow) return true;
 
       // Check swing levels (all grades — MAJOR, INTERNAL, INNER)
-      const priorSwingLows = swings.filter(
-        (s: any) => s.type === 'LOW' && s.t < c.t
-      );
+      const priorSwingLows = swings
+        .filter((s: any) => s.type === 'LOW' && s.t < c.t)
+        .sort((a: any, b: any) => a.t - b.t);
       const recentLows = priorSwingLows.slice(-8);
       for (const s of recentLows) {
         const p = Number(s.price);
@@ -174,9 +174,9 @@ export function checkPerfectMovementSetup(
       if (asianHigh > 0 && c.h >= asianHigh - sweepTolerance && c.c < asianHigh) return true;
       if (londonHigh > 0 && c.h >= londonHigh - sweepTolerance && c.c < londonHigh) return true;
 
-      const priorSwingHighs = swings.filter(
-        (s: any) => s.type === 'HIGH' && s.t < c.t
-      );
+      const priorSwingHighs = swings
+        .filter((s: any) => s.type === 'HIGH' && s.t < c.t)
+        .sort((a: any, b: any) => a.t - b.t);
       const recentHighs = priorSwingHighs.slice(-8);
       for (const s of recentHighs) {
         const p = Number(s.price);
