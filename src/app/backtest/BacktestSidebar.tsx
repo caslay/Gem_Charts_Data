@@ -565,35 +565,52 @@ export default function BacktestSidebar({
                 </button>
 
                 {/* Statistical Validation */}
-                {metrics?.institutional_sponsorship?.statistical_validation && (
-                  <div className="bg-background/40 p-2 border border-card-border rounded-lg space-y-1">
-                    {[
-                      { label: 't-STAT', value: metrics.institutional_sponsorship.statistical_validation.t_statistic?.toFixed(4) ?? '0.0000' },
-                      { label: 'p-VALUE', value: metrics.institutional_sponsorship.statistical_validation.p_value?.toFixed(4) ?? '1.0000' },
-                    ].map((row) => (
-                      <div key={row.label} className="flex justify-between text-[10px] items-center">
-                        <span className="text-muted">{row.label}</span>
-                        <span className="font-mono font-bold text-foreground">{row.value}</span>
+                {metrics?.institutional_sponsorship?.statistical_validation && (() => {
+                  const statVal = metrics.institutional_sponsorship.statistical_validation;
+                  const tStat = Math.abs(statVal.t_statistic || 0);
+                  const pVal = statVal.p_value ?? 1.0;
+                  const isConsolidation = metrics.institutional_sponsorship.status === 'CONSOLIDATION';
+
+                  let tierLabel = statVal.confidence_tier_label || 'REJECTED';
+                  let tierColor = 'text-rose-500';
+
+                  if (isConsolidation) {
+                    tierLabel = 'CONSOLIDATION';
+                    tierColor = 'text-accent';
+                  } else if (statVal.confidence_tier === 'CONFIRMED_95' || (tStat >= 1.96 && pVal < 0.05)) {
+                    tierLabel = 'CONFIRMED (95%)';
+                    tierColor = 'text-emerald-400';
+                  } else if (statVal.confidence_tier === 'MODERATE_90' || (tStat >= 1.65 && pVal <= 0.10)) {
+                    tierLabel = 'MODERATE (90%)';
+                    tierColor = 'text-amber-400';
+                  } else if (statVal.confidence_tier === 'BORDERLINE_85' || (tStat >= 1.44 && pVal <= 0.15)) {
+                    tierLabel = 'BORDERLINE (85%)';
+                    tierColor = 'text-sky-400';
+                  } else {
+                    tierLabel = 'REJECTED';
+                    tierColor = 'text-rose-500';
+                  }
+
+                  return (
+                    <div className="bg-background/40 p-2 border border-card-border rounded-lg space-y-1">
+                      {[
+                        { label: 't-STAT', value: statVal.t_statistic?.toFixed(4) ?? '0.0000' },
+                        { label: 'p-VALUE', value: statVal.p_value?.toFixed(4) ?? '1.0000' },
+                      ].map((row) => (
+                        <div key={row.label} className="flex justify-between text-[10px] items-center">
+                          <span className="text-muted">{row.label}</span>
+                          <span className="font-mono font-bold text-foreground">{row.value}</span>
+                        </div>
+                      ))}
+                      <div className="flex justify-between text-[10px] items-center">
+                        <span className="text-muted">OLS CONFIDENCE</span>
+                        <span className={`font-black uppercase text-[9px] tracking-wider ${tierColor}`}>
+                          {tierLabel}
+                        </span>
                       </div>
-                    ))}
-                    <div className="flex justify-between text-[10px] items-center">
-                      <span className="text-muted">OLS VALIDATION</span>
-                      <span className={`font-black uppercase text-[9px] tracking-wider ${
-                        metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true
-                          ? 'text-emerald-500'
-                          : metrics.institutional_sponsorship.status === 'CONSOLIDATION'
-                          ? 'text-accent'
-                          : 'text-rose-500'
-                      }`}>
-                        {metrics.institutional_sponsorship.statistical_validation.confidence_interval_95 === true
-                          ? 'CONFIRMED'
-                          : metrics.institutional_sponsorship.status === 'CONSOLIDATION'
-                          ? 'CONSOLIDATION'
-                          : 'REJECTED'}
-                      </span>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             </div>
 

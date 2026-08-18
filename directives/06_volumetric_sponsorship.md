@@ -502,33 +502,34 @@ Model: y ~ β₀ + β₁·anomaly_multiplier + β₂·volume_delta + β₃·is_d
 | `rolling_vol_14` | `SMA(volume, 14)` | Baseline volume reference |
 | `anomaly_multiplier` | `volume / (rolling_vol_14 + 1e-5)` | How many standard volumes above normal |
 | `is_dead_zone` | `hour=12 OR (hour=13 AND min≤30)` NY time | NY Lunch session flag |
-| `future_return` | `pct_change(close).shift(-1)` | 1-candle forward return (OLS target) |
+| `future_return` | `(c.shift(-3) - c) / c` | 3-candle forward lookahead return (OLS target) |
 
 #### Regression Window
 
 ```
-reg_df = df.iloc[14:-1]  // Drop first 14 (rolling warmup) + last 1 (incomplete future return)
+reg_df = df.iloc[14:-3]  // Drop first 14 (rolling warmup) + last 3 (incomplete 3-bar future return)
 Minimum rows: 10 (below this, OLS is skipped → defaults to LOW confidence)
 ```
 
-### 6.3 Statistical Validation Thresholds
+### 6.3 Statistical Validation Thresholds (4-Tier Quant Standard)
 
-The OLS output produces `t_statistic` and `p_value` for the `anomaly_multiplier` coefficient:
+The OLS output produces `t_statistic` and `p_value` for the `anomaly_multiplier` coefficient evaluated across 4 quant tiers:
 
-| Confidence Level | p-value Threshold | Meaning |
-|---|---|---|
-| **HIGH** | `p < 0.05` | Anomaly multiplier is a statistically significant predictor at 95% confidence |
-| **MEDIUM** | `0.05 ≤ p < 0.15` | Borderline significance — use with caution |
-| **LOW** | `p ≥ 0.15` | No statistical evidence that volume anomaly predicts returns |
+| Tier Name | Key | Thresholds | Significance & Trading Action |
+|---|---|---|---|
+| 🟢 **CONFIRMED (95%)** | `CONFIRMED_95` | `|t| ≥ 1.96, p < 0.05` | Maximum institutional conviction — authorizes Full Macro Risk |
+| 🟡 **MODERATE (90%)** | `MODERATE_90` | `|t| ≥ 1.65, p ≤ 0.10` | Primary institutional benchmark — standard trade execution authorized |
+| 🔵 **BORDERLINE (85%)** | `BORDERLINE_85` | `|t| ≥ 1.44, p ≤ 0.15` | Emerging volume flow — trade with caution / half risk |
+| 🔴 **REJECTED** | `REJECTED` | `p > 0.15` | Statistically insignificant noise — stand down / veto |
 
 #### Confidence Interval Flags
 
 ```python
-# Standard gate (backward compatible)
-confidence_interval_95 = (p_value < 0.15) AND (t_statistic > 1.96)
+# Primary institutional benchmark (90% Confidence)
+confidence_interval_95 = (p_value <= 0.10) AND (abs(t_statistic) >= 1.65)
 
-# Strict gate (used by STRICT sensitivity mode)
-confidence_interval_95_strict = (p_value < 0.05) AND (t_statistic > 1.96)
+# Elite top-tier benchmark (95% Confidence)
+confidence_interval_95_strict = (p_value < 0.05) AND (abs(t_statistic) >= 1.96)
 ```
 
 ### 6.4 Consolidation Short-Circuit

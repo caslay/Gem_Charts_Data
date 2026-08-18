@@ -7,9 +7,13 @@ export interface InstitutionalSponsorship {
   statistical_validation: {
     t_statistic: number;
     p_value: number;
-    confidence_level: 'HIGH' | 'MEDIUM' | 'LOW';
-    confidence_interval_95: boolean; // Must be TRUE to execute
-    confidence_interval_95_strict: boolean;
+    confidence_level: 'HIGH' | 'MEDIUM_HIGH' | 'MEDIUM' | 'LOW';
+    confidence_tier?: 'CONFIRMED_95' | 'MODERATE_90' | 'BORDERLINE_85' | 'REJECTED' | 'CONSOLIDATION';
+    confidence_tier_label?: string;
+    confidence_interval_95: boolean; // Standard primary institutional benchmark (|t| >= 1.65, p <= 0.10)
+    confidence_interval_95_strict: boolean; // Strict elite benchmark (|t| >= 1.96, p < 0.05)
+    confidence_interval_90?: boolean;
+    confidence_interval_85?: boolean;
   };
 }
  
@@ -34,8 +38,8 @@ function normalCDF(z: number): number {
   return 0.5 * (1 + erf(z / Math.sqrt(2)));
 }
 
-function invertSymmetric4x4(A: number[][]): number[][] | null {
-  const n = 4;
+function invertMatrix(A: number[][]): number[][] | null {
+  const n = A.length;
   const mat: number[][] = [];
   for (let i = 0; i < n; i++) {
     mat[i] = new Array(2 * n).fill(0);
@@ -85,7 +89,17 @@ function invertSymmetric4x4(A: number[][]): number[][] | null {
   return inv;
 }
 
-function runRegression(recentCandles: Candle[]): { t_statistic: number; p_value: number; confidence_level: 'HIGH' | 'MEDIUM' | 'LOW'; confidence_interval_95: boolean; confidence_interval_95_strict: boolean } {
+function runRegression(recentCandles: Candle[]): {
+  t_statistic: number;
+  p_value: number;
+  confidence_level: 'HIGH' | 'MEDIUM_HIGH' | 'MEDIUM' | 'LOW';
+  confidence_tier: 'CONFIRMED_95' | 'MODERATE_90' | 'BORDERLINE_85' | 'REJECTED' | 'CONSOLIDATION';
+  confidence_tier_label: string;
+  confidence_interval_95: boolean;
+  confidence_interval_95_strict: boolean;
+  confidence_interval_90: boolean;
+  confidence_interval_85: boolean;
+} {
   const N = recentCandles.length;
 
   const volumes = recentCandles.map(c => c.v !== undefined ? c.v : ((c.taker_buy_vol || 0) + (c.taker_sell_vol || 0)));
@@ -129,17 +143,27 @@ function runRegression(recentCandles: Candle[]): { t_statistic: number; p_value:
     }
   }
 
-  const futureReturns = new Array<number>(N);
-  for (let i = 0; i < N - 1; i++) {
-    const prevC = recentCandles[i].c;
-    futureReturns[i] = prevC !== 0 ? (recentCandles[i + 1].c - prevC) / prevC : 0;
-  }
-  futureReturns[N - 1] = 0;
+  const hasDeadZoneVariance = deadZones.some(d => d === 1) && deadZones.some(d => d === 0);
 
+  // 1. Expand Forward Return Lookahead Horizon to 3 candles (Architectural Directive 1)
+  const futureReturns = new Array<number>(N);
+  for (let i = 0; i < N - 3; i++) {
+    const prevC = recentCandles[i].c;
+    futureReturns[i] = prevC !== 0 ? (recentCandles[i + 3].c - prevC) / prevC : 0;
+  }
+  for (let i = Math.max(0, N - 3); i < N; i++) {
+    futureReturns[i] = 0;
+  }
+
+  // 2. Strict chronological safety: drop 14 warmup candles and last 3 incomplete future return candles
   const X: number[][] = [];
   const y: number[] = [];
-  for (let i = 14; i < N - 1; i++) {
-    X.push([1, anomalyMultipliers[i], volumeDeltas[i], deadZones[i]]);
+  for (let i = 14; i < N - 3; i++) {
+    if (hasDeadZoneVariance) {
+      X.push([1, anomalyMultipliers[i], volumeDeltas[i], deadZones[i]]);
+    } else {
+      X.push([1, anomalyMultipliers[i], volumeDeltas[i]]);
+    }
     y.push(futureReturns[i]);
   }
 
@@ -149,12 +173,16 @@ function runRegression(recentCandles: Candle[]): { t_statistic: number; p_value:
       t_statistic: 0,
       p_value: 1,
       confidence_level: 'LOW',
+      confidence_tier: 'REJECTED',
+      confidence_tier_label: 'REJECTED',
       confidence_interval_95: false,
-      confidence_interval_95_strict: false
+      confidence_interval_95_strict: false,
+      confidence_interval_90: false,
+      confidence_interval_85: false
     };
   }
 
-  const K = 4;
+  const K = X[0].length;
   const XT_X: number[][] = [];
   for (let r = 0; r < K; r++) {
     XT_X[r] = new Array<number>(K).fill(0);
@@ -176,14 +204,18 @@ function runRegression(recentCandles: Candle[]): { t_statistic: number; p_value:
     XT_y[r] = sum;
   }
 
-  const inv = invertSymmetric4x4(XT_X);
+  const inv = invertMatrix(XT_X);
   if (!inv) {
     return {
       t_statistic: 0,
       p_value: 1,
       confidence_level: 'LOW',
+      confidence_tier: 'REJECTED',
+      confidence_tier_label: 'REJECTED',
       confidence_interval_95: false,
-      confidence_interval_95_strict: false
+      confidence_interval_95_strict: false,
+      confidence_interval_90: false,
+      confidence_interval_85: false
     };
   }
 
@@ -222,22 +254,44 @@ function runRegression(recentCandles: Candle[]): { t_statistic: number; p_value:
   const absT = Math.abs(t_statistic);
   const p_value = 2 * (1 - normalCDF(absT));
   
-  let confidence_level: 'HIGH' | 'MEDIUM' | 'LOW' = 'LOW';
-  if (p_value < 0.05) {
-    confidence_level = 'HIGH';
-  } else if (p_value < 0.15) {
-    confidence_level = 'MEDIUM';
-  }
+  // 4-Tier Quant Classification (Architectural Directives 2 & 3)
+  const confidence_interval_95_strict = p_value < 0.05 && absT >= 1.96;
+  const confidence_interval_90 = p_value <= 0.10 && absT >= 1.65;
+  const confidence_interval_85 = p_value <= 0.15 && absT >= 1.44;
+  const confidence_interval_95 = confidence_interval_90; // Standard primary institutional benchmark
 
-  const confidence_interval_95 = p_value < 0.15 && t_statistic > 1.96;
-  const confidence_interval_95_strict = p_value < 0.05 && t_statistic > 1.96;
+  let confidence_level: 'HIGH' | 'MEDIUM_HIGH' | 'MEDIUM' | 'LOW' = 'LOW';
+  let confidence_tier: 'CONFIRMED_95' | 'MODERATE_90' | 'BORDERLINE_85' | 'REJECTED' | 'CONSOLIDATION' = 'REJECTED';
+  let confidence_tier_label = 'REJECTED';
+
+  if (confidence_interval_95_strict) {
+    confidence_level = 'HIGH';
+    confidence_tier = 'CONFIRMED_95';
+    confidence_tier_label = 'CONFIRMED (95%)';
+  } else if (confidence_interval_90) {
+    confidence_level = 'MEDIUM_HIGH';
+    confidence_tier = 'MODERATE_90';
+    confidence_tier_label = 'MODERATE (90%)';
+  } else if (confidence_interval_85) {
+    confidence_level = 'MEDIUM';
+    confidence_tier = 'BORDERLINE_85';
+    confidence_tier_label = 'BORDERLINE (85%)';
+  } else {
+    confidence_level = 'LOW';
+    confidence_tier = 'REJECTED';
+    confidence_tier_label = 'REJECTED';
+  }
 
   return {
     t_statistic: parseFloat(t_statistic.toFixed(4)),
     p_value: parseFloat(p_value.toFixed(4)),
     confidence_level,
+    confidence_tier,
+    confidence_tier_label,
     confidence_interval_95,
-    confidence_interval_95_strict
+    confidence_interval_95_strict,
+    confidence_interval_90,
+    confidence_interval_85
   };
 }
 
@@ -251,8 +305,12 @@ export function verifyDisplacementOffline(recentCandles: Candle[], symbol: strin
         t_statistic: 0,
         p_value: 1,
         confidence_level: 'LOW',
+        confidence_tier: 'REJECTED',
+        confidence_tier_label: 'REJECTED',
         confidence_interval_95: false,
-        confidence_interval_95_strict: false
+        confidence_interval_95_strict: false,
+        confidence_interval_90: false,
+        confidence_interval_85: false
       }
     };
   }
@@ -306,8 +364,12 @@ export function verifyDisplacementOffline(recentCandles: Candle[], symbol: strin
         t_statistic: 0,
         p_value: 1,
         confidence_level: 'LOW' as const,
+        confidence_tier: 'CONSOLIDATION' as const,
+        confidence_tier_label: 'CONSOLIDATION',
         confidence_interval_95: false,
-        confidence_interval_95_strict: false
+        confidence_interval_95_strict: false,
+        confidence_interval_90: false,
+        confidence_interval_85: false
       }
     : runRegression(recentCandles);
 

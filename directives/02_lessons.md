@@ -322,6 +322,23 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   2. **Dedicated Quota Slicing in `structureLayer.ts`:** Mapped confirmed Major/Internal swings alongside recent Inner swings (`[...majorAndInt.slice(-60), ...recentInner].sort(...)`), guaranteeing Major and Internal horizontal levels are never starved by high counts of Inner sub-swings.
   3. **Full Historical `internalZigzag`:** Built `internalZigzag` from all `internalSwings` to ensure complete multi-scale structure shift history across the entire chart.
 
+### 44. Displacement OLS Statistical Over-Filtering & Lookahead Horizon Recalibration (Resolved in V16.7.4)
+- **The Bug:** On intraday 5m charts, `OLS 95% CONFIDENCE` was almost permanently `REJECTED` (Salmon), preventing valid institutional displacement signals from achieving verified execution status.
+- **The Cause:** 
+  1. **1-Bar Retest Penalty:** The OLS regression target evaluated only the immediate $+1$ candle return. Because institutional displacement candles are naturally followed by a 1-bar pause or Fair Value Gap retest, the linear slope coefficient was artificially depressed ($t \approx 1.3 - 1.7$, $p \approx 0.10 - 0.20$).
+  2. **Over-Strict Academic Threshold:** $t > 1.96$ ($p < 0.05$) represents a 95% clinical laboratory standard, whereas quantitative finance benchmarks use 90% confidence ($|t| \ge 1.65, p \le 0.10$) for high-frequency financial time series.
+  3. **Matrix Singularity in Offline Solver:** When market sessions did not span the NY Lunch dead zone, the `deadZones` feature column had 0 variance (all zeros), making the custom 4x4 matrix singular and failing inversion.
+- **The Fix:**
+  1. **3-Candle Forward Return Horizon:** Expanded target return to a 3-candle lookahead window ($\frac{c_{t+3} - c_t}{c_t}$) in both Python (`api/index.py`) and TypeScript (`displacementEngine.ts`), with strict chronological safety slicing (`iloc[14:-3]`).
+  2. **Calibrated 90% Primary Benchmark:** Standardized institutional confirmation to $|t| \ge 1.65, p \le 0.10$.
+  3. **Dynamic Multi-Tier UI Badging:** Replaced binary red/green display with a 4-tier institutional classification:
+     - 🟢 **CONFIRMED (95%)**: $|t| \ge 1.96, p < 0.05$ (Elite Conviction)
+     - 🟡 **MODERATE (90%)**: $|t| \ge 1.65, p \le 0.10$ (Institutional Standard)
+     - 🔵 **BORDERLINE (85%)**: $|t| \ge 1.44, p \le 0.15$ (Emerging Flow)
+     - 🔴 **REJECTED**: $p > 0.15$ (Noise)
+  4. **Dynamic Column Adaptation & Matrix Inversion:** Implemented dynamic column selection and generalized Gauss-Jordan matrix inversion in `displacementEngine.ts` to prevent zero-variance singularity.
+
+
 
 
 

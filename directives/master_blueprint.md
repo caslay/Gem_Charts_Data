@@ -1,8 +1,29 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.13
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.14
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-18 (V16.13 — Market Structure Chronological Synchronization & Multi-Timeframe Swings Audit)  
+> **Last Updated:** 2026-08-18 (V16.14 — Displacement OLS Recalibration & 4-Tier Statistical Classification)  
+
+## 🆕 V16.14 Changelog — Displacement OLS Recalibration & 4-Tier Statistical Classification (2026-08-18)
+
+### Summary
+Recalibrated the Displacement OLS Statistical Validation pipeline and frontend UI presentation to eliminate the 5-minute over-filtering bottleneck. Expanded the regression lookahead target from a 1-candle horizon to a 3-candle forward window ($\frac{c_{t+3} - c_t}{c_t}$), standardized primary institutional confirmation to 90% confidence ($|t| \ge 1.65, p \le 0.10$), upgraded the UI to a 4-tier institutional classification badge (`CONFIRMED 95%`, `MODERATE 90%`, `BORDERLINE 85%`, `REJECTED`), and synchronized the Python microservice and TypeScript solver with dynamic column rank protection.
+
+### Key Features & Architectural Directives
+- **3-Candle Forward Return Lookahead Horizon:**
+  - Updated the regression target variable in both `api/index.py` and `displacementEngine.ts` to capture multi-candle institutional expansion, eliminating the 1-bar FVG retest penalty.
+  - Implemented strict chronological safety slicing (`iloc[14:-3]`) to prevent forward-looking leakage.
+- **Calibrated 90% Primary Confirmation Benchmark:**
+  - Re-calibrated the baseline institutional confirmation gate from academic 95% ($t > 1.96$) to standard financial 90% ($|t| \ge 1.65, p \le 0.10$) while maintaining strict 95% ($|t| \ge 1.96, p < 0.05$) as an elite tier.
+- **4-Tier Institutional UI Badging (`Sidebar.tsx` & `BacktestSidebar.tsx`):**
+  - 🟢 **CONFIRMED (95%)**: $|t| \ge 1.96, p < 0.05$ (Emerald `#34d399` / `text-emerald-400`)
+  - 🟡 **MODERATE (90%)**: $|t| \ge 1.65, p \le 0.10$ (Amber `#fbbf24` / `text-amber-400`)
+  - 🔵 **BORDERLINE (85%)**: $|t| \ge 1.44, p \le 0.15$ (Sky `#38bdf8` / `text-sky-400`)
+  - 🔴 **REJECTED**: $p > 0.15$ (Rose `#f43f5e` / `text-rose-500`)
+- **Dynamic Rank Adaptation & Matrix Inversion:**
+  - Implemented dynamic column selection and generalized Gauss-Jordan matrix inversion in `displacementEngine.ts` to prevent zero-variance singularity during non-dead-zone trading sessions.
+
+---
 
 ## 🆕 V16.13 Changelog — Market Structure Chronological Synchronization & Multi-Timeframe Swings Audit (2026-08-18)
 

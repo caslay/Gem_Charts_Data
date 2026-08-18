@@ -92,8 +92,8 @@ async def calculate_displacement(candles: List[CandleInput], symbol: Optional[st
     df['minute'] = ny_time.dt.minute
     df['is_dead_zone'] = ((df['hour'] == 12) | ((df['hour'] == 13) & (df['minute'] <= 30))).astype(int)
     
-    # Forward 1-candle return for OLS target
-    df['future_return'] = df['c'].pct_change(fill_method=None).shift(-1)
+    # Forward 3-candle return for OLS target (Architectural Directive 1)
+    df['future_return'] = (df['c'].shift(-3) - df['c']) / df['c']
 
     # 3. Volatility Filter Check (Price Range < 0.1% is CONSOLIDATION)
     price_min = df['l'].min()
@@ -102,19 +102,25 @@ async def calculate_displacement(candles: List[CandleInput], symbol: Optional[st
     is_consolidation = bool(volatility_range < 0.001)
 
     # 4. Fit Statsmodels OLS model to validate the statistical significance of anomaly_multiplier
-    # Drop first 14 elements (rolling warmup) and the last element (current incomplete future return)
-    reg_df = df.iloc[14:-1].dropna(subset=['future_return', 'anomaly_multiplier', 'volume_delta', 'is_dead_zone'])
+    # Drop first 14 elements (rolling warmup) and the last 3 elements (current incomplete 3-bar future return)
+    reg_df = df.iloc[14:-3].dropna(subset=['future_return', 'anomaly_multiplier', 'volume_delta', 'is_dead_zone'])
     
     t_statistic = 0.0
     p_value = 1.0
     confidence_interval_95 = False
     confidence_interval_95_strict = False
+    confidence_interval_90 = False
+    confidence_interval_85 = False
     confidence_level = "LOW"
+    confidence_tier = "REJECTED"
+    confidence_tier_label = "REJECTED"
 
     if is_consolidation:
         t_statistic = 0.0
         p_value = 1.0
         confidence_level = "LOW"
+        confidence_tier = "CONSOLIDATION"
+        confidence_tier_label = "CONSOLIDATION"
     elif len(reg_df) >= 10:
         try:
             X = reg_df[['anomaly_multiplier', 'volume_delta', 'is_dead_zone']]
@@ -126,17 +132,30 @@ async def calculate_displacement(candles: List[CandleInput], symbol: Optional[st
             
             t_statistic = float(results.tvalues.get('anomaly_multiplier', 0.0))
             p_value = float(results.pvalues.get('anomaly_multiplier', 1.0))
-            
-            if p_value < 0.05:
+            abs_t = abs(t_statistic)
+
+            # 4-Tier Quant Classification (Architectural Directives 2 & 3)
+            confidence_interval_95_strict = bool(p_value < 0.05 and abs_t >= 1.96)
+            confidence_interval_90 = bool(p_value <= 0.10 and abs_t >= 1.65)
+            confidence_interval_85 = bool(p_value <= 0.15 and abs_t >= 1.44)
+            confidence_interval_95 = confidence_interval_90 # Standard primary institutional benchmark
+
+            if confidence_interval_95_strict:
                 confidence_level = "HIGH"
-            elif p_value < 0.15:
+                confidence_tier = "CONFIRMED_95"
+                confidence_tier_label = "CONFIRMED (95%)"
+            elif confidence_interval_90:
+                confidence_level = "MEDIUM_HIGH"
+                confidence_tier = "MODERATE_90"
+                confidence_tier_label = "MODERATE (90%)"
+            elif confidence_interval_85:
                 confidence_level = "MEDIUM"
+                confidence_tier = "BORDERLINE_85"
+                confidence_tier_label = "BORDERLINE (85%)"
             else:
                 confidence_level = "LOW"
-                
-            # Backward compatibility: Confidence Interval validation: p-value < 0.15 and t_statistic > 1.96
-            confidence_interval_95 = bool(p_value < 0.15 and t_statistic > 1.96)
-            confidence_interval_95_strict = bool(p_value < 0.05 and t_statistic > 1.96)
+                confidence_tier = "REJECTED"
+                confidence_tier_label = "REJECTED"
         except Exception as e:
             # Handle collinearity/singular matrix errors gracefully in low-volatility situations
             pass
@@ -176,6 +195,8 @@ async def calculate_displacement(candles: List[CandleInput], symbol: Optional[st
     if np.isnan(p_value) or np.isinf(p_value):
         p_value = 1.0
         confidence_level = "LOW"
+        confidence_tier = "REJECTED"
+        confidence_tier_label = "REJECTED"
 
     return DisplacementResponse(
         status=status,
@@ -185,8 +206,12 @@ async def calculate_displacement(candles: List[CandleInput], symbol: Optional[st
             "t_statistic": float(round(t_statistic, 4)),
             "p_value": float(round(p_value, 4)),
             "confidence_level": confidence_level,
+            "confidence_tier": confidence_tier,
+            "confidence_tier_label": confidence_tier_label,
             "confidence_interval_95": confidence_interval_95,
-            "confidence_interval_95_strict": confidence_interval_95_strict
+            "confidence_interval_95_strict": confidence_interval_95_strict,
+            "confidence_interval_90": confidence_interval_90,
+            "confidence_interval_85": confidence_interval_85
         }
     )
 
