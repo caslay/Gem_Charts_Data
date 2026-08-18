@@ -309,3 +309,31 @@ export interface M2MInvalidationCheckResult {
   /** Direction of the breach (price went ABOVE or BELOW the invalidation level). */
   breach_direction: 'ABOVE' | 'BELOW' | null;
 }
+
+// ─── Multi-Timeframe (MTF) Telemetry Context ──────────────────────────────────
+
+export interface AgentTimeframeTelemetry {
+  timeframe: '1m' | '5m' | '15m' | '1h';
+  trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  structure_break: 'BOS' | 'MSS' | 'NONE';
+  displacement: 'ACTIVE_BULLISH' | 'ACTIVE_BEARISH' | 'INACTIVE' | 'CONSOLIDATION';
+  ols_tier: 'CONFIRMED_95' | 'MODERATE_90' | 'BORDERLINE_85' | 'REJECTED' | 'CONSOLIDATION';
+  ols_tier_label: string;
+  t_statistic: number;
+  p_value: number;
+  order_flow_regime: string;
+  active_ob_count: number;
+  unmitigated_fvg_count: number;
+  dol_target: { price: number; type: 'BSL' | 'SSL'; distance_pips: number } | null;
+  last_close_price: number;
+}
+
+export interface AgentMTFSummary {
+  timeframes: Record<string, AgentTimeframeTelemetry>;
+  htf_directional_bias: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  htf_alignment: boolean;
+  top_down_confluence_pct: number;
+  active_macro_dol: { price: number; type: 'BSL' | 'SSL'; timeframe: string; distance_pips: number } | null;
+  evaluated_at: number;
+}
+

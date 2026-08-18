@@ -36,18 +36,30 @@ export interface LiveCandle {
 
 export type WSStatus = 'CONNECTING' | 'OPEN' | 'CLOSED' | 'ERROR';
 
+export interface ClosedCandleEvent {
+  interval: string;
+  candle: LiveCandle;
+  closedAt: number;
+}
+
 export interface UseBinanceWSOptions {
-  /** e.g. 'ethusdt'. Defaults to 'ethusdt' */
+  /** e.g. 'ethusdc'. Defaults to 'ethusdc' */
   symbol?: string;
-  /** Kline interval. Defaults to '5m' */
+  /** Kline interval for active visual chart. Defaults to '5m' */
   interval?: '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '4h';
   /** Set to false to disable the connection entirely (e.g. during server render) */
   enabled?: boolean;
+  /** Enable background multi-timeframe streaming (1m, 5m, 15m, 1h). Defaults to true */
+  multiStreamEnabled?: boolean;
 }
 
 export interface UseBinanceWSReturn {
-  /** The most recent live candle. Null until first message arrives. */
+  /** The most recent live candle for the active visual interval. */
   liveCandle: LiveCandle | null;
+  /** Live candles dictionary for all streamed timeframes ('1m', '5m', '15m', '1h') */
+  liveCandles: Record<string, LiveCandle>;
+  /** Event emitted on verified candle closure ('isClosed === true') */
+  lastClosedEvent: ClosedCandleEvent | null;
   /** WebSocket connection status */
   status: WSStatus;
   /** Current live close price — convenience accessor for the HUD */
@@ -60,16 +72,10 @@ export interface UseBinanceWSReturn {
 // Constants
 // ---------------------------------------------------------------------------
 
-/**
- * ⚠️ MIGRATION NOTE (April 2026):
- * Binance decommissioned the legacy `/ws` endpoint for market data streams.
- * Kline streams must now connect to `/market/ws`.
- * Old (dead): wss://fstream.binance.com/ws/ethusdc@kline_5m
- * New (live):  wss://fstream.binance.com/market/ws/ethusdc@kline_5m
- */
 const BINANCE_WS_BASE = 'wss://fstream.binance.com/market/ws';
+const BINANCE_MULTI_STREAM_BASE = 'wss://fstream.binance.com/market/stream';
+const CORE_MTF_INTERVALS = ['1m', '5m', '15m', '1h'] as const;
 
-// UTC+3 offset removed. Operating strictly on UTC-0.
 const BACKOFF_BASE_MS = 1_000;   // 1s initial delay
 const BACKOFF_MAX_MS = 30_000;  // 30s ceiling
 const BACKOFF_FACTOR = 2;
@@ -82,66 +88,48 @@ export function useBinanceWS({
   symbol = 'ethusdc',
   interval = '5m',
   enabled = true,
+  multiStreamEnabled = true,
 }: UseBinanceWSOptions = {}): UseBinanceWSReturn {
 
   const [liveCandle, setLiveCandle] = useState<LiveCandle | null>(null);
+  const [liveCandles, setLiveCandles] = useState<Record<string, LiveCandle>>({});
+  const [lastClosedEvent, setLastClosedEvent] = useState<ClosedCandleEvent | null>(null);
   const [status, setStatus] = useState<WSStatus>('CLOSED');
 
   // ---- Refs that must NOT trigger re-renders ----
   const wsRef = useRef<WebSocket | null>(null);
   const retryCountRef = useRef<number>(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** A stable ref so connect() closure can check whether it should bail */
   const isDestroyedRef = useRef<boolean>(false);
-  /** Allows external callers to trigger a manual reconnect */
   const manualRetrigger = useRef<number>(0);
-  /**
-   * Holds the deferred-connect setTimeout handle.
-   * Used to cancel the initial connection attempt during React Strict Mode's
-   * first (dev-only) mount/unmount cycle before any WebSocket is created.
-   */
   const connectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /**
-   * Indirection ref so `connect`'s ws.onclose handler always calls the LATEST
-   * version of scheduleReconnect without being frozen in a stale closure.
-   * (scheduleReconnect is defined after connect — calling it directly from
-   * inside connect's useCallback closure captures `undefined` on first render.)
-   */
   const scheduleReconnectRef = useRef<() => void>(() => { });
 
-  // Keep a stable ref to the current liveCandle so other logic can read it
-  // synchronously without adding it as a useEffect dependency.
   const liveCandleRef = useRef<LiveCandle | null>(null);
+  const liveCandlesRef = useRef<Record<string, LiveCandle>>({});
+  const livePriceRef = useRef<number | null>(null);
+  const [livePrice, setLivePrice] = useState<number | null>(null);
 
   // ---------------------------------------------------------------------------
-  // Parser: Binance kline message → LiveCandle
+  // Parser: Binance kline message → LiveCandle + interval
   // ---------------------------------------------------------------------------
-  const parseMessage = useCallback((raw: MessageEvent<string>): LiveCandle | null => {
+  const parseMessage = useCallback((raw: MessageEvent<string>): { candle: LiveCandle; interval: string } | null => {
     try {
-      const msg = JSON.parse(raw.data) as {
-        e: string;
-        k: {
-          t: number; // Open time ms
-          o: string;
-          h: string;
-          l: string;
-          c: string;
-          v: string;
-          V: string; // Taker buy base asset volume
-          x: boolean; // Candle is closed flag
-        };
-      };
+      const parsed = JSON.parse(raw.data);
+      
+      // Multi-stream payload wrapper: { stream: 'ethusdc@kline_5m', data: { e: 'kline', k: {...} } }
+      // Single-stream payload: { e: 'kline', k: {...} }
+      const msg = (parsed && parsed.data) ? parsed.data : parsed;
 
-      // Guard: only process kline events
-      if (msg.e !== 'kline' || !msg.k) return null;
+      if (!msg || msg.e !== 'kline' || !msg.k) return null;
 
       const k = msg.k;
+      const kInterval = k.i || interval;
       const volume = parseFloat(k.v);
       const taker_buy_vol = parseFloat(k.V || '0');
       const taker_sell_vol = parseFloat((volume - taker_buy_vol).toFixed(4));
 
-      return {
-        // Converted to seconds as required by lightweight-charts.
+      const candle: LiveCandle = {
         time: Math.floor(k.t / 1000) as UTCTimestamp,
         open: parseFloat(k.o),
         high: parseFloat(k.h),
@@ -150,22 +138,21 @@ export function useBinanceWS({
         volume,
         taker_buy_vol,
         taker_sell_vol,
-        isClosed: k.x,
+        isClosed: k.x === true,
       };
+
+      return { candle, interval: kInterval };
     } catch {
       return null;
     }
-  }, []);
+  }, [interval]);
 
   // ---------------------------------------------------------------------------
   // Core: connect
   // ---------------------------------------------------------------------------
   const connect = useCallback(() => {
-    // Bail if the hook has been torn down (handles React Strict Mode double-invoke)
     if (isDestroyedRef.current) return;
 
-    // Close any existing socket cleanly before opening a new one.
-    // Guard: skip close() on a CONNECTING socket to avoid the browser error.
     if (wsRef.current) {
       wsRef.current.onopen = null;
       wsRef.current.onmessage = null;
@@ -177,8 +164,17 @@ export function useBinanceWS({
       wsRef.current = null;
     }
 
-    const streamName = `${symbol.toLowerCase()}@kline_${interval}`;
-    const url = `${BINANCE_WS_BASE}/${streamName}`;
+    const sym = symbol.toLowerCase();
+    let url: string;
+
+    if (multiStreamEnabled) {
+      // Build combined multi-stream URL for background MTF processing
+      const uniqueIntervals = Array.from(new Set([...CORE_MTF_INTERVALS, interval]));
+      const streams = uniqueIntervals.map(i => `${sym}@kline_${i}`).join('/');
+      url = `${BINANCE_MULTI_STREAM_BASE}?streams=${streams}`;
+    } else {
+      url = `${BINANCE_WS_BASE}/${sym}@kline_${interval}`;
+    }
 
     setStatus('CONNECTING');
 
@@ -187,36 +183,49 @@ export function useBinanceWS({
 
     ws.onopen = () => {
       if (isDestroyedRef.current) { ws.close(); return; }
-      retryCountRef.current = 0; // reset backoff on successful open
+      retryCountRef.current = 0;
       setStatus('OPEN');
     };
 
     ws.onmessage = (event: MessageEvent<string>) => {
       if (isDestroyedRef.current) return;
-      const candle = parseMessage(event);
-      if (candle) {
+      const res = parseMessage(event);
+      if (!res) return;
+
+      const { candle, interval: msgInterval } = res;
+
+      // Update multi-candles dictionary
+      liveCandlesRef.current[msgInterval] = candle;
+      livePriceRef.current = candle.close;
+      setLivePrice(candle.close);
+
+      // If this message belongs to the active visual interval, update liveCandle
+      if (msgInterval === interval) {
         liveCandleRef.current = candle;
         setLiveCandle(candle);
+      }
+
+      // Verified Candle Closure Dispatcher
+      if (candle.isClosed) {
+        setLastClosedEvent({
+          interval: msgInterval,
+          candle,
+          closedAt: Date.now(),
+        });
       }
     };
 
     ws.onerror = () => {
       if (isDestroyedRef.current) return;
       setStatus('ERROR');
-      // onclose fires right after onerror on WebSocket — reconnect is handled there
     };
 
     ws.onclose = () => {
       if (isDestroyedRef.current) return;
       setStatus('CLOSED');
-      // Always call via ref to avoid the stale-closure trap:
-      // connect() is defined before scheduleReconnect, so a direct call
-      // would capture undefined on the first render.
       scheduleReconnectRef.current();
     };
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, interval, parseMessage]);
+  }, [symbol, interval, multiStreamEnabled, parseMessage]);
 
   // ---------------------------------------------------------------------------
   // Exponential backoff scheduler
@@ -224,7 +233,6 @@ export function useBinanceWS({
   const scheduleReconnect = useCallback(() => {
     if (isDestroyedRef.current) return;
 
-    // Clear any pending retry timer
     if (retryTimerRef.current) {
       clearTimeout(retryTimerRef.current);
       retryTimerRef.current = null;
@@ -244,7 +252,6 @@ export function useBinanceWS({
     }, delay);
   }, [connect]);
 
-  // Keep the ref in sync so connect's ws.onclose always calls the live version
   scheduleReconnectRef.current = scheduleReconnect;
 
   // ---------------------------------------------------------------------------
@@ -260,49 +267,33 @@ export function useBinanceWS({
   // Effect: mount / unmount lifecycle
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    // SSR guard — WebSocket is not available on the server
     if (typeof window === 'undefined') return;
     if (!enabled) return;
 
     isDestroyedRef.current = false;
 
-    // Reset live candle state on connection change / dependency update to prevent stale rendering
+    // Reset visual active candle on interval change
     setLiveCandle(null);
 
-    // ── Strict Mode Race Condition Fix ──────────────────────────────────────
-    // In React 19 dev mode, effects fire twice (mount → unmount → mount).
-    // Calling connect() synchronously means the cleanup from the *first* cycle
-    // calls ws.close() on a socket still in CONNECTING state, producing:
-    //   "WebSocket is closed before the connection is established"
-    //
-    // The 75 ms delay ensures the first-cycle cleanup (which runs within ~1 ms)
-    // will cancel connectTimerRef before a WebSocket is ever created.
-    // On the real second mount the timer fires normally.
     connectTimerRef.current = setTimeout(() => {
       if (!isDestroyedRef.current) {
         connect();
       }
     }, 75);
 
-    // Cleanup: called on unmount OR when deps change (symbol/interval hot-swap)
     return () => {
       isDestroyedRef.current = true;
 
-      // Cancel the deferred-connect timer (main guard against Strict Mode thrash)
       if (connectTimerRef.current) {
         clearTimeout(connectTimerRef.current);
         connectTimerRef.current = null;
       }
 
-      // Cancel any pending reconnect timer
       if (retryTimerRef.current) {
         clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
       }
 
-      // Tear down the WebSocket gracefully.
-      // Guard: calling close() on a CONNECTING socket is what triggers the
-      // browser error. Only close if the socket has advanced past that state.
       if (wsRef.current) {
         wsRef.current.onopen = null;
         wsRef.current.onmessage = null;
@@ -316,10 +307,12 @@ export function useBinanceWS({
     };
   }, [connect, enabled]);
 
-  // ---------------------------------------------------------------------------
-  // Derived state: live price
-  // ---------------------------------------------------------------------------
-  const livePrice = liveCandle?.close ?? null;
-
-  return { liveCandle, status, livePrice, reconnect };
+  return {
+    liveCandle,
+    liveCandles: liveCandlesRef.current,
+    lastClosedEvent,
+    status,
+    livePrice,
+    reconnect
+  };
 }

@@ -27,15 +27,17 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
   // Centralized WS interval state — Chart and other consumers set this
   const [wsInterval, setWsInterval] = useState<'1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '4h'>('5m');
 
-  // Single, global WebSocket connection — prevents duplicate connections (Lesson #7)
+  // Single, global WebSocket connection with Multi-Stream MTF support
   const {
     liveCandle,
+    liveCandles,
+    lastClosedEvent,
     livePrice,
     status: wsStatus,
     reconnect: wsReconnect,
   } = useBinanceWS({ symbol: 'ethusdc', interval: wsInterval });
 
-  const marketData = useMarketDataHook(wsInterval, liveCandle);
+  const marketData = useMarketDataHook(wsInterval, liveCandle, liveCandles, lastClosedEvent, livePrice);
 
   // Background Auto-Trade Executor: automatically opens trades in journal when price touches entry
   useAutoTradeExecutor(marketData.data, false);
