@@ -69,8 +69,9 @@ export default function LiveOrderBlockExecutionHUD() {
                 : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-slate-200'
             }`}
           >
+            <span>🏛️ OB:</span>
             {engineConfig.autoExecute ? <Play className="w-2.5 h-2.5 text-emerald-400 fill-emerald-400" /> : <Pause className="w-2.5 h-2.5" />}
-            <span>{engineConfig.autoExecute ? 'AUTO-EXECUTE ON' : 'MANUAL WATCH'}</span>
+            <span>{engineConfig.autoExecute ? 'AUTO-EXEC ON' : 'MANUAL WATCH'}</span>
           </button>
 
           <button

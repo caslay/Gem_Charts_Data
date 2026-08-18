@@ -13,7 +13,8 @@ export const displacementLayer: ChartLayer = {
     if (seriesMarkers && activeCandles && activeCandles.length > 0) {
       const isHighPerf = engineSettings?.highPerformanceMode ?? false;
       const lastClosedT = activeCandles[activeCandles.length - 2]?.t ?? activeCandles[activeCandles.length - 1]?.t;
-      const cacheKey = `${lastClosedT}_${activeCandles.length}_${theme}_${engineSettings?.visualizePerfectMovementOnly}_${isHighPerf}`;
+      const swingsCount = context.structureState?.swings?.length ?? 0;
+      const cacheKey = `${lastClosedT}_${activeCandles.length}_${theme}_${engineSettings?.visualizePerfectMovementOnly}_${engineSettings?.pmAtrMultiplier}_${engineSettings?.pmVolumeSmaPeriod}_${swingsCount}_${isHighPerf}`;
 
       // Reuse memoized markers if candle close timestamp and settings have not changed
       if (storage.get('cacheKey') === cacheKey && storage.has('cachedMarkers')) {

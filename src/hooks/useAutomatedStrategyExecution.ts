@@ -10,6 +10,12 @@ import {
   ExecutionEvent,
 } from '@/lib/quantEngine/AutomatedStrategyExecutionEngine';
 import { Candle } from '@/lib/fvgEngine';
+import {
+  getSweepReclaimAutoExec,
+  setSweepReclaimAutoExec,
+  STRATEGY_AUTO_EXEC_EVENT,
+  StrategyAutoExecState,
+} from '@/lib/quantEngine/strategyExecutionConfig';
 import type { SmartAlert } from '@/hooks/useLiveAlerts';
 
 // Global singleton instance ensures background tick execution persists across tabs & modals
@@ -33,6 +39,7 @@ export function useAutomatedStrategyExecution(
 
   const [engineConfig, setEngineConfig] = useState<AutomatedExecutionConfig>({
     ...DEFAULT_AUTOMATED_CONFIG,
+    autoExecute: getSweepReclaimAutoExec(),
     ...initialConfig,
   });
 
@@ -42,6 +49,27 @@ export function useAutomatedStrategyExecution(
   const [closedTrades, setClosedTrades] = useState<StrategyExecutionPosition[]>([]);
   const [accountEquity, setAccountEquity] = useState<number>(10000.0);
   const [lastEvent, setLastEvent] = useState<ExecutionEvent | null>(null);
+
+  // Listen to cross-component dual strategy auto-exec changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleAutoExecUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<StrategyAutoExecState>;
+      const srEnabled = customEvent.detail ? customEvent.detail.isSweepReclaimAutoExecEnabled : getSweepReclaimAutoExec();
+      setEngineConfig(prev => {
+        if (prev.autoExecute !== srEnabled) {
+          return { ...prev, autoExecute: srEnabled };
+        }
+        return prev;
+      });
+    };
+
+    window.addEventListener(STRATEGY_AUTO_EXEC_EVENT, handleAutoExecUpdate);
+    return () => {
+      window.removeEventListener(STRATEGY_AUTO_EXEC_EVENT, handleAutoExecUpdate);
+    };
+  }, []);
 
   // Sync configuration updates into engine
   useEffect(() => {
@@ -281,11 +309,20 @@ export function useAutomatedStrategyExecution(
     return engineRef.current.moveStopToBreakeven(posId);
   }, []);
 
+  const toggleAutoExecute = useCallback(() => {
+    const nextVal = !engineConfig.autoExecute;
+    setSweepReclaimAutoExec(nextVal);
+    setEngineConfig(prev => ({ ...prev, autoExecute: nextVal }));
+    return nextVal;
+  }, [engineConfig.autoExecute]);
+
   const riskUsd2Pct = parseFloat((accountEquity * (engineConfig.compoundingRiskPct / 100)).toFixed(2));
 
   return {
     engineConfig,
     setEngineConfig,
+    isSweepReclaimAutoExecEnabled: engineConfig.autoExecute,
+    toggleAutoExecute,
     activePositions,
     pendingOrders,
     closedTrades,

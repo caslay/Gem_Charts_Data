@@ -260,6 +260,7 @@ export function generateVolumetricMarkers(candles: MarkerCandle[], colors: Marke
   annotateCandlesWithVolumetricSignals(candles);
 
   const markers: SeriesMarker<any>[] = [];
+  const usePerfectFilter = colors.visualizePerfectMovementOnly === true && !!colors.marketData;
 
   for (let i = 0; i < candles.length; i++) {
     const c = candles[i];
@@ -268,12 +269,9 @@ export function generateVolumetricMarkers(candles: MarkerCandle[], colors: Marke
     // Lightweight charts time format handling
     const markerTime = c.t.toString().length > 10 ? Math.floor(c.t / 1000) : c.t;
 
-    const usePerfectFilter = colors.visualizePerfectMovementOnly === true && colors.marketData;
-    const fadedColor = colors.theme === 'light' ? 'rgba(128, 128, 128, 0.90)' : 'rgba(128, 128, 128, 0.90)';
-
     if (c.volumetric_signal === 'ARROW_UP') {
       let isPerfect = false;
-      if (usePerfectFilter) {
+      if (colors.marketData) {
         const pmSettings: PerfectMovementSettings = {
           pmAtrMultiplier: colors.pmAtrMultiplier,
           pmVolumeSmaPeriod: colors.pmVolumeSmaPeriod,
@@ -283,28 +281,30 @@ export function generateVolumetricMarkers(candles: MarkerCandle[], colors: Marke
           pmSweepLookback: colors.pmSweepLookback,
           direction: 'LONG',
         };
-        isPerfect = checkPerfectMovementSetup(candles, colors.marketData || null, pmSettings, i, colors.structureState);
+        isPerfect = checkPerfectMovementSetup(candles, colors.marketData, pmSettings, i, colors.structureState);
       }
 
-      let arrowColor = '';
-      if (usePerfectFilter) {
-        arrowColor = isPerfect ? '#00f0ff' : fadedColor;
-      } else {
+      // If PM-only filter is active, only render confirmed PM setups
+      if (usePerfectFilter && !isPerfect) continue;
+
+      let arrowColor = '#00f0ff';
+      if (!isPerfect) {
         const isStrong = c.taker_buy_vol !== undefined && c.taker_sell_vol !== undefined && c.taker_buy_vol > c.taker_sell_vol;
-        const weakColor = colors.theme === 'light' ? 'rgba(0, 0, 0, 0.45)' : 'rgba(255, 255, 255, 0.45)';
-        arrowColor = isStrong ? (colors.volumetricStrongArrowColor || (colors.theme === 'light' ? '#e11d48' : '#ff007f')) : weakColor;
+        const strongColor = colors.bullishSweepColor || '#00f0ff';
+        const weakColor = colors.theme === 'light' ? 'rgba(0, 0, 0, 0.15)' : 'rgba(255, 255, 255, 0.15)';
+        arrowColor = isStrong ? strongColor : weakColor;
       }
 
       markers.push({
         time: markerTime as any,
         position: 'belowBar',
-        color: arrowColor,
+        color: isPerfect ? '#00f0ff' : arrowColor,
         shape: 'arrowUp',
-        text: isPerfect && usePerfectFilter ? 'PM' : '',
+        text: isPerfect ? 'PM' : '',
       });
     } else if (c.volumetric_signal === 'ARROW_DOWN') {
       let isPerfect = false;
-      if (usePerfectFilter) {
+      if (colors.marketData) {
         const pmSettings: PerfectMovementSettings = {
           pmAtrMultiplier: colors.pmAtrMultiplier,
           pmVolumeSmaPeriod: colors.pmVolumeSmaPeriod,
@@ -314,26 +314,31 @@ export function generateVolumetricMarkers(candles: MarkerCandle[], colors: Marke
           pmSweepLookback: colors.pmSweepLookback,
           direction: 'SHORT',
         };
-        isPerfect = checkPerfectMovementSetup(candles, colors.marketData || null, pmSettings, i, colors.structureState);
+        isPerfect = checkPerfectMovementSetup(candles, colors.marketData, pmSettings, i, colors.structureState);
       }
 
-      let arrowColor = '';
-      if (usePerfectFilter) {
-        arrowColor = isPerfect ? '#ff007f' : fadedColor;
-      } else {
+      // If PM-only filter is active, only render confirmed PM setups
+      if (usePerfectFilter && !isPerfect) continue;
+
+      let arrowColor = '#ff007f';
+      if (!isPerfect) {
         const isStrong = c.taker_buy_vol !== undefined && c.taker_sell_vol !== undefined && c.taker_sell_vol > c.taker_buy_vol;
-        const weakColor = colors.theme === 'light' ? 'rgba(0, 0, 0, 0.45)' : 'rgba(255, 255, 255, 0.45)';
-        arrowColor = isStrong ? (colors.volumetricStrongArrowColor || (colors.theme === 'light' ? '#e11d48' : '#ff007f')) : weakColor;
+        const strongColor = colors.volumetricStrongArrowColor || (colors.theme === 'light' ? '#e11d48' : '#ff007f');
+        const weakColor = colors.theme === 'light' ? 'rgba(0, 0, 0, 0.15)' : 'rgba(255, 255, 255, 0.15)';
+        arrowColor = isStrong ? strongColor : weakColor;
       }
 
       markers.push({
         time: markerTime as any,
         position: 'aboveBar',
-        color: arrowColor,
+        color: isPerfect ? '#ff007f' : arrowColor,
         shape: 'arrowDown',
-        text: isPerfect && usePerfectFilter ? 'PM' : '',
+        text: isPerfect ? 'PM' : '',
       });
     } else if (c.volumetric_signal === 'CIRCLE_UP') {
+      // In Perfect Movement Only mode, suppress circles to avoid clutter
+      if (usePerfectFilter) continue;
+
       const circleColor = colors.bullishSweepColor;
       markers.push({
         time: markerTime as any,
@@ -343,6 +348,9 @@ export function generateVolumetricMarkers(candles: MarkerCandle[], colors: Marke
         text: '',
       });
     } else if (c.volumetric_signal === 'CIRCLE_DOWN') {
+      // In Perfect Movement Only mode, suppress circles to avoid clutter
+      if (usePerfectFilter) continue;
+
       const circleColor = colors.bearishSweepColor;
       markers.push({
         time: markerTime as any,

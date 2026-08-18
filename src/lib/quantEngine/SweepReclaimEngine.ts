@@ -7,19 +7,20 @@
  *  - Phase 1 (Multi-Timeframe Anchors): Tracks Asian High/Low (00:00–07:00 UTC),
  *    London High/Low (07:00–12:00 UTC), Previous Day High/Low (PDH/PDL), and
  *    color-locked Major/Internal pivots with strict zero look-ahead bias.
- *  - Phase 2 (Liquidity Sweep): Detects price breaking through the anchor shelf
- *    to purge external liquidity (SSL for Bullish, BSL for Bearish) within a
- *    configurable freshness window.
- *  - Phase 3 (Volumetric Displacement Reclaim): Gated strictly on confirmed candle
- *    body close back beyond the anchor shelf with:
- *      1. Candle body-to-range ratio >= 0.55.
- *      2. Directional taker volume delta dominance >= 51.5%.
- *      3. Displacement Fair Value Gap (BISI/SIBI) creation and 50% Consequent Encroachment (CE).
- *  - Phase 4 (3-Stage Harvest & Trailing Execution Engine):
- *      - Tranche 1 (40% at 1.0R): Partial fill, activates structural trailing stop anchored
- *        to displacement FVG 50% CE (capping runner risk so net trade P&L >= 0.0R).
- *      - Tranche 2 (40% at 1.5R): Partial fill, immediately ratchets active SL to a guaranteed +1.0R floor.
- *      - Tranche 3 (20% DOL Runner): Trails remaining inventory along confirmed local swing pivots.
+ *  - Phase 2 (Liquidity Sweep Detection): Detects price breaking through the anchor shelf
+ *    to purge external liquidity with wick rejection signature (elevated volume + rejection wick).
+ *  - Phase 3 (3-Pillar Volumetric Displacement Reclaim Gatekeeper):
+ *      - Pillar 1: Volume Ratio >= 1.5x (vs 20-period Volume SMA).
+ *      - Pillar 2: Directional Taker Delta Dominance >= 60.0%.
+ *      - Pillar 3: Candle Body-to-Range Ratio >= 60.0%.
+ *      - Displacement Fair Value Gap (BISI/SIBI) 50% Consequent Encroachment (CE).
+ *  - Phase 4 (Precision Order Routing, Valuation Gating & 3-Stage Harvest):
+ *      - Precision Routing: FVG 50% CE, Sweep OB 50% MT, or Reclaim Shelf.
+ *      - Discount/Premium Valuation Gate: Longs execute in Discount (<= Equilibrium); Shorts execute in Premium (>= Equilibrium).
+ *      - Hard Stop Loss: Locked 1 tick beyond the absolute sweep candle extreme.
+ *      - Tranche 1 (40% @ 1.0R): Locks +0.40R profit, advances SL to FVG CE / Breakeven.
+ *      - Tranche 2 (40% @ 1.5R): Locks +0.60R profit, ratchets SL to guaranteed +1.0R profit floor.
+ *      - Tranche 3 (20% @ HTF DOL Runner): Trails remaining inventory along confirmed swing pivots to macro DOL.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -88,16 +89,19 @@ export interface SweepReclaimSetup {
   anchor_swing_grade: 'MAJOR' | 'INTERNAL' | 'INNER' | 'SESSION' | 'DAILY';
   anchor_color_validated: boolean;
 
-  // Phase 2: Sweep Metrics (Purge)
+  // Phase 2: Sweep Metrics (Purge & Wick Rejection)
   sweep_price: number | null;
   sweep_index: number | null;
   sweep_time: number | null;
   sweep_depth: number | null;
   sweep_depth_pct: number | null;
   sweep_volume_ratio: number | null;
+  sweep_wick_ratio: number | null;
+  is_wick_rejection_sweep: boolean;
+  sweep_ob_mt: number | null;
   bars_anchor_to_sweep: number | null;
 
-  // Phase 3: Volumetric Reclaim Metrics (Displacement / Inversion)
+  // Phase 3: 3-Pillar Volumetric Reclaim Metrics (Displacement / Inversion)
   reclaim_index: number | null;
   reclaim_time: number | null;
   reclaim_close_price: number | null;
@@ -111,7 +115,13 @@ export interface SweepReclaimSetup {
   bars_sweep_to_reclaim: number | null;
   is_reclaimed: boolean;
 
-  // Phase 4: Retest & Execution Simulation
+  // 3-Pillar Displacement Gatekeeper Flags
+  pillar1_volume_ratio_passed: boolean;
+  pillar2_delta_dominance_passed: boolean;
+  pillar3_body_ratio_passed: boolean;
+  three_pillar_displacement_passed: boolean;
+
+  // Phase 4: Retest, Valuation Gating & Execution
   retest_index: number | null;
   retest_time: number | null;
   retest_price: number | null;
@@ -119,8 +129,12 @@ export interface SweepReclaimSetup {
   is_retested: boolean;
   body_defense_passed: boolean;
 
+  // Dealing Range & Valuation Gating
+  dealing_range_equilibrium: number | null;
+  is_valuation_aligned: boolean;
+
   // Risk / Reward & Execution Geometry
-  entry_mode: 'FVG_CE' | 'RECLAIM_LEVEL';
+  entry_mode: 'FVG_CE' | 'SWEEP_OB_MT' | 'RECLAIM_LEVEL';
   entry_price: number;
   stop_loss: number;
   risk_usd: number;
@@ -170,15 +184,24 @@ export interface SweepReclaimScanConfig {
   maxBarsAnchorToSweep?: number;              // Max candles between anchor and sweep (default: 30)
   maxBarsSweepToReclaim?: number;             // Max candles from sweep extreme to reclaim close (default: 12)
   maxBarsToRetest?: number;                   // Max candles from reclaim to retest entry (default: 24)
-  deltaDominanceThreshold?: number;           // Min taker delta dominance % (default: 51.5)
-  bodyRatioThreshold?: number;                // Min candle body-to-range ratio (default: 0.55)
+
+  // 3-Pillar Displacement Gatekeeper Thresholds
+  volumeExpansionThreshold?: number;          // Pillar 1: Min Volume Ratio vs SMA (default: 1.50x)
+  deltaDominanceThreshold?: number;           // Pillar 2: Min taker delta dominance % (default: 60.0%)
+  bodyRatioThreshold?: number;                // Pillar 3: Min candle body-to-range ratio (default: 0.60)
+  requireThreePillarDisplacement?: boolean;   // Veto reclaims that fail 3-pillar gate (default: true)
+
+  // Valuation Gating
+  enforceDiscountPremiumGate?: boolean;       // Require Longs in Discount, Shorts in Premium (default: false)
+
+  // Target Multiples & Execution
   stage1Multiple?: number;                    // Stage 1 Tranche target R (default: 1.0)
   stage2Multiple?: number;                    // Stage 2 Tranche target R (default: 1.5)
   stage3Multiple?: number;                    // Stage 3 Tranche target R / DOL runner (default: 3.0)
-  entryMode?: 'FVG_CE' | 'RECLAIM_LEVEL';     // Entry at displacement FVG 50% CE or Reclaim Shelf (default: 'FVG_CE')
+  entryMode?: 'FVG_CE' | 'SWEEP_OB_MT' | 'RECLAIM_LEVEL'; // (default: 'FVG_CE')
   enableStructuralTrail?: boolean;            // Trail SL to FVG CE after Stage 1 (default: true)
   enableProfitRatchet?: boolean;              // Ratchet SL to +1.0R floor after Stage 2 (default: true)
-  minSweepDepthAtrMultiplier?: number;        // Min sweep penetration in ATR (default: 0.1)
+  minSweepDepthAtrMultiplier?: number;        // Min sweep penetration in ATR (default: 0.10)
   slBufferAtrMultiplier?: number;             // Volatility buffer added behind sweep extreme (default: 0.15)
 }
 
@@ -192,6 +215,22 @@ export interface SweepReclaimTelemetrySummary {
   reclaim_rate_pct: number;
   retest_rate_pct: number;
   retest_win_rate_pct: number;
+
+  // 3-Pillar Displacement Breakdown
+  pillar1_pass_count: number;
+  pillar1_pass_pct: number;
+  pillar2_pass_count: number;
+  pillar2_pass_pct: number;
+  pillar3_pass_count: number;
+  pillar3_pass_pct: number;
+  three_pillar_all_pass_count: number;
+  three_pillar_all_pass_pct: number;
+
+  // Liquidity & Valuation Metrics
+  wick_rejection_sweep_count: number;
+  wick_rejection_sweep_pct: number;
+  discount_premium_aligned_count: number;
+  discount_premium_aligned_pct: number;
 
   total_winning_trades: number;
   total_losing_trades: number;
@@ -246,8 +285,11 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   maxBarsAnchorToSweep: 30,
   maxBarsSweepToReclaim: 12,
   maxBarsToRetest: 24,
-  deltaDominanceThreshold: 51.5,
-  bodyRatioThreshold: 0.55,
+  volumeExpansionThreshold: 1.50,
+  deltaDominanceThreshold: 60.0,
+  bodyRatioThreshold: 0.60,
+  requireThreePillarDisplacement: true,
+  enforceDiscountPremiumGate: false,
   stage1Multiple: 1.0,
   stage2Multiple: 1.5,
   stage3Multiple: 3.0,
@@ -339,8 +381,7 @@ export class SweepReclaimEngine {
       });
       pivotEngine.processCandles(candles);
 
-      // Deduplicate pivots occurring on the same candle index and direction, retaining highest grade
-      const uniquePivotsMap = new Map<string, typeof pivotEngine.pivots[0]>();
+      const uniquePivotsMap = new Map<string, (typeof pivotEngine.pivots)[0]>();
       for (const p of pivotEngine.pivots) {
         const key = `${p.index}_${p.type}`;
         const existing = uniquePivotsMap.get(key);
@@ -366,7 +407,6 @@ export class SweepReclaimEngine {
     }
 
     // 2. Session Extrema & PDH/PDL Partitioning
-    // Group candles chronologically by calendar day (UTC)
     const candlesByDay = new Map<string, { candles: Candle[]; indices: number[] }>();
     for (let i = 0; i < n; i++) {
       const c = candles[i];
@@ -402,8 +442,8 @@ export class SweepReclaimEngine {
       }
 
       if (asianCandles.length > 0 && postAsianFirstIdx !== null) {
-        const aHigh = Math.max(...asianCandles.map(c => c.h ?? (c as any).high));
-        const aLow = Math.min(...asianCandles.map(c => c.l ?? (c as any).low));
+        const aHigh = Math.max(...asianCandles.map((c) => c.h ?? (c as any).high));
+        const aLow = Math.min(...asianCandles.map((c) => c.l ?? (c as any).low));
         const anchorTime = candles[postAsianFirstIdx].t;
 
         if (allowedTypes.has('ASIAN_HIGH')) {
@@ -450,8 +490,8 @@ export class SweepReclaimEngine {
       }
 
       if (londonCandles.length > 0 && postLondonFirstIdx !== null) {
-        const lHigh = Math.max(...londonCandles.map(c => c.h ?? (c as any).high));
-        const lLow = Math.min(...londonCandles.map(c => c.l ?? (c as any).low));
+        const lHigh = Math.max(...londonCandles.map((c) => c.h ?? (c as any).high));
+        const lLow = Math.min(...londonCandles.map((c) => c.l ?? (c as any).low));
         const anchorTime = candles[postLondonFirstIdx].t;
 
         if (allowedTypes.has('LONDON_HIGH')) {
@@ -481,23 +521,24 @@ export class SweepReclaimEngine {
         }
       }
 
-      // ── Previous Day High / Low (PDH / PDL) ────────────────────────────────
-      if (dIdx > 0 && dayIndices.length > 0) {
+      // ── Previous Day High / Low (PDH / PDL) ─────────────────────────────────
+      if (dIdx > 0) {
         const prevDayKey = daysList[dIdx - 1];
-        const prevDay = candlesByDay.get(prevDayKey)!;
-        if (prevDay.candles.length > 0) {
-          const pdh = Math.max(...prevDay.candles.map(c => c.h ?? (c as any).high));
-          const pdl = Math.min(...prevDay.candles.map(c => c.l ?? (c as any).low));
-          const firstCandleOfDay = dayIndices[0];
-          const anchorTime = candles[firstCandleOfDay].t;
+        const { candles: prevCandles, indices: prevIndices } = candlesByDay.get(prevDayKey)!;
+
+        if (prevCandles.length >= 10) {
+          const pdh = Math.max(...prevCandles.map((c) => c.h ?? (c as any).high));
+          const pdl = Math.min(...prevCandles.map((c) => c.l ?? (c as any).low));
+          const dayFirstIdx = dayIndices[0];
+          const anchorTime = candles[dayFirstIdx].t;
 
           if (allowedTypes.has('PDH')) {
             anchors.push({
               type: 'PDH',
-              name: `Previous Day High (PDH: $${pdh.toFixed(2)})`,
+              name: `Previous Day High ($${pdh.toFixed(2)})`,
               level: pdh,
               time: anchorTime,
-              index: firstCandleOfDay,
+              index: dayFirstIdx,
               bias: 'BEARISH',
               grade: 'DAILY',
               colorValidated: true,
@@ -507,10 +548,10 @@ export class SweepReclaimEngine {
           if (allowedTypes.has('PDL')) {
             anchors.push({
               type: 'PDL',
-              name: `Previous Day Low (PDL: $${pdl.toFixed(2)})`,
+              name: `Previous Day Low ($${pdl.toFixed(2)})`,
               level: pdl,
               time: anchorTime,
-              index: firstCandleOfDay,
+              index: dayFirstIdx,
               bias: 'BULLISH',
               grade: 'DAILY',
               colorValidated: true,
@@ -520,33 +561,31 @@ export class SweepReclaimEngine {
       }
     }
 
-    // Sort all anchors strictly chronologically
-    return anchors.sort((a, b) => a.index - b.index || a.level - b.level);
+    anchors.sort((a, b) => a.index - b.index);
+    return anchors;
   }
 
   /**
-   * Scans a historical sequence of confirmed candles for 4-Phase Sweep & Reclaim setups.
+   * Scans a full historical candle series through the 4-phase Sweep & Reclaim state machine.
    */
   public scanHistoricalSetups(candles: Candle[]): {
     setups: SweepReclaimSetup[];
     telemetry: SweepReclaimTelemetrySummary;
   } {
-    if (!candles || candles.length < 30) {
-      return {
-        setups: [],
-        telemetry: this.createEmptyTelemetry()
-      };
+    const n = candles.length;
+    if (n < 20) {
+      return { setups: [], telemetry: this.createEmptyTelemetry() };
     }
 
-    const n = candles.length;
-    const atrSeries = calculateAtrSeries(candles, 14);
     const anchors = this.extractAnchors(candles);
+    const atrSeries = calculateAtrSeries(candles, 14);
+
     const detectedSetups: SweepReclaimSetup[] = [];
 
-    // Helper map for volume SMA
-    const volSmaSeries: number[] = new Array(n).fill(0);
-    let volSum = 0;
+    // Rolling 20-period Volume SMA
+    const volSmaSeries: number[] = new Array(n).fill(1);
     const volPeriod = 20;
+    let volSum = 0;
     for (let i = 0; i < n; i++) {
       volSum += candles[i].v ?? 0;
       if (i >= volPeriod) {
@@ -557,14 +596,18 @@ export class SweepReclaimEngine {
       }
     }
 
-    const deltaDominanceThreshold = this.config.deltaDominanceThreshold ?? 51.5;
-    const bodyRatioThreshold = this.config.bodyRatioThreshold ?? 0.55;
+    const volumeExpansionThreshold = this.config.volumeExpansionThreshold ?? 1.50;
+    const deltaDominanceThreshold = this.config.deltaDominanceThreshold ?? 60.0;
+    const bodyRatioThreshold = this.config.bodyRatioThreshold ?? 0.60;
+    const requireThreePillar = this.config.requireThreePillarDisplacement !== false;
+    const enforceDiscountPremium = !!this.config.enforceDiscountPremiumGate;
+
     const stage1Multiple = this.config.stage1Multiple ?? 1.0;
     const stage2Multiple = this.config.stage2Multiple ?? 1.5;
     const stage3Multiple = this.config.stage3Multiple ?? 3.0;
     const entryMode = this.config.entryMode ?? 'FVG_CE';
 
-    // Iterate through confirmed multi-timeframe anchors to track Phase 1 -> 4
+    // Iterate through confirmed multi-timeframe anchors
     for (const anchor of anchors) {
       const anchorIdx = anchor.index;
       if (anchorIdx < 2 || anchorIdx >= n - 5) continue;
@@ -576,10 +619,12 @@ export class SweepReclaimEngine {
       const anchorType = anchor.type;
       const anchorName = anchor.name;
 
-      const maxSweepLookback = anchorGrade === 'SESSION' || anchorGrade === 'DAILY'
-        ? Math.max(96, (this.config.maxBarsAnchorToSweep ?? 30) * 3)
-        : (this.config.maxBarsAnchorToSweep ?? 30);
+      const maxSweepLookback =
+        anchorGrade === 'SESSION' || anchorGrade === 'DAILY'
+          ? Math.max(96, (this.config.maxBarsAnchorToSweep ?? 30) * 3)
+          : (this.config.maxBarsAnchorToSweep ?? 30);
       const maxSweepIdx = Math.min(n - 1, anchorIdx + maxSweepLookback);
+
       let sweepFound = false;
       let sweepIdx: number | null = null;
       let sweepExtremePrice: number | null = null;
@@ -587,10 +632,12 @@ export class SweepReclaimEngine {
       let sweepDepth = 0;
       let sweepDepthPct = 0;
       let sweepVolRatio = 1.0;
+      let sweepWickRatio = 0.0;
+      let isWickRejection = false;
+      let sweepObMt: number | null = null;
 
-      // ─── Phase 2: Liquidity Sweep Detection ──────────────────────────────────
+      // ─── Phase 2: Liquidity Sweep Detection (Wick Rejection Signature) ───────
       if (isBullish) {
-        // Price must violate below the anchor low shelf
         let localMinLow = Infinity;
         let localMinIdx = -1;
 
@@ -620,10 +667,22 @@ export class SweepReclaimEngine {
             sweepDepthPct = (currentDepth / anchorLevel) * 100;
             const avgVol = volSmaSeries[localMinIdx] || 1;
             sweepVolRatio = (candles[localMinIdx].v ?? 0) / avgVol;
+
+            // Wick Rejection Math: lower wick ratio
+            const sc = candles[localMinIdx];
+            const scOpen = sc.o ?? (sc as any).open;
+            const scClose = sc.c ?? (sc as any).close;
+            const scHigh = sc.h ?? (sc as any).high;
+            const scLow = sc.l ?? (sc as any).low;
+            const scRange = Math.max(0.0001, scHigh - scLow);
+            const lowerWick = Math.min(scOpen, scClose) - scLow;
+            sweepWickRatio = parseFloat(((lowerWick / scRange) * 100).toFixed(1));
+            isWickRejection = sweepWickRatio >= 40.0 && sweepVolRatio >= 1.0;
+            sweepObMt = parseFloat(((scHigh + scLow) / 2).toFixed(4));
           }
         }
       } else {
-        // Bearish: Price must violate above the anchor high shelf
+        // Bearish: Price violates above the anchor high shelf
         let localMaxHigh = -Infinity;
         let localMaxIdx = -1;
 
@@ -653,6 +712,18 @@ export class SweepReclaimEngine {
             sweepDepthPct = (currentDepth / anchorLevel) * 100;
             const avgVol = volSmaSeries[localMaxIdx] || 1;
             sweepVolRatio = (candles[localMaxIdx].v ?? 0) / avgVol;
+
+            // Wick Rejection Math: upper wick ratio
+            const sc = candles[localMaxIdx];
+            const scOpen = sc.o ?? (sc as any).open;
+            const scClose = sc.c ?? (sc as any).close;
+            const scHigh = sc.h ?? (sc as any).high;
+            const scLow = sc.l ?? (sc as any).low;
+            const scRange = Math.max(0.0001, scHigh - scLow);
+            const upperWick = scHigh - Math.max(scOpen, scClose);
+            sweepWickRatio = parseFloat(((upperWick / scRange) * 100).toFixed(1));
+            isWickRejection = sweepWickRatio >= 40.0 && sweepVolRatio >= 1.0;
+            sweepObMt = parseFloat(((scHigh + scLow) / 2).toFixed(4));
           }
         }
       }
@@ -675,13 +746,18 @@ export class SweepReclaimEngine {
           anchor_swing_type: isBullish ? 'SWING_LOW' : 'SWING_HIGH',
           anchor_swing_grade: anchorGrade,
           anchor_color_validated: anchor.colorValidated,
+
           sweep_price: null,
           sweep_index: null,
           sweep_time: null,
           sweep_depth: null,
           sweep_depth_pct: null,
           sweep_volume_ratio: null,
+          sweep_wick_ratio: null,
+          is_wick_rejection_sweep: false,
+          sweep_ob_mt: null,
           bars_anchor_to_sweep: null,
+
           reclaim_index: null,
           reclaim_time: null,
           reclaim_close_price: null,
@@ -694,12 +770,22 @@ export class SweepReclaimEngine {
           reclaim_fvg_ce: null,
           bars_sweep_to_reclaim: null,
           is_reclaimed: false,
+
+          pillar1_volume_ratio_passed: false,
+          pillar2_delta_dominance_passed: false,
+          pillar3_body_ratio_passed: false,
+          three_pillar_displacement_passed: false,
+
           retest_index: null,
           retest_time: null,
           retest_price: null,
           bars_reclaim_to_retest: null,
           is_retested: false,
           body_defense_passed: false,
+
+          dealing_range_equilibrium: null,
+          is_valuation_aligned: false,
+
           entry_mode: entryMode,
           entry_price: parseFloat(anchorLevel.toFixed(4)),
           stop_loss: parseFloat(anchorLevel.toFixed(4)),
@@ -740,7 +826,7 @@ export class SweepReclaimEngine {
         continue;
       }
 
-      // ─── Phase 3: Volumetric Displacement Reclaim Confirmation ──────────────
+      // ─── Phase 3: 3-Pillar Volumetric Displacement Reclaim Confirmation ──────
       const maxReclaimIdx = Math.min(n - 1, sweepIdx + (this.config.maxBarsSweepToReclaim ?? 12));
       let reclaimFound = false;
       let reclaimIdx: number | null = null;
@@ -753,6 +839,11 @@ export class SweepReclaimEngine {
       let reclaimFvgTop: number | null = null;
       let reclaimFvgBottom: number | null = null;
       let reclaimFvgCe: number | null = null;
+
+      let p1Passed = false;
+      let p2Passed = false;
+      let p3Passed = false;
+      let threePillarsPassed = false;
 
       for (let i = sweepIdx; i <= maxReclaimIdx; i++) {
         const c = candles[i];
@@ -767,18 +858,24 @@ export class SweepReclaimEngine {
         if (isBullish) {
           // Reclaim: confirmed body close strictly ABOVE the anchor shelf
           if (close > anchorLevel && close > open) {
-            // Check Body Ratio Gate
-            if (bodyRatio < bodyRatioThreshold) continue;
+            const avgVol = volSmaSeries[i] || 1;
+            const curVolExp = (c.v ?? 0) / avgVol;
 
-            // Check Directional Taker Delta Dominance Gate
-            let deltaPct = 50.0;
+            let curDeltaPct = 50.0;
             if (c.taker_buy_vol !== undefined && (c.v ?? 0) > 0) {
-              deltaPct = (c.taker_buy_vol / c.v) * 100;
+              curDeltaPct = (c.taker_buy_vol / c.v) * 100;
             } else {
-              // Synthetic structural delta proxy
-              deltaPct = 50.0 + 50.0 * (candleBody / candleRange);
+              curDeltaPct = 50.0 + 50.0 * (candleBody / candleRange);
             }
-            if (deltaPct < deltaDominanceThreshold) continue;
+
+            const curP1 = curVolExp >= volumeExpansionThreshold;
+            const curP2 = curDeltaPct >= deltaDominanceThreshold;
+            const curP3 = bodyRatio >= (bodyRatioThreshold > 1 ? bodyRatioThreshold / 100 : bodyRatioThreshold);
+            const curAll3 = curP1 && curP2 && curP3;
+
+            if (requireThreePillar && !curAll3) {
+              continue; // Veto low-momentum overlap
+            }
 
             // Check / Extract Active Displacement BISI FVG
             let foundFvg = false;
@@ -802,10 +899,14 @@ export class SweepReclaimEngine {
             reclaimIdx = i;
             reclaimTime = c.t;
             reclaimClosePrice = close;
-            const avgVol = volSmaSeries[i] || 1;
-            reclaimVolExp = (c.v ?? 0) / avgVol;
+            reclaimVolExp = curVolExp;
             reclaimBodyRatio = parseFloat((bodyRatio * 100).toFixed(1));
-            reclaimDeltaDominance = parseFloat(deltaPct.toFixed(1));
+            reclaimDeltaDominance = parseFloat(curDeltaPct.toFixed(1));
+
+            p1Passed = curP1;
+            p2Passed = curP2;
+            p3Passed = curP3;
+            threePillarsPassed = curAll3;
 
             if (foundFvg) {
               reclaimFvgCreated = true;
@@ -823,18 +924,24 @@ export class SweepReclaimEngine {
         } else {
           // Bearish: confirmed body close strictly BELOW the anchor shelf
           if (close < anchorLevel && close < open) {
-            // Check Body Ratio Gate
-            if (bodyRatio < bodyRatioThreshold) continue;
+            const avgVol = volSmaSeries[i] || 1;
+            const curVolExp = (c.v ?? 0) / avgVol;
 
-            // Check Directional Taker Delta Dominance Gate
-            let deltaPct = 50.0;
+            let curDeltaPct = 50.0;
             if (c.taker_sell_vol !== undefined && (c.v ?? 0) > 0) {
-              deltaPct = (c.taker_sell_vol / c.v) * 100;
+              curDeltaPct = (c.taker_sell_vol / c.v) * 100;
             } else {
-              // Synthetic structural delta proxy
-              deltaPct = 50.0 + 50.0 * (candleBody / candleRange);
+              curDeltaPct = 50.0 + 50.0 * (candleBody / candleRange);
             }
-            if (deltaPct < deltaDominanceThreshold) continue;
+
+            const curP1 = curVolExp >= volumeExpansionThreshold;
+            const curP2 = curDeltaPct >= deltaDominanceThreshold;
+            const curP3 = bodyRatio >= (bodyRatioThreshold > 1 ? bodyRatioThreshold / 100 : bodyRatioThreshold);
+            const curAll3 = curP1 && curP2 && curP3;
+
+            if (requireThreePillar && !curAll3) {
+              continue; // Veto low-momentum overlap
+            }
 
             // Check / Extract Active Displacement SIBI FVG
             let foundFvg = false;
@@ -858,10 +965,14 @@ export class SweepReclaimEngine {
             reclaimIdx = i;
             reclaimTime = c.t;
             reclaimClosePrice = close;
-            const avgVol = volSmaSeries[i] || 1;
-            reclaimVolExp = (c.v ?? 0) / avgVol;
+            reclaimVolExp = curVolExp;
             reclaimBodyRatio = parseFloat((bodyRatio * 100).toFixed(1));
-            reclaimDeltaDominance = parseFloat(deltaPct.toFixed(1));
+            reclaimDeltaDominance = parseFloat(curDeltaPct.toFixed(1));
+
+            p1Passed = curP1;
+            p2Passed = curP2;
+            p3Passed = curP3;
+            threePillarsPassed = curAll3;
 
             if (foundFvg) {
               reclaimFvgCreated = true;
@@ -879,13 +990,37 @@ export class SweepReclaimEngine {
         }
       }
 
-      const atrAtSweep = atrSeries[sweepIdx] || 1.0;
-      const slBuffer = (this.config.slBufferAtrMultiplier ?? 0.15) * atrAtSweep;
+      // ── Dealing Range & Valuation Gating (Discount vs Premium) ──────────────
+      const lookbackStart = Math.max(0, anchorIdx - 5);
+      const lookbackEnd = reclaimIdx !== null ? reclaimIdx : sweepIdx;
+      let rangeHigh = -Infinity;
+      let rangeLow = Infinity;
+      for (let k = lookbackStart; k <= lookbackEnd; k++) {
+        const cHigh = candles[k].h ?? (candles[k] as any).high;
+        const cLow = candles[k].l ?? (candles[k] as any).low;
+        if (cHigh > rangeHigh) rangeHigh = cHigh;
+        if (cLow < rangeLow) rangeLow = cLow;
+      }
+      const dealingRangeEquilibrium =
+        rangeHigh > rangeLow ? parseFloat(((rangeHigh + rangeLow) / 2).toFixed(4)) : anchorLevel;
 
-      // Select Entry Level: FVG 50% CE vs Reclaim Shelf
-      const executionEntry = entryMode === 'FVG_CE' && reclaimFvgCe !== null
-        ? reclaimFvgCe
-        : anchorLevel;
+      // Select Entry Level: FVG 50% CE vs Sweep OB 50% MT vs Reclaim Shelf
+      let executionEntry = anchorLevel;
+      if (entryMode === 'SWEEP_OB_MT' && sweepObMt !== null) {
+        executionEntry = sweepObMt;
+      } else if (entryMode === 'FVG_CE' && reclaimFvgCe !== null) {
+        executionEntry = reclaimFvgCe;
+      } else {
+        executionEntry = anchorLevel;
+      }
+
+      const isValuationAligned = isBullish
+        ? executionEntry <= dealingRangeEquilibrium
+        : executionEntry >= dealingRangeEquilibrium;
+
+      // Stop Loss: Locked 1 tick beyond sweep candle extreme
+      const atrAtSweep = atrSeries[sweepIdx] || 1.0;
+      const slBuffer = Math.max(0.01, (this.config.slBufferAtrMultiplier ?? 0.15) * atrAtSweep);
 
       const stopLoss = isBullish
         ? Math.min(sweepExtremePrice - slBuffer, executionEntry - 0.50)
@@ -929,6 +1064,9 @@ export class SweepReclaimEngine {
         sweep_depth: parseFloat(sweepDepth.toFixed(4)),
         sweep_depth_pct: parseFloat(sweepDepthPct.toFixed(3)),
         sweep_volume_ratio: parseFloat(sweepVolRatio.toFixed(2)),
+        sweep_wick_ratio: sweepWickRatio,
+        is_wick_rejection_sweep: isWickRejection,
+        sweep_ob_mt: sweepObMt,
         bars_anchor_to_sweep: sweepIdx - anchorIdx,
 
         reclaim_index: reclaimIdx,
@@ -944,12 +1082,20 @@ export class SweepReclaimEngine {
         bars_sweep_to_reclaim: reclaimIdx !== null ? reclaimIdx - sweepIdx : null,
         is_reclaimed: reclaimFound,
 
+        pillar1_volume_ratio_passed: p1Passed,
+        pillar2_delta_dominance_passed: p2Passed,
+        pillar3_body_ratio_passed: p3Passed,
+        three_pillar_displacement_passed: threePillarsPassed,
+
         retest_index: null,
         retest_time: null,
         retest_price: null,
         bars_reclaim_to_retest: null,
         is_retested: false,
         body_defense_passed: false,
+
+        dealing_range_equilibrium: dealingRangeEquilibrium,
+        is_valuation_aligned: isValuationAligned,
 
         entry_mode: entryMode,
         entry_price: parseFloat(executionEntry.toFixed(4)),
@@ -995,8 +1141,15 @@ export class SweepReclaimEngine {
         continue;
       }
 
+      if (enforceDiscountPremium && !isValuationAligned) {
+        // Vetoed by valuation gate
+        baseSetup.status = 'RECLAIMED_NO_RETEST';
+        baseSetup.simulated_outcome = 'INVALIDATED';
+        detectedSetups.push(baseSetup);
+        continue;
+      }
+
       // ─── Phase 4: Retest & 3-Stage Harvest Execution Simulation ────────────
-      // Retest search begins strictly on candles occurring AFTER the confirmed reclaim close
       const maxRetestIdx = Math.min(n - 1, reclaimIdx + (this.config.maxBarsToRetest ?? 24));
       let retestFound = false;
       let retestIdx: number | null = null;
@@ -1011,7 +1164,7 @@ export class SweepReclaimEngine {
         const close = c.c ?? (c as any).close;
 
         if (isBullish) {
-          // Bullish: Price pulls back into execution entry (FVG CE or anchor shelf)
+          // Bullish: Price pulls back into execution entry (FVG CE, OB MT, or anchor shelf)
           if (low <= executionEntry) {
             // ICT Body Defense Doctrine: Candle body must close above shelf
             if (close >= anchorLevel) {
@@ -1022,7 +1175,6 @@ export class SweepReclaimEngine {
               bodyDefenseValid = true;
               break;
             } else {
-              // Body closed below shelf: Invalidated
               baseSetup.phase = 'RETEST';
               baseSetup.status = 'INVALIDATED_AT_RETEST';
               baseSetup.simulated_outcome = 'INVALIDATED';
@@ -1072,7 +1224,6 @@ export class SweepReclaimEngine {
       baseSetup.bars_reclaim_to_retest = retestIdx - reclaimIdx;
 
       // ─── 3-Stage Harvest Trade Execution State Machine ─────────────────────
-      // Forward simulation from retest candle onward
       let positionOpen = true;
       let activeStopLoss = stopLoss;
       let maxFavorablePrice = executionEntry;
@@ -1087,7 +1238,6 @@ export class SweepReclaimEngine {
       const enableStructuralTrail = this.config.enableStructuralTrail !== false;
       const enableProfitRatchet = this.config.enableProfitRatchet !== false;
 
-      // Tranche Weights: 40% Stage 1, 40% Stage 2, 20% Stage 3
       const w1 = 0.40;
       const w2 = 0.40;
       const w3 = 0.20;
@@ -1119,13 +1269,9 @@ export class SweepReclaimEngine {
             stageFilledThisBar = true;
 
             if (enableStructuralTrail) {
-              // Anchor structural trailing stop to FVG 50% CE
-              // Net risk cap: remaining 60% position loss cannot exceed Stage 1 profit (+0.40R)
-              // max loss allowed on remaining 60% = -0.40 / 0.60 = -0.667R
-              const structuralTrailLevel = reclaimFvgCe !== null && reclaimFvgCe > stopLoss
-                ? reclaimFvgCe
-                : executionEntry;
-              const maxGuaranteedFloor = executionEntry - (0.60 * riskUsd);
+              const structuralTrailLevel =
+                reclaimFvgCe !== null && reclaimFvgCe > stopLoss ? reclaimFvgCe : executionEntry;
+              const maxGuaranteedFloor = executionEntry - 0.60 * riskUsd;
               activeStopLoss = Math.max(structuralTrailLevel, maxGuaranteedFloor);
               baseSetup.active_trailing_sl = parseFloat(activeStopLoss.toFixed(4));
               baseSetup.trailing_sl_source = reclaimFvgCe !== null ? 'FVG_CE' : 'BREAKEVEN';
@@ -1144,25 +1290,23 @@ export class SweepReclaimEngine {
             stageFilledThisBar = true;
 
             if (enableProfitRatchet) {
-              // Immediately ratchet active SL to guaranteed +1.0R profit floor
               const ratchetLevel = executionEntry + 1.0 * riskUsd;
               activeStopLoss = Math.max(activeStopLoss, ratchetLevel);
               baseSetup.active_trailing_sl = parseFloat(activeStopLoss.toFixed(4));
-              baseSetup.active_ratchet_floor = parseFloat(activeStopLoss.toFixed(4));
+              baseSetup.active_ratchet_floor = parseFloat(ratchetLevel.toFixed(4));
               baseSetup.trailing_sl_source = 'PROFIT_RATCHET_FLOOR';
             }
           }
 
-          // ── Tranche 3: 20% DOL Runner ─────────────────────────────────────
-          if (hitStage3 && baseSetup.is_stage2_filled) {
+          // ── Tranche 3: 20% at Macro DOL Target ─────────────────────────────
+          if (hitStage3 && baseSetup.is_stage2_filled && !baseSetup.is_stage3_filled) {
             baseSetup.is_stage3_filled = true;
             baseSetup.stage3_hit_time = c.t;
             baseSetup.stage3_hit_index = i;
+
+            realizedRr = w1 * stage1Multiple + w2 * stage2Multiple + w3 * stage3Multiple;
             outcome = 'FULL_TP3_WIN';
             stageExit = 'FULL_TP3_WIN';
-            const runnerR = (target3 - executionEntry) / riskUsd;
-            const blended = (w1 * stage1Multiple) + (w2 * stage2Multiple) + (w3 * runnerR);
-            realizedRr = parseFloat(blended.toFixed(2));
             exitIdx = i;
             exitPrice = target3;
             exitTime = c.t;
@@ -1170,41 +1314,40 @@ export class SweepReclaimEngine {
             break;
           }
 
-          // ── Stop Loss / Ratchet Hit Evaluation ────────────────────────────
-          if (!stageFilledThisBar && hitInitialSL) {
+          // Stop Loss / Ratchet Violation Check
+          const checkSL = stageFilledThisBar ? activeStopLoss : initialBarSL;
+          if (low <= checkSL) {
+            exitIdx = i;
+            exitPrice = checkSL;
+            exitTime = c.t;
+            positionOpen = false;
+
             if (baseSetup.is_stage2_filled) {
-              // Stopped out with Stage 1 + Stage 2 banked, runner stopped at +1.0R floor
+              const runnerR = (checkSL - executionEntry) / riskUsd;
+              realizedRr = w1 * stage1Multiple + w2 * stage2Multiple + w3 * runnerR;
               outcome = 'FULL_TP2_WIN';
               stageExit = 'STAGE_2_WIN';
-              const runnerR = (initialBarSL - executionEntry) / riskUsd;
-              const blended = (w1 * stage1Multiple) + (w2 * stage2Multiple) + (w3 * runnerR);
-              realizedRr = parseFloat(blended.toFixed(2));
             } else if (baseSetup.is_stage1_filled) {
-              // Stopped out with Stage 1 banked, runner stopped at structural FVG CE / BE
-              outcome = 'BE_SCRATCH_WIN';
-              stageExit = 'STAGE_1_SCRATCH';
-              const runnerR = (initialBarSL - executionEntry) / riskUsd;
-              const blended = (w1 * stage1Multiple) + ((1 - w1) * runnerR);
-              realizedRr = parseFloat(Math.max(0.0, blended).toFixed(2));
-              if (initialBarSL >= executionEntry) {
+              const runnerR = (checkSL - executionEntry) / riskUsd;
+              realizedRr = w1 * stage1Multiple + (w2 + w3) * runnerR;
+              if (realizedRr >= 0) {
+                outcome = 'BE_SCRATCH_WIN';
+                stageExit = 'STAGE_1_SCRATCH';
                 baseSetup.is_be_scratch = true;
               } else {
+                outcome = 'STRUCTURAL_SCRATCH';
+                stageExit = 'STAGE_1_SCRATCH';
                 baseSetup.is_structural_scratch = true;
               }
             } else {
-              // Initial Stop Loss Hit
+              realizedRr = -1.0;
               outcome = 'STOPPED_OUT';
               stageExit = 'STOPPED_OUT';
-              realizedRr = -1.0;
             }
-            exitIdx = i;
-            exitPrice = initialBarSL;
-            exitTime = c.t;
-            positionOpen = false;
             break;
           }
         } else {
-          // Bearish Execution State Machine
+          // Bearish Simulation
           if (low < maxFavorablePrice) maxFavorablePrice = low;
           if (high > maxAdversePrice) maxAdversePrice = high;
 
@@ -1224,10 +1367,9 @@ export class SweepReclaimEngine {
             stageFilledThisBar = true;
 
             if (enableStructuralTrail) {
-              const structuralTrailLevel = reclaimFvgCe !== null && reclaimFvgCe < stopLoss
-                ? reclaimFvgCe
-                : executionEntry;
-              const maxGuaranteedFloor = executionEntry + (0.60 * riskUsd);
+              const structuralTrailLevel =
+                reclaimFvgCe !== null && reclaimFvgCe < stopLoss ? reclaimFvgCe : executionEntry;
+              const maxGuaranteedFloor = executionEntry + 0.60 * riskUsd;
               activeStopLoss = Math.min(structuralTrailLevel, maxGuaranteedFloor);
               baseSetup.active_trailing_sl = parseFloat(activeStopLoss.toFixed(4));
               baseSetup.trailing_sl_source = reclaimFvgCe !== null ? 'FVG_CE' : 'BREAKEVEN';
@@ -1249,21 +1391,20 @@ export class SweepReclaimEngine {
               const ratchetLevel = executionEntry - 1.0 * riskUsd;
               activeStopLoss = Math.min(activeStopLoss, ratchetLevel);
               baseSetup.active_trailing_sl = parseFloat(activeStopLoss.toFixed(4));
-              baseSetup.active_ratchet_floor = parseFloat(activeStopLoss.toFixed(4));
+              baseSetup.active_ratchet_floor = parseFloat(ratchetLevel.toFixed(4));
               baseSetup.trailing_sl_source = 'PROFIT_RATCHET_FLOOR';
             }
           }
 
-          // ── Tranche 3: 20% DOL Runner ─────────────────────────────────────
-          if (hitStage3 && baseSetup.is_stage2_filled) {
+          // ── Tranche 3: 20% at Macro DOL Target ─────────────────────────────
+          if (hitStage3 && baseSetup.is_stage2_filled && !baseSetup.is_stage3_filled) {
             baseSetup.is_stage3_filled = true;
             baseSetup.stage3_hit_time = c.t;
             baseSetup.stage3_hit_index = i;
+
+            realizedRr = w1 * stage1Multiple + w2 * stage2Multiple + w3 * stage3Multiple;
             outcome = 'FULL_TP3_WIN';
             stageExit = 'FULL_TP3_WIN';
-            const runnerR = (executionEntry - target3) / riskUsd;
-            const blended = (w1 * stage1Multiple) + (w2 * stage2Multiple) + (w3 * runnerR);
-            realizedRr = parseFloat(blended.toFixed(2));
             exitIdx = i;
             exitPrice = target3;
             exitTime = c.t;
@@ -1271,87 +1412,93 @@ export class SweepReclaimEngine {
             break;
           }
 
-          // ── Stop Loss / Ratchet Hit Evaluation ────────────────────────────
-          if (!stageFilledThisBar && hitInitialSL) {
+          // Stop Loss / Ratchet Violation Check
+          const checkSL = stageFilledThisBar ? activeStopLoss : initialBarSL;
+          if (high >= checkSL) {
+            exitIdx = i;
+            exitPrice = checkSL;
+            exitTime = c.t;
+            positionOpen = false;
+
             if (baseSetup.is_stage2_filled) {
+              const runnerR = (executionEntry - checkSL) / riskUsd;
+              realizedRr = w1 * stage1Multiple + w2 * stage2Multiple + w3 * runnerR;
               outcome = 'FULL_TP2_WIN';
               stageExit = 'STAGE_2_WIN';
-              const runnerR = (executionEntry - initialBarSL) / riskUsd;
-              const blended = (w1 * stage1Multiple) + (w2 * stage2Multiple) + (w3 * runnerR);
-              realizedRr = parseFloat(blended.toFixed(2));
             } else if (baseSetup.is_stage1_filled) {
-              outcome = 'BE_SCRATCH_WIN';
-              stageExit = 'STAGE_1_SCRATCH';
-              const runnerR = (executionEntry - initialBarSL) / riskUsd;
-              const blended = (w1 * stage1Multiple) + ((1 - w1) * runnerR);
-              realizedRr = parseFloat(Math.max(0.0, blended).toFixed(2));
-              if (initialBarSL <= executionEntry) {
+              const runnerR = (executionEntry - checkSL) / riskUsd;
+              realizedRr = w1 * stage1Multiple + (w2 + w3) * runnerR;
+              if (realizedRr >= 0) {
+                outcome = 'BE_SCRATCH_WIN';
+                stageExit = 'STAGE_1_SCRATCH';
                 baseSetup.is_be_scratch = true;
               } else {
+                outcome = 'STRUCTURAL_SCRATCH';
+                stageExit = 'STAGE_1_SCRATCH';
                 baseSetup.is_structural_scratch = true;
               }
             } else {
+              realizedRr = -1.0;
               outcome = 'STOPPED_OUT';
               stageExit = 'STOPPED_OUT';
-              realizedRr = -1.0;
             }
-            exitIdx = i;
-            exitPrice = initialBarSL;
-            exitTime = c.t;
-            positionOpen = false;
             break;
           }
         }
       }
 
-      // Calculate MFE & MAE
-      const mfeUsd = isBullish
-        ? Math.max(0, maxFavorablePrice - executionEntry)
-        : Math.max(0, executionEntry - maxFavorablePrice);
+      // Calculate MFE / MAE
+      const maxFavorableDelta = isBullish
+        ? maxFavorablePrice - executionEntry
+        : executionEntry - maxFavorablePrice;
+      const maxAdverseDelta = isBullish
+        ? executionEntry - maxAdversePrice
+        : maxAdversePrice - executionEntry;
 
-      const maeUsd = isBullish
-        ? Math.max(0, executionEntry - maxAdversePrice)
-        : Math.max(0, maxAdversePrice - executionEntry);
+      const mfeR = parseFloat((Math.max(0, maxFavorableDelta) / riskUsd).toFixed(2));
+      const maeR = parseFloat((Math.max(0, maxAdverseDelta) / riskUsd).toFixed(2));
 
       baseSetup.simulated_outcome = outcome;
       baseSetup.stage_exit_type = stageExit;
-      baseSetup.realized_rr = realizedRr;
-      baseSetup.mfe_usd = parseFloat(mfeUsd.toFixed(2));
-      baseSetup.mfe_r = parseFloat((mfeUsd / riskUsd).toFixed(2));
-      baseSetup.mae_usd = parseFloat(maeUsd.toFixed(2));
-      baseSetup.mae_r = parseFloat((maeUsd / riskUsd).toFixed(2));
-      baseSetup.bars_to_outcome = exitIdx !== null ? exitIdx - retestIdx : null;
+      baseSetup.realized_rr = parseFloat(realizedRr.toFixed(2));
+      baseSetup.mfe_r = mfeR;
+      baseSetup.mfe_usd = parseFloat((mfeR * 100).toFixed(2));
+      baseSetup.mae_r = maeR;
+      baseSetup.mae_usd = parseFloat((maeR * 100).toFixed(2));
       baseSetup.exit_price = exitPrice !== null ? parseFloat(exitPrice.toFixed(4)) : null;
       baseSetup.exit_time = exitTime;
+      baseSetup.bars_to_outcome = exitIdx !== null ? exitIdx - retestIdx : null;
 
       detectedSetups.push(baseSetup);
     }
 
-    // Sort detected setups chronologically by anchor time
-    detectedSetups.sort((a, b) => a.anchor_time - b.anchor_time);
-
-    // Compute comprehensive telemetry summary
-    const telemetry = this.computeTelemetry(detectedSetups);
-
-    return {
-      setups: detectedSetups,
-      telemetry,
-    };
+    const telemetry = this.generateTelemetrySummary(detectedSetups);
+    return { setups: detectedSetups, telemetry };
   }
 
   /**
-   * Computes quantitative telemetry and performance metrics from detected setups.
+   * Aggregates setups into comprehensive telemetry analytics including 3-pillar displacement distributions.
    */
-  private computeTelemetry(setups: SweepReclaimSetup[]): SweepReclaimTelemetrySummary {
+  private generateTelemetrySummary(setups: SweepReclaimSetup[]): SweepReclaimTelemetrySummary {
     const totalAnchors = setups.length;
-    const totalSweeps = setups.filter(s => s.sweep_index !== null).length;
-    const totalReclaims = setups.filter(s => s.is_reclaimed).length;
-    const retestedSetups = setups.filter(s => s.is_retested);
+    const sweptSetups = setups.filter((s) => s.sweep_index !== null);
+    const totalSweeps = sweptSetups.length;
+    const reclaimedSetups = setups.filter((s) => s.is_reclaimed);
+    const totalReclaims = reclaimedSetups.length;
+    const retestedSetups = setups.filter((s) => s.is_retested);
     const totalRetests = retestedSetups.length;
 
     const sweepRatePct = totalAnchors > 0 ? (totalSweeps / totalAnchors) * 100 : 0;
     const reclaimRatePct = totalSweeps > 0 ? (totalReclaims / totalSweeps) * 100 : 0;
     const retestRatePct = totalReclaims > 0 ? (totalRetests / totalReclaims) * 100 : 0;
+
+    let pillar1PassCount = 0;
+    let pillar2PassCount = 0;
+    let pillar3PassCount = 0;
+    let threePillarAllPassCount = 0;
+
+    let wickRejectionCount = 0;
+    let discountPremiumCount = 0;
 
     let totalWins = 0;
     let totalLosses = 0;
@@ -1403,6 +1550,14 @@ export class SweepReclaimEngine {
 
       if (s.type === 'BULLISH') bullTotal++;
       else bearTotal++;
+
+      if (s.is_wick_rejection_sweep) wickRejectionCount++;
+      if (s.is_valuation_aligned) discountPremiumCount++;
+
+      if (s.pillar1_volume_ratio_passed) pillar1PassCount++;
+      if (s.pillar2_delta_dominance_passed) pillar2PassCount++;
+      if (s.pillar3_body_ratio_passed) pillar3PassCount++;
+      if (s.three_pillar_displacement_passed) threePillarAllPassCount++;
 
       if (s.bars_sweep_to_reclaim !== null) sumBarsReclaim += s.bars_sweep_to_reclaim;
       if (s.bars_reclaim_to_retest !== null) sumBarsRetest += s.bars_reclaim_to_retest;
@@ -1460,13 +1615,11 @@ export class SweepReclaimEngine {
     const avgWinningRr = totalWins > 0 ? sumWinRr / totalWins : 0;
     const avgLosingRr = totalLosses > 0 ? sumLossRr / totalLosses : 0;
 
-    const profitFactor = sumLossRr > 0
-      ? sumWinRr / sumLossRr
-      : sumWinRr > 0 ? 99.9 : 0;
+    const profitFactor = sumLossRr > 0 ? sumWinRr / sumLossRr : sumWinRr > 0 ? 99.9 : 0;
 
     const winProb = totalRetests > 0 ? totalWins / totalRetests : 0;
     const lossProb = totalRetests > 0 ? totalLosses / totalRetests : 0;
-    const expectedValueR = totalRetests > 0 ? (winProb * avgWinningRr) - (lossProb * (avgLosingRr || 1.0)) : 0;
+    const expectedValueR = totalRetests > 0 ? winProb * avgWinningRr - lossProb * (avgLosingRr || 1.0) : 0;
 
     return {
       total_anchors_detected: totalAnchors,
@@ -1478,6 +1631,20 @@ export class SweepReclaimEngine {
       reclaim_rate_pct: parseFloat(reclaimRatePct.toFixed(1)),
       retest_rate_pct: parseFloat(retestRatePct.toFixed(1)),
       retest_win_rate_pct: parseFloat(retestWinRatePct.toFixed(1)),
+
+      pillar1_pass_count: pillar1PassCount,
+      pillar1_pass_pct: totalReclaims > 0 ? parseFloat(((pillar1PassCount / totalReclaims) * 100).toFixed(1)) : 0,
+      pillar2_pass_count: pillar2PassCount,
+      pillar2_pass_pct: totalReclaims > 0 ? parseFloat(((pillar2PassCount / totalReclaims) * 100).toFixed(1)) : 0,
+      pillar3_pass_count: pillar3PassCount,
+      pillar3_pass_pct: totalReclaims > 0 ? parseFloat(((pillar3PassCount / totalReclaims) * 100).toFixed(1)) : 0,
+      three_pillar_all_pass_count: threePillarAllPassCount,
+      three_pillar_all_pass_pct: totalReclaims > 0 ? parseFloat(((threePillarAllPassCount / totalReclaims) * 100).toFixed(1)) : 0,
+
+      wick_rejection_sweep_count: wickRejectionCount,
+      wick_rejection_sweep_pct: totalSweeps > 0 ? parseFloat(((wickRejectionCount / totalSweeps) * 100).toFixed(1)) : 0,
+      discount_premium_aligned_count: discountPremiumCount,
+      discount_premium_aligned_pct: totalAnchors > 0 ? parseFloat(((discountPremiumCount / totalAnchors) * 100).toFixed(1)) : 0,
 
       total_winning_trades: totalWins,
       total_losing_trades: totalLosses,
@@ -1532,6 +1699,21 @@ export class SweepReclaimEngine {
       reclaim_rate_pct: 0,
       retest_rate_pct: 0,
       retest_win_rate_pct: 0,
+
+      pillar1_pass_count: 0,
+      pillar1_pass_pct: 0,
+      pillar2_pass_count: 0,
+      pillar2_pass_pct: 0,
+      pillar3_pass_count: 0,
+      pillar3_pass_pct: 0,
+      three_pillar_all_pass_count: 0,
+      three_pillar_all_pass_pct: 0,
+
+      wick_rejection_sweep_count: 0,
+      wick_rejection_sweep_pct: 0,
+      discount_premium_aligned_count: 0,
+      discount_premium_aligned_pct: 0,
+
       total_winning_trades: 0,
       total_losing_trades: 0,
       total_be_scratches: 0,

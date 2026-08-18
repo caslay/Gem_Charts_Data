@@ -26,6 +26,7 @@ import {
   Anchor
 } from 'lucide-react';
 import { useLiveOrderBlockExecution } from '@/hooks/useLiveOrderBlockExecution';
+import { useAutomatedStrategyExecution } from '@/hooks/useAutomatedStrategyExecution';
 
 interface LiveOrderBlockModalProps {
   isOpen: boolean;
@@ -38,9 +39,11 @@ export default function LiveOrderBlockModal({
   onClose,
   symbol = 'ETHUSDC.p'
 }: LiveOrderBlockModalProps) {
+  // Strategy 1: Order Block & Breaker Execution
   const {
     engineConfig,
     setEngineConfig,
+    isOrderBlockAutoExecEnabled,
     activePositions,
     activeZones,
     activeZonesByTimeframe,
@@ -52,11 +55,21 @@ export default function LiveOrderBlockModal({
     isConnected,
     cooldownRemainingSec,
     testingStates,
-    toggleAutoExecute,
+    toggleAutoExecute: toggleObAutoExecute,
     setScalingMode,
     setTrailingMode,
     setEnforceHtfAlignment
   } = useLiveOrderBlockExecution();
+
+  // Strategy 2: Sweep & Reclaim 3-Pillar Execution
+  const {
+    engineConfig: srEngineConfig,
+    setEngineConfig: setSrEngineConfig,
+    isSweepReclaimAutoExecEnabled,
+    toggleAutoExecute: toggleSrAutoExecute,
+    accountEquity,
+    riskUsd2Pct
+  } = useAutomatedStrategyExecution();
 
   const [activeTab, setActiveTab] = useState<'EXECUTION' | 'ZONES' | 'SETTINGS'>('EXECUTION');
 
@@ -108,29 +121,54 @@ export default function LiveOrderBlockModal({
                 </span>
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Simultaneous background tracking across 5m, 15m & 1h with Top-Down HTF Alignment gating and 3-Stage scaling (40/40/20).
+                Dual strategy independent auto-execution (OB & Breakers + Sweep & Reclaim) with Top-Down HTF gating & 3-Stage scaling.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Auto Execute Toggle Button */}
-            <button
-              type="button"
-              onClick={toggleAutoExecute}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border font-bold uppercase transition-all cursor-pointer text-[10px] ${
-                engineConfig.autoExecute
-                  ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80 shadow-[0_0_10px_rgba(16,185,129,0.25)]'
-                  : 'bg-card border-card-border text-muted hover:text-foreground'
-              }`}
-            >
-              {engineConfig.autoExecute ? (
-                <Play className="w-3 h-3 text-emerald-400 fill-emerald-400" />
-              ) : (
-                <Pause className="w-3 h-3" />
-              )}
-              <span>{engineConfig.autoExecute ? 'AUTO-EXEC ON' : 'MANUAL WATCH'}</span>
-            </button>
+            {/* Dual Independent Auto-Execution Toggles */}
+            <div className="flex items-center gap-1.5 bg-background/60 p-1 rounded-xl border border-card-border/60">
+              {/* Strategy 1: OB & Breakers Toggle */}
+              <button
+                type="button"
+                onClick={toggleObAutoExecute}
+                title="Toggle Autonomous Execution for Order Block & Breaker Strategy"
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-bold uppercase transition-all cursor-pointer text-[9px] ${
+                  isOrderBlockAutoExecEnabled
+                    ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80 shadow-[0_0_8px_rgba(16,185,129,0.25)]'
+                    : 'bg-card/40 border-card-border text-muted hover:text-foreground'
+                }`}
+              >
+                <span>🏛️ OB:</span>
+                {isOrderBlockAutoExecEnabled ? (
+                  <Play className="w-2.5 h-2.5 text-emerald-400 fill-emerald-400" />
+                ) : (
+                  <Pause className="w-2.5 h-2.5 text-slate-500" />
+                )}
+                <span>{isOrderBlockAutoExecEnabled ? 'ON' : 'OFF'}</span>
+              </button>
+
+              {/* Strategy 2: Sweep & Reclaim Toggle */}
+              <button
+                type="button"
+                onClick={toggleSrAutoExecute}
+                title="Toggle Autonomous Execution for Sweep & Reclaim 3-Pillar Strategy"
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-bold uppercase transition-all cursor-pointer text-[9px] ${
+                  isSweepReclaimAutoExecEnabled
+                    ? 'bg-cyan-950/80 border-cyan-500/50 text-cyan-300 hover:bg-cyan-900/80 shadow-[0_0_8px_rgba(6,182,212,0.25)]'
+                    : 'bg-card/40 border-card-border text-muted hover:text-foreground'
+                }`}
+              >
+                <span>⚡ S&R:</span>
+                {isSweepReclaimAutoExecEnabled ? (
+                  <Play className="w-2.5 h-2.5 text-cyan-400 fill-cyan-400" />
+                ) : (
+                  <Pause className="w-2.5 h-2.5 text-slate-500" />
+                )}
+                <span>{isSweepReclaimAutoExecEnabled ? 'ON' : 'OFF'}</span>
+              </button>
+            </div>
 
             <button
               onClick={onClose}
@@ -481,7 +519,7 @@ export default function LiveOrderBlockModal({
 
                     return (
                       <div
-                        key={zone.id}
+                        key={`${zone.timeframe}_${zone.id}_${zone.origin_time}`}
                         className={`border rounded-xl p-3.5 flex flex-col justify-between gap-2.5 transition-all ${
                           isVetoed
                             ? 'bg-rose-950/20 border-rose-500/30 opacity-75'
@@ -583,105 +621,223 @@ export default function LiveOrderBlockModal({
           )}
 
           {activeTab === 'SETTINGS' && (
-            <div className="flex flex-col gap-4 max-w-xl mx-auto py-2">
-              {/* ── Higher-Timeframe Alignment Setting ────────────────────────── */}
-              <div className="bg-card/40 border border-card-border rounded-xl p-4 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-5 max-w-2xl mx-auto py-2">
+              {/* ───────────────────────────────────────────────────────────── */}
+              {/* SUB-PANEL 1: 🏛️ ORDER BLOCK & BREAKER STRATEGY SETTINGS        */}
+              {/* ───────────────────────────────────────────────────────────── */}
+              <div className="bg-card/40 border border-slate-800 rounded-xl p-4 flex flex-col gap-3.5">
+                <div className="flex items-center justify-between border-b border-card-border/60 pb-3">
                   <div className="flex items-center gap-2">
-                    <Anchor className="w-4 h-4 text-cyan-400" />
+                    <span className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                      <Activity className="w-4 h-4" />
+                    </span>
                     <div>
-                      <h4 className="font-bold text-foreground text-sm">Higher-Timeframe (HTF) Alignment</h4>
-                      <p className="text-[9px] text-muted">Veto counter-trend 5m precision entries unless sponsored by 15m/1h structure.</p>
+                      <h4 className="font-bold text-foreground text-sm flex items-center gap-2">
+                        <span>Order Block & Breaker Strategy</span>
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                          isOrderBlockAutoExecEnabled
+                            ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/30'
+                            : 'bg-card text-muted border border-card-border'
+                        }`}>
+                          {isOrderBlockAutoExecEnabled ? 'AUTONOMOUS ROUTING' : 'MANUAL WATCH'}
+                        </span>
+                      </h4>
+                      <p className="text-[9px] text-muted">
+                        Multi-timeframe resting limit entries with In-Zone testing and HTF sponsorship.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={toggleObAutoExecute}
+                    className={`px-3 py-1.5 rounded-lg border font-bold text-[10px] uppercase transition cursor-pointer flex items-center gap-1.5 ${
+                      isOrderBlockAutoExecEnabled
+                        ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.25)]'
+                        : 'bg-card border-card-border text-muted hover:text-foreground'
+                    }`}
+                  >
+                    {isOrderBlockAutoExecEnabled ? <Play size={10} className="fill-emerald-400" /> : <Pause size={10} />}
+                    <span>{isOrderBlockAutoExecEnabled ? 'AUTO-EXEC ON' : 'DISABLED'}</span>
+                  </button>
+                </div>
+
+                {/* Higher-Timeframe Alignment Setting */}
+                <div className="flex items-center justify-between bg-background/50 p-3 rounded-lg border border-card-border/40">
+                  <div className="flex items-center gap-2">
+                    <Anchor className="w-3.5 h-3.5 text-cyan-400" />
+                    <div>
+                      <div className="font-bold text-foreground text-[11px]">HTF Alignment Gatekeeper</div>
+                      <p className="text-[8px] text-muted">Veto counter-trend 5m precision entries unless sponsored by 15m/1h structure.</p>
                     </div>
                   </div>
                   <button
                     onClick={() => setEnforceHtfAlignment(!engineConfig.enforceHtfAlignment)}
-                    className={`px-3 py-1.5 rounded-lg border font-bold text-[10px] uppercase transition cursor-pointer ${
+                    className={`px-2.5 py-1 rounded text-[9px] font-bold uppercase transition cursor-pointer border ${
                       engineConfig.enforceHtfAlignment
                         ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
                         : 'bg-card border-card-border text-muted hover:text-foreground'
                     }`}
                   >
-                    {engineConfig.enforceHtfAlignment ? 'ENABLED (STRICT)' : 'DISABLED (PERMISSIVE)'}
+                    {engineConfig.enforceHtfAlignment ? 'STRICT' : 'PERMISSIVE'}
                   </button>
+                </div>
+
+                {/* Position Scaling Model */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] uppercase font-bold text-muted flex items-center gap-1">
+                    <Sliders className="w-3 h-3 text-cyan-400" /> Position Scaling Model
+                  </span>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => setScalingMode('THREE_STAGE_HARVEST')}
+                      className={`p-2 rounded-lg border text-left flex flex-col gap-0.5 transition cursor-pointer ${
+                        engineConfig.positionScalingMode === 'THREE_STAGE_HARVEST'
+                          ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold'
+                          : 'bg-card/30 border-card-border text-muted hover:text-foreground'
+                      }`}
+                    >
+                      <span className="text-[9px]">3-Stage (40/40/20)</span>
+                      <span className="text-[8px] opacity-75">1.0R / 1.5R / Runner</span>
+                    </button>
+
+                    <button
+                      onClick={() => setScalingMode('TWO_STAGE_DYNAMIC')}
+                      className={`p-2 rounded-lg border text-left flex flex-col gap-0.5 transition cursor-pointer ${
+                        engineConfig.positionScalingMode === 'TWO_STAGE_DYNAMIC'
+                          ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold'
+                          : 'bg-card/30 border-card-border text-muted hover:text-foreground'
+                      }`}
+                    >
+                      <span className="text-[9px]">2-Stage (50/50)</span>
+                      <span className="text-[8px] opacity-75">1.0R Scale + Runner</span>
+                    </button>
+
+                    <button
+                      onClick={() => setScalingMode('SINGLE_STAGE')}
+                      className={`p-2 rounded-lg border text-left flex flex-col gap-0.5 transition cursor-pointer ${
+                        engineConfig.positionScalingMode === 'SINGLE_STAGE'
+                          ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold'
+                          : 'bg-card/30 border-card-border text-muted hover:text-foreground'
+                      }`}
+                    >
+                      <span className="text-[9px]">Single 2.5R</span>
+                      <span className="text-[8px] opacity-75">100% Fixed Target</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Trailing Stop Loss Logic */}
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[10px] uppercase font-bold text-muted flex items-center gap-1">
+                    <Shield className="w-3 h-3 text-emerald-400" /> Trailing Stop Loss Logic
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setTrailingMode('STRUCTURAL_FVG_TRAIL')}
+                      className={`p-2 rounded-lg border text-left flex flex-col gap-0.5 transition cursor-pointer ${
+                        engineConfig.trailingStopMode === 'STRUCTURAL_FVG_TRAIL'
+                          ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold'
+                          : 'bg-card/30 border-card-border text-muted hover:text-foreground'
+                      }`}
+                    >
+                      <span className="text-[9px]">Structural FVG CE</span>
+                      <span className="text-[8px] opacity-75">Breathing Room Model</span>
+                    </button>
+
+                    <button
+                      onClick={() => setTrailingMode('STATIC_BREAKEVEN')}
+                      className={`p-2 rounded-lg border text-left flex flex-col gap-0.5 transition cursor-pointer ${
+                        engineConfig.trailingStopMode === 'STATIC_BREAKEVEN'
+                          ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold'
+                          : 'bg-card/30 border-card-border text-muted hover:text-foreground'
+                      }`}
+                    >
+                      <span className="text-[9px]">Static Breakeven</span>
+                      <span className="text-[8px] opacity-75">Snaps SL to Entry</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* ── Position Scaling Model ──────────────────────────────────── */}
-              <div className="bg-card/40 border border-card-border rounded-xl p-4 flex flex-col gap-3">
-                <h4 className="font-bold text-foreground text-sm flex items-center gap-2">
-                  <Sliders className="w-4 h-4 text-cyan-400" />
-                  <span>Position Scaling Model</span>
-                </h4>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    onClick={() => setScalingMode('THREE_STAGE_HARVEST')}
-                    className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition cursor-pointer ${
-                      engineConfig.positionScalingMode === 'THREE_STAGE_HARVEST'
-                        ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold'
-                        : 'bg-card/30 border-card-border text-muted hover:text-foreground'
-                    }`}
-                  >
-                    <span className="text-[10px]">3-Stage (40/40/20)</span>
-                    <span className="text-[8px] opacity-75">1.0R / 1.5R / Runner</span>
-                  </button>
+              {/* ───────────────────────────────────────────────────────────── */}
+              {/* SUB-PANEL 2: ⚡ SWEEP & RECLAIM 3-PILLAR STRATEGY SETTINGS      */}
+              {/* ───────────────────────────────────────────────────────────── */}
+              <div className="bg-card/40 border border-slate-800 rounded-xl p-4 flex flex-col gap-3.5">
+                <div className="flex items-center justify-between border-b border-card-border/60 pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                      <Zap className="w-4 h-4" />
+                    </span>
+                    <div>
+                      <h4 className="font-bold text-foreground text-sm flex items-center gap-2">
+                        <span>Sweep & Reclaim Strategy</span>
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                          isSweepReclaimAutoExecEnabled
+                            ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-500/30'
+                            : 'bg-card text-muted border border-card-border'
+                        }`}>
+                          {isSweepReclaimAutoExecEnabled ? 'AUTONOMOUS ROUTING' : 'MANUAL WATCH'}
+                        </span>
+                      </h4>
+                      <p className="text-[9px] text-muted">
+                        3-Pillar Displacement gatekeeper & 2% compounding position sizer.
+                      </p>
+                    </div>
+                  </div>
 
                   <button
-                    onClick={() => setScalingMode('TWO_STAGE_DYNAMIC')}
-                    className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition cursor-pointer ${
-                      engineConfig.positionScalingMode === 'TWO_STAGE_DYNAMIC'
-                        ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold'
-                        : 'bg-card/30 border-card-border text-muted hover:text-foreground'
+                    type="button"
+                    onClick={toggleSrAutoExecute}
+                    className={`px-3 py-1.5 rounded-lg border font-bold text-[10px] uppercase transition cursor-pointer flex items-center gap-1.5 ${
+                      isSweepReclaimAutoExecEnabled
+                        ? 'bg-cyan-950/80 border-cyan-500 text-cyan-300 shadow-[0_0_8px_rgba(6,182,212,0.25)]'
+                        : 'bg-card border-card-border text-muted hover:text-foreground'
                     }`}
                   >
-                    <span className="text-[10px]">2-Stage (50/50)</span>
-                    <span className="text-[8px] opacity-75">1.0R Scale + Runner</span>
-                  </button>
-
-                  <button
-                    onClick={() => setScalingMode('SINGLE_STAGE')}
-                    className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition cursor-pointer ${
-                      engineConfig.positionScalingMode === 'SINGLE_STAGE'
-                        ? 'bg-cyan-500/20 border-cyan-500 text-cyan-300 font-bold'
-                        : 'bg-card/30 border-card-border text-muted hover:text-foreground'
-                    }`}
-                  >
-                    <span className="text-[10px]">Single 2.5R</span>
-                    <span className="text-[8px] opacity-75">100% Fixed Target</span>
+                    {isSweepReclaimAutoExecEnabled ? <Play size={10} className="fill-cyan-400" /> : <Pause size={10} />}
+                    <span>{isSweepReclaimAutoExecEnabled ? 'AUTO-EXEC ON' : 'DISABLED'}</span>
                   </button>
                 </div>
-              </div>
 
-              {/* ── Trailing Stop Loss Logic ─────────────────────────────────── */}
-              <div className="bg-card/40 border border-card-border rounded-xl p-4 flex flex-col gap-3">
-                <h4 className="font-bold text-foreground text-sm flex items-center gap-2">
-                  <Shield className="w-4 h-4 text-emerald-400" />
-                  <span>Trailing Stop Loss Logic</span>
-                </h4>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setTrailingMode('STRUCTURAL_FVG_TRAIL')}
-                    className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition cursor-pointer ${
-                      engineConfig.trailingStopMode === 'STRUCTURAL_FVG_TRAIL'
-                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold'
-                        : 'bg-card/30 border-card-border text-muted hover:text-foreground'
-                    }`}
-                  >
-                    <span className="text-[10px]">Structural FVG CE</span>
-                    <span className="text-[8px] opacity-75">Breathing Room Model</span>
-                  </button>
+                {/* 2% Dynamic Compounding Summary */}
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <div className="bg-background/50 p-2.5 rounded-lg border border-card-border/40 flex flex-col">
+                    <span className="text-[8px] text-muted uppercase">Active Equity</span>
+                    <span className="font-bold text-white text-xs">${accountEquity.toFixed(2)}</span>
+                  </div>
+                  <div className="bg-cyan-950/30 p-2.5 rounded-lg border border-cyan-500/30 flex flex-col">
+                    <span className="text-[8px] text-cyan-400 uppercase font-bold">1.0R Compounded Risk</span>
+                    <span className="font-bold text-cyan-300 text-xs">${riskUsd2Pct.toFixed(2)} (2.0%)</span>
+                  </div>
+                </div>
 
-                  <button
-                    onClick={() => setTrailingMode('STATIC_BREAKEVEN')}
-                    className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition cursor-pointer ${
-                      engineConfig.trailingStopMode === 'STATIC_BREAKEVEN'
-                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold'
-                        : 'bg-card/30 border-card-border text-muted hover:text-foreground'
-                    }`}
-                  >
-                    <span className="text-[10px]">Static Breakeven</span>
-                    <span className="text-[8px] opacity-75">Snaps SL to Entry</span>
-                  </button>
+                {/* 3-Pillar Displacement Gatekeeper Standard */}
+                <div className="bg-background/50 p-3 rounded-lg border border-card-border/40 flex flex-col gap-1.5 text-[9px]">
+                  <div className="font-bold text-slate-300 uppercase text-[10px] flex items-center justify-between">
+                    <span>3-Pillar Displacement Gatekeeper</span>
+                    <span className="text-cyan-400">INSTITUTIONAL STANDARD</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                    <div className="p-1.5 rounded bg-slate-950 border border-slate-800">
+                      <span className="text-slate-500 text-[8px] block">P1: Volume</span>
+                      <span className="font-bold text-cyan-300">&ge; 1.50x SMA</span>
+                    </div>
+                    <div className="p-1.5 rounded bg-slate-950 border border-slate-800">
+                      <span className="text-slate-500 text-[8px] block">P2: Taker Delta</span>
+                      <span className="font-bold text-cyan-300">&ge; 60.0%</span>
+                    </div>
+                    <div className="p-1.5 rounded bg-slate-950 border border-slate-800">
+                      <span className="text-slate-500 text-[8px] block">P3: Body Ratio</span>
+                      <span className="font-bold text-cyan-300">&ge; 60.0%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Retest Entry & Profit Ratchet Rules */}
+                <div className="flex items-center justify-between text-[9px] text-muted pt-1 border-t border-card-border/40">
+                  <span>Entry: <strong>Displacement FVG 50% CE / OB MT</strong></span>
+                  <span>Trailing: <strong>+1.0R Floor Ratchet @ Stage 2</strong></span>
                 </div>
               </div>
             </div>

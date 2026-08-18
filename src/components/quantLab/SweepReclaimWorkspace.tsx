@@ -80,12 +80,14 @@ export default function SweepReclaimWorkspace({
     DAILY: true,
   });
 
-  // Volumetric & Displacement Gating
-  const [deltaDominanceThreshold, setDeltaDominanceThreshold] = useState(51.5);
-  const [bodyRatioThreshold, setBodyRatioThreshold] = useState(0.55);
+  // Volumetric & Displacement Gating (3-Pillar Gatekeeper)
+  const [volumeExpansionThreshold, setVolumeExpansionThreshold] = useState(1.50);
+  const [deltaDominanceThreshold, setDeltaDominanceThreshold] = useState(60.0);
+  const [bodyRatioThreshold, setBodyRatioThreshold] = useState(0.60);
+  const [enforceDiscountPremiumGate, setEnforceDiscountPremiumGate] = useState(false);
 
   // 3-Stage Harvest & Risk Controls
-  const [entryMode, setEntryMode] = useState<"FVG_CE" | "RECLAIM_LEVEL">("FVG_CE");
+  const [entryMode, setEntryMode] = useState<"FVG_CE" | "SWEEP_OB_MT" | "RECLAIM_LEVEL">("FVG_CE");
   const [stage1Multiple, setStage1Multiple] = useState(1.0);
   const [stage2Multiple, setStage2Multiple] = useState(1.5);
   const [stage3Multiple, setStage3Multiple] = useState(3.0);
@@ -155,8 +157,11 @@ export default function SweepReclaimWorkspace({
       maxBarsAnchorToSweep,
       maxBarsSweepToReclaim,
       maxBarsToRetest,
+      volumeExpansionThreshold,
       deltaDominanceThreshold,
       bodyRatioThreshold,
+      requireThreePillarDisplacement: true,
+      enforceDiscountPremiumGate,
       stage1Multiple,
       stage2Multiple,
       stage3Multiple,
@@ -404,19 +409,40 @@ export default function SweepReclaimWorkspace({
           </div>
         </div>
 
-        {/* Volumetric Gates & 3-Stage Harvest Parameters */}
+        {/* 3-Pillar Displacement Gatekeeper & 3-Stage Harvest Parameters */}
         <div className="border-t border-slate-800/40 pt-4 mb-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Taker Delta Dominance Threshold */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+            {/* Pillar 1: Volume Ratio vs SMA */}
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center justify-between">
-                <span>Delta Dominance Gate</span>
+                <span>P1: Volume Ratio</span>
+                <span className="text-cyan-400 font-bold">{volumeExpansionThreshold.toFixed(2)}x</span>
+              </label>
+              <input
+                type="range"
+                min="1.0"
+                max="2.5"
+                step="0.05"
+                disabled={isScanning}
+                value={volumeExpansionThreshold}
+                onChange={(e) => setVolumeExpansionThreshold(parseFloat(e.target.value))}
+                className="w-full accent-cyan-400"
+              />
+              <span className="text-[9px] text-slate-500 font-mono">
+                Min volume vs 20-period SMA
+              </span>
+            </div>
+
+            {/* Pillar 2: Taker Delta Dominance Threshold */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center justify-between">
+                <span>P2: Delta Dominance</span>
                 <span className="text-cyan-400 font-bold">{deltaDominanceThreshold.toFixed(1)}%</span>
               </label>
               <input
                 type="range"
                 min="50.0"
-                max="60.0"
+                max="75.0"
                 step="0.5"
                 disabled={isScanning}
                 value={deltaDominanceThreshold}
@@ -424,20 +450,20 @@ export default function SweepReclaimWorkspace({
                 className="w-full accent-cyan-400"
               />
               <span className="text-[9px] text-slate-500 font-mono">
-                Min directional taker delta volume on reclaim bar
+                Min directional taker delta %
               </span>
             </div>
 
-            {/* Candle Body-to-Range Ratio */}
+            {/* Pillar 3: Candle Body-to-Range Ratio */}
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center justify-between">
-                <span>Body-to-Range Gate</span>
+                <span>P3: Body-to-Range</span>
                 <span className="text-cyan-400 font-bold">{(bodyRatioThreshold * 100).toFixed(0)}%</span>
               </label>
               <input
                 type="range"
                 min="0.40"
-                max="0.75"
+                max="0.80"
                 step="0.05"
                 disabled={isScanning}
                 value={bodyRatioThreshold}
@@ -445,7 +471,7 @@ export default function SweepReclaimWorkspace({
                 className="w-full accent-cyan-400"
               />
               <span className="text-[9px] text-slate-500 font-mono">
-                Min candle body ratio |c - o| / (h - l)
+                Min body ratio |c - o| / (h - l)
               </span>
             </div>
 
@@ -461,10 +487,11 @@ export default function SweepReclaimWorkspace({
                 className="text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500/50 outline-none rounded text-white"
               >
                 <option value="FVG_CE">Displacement FVG 50% CE</option>
+                <option value="SWEEP_OB_MT">Sweep OB 50% Mean Threshold (MT)</option>
                 <option value="RECLAIM_LEVEL">Reclaimed Shelf Level</option>
               </select>
               <span className="text-[9px] text-slate-500 font-mono">
-                Consequent Encroachment (50% CE) or Reclaim level
+                FVG 50% CE, OB 50% MT, or Shelf
               </span>
             </div>
 
@@ -493,7 +520,7 @@ export default function SweepReclaimWorkspace({
 
         {/* Execution & Trigger Button */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-3 border-t border-slate-800/40">
-          <div className="flex items-center gap-4 text-slate-400 text-xs font-mono">
+          <div className="flex flex-wrap items-center gap-4 text-slate-400 text-xs font-mono">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -514,6 +541,17 @@ export default function SweepReclaimWorkspace({
                 className="rounded accent-cyan-400"
               />
               <span>+1.0R Profit Ratchet Floor</span>
+            </label>
+
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                disabled={isScanning}
+                checked={enforceDiscountPremiumGate}
+                onChange={(e) => setEnforceDiscountPremiumGate(e.target.checked)}
+                className="rounded accent-cyan-400"
+              />
+              <span>Discount/Premium Valuation Gate</span>
             </label>
           </div>
 
@@ -749,6 +787,61 @@ export default function SweepReclaimWorkspace({
                 <span>Structural Scratches: <strong className="text-white">{telemetry.total_structural_scratches ?? 0}</strong></span>
                 <span>Full TP Wins: <strong className="text-emerald-400">{(telemetry.full_tp2_wins ?? 0) + (telemetry.full_tp3_wins ?? 0)}</strong></span>
                 <span>Stopped: <strong className="text-rose-400">{telemetry.stopped_out_count ?? 0}</strong></span>
+              </div>
+            </div>
+
+            {/* 3-Pillar Volumetric Displacement Gatekeeper & Liquidity Metrics */}
+            <div className="lg:col-span-12 p-4 rounded-lg border border-slate-800/60 bg-slate-900/30 font-mono">
+              <h3 className="text-xs uppercase font-bold text-slate-300 mb-3 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>3-Pillar Institutional Displacement & Valuation Telemetry</span>
+                </span>
+                <span className="text-[10px] text-cyan-400">Volumetric Conviction Standard</span>
+              </h3>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-center">
+                {/* Pillar 1 */}
+                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
+                  <span className="text-[8px] uppercase text-slate-500 block">Pillar 1: Vol Ratio &ge; 1.5x</span>
+                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar1_pass_count ?? 0}</span>
+                  <span className="text-[9px] text-slate-400 block">{telemetry.pillar1_pass_pct ?? 0}% Passed</span>
+                </div>
+
+                {/* Pillar 2 */}
+                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
+                  <span className="text-[8px] uppercase text-slate-500 block">Pillar 2: Delta &ge; 60%</span>
+                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar2_pass_count ?? 0}</span>
+                  <span className="text-[9px] text-slate-400 block">{telemetry.pillar2_pass_pct ?? 0}% Passed</span>
+                </div>
+
+                {/* Pillar 3 */}
+                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
+                  <span className="text-[8px] uppercase text-slate-500 block">Pillar 3: Body &ge; 60%</span>
+                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar3_pass_count ?? 0}</span>
+                  <span className="text-[9px] text-slate-400 block">{telemetry.pillar3_pass_pct ?? 0}% Passed</span>
+                </div>
+
+                {/* All 3 Pillars */}
+                <div className="p-2.5 rounded bg-cyan-950/30 border border-cyan-500/40">
+                  <span className="text-[8px] uppercase text-cyan-400 block font-bold">3-Pillars All Pass</span>
+                  <span className="text-sm font-bold text-cyan-300">{telemetry.three_pillar_all_pass_count ?? 0}</span>
+                  <span className="text-[9px] text-cyan-400/80 block">{telemetry.three_pillar_all_pass_pct ?? 0}% Confirmed</span>
+                </div>
+
+                {/* Wick Rejection */}
+                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
+                  <span className="text-[8px] uppercase text-slate-500 block">Wick Rejection Sweeps</span>
+                  <span className="text-sm font-bold text-amber-300">{telemetry.wick_rejection_sweep_count ?? 0}</span>
+                  <span className="text-[9px] text-slate-400 block">{telemetry.wick_rejection_sweep_pct ?? 0}% Sweeps</span>
+                </div>
+
+                {/* Valuation Aligned */}
+                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
+                  <span className="text-[8px] uppercase text-slate-500 block">Discount/Premium Aligned</span>
+                  <span className="text-sm font-bold text-purple-300">{telemetry.discount_premium_aligned_count ?? 0}</span>
+                  <span className="text-[9px] text-slate-400 block">{telemetry.discount_premium_aligned_pct ?? 0}% Aligned</span>
+                </div>
               </div>
             </div>
           </div>

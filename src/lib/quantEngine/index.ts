@@ -7,3 +7,4 @@ export * from './OrderBlockEngine';
 export * from './SweepReclaimEngine';
 export * from './LiveOrderBlockExecutionEngine';
 export * from './AutomatedStrategyExecutionEngine';
+export * from './strategyExecutionConfig';

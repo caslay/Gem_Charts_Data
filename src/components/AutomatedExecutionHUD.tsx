@@ -32,6 +32,8 @@ export default function AutomatedExecutionHUD({
   const {
     engineConfig,
     setEngineConfig,
+    isSweepReclaimAutoExecEnabled,
+    toggleAutoExecute,
     activePositions,
     pendingOrders,
     closedTrades,
@@ -54,12 +56,23 @@ export default function AutomatedExecutionHUD({
             <Zap className="w-4 h-4" />
           </span>
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-2">
-              <span>Dynamic 2% Compounding Execution Engine</span>
-              <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-950 text-cyan-300 border border-cyan-500/30">
-                ACTIVE
-              </span>
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-white">
+                Dynamic 2% Compounding Execution Engine
+              </h3>
+              <button
+                type="button"
+                onClick={toggleAutoExecute}
+                className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase transition flex items-center gap-1 border ${
+                  isSweepReclaimAutoExecEnabled
+                    ? 'bg-cyan-950 text-cyan-300 border-cyan-500/40 shadow-[0_0_8px_rgba(6,182,212,0.25)]'
+                    : 'bg-slate-900 text-slate-400 border-slate-700'
+                }`}
+              >
+                <span>⚡ S&R:</span>
+                <span>{isSweepReclaimAutoExecEnabled ? 'AUTO-EXEC ON' : 'MANUAL WATCH'}</span>
+              </button>
+            </div>
             <span className="text-[10px] text-slate-400">
               3-Stage Harvest & Profit-Locking Ratchet State Machine
             </span>

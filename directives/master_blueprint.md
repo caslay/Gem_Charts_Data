@@ -1,8 +1,70 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.17
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.19
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-18 (V16.17 — Automated Strategy Execution Engine with Dynamic 2% Compounding & Multi-Stage Lifecycle)  
+> **Last Updated:** 2026-08-18 (V16.19 — Dual Strategy Independent Auto-Execution Control Panel)  
+
+## 🆕 V16.19 Changelog — Dual Strategy Independent Auto-Execution Control Panel (2026-08-18)
+
+### Summary
+Architected, implemented, and verified the **Dual Strategy Independent Auto-Execution Control Panel** and decoupled background dispatcher routing. Enables granular, independent control over autonomous order placement for both the **Order Block & Breaker Strategy** (`isOrderBlockAutoExecEnabled`) and the **Sweep & Reclaim 3-Pillar Strategy** (`isSweepReclaimAutoExecEnabled`), with persistent `localStorage` state, reactive cross-component custom event synchronization, dual status buttons in the Cockpit Header ribbon, dedicated strategy configuration sub-panels in the Settings tab, and dynamic HUD status badges.
+
+### Key Features & Architectural Directives
+- **Decoupled Strategy Execution Flags & Storage Persistence (`strategyExecutionConfig.ts`):**
+  - Independent keys: `FLOW_STATE_OB_AUTO_EXEC` and `FLOW_STATE_SR_AUTO_EXEC`.
+  - SSR-safe getters/setters defaulting to `true`.
+  - Global `strategy-auto-exec-changed` window event bus ensuring instant reactivity across all mounted hooks, modals, and HUD components without page reloads.
+  - Exported reactive hook `useDualStrategyAutoExec()`.
+- **Cockpit Header Ribbon Integration (`LiveOrderBlockModal.tsx`):**
+  - Displays dual independent interactive execution pills:
+    - `🏛️ OB: [ON / OFF]` (Emerald when active, Slate when manual watch).
+    - `⚡ S&R: [ON / OFF]` (Cyan when active, Slate when manual watch).
+- **Engine Settings Tab Dual Sub-Panels (`LiveOrderBlockModal.tsx`):**
+  - **Sub-Panel 1: 🏛️ Order Block & Breaker Strategy Controls:**
+    - Independent Auto-Execute toggle.
+    - Higher-Timeframe Alignment gatekeeper (Strict 15m/1h vs Permissive).
+    - In-Zone Confirmation Gate (1.25x Volume Expansion + Taker Delta).
+    - Position Scaling Model (3-Stage 40/40/20 vs 2-Stage 50/50 vs Single 2.5R).
+    - Trailing Stop Loss Logic (Structural FVG CE vs Static Breakeven).
+  - **Sub-Panel 2: ⚡ Sweep & Reclaim 3-Pillar Strategy Controls:**
+    - Independent Auto-Execute toggle.
+    - Dynamic 2% Compounding Risk sizing display (active equity and 1.0R dollar amount).
+    - 3-Pillar Displacement Gatekeeper standard verification (Volume $\ge 1.50\text{x}$, Taker Delta $\ge 60\%$, Body Ratio $\ge 60\%$).
+    - Retest Entry Model (Displacement FVG 50% CE / Sweep OB 50% MT / Reclaimed Shelf Level).
+    - Dealing Range Valuation Gating (Longs in Discount, Shorts in Premium).
+    - Trailing & Ratchet (+1.0R Floor Ratchet at Stage 2).
+- **Background Dispatcher Routing:**
+  - `useLiveOrderBlockExecution.ts`: Bypasses order creation when `isOrderBlockAutoExecEnabled === false` while keeping zone visualization, testing state calculations, and alerts active.
+  - `useAutomatedStrategyExecution.ts`: Rejects order submissions when `isSweepReclaimAutoExecEnabled === false` while maintaining real-time equity queries and telemetry tracking.
+- **HUD & Telemetry Synchronization:**
+  - `LiveOrderBlockExecutionHUD.tsx` & `AutomatedExecutionHUD.tsx` display dedicated strategy execution badges (`🏛️ OB AUTO-EXEC ON` / `⚡ S&R AUTO-EXEC ON`).
+
+## 🆕 V16.18 Changelog — Sweep & Reclaim Quantitative Engine & 3-Pillar Displacement State Machine (2026-08-18)
+
+### Summary
+Enhanced the **Sweep & Reclaim (Failed Signal Reversal)** quantitative engine (`SweepReclaimEngine.ts`), SSE streaming scanner API (`/api/quant-lab/sweep-reclaim-scanner`), and Quant Lab Workspace (`SweepReclaimWorkspace.tsx`) with the **3-Pillar Volumetric Displacement Gatekeeper**, **Wick Rejection Signature**, **Sweep OB 50% Mean Threshold (MT)** entry modeling, **Discount/Premium Valuation Gating**, **Hard Stop Loss 1-tick extreme lock**, and granular telemetry diagnostics.
+
+### Key Features & Architectural Directives
+- **Liquidity Sweep Detection Layer (Wick Rejection Signature):**
+  - Tracks Session Extremes (Asian/London High/Low), PDH/PDL, and color-locked swing pivots.
+  - Detects sweeps characterized by elevated volume ($\ge 1.0\text{x}$ SMA) and weak directional body expansion (Wick Ratio $\ge 40\%$), signifying liquidity absorption rather than continuation.
+  - Derives the Sweep Order Block 50% Mean Threshold (`sweep_ob_mt`).
+- **3-Pillar Volumetric Displacement Gatekeeper (Phase 3):**
+  - **Pillar 1:** Volume Expansion Ratio $\ge 1.50\text{x}$ (relative to 20-period Volume SMA).
+  - **Pillar 2:** Directional Taker Volume Delta Dominance $\ge 60.0\%$ ($\ge 60\%$ taker buy volume for Bullish, $\ge 60\%$ taker sell volume for Bearish).
+  - **Pillar 3:** Candle Body-to-Range Ratio $\ge 60.0\%$ ($|c - o| / (h - l) \ge 0.60$).
+  - Vetoes low-momentum candle overlap; confirms Market Structure Shift (MSS) with displacement Fair Value Gap (BISI/SIBI) 50% Consequent Encroachment (`reclaim_fvg_ce`).
+- **Precision Mitigation & Valuation Gating (Phase 4):**
+  - **Order Routing Options:** Displacement FVG 50% CE (`FVG_CE`), Sweep OB 50% Mean Threshold (`SWEEP_OB_MT`), or Reclaimed Anchor Shelf (`RECLAIM_LEVEL`).
+  - **Discount/Premium Valuation Gate:** Computes local Dealing Range Equilibrium ($(\text{High} + \text{Low})/2$); verifies Longs in Discount ($\le \text{Equilibrium}$) and Shorts in Premium ($\ge \text{Equilibrium}$).
+  - **Hard Stop Loss:** Locked 1 tick / volatility buffer beyond the sweep candle extreme.
+- **3-Stage Harvest & Risk Engine:**
+  - **Tranche 1 (40% @ 1.0R):** Locks $+0.40R$, trails SL to displacement FVG 50% CE / Breakeven.
+  - **Tranche 2 (40% @ 1.5R):** Locks $+0.60R$, ratchets SL to guaranteed $+1.0R$ structural profit floor.
+  - **Tranche 3 (20% @ HTF DOL Runner):** Trails runner along confirmed swing pivots to macro Draw on Liquidity.
+- **Telemetry & Diagnostics Dashboard (`SweepReclaimWorkspace.tsx`):**
+  - Surfaces 3-Pillar pass/fail breakdown (Pillar 1 %, Pillar 2 %, Pillar 3 %, 3-Pillars All Passed %), Wick Rejection sweep rate, Discount/Premium alignment %, 4-Phase conversion funnel, and 3-Stage harvest tranche distributions.
+  - Full CSV/JSON data export includes 3-Pillar, Sweep OB MT, and Valuation fields.
 
 ## 🆕 V16.17 Changelog — Automated Strategy Execution Engine with Dynamic 2% Compounding & Multi-Stage Lifecycle (2026-08-18)
 
