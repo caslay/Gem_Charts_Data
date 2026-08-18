@@ -12,6 +12,17 @@
  */
 
 import { Candle } from '../fvgEngine';
+import {
+  SweepReclaimEngine,
+  SweepReclaimSetup,
+  SweepReclaimScanConfig,
+  SweepReclaimAnchorType
+} from './SweepReclaimEngine';
+import {
+  SweepReclaimLiveSettings,
+  DEFAULT_SR_LIVE_SETTINGS,
+  SupportedOBTimeframe
+} from './strategyExecutionConfig';
 
 export type PositionStageStatus =
   | 'PENDING_LIMIT_ENTRY'
@@ -125,6 +136,9 @@ export interface AutomatedExecutionConfig {
   enableStructuralTrail: boolean; // Trail to FVG CE after Stage 1
   enableProfitRatchet: boolean;   // Ratchet SL to +1.0R floor after Stage 2
   slBufferAtrMultiplier: number;  // default: 0.15 ATR
+
+  // Dynamic Live Settings
+  liveSettings?: SweepReclaimLiveSettings;
 }
 
 export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
@@ -150,6 +164,7 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   enableStructuralTrail: true,
   enableProfitRatchet: true,
   slBufferAtrMultiplier: 0.15,
+  liveSettings: DEFAULT_SR_LIVE_SETTINGS,
 };
 
 export type ExecutionEventType =
@@ -187,6 +202,10 @@ export class AutomatedStrategyExecutionEngine {
   private lastTradeClosedTimestamp: number = 0;
   private consumedZoneIds: Set<string> = new Set();
   private currentAccountEquity: number = 10000.0;
+
+  // Background Multi-Timeframe Scanning State
+  private processedSetupIds: Set<string> = new Set();
+  private latestScannedSetups: SweepReclaimSetup[] = [];
 
   constructor(config?: Partial<AutomatedExecutionConfig>) {
     this.config = { ...DEFAULT_AUTOMATED_CONFIG, ...config };
@@ -721,7 +740,37 @@ export class AutomatedStrategyExecutionEngine {
   }
 
   /**
+   * Performs an atomic in-memory rollback if database order placement or network fails.
+   */
+  public rollbackPosition(posId: string, errorReason?: string): boolean {
+    const activeIdx = this.activePositions.findIndex((p) => p.id === posId || p.dbTradeId === posId);
+    if (activeIdx !== -1) {
+      const pos = this.activePositions[activeIdx];
+      this.activePositions.splice(activeIdx, 1);
+      if (pos.originZoneId) {
+        this.consumedZoneIds.delete(pos.originZoneId);
+      }
+      this.emit('ROLLBACK', `⚠️ [ORDER ROLLBACK] Position ${posId} purged from memory due to persistence failure: ${errorReason || 'Unknown error'}`, pos);
+      return true;
+    }
+
+    const pendingIdx = this.pendingLimitOrders.findIndex((p) => p.id === posId || p.dbTradeId === posId);
+    if (pendingIdx !== -1) {
+      const pos = this.pendingLimitOrders[pendingIdx];
+      this.pendingLimitOrders.splice(pendingIdx, 1);
+      if (pos.originZoneId) {
+        this.consumedZoneIds.delete(pos.originZoneId);
+      }
+      this.emit('ROLLBACK', `⚠️ [ORDER ROLLBACK] Pending limit order ${posId} purged from memory: ${errorReason || 'Unknown error'}`, pos);
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Rehydrates open positions from persistent PostgreSQL / in-memory trade records on mount.
+   * Strictly isolates trades to Sweep & Reclaim namespace signatures.
    */
   public rehydrateOpenPositions(dbTrades: any[]): StrategyExecutionPosition[] {
     const rehydrated: StrategyExecutionPosition[] = [];
@@ -729,6 +778,19 @@ export class AutomatedStrategyExecutionEngine {
     for (const trade of dbTrades) {
       if (trade.status !== 'OPEN' && trade.status !== 'STAGE_1_FILLED' && trade.status !== 'STAGE_2_FILLED') {
         continue;
+      }
+
+      // Namespace Isolation: Only adopt trades belonging to Sweep & Reclaim
+      const stratName = (trade.strategy_name || '').toLowerCase();
+      const isSrStrategy =
+        stratName.includes('sweep & reclaim') ||
+        stratName.includes('s&r') ||
+        stratName.includes('3-pillar') ||
+        stratName.includes('failed signal reversal') ||
+        stratName.includes('auto 2% compounded');
+
+      if (!isSrStrategy) {
+        continue; // Strictly ignore Order Block or other strategy trades
       }
 
       // Check if already active
@@ -848,5 +910,174 @@ export class AutomatedStrategyExecutionEngine {
 
   public getClosedPositions(): StrategyExecutionPosition[] {
     return [...this.closedPositionsHistory];
+  }
+
+  public getScannedSetups(): SweepReclaimSetup[] {
+    return [...this.latestScannedSetups];
+  }
+
+  public getLiveSettings(): SweepReclaimLiveSettings {
+    return this.config.liveSettings || DEFAULT_SR_LIVE_SETTINGS;
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 5. Autonomous Multi-Timeframe Background Ingestion & Scan Loop
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Ingests closed multi-timeframe candle streams (5m, 15m, 1h) concurrently.
+   * Runs SweepReclaimEngine detection across enabled timeframes and auto-routes confirmed setups.
+   */
+  public onMultiTimeframeCandles(
+    multiTfCandles: { '5m'?: Candle[]; '15m'?: Candle[]; '1h'?: Candle[] },
+    macroContext?: {
+      macroDailyBias?: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+      dolDirection?: 'BULLISH' | 'BEARISH' | 'BALANCED';
+      localDealingRange?: any;
+    }
+  ): {
+    scannedSetups: SweepReclaimSetup[];
+    executedSetups: SweepReclaimSetup[];
+  } {
+    const settings = this.config.liveSettings || DEFAULT_SR_LIVE_SETTINGS;
+    const enabledTfs = settings.enabledTimeframes && settings.enabledTimeframes.length > 0
+      ? settings.enabledTimeframes
+      : ['5m', '15m', '1h'];
+
+    const scanned: SweepReclaimSetup[] = [];
+    const executed: SweepReclaimSetup[] = [];
+
+    // Map UI anchor categories to underlying SweepReclaimAnchorType array
+    const mappedAnchorTypes: SweepReclaimAnchorType[] = [];
+    const activeAnchors = settings.anchorTypes || ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'];
+    if (activeAnchors.includes('SWING_PIVOT')) mappedAnchorTypes.push('SWING_PIVOT');
+    if (activeAnchors.includes('ASIAN')) {
+      mappedAnchorTypes.push('ASIAN_HIGH');
+      mappedAnchorTypes.push('ASIAN_LOW');
+    }
+    if (activeAnchors.includes('LONDON')) {
+      mappedAnchorTypes.push('LONDON_HIGH');
+      mappedAnchorTypes.push('LONDON_LOW');
+    }
+    if (activeAnchors.includes('DAILY')) {
+      mappedAnchorTypes.push('PDH');
+      mappedAnchorTypes.push('PDL');
+    }
+
+    for (const tf of enabledTfs) {
+      const candles = multiTfCandles[tf as keyof typeof multiTfCandles];
+      if (!candles || candles.length < 25) continue;
+
+      const latestCandle = candles[candles.length - 1];
+      const latestPrice = latestCandle.c ?? (latestCandle as any).close;
+
+      const scanConfig: SweepReclaimScanConfig = {
+        symbol: this.config.symbol,
+        timeframe: tf,
+        anchorTypes: mappedAnchorTypes.length > 0 ? mappedAnchorTypes : undefined,
+        minSweepDepthAtrMultiplier: 0.10,
+        maxBarsAnchorToSweep: 40,
+        maxBarsSweepToReclaim: 16,
+        maxBarsToRetest: 30,
+        slBufferAtrMultiplier: this.config.slBufferAtrMultiplier ?? 0.15,
+        entryMode: settings.entryMode ?? 'FVG_CE',
+        stage1Multiple: settings.stage2Multiple ? settings.stage2Multiple * 0.67 : this.config.stage1Multiple ?? 1.0,
+        stage2Multiple: settings.stage2Multiple ?? this.config.stage2Multiple ?? 1.5,
+        stage3Multiple: settings.stage3Multiple ?? this.config.stage3Multiple ?? 3.0,
+        enableStructuralTrail: settings.enableStructuralTrail ?? this.config.enableStructuralTrail,
+        enableProfitRatchet: settings.enableProfitRatchet ?? this.config.enableProfitRatchet,
+        volumeExpansionThreshold: settings.volumeExpansionThreshold ?? 1.50,
+        deltaDominanceThreshold: settings.deltaDominanceThreshold ?? 60.0,
+        bodyRatioThreshold: settings.bodyRatioThreshold ?? 0.60,
+        requireThreePillarDisplacement: true,
+        enforceDiscountPremiumGate: settings.enforceDiscountPremiumGate ?? true,
+      };
+
+      try {
+        const engine = new SweepReclaimEngine(scanConfig);
+        const scanResult = engine.scanHistoricalSetups(candles);
+        const setups = scanResult.setups || [];
+
+        for (const s of setups) {
+          scanned.push(s);
+
+          // ── STRICT FRESHNESS & REAL-TIME RECENTNESS GUARD ──
+          // A setup is ONLY eligible for live execution if:
+          // 1. It is currently waiting for retest (RECLAIMED_NO_RETEST) and the reclaim occurred on a recent bar (within last 6 bars)
+          // 2. OR it was retested on the very latest closed bar (retest_index >= candles.length - 2)
+          // All older historical setups are marked processed and ignored for live execution.
+          const isFreshReclaim =
+            s.status === 'RECLAIMED_NO_RETEST' &&
+            s.reclaim_index !== null &&
+            s.reclaim_index >= candles.length - 6;
+
+          const isLatestRetest =
+            s.status === 'RETESTED' &&
+            s.retest_index !== null &&
+            s.retest_index >= candles.length - 2;
+
+          if (!isFreshReclaim && !isLatestRetest) {
+            // Stale historical setup: mark as processed to prevent back-execution
+            this.processedSetupIds.add(s.id);
+            continue;
+          }
+
+          // Check if setup is confirmed for live entry (3-Pillars passed and Valuation aligned)
+          const isConfirmed =
+            s.three_pillar_displacement_passed &&
+            (!settings.enforceDiscountPremiumGate || s.is_valuation_aligned);
+
+          if (isConfirmed && this.config.autoExecute && !this.processedSetupIds.has(s.id)) {
+            // Determine limit entry price based on entryMode
+            let entryPrice = s.entry_price;
+            if (!entryPrice || isNaN(entryPrice)) {
+              if (settings.entryMode === 'FVG_CE' && s.reclaim_fvg_ce) {
+                entryPrice = s.reclaim_fvg_ce;
+              } else if (settings.entryMode === 'SWEEP_OB_MT' && s.sweep_ob_mt) {
+                entryPrice = s.sweep_ob_mt;
+              } else {
+                entryPrice = s.anchor_level;
+              }
+            }
+
+            // Price Sanity Guard: Ensure entry level is within 5% of current market price
+            const priceDistancePct = Math.abs(entryPrice - latestPrice) / latestPrice;
+            if (priceDistancePct > 0.05) {
+              this.processedSetupIds.add(s.id);
+              continue;
+            }
+
+            const direction = s.type === 'BULLISH' ? 'LONG' : 'SHORT';
+            const strategyName = `Sweep & Reclaim (${tf.toUpperCase()} ${s.anchor_name || s.anchor_type})`;
+
+            const submitRes = this.submitStrategyOrder({
+              strategyId: s.id,
+              strategyName,
+              symbol: this.config.symbol,
+              timeframe: tf,
+              direction,
+              limitEntryPrice: parseFloat(entryPrice.toFixed(4)),
+              stopLossPrice: parseFloat(s.stop_loss.toFixed(4)),
+              currentMarketPrice: latestPrice,
+              fvgCeLevel: s.reclaim_fvg_ce,
+              dynamicDolTarget: s.stage3_target,
+              originZoneId: s.id,
+              originAnchorLevel: s.anchor_level,
+              overrideRiskPct: settings.compoundingRiskPct,
+            });
+
+            if (submitRes.success) {
+              this.processedSetupIds.add(s.id);
+              executed.push(s);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[AutomatedStrategyExecutionEngine] Error scanning ${tf} candles for S&R:`, err);
+      }
+    }
+
+    this.latestScannedSetups = scanned;
+    return { scannedSetups: scanned, executedSetups: executed };
   }
 }

@@ -24,6 +24,7 @@ import { useLiveOrderBlockExecution } from '@/hooks/useLiveOrderBlockExecution';
 export default function LiveOrderBlockExecutionHUD() {
   const {
     engineConfig,
+    enabledTimeframes,
     activePositions,
     activeZones,
     closedLiveTrades,
@@ -34,7 +35,9 @@ export default function LiveOrderBlockExecutionHUD() {
     testingStates,
     toggleAutoExecute,
     setScalingMode,
-    setTrailingMode
+    setTrailingMode,
+    toggleTimeframeStream,
+    isTimeframeStreamEnabled
   } = useLiveOrderBlockExecution();
 
   const [isExpanded, setIsExpanded] = useState(true);
@@ -59,6 +62,37 @@ export default function LiveOrderBlockExecutionHUD() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Dynamic MTF Stream Selective Toggles */}
+          <div className="hidden sm:flex items-center gap-1 bg-slate-900/80 p-0.5 rounded border border-slate-800">
+            <span className="text-[8px] font-black text-slate-400 uppercase tracking-wider px-1">MTF:</span>
+            {(['5m', '15m', '1h'] as const).map(tf => {
+              const isEnabled = isTimeframeStreamEnabled(tf);
+              const activeColor =
+                tf === '1h'
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-[0_0_8px_rgba(6,182,212,0.25)]'
+                  : tf === '15m'
+                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-[0_0_8px_rgba(168,85,247,0.25)]'
+                  : 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]';
+
+              return (
+                <button
+                  key={tf}
+                  type="button"
+                  onClick={() => toggleTimeframeStream(tf)}
+                  title={`Live OB ${tf.toUpperCase()} Stream: ${isEnabled ? 'ACTIVE (Click to Suspend)' : 'SUSPENDED (Click to Enable)'}`}
+                  className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer border flex items-center gap-1 ${
+                    isEnabled
+                      ? activeColor
+                      : 'bg-slate-950 text-slate-600 border-slate-800 hover:text-slate-400 line-through'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${isEnabled ? (tf === '1h' ? 'bg-cyan-400' : tf === '15m' ? 'bg-purple-400' : 'bg-amber-400') : 'bg-slate-600'}`} />
+                  <span>{tf}</span>
+                </button>
+              );
+            })}
+          </div>
+
           {/* Auto-Execute Toggle */}
           <button
             type="button"

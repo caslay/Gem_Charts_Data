@@ -76,6 +76,7 @@ export interface LiveExecutionConfig extends OrderBlockScanConfig {
   requireInZoneConfirmation: boolean;
   volumeExpansionThreshold: number;
   enforceHtfAlignment: boolean; // Enforce 15m/1h sponsorship before executing 5m trades
+  enabledTimeframes?: SupportedTimeframe[]; // Dynamic user-selectable MTF streams (e.g. ['5m', '15m', '1h'])
 }
 
 export const DEFAULT_LIVE_EXEC_CONFIG: LiveExecutionConfig = {
@@ -89,6 +90,7 @@ export const DEFAULT_LIVE_EXEC_CONFIG: LiveExecutionConfig = {
   requireInZoneConfirmation: true,// Eliminate blind limit fills
   volumeExpansionThreshold: 1.25,// >= 1.25x Volume SMA requirement
   enforceHtfAlignment: true,     // Veto counter-trend 5m signals
+  enabledTimeframes: ['5m', '15m', '1h'], // All 3 standard MTF streams enabled by default
   strictTierAPlus: false,
   minQualityTier: 'ALL',
   maxBarsToMitigation: 24,       // Lookback limit for fresh zones
@@ -116,7 +118,7 @@ export const DEFAULT_LIVE_EXEC_CONFIG: LiveExecutionConfig = {
 };
 
 export type TradeEventCallback = (event: {
-  type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO' | 'ROLLBACK' | 'REHYDRATED' | 'LIVE_OB_DETECTED';
+  type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO' | 'ROLLBACK' | 'REHYDRATED' | 'LIVE_OB_DETECTED' | 'TIMEFRAME_STREAMS_UPDATED';
   position?: LivePosition;
   message: string;
 }) => void;
@@ -142,6 +144,7 @@ export type SupportedTimeframe = typeof SUPPORTED_TIMEFRAMES[number];
 
 export class LiveOrderBlockExecutionEngine {
   private config: LiveExecutionConfig;
+  private enabledTimeframes: Set<SupportedTimeframe> = new Set(['5m', '15m', '1h']);
   private orderBlockEngines: Map<string, OrderBlockEngine> = new Map();
   private closedCandlesByTimeframe: Map<string, Candle[]> = new Map();
   private lastProcessedCandleTimes: Map<string, number> = new Map();
@@ -166,6 +169,9 @@ export class LiveOrderBlockExecutionEngine {
 
   constructor(customConfig?: Partial<LiveExecutionConfig>) {
     this.config = { ...DEFAULT_LIVE_EXEC_CONFIG, ...customConfig };
+    if (this.config.enabledTimeframes && this.config.enabledTimeframes.length > 0) {
+      this.enabledTimeframes = new Set(this.config.enabledTimeframes);
+    }
     this.initializeTimeframeEngines();
   }
 
@@ -192,7 +198,100 @@ export class LiveOrderBlockExecutionEngine {
 
   public updateConfig(newConfig: Partial<LiveExecutionConfig>) {
     this.config = { ...this.config, ...newConfig };
+    if (newConfig.enabledTimeframes && newConfig.enabledTimeframes.length > 0) {
+      this.enabledTimeframes = new Set(newConfig.enabledTimeframes);
+    }
     this.initializeTimeframeEngines();
+    this.rebuildAllActiveZones();
+  }
+
+  /**
+   * Updates enabled timeframe streams dynamically and triggers selective active zone recalculation.
+   */
+  public updateEnabledTimeframes(enabledTfs: SupportedTimeframe[]) {
+    const sanitized = (enabledTfs && enabledTfs.length > 0)
+      ? enabledTfs.filter(tf => SUPPORTED_TIMEFRAMES.includes(tf))
+      : (['5m', '15m', '1h'] as SupportedTimeframe[]);
+
+    this.config.enabledTimeframes = [...sanitized];
+    this.enabledTimeframes = new Set(sanitized);
+
+    // 1. Purge resting zones and pending in-zone testing states for disabled timeframes
+    for (const tf of SUPPORTED_TIMEFRAMES) {
+      if (!this.enabledTimeframes.has(tf)) {
+        this.activeZonesByTimeframe.set(tf, []);
+        for (const [zoneId, testState] of this.inZoneTestingStates.entries()) {
+          if (testState.timeframe === tf) {
+            this.inZoneTestingStates.delete(zoneId);
+          }
+        }
+      } else {
+        // If re-enabled and cached candles exist, re-scan and populate fresh Tier A+/A/B zones
+        const cachedCandles = this.closedCandlesByTimeframe.get(tf);
+        if (cachedCandles && cachedCandles.length > 0) {
+          let engine = this.orderBlockEngines.get(tf);
+          if (!engine) {
+            engine = new OrderBlockEngine({ ...this.config, timeframe: tf as any });
+            this.orderBlockEngines.set(tf, engine);
+          }
+
+          const scanResult = engine.scanHistoricalOrderBlocks(cachedCandles);
+          const timeframeMinutes = tf === '1h' ? 60 : tf === '15m' ? 15 : 5;
+          const maxLookbackMs = (this.config.maxBarsToMitigation ?? 24) * timeframeMinutes * 60 * 1000;
+          const lastCandle = cachedCandles[cachedCandles.length - 1];
+          const now = lastCandle.t;
+
+          const validTfZones = scanResult.orderBlocks.filter(ob => {
+            if (this.consumedZoneIds.has(ob.id)) return false;
+            const ageMs = now - ob.origin_time;
+            if (ageMs > maxLookbackMs && ob.lifecycle_status === 'UNTESTED') return false;
+            if (
+              ob.lifecycle_status === 'ZONE_INVALIDATED' ||
+              ob.lifecycle_status === 'MEAN_THRESHOLD_VIOLATED' ||
+              ob.lifecycle_status === 'EXPIRED_STALE' ||
+              ob.lifecycle_status === 'BREAKER_EXPIRED' ||
+              ob.lifecycle_status === 'BREAKER_VETOED_NO_DOL' ||
+              ob.lifecycle_status === 'BREAKER_VETOED_VALUATION'
+            ) {
+              this.consumedZoneIds.add(ob.id);
+              return false;
+            }
+            return (
+              ob.lifecycle_status === 'UNTESTED' ||
+              ob.lifecycle_status === 'ACTIVE_BREAKER' ||
+              ob.lifecycle_status === 'BREAKER_CONFIRMED_ACTIVE'
+            );
+          });
+
+          const is1hActive = this.enabledTimeframes.has('1h');
+          const is15mActive = this.enabledTimeframes.has('15m');
+          const structural_weight: InstitutionalOrderBlock['structural_weight'] =
+            tf === '1h' ? '1H_MACRO_ANCHOR' :
+            tf === '15m' ? (is1hActive ? '15M_STRUCTURAL' : '15M_PROMOTED_ANCHOR') :
+            (!is1hActive && !is15mActive ? '5M_STANDALONE_TRIGGER' : '5M_PRECISION_TRIGGER');
+
+          const taggedZones = validTfZones.map(zone => {
+            const alignment = this.evaluateHtfAlignment(zone, tf, this.currentMacroContext);
+            return {
+              ...zone,
+              timeframe: tf,
+              structural_weight,
+              htf_alignment_status: alignment.status,
+              htf_veto_reason: alignment.reason,
+            };
+          });
+
+          this.activeZonesByTimeframe.set(tf, taggedZones);
+        }
+      }
+    }
+
+    this.rebuildAllActiveZones();
+    this.emitEvent(
+      'TIMEFRAME_STREAMS_UPDATED',
+      undefined,
+      `🎛️ [MTF STREAMS UPDATED] Active monitoring profile: [${sanitized.map(t => t.toUpperCase()).join(', ')}]`
+    );
   }
 
   public subscribe(callback: TradeEventCallback): () => void {
@@ -203,7 +302,7 @@ export class LiveOrderBlockExecutionEngine {
   }
 
   private emitEvent(
-    type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO' | 'ROLLBACK' | 'REHYDRATED' | 'LIVE_OB_DETECTED',
+    type: 'ORDER_OPENED' | 'STAGE_1_HARVEST' | 'STAGE_2_HARVEST' | 'STAGE_3_RUNNER' | 'POSITION_CLOSED' | 'CONFIRMATION_PENDING' | 'COOLDOWN_ACTIVE' | 'HTF_VETO' | 'ROLLBACK' | 'REHYDRATED' | 'LIVE_OB_DETECTED' | 'TIMEFRAME_STREAMS_UPDATED',
     position: LivePosition | undefined,
     message: string
   ) {
@@ -218,7 +317,7 @@ export class LiveOrderBlockExecutionEngine {
 
   /**
    * Ingests multi-timeframe candle streams (5m, 15m, 1h) concurrently.
-   * Runs the zero look-ahead multi-gate validation pipeline independently per timeframe.
+   * Runs the zero look-ahead multi-gate validation pipeline independently for currently enabled timeframes.
    */
   public onMultiTimeframeCandles(
     timeframeCandles: {
@@ -237,6 +336,19 @@ export class LiveOrderBlockExecutionEngine {
 
     for (const tf of SUPPORTED_TIMEFRAMES) {
       const candles = timeframeCandles[tf];
+      if (candles && candles.length > 0) {
+        this.closedCandlesByTimeframe.set(tf, [...candles].sort((a, b) => a.t - b.t));
+      }
+
+      // ── Selective Background Ingestion: Skip evaluation if timeframe is disabled ──
+      if (!this.enabledTimeframes.has(tf)) {
+        if (this.activeZonesByTimeframe.get(tf)?.length) {
+          this.activeZonesByTimeframe.set(tf, []);
+          hasUpdates = true;
+        }
+        continue;
+      }
+
       if (!candles || candles.length === 0) continue;
 
       const lastCandle = candles[candles.length - 1];
@@ -247,7 +359,6 @@ export class LiveOrderBlockExecutionEngine {
       }
 
       this.lastProcessedCandleTimes.set(tf, lastCandle.t);
-      this.closedCandlesByTimeframe.set(tf, [...candles].sort((a, b) => a.t - b.t));
 
       // Get or create dedicated engine for this timeframe
       let engine = this.orderBlockEngines.get(tf);
@@ -293,13 +404,15 @@ export class LiveOrderBlockExecutionEngine {
         );
       });
 
-      // ── Assign Structural Weights & Evaluate HTF Alignment ──
-      const taggedZones = validTfZones.map(zone => {
-        const structural_weight: InstitutionalOrderBlock['structural_weight'] =
-          tf === '1h' ? '1H_MACRO_ANCHOR' :
-          tf === '15m' ? '15M_STRUCTURAL' :
-          '5M_PRECISION_TRIGGER';
+      // ── Assign Structural Weights & Evaluate Dynamic HTF Hierarchy ──
+      const is1hActive = this.enabledTimeframes.has('1h');
+      const is15mActive = this.enabledTimeframes.has('15m');
+      const structural_weight: InstitutionalOrderBlock['structural_weight'] =
+        tf === '1h' ? '1H_MACRO_ANCHOR' :
+        tf === '15m' ? (is1hActive ? '15M_STRUCTURAL' : '15M_PROMOTED_ANCHOR') :
+        (!is1hActive && !is15mActive ? '5M_STANDALONE_TRIGGER' : '5M_PRECISION_TRIGGER');
 
+      const taggedZones = validTfZones.map(zone => {
         const alignment = this.evaluateHtfAlignment(zone, tf, this.currentMacroContext);
 
         return {
@@ -356,14 +469,19 @@ export class LiveOrderBlockExecutionEngine {
   }
 
   /**
-   * Evaluates Top-Down Higher-Timeframe (HTF) Alignment for a candidate zone.
-   * 1h is the Macro Anchor. 15m is the Structural Anchor. 5m is the Precision Trigger.
+   * Evaluates Dynamic Higher-Timeframe (HTF) Hierarchy for a candidate zone based on active timeframe streams:
+   *  - If 1h is enabled: 1h is Macro Anchor. 15m is Structural. 5m is Precision Trigger.
+   *  - If 1h is disabled & 15m is enabled: 15m is PROMOTED to Primary Structural Anchor.
+   *  - If all higher timeframes are disabled: 5m operates in Standalone Trigger Mode without failing.
    */
   private evaluateHtfAlignment(
     zone: InstitutionalOrderBlock,
     timeframe: string,
     macroContext: MacroMarketContext
   ): { status: 'HTF_ALIGNED' | 'VETOED_COUNTER_HTF' | 'HTF_ANCHOR'; reason: string | null } {
+    const is1hActive = this.enabledTimeframes.has('1h');
+    const is15mActive = this.enabledTimeframes.has('15m');
+
     // 1h zones are primary macro anchors
     if (timeframe === '1h') {
       return { status: 'HTF_ANCHOR', reason: null };
@@ -373,10 +491,15 @@ export class LiveOrderBlockExecutionEngine {
     const macroBias = macroContext.macroDailyBias || 'NEUTRAL';
     const dolDir = macroContext.dolDirection || 'NONE';
 
-    // 15m zones: aligned if not strictly opposing a confirmed macro bias
+    // 15m zones:
     if (timeframe === '15m') {
+      // When 1h is disabled, promote 15m to act as the primary structural anchor
+      if (!is1hActive) {
+        return { status: 'HTF_ANCHOR', reason: null };
+      }
+
+      // When 1h is enabled, align against macro daily bias and DOL
       if (isBullish && macroBias === 'BEARISH' && dolDir === 'BEARISH') {
-        // Counter-trend 15m trade against both daily bias and DOL
         return {
           status: 'VETOED_COUNTER_HTF',
           reason: '15m Bullish setup counters prevailing Bearish Macro Daily Bias and Bearish DOL.'
@@ -391,17 +514,22 @@ export class LiveOrderBlockExecutionEngine {
       return { status: 'HTF_ALIGNED', reason: null };
     }
 
-    // 5m Precision Triggers: require explicit 15m/1h confluence or HTF liquidity sweep sponsorship
+    // 5m Precision Triggers:
     if (timeframe === '5m') {
-      const htf15mZones = this.activeZonesByTimeframe.get('15m') || [];
-      const htf1hZones = this.activeZonesByTimeframe.get('1h') || [];
+      // Standalone execution mode: If both 1h and 15m are disabled, execute standalone without failing
+      if (!is1hActive && !is15mActive) {
+        return { status: 'HTF_ANCHOR', reason: null };
+      }
 
-      const has15mSponsorship = htf15mZones.some(z => {
+      const htf15mZones = is15mActive ? (this.activeZonesByTimeframe.get('15m') || []) : [];
+      const htf1hZones = is1hActive ? (this.activeZonesByTimeframe.get('1h') || []) : [];
+
+      const has15mSponsorship = is15mActive && htf15mZones.some(z => {
         const zBull = z.is_breaker ? (z.type === 'BEARISH') : (z.type === 'BULLISH');
         return zBull === isBullish && z.quality_tier !== 'UNVALIDATED';
       });
 
-      const has1hSponsorship = htf1hZones.some(z => {
+      const has1hSponsorship = is1hActive && htf1hZones.some(z => {
         const zBull = z.is_breaker ? (z.type === 'BEARISH') : (z.type === 'BULLISH');
         return zBull === isBullish;
       });
@@ -421,15 +549,16 @@ export class LiveOrderBlockExecutionEngine {
         zone.gates.sweep_type === 'SSL'
       );
 
-      // Gate check: 5m must have at least one valid higher-timeframe confluence vector
+      // Gate check: 5m must have at least one valid active higher-timeframe confluence vector
       if (has15mSponsorship || has1hSponsorship || isMacroAligned || isHtfSweepSponsored) {
         return { status: 'HTF_ALIGNED', reason: null };
       }
 
       if (this.config.enforceHtfAlignment) {
+        const activeHigherTfs = [is15mActive ? '15m' : null, is1hActive ? '1h' : null].filter(Boolean).join('/');
         return {
           status: 'VETOED_COUNTER_HTF',
-          reason: `5m ${zone.type} trigger lacks 15m/1h structural sponsorship or Macro Bias alignment.`
+          reason: `5m ${zone.type} trigger lacks ${activeHigherTfs || 'HTF'} structural sponsorship or Macro Bias alignment.`
         };
       }
     }
@@ -438,11 +567,12 @@ export class LiveOrderBlockExecutionEngine {
   }
 
   /**
-   * Rebuilds the unified active zone array across all timeframes.
+   * Rebuilds the unified active zone array across all active, enabled timeframes.
    */
   private rebuildAllActiveZones() {
     const combined: InstitutionalOrderBlock[] = [];
     for (const tf of SUPPORTED_TIMEFRAMES) {
+      if (!this.enabledTimeframes.has(tf)) continue;
       const zones = this.activeZonesByTimeframe.get(tf) || [];
       combined.push(...zones);
     }
@@ -853,6 +983,14 @@ export class LiveOrderBlockExecutionEngine {
 
   public getClosedPositions(): LivePosition[] {
     return this.closedPositions;
+  }
+
+  public getEnabledTimeframes(): SupportedTimeframe[] {
+    return Array.from(this.enabledTimeframes);
+  }
+
+  public isTimeframeEnabled(tf: SupportedTimeframe): boolean {
+    return this.enabledTimeframes.has(tf);
   }
 
   public getConfig(): LiveExecutionConfig {
