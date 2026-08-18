@@ -95,7 +95,7 @@ export const structureLayer: ChartLayer = {
       if (pt.candle_index === undefined) continue;
 
       const x = timeScale.timeToCoordinate(Math.floor(pt.t / 1000) as any);
-      const y = series.priceToCoordinate(pt.price);
+      const y = series.priceToCoordinate(Number(pt.price));
 
       if (x !== null && y !== null) {
         mappedSwings.push({
@@ -128,7 +128,7 @@ export const structureLayer: ChartLayer = {
         .slice(idx + 1)
         .find((later) => {
           if (!isInternal && later.structure_type === 'INTERNAL') return false;
-          return S.type === 'HIGH' ? later.price > S.price : later.price < S.price;
+          return S.type === 'HIGH' ? Number(later.price) > Number(S.price) : Number(later.price) < Number(S.price);
         });
 
       const xEnd = breachSwing ? breachSwing.x : rightX;
@@ -520,9 +520,9 @@ export const structureLayer: ChartLayer = {
         showInternalSwings && showInner && analysis.innerZigzag &&
           analysis.innerZigzag.map((seg: any, idx: number) => {
             const fromX = timeScale.timeToCoordinate(Math.floor(seg.from.t / 1000) as any);
-            const fromY = series.priceToCoordinate(seg.from.price);
+            const fromY = series.priceToCoordinate(Number(seg.from.price));
             const toX = timeScale.timeToCoordinate(Math.floor(seg.to.t / 1000) as any);
-            const toY = series.priceToCoordinate(seg.to.price);
+            const toY = series.priceToCoordinate(Number(seg.to.price));
 
             if (fromX !== null && fromY !== null && toX !== null && toY !== null) {
               return React.createElement('line', {
