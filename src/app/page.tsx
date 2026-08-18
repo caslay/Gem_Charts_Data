@@ -16,6 +16,7 @@ import OrderFlowTimelineRibbon from '@/components/OrderFlowTimelineRibbon';
 import OrderFlowTimelineModal from '@/components/modals/OrderFlowTimelineModal';
 import LiveOrderBlockModal from '@/components/modals/LiveOrderBlockModal';
 import { useLiveOrderBlockExecution } from '@/hooks/useLiveOrderBlockExecution';
+import { useAutomatedStrategyExecution } from '@/hooks/useAutomatedStrategyExecution';
 import { calculateATR } from '@/lib/riskEngine';
 import { safeParseAiJson } from '@/lib/aiJsonParser';
 
@@ -532,6 +533,7 @@ export default function Home() {
       {/* Decoupled Leaf Runners */}
       <StrategyEvaluatorRunner />
       <LiveOrderBlockExecutionRunner />
+      <AutomatedStrategyExecutionRunner />
       <PendingOrdersManager
         pendingOrders={pendingOrders}
         setPendingOrders={setPendingOrders}
@@ -539,6 +541,12 @@ export default function Home() {
       />
     </main>
   );
+}
+
+// Dedicated leaf component to run automated 2% compounding execution engine in background 24/7
+function AutomatedStrategyExecutionRunner() {
+  useAutomatedStrategyExecution();
+  return null;
 }
 
 // Dedicated leaf component to run live Order Block execution engine in background 24/7

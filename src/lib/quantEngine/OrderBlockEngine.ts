@@ -568,7 +568,7 @@ export class OrderBlockEngine {
     }
 
     return {
-      id: `OB_BULL_${origin_time}_${top.toFixed(2)}_${bottom.toFixed(2)}`,
+      id: `OB_BULL_${this.config.timeframe}_${origin_time}_${top.toFixed(2)}_${bottom.toFixed(2)}`,
       type: 'BULLISH',
       symbol: this.config.symbol,
       timeframe: this.config.timeframe,
@@ -742,7 +742,7 @@ export class OrderBlockEngine {
     }
 
     return {
-      id: `OB_BEAR_${origin_time}_${top.toFixed(2)}_${bottom.toFixed(2)}`,
+      id: `OB_BEAR_${this.config.timeframe}_${origin_time}_${top.toFixed(2)}_${bottom.toFixed(2)}`,
       type: 'BEARISH',
       symbol: this.config.symbol,
       timeframe: this.config.timeframe,

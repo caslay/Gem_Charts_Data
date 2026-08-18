@@ -11,6 +11,12 @@ import {
   MacroMarketContext
 } from '@/lib/quantEngine/LiveOrderBlockExecutionEngine';
 import { InstitutionalOrderBlock } from '@/lib/quantEngine/OrderBlockEngine';
+import {
+  getOrderBlockAutoExec,
+  setOrderBlockAutoExec,
+  STRATEGY_AUTO_EXEC_EVENT,
+  StrategyAutoExecState,
+} from '@/lib/quantEngine/strategyExecutionConfig';
 import type { SmartAlert } from '@/hooks/useLiveAlerts';
 
 // Global singleton instance ensures synchronous background processing across all page components & modals
@@ -35,6 +41,7 @@ export function useLiveOrderBlockExecution(
 
   const [engineConfig, setEngineConfig] = useState<LiveExecutionConfig>({
     ...DEFAULT_LIVE_EXEC_CONFIG,
+    autoExecute: getOrderBlockAutoExec(),
     ...initialConfig
   });
 
@@ -52,6 +59,27 @@ export function useLiveOrderBlockExecution(
   const [lastEventTime, setLastEventTime] = useState<number>(0);
   const [cooldownRemainingSec, setCooldownRemainingSec] = useState<number>(0);
   const [testingStates, setTestingStates] = useState<InZoneTestingState[]>([]);
+
+  // Listen to cross-component dual strategy auto-exec changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleAutoExecUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<StrategyAutoExecState>;
+      const obEnabled = customEvent.detail ? customEvent.detail.isOrderBlockAutoExecEnabled : getOrderBlockAutoExec();
+      setEngineConfig(prev => {
+        if (prev.autoExecute !== obEnabled) {
+          return { ...prev, autoExecute: obEnabled };
+        }
+        return prev;
+      });
+    };
+
+    window.addEventListener(STRATEGY_AUTO_EXEC_EVENT, handleAutoExecUpdate);
+    return () => {
+      window.removeEventListener(STRATEGY_AUTO_EXEC_EVENT, handleAutoExecUpdate);
+    };
+  }, []);
 
   // Update engine config when state changes
   useEffect(() => {
@@ -350,8 +378,11 @@ export function useLiveOrderBlockExecution(
   }, []);
 
   const toggleAutoExecute = useCallback(() => {
-    setEngineConfig(prev => ({ ...prev, autoExecute: !prev.autoExecute }));
-  }, []);
+    const nextVal = !engineConfig.autoExecute;
+    setOrderBlockAutoExec(nextVal);
+    setEngineConfig(prev => ({ ...prev, autoExecute: nextVal }));
+    return nextVal;
+  }, [engineConfig.autoExecute]);
 
   const setScalingMode = useCallback((mode: 'THREE_STAGE_HARVEST' | 'TWO_STAGE_DYNAMIC' | 'SINGLE_STAGE') => {
     setEngineConfig(prev => ({ ...prev, positionScalingMode: mode }));
@@ -368,6 +399,7 @@ export function useLiveOrderBlockExecution(
   return {
     engineConfig,
     setEngineConfig,
+    isOrderBlockAutoExecEnabled: engineConfig.autoExecute,
     activePositions,
     activeZones,
     activeZonesByTimeframe,

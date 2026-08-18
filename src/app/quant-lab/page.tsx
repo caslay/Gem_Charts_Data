@@ -39,7 +39,33 @@ import {
 } from "lucide-react";
 import { QuantLabRun, QuantLabTrade } from "@/lib/chartLayers/types";
 import { InstitutionalOrderBlock, OrderBlockTelemetrySummary } from "@/lib/quantEngine/OrderBlockEngine";
+import {
+  SweepReclaimSetup,
+  SweepReclaimTelemetrySummary,
+  SweepReclaimScanConfig
+} from "@/lib/quantEngine/SweepReclaimEngine";
+import SweepReclaimWorkspace from "@/components/quantLab/SweepReclaimWorkspace";
+import SweepReclaimSidebarList from "@/components/quantLab/SweepReclaimSidebarList";
 import SettingsModal from "@/components/modals/SettingsModal";
+
+export interface StoredSrScan {
+  id: string;
+  scan_name: string;
+  symbol: string;
+  timeframe: string;
+  start_date: string;
+  end_date: string;
+  total_detected: number;
+  sweep_rate_pct: number;
+  reclaim_rate_pct: number;
+  retest_rate_pct: number;
+  retest_win_rate_pct: number;
+  avg_realized_rr: number;
+  profit_factor: number;
+  telemetry_summary: SweepReclaimTelemetrySummary;
+  setups: SweepReclaimSetup[];
+  created_at: string;
+}
 
 export interface StoredObScan {
   id: string;
@@ -61,8 +87,24 @@ export interface StoredObScan {
 
 export default function QuantLabPage() {
   // --- Workspace Mode Switcher ---
-  const [activeMainTab, setActiveMainTab] = useState<'OB_SCANNER' | 'STRATEGY_BACKTEST'>('OB_SCANNER');
+  const [activeMainTab, setActiveMainTab] = useState<'SWEEP_RECLAIM_SCANNER' | 'OB_SCANNER' | 'STRATEGY_BACKTEST'>('SWEEP_RECLAIM_SCANNER');
   const [isSoundSettingsOpen, setIsSoundSettingsOpen] = useState(false);
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 0. SWEEP & RECLAIM SCANNER STATES (New V16.16 Suite)
+  // ─────────────────────────────────────────────────────────────────────────────
+  const [srScansList, setSrScansList] = useState<StoredSrScan[]>([]);
+  const [selectedSrScan, setSelectedSrScan] = useState<StoredSrScan | null>(null);
+  const [loadingSrScans, setLoadingSrScans] = useState(false);
+
+  const [srScanning, setSrScanning] = useState(false);
+  const [srStatusMsg, setSrStatusMsg] = useState("");
+  const [srProgress, setSrProgress] = useState<{
+    phase: string;
+    message: string;
+    candlesFetched?: number;
+    detectedCount?: number;
+  } | null>(null);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // 1. STRATEGY BACKTEST STATES (Legacy V15 Suite)
@@ -191,6 +233,24 @@ export default function QuantLabPage() {
     }
   }, []);
 
+  const fetchSrScans = useCallback(async () => {
+    setLoadingSrScans(true);
+    try {
+      const res = await fetch("/api/quant-lab/sr-scans");
+      if (res.ok) {
+        const json = await res.json();
+        setSrScansList(json.scans || []);
+        if (!selectedSrScan && json.scans && json.scans.length > 0) {
+          setSelectedSrScan(json.scans[0]);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch S&R scans:", err);
+    } finally {
+      setLoadingSrScans(false);
+    }
+  }, [selectedSrScan]);
+
   const fetchObScans = useCallback(async () => {
     setLoadingObScans(true);
     try {
@@ -213,7 +273,8 @@ export default function QuantLabPage() {
   useEffect(() => {
     fetchRuns();
     fetchObScans();
-  }, [fetchRuns, fetchObScans]);
+    fetchSrScans();
+  }, [fetchRuns, fetchObScans, fetchSrScans]);
 
   const fetchTradesForRun = useCallback(async (runId: string) => {
     setLoadingTrades(true);
@@ -270,6 +331,91 @@ export default function QuantLabPage() {
       }
     } catch (err) {
       console.error("Failed to delete OB scan:", err);
+    }
+  };
+
+  const handleDeleteSrScan = async (e: React.MouseEvent, scanId: string) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this historical Sweep & Reclaim scan?")) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/quant-lab/sr-scans?id=${scanId}`, { method: "DELETE" });
+      if (res.ok) {
+        setSrScansList(prev => prev.filter(s => s.id !== scanId));
+        if (selectedSrScan?.id === scanId) {
+          setSelectedSrScan(null);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to delete S&R scan:", err);
+    }
+  };
+
+  const runSweepReclaimScan = async (config: SweepReclaimScanConfig & { scan_name: string; start_date: string; end_date: string }) => {
+    if (srScanning) return;
+    setSrScanning(true);
+    setSrProgress(null);
+    setSrStatusMsg("Connecting to historical data ingestion pipeline...");
+
+    try {
+      const response = await fetch("/api/quant-lab/sweep-reclaim-scanner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+
+      if (!response.body) {
+        throw new Error("Failed to initialize SSE stream.");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const cleanLine = line.trim();
+          if (cleanLine.startsWith("data: ")) {
+            try {
+              const payload = JSON.parse(cleanLine.substring(6));
+
+              if (payload.type === "status") {
+                setSrStatusMsg(payload.message);
+              } else if (payload.type === "progress") {
+                setSrProgress({
+                  phase: payload.phase,
+                  message: payload.message,
+                  candlesFetched: payload.candlesFetched,
+                  detectedCount: payload.detectedCount,
+                });
+              } else if (payload.type === "complete") {
+                setSrStatusMsg("Sweep & Reclaim scanning and 4-phase backtesting complete!");
+                setSrScansList(prev => [payload.scan, ...prev]);
+                setSelectedSrScan(payload.scan);
+                setSrScanning(false);
+                setSrProgress(null);
+              } else if (payload.type === "error") {
+                setSrStatusMsg(`Scan Failed: ${payload.error}`);
+                setSrScanning(false);
+              }
+            } catch (jsonErr) {
+              console.error("SSE parse error:", jsonErr);
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error("S&R Scan stream failed:", err);
+      setSrStatusMsg(`Network Error: ${err.message}`);
+      setSrScanning(false);
     }
   };
 
@@ -518,6 +664,109 @@ export default function QuantLabPage() {
   // Export Handlers
   // ─────────────────────────────────────────────────────────────────────────────
 
+  const handleExportSrJson = () => {
+    if (!selectedSrScan) return;
+    const exportPayload = {
+      scan_metadata: {
+        id: selectedSrScan.id,
+        scan_name: selectedSrScan.scan_name,
+        symbol: selectedSrScan.symbol,
+        timeframe: selectedSrScan.timeframe,
+        start_date: selectedSrScan.start_date.slice(0, 10),
+        end_date: selectedSrScan.end_date.slice(0, 10),
+        total_detected: selectedSrScan.total_detected,
+        sweep_rate_pct: selectedSrScan.sweep_rate_pct,
+        reclaim_rate_pct: selectedSrScan.reclaim_rate_pct,
+        retest_rate_pct: selectedSrScan.retest_rate_pct,
+        retest_win_rate_pct: selectedSrScan.retest_win_rate_pct,
+        avg_realized_rr: selectedSrScan.avg_realized_rr,
+        profit_factor: selectedSrScan.profit_factor,
+      },
+      telemetry: selectedSrScan.telemetry_summary,
+      setups: selectedSrScan.setups,
+    };
+
+    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `SWEEP_RECLAIM_${selectedSrScan.symbol}_${selectedSrScan.timeframe}_${selectedSrScan.id.slice(0, 8)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportSrCsv = () => {
+    if (!selectedSrScan || !selectedSrScan.setups) return;
+
+    const headers = [
+      "ID", "Type", "AnchorType", "AnchorName", "AnchorTime", "AnchorLevel",
+      "SweepTime", "SweepPrice", "SweepDepthUsd", "SweepDepthPct", "WickRejectionSweep", "SweepOBMT",
+      "ReclaimTime", "ReclaimClosePrice", "Pillar1VolPass", "Pillar2DeltaPass", "Pillar3BodyPass", "ThreePillarsAllPass",
+      "DeltaDominancePct", "BodyRatioPct", "FvgCE", "DealingRangeEquilibrium", "ValuationAligned",
+      "RetestTime", "EntryMode", "EntryPrice", "StopLoss", "Stage1Target", "Stage2Target", "Stage3Target",
+      "BodyDefensePassed", "Outcome", "StageExitType", "RealizedRR", "MFE_R", "MAE_R",
+      "TrailingSlSource", "ActiveTrailingSl", "BarsAnchorToSweep", "BarsSweepToReclaim", "BarsReclaimToRetest", "BarsToOutcome"
+    ];
+
+    const rows = selectedSrScan.setups.map((s) => [
+      s.id,
+      s.type,
+      s.anchor_type,
+      `"${s.anchor_name.replace(/"/g, '""')}"`,
+      new Date(s.anchor_time).toISOString(),
+      s.anchor_level,
+      s.sweep_time ? new Date(s.sweep_time).toISOString() : "N/A",
+      s.sweep_price ?? "N/A",
+      s.sweep_depth ?? "N/A",
+      s.sweep_depth_pct ?? "N/A",
+      s.is_wick_rejection_sweep ? "YES" : "NO",
+      s.sweep_ob_mt ?? "N/A",
+      s.reclaim_time ? new Date(s.reclaim_time).toISOString() : "N/A",
+      s.reclaim_close_price ?? "N/A",
+      s.pillar1_volume_ratio_passed ? "PASS" : "FAIL",
+      s.pillar2_delta_dominance_passed ? "PASS" : "FAIL",
+      s.pillar3_body_ratio_passed ? "PASS" : "FAIL",
+      s.three_pillar_displacement_passed ? "PASS" : "FAIL",
+      s.reclaim_delta_dominance_pct ?? "N/A",
+      s.reclaim_body_ratio ?? "N/A",
+      s.reclaim_fvg_ce ?? "N/A",
+      s.dealing_range_equilibrium ?? "N/A",
+      s.is_valuation_aligned ? "ALIGNED" : "UNALIGNED",
+      s.retest_time ? new Date(s.retest_time).toISOString() : "N/A",
+      s.entry_mode ?? "FVG_CE",
+      s.entry_price,
+      s.stop_loss,
+      s.stage1_target,
+      s.stage2_target,
+      s.stage3_target,
+      s.body_defense_passed ? "PASS" : "FAIL",
+      s.simulated_outcome,
+      s.stage_exit_type ?? "N/A",
+      s.realized_rr,
+      s.mfe_r,
+      s.mae_r,
+      s.trailing_sl_source ?? "INITIAL",
+      s.active_trailing_sl ?? s.stop_loss,
+      s.bars_anchor_to_sweep ?? "N/A",
+      s.bars_sweep_to_reclaim ?? "N/A",
+      s.bars_reclaim_to_retest ?? "N/A",
+      s.bars_to_outcome ?? "N/A",
+    ]);
+
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `SWEEP_RECLAIM_TELEMETRY_${selectedSrScan.symbol}_${selectedSrScan.timeframe}_${selectedSrScan.id.slice(0, 8)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const handleExportValidatedObDataset = () => {
     if (!selectedObScan) return;
     const exportPayload = {
@@ -705,6 +954,18 @@ export default function QuantLabPage() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="bg-slate-900/90 border border-slate-800 p-1 rounded-lg flex items-center gap-1 font-mono text-xs font-bold">
             <button
+              onClick={() => setActiveMainTab('SWEEP_RECLAIM_SCANNER')}
+              className={`px-3 py-1.5 rounded flex items-center gap-1.5 transition ${
+                activeMainTab === 'SWEEP_RECLAIM_SCANNER'
+                  ? 'bg-cyan-500 text-slate-950 shadow-sm shadow-cyan-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+              }`}
+            >
+              <Repeat className="w-3.5 h-3.5" />
+              <span>SWEEP & RECLAIM SCANNER</span>
+            </button>
+
+            <button
               onClick={() => setActiveMainTab('OB_SCANNER')}
               className={`px-3 py-1.5 rounded flex items-center gap-1.5 transition ${
                 activeMainTab === 'OB_SCANNER'
@@ -754,7 +1015,15 @@ export default function QuantLabPage() {
         {/* LEFT SIDEBAR: Scan / Run History List                              */}
         {/* ─────────────────────────────────────────────────────────────────── */}
         <aside className="lg:col-span-4 flex flex-col gap-6">
-          {activeMainTab === 'OB_SCANNER' ? (
+          {activeMainTab === 'SWEEP_RECLAIM_SCANNER' ? (
+            <SweepReclaimSidebarList
+              scans={srScansList}
+              selectedScan={selectedSrScan}
+              onSelectScan={setSelectedSrScan}
+              onDeleteScan={handleDeleteSrScan}
+              loading={loadingSrScans}
+            />
+          ) : activeMainTab === 'OB_SCANNER' ? (
             // Historical OB Scans List
             <div className="border border-slate-800/50 bg-slate-900/30 backdrop-blur-sm rounded-lg p-5">
               <div className="flex items-center justify-between mb-4">
@@ -924,7 +1193,19 @@ export default function QuantLabPage() {
         {/* RIGHT MAIN WORKSPACE                                               */}
         {/* ─────────────────────────────────────────────────────────────────── */}
         <main className="lg:col-span-8 flex flex-col gap-6">
-          {activeMainTab === 'OB_SCANNER' ? (
+          {activeMainTab === 'SWEEP_RECLAIM_SCANNER' ? (
+            <SweepReclaimWorkspace
+              scansList={srScansList}
+              selectedScan={selectedSrScan}
+              onSelectScan={setSelectedSrScan}
+              isScanning={srScanning}
+              statusMsg={srStatusMsg}
+              progress={srProgress}
+              onRunScan={runSweepReclaimScan}
+              onExportJson={handleExportSrJson}
+              onExportCsv={handleExportSrCsv}
+            />
+          ) : activeMainTab === 'OB_SCANNER' ? (
             // =================================================================
             // TAB 1: INSTITUTIONAL ORDER BLOCK SCANNER & FILTERING WORKSPACE
             // =================================================================
