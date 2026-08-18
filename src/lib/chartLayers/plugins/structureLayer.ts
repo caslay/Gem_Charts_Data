@@ -83,11 +83,15 @@ export const structureLayer: ChartLayer = {
       ? (themeSettings?.dark_accent || '#a855f7')
       : (themeSettings?.light_accent || '#4f46e5');
     // 3. Pixel Coordinate Conversion — Map swings to SVG coordinates
-    const mappedSwings: MappedPoint[] = [];
-    const swings = (analysis.swings || []).slice(-150); // Cap to last 150 swings for ultra-responsive rendering
+    // Ensure all confirmed Major and Internal swings are mapped without starvation, plus recent Inner swings
+    const rawSwings: StructuralSwing[] = analysis.swings || [];
+    const majorAndInt = rawSwings.filter((s) => s.grade === 'MAJOR' || s.grade === 'INTERNAL');
+    const recentInner = rawSwings.filter((s) => s.grade === 'INNER').slice(-100);
+    const swingsToMap = [...majorAndInt.slice(-60), ...recentInner].sort((a, b) => a.t - b.t);
 
-    for (let i = 0; i < swings.length; i++) {
-      const pt = swings[i];
+    const mappedSwings: MappedPoint[] = [];
+    for (let i = 0; i < swingsToMap.length; i++) {
+      const pt = swingsToMap[i];
       if (pt.candle_index === undefined) continue;
 
       const x = timeScale.timeToCoordinate(Math.floor(pt.t / 1000) as any);
@@ -106,7 +110,7 @@ export const structureLayer: ChartLayer = {
     const confirmedMajor = mappedSwings
       .filter((s) => (s.grade === 'MAJOR' || s.grade === 'INTERNAL') && s.confirmed !== false)
       .sort((a, b) => a.t - b.t)
-      .slice(-40); // Limit horizontal levels to top 40 recent major swings
+      .slice(-40); // Limit horizontal levels to top 40 recent major/internal swings
 
     // ─── 1. Implement Horizontal Price Ceilings / Floors ───
     const horizontalLevels: React.ReactElement[] = [];
@@ -118,12 +122,14 @@ export const structureLayer: ChartLayer = {
       const shouldRender = isInternal ? showInternalSwings : showMajor;
       if (!shouldRender) return;
 
-      // Find the first confirmed major swing after S that breaches S.price
+      // Find the first confirmed swing after S that breaches S.price
+      // If S is a Major level, it should only be breached by a Major level breach
       const breachSwing = confirmedMajor
         .slice(idx + 1)
-        .find((later) =>
-          S.type === 'HIGH' ? later.price > S.price : later.price < S.price
-        );
+        .find((later) => {
+          if (!isInternal && later.structure_type === 'INTERNAL') return false;
+          return S.type === 'HIGH' ? later.price > S.price : later.price < S.price;
+        });
 
       const xEnd = breachSwing ? breachSwing.x : rightX;
       

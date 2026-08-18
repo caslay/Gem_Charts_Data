@@ -1,8 +1,27 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.12
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.13
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-17 (V16.12 — Order Flow Footprint & Timeline Synchronization)  
+> **Last Updated:** 2026-08-18 (V16.13 — Market Structure Chronological Synchronization & Multi-Timeframe Swings Audit)  
+
+## 🆕 V16.13 Changelog — Market Structure Chronological Synchronization & Multi-Timeframe Swings Audit (2026-08-18)
+
+### Summary
+Resolved a critical structural starvation bug on the 5-minute chart where horizontal structure lines (`MAJOR HIGH`, `MAJOR LOW`, `INT HIGH`, `INT LOW`) and Major swing circles were missing. Fixed the group-by-level array ordering in `MarketStructureAPI.ts` by enforcing strict chronological timestamp sorting, expanded `structureLayer.ts` mapping with dedicated quotas for Major and Internal levels, expanded `internalZigzag` to span full chart history, and prevented minor internal swings from prematurely terminating major horizontal price levels.
+
+### Key Features & Architectural Directives
+- **Strict Chronological Swings Array Sorting (`MarketStructureAPI.ts`):**
+  - Enforced `swings.sort((a, b) => a.t - b.t)` on the unified output of `majorSwings`, `internalSwings`, and `innerSwingsRaw`.
+  - Guarantees that downstream array slicing (`.slice(-N)`) preserves the most recent swings chronologically rather than being biased toward Level 0 Inner swings.
+- **Dedicated Quota Slicing in Layer Orchestrator (`structureLayer.ts`):**
+  - Replaced naive `(analysis.swings || []).slice(-150)` with dedicated multi-scale quotas: `[...confirmedMajorSwings.slice(-60), ...recentInnerSwings.slice(-100)].sort((a, b) => a.t - b.t)`.
+  - Guarantees that confirmed Major and Internal horizontal ceilings and floors are always rendered regardless of the number of active Inner sub-waves.
+- **Major Level Breach Protection (`structureLayer.ts`):**
+  - Updated `breachSwing` evaluation so that a `MAJOR` horizontal ceiling or floor is only breached by price action surpassing the Major level, preventing minor internal fluctuations from cutting macro levels short.
+- **Full Historical Internal ZigZag Tracking (`MarketStructureAPI.ts`):**
+  - Built `internalZigzag` across all `internalSwings` rather than truncating it to `activeInternalSwings`, ensuring that internal structure shifts (`iBOS` / `iMSS`) and internal zigzag paths are available across the entire historical chart.
+
+---
 
 ## 🆕 V16.12 Changelog — Order Flow Footprint & Timeline Synchronization (2026-08-17)
 

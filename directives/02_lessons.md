@@ -311,6 +311,17 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
      - Cull all SVG elements (horizontal lines, breach badges, zigzag paths, and hollow swing circles) that fall outside the active chart viewport ($x < -50$ or $x > \text{rightX} + 50$).
   3. **Eliminated Duplicate Fetch Race:** Removed the redundant `refetch()` in `page.tsx` since `setWsInterval` already updates the global context and triggers `fetchData()` in `useMarketData`.
 
+### 43. Swings Array Group-by-Level Inversion & 5m Structure Line Starvation (Resolved in V16.7.3)
+- **The Bug:** On the 5-minute chart, horizontal structure lines (`MAJOR HIGH`, `MAJOR LOW`, `INT HIGH`, `INT LOW`) and Major swing circles failed to render, leaving only BOS/MSS badges visible.
+- **The Cause:** 
+  1. **Group-by-Level Inversion in `MarketStructureAPI.ts`:** The `swings` return array was constructed by concatenating `[...majorSwings, ...internalSwings, ...innerSwingsRaw]` without sorting by timestamp `t`.
+  2. **Starvation in `structureLayer.ts`:** `structureLayer.ts` sliced `analysis.swings.slice(-150)`. On a 5m chart with 1,000 candles and 339 total swings (173 Inner swings), taking the last 150 items sliced exclusively from `innerSwingsRaw`, dropping 100% of Major and Internal swings from `mappedSwings`. As a result, `confirmedMajor` evaluated to `[]` (empty), completely wiping out all horizontal structure lines.
+  3. **Dealing Range Truncation on `internalZigzag`:** `internalZigzag` was restricted to `activeInternalSwings` ($t \ge \text{majorRangeStartTime}$), collapsing 120 internal swings down to 4–6 segments on 5m.
+- **The Fix:**
+  1. **Strict Chronological Sorting:** Sorted `swings` by timestamp in `MarketStructureAPI.ts` (`swings.sort((a, b) => a.t - b.t)`).
+  2. **Dedicated Quota Slicing in `structureLayer.ts`:** Mapped confirmed Major/Internal swings alongside recent Inner swings (`[...majorAndInt.slice(-60), ...recentInner].sort(...)`), guaranteeing Major and Internal horizontal levels are never starved by high counts of Inner sub-swings.
+  3. **Full Historical `internalZigzag`:** Built `internalZigzag` from all `internalSwings` to ensure complete multi-scale structure shift history across the entire chart.
+
 
 
 
