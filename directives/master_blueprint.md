@@ -1,8 +1,63 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.19
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.21
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-18 (V16.19 — Dual Strategy Independent Auto-Execution Control Panel)  
+> **Last Updated:** 2026-08-19 (V16.21 — Complete Strategy Decoupling, Live MTF Background Ingestion & UI Parity for Sweep & Reclaim)  
+
+## 🆕 V16.21 Changelog — Complete Strategy Decoupling, Live MTF Background Ingestion & UI Parity for Sweep & Reclaim (2026-08-19)
+
+### Summary
+Architected, executed, and rigorously verified an institutional 3-phase architectural upgrade to achieve complete decoupling, autonomous multi-timeframe background ingestion, namespace isolation, atomic memory rollback, and full cockpit settings UI parity between the **Order Block & Breakers Strategy** and the **Sweep & Reclaim 3-Pillar Strategy**.
+
+### Key Features & Architectural Directives
+- **Phase 1: Hardening & Namespace Isolation (`useAutomatedStrategyExecution.ts`, `AutomatedStrategyExecutionEngine.ts`):**
+  - **Database Rehydration Isolation:** Implemented strict strategy name filtering (`strategy_name.includes('Sweep & Reclaim') || includes('S&R') || includes('3-Pillar') || includes('Auto 2% Compounded')`) during on-mount rehydration. Guarantees Order Block trades are never adopted or processed by the Sweep & Reclaim engine.
+  - **Atomic In-Memory Rollback:** Added `rollbackPosition(posId: string, errorReason?: string)` to `AutomatedStrategyExecutionEngine`. If `POST /api/trades` fails (e.g. 403 `HEDGING_BLOCKED`, risk veto, network drops), the failed position is immediately purged from memory, consumed zone locks are released, and a `ROLLBACK` event is dispatched.
+- **Phase 2: Autonomous Multi-Timeframe Background Ingestion (`AutomatedStrategyExecutionEngine.ts`, `strategyExecutionConfig.ts`):**
+  - **Live MTF Candle Ingestion:** Added `onMultiTimeframeCandles({ '5m'?: Candle[], '15m'?: Candle[], '1h'?: Candle[] }, macroContext)` to `AutomatedStrategyExecutionEngine`. Runs `SweepReclaimEngine.scanHistoricalSetups()` across closed candle streams in real-time.
+  - **Autonomous Order Routing:** When `isSweepReclaimAutoExecEnabled === true`, confirmed 3-Pillar displacement reclaims with valuation alignment automatically submit resting limit orders (`submitStrategyOrder`) without requiring manual UI triggers.
+  - **Persistent Settings Layer:** Implemented `FLOW_STATE_SR_SETTINGS` storage key, `strategy-sr-settings-changed` reactive event bus, and `useSweepReclaimLiveSettings()` custom hook.
+- **Phase 3: Cockpit Settings Tab Full Functional Parity (`LiveOrderBlockModal.tsx`):**
+  - Upgraded Sub-Panel 2 from static text into a state-of-the-art interactive control matrix:
+    - **Dynamic Compounding Risk Selector:** Selectable pills for `1.0%`, `2.0%`, and `3.0%` risk ($1.0R dollar display).
+    - **Multi-Timeframe Stream Ingestion Matrix:** Interactive toggle cards for `5m`, `15m`, and `1h` streams with active/suspended indicators.
+    - **Multi-Timeframe Anchor Pool:** Interactive toggle badges for `Major Pivots`, `Asian H/L`, `London H/L`, and `PDH/PDL`.
+    - **3-Pillar Displacement Gatekeeper Steppers:** Interactive selectors for Pillar 1 (Volume Ratio $\ge 1.25\text{x}-1.75\text{x}$), Pillar 2 (Taker Delta $\ge 50\%-65\%$), and Pillar 3 (Body Ratio $\ge 50\%-70\%$).
+    - **Retest Entry Model Selector:** Interactive options for `Displacement FVG 50% CE`, `Sweep OB 50% MT`, and `Reclaimed Shelf`.
+    - **Valuation Gate Toggle:** Interactive switch for `STRICT ALIGNMENT (Discount/Premium)` vs `PERMISSIVE (Off)`.
+    - **Trailing Stop & Ratchet Toggles:** Independent switches for `Structural FVG Trail` and `+1.0R Profit Ratchet Floor @ Stage 2`.
+- **Static Analysis & Automated Verification:**
+  - `npx tsc --noEmit` verified with 0 errors.
+  - Verification test suite passed 100% across all 4 test suites (Namespace Isolation, Atomic Rollback, MTF Scanning, and Settings Persistence).
+
+## 🆕 V16.20 Changelog — Dynamic Multi-Timeframe Stream Toggles & Selective Execution Matrix (2026-08-18)
+
+### Summary
+Architected, implemented, and rigorously verified the **Dynamic Multi-Timeframe (MTF) Stream Toggles & Selective Execution Matrix** across the Quant Engine core (`LiveOrderBlockExecutionEngine.ts`), Storage & Reactive Event Layer (`strategyExecutionConfig.ts`), Hook Layer (`useLiveOrderBlockExecution.ts`), and UI Cockpit/HUD/Ribbon components (`OrderFlowTimelineRibbon.tsx`, `LiveOrderBlockModal.tsx`, `LiveOrderBlockExecutionHUD.tsx`). Traders can now dynamically enable or suspend background candle processing per timeframe (e.g. enabling 5m and 15m while disabling 1h), with instant active zone pool synchronization, dynamic HTF structural anchor promotion fallback (`15M_PROMOTED_ANCHOR`, `5M_STANDALONE_TRIGGER`), persistent `localStorage` monitoring profiles, and zero-stalling execution continuity on live ticks.
+
+### Key Features & Architectural Directives
+- **Granular Timeframe Toggle State & Persistent Storage (`strategyExecutionConfig.ts`):**
+  - Storage key: `FLOW_STATE_OB_ENABLED_TIMEFRAMES = 'FLOW_STATE_OB_ENABLED_TIMEFRAMES'`.
+  - Supported timeframes: `'5m'`, `'15m'`, `'1h'`. Defaults to `['5m', '15m', '1h']`.
+  - SSR-safe getters/setters with single-active guard ensuring at least one timeframe remains active.
+  - Global `strategy-timeframe-toggle-changed` window event bus ensuring instant reactive cross-component synchronization without page reloads.
+  - Exported custom hook `useOBTimeframeStreams()`.
+- **Selective Background Ingestion & Compute Optimization (`LiveOrderBlockExecutionEngine.ts`):**
+  - Internal `enabledTimeframes: Set<SupportedTimeframe>` state initialized dynamically.
+  - `onMultiTimeframeCandles()` selectively skips `OrderBlockEngine` scanning and zone pruning loops for disabled timeframes.
+  - `updateEnabledTimeframes(enabledTfs)` immediately purges resting zones and in-zone testing states for disabled intervals and auto-evaluates cached candles for newly re-enabled intervals.
+  - Emits `TIMEFRAME_STREAMS_UPDATED` lifecycle event.
+- **Dynamic Higher-Timeframe (HTF) Hierarchy Fallback & Structural Weight Promotion:**
+  - When `1h` is disabled, the HTF Gatekeeper dynamically promotes `15m` to the primary root structural anchor (`15M_PROMOTED_ANCHOR` / `HTF_ANCHOR`), evaluating 5m alignment against 15m structure.
+  - When both `1h` and `15m` are disabled, `5m` zones are promoted to standalone trigger mode (`5M_STANDALONE_TRIGGER` / `HTF_ANCHOR`), executing without missing-HTF exceptions.
+- **Cockpit Ribbon, HUD, & Modal UI Enhancements:**
+  - **Order Flow Timeline Ribbon (`OrderFlowTimelineRibbon.tsx`):** Added interactive color-coded MTF toggle pills (`5m`, `15m`, `1h`) directly beside the `[ LIVE OB EXECUTION ]` cockpit launcher.
+  - **Live Order Block Cockpit Modal (`LiveOrderBlockModal.tsx`):**
+    - Header: Added interactive MTF stream toggle pill cluster.
+    - Status Metrics: MTF Resting Matrix displays active counts and struck-through suspended indicators.
+    - ZONES Tab: Sub-filter buttons display `[OFF]` badges for suspended streams; Zone cards render `PROMOTED ANCHOR` and `STANDALONE TRIGGER` badges.
+    - SETTINGS Tab: Dedicated "Multi-Timeframe Stream Ingestion Matrix" panel with interactive cards and stream status.
+  - **Live Execution HUD (`LiveOrderBlockExecutionHUD.tsx`):** Added compact MTF toggle pills with live pulse indicators in the HUD header.
 
 ## 🆕 V16.19 Changelog — Dual Strategy Independent Auto-Execution Control Panel (2026-08-18)
 

@@ -8,7 +8,8 @@ import {
   LiveExecutionConfig,
   DEFAULT_LIVE_EXEC_CONFIG,
   InZoneTestingState,
-  MacroMarketContext
+  MacroMarketContext,
+  SupportedTimeframe
 } from '@/lib/quantEngine/LiveOrderBlockExecutionEngine';
 import { InstitutionalOrderBlock } from '@/lib/quantEngine/OrderBlockEngine';
 import {
@@ -16,6 +17,13 @@ import {
   setOrderBlockAutoExec,
   STRATEGY_AUTO_EXEC_EVENT,
   StrategyAutoExecState,
+  getEnabledOBTimeframes,
+  setEnabledOBTimeframes,
+  toggleOBTimeframeStream,
+  OB_TIMEFRAME_TOGGLE_EVENT,
+  OBTimeframeToggleState,
+  SupportedOBTimeframe,
+  DEFAULT_ENABLED_TIMEFRAMES
 } from '@/lib/quantEngine/strategyExecutionConfig';
 import type { SmartAlert } from '@/hooks/useLiveAlerts';
 
@@ -42,10 +50,14 @@ export function useLiveOrderBlockExecution(
   const [engineConfig, setEngineConfig] = useState<LiveExecutionConfig>({
     ...DEFAULT_LIVE_EXEC_CONFIG,
     autoExecute: getOrderBlockAutoExec(),
+    enabledTimeframes: getEnabledOBTimeframes(),
     ...initialConfig
   });
 
   const engineRef = useRef<LiveOrderBlockExecutionEngine>(getSharedEngine(engineConfig));
+  const [enabledTimeframes, setEnabledTimeframesState] = useState<SupportedOBTimeframe[]>(
+    engineConfig.enabledTimeframes || DEFAULT_ENABLED_TIMEFRAMES
+  );
   const [activePositions, setActivePositions] = useState<LivePosition[]>([]);
   const [activeZones, setActiveZones] = useState<InstitutionalOrderBlock[]>([]);
   const [activeZonesByTimeframe, setActiveZonesByTimeframe] = useState<Record<string, InstitutionalOrderBlock[]>>({
@@ -80,6 +92,31 @@ export function useLiveOrderBlockExecution(
       window.removeEventListener(STRATEGY_AUTO_EXEC_EVENT, handleAutoExecUpdate);
     };
   }, []);
+
+  // Listen to cross-component MTF stream toggle changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleTfUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<OBTimeframeToggleState>;
+      const tfs = (customEvent.detail && Array.isArray(customEvent.detail.enabledTimeframes))
+        ? customEvent.detail.enabledTimeframes
+        : getEnabledOBTimeframes();
+
+      setEnabledTimeframesState(tfs);
+      setEngineConfig(prev => ({ ...prev, enabledTimeframes: tfs }));
+      if (engineRef.current) {
+        engineRef.current.updateEnabledTimeframes(tfs);
+        setActiveZones([...engineRef.current.getActiveZones(timeframeFilter)]);
+        setActiveZonesByTimeframe({ ...engineRef.current.getActiveZonesByTimeframe() });
+      }
+    };
+
+    window.addEventListener(OB_TIMEFRAME_TOGGLE_EVENT, handleTfUpdate);
+    return () => {
+      window.removeEventListener(OB_TIMEFRAME_TOGGLE_EVENT, handleTfUpdate);
+    };
+  }, [timeframeFilter]);
 
   // Update engine config when state changes
   useEffect(() => {
@@ -143,7 +180,7 @@ export function useLiveOrderBlockExecution(
         dispatchAlert?.('LIVE_OB_DETECTED', event.message, '/audio/flow_state.wav', 'AUTONOMOUS_OB');
       } else if (event.type === 'CONFIRMATION_PENDING') {
         dispatchAlert?.('IN_ZONE_CONFIRMATION_PENDING', event.message, '/audio/session_transition.wav', 'AUTONOMOUS_OB');
-      } else if (event.type === 'ORDER_OPENED') {
+      } else if (event.type === 'ORDER_OPENED' && pos?.dbTradeId) {
         dispatchAlert?.('AUTO_ORDER_ROUTED', event.message, '/audio/sweep_alert.mp3', 'AUTONOMOUS_OB');
       } else if (event.type === 'STAGE_1_HARVEST' || event.type === 'STAGE_2_HARVEST' || event.type === 'STAGE_3_RUNNER') {
         dispatchAlert?.('STAGE_FILL', event.message, '/audio/objective_update.wav', 'AUTONOMOUS_OB');
@@ -187,7 +224,8 @@ export function useLiveOrderBlockExecution(
           if (!res.ok) {
             const errorJson = await res.json().catch(() => ({}));
             const errorMsg = errorJson.error || errorJson.message || `HTTP ${res.status}`;
-            console.error('[useLiveOrderBlockExecution] DB Trade creation failed, triggering rollback:', errorMsg);
+            console.warn('[useLiveOrderBlockExecution] DB Trade creation vetoed/failed, triggering rollback:', errorMsg);
+            dispatchAlert?.('SMT_TRAP', `🛡️ [PORTFOLIO GUARD] OB Order placement vetoed: ${errorMsg}`, undefined, 'AUTONOMOUS_OB');
             // Atomic rollback to eliminate ghost positions
             engineRef.current.rollbackPosition(pos.id, errorMsg);
             setActivePositions([...engineRef.current.getActivePositions()]);
@@ -201,6 +239,8 @@ export function useLiveOrderBlockExecution(
           if (resData.trade_id) {
             engineRef.current.setDbTradeId(pos.id, resData.trade_id);
             setActivePositions([...engineRef.current.getActivePositions()]);
+            // Dispatch verified entry alert after DB confirmation
+            dispatchAlert?.('AUTO_ORDER_ROUTED', event.message, '/audio/sweep_alert.mp3', 'AUTONOMOUS_OB');
           }
 
           // Trigger global journal refresh
@@ -208,7 +248,7 @@ export function useLiveOrderBlockExecution(
             window.dispatchEvent(new Event('trades-refresh'));
           }
         } catch (err) {
-          console.error('[useLiveOrderBlockExecution] Network failure during trade creation, rolling back:', err);
+          console.warn('[useLiveOrderBlockExecution] Network failure during trade creation, rolling back:', err);
           engineRef.current.rollbackPosition(pos.id, 'Network failure during trade entry persistence');
           setActivePositions([...engineRef.current.getActivePositions()]);
           if (typeof window !== 'undefined') {
@@ -396,10 +436,46 @@ export function useLiveOrderBlockExecution(
     setEngineConfig(prev => ({ ...prev, enforceHtfAlignment: enabled }));
   }, []);
 
+  const toggleTimeframeStream = useCallback((tf: SupportedOBTimeframe) => {
+    const next = toggleOBTimeframeStream(tf);
+    setEnabledTimeframesState(next);
+    setEngineConfig(prev => ({ ...prev, enabledTimeframes: next }));
+    if (engineRef.current) {
+      engineRef.current.updateEnabledTimeframes(next);
+      setActiveZones([...engineRef.current.getActiveZones(timeframeFilter)]);
+      setActiveZonesByTimeframe({ ...engineRef.current.getActiveZonesByTimeframe() });
+    }
+    return next;
+  }, [timeframeFilter]);
+
+  const setTimeframeStreamEnabled = useCallback((tf: SupportedOBTimeframe, enabled: boolean) => {
+    const current = getEnabledOBTimeframes();
+    let next: SupportedOBTimeframe[];
+    if (enabled) {
+      next = current.includes(tf) ? current : [...current, tf];
+    } else {
+      if (current.length <= 1 && current.includes(tf)) return;
+      next = current.filter(t => t !== tf);
+    }
+    setEnabledOBTimeframes(next);
+    setEnabledTimeframesState(next);
+    setEngineConfig(prev => ({ ...prev, enabledTimeframes: next }));
+    if (engineRef.current) {
+      engineRef.current.updateEnabledTimeframes(next);
+      setActiveZones([...engineRef.current.getActiveZones(timeframeFilter)]);
+      setActiveZonesByTimeframe({ ...engineRef.current.getActiveZonesByTimeframe() });
+    }
+  }, [timeframeFilter]);
+
+  const isTimeframeStreamEnabled = useCallback((tf: SupportedOBTimeframe) => {
+    return enabledTimeframes.includes(tf);
+  }, [enabledTimeframes]);
+
   return {
     engineConfig,
     setEngineConfig,
     isOrderBlockAutoExecEnabled: engineConfig.autoExecute,
+    enabledTimeframes,
     activePositions,
     activeZones,
     activeZonesByTimeframe,
@@ -414,6 +490,10 @@ export function useLiveOrderBlockExecution(
     toggleAutoExecute,
     setScalingMode,
     setTrailingMode,
-    setEnforceHtfAlignment
+    setEnforceHtfAlignment,
+    toggleTimeframeStream,
+    setTimeframeStreamEnabled,
+    isTimeframeStreamEnabled,
+    setEnabledTimeframes: setEnabledOBTimeframes
   };
 }

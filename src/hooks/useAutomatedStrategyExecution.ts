@@ -10,11 +10,19 @@ import {
   ExecutionEvent,
 } from '@/lib/quantEngine/AutomatedStrategyExecutionEngine';
 import { Candle } from '@/lib/fvgEngine';
+import { SweepReclaimSetup } from '@/lib/quantEngine/SweepReclaimEngine';
 import {
   getSweepReclaimAutoExec,
   setSweepReclaimAutoExec,
   STRATEGY_AUTO_EXEC_EVENT,
   StrategyAutoExecState,
+  getSweepReclaimLiveSettings,
+  setSweepReclaimLiveSettings,
+  updateSweepReclaimLiveSettings,
+  SR_SETTINGS_CHANGED_EVENT,
+  SweepReclaimLiveSettings,
+  DEFAULT_SR_LIVE_SETTINGS,
+  SupportedOBTimeframe,
 } from '@/lib/quantEngine/strategyExecutionConfig';
 import type { SmartAlert } from '@/hooks/useLiveAlerts';
 
@@ -40,6 +48,7 @@ export function useAutomatedStrategyExecution(
   const [engineConfig, setEngineConfig] = useState<AutomatedExecutionConfig>({
     ...DEFAULT_AUTOMATED_CONFIG,
     autoExecute: getSweepReclaimAutoExec(),
+    liveSettings: getSweepReclaimLiveSettings(),
     ...initialConfig,
   });
 
@@ -47,6 +56,7 @@ export function useAutomatedStrategyExecution(
   const [activePositions, setActivePositions] = useState<StrategyExecutionPosition[]>([]);
   const [pendingOrders, setPendingOrders] = useState<StrategyExecutionPosition[]>([]);
   const [closedTrades, setClosedTrades] = useState<StrategyExecutionPosition[]>([]);
+  const [scannedSetups, setScannedSetups] = useState<SweepReclaimSetup[]>([]);
   const [accountEquity, setAccountEquity] = useState<number>(10000.0);
   const [lastEvent, setLastEvent] = useState<ExecutionEvent | null>(null);
 
@@ -68,6 +78,40 @@ export function useAutomatedStrategyExecution(
     window.addEventListener(STRATEGY_AUTO_EXEC_EVENT, handleAutoExecUpdate);
     return () => {
       window.removeEventListener(STRATEGY_AUTO_EXEC_EVENT, handleAutoExecUpdate);
+    };
+  }, []);
+
+  // Listen to cross-component S&R settings updates
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleSettingsUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<SweepReclaimLiveSettings>;
+      const updated = customEvent.detail || getSweepReclaimLiveSettings();
+      setEngineConfig(prev => ({
+        ...prev,
+        compoundingRiskPct: updated.compoundingRiskPct ?? prev.compoundingRiskPct,
+        stage2Multiple: updated.stage2Multiple ?? prev.stage2Multiple,
+        stage3Multiple: updated.stage3Multiple ?? prev.stage3Multiple,
+        enableStructuralTrail: updated.enableStructuralTrail ?? prev.enableStructuralTrail,
+        enableProfitRatchet: updated.enableProfitRatchet ?? prev.enableProfitRatchet,
+        liveSettings: updated,
+      }));
+      if (engineRef.current) {
+        engineRef.current.updateConfig({
+          compoundingRiskPct: updated.compoundingRiskPct,
+          stage2Multiple: updated.stage2Multiple,
+          stage3Multiple: updated.stage3Multiple,
+          enableStructuralTrail: updated.enableStructuralTrail,
+          enableProfitRatchet: updated.enableProfitRatchet,
+          liveSettings: updated,
+        });
+      }
+    };
+
+    window.addEventListener(SR_SETTINGS_CHANGED_EVENT, handleSettingsUpdate);
+    return () => {
+      window.removeEventListener(SR_SETTINGS_CHANGED_EVENT, handleSettingsUpdate);
     };
   }, []);
 
@@ -100,7 +144,7 @@ export function useAutomatedStrategyExecution(
     fetchAccountEquity();
   }, [fetchAccountEquity]);
 
-  // ── 2. On-Mount Database Re-hydration from /api/trades ─────────────────────
+  // ── 2. On-Mount Database Re-hydration from /api/trades (Namespace Isolated) ──
   useEffect(() => {
     let isMounted = true;
 
@@ -110,10 +154,21 @@ export function useAutomatedStrategyExecution(
         if (!res.ok) return;
         const data = await res.json();
         const trades = data.trades || [];
-        const openTrades = trades.filter(
-          (t: any) =>
-            t.status === 'OPEN' || t.status === 'STAGE_1_FILLED' || t.status === 'STAGE_2_FILLED'
-        );
+
+        // STRICT ISOLATION: Only rehydrate trades belonging to Sweep & Reclaim
+        const openTrades = trades.filter((t: any) => {
+          if (t.status !== 'OPEN' && t.status !== 'STAGE_1_FILLED' && t.status !== 'STAGE_2_FILLED') {
+            return false;
+          }
+          const strat = (t.strategy_name || '').toLowerCase();
+          return (
+            strat.includes('sweep & reclaim') ||
+            strat.includes('s&r') ||
+            strat.includes('3-pillar') ||
+            strat.includes('failed signal reversal') ||
+            strat.includes('auto 2% compounded')
+          );
+        });
 
         if (openTrades.length > 0 && engineRef.current && isMounted) {
           const rehydrated = engineRef.current.rehydrateOpenPositions(openTrades);
@@ -149,7 +204,7 @@ export function useAutomatedStrategyExecution(
       // ── Event Bus Audio / Toast Notifications ──
       if (event.type === 'LIMIT_ORDER_PLACED') {
         dispatchAlert?.('AUTO_ORDER_ROUTED', event.message, '/audio/fvg_alert.mp3', 'STRATEGY_EXECUTION');
-      } else if (event.type === 'ORDER_FILLED') {
+      } else if (event.type === 'ORDER_FILLED' && pos?.dbTradeId) {
         dispatchAlert?.('AUTO_ORDER_ROUTED', event.message, '/audio/sweep_alert.mp3', 'STRATEGY_EXECUTION');
       } else if (event.type === 'STAGE_1_HARVEST' || event.type === 'STAGE_2_HARVEST') {
         dispatchAlert?.('STAGE_FILL', event.message, '/audio/objective_update.wav', 'STRATEGY_EXECUTION');
@@ -157,7 +212,7 @@ export function useAutomatedStrategyExecution(
         dispatchAlert?.('SMT_TRAP', event.message, '/audio/flow_state.wav', 'STRATEGY_EXECUTION');
       }
 
-      // ── A. Atomic Trade Entry: POST /api/trades ──
+      // ── A. Atomic Trade Entry: POST /api/trades with Rollback Guard ──
       if (event.type === 'ORDER_FILLED' && pos && !pos.dbTradeId) {
         try {
           const payload = {
@@ -190,19 +245,41 @@ export function useAutomatedStrategyExecution(
             body: JSON.stringify(payload),
           });
 
-          if (res.ok) {
-            const data = await res.json();
-            const dbId = data.trade_id || data.trade?.id;
-            if (dbId) {
-              engineRef.current.linkDbTradeId(pos.id, dbId);
+          if (!res.ok) {
+            const errorJson = await res.json().catch(() => ({}));
+            const errorMsg = errorJson.error || errorJson.message || `HTTP ${res.status}`;
+            console.warn('[useAutomatedStrategyExecution] DB Trade creation vetoed/failed, triggering rollback:', errorMsg);
+            dispatchAlert?.('SMT_TRAP', `🛡️ [PORTFOLIO GUARD] Order placement vetoed: ${errorMsg}`, undefined, 'STRATEGY_EXECUTION');
+            // Atomic rollback on failure
+            engineRef.current.rollbackPosition(pos.id, errorMsg);
+            setActivePositions([...engineRef.current.getActivePositions()]);
+            setPendingOrders([...engineRef.current.getPendingLimitOrders()]);
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('trades-refresh'));
             }
+            return;
+          }
+
+          const data = await res.json();
+          const dbId = data.trade_id || data.trade?.id;
+          if (dbId) {
+            engineRef.current.linkDbTradeId(pos.id, dbId);
+            setActivePositions([...engineRef.current.getActivePositions()]);
+            // Dispatch verified entry alert after DB confirmation
+            dispatchAlert?.('AUTO_ORDER_ROUTED', event.message, '/audio/sweep_alert.mp3', 'STRATEGY_EXECUTION');
           }
 
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('trades-refresh'));
           }
         } catch (err) {
-          console.error('[useAutomatedStrategyExecution] Failed to persist new trade to DB:', err);
+          console.warn('[useAutomatedStrategyExecution] Network failure during trade creation, rolling back:', err);
+          engineRef.current.rollbackPosition(pos.id, 'Network failure during trade entry persistence');
+          setActivePositions([...engineRef.current.getActivePositions()]);
+          setPendingOrders([...engineRef.current.getPendingLimitOrders()]);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('trades-refresh'));
+          }
         }
       }
 
@@ -265,7 +342,38 @@ export function useAutomatedStrategyExecution(
     };
   }, [dispatchAlert, fetchAccountEquity]);
 
-  // ── 4. Real-Time Market Tick Processing Pipeline ──────────────────────────
+  // ── 4. Multi-Timeframe Background Candle Ingestion (5m, 15m, 1h) ────────────
+  useEffect(() => {
+    if (!engineRef.current || !marketData) return;
+
+    const payload = marketData.data_payload || {};
+    const candles5m = payload.candles_5m;
+    const candles15m = payload.candles_15m;
+    const candles1h = payload.candles_1h;
+
+    const ipda = marketData.ipda_metrics || {};
+    const macroContext = {
+      macroDailyBias: ipda.macro_daily_bias,
+      dolDirection: ipda.dol_direction,
+      localDealingRange: ipda.pricing_context?.local_dealing_range,
+    };
+
+    const res = engineRef.current.onMultiTimeframeCandles(
+      {
+        '5m': candles5m,
+        '15m': candles15m,
+        '1h': candles1h,
+      },
+      macroContext
+    );
+
+    setScannedSetups(res.scannedSetups);
+    setActivePositions([...engineRef.current.getActivePositions()]);
+    setPendingOrders([...engineRef.current.getPendingLimitOrders()]);
+    setClosedTrades([...engineRef.current.getClosedPositions()]);
+  }, [marketData]);
+
+  // ── 5. Real-Time Market Tick Processing Pipeline ──────────────────────────
   useEffect(() => {
     if (livePrice && livePrice > 0 && engineRef.current) {
       const candleAdapter: Candle | null = liveCandle
@@ -316,16 +424,44 @@ export function useAutomatedStrategyExecution(
     return nextVal;
   }, [engineConfig.autoExecute]);
 
-  const riskUsd2Pct = parseFloat((accountEquity * (engineConfig.compoundingRiskPct / 100)).toFixed(2));
+  const updateSettings = useCallback((partial: Partial<SweepReclaimLiveSettings>) => {
+    const next = updateSweepReclaimLiveSettings(partial);
+    setEngineConfig(prev => ({
+      ...prev,
+      compoundingRiskPct: next.compoundingRiskPct ?? prev.compoundingRiskPct,
+      stage2Multiple: next.stage2Multiple ?? prev.stage2Multiple,
+      stage3Multiple: next.stage3Multiple ?? prev.stage3Multiple,
+      enableStructuralTrail: next.enableStructuralTrail ?? prev.enableStructuralTrail,
+      enableProfitRatchet: next.enableProfitRatchet ?? prev.enableProfitRatchet,
+      liveSettings: next,
+    }));
+    if (engineRef.current) {
+      engineRef.current.updateConfig({
+        compoundingRiskPct: next.compoundingRiskPct,
+        stage2Multiple: next.stage2Multiple,
+        stage3Multiple: next.stage3Multiple,
+        enableStructuralTrail: next.enableStructuralTrail,
+        enableProfitRatchet: next.enableProfitRatchet,
+        liveSettings: next,
+      });
+    }
+    return next;
+  }, []);
+
+  const riskPct = engineConfig.liveSettings?.compoundingRiskPct ?? engineConfig.compoundingRiskPct ?? 2.0;
+  const riskUsd2Pct = parseFloat((accountEquity * (riskPct / 100)).toFixed(2));
 
   return {
     engineConfig,
     setEngineConfig,
+    settings: engineConfig.liveSettings || DEFAULT_SR_LIVE_SETTINGS,
+    updateSettings,
     isSweepReclaimAutoExecEnabled: engineConfig.autoExecute,
     toggleAutoExecute,
     activePositions,
     pendingOrders,
     closedTrades,
+    scannedSetups,
     accountEquity,
     riskUsd2Pct,
     lastEvent,

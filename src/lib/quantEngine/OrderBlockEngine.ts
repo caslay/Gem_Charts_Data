@@ -137,7 +137,7 @@ export interface InstitutionalOrderBlock {
   is_consumed?: boolean; // Single-use trade execution safety flag
 
   // Multi-Timeframe (MTF) & Structural Role Metadata
-  structural_weight?: '1H_MACRO_ANCHOR' | '15M_STRUCTURAL' | '5M_PRECISION_TRIGGER' | 'OTHER';
+  structural_weight?: '1H_MACRO_ANCHOR' | '15M_STRUCTURAL' | '15M_PROMOTED_ANCHOR' | '5M_PRECISION_TRIGGER' | '5M_STANDALONE_TRIGGER' | 'OTHER';
   htf_alignment_status?: 'HTF_ALIGNED' | 'VETOED_COUNTER_HTF' | 'HTF_ANCHOR';
   htf_veto_reason?: string | null;
 

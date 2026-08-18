@@ -23,7 +23,8 @@ import {
   Filter,
   Check,
   Ban,
-  Anchor
+  Anchor,
+  Percent
 } from 'lucide-react';
 import { useLiveOrderBlockExecution } from '@/hooks/useLiveOrderBlockExecution';
 import { useAutomatedStrategyExecution } from '@/hooks/useAutomatedStrategyExecution';
@@ -44,6 +45,7 @@ export default function LiveOrderBlockModal({
     engineConfig,
     setEngineConfig,
     isOrderBlockAutoExecEnabled,
+    enabledTimeframes,
     activePositions,
     activeZones,
     activeZonesByTimeframe,
@@ -58,13 +60,17 @@ export default function LiveOrderBlockModal({
     toggleAutoExecute: toggleObAutoExecute,
     setScalingMode,
     setTrailingMode,
-    setEnforceHtfAlignment
+    setEnforceHtfAlignment,
+    toggleTimeframeStream,
+    isTimeframeStreamEnabled
   } = useLiveOrderBlockExecution();
 
   // Strategy 2: Sweep & Reclaim 3-Pillar Execution
   const {
     engineConfig: srEngineConfig,
     setEngineConfig: setSrEngineConfig,
+    settings: srSettings,
+    updateSettings: updateSrSettings,
     isSweepReclaimAutoExecEnabled,
     toggleAutoExecute: toggleSrAutoExecute,
     accountEquity,
@@ -127,6 +133,37 @@ export default function LiveOrderBlockModal({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Dynamic MTF Stream Selective Toggles */}
+            <div className="hidden sm:flex items-center gap-1 bg-background/60 p-1 rounded-xl border border-card-border/60">
+              <span className="text-[8px] font-black text-muted uppercase tracking-wider px-1">STREAMS:</span>
+              {(['5m', '15m', '1h'] as const).map(tf => {
+                const isEnabled = isTimeframeStreamEnabled(tf);
+                const activeColor =
+                  tf === '1h'
+                    ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-[0_0_8px_rgba(6,182,212,0.25)]'
+                    : tf === '15m'
+                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-[0_0_8px_rgba(168,85,247,0.25)]'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]';
+
+                return (
+                  <button
+                    key={tf}
+                    type="button"
+                    onClick={() => toggleTimeframeStream(tf)}
+                    title={`Live OB ${tf.toUpperCase()} Stream: ${isEnabled ? 'ACTIVE (Click to Suspend)' : 'SUSPENDED (Click to Enable)'}`}
+                    className={`px-2 py-0.5 rounded-lg border font-bold uppercase transition-all cursor-pointer text-[9px] flex items-center gap-1 ${
+                      isEnabled
+                        ? activeColor
+                        : 'bg-card/40 border-card-border/40 text-muted/40 hover:text-muted line-through'
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${isEnabled ? (tf === '1h' ? 'bg-cyan-400' : tf === '15m' ? 'bg-purple-400' : 'bg-amber-400') : 'bg-slate-600'}`} />
+                    <span>{tf}</span>
+                  </button>
+                );
+              })}
+            </div>
+
             {/* Dual Independent Auto-Execution Toggles */}
             <div className="flex items-center gap-1.5 bg-background/60 p-1 rounded-xl border border-card-border/60">
               {/* Strategy 1: OB & Breakers Toggle */}
@@ -262,11 +299,17 @@ export default function LiveOrderBlockModal({
                   <span className="text-[9px] uppercase text-muted font-bold">MTF Resting Matrix</span>
                   <div className="flex items-center justify-between mt-1">
                     <div className="flex items-center gap-1 text-[11px] font-bold">
-                      <span className="text-amber-400">{count5m}·5m</span>
+                      <span className={isTimeframeStreamEnabled('5m') ? 'text-amber-400' : 'text-slate-600 line-through'}>
+                        {count5m}·5m
+                      </span>
                       <span className="text-slate-500">/</span>
-                      <span className="text-purple-400">{count15m}·15m</span>
+                      <span className={isTimeframeStreamEnabled('15m') ? 'text-purple-400' : 'text-slate-600 line-through'}>
+                        {count15m}·15m
+                      </span>
                       <span className="text-slate-500">/</span>
-                      <span className="text-cyan-400">{count1h}·1h</span>
+                      <span className={isTimeframeStreamEnabled('1h') ? 'text-cyan-400' : 'text-slate-600 line-through'}>
+                        {count1h}·1h
+                      </span>
                     </div>
                     <span className="text-[9px] text-slate-400">{totalZones} Total</span>
                   </div>
@@ -449,7 +492,7 @@ export default function LiveOrderBlockModal({
             <div className="flex flex-col gap-3">
               {/* ── Multi-Timeframe Sub-Filter Bar ─────────────────────────────── */}
               <div className="flex items-center justify-between text-[10px]">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-muted text-[9px] uppercase font-bold flex items-center gap-1 mr-1">
                     <Filter size={11} /> Filter:
                   </span>
@@ -466,35 +509,44 @@ export default function LiveOrderBlockModal({
 
                   <button
                     onClick={() => setTimeframeFilter('5m')}
-                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition cursor-pointer flex items-center gap-1 ${
                       timeframeFilter === '5m'
                         ? 'bg-amber-500/20 text-amber-300 border border-amber-500/60'
-                        : 'bg-card/40 text-muted hover:text-foreground border border-card-border'
+                        : isTimeframeStreamEnabled('5m')
+                        ? 'bg-card/40 text-muted hover:text-foreground border border-card-border'
+                        : 'bg-card/20 text-slate-600 border border-card-border/30 line-through'
                     }`}
                   >
-                    5m Precision ({count5m})
+                    <span>5m Precision ({count5m})</span>
+                    {!isTimeframeStreamEnabled('5m') && <span className="text-[8px] text-rose-400 font-normal">[OFF]</span>}
                   </button>
 
                   <button
                     onClick={() => setTimeframeFilter('15m')}
-                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition cursor-pointer flex items-center gap-1 ${
                       timeframeFilter === '15m'
                         ? 'bg-purple-500/20 text-purple-300 border border-purple-500/60'
-                        : 'bg-card/40 text-muted hover:text-foreground border border-card-border'
+                        : isTimeframeStreamEnabled('15m')
+                        ? 'bg-card/40 text-muted hover:text-foreground border border-card-border'
+                        : 'bg-card/20 text-slate-600 border border-card-border/30 line-through'
                     }`}
                   >
-                    15m Structural ({count15m})
+                    <span>15m Structural ({count15m})</span>
+                    {!isTimeframeStreamEnabled('15m') && <span className="text-[8px] text-rose-400 font-normal">[OFF]</span>}
                   </button>
 
                   <button
                     onClick={() => setTimeframeFilter('1h')}
-                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase transition cursor-pointer flex items-center gap-1 ${
                       timeframeFilter === '1h'
                         ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/60'
-                        : 'bg-card/40 text-muted hover:text-foreground border border-card-border'
+                        : isTimeframeStreamEnabled('1h')
+                        ? 'bg-card/40 text-muted hover:text-foreground border border-card-border'
+                        : 'bg-card/20 text-slate-600 border border-card-border/30 line-through'
                     }`}
                   >
-                    1h Macro ({count1h})
+                    <span>1h Macro ({count1h})</span>
+                    {!isTimeframeStreamEnabled('1h') && <span className="text-[8px] text-rose-400 font-normal">[OFF]</span>}
                   </button>
                 </div>
 
@@ -553,7 +605,15 @@ export default function LiveOrderBlockModal({
                           </div>
 
                           {/* Alignment / Anchor Status */}
-                          {zone.htf_alignment_status === 'HTF_ANCHOR' ? (
+                          {zone.structural_weight === '15M_PROMOTED_ANCHOR' ? (
+                            <span className="px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-500/30 text-[8px] font-bold flex items-center gap-1" title="1h disabled: 15m promoted to root structural anchor">
+                              <Anchor size={10} /> PROMOTED ANCHOR
+                            </span>
+                          ) : zone.structural_weight === '5M_STANDALONE_TRIGGER' ? (
+                            <span className="px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-500/30 text-[8px] font-bold flex items-center gap-1" title="HTFs disabled: 5m operating in standalone trigger mode">
+                              <Crosshair size={10} /> STANDALONE TRIGGER
+                            </span>
+                          ) : zone.htf_alignment_status === 'HTF_ANCHOR' ? (
                             <span className="px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-300 border border-cyan-500/30 text-[8px] font-bold flex items-center gap-1">
                               <Anchor size={10} /> MACRO ANCHOR
                             </span>
@@ -662,6 +722,81 @@ export default function LiveOrderBlockModal({
                   </button>
                 </div>
 
+                {/* ── Multi-Timeframe Stream Ingestion Matrix ── */}
+                <div className="flex flex-col gap-2 bg-background/50 p-3 rounded-lg border border-card-border/40">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                      <span className="font-bold text-foreground text-[11px]">MTF Stream Ingestion Matrix</span>
+                    </div>
+                    <span className="text-[8px] text-muted-foreground uppercase font-bold">
+                      {enabledTimeframes?.length || 3} of 3 Active
+                    </span>
+                  </div>
+                  <p className="text-[9px] text-muted">
+                    Enable or suspend background candle processing per timeframe. Alignment gatekeepers adapt automatically.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
+                    {/* 5m Precision Stream */}
+                    <button
+                      type="button"
+                      onClick={() => toggleTimeframeStream('5m')}
+                      className={`p-2.5 rounded-lg border text-left flex flex-col justify-between gap-1 transition cursor-pointer ${
+                        isTimeframeStreamEnabled('5m')
+                          ? 'bg-amber-950/30 border-amber-500/60 text-amber-200'
+                          : 'bg-card/20 border-card-border/40 text-muted/50 hover:text-muted'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-amber-400">5M PRECISION</span>
+                        <span className={`w-2 h-2 rounded-full ${isTimeframeStreamEnabled('5m') ? 'bg-amber-400 animate-pulse' : 'bg-slate-700'}`} />
+                      </div>
+                      <span className="text-[8px] text-muted">
+                        {isTimeframeStreamEnabled('5m') ? '✓ Live Trigger Enabled' : '✕ Stream Suspended'}
+                      </span>
+                    </button>
+
+                    {/* 15m Structural Stream */}
+                    <button
+                      type="button"
+                      onClick={() => toggleTimeframeStream('15m')}
+                      className={`p-2.5 rounded-lg border text-left flex flex-col justify-between gap-1 transition cursor-pointer ${
+                        isTimeframeStreamEnabled('15m')
+                          ? 'bg-purple-950/30 border-purple-500/60 text-purple-200'
+                          : 'bg-card/20 border-card-border/40 text-muted/50 hover:text-muted'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-purple-400">15M STRUCTURAL</span>
+                        <span className={`w-2 h-2 rounded-full ${isTimeframeStreamEnabled('15m') ? 'bg-purple-400 animate-pulse' : 'bg-slate-700'}`} />
+                      </div>
+                      <span className="text-[8px] text-muted">
+                        {isTimeframeStreamEnabled('15m') ? '✓ Structural Anchor' : '✕ Stream Suspended'}
+                      </span>
+                    </button>
+
+                    {/* 1h Macro Stream */}
+                    <button
+                      type="button"
+                      onClick={() => toggleTimeframeStream('1h')}
+                      className={`p-2.5 rounded-lg border text-left flex flex-col justify-between gap-1 transition cursor-pointer ${
+                        isTimeframeStreamEnabled('1h')
+                          ? 'bg-cyan-950/30 border-cyan-500/60 text-cyan-200'
+                          : 'bg-card/20 border-card-border/40 text-muted/50 hover:text-muted'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-cyan-400">1H MACRO</span>
+                        <span className={`w-2 h-2 rounded-full ${isTimeframeStreamEnabled('1h') ? 'bg-cyan-400 animate-pulse' : 'bg-slate-700'}`} />
+                      </div>
+                      <span className="text-[8px] text-muted">
+                        {isTimeframeStreamEnabled('1h') ? '✓ Macro Anchor' : '✕ Stream Suspended'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
                 {/* Higher-Timeframe Alignment Setting */}
                 <div className="flex items-center justify-between bg-background/50 p-3 rounded-lg border border-card-border/40">
                   <div className="flex items-center gap-2">
@@ -763,7 +898,8 @@ export default function LiveOrderBlockModal({
               {/* ───────────────────────────────────────────────────────────── */}
               {/* SUB-PANEL 2: ⚡ SWEEP & RECLAIM 3-PILLAR STRATEGY SETTINGS      */}
               {/* ───────────────────────────────────────────────────────────── */}
-              <div className="bg-card/40 border border-slate-800 rounded-xl p-4 flex flex-col gap-3.5">
+              <div className="bg-card/40 border border-slate-800 rounded-xl p-4 flex flex-col gap-4">
+                {/* Header */}
                 <div className="flex items-center justify-between border-b border-card-border/60 pb-3">
                   <div className="flex items-center gap-2">
                     <span className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
@@ -781,7 +917,7 @@ export default function LiveOrderBlockModal({
                         </span>
                       </h4>
                       <p className="text-[9px] text-muted">
-                        3-Pillar Displacement gatekeeper & 2% compounding position sizer.
+                        Institutional 4-Phase Liquidity Sweep, 3-Pillar Displacement & Compounding Execution.
                       </p>
                     </div>
                   </div>
@@ -800,44 +936,312 @@ export default function LiveOrderBlockModal({
                   </button>
                 </div>
 
-                {/* 2% Dynamic Compounding Summary */}
-                <div className="grid grid-cols-2 gap-2 text-[10px]">
-                  <div className="bg-background/50 p-2.5 rounded-lg border border-card-border/40 flex flex-col">
-                    <span className="text-[8px] text-muted uppercase">Active Equity</span>
-                    <span className="font-bold text-white text-xs">${accountEquity.toFixed(2)}</span>
+                {/* 1. Dynamic Compounding Risk Sizing Selector */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Percent className="w-3.5 h-3.5 text-cyan-400" />
+                      Dynamic Compounding Risk Sizing ($1.0R)
+                    </span>
+                    <span className="text-[9px] text-cyan-400 font-mono font-bold">
+                      ${((accountEquity * ((srSettings?.compoundingRiskPct || 2.0) / 100))).toFixed(2)} USD / Trade
+                    </span>
                   </div>
-                  <div className="bg-cyan-950/30 p-2.5 rounded-lg border border-cyan-500/30 flex flex-col">
-                    <span className="text-[8px] text-cyan-400 uppercase font-bold">1.0R Compounded Risk</span>
-                    <span className="font-bold text-cyan-300 text-xs">${riskUsd2Pct.toFixed(2)} (2.0%)</span>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    {[1.0, 2.0, 3.0].map((riskPct) => {
+                      const isSelected = (srSettings?.compoundingRiskPct || 2.0) === riskPct;
+                      const calculatedUsd = (accountEquity * (riskPct / 100)).toFixed(2);
+                      return (
+                        <button
+                          key={riskPct}
+                          type="button"
+                          onClick={() => updateSrSettings({ compoundingRiskPct: riskPct })}
+                          className={`p-2.5 rounded-lg border text-left transition flex flex-col gap-0.5 cursor-pointer ${
+                            isSelected
+                              ? 'bg-cyan-950/70 border-cyan-500 text-cyan-200 shadow-[0_0_10px_rgba(6,182,212,0.15)]'
+                              : 'bg-background/40 border-card-border/60 text-muted hover:text-foreground hover:border-card-border'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold">{riskPct.toFixed(1)}% Compounding</span>
+                            {isSelected && <CheckCircle2 className="w-3 h-3 text-cyan-400" />}
+                          </div>
+                          <span className="text-[9px] font-mono text-slate-400 font-bold">${calculatedUsd} @ 1.0R</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
-                {/* 3-Pillar Displacement Gatekeeper Standard */}
-                <div className="bg-background/50 p-3 rounded-lg border border-card-border/40 flex flex-col gap-1.5 text-[9px]">
+                {/* 2. Multi-Timeframe Stream Ingestion Matrix for S&R */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                      Multi-Timeframe Ingestion Matrix
+                    </span>
+                    <span className="text-[9px] text-slate-400">
+                      {srSettings?.enabledTimeframes?.length || 3} Active Streams
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['5m', '15m', '1h'] as const).map((tf) => {
+                      const isEnabled = srSettings?.enabledTimeframes?.includes(tf) ?? true;
+                      return (
+                        <button
+                          key={tf}
+                          type="button"
+                          onClick={() => {
+                            const current = srSettings?.enabledTimeframes || ['5m', '15m', '1h'];
+                            let next: ('5m' | '15m' | '1h')[];
+                            if (current.includes(tf)) {
+                              if (current.length <= 1) return; // Prevent disabling last
+                              next = current.filter(t => t !== tf);
+                            } else {
+                              next = [...current, tf];
+                            }
+                            updateSrSettings({ enabledTimeframes: next });
+                          }}
+                          className={`p-2.5 rounded-lg border text-left transition flex flex-col gap-1 cursor-pointer ${
+                            isEnabled
+                              ? 'bg-cyan-950/60 border-cyan-500/70 text-cyan-300 shadow-[0_0_8px_rgba(6,182,212,0.12)]'
+                              : 'bg-background/30 border-card-border/40 text-slate-500 hover:text-slate-400 opacity-60'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black font-mono uppercase">{tf} Stream</span>
+                            <span className={`w-2 h-2 rounded-full ${isEnabled ? 'bg-cyan-400 shadow-[0_0_6px_#22d3ee]' : 'bg-slate-600'}`} />
+                          </div>
+                          <span className="text-[8px] font-bold text-slate-400">
+                            {isEnabled ? 'ACTIVE INGESTION' : 'STREAM SUSPENDED'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. Multi-Timeframe Anchor Selection */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Anchor className="w-3.5 h-3.5 text-cyan-400" />
+                      Multi-Timeframe Anchor Pool
+                    </span>
+                    <span className="text-[9px] text-slate-400">
+                      {srSettings?.anchorTypes?.length || 4} Selected
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { id: 'SWING_PIVOT', label: 'Major Pivots' },
+                      { id: 'ASIAN', label: 'Asian H/L' },
+                      { id: 'LONDON', label: 'London H/L' },
+                      { id: 'DAILY', label: 'PDH / PDL' },
+                    ].map((anchor) => {
+                      const isSelected = (srSettings?.anchorTypes || ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY']).includes(anchor.id as any);
+                      return (
+                        <button
+                          key={anchor.id}
+                          type="button"
+                          onClick={() => {
+                            const current = srSettings?.anchorTypes || ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'];
+                            let next: any[];
+                            if (current.includes(anchor.id as any)) {
+                              if (current.length <= 1) return;
+                              next = current.filter(a => a !== anchor.id);
+                            } else {
+                              next = [...current, anchor.id];
+                            }
+                            updateSrSettings({ anchorTypes: next });
+                          }}
+                          className={`px-2.5 py-2 rounded-lg border text-center transition cursor-pointer flex items-center justify-between text-[10px] font-bold ${
+                            isSelected
+                              ? 'bg-cyan-950/70 border-cyan-500/80 text-cyan-300'
+                              : 'bg-background/40 border-card-border/50 text-slate-500 hover:text-slate-400 opacity-60'
+                          }`}
+                        >
+                          <span>{anchor.label}</span>
+                          {isSelected ? <Check className="w-3 h-3 text-cyan-400" /> : <Ban className="w-3 h-3 text-slate-600" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 4. 3-Pillar Displacement Gatekeeper Steppers */}
+                <div className="bg-background/50 p-3 rounded-lg border border-card-border/40 flex flex-col gap-2.5">
                   <div className="font-bold text-slate-300 uppercase text-[10px] flex items-center justify-between">
-                    <span>3-Pillar Displacement Gatekeeper</span>
-                    <span className="text-cyan-400">INSTITUTIONAL STANDARD</span>
+                    <span className="flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                      3-Pillar Displacement Gatekeeper Thresholds
+                    </span>
+                    <span className="text-cyan-400 text-[9px] font-mono font-bold">STRICT GATING</span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 pt-1 text-center">
-                    <div className="p-1.5 rounded bg-slate-950 border border-slate-800">
-                      <span className="text-slate-500 text-[8px] block">P1: Volume</span>
-                      <span className="font-bold text-cyan-300">&ge; 1.50x SMA</span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[9px]">
+                    {/* Pillar 1: Volume Ratio */}
+                    <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col gap-1.5">
+                      <span className="text-slate-400 text-[8px] uppercase font-bold">P1: Volume Expansion</span>
+                      <div className="grid grid-cols-3 gap-1">
+                        {[1.25, 1.50, 1.75].map((val) => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => updateSrSettings({ volumeExpansionThreshold: val })}
+                            className={`py-1 rounded border text-center font-mono font-bold text-[9px] cursor-pointer ${
+                              (srSettings?.volumeExpansionThreshold ?? 1.50) === val
+                                ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
+                                : 'bg-background/50 border-slate-800 text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            &ge;{val.toFixed(2)}x
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className="p-1.5 rounded bg-slate-950 border border-slate-800">
-                      <span className="text-slate-500 text-[8px] block">P2: Taker Delta</span>
-                      <span className="font-bold text-cyan-300">&ge; 60.0%</span>
+
+                    {/* Pillar 2: Taker Delta */}
+                    <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col gap-1.5">
+                      <span className="text-slate-400 text-[8px] uppercase font-bold">P2: Taker Delta Ratio</span>
+                      <div className="grid grid-cols-3 gap-1">
+                        {[50.0, 60.0, 65.0].map((val) => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => updateSrSettings({ deltaDominanceThreshold: val })}
+                            className={`py-1 rounded border text-center font-mono font-bold text-[9px] cursor-pointer ${
+                              (srSettings?.deltaDominanceThreshold ?? 60.0) === val
+                                ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
+                                : 'bg-background/50 border-slate-800 text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            &ge;{val.toFixed(0)}%
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <div className="p-1.5 rounded bg-slate-950 border border-slate-800">
-                      <span className="text-slate-500 text-[8px] block">P3: Body Ratio</span>
-                      <span className="font-bold text-cyan-300">&ge; 60.0%</span>
+
+                    {/* Pillar 3: Body Ratio */}
+                    <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col gap-1.5">
+                      <span className="text-slate-400 text-[8px] uppercase font-bold">P3: Candle Body Ratio</span>
+                      <div className="grid grid-cols-3 gap-1">
+                        {[0.50, 0.60, 0.70].map((val) => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => updateSrSettings({ bodyRatioThreshold: val })}
+                            className={`py-1 rounded border text-center font-mono font-bold text-[9px] cursor-pointer ${
+                              (srSettings?.bodyRatioThreshold ?? 0.60) === val
+                                ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
+                                : 'bg-background/50 border-slate-800 text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            &ge;{(val * 100).toFixed(0)}%
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Retest Entry & Profit Ratchet Rules */}
-                <div className="flex items-center justify-between text-[9px] text-muted pt-1 border-t border-card-border/40">
-                  <span>Entry: <strong>Displacement FVG 50% CE / OB MT</strong></span>
-                  <span>Trailing: <strong>+1.0R Floor Ratchet @ Stage 2</strong></span>
+                {/* 5. Retest Entry Model & Gating Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px]">
+                  {/* Entry Model Selection */}
+                  <div className="flex flex-col gap-1.5 bg-background/40 p-2.5 rounded-lg border border-card-border/50">
+                    <span className="text-[9px] font-bold text-slate-300 uppercase flex items-center gap-1">
+                      <Crosshair className="w-3 h-3 text-cyan-400" />
+                      Retest Entry Model
+                    </span>
+                    <div className="grid grid-cols-3 gap-1 pt-0.5">
+                      {[
+                        { id: 'FVG_CE', label: 'FVG 50% CE' },
+                        { id: 'SWEEP_OB_MT', label: 'OB 50% MT' },
+                        { id: 'RECLAIM_LEVEL', label: 'Shelf Level' },
+                      ].map((mode) => (
+                        <button
+                          key={mode.id}
+                          type="button"
+                          onClick={() => updateSrSettings({ entryMode: mode.id as any })}
+                          className={`py-1.5 px-1 rounded border text-center font-bold text-[8.5px] cursor-pointer transition ${
+                            (srSettings?.entryMode || 'FVG_CE') === mode.id
+                              ? 'bg-cyan-950/80 border-cyan-500 text-cyan-300 shadow-[0_0_6px_rgba(6,182,212,0.2)]'
+                              : 'bg-background/30 border-slate-800 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {mode.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Valuation Discount/Premium Gate */}
+                  <div className="flex flex-col gap-1.5 bg-background/40 p-2.5 rounded-lg border border-card-border/50">
+                    <span className="text-[9px] font-bold text-slate-300 uppercase flex items-center gap-1">
+                      <Shield className="w-3 h-3 text-cyan-400" />
+                      Valuation Gate (Discount/Premium)
+                    </span>
+                    <div className="grid grid-cols-2 gap-1 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => updateSrSettings({ enforceDiscountPremiumGate: true })}
+                        className={`py-1.5 px-1 rounded border text-center font-bold text-[8.5px] cursor-pointer transition ${
+                          (srSettings?.enforceDiscountPremiumGate ?? true)
+                            ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow-[0_0_6px_rgba(16,185,129,0.2)]'
+                            : 'bg-background/30 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        STRICT ALIGNMENT
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateSrSettings({ enforceDiscountPremiumGate: false })}
+                        className={`py-1.5 px-1 rounded border text-center font-bold text-[8.5px] cursor-pointer transition ${
+                          !(srSettings?.enforceDiscountPremiumGate ?? true)
+                            ? 'bg-amber-950/80 border-amber-500 text-amber-300 shadow-[0_0_6px_rgba(245,158,11,0.2)]'
+                            : 'bg-background/30 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        PERMISSIVE (OFF)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 6. Trailing Stop Loss & Profit Ratchet Controls */}
+                <div className="flex items-center justify-between text-[9px] bg-background/30 p-2.5 rounded-lg border border-card-border/40">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateSrSettings({ enableStructuralTrail: !(srSettings?.enableStructuralTrail ?? true) })}
+                      className={`px-2 py-1 rounded border font-bold text-[8.5px] cursor-pointer flex items-center gap-1 ${
+                        (srSettings?.enableStructuralTrail ?? true)
+                          ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
+                          : 'bg-background/50 border-slate-800 text-slate-500'
+                      }`}
+                    >
+                      <Lock className="w-3 h-3" />
+                      <span>Structural FVG Trail: {(srSettings?.enableStructuralTrail ?? true) ? 'ON' : 'OFF'}</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateSrSettings({ enableProfitRatchet: !(srSettings?.enableProfitRatchet ?? true) })}
+                      className={`px-2 py-1 rounded border font-bold text-[8.5px] cursor-pointer flex items-center gap-1 ${
+                        (srSettings?.enableProfitRatchet ?? true)
+                          ? 'bg-cyan-950 border-cyan-500 text-cyan-300'
+                          : 'bg-background/50 border-slate-800 text-slate-500'
+                      }`}
+                    >
+                      <TrendingUp className="w-3 h-3" />
+                      <span>+1.0R Ratchet @ Stage 2: {(srSettings?.enableProfitRatchet ?? true) ? 'ON' : 'OFF'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

@@ -3,7 +3,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { OrderFlowStateRecord, OrderFlowTimelineSummary, OrderFlowState } from '@/lib/quantEngine/types';
-import { Activity, Clock, ArrowRight, TrendingUp, TrendingDown, Maximize2, Shield, Info } from 'lucide-react';
+import { Activity, Clock, ArrowRight, TrendingUp, TrendingDown, Maximize2, Shield, Info, SlidersHorizontal } from 'lucide-react';
+import { useOBTimeframeStreams, SupportedOBTimeframe } from '@/lib/quantEngine/strategyExecutionConfig';
 
 interface OrderFlowTimelineRibbonProps {
   timeline?: OrderFlowTimelineSummary | null;
@@ -191,6 +192,7 @@ export default function OrderFlowTimelineRibbon({
     rect: DOMRect | null;
   } | null>(null);
   const [mounted, setMounted] = useState(false);
+  const { enabledTimeframes, isTimeframeEnabled, toggleTimeframe } = useOBTimeframeStreams();
 
   useEffect(() => {
     setMounted(true);
@@ -260,13 +262,47 @@ export default function OrderFlowTimelineRibbon({
 
         {/* Action button & Stats count */}
         <div className="flex items-center gap-2 shrink-0">
-          <div className="hidden md:flex items-center gap-2 text-[10px] text-muted">
+          <div className="hidden lg:flex items-center gap-2 text-[10px] text-muted">
             <span>TRANSITIONS: <strong className="text-foreground font-bold">{timeline?.stats?.total_transitions ?? allSegments.length}</strong></span>
             {timeline?.stats?.dominant_state_last_24h && (
-              <span className="hidden lg:inline border-l border-card-border pl-2">
+              <span className="hidden xl:inline border-l border-card-border pl-2">
                 DOMINANT 24H: <strong className="text-foreground font-bold">{getStateMetadata(timeline.stats.dominant_state_last_24h).shortLabel}</strong>
               </span>
             )}
+          </div>
+
+          {/* Dynamic MTF Stream Toggles in Cockpit Ribbon */}
+          <div className="hidden sm:flex items-center gap-1 bg-background/60 px-1.5 py-0.5 rounded-md border border-card-border/60">
+            <span className="text-[8px] font-black text-muted uppercase tracking-wider mr-0.5">MTF:</span>
+            {(['5m', '15m', '1h'] as const).map(tf => {
+              const isEnabled = isTimeframeEnabled(tf);
+              const activeColor =
+                tf === '1h'
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-[0_0_8px_rgba(6,182,212,0.25)]'
+                  : tf === '15m'
+                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-[0_0_8px_rgba(168,85,247,0.25)]'
+                  : 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-[0_0_8px_rgba(245,158,11,0.25)]';
+
+              return (
+                <button
+                  key={tf}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleTimeframe(tf);
+                  }}
+                  title={`Live OB ${tf.toUpperCase()} Stream: ${isEnabled ? 'ACTIVE (Click to Suspend)' : 'SUSPENDED (Click to Enable)'}`}
+                  className={`px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer border flex items-center gap-1 ${
+                    isEnabled
+                      ? activeColor
+                      : 'bg-card/40 text-muted/40 border-card-border/40 hover:text-muted hover:border-card-border line-through'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${isEnabled ? (tf === '1h' ? 'bg-cyan-400' : tf === '15m' ? 'bg-purple-400' : 'bg-amber-400') : 'bg-slate-600'}`} />
+                  <span>{tf}</span>
+                </button>
+              );
+            })}
           </div>
 
           {onOpenLiveOBModal && (
