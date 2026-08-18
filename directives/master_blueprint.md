@@ -1,8 +1,33 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.14
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.15
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-18 (V16.14 — Displacement OLS Recalibration & 4-Tier Statistical Classification)  
+> **Last Updated:** 2026-08-18 (V16.15 — Universal Multi-Timeframe Background Pipeline & Event-Driven Reactivity)  
+
+## 🆕 V16.15 Changelog — Universal Multi-Timeframe Background Pipeline & Event-Driven Reactivity (2026-08-18)
+
+### Summary
+Upgraded the market data pipeline to resolve Multi-Timeframe Signal Fragmentation and Stale State Reactivity, eliminating the need for manual page refreshes or interval switching. Implemented a combined Multi-Stream WebSocket listener (`1m`, `5m`, `15m`, `1h`), a Two-Speed Event Pipeline (Tick-Speed vs Candle-Speed), the Universal `MTFTelemetryEngine` calculating real-time structure, 3-bar OLS displacement, order flow regimes, and active order blocks across all timeframes concurrently, the Consolidated `MTFStatusRadar` HUD widget, and an MTF background alert notification bus with debouncing.
+
+### Key Features & Architectural Directives
+- **Multi-Stream WebSocket Ingestion (`useBinanceWS.ts`):**
+  - Connects to Binance Combined Market Stream (`wss://fstream.binance.com/market/stream?streams=...`) across `1m`, `5m`, `15m`, and `1h` on a single persistent TCP connection.
+  - Exposes `liveCandles` dictionary, active `liveCandle`, `livePrice`, and the deterministic `lastClosedEvent` dispatcher (`isClosed === true`).
+- **Two-Speed Event Pipeline & Rolling Buffers (`useMarketData.ts`):**
+  - **Tick-Speed:** Non-blocking real-time updates for live price, floating P&L, and distance to equilibrium via `MarketDataLiveContext`.
+  - **Candle-Speed:** Deterministic execution triggered strictly upon verified candle closures (`isClosed === true`).
+  - Fixed-size rolling buffer limits (max 500 bars per interval) to prevent memory growth during long-running sessions.
+- **Universal Multi-Timeframe Telemetry Engine (`MTFTelemetryEngine.ts`):**
+  - Concurrently evaluates Market Structure, 3-Bar Forward OLS Displacement, Order Flow Regimes, and active Order Blocks across 5m, 15m, and 1h simultaneously.
+  - Calculates Top-Down Confluence score (0–100%) and tracks active Macro Draw on Liquidity (DOL) targets across higher timeframes.
+- **Consolidated MTF Telemetry HUD Status Radar (`MTFStatusRadar.tsx`):**
+  - Glassmorphic multi-timeframe radar widget displaying live structure, trend, order flow regime, and OLS validation badges across 5m, 15m, and 1h.
+  - Interactive click-to-switch timeframe action seamlessly embedded into `Sidebar.tsx`.
+- **Background Alert Bus & Notification Throttle (`useLiveAlerts.ts`):**
+  - Listens to background timeframes (15m, 1h) to emit structural alerts (`[15M MSS DETECTED]`, `[15M OLS CONFIRMED]`) regardless of the active visual chart interval.
+  - Applies alert debouncing (5–10 min cooldowns) to prevent notification storms.
+
+---
 
 ## 🆕 V16.14 Changelog — Displacement OLS Recalibration & 4-Tier Statistical Classification (2026-08-18)
 

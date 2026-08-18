@@ -5,7 +5,9 @@ import { useLiveAlerts } from './useLiveAlerts';
 import { useAIAnalysis } from './useAIAnalysis';
 import { Candle } from '@/lib/fvgEngine';
 import { analyzeMarketStructure, MarketStructureAnalysis } from '@/lib/structureEngine';
-import type { LiveCandle } from './useBinanceWS';
+import type { LiveCandle, ClosedCandleEvent } from './useBinanceWS';
+import { MTFTelemetryEngine, MTFTelemetrySummary } from '@/lib/quantEngine/MTFTelemetryEngine';
+import { verifyDisplacementOffline } from '@/lib/displacementEngine';
 export type { Candle };
 
 export interface SignalAlerts {
@@ -472,10 +474,18 @@ export function mergeDeltaPayload(
   };
 }
 
-export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveCandle | null = null) {
+export function useMarketData(
+  selectedInterval: string = '5m',
+  liveCandle: LiveCandle | null = null,
+  liveCandles: Record<string, LiveCandle> = {},
+  lastClosedEvent: ClosedCandleEvent | null = null,
+  livePrice: number | null = null
+) {
   const [data, setData] = useState<MarketDataPayload | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [mtfSummary, setMtfSummary] = useState<MTFTelemetrySummary | null>(null);
+  const mtfEngineRef = useRef<MTFTelemetryEngine>(new MTFTelemetryEngine('ETHUSDC'));
 
   const [contextAnchorTimestamp, setContextAnchorTimestamp] = useState<number | null>(null);
   const [structureState, setStructureState] = useState<MarketStructureAnalysis | null>(null);
@@ -876,9 +886,85 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
     };
   }, [fetchData]);
 
-  // Synchronize WebSocket live candle updates into the main data payload
-  // Decoupled tick architecture: Intermediate unclosed ticks update Chart canvas directly
-  // via MarketDataLiveContext. We ONLY update root data state on official candle closes.
+  // ── 1. Event-Driven Automated Recalculation & MTF Rolling Buffers ─────────────
+  // Deterministically executed strictly upon verified candle close events ('isClosed === true')
+  useEffect(() => {
+    if (!lastClosedEvent || !data || !data.data_payload) return;
+
+    const { interval: closedInterval, candle: closedCandle } = lastClosedEvent;
+    const seriesKey = `candles_${closedInterval}`;
+    const currentCandles = data.data_payload[seriesKey] || [];
+    if (currentCandles.length === 0) return;
+
+    const lastCandle = currentCandles[currentCandles.length - 1];
+    const lastTimeSec = Math.floor(lastCandle.t / 1000);
+
+    const isSameTime = closedCandle.time === lastTimeSec;
+    const isNewerTime = closedCandle.time > lastTimeSec;
+
+    const mappedCandle: Candle = {
+      t: closedCandle.time * 1000,
+      o: closedCandle.open,
+      h: closedCandle.high,
+      l: closedCandle.low,
+      c: closedCandle.close,
+      v: closedCandle.volume,
+      taker_buy_vol: (closedCandle as any).taker_buy_vol ?? closedCandle.volume / 2,
+      taker_sell_vol: (closedCandle as any).taker_sell_vol ?? closedCandle.volume / 2,
+      isClosed: true
+    };
+
+    let updatedCandles = [...currentCandles];
+    if (isSameTime) {
+      updatedCandles[updatedCandles.length - 1] = mappedCandle;
+    } else if (isNewerTime) {
+      updatedCandles.push(mappedCandle);
+    }
+
+    // Enforce fixed-size rolling buffer limit (350–500 bars per interval) to prevent memory leaks
+    if (updatedCandles.length > 500) {
+      updatedCandles = updatedCandles.slice(-500);
+    }
+
+    const updatedPayload = {
+      ...data.data_payload,
+      [seriesKey]: updatedCandles,
+    };
+
+    // Instant local OLS displacement calculation on verified candle close
+    let updatedSponsorship = data.ipda_metrics?.institutional_sponsorship;
+    if (closedInterval === selectedInterval) {
+      try {
+        const sponsorship = verifyDisplacementOffline(updatedCandles, 'ETHUSDC');
+        updatedSponsorship = sponsorship as any;
+      } catch (err) {
+        console.warn('[MarketData] Instant displacement solver error:', err);
+      }
+    }
+
+    // Recalculate MTF Telemetry Summary reactively
+    const updatedSummary = mtfEngineRef.current.evaluateAll(updatedPayload, livePrice ?? closedCandle.close);
+    setMtfSummary(updatedSummary);
+
+    setData(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        ipda_metrics: {
+          ...prev.ipda_metrics,
+          institutional_sponsorship: updatedSponsorship,
+          order_flow_engine: {
+            ...prev.ipda_metrics?.order_flow_engine,
+            displacement_sponsorship: updatedSponsorship,
+          }
+        },
+        data_payload: updatedPayload,
+      };
+    });
+  }, [lastClosedEvent, selectedInterval, livePrice]);
+
+  // ── 2. Tick-Speed Stream Synchronization ─────────────────────────────────────
+  // Intermediate open-candle ticks update the active series array smoothly
   useEffect(() => {
     if (!liveCandle || !data || !data.data_payload) return;
 
@@ -932,6 +1018,13 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
       };
     });
   }, [liveCandle, selectedInterval]);
+
+  // ── 3. Initial & Polling MTF Telemetry Evaluation ────────────────────────────
+  useEffect(() => {
+    if (!data || !data.data_payload) return;
+    const summary = mtfEngineRef.current.evaluateAll(data.data_payload, livePrice ?? undefined);
+    setMtfSummary(summary);
+  }, [data?.data_payload, livePrice]);
 
   // Synchronize and update the stabilized structural state
   useEffect(() => {
@@ -1024,7 +1117,7 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
   }, [data, selectedInterval, contextAnchorTimestamp, engineSettings]);
 
   // Hook into live alerts: Triggers Binance WS, performs diffs, fires audio/push alerts
-  const { activeAlerts, clearAlerts, dismissAlert, triggerAlert } = useLiveAlerts(data, fetchData, signalAlertsEnabled, signalAlerts);
+  const { activeAlerts, clearAlerts, dismissAlert, triggerAlert } = useLiveAlerts(data, fetchData, signalAlertsEnabled, signalAlerts, mtfSummary);
 
   // ── V6 Naked — always full, unsliced ─────────────────────────────────────
   const downloadV6 = useCallback(() => {
@@ -1208,7 +1301,8 @@ export function useMarketData(selectedInterval: string = '5m', liveCandle: LiveC
     structureState,
     contextAnchorTimestamp,
     engineSettings,
-    updateEngineSettings
+    updateEngineSettings,
+    mtfSummary,
   };
 }
 

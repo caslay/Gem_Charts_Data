@@ -30,6 +30,7 @@ import HudModal from './modals/HudModal';
 import PotentialTradesModal from './modals/PotentialTradesModal';
 import SelfCorrectionModal from './modals/SelfCorrectionModal';
 import OrderFlowTimelineModal from './modals/OrderFlowTimelineModal';
+import { MTFStatusRadar } from './MTFStatusRadar';
 import { getStateMetadata, formatDuration, getUnifiedTimelineSegments } from './OrderFlowTimelineRibbon';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
 import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
@@ -288,11 +289,13 @@ const Sidebar = memo(function Sidebar({
     aiAnalysis,
     triggerAiAnalysisScan,
     wsInterval,
+    setWsInterval,
     structureState,
     themeSettings,
     isAuto30mScanActive,
     toggleAuto30mScan,
-    next30mScanSeconds
+    next30mScanSeconds,
+    mtfSummary,
   } = useMarketDataContext();
 
   const { livePrice } = useMarketDataLiveContext();
@@ -560,6 +563,13 @@ const Sidebar = memo(function Sidebar({
 
           {/* Scrollable Cards Area */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-card-border scrollbar-track-transparent">
+
+            {/* Multi-Timeframe Status Radar */}
+            <MTFStatusRadar
+              mtfSummary={mtfSummary}
+              activeInterval={wsInterval}
+              onSelectInterval={setWsInterval as any}
+            />
 
             {/* Card 1: Time Killzones */}
             <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">

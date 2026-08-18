@@ -76,7 +76,8 @@ export function useLiveAlerts(
   data: any,
   refetch?: () => Promise<void>,
   signalAlertsEnabled?: SignalAlertsEnabled,
-  signalAlerts?: SignalAlerts
+  signalAlerts?: SignalAlerts,
+  mtfSummary?: any
 ) {
   const [activeAlerts, setActiveAlerts] = useState<SmartAlert[]>([]);
   const prevDataRef = useRef<any>(null);
@@ -90,6 +91,8 @@ export function useLiveAlerts(
   const prevTargetStatusRef = useRef<string | null>(null);
   const prevSponsorshipRef = useRef<string | null>(null);
   const prevTimeWindowRef = useRef<string | null>(null);
+  const prevMtfBreaksRef = useRef<Record<string, string>>({});
+  const prevMtfOlsRef = useRef<Record<string, string>>({});
 
   // Keep refs updated for effects/callbacks
   useEffect(() => {
@@ -257,6 +260,38 @@ export function useLiveAlerts(
       );
     }
     if (timeWindow) prevTimeWindowRef.current = timeWindow;
+
+    // 5. Multi-Timeframe Background Alerts (Cross-Timeframe Monitoring)
+    if (mtfSummary && mtfSummary.timeframes) {
+      ['5m', '15m', '1h'].forEach((tfKey) => {
+        const tfData = mtfSummary.timeframes[tfKey];
+        if (!tfData) return;
+
+        // Background MSS alert
+        if (tfData.structure_break === 'MSS' && prevMtfBreaksRef.current[tfKey] !== 'MSS') {
+          if (checkCooldown(`MTF_MSS_${tfKey}`, 5 * 60 * 1000)) {
+            triggerAlert(
+              'FLOW_STATE',
+              `⚡ [${tfKey.toUpperCase()} MSS DETECTED] Market Structure Shift forming on ${tfKey.toUpperCase()}!`,
+              "/audio/flow_state.wav"
+            );
+          }
+        }
+        prevMtfBreaksRef.current[tfKey] = tfData.structure_break;
+
+        // Background OLS 95% Elite confirmation alert
+        if (tfData.ols_tier === 'CONFIRMED_95' && prevMtfOlsRef.current[tfKey] !== 'CONFIRMED_95') {
+          if (checkCooldown(`MTF_OLS_${tfKey}`, 10 * 60 * 1000)) {
+            triggerAlert(
+              'FLOW_STATE',
+              `🟢 [${tfKey.toUpperCase()} OLS CONFIRMED] Institutional Sponsorship confirmed at 95% on ${tfKey.toUpperCase()}!`,
+              "/audio/flow_state.wav"
+            );
+          }
+        }
+        prevMtfOlsRef.current[tfKey] = tfData.ols_tier;
+      });
+    }
 
     // --- 2. The DEAD_ZONE Mute ---
     // Check if we are in the NY Lunch/Mid-day pause (12:00 PM - 1:30 PM NY Time)
