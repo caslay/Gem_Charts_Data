@@ -11,7 +11,7 @@ export const displacementLayer: ChartLayer = {
     const { seriesMarkers, activeCandles, theme, themeSettings, storage, engineSettings, data } = context;
 
     if (seriesMarkers && activeCandles && activeCandles.length > 0) {
-      const isHighPerf = engineSettings?.highPerformanceMode ?? false;
+      const isHighPerf = engineSettings?.highPerformanceMode !== false;
       const lastClosedT = activeCandles[activeCandles.length - 2]?.t ?? activeCandles[activeCandles.length - 1]?.t;
       const swingsCount = context.structureState?.swings?.length ?? 0;
       const cacheKey = `${lastClosedT}_${activeCandles.length}_${theme}_${engineSettings?.visualizePerfectMovementOnly}_${engineSettings?.pmAtrMultiplier}_${engineSettings?.pmVolumeSmaPeriod}_${swingsCount}_${isHighPerf}`;
@@ -41,10 +41,11 @@ export const displacementLayer: ChartLayer = {
         ? (themeSettings?.dark_chart_volumetric_strong_arrow || '#ff007f')
         : (themeSettings?.light_chart_volumetric_strong_arrow || '#e11d48');
 
-      // Sort and slice data (in High Performance Mode, limit lookback to last 500 candles for max FPS)
+      // Sort and slice data: limit lookback to last 350-500 candles to guarantee 60+ FPS
       let sortedData = [...activeCandles].sort((a, b) => a.t - b.t);
-      if (isHighPerf && sortedData.length > 500) {
-        sortedData = sortedData.slice(sortedData.length - 500);
+      const maxLookback = isHighPerf ? 350 : 500;
+      if (sortedData.length > maxLookback) {
+        sortedData = sortedData.slice(sortedData.length - maxLookback);
       }
 
       const markers = generateVolumetricMarkers(

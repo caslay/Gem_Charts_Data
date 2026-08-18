@@ -76,7 +76,8 @@ export default function OrderBlockOverlay({ context }: OrderBlockOverlayProps) {
 
   if (!liveZones || liveZones.length === 0) {
     const lastCandle = activeCandles[activeCandles.length - 1];
-    const cacheKey = `ob_scan_v3_${lastCandle.t}_${activeCandles.length}`;
+    const scanCandles = activeCandles.length > 250 ? activeCandles.slice(-250) : activeCandles;
+    const cacheKey = `ob_scan_v3_${lastCandle.t}_${scanCandles.length}`;
     let scanResult = storage.get(cacheKey);
 
     if (!scanResult) {
@@ -90,7 +91,7 @@ export default function OrderBlockOverlay({ context }: OrderBlockOverlayProps) {
         maxBreakerRetestBars: 20,
         aggregateConsecutiveCandles: true,
       });
-      scanResult = engine.scanHistoricalOrderBlocks(activeCandles);
+      scanResult = engine.scanHistoricalOrderBlocks(scanCandles);
       storage.set(cacheKey, scanResult);
     }
 

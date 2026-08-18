@@ -144,8 +144,15 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const symbol = url.searchParams.get('symbol') || 'ETHUSDC';
     
-    // Fetch custom candle limit from system_settings or fallback to 1000
-    let limit = 1000;
+    // Calibrated baseline candle lookback limits per timeframe (V16.22 Performance Optimization)
+    const DEFAULT_LIMIT_1M = 350;
+    const DEFAULT_LIMIT_5M = 350;
+    const DEFAULT_LIMIT_15M = 250;
+    const DEFAULT_LIMIT_1H = 120;
+    const DEFAULT_LIMIT_4H = 80;
+
+    // Fetch custom base candle limit from system_settings or fallback to 350
+    let limit = 350;
     try {
       const limitRes = await sql`
         SELECT key_value FROM system_settings WHERE key_name = 'candles_limit' LIMIT 1
@@ -174,39 +181,45 @@ export async function GET(req: Request) {
     const isStandardInterval = ['5m', '15m', '1h', '4h'].includes(visualInterval);
 
     if (isPoll) {
-      // Polling mode: only fetch 5 candles of the active interval
+      // Polling mode: only fetch 5 delta candles of the active interval
       if (visualInterval === '1m') limit1m = 5;
       else if (visualInterval === '5m') limit5m = 5;
       else if (visualInterval === '15m') limit15m = 5;
       else if (visualInterval === '1h') limit1h = 5;
       else if (visualInterval === '4h') limit4h = 5;
     } else if (timeframeGated && !isInit) {
-      // Gated mode: fetch full limit only for active interval
-      const activeLimit = visualInterval === '1m' ? parseInt(url.searchParams.get('limit1m') || String(limit), 10) :
-                          visualInterval === '5m' ? parseInt(url.searchParams.get('limit5m') || String(limit), 10) :
-                          visualInterval === '15m' ? parseInt(url.searchParams.get('limit15m') || String(limit), 10) :
-                          visualInterval === '1h' ? parseInt(url.searchParams.get('limit1h') || String(limit), 10) :
-                          visualInterval === '4h' ? parseInt(url.searchParams.get('limit4h') || String(limit), 10) : limit;
+      // Gated mode: fetch calibrated limit only for active interval
+      const parsed1m = parseInt(url.searchParams.get('limit1m') || String(DEFAULT_LIMIT_1M), 10);
+      const parsed5m = parseInt(url.searchParams.get('limit5m') || String(DEFAULT_LIMIT_5M), 10);
+      const parsed15m = parseInt(url.searchParams.get('limit15m') || String(DEFAULT_LIMIT_15M), 10);
+      const parsed1h = parseInt(url.searchParams.get('limit1h') || String(DEFAULT_LIMIT_1H), 10);
+      const parsed4h = parseInt(url.searchParams.get('limit4h') || String(DEFAULT_LIMIT_4H), 10);
 
-      if (visualInterval === '1m') limit1m = activeLimit;
-      else if (visualInterval === '5m') limit5m = activeLimit;
-      else if (visualInterval === '15m') limit15m = activeLimit;
-      else if (visualInterval === '1h') limit1h = activeLimit;
-      else if (visualInterval === '4h') limit4h = activeLimit;
+      if (visualInterval === '1m') limit1m = !isNaN(parsed1m) && parsed1m > 0 ? parsed1m : DEFAULT_LIMIT_1M;
+      else if (visualInterval === '5m') limit5m = !isNaN(parsed5m) && parsed5m > 0 ? parsed5m : DEFAULT_LIMIT_5M;
+      else if (visualInterval === '15m') limit15m = !isNaN(parsed15m) && parsed15m > 0 ? parsed15m : DEFAULT_LIMIT_15M;
+      else if (visualInterval === '1h') limit1h = !isNaN(parsed1h) && parsed1h > 0 ? parsed1h : DEFAULT_LIMIT_1H;
+      else if (visualInterval === '4h') limit4h = !isNaN(parsed4h) && parsed4h > 0 ? parsed4h : DEFAULT_LIMIT_4H;
     } else {
-      // Full load: fetch all timeframes
-      limit1m = parseInt(url.searchParams.get('limit1m') || String(limit), 10);
-      limit5m = parseInt(url.searchParams.get('limit5m') || String(limit), 10);
-      limit15m = parseInt(url.searchParams.get('limit15m') || String(limit), 10);
-      limit1h = parseInt(url.searchParams.get('limit1h') || String(limit), 10);
-      limit4h = parseInt(url.searchParams.get('limit4h') || String(limit), 10);
+      // Initial bootstrap load (init=true) or full load — right-size each timeframe independently
+      const parsed1m = parseInt(url.searchParams.get('limit1m') || '', 10);
+      const parsed5m = parseInt(url.searchParams.get('limit5m') || '', 10);
+      const parsed15m = parseInt(url.searchParams.get('limit15m') || '', 10);
+      const parsed1h = parseInt(url.searchParams.get('limit1h') || '', 10);
+      const parsed4h = parseInt(url.searchParams.get('limit4h') || '', 10);
+
+      limit1m = !isNaN(parsed1m) && parsed1m > 0 ? parsed1m : DEFAULT_LIMIT_1M;
+      limit5m = !isNaN(parsed5m) && parsed5m > 0 ? parsed5m : DEFAULT_LIMIT_5M;
+      limit15m = !isNaN(parsed15m) && parsed15m > 0 ? parsed15m : DEFAULT_LIMIT_15M;
+      limit1h = !isNaN(parsed1h) && parsed1h > 0 ? parsed1h : DEFAULT_LIMIT_1H;
+      limit4h = !isNaN(parsed4h) && parsed4h > 0 ? parsed4h : DEFAULT_LIMIT_4H;
     }
 
-    if (isNaN(limit1m) || limit1m < 0 || limit1m > 1500) limit1m = limit;
-    if (isNaN(limit5m) || limit5m < 0 || limit5m > 1500) limit5m = limit;
-    if (isNaN(limit15m) || limit15m < 0 || limit15m > 1500) limit15m = limit;
-    if (isNaN(limit1h) || limit1h < 0 || limit1h > 1500) limit1h = limit;
-    if (isNaN(limit4h) || limit4h < 0 || limit4h > 1500) limit4h = limit;
+    if (isNaN(limit1m) || limit1m < 0 || limit1m > 1500) limit1m = DEFAULT_LIMIT_1M;
+    if (isNaN(limit5m) || limit5m < 0 || limit5m > 1500) limit5m = DEFAULT_LIMIT_5M;
+    if (isNaN(limit15m) || limit15m < 0 || limit15m > 1500) limit15m = DEFAULT_LIMIT_15M;
+    if (isNaN(limit1h) || limit1h < 0 || limit1h > 1500) limit1h = DEFAULT_LIMIT_1H;
+    if (isNaN(limit4h) || limit4h < 0 || limit4h > 1500) limit4h = DEFAULT_LIMIT_4H;
 
     const includeBtc = url.searchParams.get('includeBtc') !== 'false';
     const includeStructure = url.searchParams.get('includeStructure') !== 'false';

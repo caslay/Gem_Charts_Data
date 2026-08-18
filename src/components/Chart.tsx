@@ -1127,6 +1127,9 @@ export default function Chart({
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 12,
+        barSpacing: 8,
+        minBarSpacing: 1.5,
         borderColor: 'rgba(74, 68, 87, 0.5)',
         tickMarkFormatter: (time: number) => {
           return new Date(time * 1000).toLocaleTimeString('en-EG', {
@@ -1376,20 +1379,18 @@ export default function Chart({
 
       seriesRef.current.setData(formattedData);
 
-      if (isInitialLoad.current) {
-        if (isBacktest) {
-          // comfortable standard logical range zoom (last 150 candles) for replay parity
-          const totalCount = formattedData.length;
-          if (totalCount > 150) {
-            chartRef.current?.timeScale().setVisibleRange({
-              from: formattedData[totalCount - 150].time,
-              to: formattedData[totalCount - 1].time,
-            });
-          } else {
-            chartRef.current?.timeScale().fitContent();
-          }
+      if (isInitialLoad.current && chartRef.current) {
+        const timeScale = chartRef.current.timeScale();
+        const totalCount = formattedData.length;
+        const visibleCandlesCount = 120; // comfortable standard trading view (last 120 candles)
+
+        if (totalCount > visibleCandlesCount) {
+          timeScale.setVisibleRange({
+            from: formattedData[totalCount - visibleCandlesCount].time,
+            to: formattedData[totalCount - 1].time,
+          });
         } else {
-          chartRef.current?.timeScale().fitContent();
+          timeScale.fitContent();
         }
         isInitialLoad.current = false;
       } else if (prependedCount > 0 && chartRef.current) {

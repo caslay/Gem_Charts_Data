@@ -360,16 +360,16 @@ export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
   mssBodyRatio: 0.70,
   displacementVef: 1.50,
   sharpDepartureMult: 1.50,
-  candlesLimit1m: 1000,
-  candlesLimit5m: 1000,
-  candlesLimit15m: 1000,
-  candlesLimit1h: 1000,
-  candlesLimit4h: 1000,
+  candlesLimit1m: 350,
+  candlesLimit5m: 350,
+  candlesLimit15m: 250,
+  candlesLimit1h: 120,
+  candlesLimit4h: 80,
   includeBtcCorrelation: true,
   includeStructureAnalysis: true,
   includeFvgDetection: true,
   visualizePerfectMovementOnly: false,
-  highPerformanceMode: false,
+  highPerformanceMode: true,
   pmAtrMultiplier: 0.5,
   pmVolumeSmaPeriod: 10,
   pmMinBodyRatio: 0.3,
@@ -665,11 +665,11 @@ export function useMarketData(
               mssBodyRatio: mssBodyRatio ?? 0.70,
               displacementVef: displacementVef ?? 1.50,
               sharpDepartureMult: sharpDepartureMult ?? 1.50,
-              candlesLimit1m: candlesLimit1m ?? 1000,
-              candlesLimit5m: candlesLimit5m ?? 1000,
-              candlesLimit15m: candlesLimit15m ?? 1000,
-              candlesLimit1h: candlesLimit1h ?? 1000,
-              candlesLimit4h: candlesLimit4h ?? 1000,
+              candlesLimit1m: candlesLimit1m ?? 350,
+              candlesLimit5m: candlesLimit5m ?? 350,
+              candlesLimit15m: candlesLimit15m ?? 250,
+              candlesLimit1h: candlesLimit1h ?? 120,
+              candlesLimit4h: candlesLimit4h ?? 80,
               includeBtcCorrelation: includeBtcCorrelation !== false,
               includeStructureAnalysis: includeStructureAnalysis !== false,
               includeFvgDetection: includeFvgDetection !== false,
@@ -800,7 +800,7 @@ export function useMarketData(
       const timeframeGatedParam = '&timeframeGated=true';
       const activeIntervalParam = `&activeInterval=${selectedInterval}`;
       const initParam = !isPolling ? '&init=true' : '';
-      const limitParams = `&limit1m=${engineSettings.candlesLimit1m ?? 1000}&limit5m=${engineSettings.candlesLimit5m ?? 1000}&limit15m=${engineSettings.candlesLimit15m ?? 1000}&limit1h=${engineSettings.candlesLimit1h ?? 1000}&limit4h=${engineSettings.candlesLimit4h ?? 1000}`;
+      const limitParams = `&limit1m=${engineSettings.candlesLimit1m ?? 350}&limit5m=${engineSettings.candlesLimit5m ?? 350}&limit15m=${engineSettings.candlesLimit15m ?? 250}&limit1h=${engineSettings.candlesLimit1h ?? 120}&limit4h=${engineSettings.candlesLimit4h ?? 80}`;
       const featureParams = `&includeBtc=${engineSettings.includeBtcCorrelation !== false}&includeStructure=${engineSettings.includeStructureAnalysis !== false}&includeFvg=${engineSettings.includeFvgDetection !== false}`;
       
       const res = await fetch(`/api/market-data?interval=${selectedInterval}${pollParam}${timeframeGatedParam}${activeIntervalParam}${initParam}${limitParams}${featureParams}`);
@@ -815,21 +815,7 @@ export function useMarketData(
         // Check if the incoming payload is a delta structure
         if ('isDelta' in jsonData && (jsonData as any).isDelta) {
           const delta = jsonData as any as MarketDataDeltaPayload;
-          const activeKey = `candles_${selectedInterval}`;
-          const prevCandles = prev.data_payload?.[activeKey] || [];
-          
-          if (prevCandles.length > 0 && delta.delta_candles && delta.delta_candles.length > 1) {
-            const prevLastClosedT = prevCandles[prevCandles.length - 2]?.t;
-            const deltaLastClosedT = delta.delta_candles[delta.delta_candles.length - 2]?.t;
-            
-            if (prevLastClosedT && deltaLastClosedT && deltaLastClosedT > prevLastClosedT) {
-              console.log('[MarketData] New candle close detected in delta, triggering full structure and OLS recalculation.');
-              // Trigger a full fetch asynchronously using ref
-              setTimeout(() => {
-                fetchDataRef.current?.(false);
-              }, 100);
-            }
-          }
+          // Incrementally merge delta candles into active rolling buffer without triggering full REST reloads
           return mergeDeltaPayload(prev, delta, selectedInterval);
         }
 
