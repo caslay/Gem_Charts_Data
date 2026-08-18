@@ -34,11 +34,21 @@ export class PivotEngine {
         let isPH = true;
         let isPL = true;
 
+        const cHigh = c.high ?? c.h;
+        const cLow = c.low ?? c.l;
+
         for (let j = 1; j <= lb; j++) {
-          if (c.high <= candles[i + j].high || c.high <= candles[i - j].high) {
+          const nextC = candles[i + j];
+          const prevC = candles[i - j];
+          const nextHigh = nextC.high ?? nextC.h;
+          const nextLow = nextC.low ?? nextC.l;
+          const prevHigh = prevC.high ?? prevC.h;
+          const prevLow = prevC.low ?? prevC.l;
+
+          if (cHigh <= nextHigh || cHigh <= prevHigh) {
             isPH = false;
           }
-          if (c.low >= candles[i + j].low || c.low >= candles[i - j].low) {
+          if (cLow >= nextLow || cLow >= prevLow) {
             isPL = false;
           }
           if (!isPH && !isPL) break;
@@ -66,7 +76,7 @@ export class PivotEngine {
           this.pivots.push({
             type: 'SWING_HIGH',
             index: pIdx,
-            price: c.high,
+            price: cHigh,
             confirmed: isConfirmed,
             timestamp: c.t,
             level: lvl.level,
@@ -81,7 +91,7 @@ export class PivotEngine {
           this.pivots.push({
             type: 'SWING_LOW',
             index: pIdx,
-            price: c.low,
+            price: cLow,
             confirmed: isConfirmed,
             timestamp: c.t,
             level: lvl.level,

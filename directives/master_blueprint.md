@@ -1,10 +1,33 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.15
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.16
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-18 (V16.15 — Universal Multi-Timeframe Background Pipeline & Event-Driven Reactivity)  
+> **Last Updated:** 2026-08-18 (V16.16 — Sweep & Reclaim Quantitative Detection & Backtest Suite)  
 
-## 🆕 V16.15 Changelog — Universal Multi-Timeframe Background Pipeline & Event-Driven Reactivity (2026-08-18)
+## 🆕 V16.16 Changelog — Sweep & Reclaim (Failed Signal Reversal) Detection & Backtest Suite (2026-08-18)
+
+### Summary
+Architected and implemented a dedicated **Sweep & Reclaim (Failed Signal Reversal)** quantitative detection and backtest suite inside the Quant Lab workspace, matching the institutional standards of the existing Order Block and Breaker Block pipelines. Built a deterministic 4-phase chronological state engine (`SweepReclaimEngine.ts`), high-throughput Server-Sent Events (SSE) streaming API route (`/api/quant-lab/sweep-reclaim-scanner`), self-healing Neon PostgreSQL scan ledger (`quant_lab_sr_scans`), dedicated Quant Lab workspace UI components (`SweepReclaimWorkspace.tsx` & `SweepReclaimSidebarList.tsx`), comprehensive quantitative telemetry (4-Phase Funnel, Reclaim Rate %, Retest Win Rate %, Realized R:R, Profit Factor, Expected Value, MFE/MAE), interactive 4-phase Setup Inspector Modal, and one-click JSON/CSV dataset export triggers with guaranteed Zero Look-Ahead Parity.
+
+### Key Features & Architectural Directives
+- **Deterministic 4-Phase State Engine (`SweepReclaimEngine.ts`):**
+  - **Phase 1 (Anchor Origin):** Identifies horizontal support/resistance shelves using color-locked swing pivots (`PivotEngine` with Major/Internal/Inner hierarchy).
+  - **Phase 2 (Liquidity Sweep / Failed Signal):** Detects price breaking through the anchor shelf to purge external liquidity (SSL for Bullish setups, BSL for Bearish setups) within a configurable freshness window (`max_bars_anchor_to_sweep`).
+  - **Phase 3 (Displacement Reclaim):** Verifies aggressive reversal with a confirmed candle body close back inside the anchor shelf (MSS / Inversion) within `max_bars_sweep_to_reclaim`, with optional volume expansion gating.
+  - **Phase 4 (Retest & Execution Simulation):** On subsequent closed candles (strictly after reclaim confirmation), detects pullback into the reclaimed shelf with ICT body defense validation, simulating entry at shelf, Stop Loss pinned behind the absolute sweep extreme (plus volatility buffer), and multi-stage scaling (TP1: 1.0R–1.5R, TP2: 2.0R–4.0R / DOL).
+- **Multi-Stage Position Management & Telemetry Suite:**
+  - Multi-stage position scaling with configurable TP1/TP2 ratios (default: 50% / 50%), breakeven ratcheting upon TP1 fill, and continuous MFE (Maximum Favorable Excursion) & MAE (Maximum Adverse Excursion) tracking in both R-multiples and USD.
+  - Computes comprehensive quantitative metrics: Total Anchors, Total Sweeps, Total Reclaims, Total Retests, Sweep Rate %, Reclaim Rate %, Retest Rate %, Retest Win Rate %, Average Realized R:R, Profit Factor, Expected Value $E[R]$, Average MFE/MAE, Stage 1/2 fill distributions, and Bullish vs Bearish breakdown.
+- **High-Throughput Streaming Backend (`/api/quant-lab/sweep-reclaim-scanner` & `/api/quant-lab/sr-scans`):**
+  - Next.js Route Handler supporting real-time Server-Sent Events (SSE) streaming with rate-paced Binance kline fetching and automatic offline simulation generator fallback.
+  - Self-healing PostgreSQL database table `quant_lab_sr_scans` storing scan metadata, telemetry summaries, and complete setup lifecycle payloads.
+- **Quant Lab Workspace UI Integration (`quant-lab/page.tsx`, `SweepReclaimWorkspace.tsx`, `SweepReclaimSidebarList.tsx`):**
+  - Integrated dedicated **SWEEP & RECLAIM SCANNER** navigation tab in Quant Lab.
+  - Interactive parameter controls (Date ranges, Lookback windows, Max bars to reclaim/retest, TP1/TP2 multiples, Trailing BE toggle, ATR buffers).
+  - Real-time SSE streaming progress HUD, 4-Phase conversion funnel cards, filterable setup table (by Direction, Status, Outcome, Search), clickable 4-phase Setup Inspector Modal, and one-click JSON and CSV dataset download triggers.
+- **Zero Look-Ahead Parity & Build Health:**
+  - Historical scanning operates strictly on confirmed candle closes (`isClosed === true`) in forward chronological sequence ($t = 0 \to N$).
+  - Full TypeScript type safety with 0 compiler errors across the workspace.
 
 ### Summary
 Upgraded the market data pipeline to resolve Multi-Timeframe Signal Fragmentation and Stale State Reactivity, eliminating the need for manual page refreshes or interval switching. Implemented a combined Multi-Stream WebSocket listener (`1m`, `5m`, `15m`, `1h`), a Two-Speed Event Pipeline (Tick-Speed vs Candle-Speed), the Universal `MTFTelemetryEngine` calculating real-time structure, 3-bar OLS displacement, order flow regimes, and active order blocks across all timeframes concurrently, the Consolidated `MTFStatusRadar` HUD widget, and an MTF background alert notification bus with debouncing.

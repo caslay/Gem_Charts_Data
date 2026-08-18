@@ -4,4 +4,5 @@ export * from './SMCStateEngine';
 export * from './LiquidityEngine';
 export * from './MarketStructureAPI';
 export * from './OrderBlockEngine';
+export * from './SweepReclaimEngine';
 
