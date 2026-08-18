@@ -491,11 +491,11 @@ function evaluateStrategy(
 
     if (sensitivity === 'STRICT') {
       if (tStat < 1.96 || pVal >= 0.05) {
-        return false; // Vetoed!
+        return false; // Vetoed! (Strict 95% threshold)
       }
     } else if (sensitivity === 'RELAXED') {
-      if (tStat < 1.65 || pVal >= 0.15) {
-        return false; // Vetoed!
+      if (tStat < 1.65 || pVal > 0.10) {
+        return false; // Vetoed! (Standard 90% threshold)
       }
     }
   }
