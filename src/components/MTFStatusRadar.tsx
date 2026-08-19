@@ -11,13 +11,16 @@ interface MTFStatusRadarProps {
   className?: string;
 }
 
-export const MTFStatusRadar: React.FC<MTFStatusRadarProps> = ({
+// Reversible feature pause switch
+export const IS_MTF_RADAR_PAUSED = false;
+
+export const MTFStatusRadar: React.FC<MTFStatusRadarProps> = React.memo(function MTFStatusRadar({
   mtfSummary,
   activeInterval,
   onSelectInterval,
   className = '',
-}) => {
-  if (!mtfSummary || !mtfSummary.timeframes) return null;
+}: MTFStatusRadarProps) {
+  if (IS_MTF_RADAR_PAUSED || !mtfSummary || !mtfSummary.timeframes) return null;
 
   const { timeframes, htf_directional_bias, htf_alignment, top_down_confluence_pct, active_macro_dol } = mtfSummary;
   const coreTfs: Array<'5m' | '15m' | '1h'> = ['5m', '15m', '1h'];
@@ -174,4 +177,4 @@ export const MTFStatusRadar: React.FC<MTFStatusRadarProps> = ({
       )}
     </div>
   );
-};
+});

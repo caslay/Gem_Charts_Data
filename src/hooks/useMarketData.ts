@@ -487,6 +487,9 @@ export function useMarketData(
   const [mtfSummary, setMtfSummary] = useState<MTFTelemetrySummary | null>(null);
   const mtfEngineRef = useRef<MTFTelemetryEngine>(new MTFTelemetryEngine('ETHUSDC'));
 
+  // Reversible feature pause switch for MTF Radar Telemetry calculations
+  const ENABLE_MTF_RADAR_TELEMETRY = true;
+
   const [contextAnchorTimestamp, setContextAnchorTimestamp] = useState<number | null>(null);
   const [structureState, setStructureState] = useState<MarketStructureAnalysis | null>(null);
 
@@ -928,9 +931,11 @@ export function useMarketData(
       }
     }
 
-    // Recalculate MTF Telemetry Summary reactively
-    const updatedSummary = mtfEngineRef.current.evaluateAll(updatedPayload, livePrice ?? closedCandle.close);
-    setMtfSummary(updatedSummary);
+    // Recalculate MTF Telemetry Summary reactively (Paused if ENABLE_MTF_RADAR_TELEMETRY is false)
+    if (ENABLE_MTF_RADAR_TELEMETRY) {
+      const updatedSummary = mtfEngineRef.current.evaluateAll(updatedPayload, closedCandle.close);
+      setMtfSummary(updatedSummary);
+    }
 
     setData(prev => {
       if (!prev) return prev;
@@ -947,7 +952,7 @@ export function useMarketData(
         data_payload: updatedPayload,
       };
     });
-  }, [lastClosedEvent, selectedInterval, livePrice]);
+  }, [lastClosedEvent, selectedInterval]);
 
   // ── 2. Tick-Speed Stream Synchronization ─────────────────────────────────────
   // Intermediate open-candle ticks update the active series array smoothly
@@ -1005,12 +1010,22 @@ export function useMarketData(
     });
   }, [liveCandle, selectedInterval]);
 
-  // ── 3. Initial & Polling MTF Telemetry Evaluation ────────────────────────────
+  // ── 3. Initial & Polling MTF Telemetry Evaluation (Closed-Candle Gated) ──────
+  const lastMtfEvaluatedClosedRef = useRef<number | null>(null);
   useEffect(() => {
+    if (!ENABLE_MTF_RADAR_TELEMETRY) return;
     if (!data || !data.data_payload) return;
-    const summary = mtfEngineRef.current.evaluateAll(data.data_payload, livePrice ?? undefined);
-    setMtfSummary(summary);
-  }, [data?.data_payload, livePrice]);
+    const candles5m = data.data_payload.candles_5m || [];
+    const lastClosedT = candles5m.length >= 2 ? candles5m[candles5m.length - 2]?.t : (candles5m[0]?.t ?? null);
+    
+    // Evaluate on initial load or when closed candle boundary shifts via polling
+    if (lastMtfEvaluatedClosedRef.current !== lastClosedT) {
+      lastMtfEvaluatedClosedRef.current = lastClosedT;
+      const lastClosePrice = candles5m.length > 0 ? candles5m[candles5m.length - 1].c : undefined;
+      const summary = mtfEngineRef.current.evaluateAll(data.data_payload, lastClosePrice);
+      setMtfSummary(summary);
+    }
+  }, [data?.data_payload]);
 
   // Synchronize and update the stabilized structural state
   useEffect(() => {
@@ -1209,7 +1224,8 @@ export function useMarketData(
 
   // ── 30-Minute Automated Analysis Scan Scheduler ────────────────────────────
   const [isAuto30mScanActive, setIsAuto30mScanActive] = useState<boolean>(true);
-  const [next30mScanSeconds, setNext30mScanSeconds] = useState<number>(1800); // 30 minutes = 1800s
+  const [nextScanTimestamp, setNextScanTimestamp] = useState<number>(() => Date.now() + 1800 * 1000);
+  const nextScanTimestampRef = useRef<number>(Date.now() + 1800 * 1000);
 
   // Sync with localStorage on client mount (avoids SSR hydration mismatch)
   useEffect(() => {
@@ -1234,24 +1250,21 @@ export function useMarketData(
   }, []);
 
   const triggerAiAnalysisScan = useCallback(async (alertMetadata?: unknown) => {
-    setNext30mScanSeconds(1800); // Reset timer on manual or auto trigger
+    const nextTime = Date.now() + 1800 * 1000;
+    nextScanTimestampRef.current = nextTime;
+    setNextScanTimestamp(nextTime);
     return triggerScan(data, alertMetadata);
   }, [data, triggerScan]);
 
-  // 30-minute periodic countdown effect
+  // 30-minute periodic scan check (silent 5s polling check, zero React re-render churn)
   useEffect(() => {
     if (!isAuto30mScanActive) return;
 
     const timer = setInterval(() => {
-      setNext30mScanSeconds((prev) => {
-        if (prev <= 1) {
-          // Trigger scan and reset countdown
-          triggerAiAnalysisScan();
-          return 1800;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+      if (Date.now() >= nextScanTimestampRef.current) {
+        triggerAiAnalysisScan();
+      }
+    }, 5000);
 
     return () => clearInterval(timer);
   }, [isAuto30mScanActive, triggerAiAnalysisScan]);
@@ -1274,7 +1287,7 @@ export function useMarketData(
     triggerAiAnalysisScan,
     isAuto30mScanActive,
     toggleAuto30mScan,
-    next30mScanSeconds,
+    nextScanTimestamp,
     signalAlerts,
     updateSignalAlert,
     signalAlertsEnabled,

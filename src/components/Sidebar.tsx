@@ -258,6 +258,318 @@ function calculateValueArea(candles: Array<{ c?: number; h?: number; l?: number;
   return { vah, val, poc };
 }
 
+// ─── Auto-Scan Countdown Leaf Component ──────────────────────────────────────
+const AutoScanCountdown = memo(function AutoScanCountdown({
+  nextScanTimestamp,
+  isAutoScanActive,
+  onToggle
+}: {
+  nextScanTimestamp: number;
+  isAutoScanActive: boolean;
+  onToggle: () => void;
+}) {
+  const [remainingSec, setRemainingSec] = useState<number>(() => {
+    return Math.max(0, Math.floor((nextScanTimestamp - Date.now()) / 1000));
+  });
+
+  useEffect(() => {
+    if (!isAutoScanActive) return;
+    const timer = setInterval(() => {
+      const sec = Math.max(0, Math.floor((nextScanTimestamp - Date.now()) / 1000));
+      setRemainingSec(sec);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isAutoScanActive, nextScanTimestamp]);
+
+  const mins = Math.floor(remainingSec / 60);
+  const secs = (remainingSec % 60).toString().padStart(2, '0');
+
+  return (
+    <div suppressHydrationWarning className="flex items-center justify-between px-2 py-1 bg-background/50 border border-card-border rounded-lg text-[10px] font-mono">
+      <div suppressHydrationWarning className="flex items-center gap-1.5">
+        <Clock size={11} className={isAutoScanActive ? "text-accent animate-pulse" : "text-muted"} />
+        <span className="text-muted font-bold">30m Auto-Scan:</span>
+        <span suppressHydrationWarning className="text-foreground font-extrabold">
+          {isAutoScanActive ? `${mins}:${secs}` : 'OFF'}
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={onToggle}
+        suppressHydrationWarning
+        className={`px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider border transition-colors ${
+          isAutoScanActive
+            ? 'bg-accent/20 border-accent text-accent'
+            : 'bg-card border-card-border text-muted hover:text-foreground'
+        }`}
+      >
+        {isAutoScanActive ? 'ENABLED' : 'PAUSED'}
+      </button>
+    </div>
+  );
+});
+
+// ─── AMT Value Area Card Leaf Component ──────────────────────────────────────
+const ValueAreaCard = memo(function ValueAreaCard({
+  vah,
+  val,
+  poc,
+  formatPrice,
+  isOpen,
+  onToggle
+}: {
+  vah?: number | null;
+  val?: number | null;
+  poc?: number | null;
+  formatPrice: (p: any) => string;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  const { livePrice } = useMarketDataLiveContext();
+
+  let auctionState = '⚪ VALUE ACCEPTANCE (HVN)';
+  let auctionColor = 'text-amber-400 bg-amber-500/10 border-amber-500/30';
+  if (livePrice && val && livePrice <= val) {
+    auctionState = '🟢 DISCOUNT AUCTION (< VAL)';
+    auctionColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
+  } else if (livePrice && vah && livePrice >= vah) {
+    auctionState = '🔴 PREMIUM AUCTION (> VAH)';
+    auctionColor = 'text-rose-400 bg-rose-500/10 border-rose-500/30';
+  }
+
+  return (
+    <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
+      <div
+        onClick={onToggle}
+        className="flex items-center justify-between cursor-pointer select-none group-hover:text-accent transition-colors"
+      >
+        <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
+          <Layers size={12} className="text-accent" />
+          <span>AMT Value Area</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase ${auctionColor}`}>
+            {auctionState.split(' ')[0]}
+          </span>
+          <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
+            {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="space-y-2.5 animate-[fade-in_0.15s_ease-out]">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-background/40 p-2 border border-card-border rounded-lg text-center">
+              <span className="text-[8px] text-muted block uppercase font-bold">VAH (70%)</span>
+              <span className="text-xs font-mono font-bold text-rose-400">{formatPrice(vah)}</span>
+            </div>
+            <div className="bg-background/40 p-2 border border-card-border rounded-lg text-center">
+              <span className="text-[8px] text-muted block uppercase font-bold">POC (HVN)</span>
+              <span className="text-xs font-mono font-bold text-accent">{formatPrice(poc)}</span>
+            </div>
+            <div className="bg-background/40 p-2 border border-card-border rounded-lg text-center">
+              <span className="text-[8px] text-muted block uppercase font-bold">VAL (70%)</span>
+              <span className="text-xs font-mono font-bold text-emerald-400">{formatPrice(val)}</span>
+            </div>
+          </div>
+          <div className={`p-2 rounded-lg border text-center text-[10px] font-black uppercase tracking-wider ${auctionColor}`}>
+            {auctionState}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ─── Order Flow Pulse Card Leaf Component ──────────────────────────────────
+const OrderFlowPulseCard = memo(function OrderFlowPulseCard({
+  orderFlow,
+  metrics,
+  isOpen,
+  onToggle,
+  onOpenModal
+}: {
+  orderFlow: any;
+  metrics: any;
+  isOpen: boolean;
+  onToggle: () => void;
+  onOpenModal: () => void;
+}) {
+  const { livePrice } = useMarketDataLiveContext();
+  const activeSt = orderFlow?.state_timeline?.active_state;
+  const [liveOfDurationSec, setLiveOfDurationSec] = useState<number>(0);
+
+  useEffect(() => {
+    if (!activeSt?.entered_at) {
+      setLiveOfDurationSec(0);
+      return;
+    }
+    const update = () => {
+      const diff = Math.max(0, Math.round((Date.now() - activeSt.entered_at) / 1000));
+      setLiveOfDurationSec(diff);
+    };
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [activeSt?.entered_at]);
+
+  const meta = activeSt ? getStateMetadata(activeSt.state) : getStateMetadata(orderFlow?.open_interest_trend || 'NEUTRAL');
+  const { segments, totalTransitions } = getUnifiedTimelineSegments(orderFlow?.state_timeline, livePrice, liveOfDurationSec, 10);
+  const totalDur = segments.reduce((acc, s) => acc + Math.max(15, s.duration_seconds || 60), 0);
+
+  return (
+    <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
+      <div
+        onClick={onToggle}
+        className="flex items-center justify-between cursor-pointer select-none group-hover:text-accent transition-colors"
+      >
+        <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
+          <BarChart3 size={12} className="text-accent" />
+          <span>Order Flow Pulse & State</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenModal();
+            }}
+            className="p-1 rounded-md text-muted hover:text-accent hover:bg-card border border-transparent hover:border-card-border transition-all cursor-pointer"
+            title="Open Order Flow State Timeline"
+          >
+            <Activity size={12} />
+          </button>
+          <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
+            {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+        </div>
+      </div>
+
+      {isOpen && (
+        <div className="space-y-3 animate-[fade-in_0.15s_ease-out]">
+          {/* Active State Machine Regime */}
+          <div className={`p-2.5 rounded-lg border ${meta.colorBorder} ${meta.colorBgMuted} space-y-1`}>
+            <div className="flex justify-between items-center text-[10px]">
+              <span className="text-muted uppercase font-bold">OI State Machine:</span>
+              <span className={`font-black uppercase tracking-wider ${meta.colorText}`}>
+                {meta.label}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-[9px] text-muted-foreground">
+              <span>{meta.description}</span>
+              {activeSt && (
+                <span className="font-mono font-bold text-foreground">
+                  {formatDuration(liveOfDurationSec || activeSt.duration_seconds)}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Mini Timeline Ribbon Preview */}
+          {segments.length > 0 && (
+            <div className="space-y-1">
+              <div className="flex justify-between items-center text-[9px] text-muted font-bold uppercase">
+                <span>Recent Transitions:</span>
+                <span className="text-foreground font-bold">{totalTransitions} logged</span>
+              </div>
+              <div className="w-full h-2.5 rounded-sm overflow-hidden flex gap-[1px] bg-background/60 p-0.5 border border-card-border/60 shadow-inner">
+                {segments.map((seg: any, idx: number) => {
+                  const segMeta = getStateMetadata(seg.state);
+                  const isLatest = idx === segments.length - 1;
+                  const dur = Math.max(15, seg.duration_seconds || 60);
+                  const flexPct = totalDur > 0 ? (dur / totalDur) * 100 : 100 / segments.length;
+
+                  return (
+                    <div
+                      key={`sidebar-mini-seg-${seg.id || seg.entered_at}-${idx}`}
+                      style={{ flex: `max(1, ${flexPct})` }}
+                      className={`h-full rounded-[1px] transition-all ${segMeta.colorBg} ${
+                        isLatest ? 'animate-pulse ring-1 ring-white/60 opacity-100' : 'opacity-80 hover:opacity-100'
+                      }`}
+                      title={`${segMeta.label} (${formatDuration(seg.duration_seconds)})`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-between items-center">
+            <span className="text-[11px] lg:text-xs text-muted font-bold">Displacement</span>
+            <span className={`text-[11px] lg:text-xs font-black uppercase tracking-wider ${metrics?.institutional_sponsorship?.status?.includes('BULLISH') ? 'text-emerald-500' :
+              metrics?.institutional_sponsorship?.status?.includes('BEARISH') ? 'text-rose-500' :
+                metrics?.institutional_sponsorship?.status === 'CONSOLIDATION' ? 'text-accent' : 'text-muted'
+              }`}>
+              {metrics?.institutional_sponsorship?.status || 'INACTIVE'}
+            </span>
+          </div>
+
+          {/* Open Timeline Modal Button */}
+          <button
+            type="button"
+            onClick={onOpenModal}
+            className="w-full py-1.5 px-2.5 rounded-lg bg-card hover:bg-accent/15 border border-card-border hover:border-accent text-muted hover:text-accent font-mono text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+          >
+            <Activity size={11} />
+            <span>[ VIEW TIMELINE & STATS ]</span>
+          </button>
+
+          {metrics?.institutional_sponsorship?.statistical_validation && (() => {
+            const statVal = metrics.institutional_sponsorship.statistical_validation;
+            const tStat = Math.abs(statVal.t_statistic || 0);
+            const pVal = statVal.p_value ?? 1.0;
+            const isConsolidation = metrics.institutional_sponsorship.status === 'CONSOLIDATION';
+
+            let tierLabel = statVal.confidence_tier_label || 'REJECTED';
+            let tierColor = 'text-rose-500';
+
+            if (isConsolidation) {
+              tierLabel = 'CONSOLIDATION';
+              tierColor = 'text-accent';
+            } else if (statVal.confidence_tier === 'CONFIRMED_95' || (tStat >= 1.96 && pVal < 0.05)) {
+              tierLabel = 'CONFIRMED (95%)';
+              tierColor = 'text-emerald-400';
+            } else if (statVal.confidence_tier === 'MODERATE_90' || (tStat >= 1.65 && pVal <= 0.10)) {
+              tierLabel = 'MODERATE (90%)';
+              tierColor = 'text-amber-400';
+            } else if (statVal.confidence_tier === 'BORDERLINE_85' || (tStat >= 1.44 && pVal <= 0.15)) {
+              tierLabel = 'BORDERLINE (85%)';
+              tierColor = 'text-sky-400';
+            } else {
+              tierLabel = 'REJECTED';
+              tierColor = 'text-rose-500';
+            }
+
+            return (
+              <div className="bg-background/40 p-2 border border-card-border rounded-lg space-y-1">
+                <div className="flex justify-between text-[10px] items-center">
+                  <span className="text-muted">t-STAT</span>
+                  <span className="font-mono font-bold text-foreground">
+                    {statVal.t_statistic?.toFixed(4) ?? '0.0000'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-[10px] items-center">
+                  <span className="text-muted">p-VALUE</span>
+                  <span className="font-mono font-bold text-foreground">
+                    {statVal.p_value?.toFixed(4) ?? '1.0000'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-[10px] items-center">
+                  <span className="text-muted">OLS CONFIDENCE</span>
+                  <span className={`font-mono font-bold ${tierColor}`}>
+                    {tierLabel}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+});
+
 // ─── Props ───────────────────────────────────────────────────────────────────
 interface SidebarProps {
   data: MarketDataPayload | null;
@@ -294,11 +606,9 @@ const Sidebar = memo(function Sidebar({
     themeSettings,
     isAuto30mScanActive,
     toggleAuto30mScan,
-    next30mScanSeconds,
+    nextScanTimestamp,
     mtfSummary,
   } = useMarketDataContext();
-
-  const { livePrice } = useMarketDataLiveContext();
 
   const [isJsonDrawerOpen, setIsJsonDrawerOpen] = useState(false);
   const [isHudModalOpen, setIsHudModalOpen] = useState(false);
@@ -330,24 +640,6 @@ const Sidebar = memo(function Sidebar({
   // ── AMT Value Area Calculation ──
   const candles15m = data?.data_payload?.candles_15m || [];
   const { vah, val, poc } = useMemo(() => calculateValueArea(candles15m), [candles15m]);
-
-  // ── Live Order Flow Active State Duration Ticker ──
-  const [liveOfDurationSec, setLiveOfDurationSec] = useState<number>(0);
-  const activeOfState = data?.ipda_metrics?.order_flow_engine?.state_timeline?.active_state;
-
-  useEffect(() => {
-    if (!activeOfState?.entered_at) {
-      setLiveOfDurationSec(0);
-      return;
-    }
-    const update = () => {
-      const diff = Math.max(0, Math.round((Date.now() - activeOfState.entered_at) / 1000));
-      setLiveOfDurationSec(diff);
-    };
-    update();
-    const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
-  }, [activeOfState?.entered_at]);
 
   // ── Parse AI analysis response ──
   let parsedAiResponse: any = null;
@@ -471,17 +763,6 @@ const Sidebar = memo(function Sidebar({
     htfVetoColor = 'text-rose-500 bg-rose-500/10 border-rose-500/30';
   }
 
-  // Value Area State
-  let auctionState = '⚪ VALUE ACCEPTANCE (HVN)';
-  let auctionColor = 'text-amber-400 bg-amber-500/10 border-amber-500/30';
-  if (livePrice && val && livePrice <= val) {
-    auctionState = '🟢 DISCOUNT AUCTION (< VAL)';
-    auctionColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-  } else if (livePrice && vah && livePrice >= vah) {
-    auctionState = '🔴 PREMIUM AUCTION (> VAH)';
-    auctionColor = 'text-rose-400 bg-rose-500/10 border-rose-500/30';
-  }
-
   return (
     <>
       {/* Mobile overlay backdrop */}
@@ -497,7 +778,7 @@ const Sidebar = memo(function Sidebar({
           onClick={onToggleCollapse}
           className={`
             hidden lg:flex fixed top-1/2 -translate-y-1/2 z-30
-            bg-card/90 backdrop-blur-md border border-card-border hover:border-accent text-muted hover:text-accent
+            bg-card/95 border border-card-border hover:border-accent text-muted hover:text-accent
             w-5 h-14 rounded-l-xl shadow-[0_0_20px_rgba(0,0,0,0.5)] transition-all duration-300 cursor-pointer
             items-center justify-center group select-none
             ${isCollapsed ? 'right-0 border-r-0 shadow-[0_0_15px_rgba(168,85,247,0.25)]' : 'right-80 border-r-0'}
@@ -516,7 +797,7 @@ const Sidebar = memo(function Sidebar({
       <aside
         className={`
           fixed top-0 right-0 z-20 h-full w-80 max-w-[90vw]
-          bg-card/90 border-l border-card-border flex flex-col lg:relative shadow-2xl backdrop-blur-md
+          bg-card/95 border-l border-card-border flex flex-col lg:relative shadow-2xl
           transition-all duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : 'translate-x-full'}
           lg:static lg:translate-x-0 lg:flex lg:shrink-0
@@ -612,47 +893,14 @@ const Sidebar = memo(function Sidebar({
             </div>
 
             {/* Card 2: AMT Value Area Matrix (NEW Institutional Synthesis Widget) */}
-            <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
-              <div
-                onClick={() => toggleCard('valueArea')}
-                className="flex items-center justify-between cursor-pointer select-none group-hover:text-accent transition-colors"
-              >
-                <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
-                  <Layers size={12} className="text-accent" />
-                  <span>AMT Value Area</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase ${auctionColor}`}>
-                    {auctionState.split(' ')[0]}
-                  </span>
-                  <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
-                    {cardOpenState.valueArea ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  </button>
-                </div>
-              </div>
-
-              {cardOpenState.valueArea && (
-                <div className="space-y-2.5 animate-[fade-in_0.15s_ease-out]">
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="bg-background/40 p-2 border border-card-border rounded-lg text-center">
-                      <span className="text-[8px] text-muted block uppercase font-bold">VAH (70%)</span>
-                      <span className="text-xs font-mono font-bold text-rose-400">{formatPrice(vah)}</span>
-                    </div>
-                    <div className="bg-background/40 p-2 border border-card-border rounded-lg text-center">
-                      <span className="text-[8px] text-muted block uppercase font-bold">POC (HVN)</span>
-                      <span className="text-xs font-mono font-bold text-accent">{formatPrice(poc)}</span>
-                    </div>
-                    <div className="bg-background/40 p-2 border border-card-border rounded-lg text-center">
-                      <span className="text-[8px] text-muted block uppercase font-bold">VAL (70%)</span>
-                      <span className="text-xs font-mono font-bold text-emerald-400">{formatPrice(val)}</span>
-                    </div>
-                  </div>
-                  <div className={`p-2 rounded-lg border text-center text-[10px] font-black uppercase tracking-wider ${auctionColor}`}>
-                    {auctionState}
-                  </div>
-                </div>
-              )}
-            </div>
+            <ValueAreaCard
+              vah={vah}
+              val={val}
+              poc={poc}
+              formatPrice={formatPrice}
+              isOpen={cardOpenState.valueArea}
+              onToggle={() => toggleCard('valueArea')}
+            />
 
             {/* Card 3: Market Structure Matrix */}
             <div className="glass-panel p-4 space-y-3.5 relative overflow-hidden group">
@@ -897,165 +1145,13 @@ const Sidebar = memo(function Sidebar({
             </div>
 
             {/* Card 6: Order Flow Pulse & State Tracker */}
-            <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
-              <div
-                onClick={() => toggleCard('orderFlow')}
-                className="flex items-center justify-between cursor-pointer select-none group-hover:text-accent transition-colors"
-              >
-                <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] lg:text-xs tracking-widest group-hover:text-accent">
-                  <BarChart3 size={12} className="text-accent" />
-                  <span>Order Flow Pulse & State</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsOrderFlowModalOpen(true);
-                    }}
-                    className="p-1 rounded-md text-muted hover:text-accent hover:bg-card border border-transparent hover:border-card-border transition-all cursor-pointer"
-                    title="Open Order Flow State Timeline"
-                  >
-                    <Activity size={12} />
-                  </button>
-                  <button type="button" className="text-muted hover:text-foreground transition-colors p-0.5">
-                    {cardOpenState.orderFlow ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  </button>
-                </div>
-              </div>
-
-              {cardOpenState.orderFlow && (
-                <div className="space-y-3 animate-[fade-in_0.15s_ease-out]">
-                  {/* Active State Machine Regime */}
-                  {(() => {
-                    const activeSt = orderFlow?.state_timeline?.active_state;
-                    const meta = activeSt ? getStateMetadata(activeSt.state) : getStateMetadata(orderFlow?.open_interest_trend || 'NEUTRAL');
-                    const { segments, totalTransitions } = getUnifiedTimelineSegments(orderFlow?.state_timeline, livePrice, liveOfDurationSec, 10);
-                    const totalDur = segments.reduce((acc, s) => acc + Math.max(15, s.duration_seconds || 60), 0);
-
-                    return (
-                      <>
-                        <div className={`p-2.5 rounded-lg border ${meta.colorBorder} ${meta.colorBgMuted} space-y-1`}>
-                          <div className="flex justify-between items-center text-[10px]">
-                            <span className="text-muted uppercase font-bold">OI State Machine:</span>
-                            <span className={`font-black uppercase tracking-wider ${meta.colorText}`}>
-                              {meta.label}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center text-[9px] text-muted-foreground">
-                            <span>{meta.description}</span>
-                            {activeSt && (
-                              <span className="font-mono font-bold text-foreground">
-                                {formatDuration(liveOfDurationSec || activeSt.duration_seconds)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Mini Timeline Ribbon Preview */}
-                        {segments.length > 0 && (
-                          <div className="space-y-1">
-                            <div className="flex justify-between items-center text-[9px] text-muted font-bold uppercase">
-                              <span>Recent Transitions:</span>
-                              <span className="text-foreground font-bold">{totalTransitions} logged</span>
-                            </div>
-                            <div className="w-full h-2.5 rounded-sm overflow-hidden flex gap-[1px] bg-background/60 p-0.5 border border-card-border/60 shadow-inner">
-                              {segments.map((seg: any, idx: number) => {
-                                const segMeta = getStateMetadata(seg.state);
-                                const isLatest = idx === segments.length - 1;
-                                const dur = Math.max(15, seg.duration_seconds || 60);
-                                const flexPct = totalDur > 0 ? (dur / totalDur) * 100 : 100 / segments.length;
-
-                                return (
-                                  <div
-                                    key={`sidebar-mini-seg-${seg.id || seg.entered_at}-${idx}`}
-                                    style={{ flex: `max(1, ${flexPct})` }}
-                                    className={`h-full rounded-[1px] transition-all ${segMeta.colorBg} ${
-                                      isLatest ? 'animate-pulse ring-1 ring-white/60 opacity-100' : 'opacity-80 hover:opacity-100'
-                                    }`}
-                                    title={`${segMeta.label} (${formatDuration(seg.duration_seconds)})`}
-                                  />
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-
-                  <div className="flex justify-between items-center">
-                    <span className="text-[11px] lg:text-xs text-muted font-bold">Displacement</span>
-                    <span className={`text-[11px] lg:text-xs font-black uppercase tracking-wider ${metrics?.institutional_sponsorship?.status?.includes('BULLISH') ? 'text-emerald-500' :
-                      metrics?.institutional_sponsorship?.status?.includes('BEARISH') ? 'text-rose-500' :
-                        metrics?.institutional_sponsorship?.status === 'CONSOLIDATION' ? 'text-accent' : 'text-muted'
-                      }`}>
-                      {metrics?.institutional_sponsorship?.status || 'INACTIVE'}
-                    </span>
-                  </div>
-
-                  {/* Open Timeline Modal Button */}
-                  <button
-                    type="button"
-                    onClick={() => setIsOrderFlowModalOpen(true)}
-                    className="w-full py-1.5 px-2.5 rounded-lg bg-card hover:bg-accent/15 border border-card-border hover:border-accent text-muted hover:text-accent font-mono text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
-                  >
-                    <Activity size={11} />
-                    <span>[ VIEW TIMELINE & STATS ]</span>
-                  </button>
-
-                  {metrics?.institutional_sponsorship?.statistical_validation && (() => {
-                    const statVal = metrics.institutional_sponsorship.statistical_validation;
-                    const tStat = Math.abs(statVal.t_statistic || 0);
-                    const pVal = statVal.p_value ?? 1.0;
-                    const isConsolidation = metrics.institutional_sponsorship.status === 'CONSOLIDATION';
-
-                    let tierLabel = statVal.confidence_tier_label || 'REJECTED';
-                    let tierColor = 'text-rose-500';
-
-                    if (isConsolidation) {
-                      tierLabel = 'CONSOLIDATION';
-                      tierColor = 'text-accent';
-                    } else if (statVal.confidence_tier === 'CONFIRMED_95' || (tStat >= 1.96 && pVal < 0.05)) {
-                      tierLabel = 'CONFIRMED (95%)';
-                      tierColor = 'text-emerald-400';
-                    } else if (statVal.confidence_tier === 'MODERATE_90' || (tStat >= 1.65 && pVal <= 0.10)) {
-                      tierLabel = 'MODERATE (90%)';
-                      tierColor = 'text-amber-400';
-                    } else if (statVal.confidence_tier === 'BORDERLINE_85' || (tStat >= 1.44 && pVal <= 0.15)) {
-                      tierLabel = 'BORDERLINE (85%)';
-                      tierColor = 'text-sky-400';
-                    } else {
-                      tierLabel = 'REJECTED';
-                      tierColor = 'text-rose-500';
-                    }
-
-                    return (
-                      <div className="bg-background/40 p-2 border border-card-border rounded-lg space-y-1">
-                        <div className="flex justify-between text-[10px] items-center">
-                          <span className="text-muted">t-STAT</span>
-                          <span className="font-mono font-bold text-foreground">
-                            {statVal.t_statistic?.toFixed(4) ?? '0.0000'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-[10px] items-center">
-                          <span className="text-muted">p-VALUE</span>
-                          <span className="font-mono font-bold text-foreground">
-                            {statVal.p_value?.toFixed(4) ?? '0.0000'}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-[10px] items-center">
-                          <span className="text-muted">OLS CONFIDENCE</span>
-                          <span className={`font-black uppercase text-[9px] tracking-wider ${tierColor}`}>
-                            {tierLabel}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
+            <OrderFlowPulseCard
+              orderFlow={orderFlow}
+              metrics={metrics}
+              isOpen={cardOpenState.orderFlow}
+              onToggle={() => toggleCard('orderFlow')}
+              onOpenModal={() => setIsOrderFlowModalOpen(true)}
+            />
 
             {/* Card 7: Resting Liquidity Pools */}
             <RestingMagnetsCard orderFlow={orderFlow} />
@@ -1216,29 +1312,11 @@ const Sidebar = memo(function Sidebar({
 
                   <div className="p-3 bg-card/45 border-t border-card-border shrink-0 flex flex-col gap-2">
                     {/* 30m Auto-Scan Toggle & Countdown */}
-                    <div suppressHydrationWarning className="flex items-center justify-between px-2 py-1 bg-background/50 border border-card-border rounded-lg text-[10px] font-mono">
-                      <div suppressHydrationWarning className="flex items-center gap-1.5">
-                        <Clock size={11} className={isAuto30mScanActive ? "text-accent animate-pulse" : "text-muted"} />
-                        <span className="text-muted font-bold">30m Auto-Scan:</span>
-                        <span suppressHydrationWarning className="text-foreground font-extrabold">
-                          {isAuto30mScanActive
-                            ? `${Math.floor((next30mScanSeconds ?? 1800) / 60)}:${((next30mScanSeconds ?? 1800) % 60).toString().padStart(2, '0')}`
-                            : 'OFF'}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={toggleAuto30mScan}
-                        suppressHydrationWarning
-                        className={`px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider border transition-colors ${
-                          isAuto30mScanActive
-                            ? 'bg-accent/20 border-accent text-accent'
-                            : 'bg-card border-card-border text-muted hover:text-foreground'
-                        }`}
-                      >
-                        {isAuto30mScanActive ? 'ENABLED' : 'PAUSED'}
-                      </button>
-                    </div>
+                    <AutoScanCountdown
+                      nextScanTimestamp={nextScanTimestamp}
+                      isAutoScanActive={isAuto30mScanActive}
+                      onToggle={toggleAuto30mScan}
+                    />
 
                     <button
                       onClick={handleLiveSynthesis}
@@ -1316,7 +1394,7 @@ const Sidebar = memo(function Sidebar({
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
 
               {/* Lookback filters */}
-              <div className="bg-background/40 rounded-xl p-4 border border-card-border backdrop-blur-md">
+              <div className="bg-background/60 rounded-xl p-4 border border-card-border">
                 <span className="text-[9px] font-black text-accent uppercase tracking-widest block mb-2">Lookback Configurations</span>
                 <div className="grid grid-cols-2 gap-2">
                   {(['5m', '15m', '1h', '4h'] as const).map((tf) => (
@@ -1405,7 +1483,6 @@ const Sidebar = memo(function Sidebar({
         isOpen={isOrderFlowModalOpen}
         onClose={() => setIsOrderFlowModalOpen(false)}
         timeline={orderFlow?.state_timeline}
-        livePrice={livePrice}
         symbol="ETHUSDC.p"
       />
     </>

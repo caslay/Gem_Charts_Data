@@ -86,7 +86,7 @@ export function NavigationHeader() {
 
   return (
     <>
-      <header className="bg-card/75 border-b border-card-border sticky top-0 z-50 shadow-md backdrop-blur-md transition-colors duration-300">
+      <header className="bg-card/95 border-b border-card-border sticky top-0 z-50 shadow-md transition-colors duration-300">
         <div className="w-full px-4 md:px-8 h-14 flex items-center justify-between">
 
           {/* LEFT SECTION (Logo & Version Badge) */}

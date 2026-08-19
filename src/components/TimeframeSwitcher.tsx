@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 
-export type Timeframe = '1m' | '5m' | '15m' | '30m' | '1h' | '4h';
+export type Timeframe = '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '4h';
 
 interface TimeframeSwitcherProps {
   selectedInterval: Timeframe;
@@ -14,7 +14,7 @@ export default function TimeframeSwitcher({ selectedInterval, onChange }: Timefr
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const timeframes: Timeframe[] = ['1m', '5m', '15m', '30m', '1h', '4h'];
+  const timeframes: Timeframe[] = ['1m', '3m', '5m', '15m', '30m', '1h', '4h'];
 
   // Handle clicking outside of dropdown to close it safely
   useEffect(() => {
@@ -35,7 +35,7 @@ export default function TimeframeSwitcher({ selectedInterval, onChange }: Timefr
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className="bg-card/75 backdrop-blur-md border border-card-border hover:border-accent/60 text-foreground px-4 py-2 font-mono text-[11px] font-black uppercase tracking-widest transition-all duration-200 cursor-pointer flex items-center gap-2 shadow-lg rounded-md"
+          className="bg-card/95 border border-card-border hover:border-accent/60 text-foreground px-4 py-2 font-mono text-[11px] font-black uppercase tracking-widest transition-all duration-200 cursor-pointer flex items-center gap-2 shadow-lg rounded-md"
           id="timeframe-menu-button"
           aria-expanded={isOpen}
           aria-haspopup="true"
@@ -50,7 +50,7 @@ export default function TimeframeSwitcher({ selectedInterval, onChange }: Timefr
 
       {isOpen && (
         <div
-          className="absolute right-0 z-50 mt-1.5 w-32 origin-top-right rounded-md bg-card/95 backdrop-blur-xl border border-card-border shadow-2xl focus:outline-none animate-in fade-in slide-in-from-top-1 duration-150"
+          className="absolute right-0 z-50 mt-1.5 w-32 origin-top-right rounded-md bg-card/98 border border-card-border shadow-2xl focus:outline-none animate-in fade-in slide-in-from-top-1 duration-150"
           role="menu"
           aria-orientation="vertical"
           aria-labelledby="timeframe-menu-button"

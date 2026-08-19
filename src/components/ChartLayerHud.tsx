@@ -22,7 +22,7 @@ export default function ChartLayerHud() {
     <div className="absolute top-4 right-20 z-20 flex items-center gap-2">
       {/* Floating Glass Capsule HUD Container */}
       <div
-        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all duration-300 bg-card/85 backdrop-blur-md border-card-border shadow-2xl ${
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all duration-300 bg-card/95 border-card-border shadow-2xl ${
           isOpen ? 'max-w-[1200px] opacity-100' : 'max-w-[42px] overflow-hidden'
         }`}
       >

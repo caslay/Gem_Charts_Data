@@ -33,14 +33,14 @@ export default function Home() {
     downloadV7Sliced,
     activeAlerts,
     dismissAlert,
+    wsInterval,
     setWsInterval,
     aiAnalysis,
     signalAlertsEnabled,
   } = useMarketDataContext();
 
-  const { livePrice } = useMarketDataLiveContext();
-
-  const [selectedInterval, setSelectedInterval] = useState<Timeframe>('5m');
+  const selectedInterval = wsInterval;
+  const setSelectedInterval = setWsInterval;
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSoundSettingsOpen, setIsSoundSettingsOpen] = useState(false);
@@ -190,11 +190,11 @@ export default function Home() {
     setManualStopLoss(null);
   };
 
-  // Initialize manual prices with ATR and snap to livePrice
+  // Initialize manual prices with ATR and current candle price
   useEffect(() => {
     if (isManualTradingActive) {
       const chartCandles = getChartData();
-      const currentEntry = livePrice || (chartCandles.length > 0 ? chartCandles[chartCandles.length - 1].c : 0);
+      const currentEntry = chartCandles.length > 0 ? chartCandles[chartCandles.length - 1].c : 0;
       
       setManualEntryPrice((prev) => (prev === null || manualOrderType === 'MARKET') ? currentEntry : prev);
       
@@ -216,13 +216,6 @@ export default function Home() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isManualTradingActive, manualDirection, manualOrderType]);
-
-  // Lock entry price to live price if MARKET is active
-  useEffect(() => {
-    if (isManualTradingActive && manualOrderType === 'MARKET' && livePrice) {
-      setManualEntryPrice(livePrice);
-    }
-  }, [isManualTradingActive, manualOrderType, livePrice]);
 
   const handleSubmitManualOrder = async (livePrice: number | null) => {
     const entry = manualOrderType === 'MARKET' ? livePrice : manualEntryPrice;
@@ -310,11 +303,6 @@ export default function Home() {
   };
 
   // Strategy Execution Engine — runs silently in the background
-
-  // Sync localized selection with global WebSocket context interval (automatically triggers data fetch)
-  useEffect(() => {
-    setWsInterval(selectedInterval);
-  }, [selectedInterval, setWsInterval]);
 
   const getChartData = useCallback(() => {
     if (!data || !data.data_payload) return EMPTY_CANDLES;
@@ -410,7 +398,6 @@ export default function Home() {
         <div className="px-4 lg:px-6 mb-2 relative z-20">
           <OrderFlowTimelineRibbon
             timeline={data?.ipda_metrics?.order_flow_engine?.state_timeline}
-            livePrice={livePrice}
             onOpenModal={() => setIsOrderFlowModalOpen(true)}
             onOpenLiveOBModal={() => setIsLiveOBModalOpen(true)}
           />
@@ -519,7 +506,6 @@ export default function Home() {
         isOpen={isOrderFlowModalOpen}
         onClose={() => setIsOrderFlowModalOpen(false)}
         timeline={data?.ipda_metrics?.order_flow_engine?.state_timeline}
-        livePrice={livePrice}
         symbol="ETHUSDC.p"
       />
 

@@ -26,7 +26,7 @@ import {
   Anchor,
   Percent
 } from 'lucide-react';
-import { useLiveOrderBlockExecution } from '@/hooks/useLiveOrderBlockExecution';
+import { useLiveOrderBlockExecution, IS_OB_STRATEGY_PAUSED } from '@/hooks/useLiveOrderBlockExecution';
 import { useAutomatedStrategyExecution } from '@/hooks/useAutomatedStrategyExecution';
 
 interface LiveOrderBlockModalProps {
@@ -35,7 +35,7 @@ interface LiveOrderBlockModalProps {
   symbol?: string;
 }
 
-export default function LiveOrderBlockModal({
+function LiveOrderBlockModalContent({
   isOpen,
   onClose,
   symbol = 'ETHUSDC.p'
@@ -215,6 +215,24 @@ export default function LiveOrderBlockModal({
             </button>
           </div>
         </div>
+
+        {/* ── Order Block Strategy Pause Status Banner ──────────────────────── */}
+        {IS_OB_STRATEGY_PAUSED && (
+          <div className="bg-cyan-950/70 border-b border-cyan-500/40 px-5 py-2.5 text-[11px] text-cyan-200 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+              </span>
+              <span className="font-bold tracking-wide">
+                <span className="text-amber-300 font-black">⏸️ ORDER BLOCK PIPELINE PAUSED:</span> 100% bandwidth allocated exclusively to <strong className="text-cyan-300">Sweep & Reclaim (3-Pillar Displacement Engine)</strong>.
+              </span>
+            </div>
+            <span className="text-[10px] font-mono font-bold bg-cyan-900/80 px-2 py-0.5 rounded text-cyan-300 border border-cyan-500/30">
+              SINGLE-STRATEGY DEDICATED MODE
+            </span>
+          </div>
+        )}
 
         {/* ── Cooldown Alert Banner ─────────────────────────────────────────── */}
         {cooldownRemainingSec > 0 && (
@@ -1265,4 +1283,9 @@ export default function LiveOrderBlockModal({
       </div>
     </div>
   );
+}
+
+export default function LiveOrderBlockModal(props: LiveOrderBlockModalProps) {
+  if (!props.isOpen) return null;
+  return <LiveOrderBlockModalContent {...props} />;
 }

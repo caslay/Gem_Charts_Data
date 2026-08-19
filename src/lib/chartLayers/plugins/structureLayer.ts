@@ -98,6 +98,9 @@ export const structureLayer: ChartLayer = {
       const y = series.priceToCoordinate(Number(pt.price));
 
       if (x !== null && y !== null) {
+        // Viewport culling: Skip swings that are far off the visible horizontal boundaries
+        if (x < -150 || x > rightX + 150) continue;
+
         mappedSwings.push({
           ...pt,
           x,

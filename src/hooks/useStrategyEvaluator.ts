@@ -481,6 +481,23 @@ function evaluateStrategy(
 
   const isObj = !Array.isArray(strategy.conditions);
 
+  const hasOnCloseCondition = conditions.some((c: any) => c.temporal === 'ON_CLOSE');
+  const hasInstantCondition = conditions.some((c: any) => c.temporal === 'INSTANT');
+  
+  // Strategy settings level check
+  const temporalMode = isObj ? (strategy.conditions.temporal_mode || 'INSTANT') : 'INSTANT';
+
+  // Decide if we need to gate this evaluation behind the candle close event:
+  // - Gated ONLY if it is a pure ON_CLOSE strategy (i.e. has ON_CLOSE conditions but NO INSTANT conditions).
+  // - If it is a mixed strategy (has both ON_CLOSE and INSTANT conditions), we do NOT gate it on close,
+  //   allowing the INSTANT conditions to trigger mid-candle.
+  // - If it is a pure INSTANT strategy, we do NOT gate it.
+  const isPureOnClose = (temporalMode === 'ON_CLOSE' && !hasInstantCondition) || (hasOnCloseCondition && !hasInstantCondition);
+
+  if (isPureOnClose) {
+    if (!liveCandle || !liveCandle.isClosed) return false;
+  }
+
   // ── OLS Statistical Validation Veto Gate ──
   const sensitivity = isObj ? (strategy.conditions.statistical_sensitivity || 'STRICT') : 'STRICT';
 
@@ -500,8 +517,19 @@ function evaluateStrategy(
     }
   }
 
-  // ── Perfect Movement setup gate check ──
+  // ── Evaluate Lightweight Fast Conditions First (Short-circuit optimization) ──
+  const allConditionsPass = conditions.every((c: any) => evaluateCondition(strategy, c, data, livePrice, aiBias));
+  if (!allConditionsPass) {
+    return false;
+  }
+
+  // ── Perfect Movement setup gate check (Evaluated ONLY if all base conditions passed) ──
   if (isObj && strategy.conditions.perfect_movement_filter) {
+    // PM setups strictly require closed candle confirmation
+    if (!liveCandle || !liveCandle.isClosed) {
+      return false;
+    }
+
     const tf = strategy.conditions.target_timeframe || activeInterval || '5m';
     const tfKey = `candles_${tf === 'ANY' ? '5m' : tf}`;
     const rawCandles = data?.data_payload?.[tfKey] || [];
@@ -541,25 +569,7 @@ function evaluateStrategy(
     }
   }
 
-  const hasOnCloseCondition = conditions.some((c: any) => c.temporal === 'ON_CLOSE');
-  const hasInstantCondition = conditions.some((c: any) => c.temporal === 'INSTANT');
-  
-  // Strategy settings level check
-  const temporalMode = isObj ? (strategy.conditions.temporal_mode || 'INSTANT') : 'INSTANT';
-
-  // Decide if we need to gate this evaluation behind the candle close event:
-  // - Gated ONLY if it is a pure ON_CLOSE strategy (i.e. has ON_CLOSE conditions but NO INSTANT conditions).
-  // - If it is a mixed strategy (has both ON_CLOSE and INSTANT conditions), we do NOT gate it on close,
-  //   allowing the INSTANT conditions to trigger mid-candle.
-  // - If it is a pure INSTANT strategy, we do NOT gate it.
-  const isPureOnClose = (temporalMode === 'ON_CLOSE' && !hasInstantCondition) || (hasOnCloseCondition && !hasInstantCondition);
-
-  if (isPureOnClose) {
-    if (!liveCandle || !liveCandle.isClosed) return false;
-  }
-
-  // All conditions must pass
-  return conditions.every((c: any) => evaluateCondition(strategy, c, data, livePrice, aiBias));
+  return true;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -696,6 +706,7 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
   // ── Main Evaluation Loop ────────────────────────────────────────────────
   useEffect(() => {
     if (!data || strategies.length === 0) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
 
     // Derived states for Directional & Active Trade Sensing
     const currentTrades = tradesRef.current;

@@ -90,6 +90,10 @@ export const sessionsLayer: ChartLayer = {
     const { activeCandles, chart, series, theme, themeSettings } = context;
     if (!activeCandles || activeCandles.length < 2) return null;
 
+    // Limit lookback to last 350 candles for 60 FPS performance
+    const maxLookback = 350;
+    const candlesToProcess = activeCandles.length > maxLookback ? activeCandles.slice(activeCandles.length - maxLookback) : activeCandles;
+
     // 1. Group active candles by calendar day in UTC
     interface SessionGroup {
       candles: any[];
@@ -104,7 +108,7 @@ export const sessionsLayer: ChartLayer = {
 
     // Group candles by UTC calendar day string: "YYYY-MM-DD"
     const candlesByDay = new Map<string, any[]>();
-    activeCandles.forEach(c => {
+    candlesToProcess.forEach(c => {
       const date = new Date(c.t);
       const dayStr = `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()}`;
       if (!candlesByDay.has(dayStr)) {

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { RenderContext } from '@/lib/chartLayers/types';
 import { useLayerStore } from '@/lib/chartLayers/store';
 import { OrderBlockEngine, InstitutionalOrderBlock } from '@/lib/quantEngine/OrderBlockEngine';
+import { IS_OB_STRATEGY_PAUSED } from '@/hooks/useLiveOrderBlockExecution';
 import {
   X,
   Layers,
@@ -65,7 +66,7 @@ export default function OrderBlockOverlay({ context }: OrderBlockOverlayProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedZone]);
 
-  if (!showLayer || !activeCandles || activeCandles.length < 5) return null;
+  if (IS_OB_STRATEGY_PAUSED || !showLayer || !activeCandles || activeCandles.length < 5) return null;
 
   // ── 1. Resolve Active Order Blocks & Breakers ─────────────────────────────
   const ipda = data?.ipda_metrics || {};
@@ -170,6 +171,10 @@ export default function OrderBlockOverlay({ context }: OrderBlockOverlayProps) {
         const width = Math.max(16, rightX - left);
         const pixelTop = Math.min(topY, bottomY);
         const height = Math.max(3, Math.abs(topY - bottomY));
+
+        // Viewport culling: Skip Order Block boxes completely off-screen
+        const chartRightX = lastCandleX !== null ? lastCandleX + 300 : 2500;
+        if (left + width < -50 || left > chartRightX + 50) return null;
 
         const isBullish = ob.type === 'BULLISH';
         const isBreaker = ob.is_breaker || ob.lifecycle_status === 'ACTIVE_BREAKER' || ob.lifecycle_status === 'BREAKER_CONFIRMED_ACTIVE';

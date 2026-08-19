@@ -34,13 +34,17 @@ export interface MTFTelemetrySummary {
 
 export class MTFTelemetryEngine {
   private symbol: string;
+  private lastCompositeFingerprint: string = '';
+  private cachedSummary: MTFTelemetrySummary | null = null;
+  private tfFingerprints: Map<string, string> = new Map();
+  private tfCache: Map<string, TimeframeTelemetry> = new Map();
 
   constructor(symbol: string = 'ETHUSDC') {
     this.symbol = symbol;
   }
 
   /**
-   * Evaluates telemetry for a single timeframe candle series
+   * Evaluates telemetry for a single timeframe candle series with fingerprint caching
    */
   public evaluateTimeframe(
     candles: Candle[],
@@ -53,6 +57,12 @@ export class MTFTelemetryEngine {
 
     const lastCandle = candles[candles.length - 1];
     const livePrice = currentPrice ?? lastCandle.c;
+    const tfKey = `${timeframe}_${lastCandle.t}_${candles.length}`;
+
+    // Return cached timeframe telemetry if closed-candle fingerprint has not changed
+    if (this.tfCache.has(timeframe) && this.tfFingerprints.get(timeframe) === tfKey) {
+      return this.tfCache.get(timeframe)!;
+    }
 
     // 1. Displacement & 3-Bar Forward OLS Validation
     const sponsorship = verifyDisplacementOffline(candles, this.symbol);
@@ -137,7 +147,7 @@ export class MTFTelemetryEngine {
       };
     }
 
-    return {
+    const result: TimeframeTelemetry = {
       timeframe,
       trend,
       structure_break: structureBreak,
@@ -154,6 +164,10 @@ export class MTFTelemetryEngine {
       last_close_price: lastCandle.c,
       timestamp: lastCandle.t,
     };
+
+    this.tfCache.set(timeframe, result);
+    this.tfFingerprints.set(timeframe, tfKey);
+    return result;
   }
 
   /**
@@ -168,11 +182,23 @@ export class MTFTelemetryEngine {
     },
     livePrice?: number
   ): MTFTelemetrySummary {
+    const c1m = payload.candles_1m || [];
+    const c5m = payload.candles_5m || [];
+    const c15m = payload.candles_15m || [];
+    const c1h = payload.candles_1h || [];
+
+    const compositeFingerprint = `${c1m[c1m.length - 1]?.t || 0}_${c5m[c5m.length - 1]?.t || 0}_${c15m[c15m.length - 1]?.t || 0}_${c1h[c1h.length - 1]?.t || 0}_${c1m.length}_${c5m.length}_${c15m.length}_${c1h.length}`;
+
+    // 0ms early return bailout if composite closed candle boundary is unchanged
+    if (this.cachedSummary && this.lastCompositeFingerprint === compositeFingerprint) {
+      return this.cachedSummary;
+    }
+
     const timeframes: Record<string, TimeframeTelemetry> = {
-      '1m': this.evaluateTimeframe(payload.candles_1m || [], '1m', livePrice),
-      '5m': this.evaluateTimeframe(payload.candles_5m || [], '5m', livePrice),
-      '15m': this.evaluateTimeframe(payload.candles_15m || [], '15m', livePrice),
-      '1h': this.evaluateTimeframe(payload.candles_1h || [], '1h', livePrice),
+      '1m': this.evaluateTimeframe(c1m, '1m', livePrice),
+      '5m': this.evaluateTimeframe(c5m, '5m', livePrice),
+      '15m': this.evaluateTimeframe(c15m, '15m', livePrice),
+      '1h': this.evaluateTimeframe(c1h, '1h', livePrice),
     };
 
     // Calculate Higher Timeframe (15m + 1h) Directional Bias
@@ -205,7 +231,7 @@ export class MTFTelemetryEngine {
       ? { ...tf15.dol_target, timeframe: '15m' } 
       : null;
 
-    return {
+    const summary: MTFTelemetrySummary = {
       timeframes,
       htf_directional_bias: htfBias,
       htf_alignment: htfAlignment,
@@ -213,6 +239,10 @@ export class MTFTelemetryEngine {
       active_macro_dol: activeMacroDol,
       evaluated_at: Date.now(),
     };
+
+    this.cachedSummary = summary;
+    this.lastCompositeFingerprint = compositeFingerprint;
+    return summary;
   }
 
   private formatOrderFlowLabel(regime: OrderFlowState): string {

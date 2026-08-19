@@ -36,6 +36,12 @@ export const fvgLayer: ChartLayer = {
 
       if (left === null) continue;
 
+      // Viewport culling: Skip FVG boxes completely off-screen
+      const lastCandle = context.activeCandles?.[context.activeCandles.length - 1];
+      const rightCoord = lastCandle ? chart.timeScale().timeToCoordinate(Math.floor(lastCandle.t / 1000) as any) : null;
+      const rightX = rightCoord !== null ? rightCoord + 300 : 2500;
+      if (left + width < -50 || left > rightX + 50) continue;
+
       const pixelTop = Math.min(topY, bottomY);
       const height = Math.abs(topY - bottomY);
 
