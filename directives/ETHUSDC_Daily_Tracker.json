@@ -1,15 +1,35 @@
 {
   "version": "1.0.0",
   "symbol": "ETHUSDC.p",
-  "lastUpdated": "2026-08-17T15:49:57.292Z",
+  "lastUpdated": "2026-08-19T15:45:25.456Z",
   "stats": {
-    "totalSetups": 32,
+    "totalSetups": 33,
     "success": 0,
     "stopOut": 4,
     "noTrigger": 0,
     "winRate": 0
   },
   "entries": [
+    {
+      "id": "ETH-20260819-1978",
+      "date": "2026-08-19",
+      "time": "15:45",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Price executed massive Phase D Sign of Streng",
+      "htfDol": "4H Bearish FVG Inefficiency ($2,130.26 - $2,174.59) & BSL Magnet ($2,114.92)",
+      "smtStatus": "NEUTRAL_SYNC — ETH leading aggressive expansion; BTC lagging near $66,826.50 PDH without confirmed lower timeframe SMT divergence",
+      "orderFlowState": "FALLING_WITH_PRICE",
+      "entryRange": [
+        1978.51,
+        2006.83
+      ],
+      "invalidation": 1965.37,
+      "tp1": 2100,
+      "tp2": 2130.26,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $2,085.73 | HTF Bullish Regime / Post-Expansion Premium Exhaustion"
+    },
     {
       "id": "ETH-20260817-1908",
       "date": "2026-08-17",

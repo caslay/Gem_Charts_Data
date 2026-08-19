@@ -343,13 +343,19 @@ export function useAutomatedStrategyExecution(
   }, [dispatchAlert, fetchAccountEquity]);
 
   // ── 4. Multi-Timeframe Background Candle Ingestion (5m, 15m, 1h) ────────────
+  const lastProcessedSrCandleRef = useRef<string>('');
   useEffect(() => {
     if (!engineRef.current || !marketData) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
 
     const payload = marketData.data_payload || {};
-    const candles5m = payload.candles_5m;
-    const candles15m = payload.candles_15m;
-    const candles1h = payload.candles_1h;
+    const candles5m = payload.candles_5m || [];
+    const candles15m = payload.candles_15m || [];
+    const candles1h = payload.candles_1h || [];
+
+    const key = `${candles5m?.[candles5m.length - 1]?.t}_${candles15m?.[candles15m.length - 1]?.t}_${candles1h?.[candles1h.length - 1]?.t}_${candles5m.length}_${candles15m.length}_${candles1h.length}`;
+    if (lastProcessedSrCandleRef.current === key) return;
+    lastProcessedSrCandleRef.current = key;
 
     const ipda = marketData.ipda_metrics || {};
     const macroContext = {
@@ -371,9 +377,14 @@ export function useAutomatedStrategyExecution(
     setActivePositions([...engineRef.current.getActivePositions()]);
     setPendingOrders([...engineRef.current.getPendingLimitOrders()]);
     setClosedTrades([...engineRef.current.getClosedPositions()]);
-  }, [marketData]);
+  }, [marketData?.data_payload]);
 
-  // ── 5. Real-Time Market Tick Processing Pipeline ──────────────────────────
+  // ── 5. Real-Time Market Tick Processing Pipeline (Throttled UI state sync) ──
+  const lastSrUiSyncTimeRef = useRef<number>(0);
+  const prevSrActiveCountRef = useRef<number>(0);
+  const prevSrPendingCountRef = useRef<number>(0);
+  const prevSrClosedCountRef = useRef<number>(0);
+
   useEffect(() => {
     if (livePrice && livePrice > 0 && engineRef.current) {
       const candleAdapter: Candle | null = liveCandle
@@ -391,9 +402,28 @@ export function useAutomatedStrategyExecution(
         : null;
 
       engineRef.current.processMarketTick(livePrice, candleAdapter);
-      setActivePositions([...engineRef.current.getActivePositions()]);
-      setPendingOrders([...engineRef.current.getPendingLimitOrders()]);
-      setClosedTrades([...engineRef.current.getClosedPositions()]);
+
+      const active = engineRef.current.getActivePositions();
+      const pending = engineRef.current.getPendingLimitOrders();
+      const closed = engineRef.current.getClosedPositions();
+
+      const activeCountChanged = prevSrActiveCountRef.current !== active.length;
+      const pendingCountChanged = prevSrPendingCountRef.current !== pending.length;
+      const closedCountChanged = prevSrClosedCountRef.current !== closed.length;
+
+      const now = Date.now();
+      const isThrottledSync = (now - lastSrUiSyncTimeRef.current >= 250) && (active.length > 0 || pending.length > 0);
+
+      if (activeCountChanged || pendingCountChanged || closedCountChanged || isThrottledSync) {
+        lastSrUiSyncTimeRef.current = now;
+        prevSrActiveCountRef.current = active.length;
+        prevSrPendingCountRef.current = pending.length;
+        prevSrClosedCountRef.current = closed.length;
+
+        setActivePositions([...active]);
+        setPendingOrders([...pending]);
+        setClosedTrades([...closed]);
+      }
     }
   }, [livePrice, liveCandle]);
 

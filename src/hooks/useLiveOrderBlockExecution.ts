@@ -23,9 +23,12 @@ import {
   OB_TIMEFRAME_TOGGLE_EVENT,
   OBTimeframeToggleState,
   SupportedOBTimeframe,
-  DEFAULT_ENABLED_TIMEFRAMES
+  DEFAULT_ENABLED_TIMEFRAMES,
+  IS_ORDER_BLOCK_STRATEGY_PAUSED
 } from '@/lib/quantEngine/strategyExecutionConfig';
 import type { SmartAlert } from '@/hooks/useLiveAlerts';
+
+export const IS_OB_STRATEGY_PAUSED = IS_ORDER_BLOCK_STRATEGY_PAUSED;
 
 // Global singleton instance ensures synchronous background processing across all page components & modals
 let sharedEngineInstance: LiveOrderBlockExecutionEngine | null = null;
@@ -125,9 +128,19 @@ export function useLiveOrderBlockExecution(
     }
   }, [engineConfig]);
 
-  // ── 1. On-Mount Database State Re-hydration ────────────────────────────────
+  // ── On-Mount Zone Purge & DB State Re-hydration ──────────────────────────
   useEffect(() => {
     let isMounted = true;
+
+    if (IS_OB_STRATEGY_PAUSED) {
+      if (engineRef.current) {
+        engineRef.current.purgeAllZones();
+      }
+      setActiveZones([]);
+      setActiveZonesByTimeframe({ '5m': [], '15m': [], '1h': [] });
+      setTestingStates([]);
+      return;
+    }
 
     async function rehydrateFromDatabase() {
       try {
@@ -359,13 +372,19 @@ export function useLiveOrderBlockExecution(
   }, [engineConfig.fixedRiskUsd]);
 
   // Ingest multi-timeframe closed candle streams (5m, 15m, 1h) concurrently from marketData
+  const lastProcessedCandleRef = useRef<string>('');
   useEffect(() => {
-    if (!engineRef.current || !marketData) return;
+    if (IS_OB_STRATEGY_PAUSED || !engineRef.current || !marketData) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
 
     const payload = marketData.data_payload || {};
-    const candles5m = payload.candles_5m;
-    const candles15m = payload.candles_15m;
-    const candles1h = payload.candles_1h;
+    const candles5m = payload.candles_5m || [];
+    const candles15m = payload.candles_15m || [];
+    const candles1h = payload.candles_1h || [];
+
+    const key = `${candles5m[candles5m.length - 1]?.t}_${candles15m[candles15m.length - 1]?.t}_${candles1h[candles1h.length - 1]?.t}_${timeframeFilter}`;
+    if (lastProcessedCandleRef.current === key) return;
+    lastProcessedCandleRef.current = key;
 
     const ipda = marketData.ipda_metrics || {};
     const orderFlow = ipda.order_flow_engine || (marketData as any).order_flow_engine || {};
@@ -391,27 +410,54 @@ export function useLiveOrderBlockExecution(
     setActiveZones([...engineRef.current.getActiveZones(timeframeFilter)]);
     setActiveZonesByTimeframe({ ...engineRef.current.getActiveZonesByTimeframe() });
     setTestingStates([...engineRef.current.getInZoneTestingStates()]);
-  }, [marketData, timeframeFilter]);
+  }, [marketData?.data_payload, timeframeFilter]);
 
-  // Process live incoming price ticks
+  // Process live incoming price ticks (Real-time calculation with throttled UI state sync)
+  const lastUiSyncTimeRef = useRef<number>(0);
+  const prevOpenCountRef = useRef<number>(0);
+  const prevClosedCountRef = useRef<number>(0);
+  const prevTestingCountRef = useRef<number>(0);
+
   useEffect(() => {
-    if (!engineRef.current || !livePrice || livePrice <= 0) return;
+    if (IS_OB_STRATEGY_PAUSED || !engineRef.current || !livePrice || livePrice <= 0) return;
 
     const res = engineRef.current.onPriceTick(livePrice, Date.now());
-    setActivePositions([...res.activePositions]);
-    setActiveZones([...engineRef.current.getActiveZones(timeframeFilter)]);
-    setActiveZonesByTimeframe({ ...engineRef.current.getActiveZonesByTimeframe() });
-    setClosedLiveTrades([...engineRef.current.getClosedPositions()]);
-    setCooldownRemainingSec(engineRef.current.getCooldownRemainingSec());
-    setTestingStates([...engineRef.current.getInZoneTestingStates()]);
+    const openPositions = res.activePositions;
+    const closedPositions = engineRef.current.getClosedPositions();
+    const testing = engineRef.current.getInZoneTestingStates();
+
+    const openCountChanged = prevOpenCountRef.current !== openPositions.length;
+    const closedCountChanged = prevClosedCountRef.current !== closedPositions.length;
+    const testingCountChanged = prevTestingCountRef.current !== testing.length;
+
+    const now = Date.now();
+    const isThrottledSync = (now - lastUiSyncTimeRef.current >= 250) && openPositions.length > 0;
+
+    if (openCountChanged || closedCountChanged || testingCountChanged || isThrottledSync) {
+      lastUiSyncTimeRef.current = now;
+      prevOpenCountRef.current = openPositions.length;
+      prevClosedCountRef.current = closedPositions.length;
+      prevTestingCountRef.current = testing.length;
+
+      setActivePositions([...openPositions]);
+      setActiveZones([...engineRef.current.getActiveZones(timeframeFilter)]);
+      setActiveZonesByTimeframe({ ...engineRef.current.getActiveZonesByTimeframe() });
+      setClosedLiveTrades([...closedPositions]);
+      setTestingStates([...testing]);
+    }
   }, [livePrice, timeframeFilter]);
 
-  // Timer interval to smoothly update cooldown ticker
+  // Timer interval to smoothly update cooldown ticker (gated to prevent zero-churn re-renders)
+  const prevCooldownRef = useRef<number>(0);
   useEffect(() => {
+    if (IS_OB_STRATEGY_PAUSED) return;
     const timer = setInterval(() => {
       if (engineRef.current) {
         const remaining = engineRef.current.getCooldownRemainingSec();
-        setCooldownRemainingSec(remaining);
+        if (remaining !== prevCooldownRef.current) {
+          prevCooldownRef.current = remaining;
+          setCooldownRemainingSec(remaining);
+        }
       }
     }, 1000);
     return () => clearInterval(timer);

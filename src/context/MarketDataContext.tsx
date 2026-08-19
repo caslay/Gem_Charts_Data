@@ -43,18 +43,25 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
   useAutoTradeExecutor(marketData.data, false);
 
 
-  const staticValue: MarketDataContextValue = {
+  // Memoize static context value so sub-second price ticks do not trigger re-render cascades
+  const staticValue: MarketDataContextValue = React.useMemo(() => ({
     ...marketData,
     wsStatus,
     wsReconnect,
     wsInterval,
     setWsInterval,
-  };
+  }), [
+    marketData,
+    wsStatus,
+    wsReconnect,
+    wsInterval,
+    setWsInterval,
+  ]);
 
-  const liveValue: MarketDataLiveContextValue = {
+  const liveValue: MarketDataLiveContextValue = React.useMemo(() => ({
     liveCandle,
     livePrice,
-  };
+  }), [liveCandle, livePrice]);
 
   return (
     <MarketDataStaticContext.Provider value={staticValue}>

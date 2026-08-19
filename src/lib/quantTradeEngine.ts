@@ -430,6 +430,7 @@ export function generatePotentialTrades(
     return entry;
   };
 
+  let hasModifiedStorage = false;
   const saveSetupState = (
     setupKey: string,
     status: string,
@@ -437,7 +438,17 @@ export function generatePotentialTrades(
   ) => {
     if (!isBacktest && typeof window !== "undefined") {
       try {
-        const existing = readRecord(storedHistory[setupKey]) || {};
+        const existing: Partial<SetupRecord> = readRecord(storedHistory[setupKey]) || {};
+        if (
+          existing.status === status &&
+          existing.openPrice === extra?.openPrice &&
+          existing.closePrice === extra?.closePrice &&
+          existing.openTime === extra?.openTime &&
+          existing.closeTime === extra?.closeTime
+        ) {
+          return;
+        }
+
         const next: SetupRecord = {
           ...existing,
           status,
@@ -446,7 +457,7 @@ export function generatePotentialTrades(
           ...extra
         };
         storedHistory[setupKey] = next;
-        localStorage.setItem("gem_quant_setup_history", JSON.stringify(storedHistory));
+        hasModifiedStorage = true;
       } catch {}
     }
   };
@@ -962,6 +973,13 @@ export function generatePotentialTrades(
     } catch (aiErr) {
       console.warn("[quantTradeEngine] Error synthesizing AI SOP setup:", aiErr);
     }
+  }
+
+  // Single batch persistence if any setup state changed
+  if (hasModifiedStorage && !isBacktest && typeof window !== "undefined") {
+    try {
+      localStorage.setItem("gem_quant_setup_history", JSON.stringify(storedHistory));
+    } catch {}
   }
 
   const firstBull = consolidatedFvgs.find((f) => f.type === "BULLISH");

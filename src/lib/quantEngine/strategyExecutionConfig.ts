@@ -63,17 +63,21 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   stage3Multiple: 3.0,
 };
 
+// Master Reversible Pause Switch for Order Block & Breaker Pipeline
+export const IS_ORDER_BLOCK_STRATEGY_PAUSED = true;
+
 /**
  * Reads the Order Block auto-execution toggle from localStorage with SSR safety.
  */
 export function getOrderBlockAutoExec(): boolean {
-  if (typeof window === 'undefined') return true;
+  if (IS_ORDER_BLOCK_STRATEGY_PAUSED) return false;
+  if (typeof window === 'undefined') return false;
   try {
     const item = localStorage.getItem(STORAGE_KEY_OB_AUTO_EXEC);
-    if (item === null) return true; // Default ON
+    if (item === null) return false;
     return item === 'true';
   } catch {
-    return true;
+    return false;
   }
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo, memo } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, SeriesMarker, createSeriesMarkers, ISeriesMarkersPluginApi, LineStyle, CrosshairMode } from 'lightweight-charts';
 import { Candle, MarketDataPayload } from '@/hooks/useMarketData';
 import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
@@ -127,7 +127,6 @@ export default function Chart({
   const htmlLayerCacheRef = useRef<Record<string, React.ReactNode>>({});
   const prevFirstCandleTimeRef = useRef<number | null>(null);
   const lastDataPayloadRef = useRef<any>(null);
-  const [, setViewportTick] = useState(0);
 
   const getLayerStorage = useCallback((layerId: string) => {
     if (!layerStorageRef.current.has(layerId)) {
@@ -281,11 +280,8 @@ export default function Chart({
 
   const { playSound, playFile } = useAlertSounds();
   const context = useMarketDataContext();
-  const liveContext = useMarketDataLiveContext();
 
   const marketContextData = propsMarketContextData !== undefined ? propsMarketContextData : context.data;
-  const livePrice = propsLivePrice !== undefined ? propsLivePrice : liveContext.livePrice;
-  const liveCandle = propsLiveCandle !== undefined ? propsLiveCandle : liveContext.liveCandle;
   const themeSettings = propsThemeSettings !== undefined ? propsThemeSettings : context.themeSettings;
   const { triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert: contextTriggerSmartAlert, setWsInterval, loadMoreHistory: contextLoadMoreHistory, isFetchingMore: contextIsFetchingMore, structureState: liveStructureState, contextAnchorTimestamp: liveContextAnchorTimestamp } = context;
   const triggerSmartAlert = propsTriggerSmartAlert !== undefined ? propsTriggerSmartAlert : contextTriggerSmartAlert;
@@ -532,7 +528,9 @@ export default function Chart({
     if (hoverTime !== null && data && data.length > 0) {
       const hoverCandle = data.find(d => Math.floor(d.t / 1000) === hoverTime);
       if (hoverCandle) {
-        const referenceVal = livePrice || hoverCandle.c;
+        const referenceVal = (localCandlesRef.current && localCandlesRef.current.length > 0)
+          ? localCandlesRef.current[localCandlesRef.current.length - 1].c
+          : hoverCandle.c;
         const snapThreshold = referenceVal * 0.0015; // 0.15% threshold for snapping to H/L
 
         if (Math.abs(rawPrice - hoverCandle.h) <= snapThreshold) {
@@ -545,7 +543,7 @@ export default function Chart({
 
     // 2. Snap to nearest tick increment
     return Math.round(snapped / tickIncrement) * tickIncrement;
-  }, [data, livePrice]);
+  }, [data]);
 
   // ── HTML Overlay Position Syncer ──────────────────────────────────────────
   const updateAlertPositions = useCallback(() => {
@@ -577,15 +575,13 @@ export default function Chart({
     if (!series || !countdownRef.current) return;
     
     const candles = localCandlesRef.current;
-    const currentPriceForAlerts = livePrice !== null && livePrice !== undefined
-      ? livePrice
-      : (candles && candles.length > 0 ? candles[candles.length - 1].c : 0);
+    const currentPriceForAlerts = (candles && candles.length > 0 ? candles[candles.length - 1].c : 0);
       
     const y = series.priceToCoordinate(currentPriceForAlerts) as number | null;
     if (y !== null) {
       countdownRef.current.style.top = `${y}px`;
     }
-  }, [livePrice]);
+  }, []);
 
   // ── Ghost Line Performance Mechanics ──────────────────────────────────────
   const updateGhostLine = useCallback((offsetY: number, hoverTime: number | null) => {
@@ -598,7 +594,10 @@ export default function Chart({
     const price = snapPrice(rawPrice, hoverTime);
     ghostPriceRef.current = price;
 
-    const referencePrice = livePrice || (data && data.length > 0 ? data[data.length - 1].c : 0);
+    const candles = localCandlesRef.current;
+    const referencePrice = (candles && candles.length > 0)
+      ? candles[candles.length - 1].c
+      : (data && data.length > 0 ? data[data.length - 1].c : 0);
     const color = price < referencePrice ? upColor : downColor;
 
     if (ghostLineRef.current) {
@@ -616,7 +615,7 @@ export default function Chart({
         title: 'ALERT (PLACE)',
       } as any);
     }
-  }, [snapPrice, livePrice, data, upColor, downColor]);
+  }, [snapPrice, data, upColor, downColor]);
 
   const clearGhostLine = useCallback(() => {
     ghostPriceRef.current = null;
@@ -630,13 +629,13 @@ export default function Chart({
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!chartRef.current || !seriesRef.current) return;
     if (activeDragLineRef.current) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const offsetX = e.clientX - rect.left;
-    const offsetY = e.clientY - rect.top;
-    const containerWidth = rect.width;
+    
+    // Use native event pixel offsets directly to eliminate synchronous getBoundingClientRect layout reflows
+    const offsetX = e.nativeEvent.offsetX;
+    const offsetY = e.nativeEvent.offsetY;
 
     const gridWidth = chartRef.current.timeScale().width();
-    const isOverYAxis = offsetX >= gridWidth && offsetX <= containerWidth;
+    const isOverYAxis = offsetX >= gridWidth;
 
     setIsHoveringPriceScale(isOverYAxis);
 
@@ -663,7 +662,10 @@ export default function Chart({
       e.stopPropagation();
 
       const price = ghostPriceRef.current;
-      const referencePrice = livePrice || (data && data.length > 0 ? data[data.length - 1].c : 0);
+      const candles = localCandlesRef.current;
+      const referencePrice = (candles && candles.length > 0)
+        ? candles[candles.length - 1].c
+        : (data && data.length > 0 ? data[data.length - 1].c : 0);
       const color = price < referencePrice ? upColor : downColor;
 
       // Select default timeframe matching chart's current interval (or closest match)
@@ -922,9 +924,7 @@ export default function Chart({
     if (!chartRef.current || !seriesRef.current) return;
     if (e.button !== 0) return; // Only left-click
     
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pointerY = e.clientY - rect.top;
-    
+    const pointerY = e.nativeEvent.offsetY;
     const series = seriesRef.current;
     
     const clickThreshold = 12;
@@ -978,8 +978,7 @@ export default function Chart({
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!seriesRef.current) return;
     
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pointerY = e.clientY - rect.top;
+    const pointerY = e.nativeEvent.offsetY;
     const rawPrice = seriesRef.current.coordinateToPrice(pointerY);
     if (rawPrice === null || isNaN(rawPrice)) return;
     
@@ -1206,14 +1205,9 @@ export default function Chart({
           // Fast binary search lookup for hovered candle volume
           let volume = 0;
           const hoverTime = Number(param.time);
-
-          if (liveCandle && Number(liveCandle.time) === hoverTime) {
-            volume = liveCandle.volume;
-          } else {
-            const histCandle = findCandleByTime(dataRef.current, hoverTime);
-            if (histCandle) {
-              volume = histCandle.v;
-            }
+          const histCandle = findCandleByTime(localCandlesRef.current || dataRef.current, hoverTime);
+          if (histCandle) {
+            volume = histCandle.v;
           }
 
           if (
@@ -1456,7 +1450,7 @@ export default function Chart({
   // ── Dynamic Recalculations for Real-Time WebSocket Reactivity ──────────────
   const activeStructureState = useMemo(() => {
     if (!structureState) return null;
-    const currentPrice = livePrice ?? (localCandles[localCandles.length - 1]?.c ?? 0);
+    const currentPrice = localCandles.length > 0 ? (localCandles[localCandles.length - 1]?.c ?? 0) : 0;
 
     // Perform lightweight update on dealing range status (O(1) complexity)
     const updatedDealingRange = structureState.dealingRange ? {
@@ -1478,7 +1472,7 @@ export default function Chart({
       dealingRange: updatedDealingRange,
       internalDealingRange: updatedInternalDealingRange
     } as any;
-  }, [structureState, livePrice, localCandles]);
+  }, [structureState, localCandles]);
 
   // ── Dynamic Chart Layer Orchestrator ─────────────────────────────────────
   useEffect(() => {
@@ -1652,6 +1646,11 @@ export default function Chart({
 
       if (left === null) continue;
 
+      // Viewport culling: Skip FVG boxes completely off-screen
+      const lastCandleSec = localCandlesRef.current && localCandlesRef.current.length > 0 ? Math.floor(localCandlesRef.current[localCandlesRef.current.length - 1].t / 1000) : 0;
+      const chartRightX = (chart.timeScale().timeToCoordinate(lastCandleSec as any) ?? 2500) + 300;
+      if (left + width < -50 || left > chartRightX + 50) continue;
+
       const pixelTop = Math.min(topY, bottomY);
       const pixelBottom = Math.max(topY, bottomY);
       const height = pixelBottom - pixelTop;
@@ -1685,7 +1684,6 @@ export default function Chart({
       computeFvgOverlay();
       updateSvgCoordinates();
       updateCountdownPosition();
-      setViewportTick((v) => (v + 1) % 100000);
     });
   }, [updateAlertPositions, computeFvgOverlay, updateSvgCoordinates, updateCountdownPosition]);
 
@@ -1760,58 +1758,6 @@ export default function Chart({
     return () => clearInterval(timer);
   }, [interval]);
 
-  // ── Phase 2: Live Candle Injection & Snapping Update ─────────────────────
-  useEffect(() => {
-    const candles = localCandlesRef.current;
-    if (seriesRef.current && liveCandle && candles && candles.length > 0) {
-      try {
-        const lastBar = candles[candles.length - 1];
-        const lastBarTimeSec = Math.floor(lastBar.t / 1000);
-
-        if (liveCandle.time >= lastBarTimeSec) {
-          // Direct canvas update via Lightweight Charts API (60fps native draw)
-          seriesRef.current.update(liveCandle as any);
-          scheduleLayoutUpdates();
-
-          // Sync into localCandles state ONLY on new candle open or candle close to prevent re-render thrashing
-          const isSameTime = liveCandle.time === lastBarTimeSec;
-          if (isSameTime && !liveCandle.isClosed) return;
-
-          setLocalCandles(prev => {
-            if (prev.length === 0) return prev;
-            const updated = [...prev];
-            const lastIdx = updated.length - 1;
-            const lastCandle = updated[lastIdx];
-            const lastTimeSec = Math.floor(lastCandle.t / 1000);
-
-            const mappedCandle: Candle = {
-              t: liveCandle.time * 1000,
-              o: liveCandle.open,
-              h: liveCandle.high,
-              l: liveCandle.low,
-              c: liveCandle.close,
-              v: liveCandle.volume,
-              taker_buy_vol: (liveCandle as any).taker_buy_vol ?? liveCandle.volume / 2,
-              taker_sell_vol: (liveCandle as any).taker_sell_vol ?? liveCandle.volume / 2,
-              isClosed: liveCandle.isClosed === true
-            };
-
-            if (liveCandle.time === lastTimeSec) {
-              // Overwrite or update the last candle on official close
-              updated[lastIdx] = mappedCandle;
-            } else if (liveCandle.time > lastTimeSec) {
-              // Append a new candle
-              updated.push(mappedCandle);
-            }
-            return updated;
-          });
-        }
-      } catch (error) {
-        console.error('[Chart] Lightweight Charts Update Error:', error);
-      }
-    }
-  }, [liveCandle, scheduleLayoutUpdates]);
-
   // ── Phase 3: The Execution Loop & Tick Crossovers ─────────────────────────
   const executeAlert = useCallback((alert: Alert) => {
 
@@ -1859,140 +1805,23 @@ export default function Chart({
     setTimeout(() => {
       setHudPulse(null);
     }, 1000);
-  }, [playSound, upColor, marketContextData, triggerSmartAlert, triggerAiAnalysisScan]);
-
-  const prevPriceRef = useRef<number | null>(null);
-  const lastProcessedClosedTimeRef = useRef<number | null>(null);
+  }, [playSound, upColor, triggerSmartAlert, triggerAiAnalysisScan]);
 
   // Reset chart scaling and tracking refs when timeframe interval changes
   useEffect(() => {
     isInitialLoad.current = true;
-    prevPriceRef.current = null;
-    lastProcessedClosedTimeRef.current = null;
     setHoveredCandle(null);
   }, [interval]);
 
-  // Monitor tick-by-tick and bar-by-bar
-  useEffect(() => {
-    if (isBacktest) return;
-
-    // 1. Resolve current active price (with WebSocket-to-REST fallback)
-    const currentPriceForAlerts = livePrice !== null
-      ? livePrice
-      : (data && data.length > 0 ? data[data.length - 1].c : null);
-
-    if (currentPriceForAlerts === null) return;
-
-    const activeAlerts = alerts.filter((a) => a.status === 'active');
-    if (activeAlerts.length === 0) {
-      prevPriceRef.current = currentPriceForAlerts;
-      return;
-    }
-
-    const prevPrice = prevPriceRef.current;
-
-    console.log('[Chart Component] Tick crossover check:', {
-      livePrice,
-      fallbackPrice: data && data.length > 0 ? data[data.length - 1].c : null,
-      currentPriceForAlerts,
-      prevPrice,
-      activeAlertsCount: activeAlerts.length
-    });
-
-    // A. TOUCH Check (Tick-by-Tick)
-    if (prevPrice !== null && prevPrice !== currentPriceForAlerts) {
-      const activeTouchAlerts = activeAlerts.filter((a) => a.triggerCondition === 'TOUCH');
-
-      activeTouchAlerts.forEach((alert) => {
-        const crossedUp = prevPrice < alert.price && currentPriceForAlerts >= alert.price;
-        const crossedDown = prevPrice > alert.price && currentPriceForAlerts <= alert.price;
-        const exactHit = currentPriceForAlerts === alert.price;
-
-        if (crossedUp || crossedDown || exactHit) {
-          console.log(`[ALERT] TOUCH condition satisfied for alert ${alert.id} (${alert.label}) at price: ${currentPriceForAlerts}`);
-          executeAlert(alert);
-        }
-      });
-    }
-
-    // B. Candle Close Check (CLOSE_ABOVE, CLOSE_BELOW, WICK_PURGE_REJECT)
-    // Resolve candle to evaluate: either live kline, or the last historical candle when it is closed
-    const activeCandle = liveCandle
-      ? liveCandle
-      : (data && data.length > 0
-        ? {
-          time: Math.floor(data[data.length - 1].t / 1000),
-          open: data[data.length - 1].o,
-          high: data[data.length - 1].h,
-          low: data[data.length - 1].l,
-          close: data[data.length - 1].c,
-          volume: data[data.length - 1].v,
-          isClosed: true // REST polled candles are by definition completed
-        }
-        : null);
-
-    if (activeCandle && activeCandle.isClosed && Number(activeCandle.time) !== lastProcessedClosedTimeRef.current) {
-      lastProcessedClosedTimeRef.current = Number(activeCandle.time);
-
-      const activeCloseAlerts = activeAlerts.filter((a) => a.triggerCondition !== 'TOUCH');
-
-      activeCloseAlerts.forEach((alert) => {
-        let isSatisfied = false;
-
-        if (alert.triggerCondition === 'CLOSE_ABOVE') {
-          if (activeCandle.close > alert.price) {
-            isSatisfied = true;
-          }
-        } else if (alert.triggerCondition === 'CLOSE_BELOW') {
-          if (activeCandle.close < alert.price) {
-            isSatisfied = true;
-          }
-        } else if (alert.triggerCondition === 'WICK_PURGE_REJECT') {
-          // If alert was placed above candle open (resistance line)
-          if (alert.price > activeCandle.open) {
-            if (activeCandle.high >= alert.price && activeCandle.close < alert.price) {
-              isSatisfied = true;
-            }
-          }
-          // If alert was placed below candle open (support line)
-          else if (alert.price < activeCandle.open) {
-            if (activeCandle.low <= alert.price && activeCandle.close > alert.price) {
-              isSatisfied = true;
-            }
-          }
-        }
-
-        if (isSatisfied) {
-          console.log(`[ALERT] ${alert.triggerCondition} condition satisfied for alert ${alert.id} (${alert.label}) at close: ${activeCandle.close}`);
-          executeAlert(alert);
-        }
-      });
-    }
-
-    // Always keep prevPriceRef synced with current live price tick
-    prevPriceRef.current = currentPriceForAlerts;
-
-  }, [livePrice, liveCandle, data, alerts, executeAlert]);
-
   // Resolve the candle to show in the HUD (top left)
   // 1. If user is hovering a candle, show the hovered candle
-  // 2. Otherwise, if there is a liveCandle, show the live candle
-  // 3. Otherwise, if there is historical data, show the last candle
+  // 2. Otherwise, show the last candle in localCandles
   const hudCandle = (() => {
     if (hoveredCandle) {
       return hoveredCandle;
     }
-    if (liveCandle) {
-      return {
-        open: liveCandle.open,
-        high: liveCandle.high,
-        low: liveCandle.low,
-        close: liveCandle.close,
-        volume: liveCandle.volume,
-      };
-    }
-    if (data && data.length > 0) {
-      const last = data[data.length - 1];
+    if (localCandles.length > 0) {
+      const last = localCandles[localCandles.length - 1];
       return {
         open: last.o,
         high: last.h,
@@ -2303,7 +2132,7 @@ export default function Chart({
 
       {/* Top Left HUD - Candle Info */}
       {hudCandle && (
-        <div className="absolute top-4 left-4 bg-[#0e0e0f]/80 backdrop-blur-md border border-[#4a4457]/30 px-3 py-1 rounded-none shadow-xl pointer-events-none z-10 flex flex-wrap items-center gap-x-4 gap-y-1 select-none font-mono text-[11px]">
+        <div className="absolute top-4 left-4 bg-[#0e0e0f]/95 border border-[#4a4457]/40 px-3 py-1 rounded-none shadow-xl pointer-events-none z-10 flex flex-wrap items-center gap-x-4 gap-y-1 select-none font-mono text-[11px]">
           <div className="flex items-center gap-1">
             <span className="text-white/40">O</span>
             <span className="text-[#e5e2e3] font-medium">{hudCandle.open.toFixed(2)}</span>
@@ -2434,7 +2263,7 @@ export default function Chart({
 
       {/* Floating Magnet Notification Toast */}
       {snapNotification && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 bg-[#141416]/95 border border-emerald-500/50 text-emerald-400 text-xs font-mono font-black uppercase tracking-wider rounded-lg shadow-2xl backdrop-blur-md animate-[fadeIn_0.15s_ease-out]">
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 bg-[#141416]/98 border border-emerald-500/50 text-emerald-400 text-xs font-mono font-black uppercase tracking-wider rounded-lg shadow-2xl animate-[fadeIn_0.15s_ease-out]">
           🧲 {snapNotification}
         </div>
       )}
@@ -2469,16 +2298,160 @@ export default function Chart({
         }}
       />
 
-      {/* HUD Pulse Visual Overlay */}
-      {hudPulse && (
-        <div
-          className={`absolute inset-0 pointer-events-none z-20 border-2 transition-all duration-300 ${hudPulse === 'BULLISH'
-            ? 'border-[#50ffaf]/60 shadow-[inset_0_0_100px_rgba(80,255,175,0.25)] bg-[#50ffaf]/5'
-            : 'border-[#ffb4ab]/60 shadow-[inset_0_0_100px_rgba(255,180,171,0.25)] bg-[#ffb4ab]/5'
-            }`}
-        />
-      )}
+      {/* Isolated Native Canvas Series & Alert Updater */}
+      <LiveSeriesCanvasUpdater
+        seriesRef={seriesRef}
+        localCandlesRef={localCandlesRef}
+        setLocalCandles={setLocalCandles}
+        scheduleLayoutUpdates={scheduleLayoutUpdates}
+        customLiveCandle={propsLiveCandle}
+        customLivePrice={propsLivePrice}
+        alerts={alerts}
+        executeAlert={executeAlert}
+        isBacktest={isBacktest}
+      />
     </div>
   );
 }
+
+interface LiveSeriesCanvasUpdaterProps {
+  seriesRef: React.RefObject<any>;
+  localCandlesRef: React.RefObject<Candle[]>;
+  setLocalCandles: React.Dispatch<React.SetStateAction<Candle[]>>;
+  scheduleLayoutUpdates: () => void;
+  customLiveCandle?: LiveCandle | null;
+  customLivePrice?: number | null;
+  alerts: Alert[];
+  executeAlert: (alert: Alert) => void;
+  isBacktest?: boolean;
+}
+
+const LiveSeriesCanvasUpdater = memo(function LiveSeriesCanvasUpdater({
+  seriesRef,
+  localCandlesRef,
+  setLocalCandles,
+  scheduleLayoutUpdates,
+  customLiveCandle,
+  customLivePrice,
+  alerts,
+  executeAlert,
+  isBacktest = false,
+}: LiveSeriesCanvasUpdaterProps) {
+  const liveContext = useMarketDataLiveContext();
+  const liveCandle = customLiveCandle !== undefined ? customLiveCandle : liveContext?.liveCandle;
+  const livePrice = customLivePrice !== undefined ? customLivePrice : liveContext?.livePrice;
+
+  const prevPriceRef = useRef<number | null>(null);
+  const lastProcessedClosedTimeRef = useRef<number | null>(null);
+
+  // 1. Direct Native Canvas Series Update via Lightweight Charts API (60fps)
+  useEffect(() => {
+    const candles = localCandlesRef.current;
+    if (seriesRef.current && liveCandle && candles && candles.length > 0) {
+      try {
+        const lastBar = candles[candles.length - 1];
+        const lastBarTimeSec = Math.floor(lastBar.t / 1000);
+
+        if (liveCandle.time >= lastBarTimeSec) {
+          seriesRef.current.update(liveCandle as any);
+          scheduleLayoutUpdates();
+
+          const isSameTime = liveCandle.time === lastBarTimeSec;
+          if (isSameTime && !liveCandle.isClosed) return;
+
+          setLocalCandles((prev) => {
+            if (prev.length === 0) return prev;
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            const lastCandle = updated[lastIdx];
+            const lastTimeSec = Math.floor(lastCandle.t / 1000);
+
+            const mappedCandle: Candle = {
+              t: liveCandle.time * 1000,
+              o: liveCandle.open,
+              h: liveCandle.high,
+              l: liveCandle.low,
+              c: liveCandle.close,
+              v: liveCandle.volume,
+              taker_buy_vol: (liveCandle as any).taker_buy_vol ?? liveCandle.volume / 2,
+              taker_sell_vol: (liveCandle as any).taker_sell_vol ?? liveCandle.volume / 2,
+              isClosed: liveCandle.isClosed === true,
+            };
+
+            if (liveCandle.time === lastTimeSec) {
+              updated[lastIdx] = mappedCandle;
+            } else if (liveCandle.time > lastTimeSec) {
+              updated.push(mappedCandle);
+            }
+            return updated;
+          });
+        }
+      } catch (error) {
+        console.error('[Chart] Lightweight Charts Update Error:', error);
+      }
+    }
+  }, [liveCandle, seriesRef, localCandlesRef, setLocalCandles, scheduleLayoutUpdates]);
+
+  // 2. Alert Crossover Evaluation (Isolated from parent Chart re-renders)
+  useEffect(() => {
+    if (isBacktest) return;
+
+    const currentPriceForAlerts = livePrice !== null && livePrice !== undefined
+      ? livePrice
+      : (localCandlesRef.current && localCandlesRef.current.length > 0 ? localCandlesRef.current[localCandlesRef.current.length - 1].c : null);
+
+    if (currentPriceForAlerts === null) return;
+
+    const activeAlerts = alerts.filter((a) => a.status === 'active');
+    if (activeAlerts.length === 0) {
+      prevPriceRef.current = currentPriceForAlerts;
+      return;
+    }
+
+    const prevPrice = prevPriceRef.current;
+
+    // A. TOUCH Check (Tick-by-Tick)
+    if (prevPrice !== null && prevPrice !== currentPriceForAlerts) {
+      const activeTouchAlerts = activeAlerts.filter((a) => a.triggerCondition === 'TOUCH');
+
+      activeTouchAlerts.forEach((alert) => {
+        const crossedUp = prevPrice < alert.price && currentPriceForAlerts >= alert.price;
+        const crossedDown = prevPrice > alert.price && currentPriceForAlerts <= alert.price;
+        const exactHit = currentPriceForAlerts === alert.price;
+
+        if (crossedUp || crossedDown || exactHit) {
+          executeAlert(alert);
+        }
+      });
+    }
+
+    // B. Candle Close Check
+    if (liveCandle && liveCandle.isClosed && Number(liveCandle.time) !== lastProcessedClosedTimeRef.current) {
+      lastProcessedClosedTimeRef.current = Number(liveCandle.time);
+      const activeCloseAlerts = activeAlerts.filter((a) => a.triggerCondition !== 'TOUCH');
+
+      activeCloseAlerts.forEach((alert) => {
+        let isSatisfied = false;
+        if (alert.triggerCondition === 'CLOSE_ABOVE' && liveCandle.close > alert.price) {
+          isSatisfied = true;
+        } else if (alert.triggerCondition === 'CLOSE_BELOW' && liveCandle.close < alert.price) {
+          isSatisfied = true;
+        } else if (alert.triggerCondition === 'WICK_PURGE_REJECT') {
+          if (alert.price > liveCandle.open && liveCandle.high >= alert.price && liveCandle.close < alert.price) {
+            isSatisfied = true;
+          } else if (alert.price < liveCandle.open && liveCandle.low <= alert.price && liveCandle.close > alert.price) {
+            isSatisfied = true;
+          }
+        }
+        if (isSatisfied) {
+          executeAlert(alert);
+        }
+      });
+    }
+
+    prevPriceRef.current = currentPriceForAlerts;
+  }, [livePrice, liveCandle, alerts, executeAlert, isBacktest, localCandlesRef]);
+
+  return null;
+});
 

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import type { OrderFlowTimelineSummary, OrderFlowStateRecord, OrderFlowState } from '@/lib/quantEngine/types';
 import { getStateMetadata, formatDuration, formatTimeCairo } from '../OrderFlowTimelineRibbon';
+import { useMarketDataLiveContext } from '@/context/MarketDataContext';
 
 interface OrderFlowTimelineModalProps {
   isOpen: boolean;
@@ -39,6 +40,9 @@ export default function OrderFlowTimelineModal({
   symbol = 'ETHUSDC.p',
   isBacktest = false,
 }: OrderFlowTimelineModalProps) {
+  const liveContext = useMarketDataLiveContext();
+  const effectiveLivePrice = livePrice !== undefined ? livePrice : liveContext?.livePrice;
+
   const [filterState, setFilterState] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedRecord, setSelectedRecord] = useState<OrderFlowStateRecord | null>(null);

@@ -26,6 +26,7 @@ import {
   PositionScalingMode,
   TrailingStopMode
 } from './OrderBlockEngine';
+import { IS_ORDER_BLOCK_STRATEGY_PAUSED } from './strategyExecutionConfig';
 
 export interface LivePosition {
   id: string;
@@ -316,6 +317,22 @@ export class LiveOrderBlockExecutionEngine {
   }
 
   /**
+   * Completely flushes and purges all active resting zones, testing states, and cached lookback data.
+   */
+  public purgeAllZones(): void {
+    this.activeZonesByTimeframe.clear();
+    for (const tf of SUPPORTED_TIMEFRAMES) {
+      this.activeZonesByTimeframe.set(tf, []);
+    }
+    this.allActiveZones = [];
+    this.knownZoneIds.clear();
+    this.inZoneTestingStates.clear();
+    this.closedCandlesByTimeframe.clear();
+    this.lastProcessedCandleTimes.clear();
+    this.consumedZoneIds.clear();
+  }
+
+  /**
    * Ingests multi-timeframe candle streams (5m, 15m, 1h) concurrently.
    * Runs the zero look-ahead multi-gate validation pipeline independently for currently enabled timeframes.
    */
@@ -328,6 +345,14 @@ export class LiveOrderBlockExecutionEngine {
     },
     macroContext?: MacroMarketContext
   ) {
+    // 0ms early return bailout when Order Block & Breaker strategy is paused
+    if (IS_ORDER_BLOCK_STRATEGY_PAUSED) {
+      if (this.allActiveZones.length > 0 || this.inZoneTestingStates.size > 0) {
+        this.purgeAllZones();
+      }
+      return;
+    }
+
     if (macroContext) {
       this.currentMacroContext = { ...this.currentMacroContext, ...macroContext };
     }
@@ -681,10 +706,11 @@ export class LiveOrderBlockExecutionEngine {
     activePositions: LivePosition[];
     activeZones: InstitutionalOrderBlock[];
   } {
-    if (!tickPrice || tickPrice <= 0) {
+    // 0ms early return bailout when Order Block & Breaker strategy is paused
+    if (IS_ORDER_BLOCK_STRATEGY_PAUSED || !tickPrice || tickPrice <= 0) {
       return {
         activePositions: Array.from(this.openPositions.values()),
-        activeZones: this.allActiveZones
+        activeZones: []
       };
     }
 
@@ -967,6 +993,7 @@ export class LiveOrderBlockExecutionEngine {
   }
 
   public getActiveZones(timeframeFilter?: 'ALL' | '5m' | '15m' | '1h'): InstitutionalOrderBlock[] {
+    if (IS_ORDER_BLOCK_STRATEGY_PAUSED) return [];
     if (!timeframeFilter || timeframeFilter === 'ALL') {
       return this.allActiveZones;
     }
@@ -976,7 +1003,7 @@ export class LiveOrderBlockExecutionEngine {
   public getActiveZonesByTimeframe(): Record<string, InstitutionalOrderBlock[]> {
     const res: Record<string, InstitutionalOrderBlock[]> = {};
     for (const tf of SUPPORTED_TIMEFRAMES) {
-      res[tf] = this.activeZonesByTimeframe.get(tf) || [];
+      res[tf] = IS_ORDER_BLOCK_STRATEGY_PAUSED ? [] : (this.activeZonesByTimeframe.get(tf) || []);
     }
     return res;
   }
@@ -998,11 +1025,13 @@ export class LiveOrderBlockExecutionEngine {
   }
 
   public getCooldownRemainingSec(): number {
+    if (IS_ORDER_BLOCK_STRATEGY_PAUSED) return 0;
     const diffMs = this.cooldownUntilTimestamp - Date.now();
     return Math.max(0, Math.ceil(diffMs / 1000));
   }
 
   public getInZoneTestingStates(): InZoneTestingState[] {
+    if (IS_ORDER_BLOCK_STRATEGY_PAUSED) return [];
     return Array.from(this.inZoneTestingStates.values());
   }
 

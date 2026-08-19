@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import type { OrderFlowStateRecord, OrderFlowTimelineSummary, OrderFlowState } from '@/lib/quantEngine/types';
 import { Activity, Clock, ArrowRight, TrendingUp, TrendingDown, Maximize2, Shield, Info, SlidersHorizontal } from 'lucide-react';
 import { useOBTimeframeStreams, SupportedOBTimeframe } from '@/lib/quantEngine/strategyExecutionConfig';
+import { useMarketDataLiveContext } from '@/context/MarketDataContext';
 
 interface OrderFlowTimelineRibbonProps {
   timeline?: OrderFlowTimelineSummary | null;
@@ -193,6 +194,8 @@ export default function OrderFlowTimelineRibbon({
   } | null>(null);
   const [mounted, setMounted] = useState(false);
   const { enabledTimeframes, isTimeframeEnabled, toggleTimeframe } = useOBTimeframeStreams();
+  const liveContext = useMarketDataLiveContext();
+  const effectiveLivePrice = livePrice !== undefined ? livePrice : liveContext?.livePrice;
 
   useEffect(() => {
     setMounted(true);
@@ -222,8 +225,8 @@ export default function OrderFlowTimelineRibbon({
 
   // Combine visible history (last 20 segments) + active state, strictly deduplicating and sorting chronologically
   const { segments: allSegments, totalTransitions } = useMemo(() => {
-    return getUnifiedTimelineSegments(timeline, livePrice, liveDurationSec, 20);
-  }, [timeline, livePrice, liveDurationSec]);
+    return getUnifiedTimelineSegments(timeline, effectiveLivePrice, liveDurationSec, 20);
+  }, [timeline, effectiveLivePrice, liveDurationSec]);
 
   // Compute total duration to determine percentage flex widths with min/max clamps
   const totalDuration = useMemo(() => {
