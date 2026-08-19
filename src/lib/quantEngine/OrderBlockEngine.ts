@@ -555,8 +555,11 @@ export class OrderBlockEngine {
 
     const entryPrice = this.config.entryMode === 'MEAN_THRESHOLD' ? mean_threshold : top;
     const tickBuffer = this.config.trailingBuffer;
-    const stopLoss = parseFloat((bottom - tickBuffer).toFixed(4));
-    const risk = Math.max(0.1, entryPrice - stopLoss);
+    const rawStopLoss = parseFloat((bottom - tickBuffer).toFixed(4));
+    const calculatedRawDistance = Math.abs(entryPrice - rawStopLoss);
+    const minStopLossDistance = Math.max(calculatedRawDistance, entryPrice * 0.0015);
+    const stopLoss = parseFloat((entryPrice - minStopLossDistance).toFixed(4));
+    const risk = minStopLossDistance;
     const tp1 = parseFloat((entryPrice + this.config.tp1Multiple * risk).toFixed(4));
     const tp2 = parseFloat((entryPrice + this.config.tp2Multiple * risk).toFixed(4));
     let tp3 = parseFloat((entryPrice + this.config.targetRewardRatio * risk).toFixed(4));
@@ -729,8 +732,11 @@ export class OrderBlockEngine {
 
     const entryPrice = this.config.entryMode === 'MEAN_THRESHOLD' ? mean_threshold : bottom;
     const tickBuffer = this.config.trailingBuffer;
-    const stopLoss = parseFloat((top + tickBuffer).toFixed(4));
-    const risk = Math.max(0.1, stopLoss - entryPrice);
+    const rawStopLoss = parseFloat((top + tickBuffer).toFixed(4));
+    const calculatedRawDistance = Math.abs(rawStopLoss - entryPrice);
+    const minStopLossDistance = Math.max(calculatedRawDistance, entryPrice * 0.0015);
+    const stopLoss = parseFloat((entryPrice + minStopLossDistance).toFixed(4));
+    const risk = minStopLossDistance;
     const tp1 = parseFloat((entryPrice - this.config.tp1Multiple * risk).toFixed(4));
     const tp2 = parseFloat((entryPrice - this.config.tp2Multiple * risk).toFixed(4));
     let tp3 = parseFloat((entryPrice - this.config.targetRewardRatio * risk).toFixed(4));

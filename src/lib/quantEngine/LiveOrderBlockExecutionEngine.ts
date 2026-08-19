@@ -804,6 +804,15 @@ export class LiveOrderBlockExecutionEngine {
   private openLivePosition(zone: InstitutionalOrderBlock, fillPrice: number, time: number) {
     if (this.openPositions.size >= this.config.maxOpenPositions) return;
 
+    // ── Guardrail: One-Active-Position-Per-Structural-Wave Concurrency Lock ──
+    const hasActiveForZone = Array.from(this.openPositions.values()).some(
+      p => p.orderBlockId === zone.id || (p.orderBlock && Math.abs(p.orderBlock.mean_threshold - zone.mean_threshold) < 0.50)
+    );
+    if (hasActiveForZone) {
+      console.warn(`[EXECUTION_LOCK] Vetoed duplicate entry for active zone: ${zone.mean_threshold}`);
+      return;
+    }
+
     // Single-use doctrine: immediately flag zone as consumed
     this.consumedZoneIds.add(zone.id);
     zone.is_consumed = true;
@@ -812,12 +821,19 @@ export class LiveOrderBlockExecutionEngine {
     const direction: 'LONG' | 'SHORT' = isBullish ? 'LONG' : 'SHORT';
 
     const entryPrice = fillPrice;
-    let initialStopLoss = isBullish ? zone.bottom : zone.top;
+    let rawStopLoss = isBullish ? zone.bottom : zone.top;
     if (zone.is_breaker && zone.breaker_stop_loss) {
-      initialStopLoss = zone.breaker_stop_loss;
+      rawStopLoss = zone.breaker_stop_loss;
     }
 
-    const risk = Math.abs(entryPrice - initialStopLoss);
+    // ── Anti-Micro-Friction Stop Loss Clamp (0.15% Minimum Price Buffer) ──
+    const rawRisk = Math.abs(entryPrice - rawStopLoss);
+    const minRisk = Math.max(rawRisk, entryPrice * 0.0015);
+    const effectiveStopLoss = isBullish
+      ? parseFloat((entryPrice - minRisk).toFixed(4))
+      : parseFloat((entryPrice + minRisk).toFixed(4));
+    const risk = minRisk;
+
     if (risk <= 0) return;
 
     const tp1Mult = this.config.tp1Multiple ?? 1.0;
@@ -844,8 +860,8 @@ export class LiveOrderBlockExecutionEngine {
       direction,
       status: 'OPEN',
       entryPrice,
-      initialStopLoss,
-      activeStopLoss: initialStopLoss,
+      initialStopLoss: effectiveStopLoss,
+      activeStopLoss: effectiveStopLoss,
       activeRatchetFloor: null,
       trailingSlSource: 'INITIAL',
       tp1Price,
@@ -874,7 +890,7 @@ export class LiveOrderBlockExecutionEngine {
     this.emitEvent(
       'ORDER_OPENED',
       newPosition,
-      `🚀 [${zone.timeframe.toUpperCase()} ORDER OPENED] ${direction} @ $${entryPrice} | SL: $${initialStopLoss} | TP1: $${tp1Price} (40%) | TP2: $${tp2Price} (40%) | TP3: $${tp3Price} (20% Runner)`
+      `🚀 [${zone.timeframe.toUpperCase()} ORDER OPENED] ${direction} @ $${entryPrice} | SL: $${effectiveStopLoss} | TP1: $${tp1Price} (40%) | TP2: $${tp2Price} (40%) | TP3: $${tp3Price} (20% Runner)`
     );
   }
 

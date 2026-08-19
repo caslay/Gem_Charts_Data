@@ -37,7 +37,7 @@ export interface SweepReclaimLiveSettings {
   compoundingRiskPct: number; // 1.0, 2.0, 3.0 (default: 2.0)
   enabledTimeframes: SupportedOBTimeframe[]; // ['5m', '15m', '1h'] (default: ['5m', '15m', '1h'])
   anchorTypes: ('SWING_PIVOT' | 'ASIAN' | 'LONDON' | 'DAILY')[]; // default: ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY']
-  entryMode: 'FVG_CE' | 'SWEEP_OB_MT' | 'RECLAIM_LEVEL'; // default: 'FVG_CE'
+  entryMode: 'FVG_CE' | 'SWEEP_OB_MT' | 'RECLAIM_LEVEL'; // default: 'SWEEP_OB_MT'
   volumeExpansionThreshold: number; // default: 1.50
   deltaDominanceThreshold: number; // default: 60.0
   bodyRatioThreshold: number; // default: 0.60
@@ -52,7 +52,7 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   compoundingRiskPct: 2.0,
   enabledTimeframes: ['5m', '15m', '1h'],
   anchorTypes: ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'],
-  entryMode: 'FVG_CE',
+  entryMode: 'SWEEP_OB_MT',
   volumeExpansionThreshold: 1.50,
   deltaDominanceThreshold: 60.0,
   bodyRatioThreshold: 0.60,

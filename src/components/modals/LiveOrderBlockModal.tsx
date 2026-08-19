@@ -1185,7 +1185,7 @@ function LiveOrderBlockModalContent({
                           type="button"
                           onClick={() => updateSrSettings({ entryMode: mode.id as any })}
                           className={`py-1.5 px-1 rounded border text-center font-bold text-[8.5px] cursor-pointer transition ${
-                            (srSettings?.entryMode || 'FVG_CE') === mode.id
+                            (srSettings?.entryMode || 'SWEEP_OB_MT') === mode.id
                               ? 'bg-cyan-950/80 border-cyan-500 text-cyan-300 shadow-[0_0_6px_rgba(6,182,212,0.2)]'
                               : 'bg-background/30 border-slate-800 text-slate-400 hover:text-white'
                           }`}

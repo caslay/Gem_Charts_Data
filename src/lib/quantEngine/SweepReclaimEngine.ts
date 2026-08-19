@@ -192,13 +192,13 @@ export interface SweepReclaimScanConfig {
   requireThreePillarDisplacement?: boolean;   // Veto reclaims that fail 3-pillar gate (default: true)
 
   // Valuation Gating
-  enforceDiscountPremiumGate?: boolean;       // Require Longs in Discount, Shorts in Premium (default: false)
+  enforceDiscountPremiumGate?: boolean;       // Require Longs in Discount, Shorts in Premium (default: true)
 
   // Target Multiples & Execution
   stage1Multiple?: number;                    // Stage 1 Tranche target R (default: 1.0)
   stage2Multiple?: number;                    // Stage 2 Tranche target R (default: 1.5)
   stage3Multiple?: number;                    // Stage 3 Tranche target R / DOL runner (default: 3.0)
-  entryMode?: 'FVG_CE' | 'SWEEP_OB_MT' | 'RECLAIM_LEVEL'; // (default: 'FVG_CE')
+  entryMode?: 'FVG_CE' | 'SWEEP_OB_MT' | 'RECLAIM_LEVEL'; // (default: 'SWEEP_OB_MT')
   enableStructuralTrail?: boolean;            // Trail SL to FVG CE after Stage 1 (default: true)
   enableProfitRatchet?: boolean;              // Ratchet SL to +1.0R floor after Stage 2 (default: true)
   minSweepDepthAtrMultiplier?: number;        // Min sweep penetration in ATR (default: 0.10)
@@ -289,11 +289,11 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   deltaDominanceThreshold: 60.0,
   bodyRatioThreshold: 0.60,
   requireThreePillarDisplacement: true,
-  enforceDiscountPremiumGate: false,
+  enforceDiscountPremiumGate: true,
   stage1Multiple: 1.0,
   stage2Multiple: 1.5,
   stage3Multiple: 3.0,
-  entryMode: 'FVG_CE',
+  entryMode: 'SWEEP_OB_MT',
   enableStructuralTrail: true,
   enableProfitRatchet: true,
   minSweepDepthAtrMultiplier: 0.10,
@@ -605,7 +605,16 @@ export class SweepReclaimEngine {
     const stage1Multiple = this.config.stage1Multiple ?? 1.0;
     const stage2Multiple = this.config.stage2Multiple ?? 1.5;
     const stage3Multiple = this.config.stage3Multiple ?? 3.0;
-    const entryMode = this.config.entryMode ?? 'FVG_CE';
+    const entryMode = this.config.entryMode ?? 'SWEEP_OB_MT';
+
+    // One-Active-Position-Per-Structural-Wave Concurrency Lock registry
+    const activeTradeIntervals: Array<{
+      startIdx: number;
+      endIdx: number;
+      anchorLevel: number;
+      sweepExtreme: number | null;
+      isBullish: boolean;
+    }> = [];
 
     // Iterate through confirmed multi-timeframe anchors
     for (const anchor of anchors) {
@@ -1018,15 +1027,21 @@ export class SweepReclaimEngine {
         ? executionEntry <= dealingRangeEquilibrium
         : executionEntry >= dealingRangeEquilibrium;
 
-      // Stop Loss: Locked 1 tick beyond sweep candle extreme
+      // Stop Loss: Locked 1 tick beyond sweep candle extreme with Anti-Micro-Friction Clamp (0.15% minimum distance)
       const atrAtSweep = atrSeries[sweepIdx] || 1.0;
       const slBuffer = Math.max(0.01, (this.config.slBufferAtrMultiplier ?? 0.15) * atrAtSweep);
 
-      const stopLoss = isBullish
+      const rawStopLoss = isBullish
         ? Math.min(sweepExtremePrice - slBuffer, executionEntry - 0.50)
         : Math.max(sweepExtremePrice + slBuffer, executionEntry + 0.50);
 
-      const riskUsd = Math.max(0.1, Math.abs(executionEntry - stopLoss));
+      const calculatedRawDistance = Math.abs(executionEntry - rawStopLoss);
+      const minStopLossDistance = Math.max(calculatedRawDistance, executionEntry * 0.0015);
+      const stopLoss = isBullish
+        ? parseFloat((executionEntry - minStopLossDistance).toFixed(4))
+        : parseFloat((executionEntry + minStopLossDistance).toFixed(4));
+
+      const riskUsd = minStopLossDistance;
       const riskPct = (riskUsd / executionEntry) * 100;
 
       const target1 = isBullish
@@ -1166,8 +1181,9 @@ export class SweepReclaimEngine {
         if (isBullish) {
           // Bullish: Price pulls back into execution entry (FVG CE, OB MT, or anchor shelf)
           if (low <= executionEntry) {
-            // ICT Body Defense Doctrine: Candle body must close above shelf
-            if (close >= anchorLevel) {
+            // ICT Body Defense Doctrine: Candle body must defend anchor / execution level
+            const defenseFloor = Math.min(anchorLevel, executionEntry);
+            if (close >= defenseFloor) {
               retestFound = true;
               retestIdx = i;
               retestPrice = executionEntry;
@@ -1185,7 +1201,9 @@ export class SweepReclaimEngine {
         } else {
           // Bearish: Price pulls back up into execution entry
           if (high >= executionEntry) {
-            if (close <= anchorLevel) {
+            // ICT Body Defense Doctrine: Candle body must defend anchor / execution level
+            const defenseCeiling = Math.max(anchorLevel, executionEntry);
+            if (close <= defenseCeiling) {
               retestFound = true;
               retestIdx = i;
               retestPrice = executionEntry;
@@ -1209,6 +1227,24 @@ export class SweepReclaimEngine {
           baseSetup.simulated_outcome = 'NO_RETEST';
           baseSetup.stage_exit_type = 'NO_RETEST';
         }
+        detectedSetups.push(baseSetup);
+        continue;
+      }
+
+      // ── One-Active-Position-Per-Structural-Wave Concurrency Lock ──
+      const isWaveAlreadyActive = activeTradeIntervals.some(
+        (t) =>
+          t.isBullish === isBullish &&
+          (t.sweepExtreme === sweepExtremePrice || Math.abs(t.anchorLevel - anchorLevel) < 0.50) &&
+          retestIdx! >= t.startIdx &&
+          retestIdx! <= t.endIdx
+      );
+
+      if (isWaveAlreadyActive) {
+        console.warn(`[EXECUTION_LOCK] Vetoed duplicate entry for active zone: ${anchorLevel}`);
+        baseSetup.status = 'RECLAIMED_NO_RETEST';
+        baseSetup.simulated_outcome = 'INVALIDATED';
+        baseSetup.stage_exit_type = 'INVALIDATED';
         detectedSetups.push(baseSetup);
         continue;
       }
@@ -1468,6 +1504,16 @@ export class SweepReclaimEngine {
       baseSetup.exit_price = exitPrice !== null ? parseFloat(exitPrice.toFixed(4)) : null;
       baseSetup.exit_time = exitTime;
       baseSetup.bars_to_outcome = exitIdx !== null ? exitIdx - retestIdx : null;
+
+      if (retestIdx !== null) {
+        activeTradeIntervals.push({
+          startIdx: retestIdx,
+          endIdx: exitIdx !== null ? exitIdx : n - 1,
+          anchorLevel,
+          sweepExtreme: sweepExtremePrice,
+          isBullish,
+        });
+      }
 
       detectedSetups.push(baseSetup);
     }

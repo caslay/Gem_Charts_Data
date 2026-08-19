@@ -817,6 +817,21 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
       const hasPriceInFvg = conditions.some((c: any) => c.metric === 'PRICE_IN_FVG');
       const entry_price = (hasPriceInFvg && typeof livePrice === 'number' && livePrice > 0) ? livePrice : undefined;
 
+      // PATCH 1: One-Active-Position-Per-Structural-Wave Concurrency Lock
+      const targetAnchorLevel = entry_price || livePrice || 0;
+      if (targetAnchorLevel > 0) {
+        const isZoneAlreadyActive = trades.some(
+          t => (t.status === 'OPEN' || t.status === 'PAUSED') &&
+            typeof t.entry_price === 'number' &&
+            Math.abs(t.entry_price - targetAnchorLevel) < 0.50
+        );
+
+        if (isZoneAlreadyActive) {
+          console.warn(`[EXECUTION_LOCK] Vetoed duplicate entry for active zone: ${targetAnchorLevel}`);
+          continue;
+        }
+      }
+
       fetch(tradesApiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
