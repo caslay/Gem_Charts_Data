@@ -1,8 +1,79 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.29
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.32
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-19 (V16.29 — HTF Status Radar Reactivation & Desktop Chrome GPU Optimization — Eliminating Compositing Blur Bottlenecks & Reflows)  
+> **Last Updated:** 2026-08-20 (V16.32 — Production-Grade Quantitative Hardening & Risk Guardrails)  
+
+## 🆕 V16.32 Changelog — Production-Grade Quantitative Hardening & Risk Guardrails (2026-08-20)
+
+### Summary
+Implemented institutional production-grade risk hardening and concurrency guardrails across the live automated execution engine (`AutomatedStrategyExecutionEngine.ts`), historical backtest replay scanner (`SweepReclaimEngine.ts`), real-time order block state machine (`LiveOrderBlockExecutionEngine.ts`), strategy evaluators (`useStrategyEvaluator.ts`), and trading API endpoints (`/api/trades`). Eliminated edge-case multi-fill clustering on overlapping liquidity anchors (Asian High/London High/Pivot waves) and stopped excessive contract size inflation on micro-wick invalidations by enforcing an active structural wave concurrency lock and a minimum 0.15% price buffer stop loss floor.
+
+### Key Features & Architectural Directives
+- **Directive 1: One-Active-Position-Per-Structural-Wave Concurrency Lock (`AutomatedStrategyExecutionEngine.ts`, `SweepReclaimEngine.ts`, `LiveOrderBlockExecutionEngine.ts`, `useStrategyEvaluator.ts`, `/api/trades`):**
+  - **Live Engine Guardrail 5:** Before queuing a resting limit order or executing a market entry for a newly triggered Sweep & Reclaim setup, the engine checks whether an active (`activePositions`) or pending (`pendingLimitOrders`) order already exists for the `originZoneId` or within $\pm 0.50$ of `originAnchorLevel`.
+  - Gracefully vetoes duplicate signals with an audit log: `[EXECUTION_LOCK] Vetoed duplicate entry for active zone: ${targetAnchorLevel}`.
+  - **Backtest Replay Synchronization:** Maintains an `activeTradeIntervals` registry during multi-anchor historical scans. If overlapping anchors in the same structural wave trigger retests during an ongoing trade window, duplicate entries are vetoed to mirror real-world execution capacity.
+- **Directive 2: Minimum Stop Loss Distance Buffer / Anti-Micro-Friction Clamp (`SweepReclaimEngine.ts`, `AutomatedStrategyExecutionEngine.ts`, `OrderBlockEngine.ts`, `LiveOrderBlockExecutionEngine.ts`, `riskEngine.ts`, `/api/trades`):**
+  - Introduced a strict 0.15% minimum price distance floor (`minStopLossDistance = Math.max(calculatedRawDistance, entryPrice * 0.0015)`) across all stop loss derivation functions and position sizing modules.
+  - In tight-wick setups (< 0.15% / < $4.50 on ETH @ $3,000), the stop loss is automatically widened to the 0.15% boundary. This prevents hyper-leveraged position sizing spikes and safely absorbs exchange bid-ask spreads, maker/taker fee slippage, and micro-friction.
+  - For normal structural setups ($\ge 0.15\%$), exact ICT structural invalidation points are preserved without modification.
+- **Directive 3: Automated Verification Suite (`scratch/test_hardening_guardrails.ts`):**
+  - Comprehensive automated test suite verified 100% enforcement of concurrency locks, veto messages, micro-wick clamping, position sizing safety, and backtest integrity.
+  - `npx tsc --noEmit` exits with **0 errors**.
+
+---
+
+## 🆕 V16.31 Changelog — Golden Sweep & Reclaim Strategy Default System Synchronization (2026-08-20)
+
+### Summary
+Standardized and synchronized the entire platform (UI initial states, Live Automated Execution Engine, Quant Lab Backtest Replay Scanner, and Session Rehydration) to use the validated **Golden Sweep & Reclaim Strategy** as the single system-wide default configuration. Locked in high-probability parameters: Sweep Order Block 50% Mean Threshold (`SWEEP_OB_MT`), active Valuation Gate (`enforceDiscountPremiumGate: true`), full multi-timeframe liquidity anchors, 3-pillar displacement thresholds (1.50x Volume, 60% Taker Delta, 60% Body Ratio), and 3-Stage Harvest scaling (40% @ 1.0R with Breakeven/FVG stop advance, 40% @ 1.5R with +1.0R ratchet floor, and 20% @ 3.0R runner).
+
+### Key Features & Architectural Directives
+- **Directive 1: Universal Golden Strategy Defaults (`strategyExecutionConfig.ts`, `SweepReclaimEngine.ts`):**
+  - Standardized `DEFAULT_SR_LIVE_SETTINGS` and `DEFAULT_SWEEP_RECLAIM_CONFIG`:
+    * `entryMode: 'SWEEP_OB_MT'` (Sweep Order Block 50% Mean Threshold).
+    * `enforceDiscountPremiumGate: true` (Mandatory Discount < 50% for Longs, Premium > 50% for Shorts).
+    * `anchorTypes: ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL']`.
+    * `volumeExpansionThreshold: 1.50`, `deltaDominanceThreshold: 60.0`, `bodyRatioThreshold: 0.60`.
+    * `stage1Multiple: 1.0`, `stage2Multiple: 1.5`, `stage3Multiple: 3.0` (40/40/20 Tranches).
+- **Directive 2: Live Execution & Backtest Engine Parity (`AutomatedStrategyExecutionEngine.ts`):**
+  - Verified limit order entry calculations at the exact 50% Mean Threshold `(scHigh + scLow) / 2` of the sweep sequence origin candle across live streaming and historical replays.
+  - Standardized protective stop-advancement logic moving stop loss to at least Breakeven (`executionEntry`) or higher (`FVG_CE` floor) immediately after Stage 1 (1.0R) fill.
+- **Directive 3: UI & Settings Rehydration Synchronization (`SweepReclaimWorkspace.tsx`, `LiveOrderBlockModal.tsx`, `route.ts`):**
+  - Updated React component initial state hooks so configuration panels, dropdowns, and checkboxes visually reflect Golden defaults on mount for fresh sessions.
+  - Updated fallback parsing in `/api/quant-lab/sweep-reclaim-scanner` to default seamlessly to `SWEEP_OB_MT` and `enforceDiscountPremiumGate: true`.
+- **Directive 4: Automated Verification Suite (`scratch/test_golden_sweep_reclaim.ts`):**
+  - Automated test suite verified 100% configuration alignment across all layers.
+  - `npx tsc --noEmit` exits with **0 errors**.
+
+---
+
+## 🆕 V16.30 Changelog — Sweep & Reclaim Scanner Dynamic Parameter Binding & Quant Engine Enforcement (2026-08-20)
+
+### Summary
+Resolved parameter desynchronization between the Sweep & Reclaim Scanner UI panel (`SweepReclaimWorkspace.tsx`), Next.js streaming API route (`/api/quant-lab/sweep-reclaim-scanner`), and the underlying quantitative engine (`SweepReclaimEngine.ts`). Ensured all active UI configuration overrides (selected Anchor Types, Retest Entry Models, Valuation Gate, and Displacement/Delta Thresholds) are dynamically collected and passed directly in the request payload, robustly parsed on the backend supporting both camelCase and snake_case contracts, and strictly enforced during chronological multi-phase scan loops.
+
+### Key Features & Architectural Directives
+- **Directive 1: Full-Duplex UI State Binding (`SweepReclaimWorkspace.tsx`):**
+  - Bound all configuration panel state controls into the `onRunScan` trigger payload with dual camelCase/snake_case representation:
+    - Active Anchor Types (`SWING_PIVOT`, `ASIAN_HIGH`, `ASIAN_LOW`, `LONDON_HIGH`, `LONDON_LOW`, `PDH`, `PDL`).
+    - Retest Entry Model (`FVG_CE`, `SWEEP_OB_MT`, `RECLAIM_LEVEL`).
+    - Valuation Gate Boolean (`enforceDiscountPremiumGate`).
+    - 3-Pillar Displacement & Delta Thresholds (`volumeExpansionThreshold`, `deltaDominanceThreshold`, `bodyRatioThreshold`).
+    - Structural lookbacks, stage multiples, and ATR buffer multipliers.
+- **Directive 2: Resilient API Route Parser (`/api/quant-lab/sweep-reclaim-scanner/route.ts`):**
+  - Replaced rigid snake_case fallback destructuring with a dual-naming parser that prioritizes incoming client keys (`body.anchorTypes ?? body.anchor_types`, `body.volumeExpansionThreshold ?? body.volume_expansion_threshold`, etc.).
+  - Configured complete `SweepReclaimScanConfig` payload passed directly into `new SweepReclaimEngine(scanConfig)`.
+- **Directive 3: Strict Quant Engine Parameter Enforcement (`SweepReclaimEngine.ts`):**
+  - **Anchor Generation Gating:** `extractAnchors()` strictly respects `this.config.anchorTypes`, skipping non-selected anchor classes entirely.
+  - **Precision Limit Entry Routing:** Dynamically computes entry price and stops based on selected model (`reclaimFvgCe` for FVG CE, `sweepObMt` for Sweep OB MT, `anchorLevel` for Reclaimed Shelf), with refined ICT candle body defense checks (`Math.min(anchorLevel, executionEntry)` for Longs, `Math.max(anchorLevel, executionEntry)` for Shorts).
+  - **Valuation Gate Veto:** When `enforceDiscountPremiumGate: true`, strictly vetoes any unaligned setup (`is_valuation_aligned === false`), preventing it from advancing to `is_retested: true`.
+- **Directive 4: Multi-Matrix Parameter Verification (`scratch/test_sr_parameter_matrix.ts`):**
+  - 4/4 parameter matrices verified with 100% test passing rate: dynamic anchor filtering, entry model routing, valuation gate vetoes, and displacement threshold filtering.
+  - TypeScript compilation validated: `npx tsc --noEmit` exits with **0 errors**.
+
+---
 
 ## 🆕 V16.29 Changelog — HTF Status Radar Reactivation & Desktop Chrome GPU Acceleration (2026-08-19)
 

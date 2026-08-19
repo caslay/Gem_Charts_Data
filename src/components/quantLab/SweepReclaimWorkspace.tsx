@@ -51,7 +51,7 @@ interface SweepReclaimWorkspaceProps {
     candlesFetched?: number;
     detectedCount?: number;
   } | null;
-  onRunScan: (config: SweepReclaimScanConfig & { scan_name: string; start_date: string; end_date: string }) => void;
+  onRunScan: (config: SweepReclaimScanConfig & { scan_name: string; start_date: string; end_date: string; [key: string]: any }) => void;
   onExportJson: () => void;
   onExportCsv: () => void;
 }
@@ -84,10 +84,10 @@ export default function SweepReclaimWorkspace({
   const [volumeExpansionThreshold, setVolumeExpansionThreshold] = useState(1.50);
   const [deltaDominanceThreshold, setDeltaDominanceThreshold] = useState(60.0);
   const [bodyRatioThreshold, setBodyRatioThreshold] = useState(0.60);
-  const [enforceDiscountPremiumGate, setEnforceDiscountPremiumGate] = useState(false);
+  const [enforceDiscountPremiumGate, setEnforceDiscountPremiumGate] = useState(true);
 
   // 3-Stage Harvest & Risk Controls
-  const [entryMode, setEntryMode] = useState<"FVG_CE" | "SWEEP_OB_MT" | "RECLAIM_LEVEL">("FVG_CE");
+  const [entryMode, setEntryMode] = useState<"FVG_CE" | "SWEEP_OB_MT" | "RECLAIM_LEVEL">("SWEEP_OB_MT");
   const [stage1Multiple, setStage1Multiple] = useState(1.0);
   const [stage2Multiple, setStage2Multiple] = useState(1.5);
   const [stage3Multiple, setStage3Multiple] = useState(3.0);
@@ -147,29 +147,51 @@ export default function SweepReclaimWorkspace({
   const handleStartScan = () => {
     onRunScan({
       scan_name: scanName,
+      scanName,
       symbol,
       timeframe,
       start_date: startDate,
+      startDate,
       end_date: endDate,
+      endDate,
       anchorTypes: resolvedAnchorTypes,
+      anchor_types: resolvedAnchorTypes,
       lookbackMajor,
+      lookback_major: lookbackMajor,
       lookbackInternal,
+      lookback_internal: lookbackInternal,
       maxBarsAnchorToSweep,
+      max_bars_anchor_to_sweep: maxBarsAnchorToSweep,
       maxBarsSweepToReclaim,
+      max_bars_sweep_to_reclaim: maxBarsSweepToReclaim,
       maxBarsToRetest,
+      max_bars_to_retest: maxBarsToRetest,
       volumeExpansionThreshold,
+      volume_expansion_threshold: volumeExpansionThreshold,
       deltaDominanceThreshold,
+      delta_dominance_threshold: deltaDominanceThreshold,
       bodyRatioThreshold,
+      body_ratio_threshold: bodyRatioThreshold,
       requireThreePillarDisplacement: true,
+      require_three_pillar_displacement: true,
       enforceDiscountPremiumGate,
+      enforce_discount_premium_gate: enforceDiscountPremiumGate,
       stage1Multiple,
+      stage1_multiple: stage1Multiple,
       stage2Multiple,
+      stage2_multiple: stage2Multiple,
       stage3Multiple,
+      stage3_multiple: stage3Multiple,
       entryMode,
+      entry_mode: entryMode,
       enableStructuralTrail,
+      enable_structural_trail: enableStructuralTrail,
       enableProfitRatchet,
+      enable_profit_ratchet: enableProfitRatchet,
       minSweepDepthAtrMultiplier: minSweepDepthAtr,
+      min_sweep_depth_atr: minSweepDepthAtr,
       slBufferAtrMultiplier: slBufferAtr,
+      sl_buffer_atr: slBufferAtr,
     });
   };
 

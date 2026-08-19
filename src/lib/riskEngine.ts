@@ -123,16 +123,21 @@ export function generateTradeExecutionParameters(
 
   const { BSL_Magnets, SSL_Magnets } = resting_liquidity_pools;
 
-  // Calculate volatility-adjusted buffer or default to 0.50 pips
+  // Calculate volatility-adjusted buffer with Anti-Micro-Friction Clamp (0.15% minimum buffer)
   const atr = candles ? calculateATR(candles) : 0;
-  const buffer = candles && atr > 0 ? 0.2 * atr : 0.50;
+  const rawBuffer = candles && atr > 0 ? 0.2 * atr : 0.50;
+  const minBuffer = currentPrice > 0 ? currentPrice * 0.0015 : 0.50;
+  const buffer = Math.max(rawBuffer, minBuffer);
 
-  const bearish_invalidation = BSL_Magnets.length > 0 
-    ? parseFloat((Math.max(...BSL_Magnets) + buffer).toFixed(2)) 
+  const rawBearish = BSL_Magnets.length > 0 ? Math.max(...BSL_Magnets) + buffer : null;
+  const rawBullish = SSL_Magnets.length > 0 ? Math.min(...SSL_Magnets) - buffer : null;
+
+  const bearish_invalidation = rawBearish !== null 
+    ? parseFloat((currentPrice > 0 ? Math.max(rawBearish, currentPrice + minBuffer) : rawBearish).toFixed(2)) 
     : null;
     
-  const bullish_invalidation = SSL_Magnets.length > 0 
-    ? parseFloat((Math.min(...SSL_Magnets) - buffer).toFixed(2)) 
+  const bullish_invalidation = rawBullish !== null 
+    ? parseFloat((currentPrice > 0 ? Math.min(rawBullish, currentPrice - minBuffer) : rawBullish).toFixed(2)) 
     : null;
 
   return {

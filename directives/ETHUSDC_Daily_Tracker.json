@@ -1,15 +1,35 @@
 {
   "version": "1.0.0",
   "symbol": "ETHUSDC.p",
-  "lastUpdated": "2026-08-19T15:45:25.456Z",
+  "lastUpdated": "2026-08-19T22:55:00.602Z",
   "stats": {
-    "totalSetups": 33,
+    "totalSetups": 34,
     "success": 0,
     "stopOut": 4,
     "noTrigger": 0,
     "winRate": 0
   },
   "entries": [
+    {
+      "id": "ETH-20260819-2128",
+      "date": "2026-08-19",
+      "time": "22:55",
+      "symbol": "ETHUSDC.p",
+      "setupType": "Temporal execution paused due to active DEAD_",
+      "htfDol": "Major Swing High & ERL BSL ($2,335.39) / Macro Daily Extension Target ($2,350.00)",
+      "smtStatus": "NEUTRAL_SYNC — No structural SMT divergence confirmed on M15; BTC and ETH co-retracing from local highs",
+      "orderFlowState": "FALLING_WITH_PRICE",
+      "entryRange": [
+        2128.21,
+        2215.01
+      ],
+      "invalidation": 2077.78,
+      "tp1": 2304.04,
+      "tp2": 2335.39,
+      "outcome": "PENDING",
+      "dolReached": false,
+      "notes": "ETHUSDC.p $2,243.78 | HTF Bullish Expansion / DEAD_ZONE Technical Retracement"
+    },
     {
       "id": "ETH-20260819-1978",
       "date": "2026-08-19",

@@ -289,8 +289,8 @@ export class AutomatedStrategyExecutionEngine {
       };
     }
 
-    const distance = Math.abs(entryPrice - stopLossPrice);
-    if (distance <= 0 || isNaN(distance)) {
+    const calculatedRawDistance = Math.abs(entryPrice - stopLossPrice);
+    if (calculatedRawDistance <= 0 || isNaN(calculatedRawDistance)) {
       return {
         riskUsd: 0,
         distance: 0,
@@ -300,6 +300,10 @@ export class AutomatedStrategyExecutionEngine {
         error: 'Invalid Stop Loss distance: Entry price equals Stop Loss (zero distance error).',
       };
     }
+
+    // Anti-Micro-Friction Clamp: 0.15% minimum stop loss distance floor
+    const minStopLossDistance = Math.max(calculatedRawDistance, entryPrice * 0.0015);
+    const distance = minStopLossDistance;
 
     const riskUsd = parseFloat((equity * (riskPct / 100)).toFixed(4));
     let rawContractSize = riskUsd / distance;
@@ -328,12 +332,12 @@ export class AutomatedStrategyExecutionEngine {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // 2. Order Submission & Resting Limit Order Routing
+  // 3. Execution Pipeline (Single-Position Cap & Sizing Validation)
   // ─────────────────────────────────────────────────────────────────────────────
 
   /**
-   * Submits a new strategy trade setup for automated execution.
-   * If entry matches current price, fills immediately; otherwise places resting limit order.
+   * Evaluates entry parameters, validates portfolio risk constraints, and queues
+   * or executes a single limit order for the Sweep & Reclaim engine.
    */
   public submitStrategyOrder(params: {
     strategyId: string;
@@ -350,11 +354,7 @@ export class AutomatedStrategyExecutionEngine {
     currentMarketPrice?: number;
     activeEquity?: number;
     overrideRiskPct?: number;
-  }): {
-    success: boolean;
-    position?: StrategyExecutionPosition;
-    message: string;
-  } {
+  }): { success: boolean; message: string; position?: StrategyExecutionPosition } {
     const {
       strategyId,
       strategyName,
@@ -407,7 +407,27 @@ export class AutomatedStrategyExecutionEngine {
       return { success: false, message: msg };
     }
 
-    // ── Guardrail 5: Zone Single-Use Doctrine ──
+    // ── Guardrail 5: One-Active-Position-Per-Structural-Wave Concurrency Lock ──
+    const targetAnchorLevel = originAnchorLevel !== undefined ? originAnchorLevel : limitEntryPrice;
+    const hasActiveForZone =
+      this.activePositions.some((p) => {
+        if (originZoneId && p.originZoneId === originZoneId) return true;
+        if (p.originAnchorLevel !== undefined && Math.abs(p.originAnchorLevel - targetAnchorLevel) < 0.50) return true;
+        return false;
+      }) ||
+      this.pendingLimitOrders.some((p) => {
+        if (originZoneId && p.originZoneId === originZoneId) return true;
+        if (p.originAnchorLevel !== undefined && Math.abs(p.originAnchorLevel - targetAnchorLevel) < 0.50) return true;
+        return false;
+      });
+
+    if (hasActiveForZone) {
+      const msg = `[EXECUTION_LOCK] Vetoed duplicate entry for active zone: ${targetAnchorLevel}`;
+      console.warn(msg);
+      return { success: false, message: msg };
+    }
+
+    // ── Guardrail 6: Zone Single-Use Doctrine ──
     if (originZoneId && this.consumedZoneIds.has(originZoneId)) {
       return {
         success: false,
@@ -415,16 +435,23 @@ export class AutomatedStrategyExecutionEngine {
       };
     }
 
+    // ── Anti-Micro-Friction Stop Loss Clamp (0.15% Minimum Price Buffer) ──
+    const isLong = direction === 'LONG';
+    const calculatedRawDistance = Math.abs(limitEntryPrice - stopLossPrice);
+    const minStopLossDistance = Math.max(calculatedRawDistance, limitEntryPrice * 0.0015);
+    const clampedStopLoss = isLong
+      ? parseFloat((limitEntryPrice - minStopLossDistance).toFixed(4))
+      : parseFloat((limitEntryPrice + minStopLossDistance).toFixed(4));
+
     // ── Compute Dynamic 2% Compounding Risk & Contract Sizing ──
     const equity = activeEquity && activeEquity > 0 ? activeEquity : this.currentAccountEquity;
-    const sizing = this.calculateCompoundedPositionSize(equity, limitEntryPrice, stopLossPrice, overrideRiskPct);
+    const sizing = this.calculateCompoundedPositionSize(equity, limitEntryPrice, clampedStopLoss, overrideRiskPct);
 
     if (!sizing.isValid) {
       return { success: false, message: sizing.error || 'Position sizing calculation failed.' };
     }
 
     // ── Derive 3-Stage Harvest Targets ──
-    const isLong = direction === 'LONG';
     const riskDistance = sizing.distance;
 
     const stage1Target = isLong
@@ -458,8 +485,8 @@ export class AutomatedStrategyExecutionEngine {
 
       limitEntryPrice,
       entryPrice: limitEntryPrice,
-      initialStopLoss: stopLossPrice,
-      activeStopLoss: stopLossPrice,
+      initialStopLoss: clampedStopLoss,
+      activeStopLoss: clampedStopLoss,
       activeRatchetFloor: null,
       trailingSlSource: 'INITIAL',
 
@@ -980,7 +1007,7 @@ export class AutomatedStrategyExecutionEngine {
         maxBarsSweepToReclaim: 16,
         maxBarsToRetest: 30,
         slBufferAtrMultiplier: this.config.slBufferAtrMultiplier ?? 0.15,
-        entryMode: settings.entryMode ?? 'FVG_CE',
+        entryMode: settings.entryMode ?? 'SWEEP_OB_MT',
         stage1Multiple: settings.stage2Multiple ? settings.stage2Multiple * 0.67 : this.config.stage1Multiple ?? 1.0,
         stage2Multiple: settings.stage2Multiple ?? this.config.stage2Multiple ?? 1.5,
         stage3Multiple: settings.stage3Multiple ?? this.config.stage3Multiple ?? 3.0,
@@ -1028,13 +1055,32 @@ export class AutomatedStrategyExecutionEngine {
             (!settings.enforceDiscountPremiumGate || s.is_valuation_aligned);
 
           if (isConfirmed && this.config.autoExecute && !this.processedSetupIds.has(s.id)) {
+            // One-Active-Position-Per-Structural-Wave Concurrency Lock
+            const isZoneAlreadyActive =
+              this.activePositions.some(
+                (p) =>
+                  p.originZoneId === s.id ||
+                  (p.originAnchorLevel !== undefined && Math.abs(p.originAnchorLevel - s.anchor_level) < 0.50)
+              ) ||
+              this.pendingLimitOrders.some(
+                (p) =>
+                  p.originZoneId === s.id ||
+                  (p.originAnchorLevel !== undefined && Math.abs(p.originAnchorLevel - s.anchor_level) < 0.50)
+              );
+
+            if (isZoneAlreadyActive) {
+              console.warn(`[EXECUTION_LOCK] Vetoed duplicate entry for active zone: ${s.anchor_level}`);
+              this.processedSetupIds.add(s.id);
+              continue;
+            }
+
             // Determine limit entry price based on entryMode
             let entryPrice = s.entry_price;
             if (!entryPrice || isNaN(entryPrice)) {
-              if (settings.entryMode === 'FVG_CE' && s.reclaim_fvg_ce) {
-                entryPrice = s.reclaim_fvg_ce;
-              } else if (settings.entryMode === 'SWEEP_OB_MT' && s.sweep_ob_mt) {
+              if (settings.entryMode === 'SWEEP_OB_MT' && s.sweep_ob_mt) {
                 entryPrice = s.sweep_ob_mt;
+              } else if (settings.entryMode === 'FVG_CE' && s.reclaim_fvg_ce) {
+                entryPrice = s.reclaim_fvg_ce;
               } else {
                 entryPrice = s.anchor_level;
               }

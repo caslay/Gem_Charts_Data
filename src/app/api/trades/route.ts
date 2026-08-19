@@ -73,6 +73,23 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
           { status: 409 }
         );
       }
+
+      // One-Active-Position-Per-Structural-Wave Concurrency Lock
+      const proposedEntry = body.entry_price || body.price || body.current_price || body.currentPrice;
+      if (proposedEntry) {
+        const parsedEntry = parseFloat(proposedEntry);
+        const isZoneAlreadyActive = inMemoryTrades.some(
+          t => (t.status === "OPEN" || t.status === "PAUSED") &&
+            t.entry_price &&
+            Math.abs(parseFloat(t.entry_price) - parsedEntry) < 0.50
+        );
+        if (isZoneAlreadyActive) {
+          return NextResponse.json(
+            { error: `[EXECUTION_LOCK] Vetoed duplicate entry for active zone: ${parsedEntry}` },
+            { status: 409 }
+          );
+        }
+      }
     }
 
 
@@ -290,7 +307,12 @@ async function handlePostFallback(req: Request, userEmail: string, parsedBody?: 
     const max_risk_limit_pct = parseFloat(account.max_risk_limit_pct);
 
     const risk_amount_usd = current_balance * (risk_percent / 100);
-    const sl_distance = Math.abs(entry_price - stop_loss);
+    const calculatedRawDistance = Math.abs(entry_price - stop_loss);
+    const minStopLossDistance = Math.max(calculatedRawDistance, entry_price * 0.0015);
+    const sl_distance = minStopLossDistance;
+    stop_loss = direction === "LONG"
+      ? parseFloat((entry_price - minStopLossDistance).toFixed(4))
+      : parseFloat((entry_price + minStopLossDistance).toFixed(4));
 
     const position_size = parseFloat((risk_amount_usd / sl_distance).toFixed(4));
     const newTradeRiskUsd = sl_distance * position_size;

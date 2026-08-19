@@ -7,7 +7,8 @@ import {
   SweepReclaimEngine,
   SweepReclaimScanConfig,
   SweepReclaimSetup,
-  SweepReclaimTelemetrySummary
+  SweepReclaimTelemetrySummary,
+  SweepReclaimAnchorType
 } from "@/lib/quantEngine/SweepReclaimEngine";
 
 // Base URL for Binance Futures REST API
@@ -165,32 +166,36 @@ export async function POST(req: Request) {
 
       try {
         const body = await req.json();
-        const {
-          scan_name = "Sweep & Reclaim Backtest Scan",
-          symbol = "ETHUSDC",
-          timeframe = "15m",
-          start_date, // YYYY-MM-DD
-          end_date,   // YYYY-MM-DD
-          anchor_types = ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL'],
-          lookback_major = 15,
-          lookback_internal = 5,
-          max_bars_anchor_to_sweep = 30,
-          max_bars_sweep_to_reclaim = 12,
-          max_bars_to_retest = 24,
-          volume_expansion_threshold = 1.50,
-          delta_dominance_threshold = 60.0,
-          body_ratio_threshold = 0.60,
-          require_three_pillar_displacement = true,
-          enforce_discount_premium_gate = false,
-          stage1_multiple = 1.0,
-          stage2_multiple = 1.5,
-          stage3_multiple = 3.0,
-          entry_mode = "FVG_CE",
-          enable_structural_trail = true,
-          enable_profit_ratchet = true,
-          min_sweep_depth_atr = 0.10,
-          sl_buffer_atr = 0.15,
-        } = body;
+
+        const scan_name = body.scan_name ?? body.scanName ?? "Sweep & Reclaim Backtest Scan";
+        const symbol = body.symbol ?? "ETHUSDC";
+        const timeframe = body.timeframe ?? "15m";
+        const start_date = body.start_date ?? body.startDate;
+        const end_date = body.end_date ?? body.endDate;
+
+        const rawAnchorTypes = body.anchorTypes ?? body.anchor_types;
+        const anchor_types: SweepReclaimAnchorType[] = Array.isArray(rawAnchorTypes) && rawAnchorTypes.length > 0
+          ? rawAnchorTypes
+          : ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL'];
+
+        const lookback_major = Number(body.lookbackMajor ?? body.lookback_major ?? 15);
+        const lookback_internal = Number(body.lookbackInternal ?? body.lookback_internal ?? 5);
+        const max_bars_anchor_to_sweep = Number(body.maxBarsAnchorToSweep ?? body.max_bars_anchor_to_sweep ?? 30);
+        const max_bars_sweep_to_reclaim = Number(body.maxBarsSweepToReclaim ?? body.max_bars_sweep_to_reclaim ?? 12);
+        const max_bars_to_retest = Number(body.maxBarsToRetest ?? body.max_bars_to_retest ?? 24);
+        const volume_expansion_threshold = Number(body.volumeExpansionThreshold ?? body.volume_expansion_threshold ?? 1.50);
+        const delta_dominance_threshold = Number(body.deltaDominanceThreshold ?? body.delta_dominance_threshold ?? 60.0);
+        const body_ratio_threshold = Number(body.bodyRatioThreshold ?? body.body_ratio_threshold ?? 0.60);
+        const require_three_pillar_displacement = (body.requireThreePillarDisplacement ?? body.require_three_pillar_displacement) !== false;
+        const enforce_discount_premium_gate = (body.enforceDiscountPremiumGate ?? body.enforce_discount_premium_gate) !== undefined ? Boolean(body.enforceDiscountPremiumGate ?? body.enforce_discount_premium_gate) : true;
+        const stage1_multiple = Number(body.stage1Multiple ?? body.stage1_multiple ?? 1.0);
+        const stage2_multiple = Number(body.stage2Multiple ?? body.stage2_multiple ?? 1.5);
+        const stage3_multiple = Number(body.stage3Multiple ?? body.stage3_multiple ?? 3.0);
+        const entry_mode = (body.entryMode ?? body.entry_mode ?? "SWEEP_OB_MT") as "FVG_CE" | "SWEEP_OB_MT" | "RECLAIM_LEVEL";
+        const enable_structural_trail = (body.enableStructuralTrail ?? body.enable_structural_trail) !== false;
+        const enable_profit_ratchet = (body.enableProfitRatchet ?? body.enable_profit_ratchet) !== false;
+        const min_sweep_depth_atr = Number(body.minSweepDepthAtrMultiplier ?? body.min_sweep_depth_atr ?? 0.10);
+        const sl_buffer_atr = Number(body.slBufferAtrMultiplier ?? body.sl_buffer_atr ?? 0.15);
 
         if (!start_date || !end_date) {
           sendChunk({ type: "error", error: "Missing required date range parameters: start_date and end_date are required." });
@@ -244,6 +249,7 @@ export async function POST(req: Request) {
           lookbackInternal: lookback_internal,
           maxBarsAnchorToSweep: max_bars_anchor_to_sweep,
           maxBarsSweepToReclaim: max_bars_sweep_to_reclaim,
+          maxBarsToRetest: max_bars_to_retest,
           volumeExpansionThreshold: volume_expansion_threshold,
           deltaDominanceThreshold: delta_dominance_threshold,
           bodyRatioThreshold: body_ratio_threshold,
