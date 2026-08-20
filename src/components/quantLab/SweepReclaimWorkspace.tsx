@@ -35,7 +35,10 @@ import {
   SweepReclaimSetup,
   SweepReclaimTelemetrySummary,
   SweepReclaimScanConfig,
-  SweepReclaimAnchorType
+  SweepReclaimAnchorType,
+  SweepReclaimEntryMode,
+  getEntryModeLabel,
+  getEntryModeDescription,
 } from "@/lib/quantEngine/SweepReclaimEngine";
 import { adaptSweepReclaimSetupsToTrades } from "@/lib/quantEngine/equityCalculator";
 import CapitalGrowthLedger from "@/components/quantLab/CapitalGrowthLedger";
@@ -89,7 +92,7 @@ export default function SweepReclaimWorkspace({
   const [enforceDiscountPremiumGate, setEnforceDiscountPremiumGate] = useState(true);
 
   // 3-Stage Harvest & Risk Controls
-  const [entryMode, setEntryMode] = useState<"FVG_CE" | "SWEEP_OB_MT" | "RECLAIM_LEVEL">("SWEEP_OB_MT");
+  const [entryMode, setEntryMode] = useState<SweepReclaimEntryMode>("SWEEP_OB_MT");
   const [stage1Multiple, setStage1Multiple] = useState(1.0);
   const [stage2Multiple, setStage2Multiple] = useState(1.5);
   const [stage3Multiple, setStage3Multiple] = useState(3.0);
@@ -511,15 +514,19 @@ export default function SweepReclaimWorkspace({
               <select
                 disabled={isScanning}
                 value={entryMode}
-                onChange={(e) => setEntryMode(e.target.value as any)}
+                onChange={(e) => setEntryMode(e.target.value as SweepReclaimEntryMode)}
                 className="text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500/50 outline-none rounded text-white"
               >
-                <option value="FVG_CE">Displacement FVG 50% CE</option>
                 <option value="SWEEP_OB_MT">Sweep OB 50% Mean Threshold (MT)</option>
-                <option value="RECLAIM_LEVEL">Reclaimed Shelf Level</option>
+                <option value="OB_PROXIMAL">Sweep OB Proximal Boundary</option>
+                <option value="FVG_CE">Displacement FVG 50% CE</option>
+                <option value="FVG_PROXIMAL">Displacement FVG Proximal Edge</option>
+                <option value="FVG_DISTAL">Displacement FVG Distal Edge</option>
+                <option value="OTE_62">62% OTE Fibonacci Retracement</option>
+                <option value="SHELF_LEVEL">Reclaimed Anchor Shelf Level</option>
               </select>
               <span className="text-[9px] text-slate-500 font-mono">
-                FVG 50% CE, OB 50% MT, or Shelf
+                {getEntryModeDescription(entryMode)}
               </span>
             </div>
 
@@ -1332,7 +1339,7 @@ export default function SweepReclaimWorkspace({
                 </div>
                 <div className="flex flex-col gap-1 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Entry Price ({inspectedSetup.entry_mode}):</span>
+                    <span className="text-slate-500">Entry Price ({getEntryModeLabel(inspectedSetup.entry_mode)}):</span>
                     <span className="text-emerald-400 font-bold">${inspectedSetup.entry_price.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">

@@ -8,7 +8,8 @@ import {
   SweepReclaimScanConfig,
   SweepReclaimSetup,
   SweepReclaimTelemetrySummary,
-  SweepReclaimAnchorType
+  SweepReclaimAnchorType,
+  SweepReclaimEntryMode,
 } from "@/lib/quantEngine/SweepReclaimEngine";
 
 // Base URL for Binance Futures REST API
@@ -191,7 +192,20 @@ export async function POST(req: Request) {
         const stage1_multiple = Number(body.stage1Multiple ?? body.stage1_multiple ?? 1.0);
         const stage2_multiple = Number(body.stage2Multiple ?? body.stage2_multiple ?? 1.5);
         const stage3_multiple = Number(body.stage3Multiple ?? body.stage3_multiple ?? 3.0);
-        const entry_mode = (body.entryMode ?? body.entry_mode ?? "SWEEP_OB_MT") as "FVG_CE" | "SWEEP_OB_MT" | "RECLAIM_LEVEL";
+        const rawEntryMode = String(body.entryMode ?? body.entry_mode ?? "SWEEP_OB_MT").toUpperCase();
+        const validEntryModes: SweepReclaimEntryMode[] = [
+          'SHELF_LEVEL',
+          'RECLAIM_LEVEL',
+          'FVG_PROXIMAL',
+          'FVG_CE',
+          'FVG_DISTAL',
+          'OB_PROXIMAL',
+          'SWEEP_OB_MT',
+          'OTE_62',
+        ];
+        const entry_mode: SweepReclaimEntryMode = validEntryModes.includes(rawEntryMode as SweepReclaimEntryMode)
+          ? (rawEntryMode as SweepReclaimEntryMode)
+          : "SWEEP_OB_MT";
         const enable_structural_trail = (body.enableStructuralTrail ?? body.enable_structural_trail) !== false;
         const enable_profit_ratchet = (body.enableProfitRatchet ?? body.enable_profit_ratchet) !== false;
         const min_sweep_depth_atr = Number(body.minSweepDepthAtrMultiplier ?? body.min_sweep_depth_atr ?? 0.10);

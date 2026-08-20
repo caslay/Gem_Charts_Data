@@ -9,6 +9,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import type { SweepReclaimEntryMode } from './SweepReclaimEngine';
 
 export const STORAGE_KEY_OB_AUTO_EXEC = 'FLOW_STATE_OB_AUTO_EXEC';
 export const STORAGE_KEY_SR_AUTO_EXEC = 'FLOW_STATE_SR_AUTO_EXEC';
@@ -37,7 +38,7 @@ export interface SweepReclaimLiveSettings {
   compoundingRiskPct: number; // 1.0, 2.0, 3.0 (default: 2.0)
   enabledTimeframes: SupportedOBTimeframe[]; // ['5m', '15m', '1h'] (default: ['5m', '15m', '1h'])
   anchorTypes: ('SWING_PIVOT' | 'ASIAN' | 'LONDON' | 'DAILY')[]; // default: ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY']
-  entryMode: 'FVG_CE' | 'SWEEP_OB_MT' | 'RECLAIM_LEVEL'; // default: 'SWEEP_OB_MT'
+  entryMode: SweepReclaimEntryMode; // default: 'SWEEP_OB_MT'
   volumeExpansionThreshold: number; // default: 1.50
   deltaDominanceThreshold: number; // default: 60.0
   bodyRatioThreshold: number; // default: 0.60

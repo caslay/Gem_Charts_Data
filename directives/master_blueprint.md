@@ -141,6 +141,36 @@ Implemented institutional production-grade risk hardening and concurrency guardr
 
 ---
 
+## 🆕 V16.32 Changelog — Retest Entry Model Geometries & Centralized Price Resolver (2026-08-20)
+
+### Summary
+Expanded the "Retest Entry Model" options inside the Sweep & Reclaim Quantitative Engine, Live Automated Execution Engine, API routes, and Quant Lab workspace to support advanced institutional SMC/ICT entry geometries with full mathematical parity across all 7 modes: `SWEEP_OB_MT`, `OB_PROXIMAL`, `FVG_CE`, `FVG_PROXIMAL`, `FVG_DISTAL`, `OTE_62`, and `SHELF_LEVEL` (with legacy alias `RECLAIM_LEVEL`). Implemented a modular, centralized price resolver `resolveRetestEntryPrice()` with directional orientation and safe fallbacks, unified UI selectors, and verified zero regressions.
+
+### Key Features & Architectural Directives
+- **Directive 1: Centralized Retest Price Resolver & Type Expansion (`SweepReclaimEngine.ts`, `strategyExecutionConfig.ts`):**
+  - Expanded `SweepReclaimEntryMode` union across types, scan configs, and live settings:
+    * `'SHELF_LEVEL'` / `'RECLAIM_LEVEL'`: Reclaimed anchor level.
+    * `'FVG_PROXIMAL'`: Outer opening edge of the displacement Fair Value Gap (Top for BISI, Bottom for SIBI).
+    * `'FVG_CE'`: 50% Consequent Encroachment midpoint of the displacement Fair Value Gap.
+    * `'FVG_DISTAL'`: Deepest boundary edge of the Fair Value Gap prior to full fill/invalidation (Bottom for BISI, Top for SIBI).
+    * `'OB_PROXIMAL'`: First boundary edge of the sweep Order Block (High for Longs, Low for Shorts).
+    * `'SWEEP_OB_MT'`: 50% Mean Threshold midpoint of the liquidity sweep candle / Order Block.
+    * `'OTE_62'`: 62% Fibonacci Retracement of the displacement impulse wave from sweep extreme to reclaim.
+  - Implemented and exported `resolveRetestEntryPrice(params: RetestPriceResolverParams): number` with comprehensive setup geometry inputs and safe fallbacks.
+  - Enriched `SweepReclaimSetup` with geometry fields: `sweep_ob_proximal`, `reclaim_fvg_proximal`, `reclaim_fvg_distal`, `displacement_impulse_high`, `displacement_impulse_low`, `ote_62_price`.
+- **Directive 2: Live & Backtest Engine Parity (`AutomatedStrategyExecutionEngine.ts`, `SweepReclaimEngine.ts`):**
+  - Integrated `resolveRetestEntryPrice` inside historical setup creation (`scanHistoricalSetups`) and live limit order submission loops (`onMultiTimeframeCandles`), guaranteeing identical execution levels.
+- **Directive 3: API & UI Component Integration (`route.ts`, `SweepReclaimWorkspace.tsx`, `LiveOrderBlockModal.tsx`):**
+  - Updated API route schema parsing to validate and accept all 7 `SweepReclaimEntryMode` values.
+  - Updated Quant Lab workspace `<select>` dropdown with all 7 options, dynamic technical descriptions, and human-readable modal inspector badges.
+  - Updated Live Order Block & Sweep Reclaim modal controls with a responsive 7-mode grid with active cyan glow and tooltip descriptions.
+- **Directive 4: Automated Verification Suite (`scratch/test_entry_modes_resolver.ts`):**
+  - Verified bullish, bearish, missing-geometry fallbacks, label helpers, and full engine scan detection across all 7 modes (5/5 stages passed).
+  - All existing test suites (`test_golden_sweep_reclaim.ts`, `test_sweep_reclaim_suite.ts`, `test_sr_parameter_matrix.ts`) passed with 100% success.
+  - `npx tsc --noEmit` exits with **0 errors**.
+
+---
+
 ## 🆕 V16.31 Changelog — Golden Sweep & Reclaim Strategy Default System Synchronization (2026-08-20)
 
 ### Summary

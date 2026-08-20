@@ -1174,20 +1174,25 @@ function LiveOrderBlockModalContent({
                       <Crosshair className="w-3 h-3 text-cyan-400" />
                       Retest Entry Model
                     </span>
-                    <div className="grid grid-cols-3 gap-1 pt-0.5">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 pt-0.5">
                       {[
-                        { id: 'FVG_CE', label: 'FVG 50% CE' },
-                        { id: 'SWEEP_OB_MT', label: 'OB 50% MT' },
-                        { id: 'RECLAIM_LEVEL', label: 'Shelf Level' },
+                        { id: 'SWEEP_OB_MT', label: 'OB 50% MT', title: '50% Mean Threshold of the sweep Order Block' },
+                        { id: 'OB_PROXIMAL', label: 'OB Proximal', title: 'First boundary of the sweep Order Block' },
+                        { id: 'FVG_CE', label: 'FVG 50% CE', title: '50% Consequent Encroachment of displacement FVG' },
+                        { id: 'FVG_PROXIMAL', label: 'FVG Proximal', title: 'Outer opening edge of displacement FVG' },
+                        { id: 'FVG_DISTAL', label: 'FVG Distal', title: 'Deepest boundary edge of displacement FVG' },
+                        { id: 'OTE_62', label: '62% OTE', title: '62% Fibonacci Retracement of displacement impulse' },
+                        { id: 'SHELF_LEVEL', label: 'Shelf Level', title: 'Reclaimed anchor shelf level' },
                       ].map((mode) => (
                         <button
                           key={mode.id}
                           type="button"
+                          title={mode.title}
                           onClick={() => updateSrSettings({ entryMode: mode.id as any })}
-                          className={`py-1.5 px-1 rounded border text-center font-bold text-[8.5px] cursor-pointer transition ${
-                            (srSettings?.entryMode || 'SWEEP_OB_MT') === mode.id
+                          className={`py-1 px-1 rounded border text-center font-bold text-[8px] cursor-pointer transition ${
+                            (srSettings?.entryMode || 'SWEEP_OB_MT') === mode.id || (mode.id === 'SHELF_LEVEL' && srSettings?.entryMode === 'RECLAIM_LEVEL')
                               ? 'bg-cyan-950/80 border-cyan-500 text-cyan-300 shadow-[0_0_6px_rgba(6,182,212,0.2)]'
-                              : 'bg-background/30 border-slate-800 text-slate-400 hover:text-white'
+                              : 'bg-background/30 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
                           }`}
                         >
                           {mode.label}

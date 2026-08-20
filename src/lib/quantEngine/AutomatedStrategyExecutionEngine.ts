@@ -16,7 +16,8 @@ import {
   SweepReclaimEngine,
   SweepReclaimSetup,
   SweepReclaimScanConfig,
-  SweepReclaimAnchorType
+  SweepReclaimAnchorType,
+  resolveRetestEntryPrice,
 } from './SweepReclaimEngine';
 import {
   SweepReclaimLiveSettings,
@@ -1076,14 +1077,30 @@ export class AutomatedStrategyExecutionEngine {
 
             // Determine limit entry price based on entryMode
             let entryPrice = s.entry_price;
-            if (!entryPrice || isNaN(entryPrice)) {
-              if (settings.entryMode === 'SWEEP_OB_MT' && s.sweep_ob_mt) {
-                entryPrice = s.sweep_ob_mt;
-              } else if (settings.entryMode === 'FVG_CE' && s.reclaim_fvg_ce) {
-                entryPrice = s.reclaim_fvg_ce;
-              } else {
-                entryPrice = s.anchor_level;
-              }
+            if (!entryPrice || isNaN(entryPrice) || (settings.entryMode && settings.entryMode !== s.entry_mode)) {
+              entryPrice = resolveRetestEntryPrice({
+                mode: settings.entryMode ?? 'SWEEP_OB_MT',
+                isBullish: s.type === 'BULLISH',
+                anchorLevel: s.anchor_level,
+                sweepCandle: s.sweep_price !== null ? {
+                  high: s.sweep_ob_proximal !== undefined && s.sweep_ob_proximal !== null && s.type === 'BULLISH'
+                    ? s.sweep_ob_proximal
+                    : (s.type === 'BULLISH' ? Math.max(s.anchor_level, (s.sweep_ob_mt ?? s.sweep_price) * 2 - s.sweep_price) : s.sweep_price),
+                  low: s.sweep_ob_proximal !== undefined && s.sweep_ob_proximal !== null && s.type === 'BEARISH'
+                    ? s.sweep_ob_proximal
+                    : (s.type === 'BULLISH' ? s.sweep_price : Math.min(s.anchor_level, (s.sweep_ob_mt ?? s.sweep_price) * 2 - s.sweep_price)),
+                  mt: s.sweep_ob_mt ?? undefined,
+                } : null,
+                fvg: s.reclaim_fvg_created && s.reclaim_fvg_top !== null && s.reclaim_fvg_bottom !== null ? {
+                  top: s.reclaim_fvg_top,
+                  bottom: s.reclaim_fvg_bottom,
+                  ce: s.reclaim_fvg_ce ?? undefined,
+                } : null,
+                displacementExtremes: s.displacement_impulse_high && s.displacement_impulse_low ? {
+                  impulseHigh: s.displacement_impulse_high,
+                  impulseLow: s.displacement_impulse_low,
+                } : null,
+              });
             }
 
             // Price Sanity Guard: Ensure entry level is within 5% of current market price
