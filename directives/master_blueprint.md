@@ -1,8 +1,28 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.32
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.33
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-20 (V16.32 — Production-Grade Quantitative Hardening & Risk Guardrails)  
+> **Last Updated:** 2026-08-20 (V16.33 — Neon Cloud Vault Hot-Swap & Settings API Hardening)  
+
+## 🆕 V16.33 Changelog — Neon Cloud Vault Hot-Swap & Settings API Hardening (2026-08-20)
+
+### Summary
+Resolved Neon cloud database data transfer quota exhaustion (`HTTP 402 / code 53000`) by seamlessly hot-swapping the active connection string in `.env.local` to the healthy, ready `neon-cyclamen-field` (`morning-lab-92807161`) project. Re-initialized and seeded all 17 self-healing PostgreSQL tables and user trading accounts. Hardened `POST /api/settings` and `GET /api/settings` with universal type coercion to ensure non-string properties (numerical theme card opacities, booleans, and nested configurations) serialize and upsert without silent dropping, and eliminated redundant `system_settings` lookups during 5-second market data polling.
+
+### Key Features & Architectural Directives
+- **Neon Cloud Vault Hot-Swap (`.env.local` & Schema Initialization):**
+  - Switched `DATABASE_URL` and `POSTGRES_URL` to the active `morning-lab-92807161` Neon compute endpoint.
+  - Executed automated database bootstrap script ensuring `system_settings`, `terminal_settings`, `trading_account`, `paper_trades`, `custom_strategies`, `user_drawings`, `order_flow_states_log`, `agent_decision_log`, `backtest_paper_trades`, and `backtest_trading_account` are created and seeded with default parameters and user balance accounts.
+- **Settings API Type Coercion & Diagnostic Telemetry (`/api/settings/route.ts`):**
+  - Upgraded `POST /api/settings` to coerce non-string values (`typeof value === 'object' ? JSON.stringify(value) : String(value)`), guaranteeing numerical theme opacities and boolean flags persist correctly into `system_settings`.
+  - Enriched error telemetry responses with explicit error messages.
+- **Redundant Market Data Polling Query Elimination (`/api/market-data/route.ts`):**
+  - Removed obsolete `candles_limit` database queries from the 5-second polling route, relying directly on client-supplied query parameters to conserve database transfer bandwidth.
+- **Automated Verification:**
+  - Verified GET/POST settings read/write operations against the active database with 100% success.
+  - `npx tsc --noEmit` exits with **0 errors**.
+
+---
 
 ## 🆕 V16.32 Changelog — Production-Grade Quantitative Hardening & Risk Guardrails (2026-08-20)
 

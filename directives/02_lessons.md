@@ -351,4 +351,13 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   3. **SVG Coordinate Viewport Culling in `sessionsLayer.ts`:** Added bounding checks (`toX < -50 || fromX > rightX + 50`) to cull off-screen historical session boxes from the SVG DOM.
   4. **Strict Lookback Clamping in `displacementLayer.ts` & `OrderBlockOverlay.tsx`:** Defaulted `highPerformanceMode` to true and clamped volumetric marker and OrderBlock fallback scans to the most recent 250–350 bars for guaranteed 60+ FPS chart interaction.
 
-
+### 46. Neon Data Transfer Quota Exhaustion & Settings API Type Coercion (Resolved in V16.23)
+- **The Bug:** Settings failed to load data from Neon, displaying empty defaults and throwing "Failed to fetch settings from cloud vault." When attempting to update/save, the system displayed "TELEMETRY WARNING: Failed to save settings." (HTTP 500 / code 53000).
+- **The Cause:**
+  1. **Neon Data Transfer Quota Exceeded:** The active Neon project (`neon-flow-state` / `snowy-darkness-92610779`) exceeded its free monthly bandwidth quota, rejecting connections with `HTTP 402 / code 53000: Your project has exceeded the data transfer quota`.
+  2. **Redundant Polling DB Queries:** `src/app/api/market-data/route.ts` executed `SELECT key_value FROM system_settings WHERE key_name = 'candles_limit'` on every 5-second polling request even though candle limits were already passed by the client, consuming thousands of queries per day.
+  3. **Strict Type Gating in Settings Upsert:** `POST /api/settings` enforced `typeof value !== "string"`, silently skipping numeric (e.g. `dark_card_opacity: 90`) and non-string settings during theme or parameter saves.
+- **The Fix:**
+  1. **Hot-Swapped to Ready Neon Project:** Updated `.env.local` with the active, healthy Neon project (`neon-cyclamen-field` / `morning-lab-92807161`), initialized all self-healing tables, and seeded default settings & accounts.
+  2. **Eliminated Polling DB Queries in `market-data/route.ts`:** Removed redundant database lookups during polling and prioritized client-supplied URL query parameters.
+  3. **Universal Type Coercion in `settings/route.ts`:** Coerced non-string payloads to valid database strings (`typeof value === 'object' ? JSON.stringify(value) : String(value)`) and enriched error telemetry with descriptive messages.

@@ -151,25 +151,16 @@ export async function GET(req: Request) {
     const DEFAULT_LIMIT_1H = 120;
     const DEFAULT_LIMIT_4H = 80;
 
-    // Fetch custom base candle limit from system_settings or fallback to 350
-    let limit = 350;
-    try {
-      const limitRes = await sql`
-        SELECT key_value FROM system_settings WHERE key_name = 'candles_limit' LIMIT 1
-      `;
-      if (limitRes.rows.length > 0) {
-        const val = parseInt(limitRes.rows[0].key_value, 10);
-        if (!isNaN(val) && val > 0) {
-          limit = val;
-        }
-      }
-    } catch (err) {
-      console.warn('[MarketData API] Failed to fetch candles_limit from database:', err);
-    }
-
     const isPoll = url.searchParams.get('poll') === 'true';
     const timeframeGated = url.searchParams.get('timeframeGated') === 'true';
     const isInit = url.searchParams.get('init') === 'true';
+
+    // Fetch custom base candle limit from query param, or fallback to 350
+    let limit = 350;
+    const queryLimit = parseInt(url.searchParams.get('limit') || '', 10);
+    if (!isNaN(queryLimit) && queryLimit > 0) {
+      limit = queryLimit;
+    }
 
     let limit1m = 0;
     let limit5m = 0;
