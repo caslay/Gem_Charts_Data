@@ -1,8 +1,31 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.33
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.34
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-20 (V16.33 — Neon Cloud Vault Hot-Swap & Settings API Hardening)  
+> **Last Updated:** 2026-08-20 (V16.34 — OAuth Authentication Resilience & Self-Healing Whitelist)  
+
+## 🆕 V16.34 Changelog — OAuth Authentication Resilience & Self-Healing Whitelist (2026-08-20)
+
+### Summary
+Hardened the NextAuth v5 and Google OAuth authentication architecture against environment variable naming variations and database schema cold-starts. Normalized Google OAuth client credentials across standard naming conventions (`AUTH_GOOGLE_ID`, `GOOGLE_CLIENT_ID`, `GOOGLE_ID`) and secret conventions (`AUTH_SECRET`, `NEXTAUTH_SECRET`), added `trustHost: true` for Vercel serverless proxy headers, enabled self-healing initialization and auto-whitelisting on the `whitelisted_users` table with defensive error handling, and updated the edge proxy matcher in `src/proxy.ts` to strictly isolate `/api/auth/*` routes and static assets.
+
+### Key Features & Architectural Directives
+- **Environment Variable Fallback Normalization (`auth.ts` & `auth.config.ts`):**
+  - Robust client ID resolution: `AUTH_GOOGLE_ID || GOOGLE_CLIENT_ID || GOOGLE_ID`.
+  - Robust client secret resolution: `AUTH_GOOGLE_SECRET || GOOGLE_CLIENT_SECRET || GOOGLE_SECRET`.
+  - Robust secret resolution: `AUTH_SECRET || NEXTAUTH_SECRET`.
+  - Added `trustHost: true` across both edge-compatible and Node.js auth configurations to properly support Vercel serverless proxy headers.
+- **Self-Healing Whitelist & Non-Blocking Database Callback (`auth.ts`):**
+  - Automatically executes `CREATE TABLE IF NOT EXISTS whitelisted_users` during Google sign-in checks.
+  - Automatically auto-whitelists the initial admin user if the table is empty.
+  - Performs case-insensitive matching (`LOWER(email) = LOWER(user.email)`).
+  - Defensive error handling prevents transient database errors from blocking user sign-in.
+- **Edge Proxy Matcher Isolation (`src/proxy.ts`):**
+  - Explicitly excluded `api/auth` from middleware evaluation to guarantee CSRF/PKCE state cookies and OAuth exchange headers remain untouched.
+- **Automated Verification:**
+  - `npx tsc --noEmit` exits with **0 errors**.
+
+---
 
 ## 🆕 V16.33 Changelog — Neon Cloud Vault Hot-Swap & Settings API Hardening (2026-08-20)
 
