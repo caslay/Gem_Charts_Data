@@ -1,8 +1,39 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.36
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.37
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-20 (V16.36 — Database Egress Optimization & Column Projection Audit)  
+> **Last Updated:** 2026-08-20 (V16.37 — Institutional Capital Growth & Chronological Equity Ledger)  
+
+## 🆕 V16.37 Changelog — Institutional Capital Growth & Chronological Equity Ledger (2026-08-20)
+
+### Summary
+Engineered and integrated an institutional-grade "Capital Growth & Chronological Equity Ledger" card container across the Quant Lab Scanner suite (Sweep & Reclaim and Institutional Order Block tabs). Eliminates manual JSON parsing, providing quantitative traders with instant, client-side, zero-lag visibility into compounded returns, theoretical expectancy vs. path-dependent sequential walk, peak-to-trough drawdown telemetry, streak analytics, and an interactive SVG equity curve with hover crosshair inspection.
+
+### Key Features & Architectural Directives
+- **Dual Compounding Calculation Engine (`src/lib/quantEngine/equityCalculator.ts`):**
+  - **Execution Win Rate:** Bound strictly to executed/retested trades (`executed_wins / total_executed_trades`).
+  - **Approach A (Theoretical Closed Expectancy):** Models closed-form mathematical expectancy:
+    $$\text{EV}_R = (\text{WinRate} \times \text{AvgWinR}) - (\text{LossRate} \times \text{AvgLossR})$$
+    $$\text{TheoreticalFinalEquity} = \text{InitialCapital} \times \left(1 + \frac{\text{RiskPct}}{100} \times \text{EV}_R\right)^N$$
+  - **Approach B (Path-Dependent Sequential Walk):** Walks chronologically through every executed trade:
+    $$\text{RiskUSD}_i = \text{Equity}_{i-1} \times \left(\frac{\text{RiskPct}}{100}\right)$$
+    $$\text{RealizedPnL}_i = \text{RiskUSD}_i \times \text{RealizedR}_i$$
+    $$\text{Equity}_i = \text{Equity}_{i-1} + \text{RealizedPnL}_i$$
+    - Tracks exact Peak Equity, Drawdown $, Max Peak-to-Trough Drawdown %, Gross Profit/Loss, and Profit Factor.
+    - Tracks Longest Win Streak, Longest Loss Streak, and Active Current Streak.
+  - **Universal Adapters & Strict Executed Filtering:** Standardizes `SweepReclaimSetup[]` and `InstitutionalOrderBlock[]` into normalized `StandardizedExecutedTrade[]` sorted chronologically. Strictly gates setups on confirmed execution/retest (`is_retested === true` and valid execution outcomes; excludes unmitigated/unretested/phantom setups like `NO_RETEST`, `INVALIDATED`, `ANCHOR_ONLY`), guaranteeing that the win rate denominator reflects true executed trades (e.g. 88 trades at 46.59% win rate).
+- **Flow-State Dark Brutalist Container (`src/components/quantLab/CapitalGrowthLedger.tsx`):**
+  - **Dynamic Context Controls:** Instant input adjustments for Initial Capital ($) (with presets $5k, $10k, $25k, $50k) and Risk Per Trade (%) (with slider, number input, presets 0.5%, 1.0%, 1.5%, 2.0%), plus Compounding Mode toggle (Dynamic Compounding vs Fixed Initial).
+  - **Dual Expectancy Comparison Sub-Banner:** Side-by-side display of Approach A vs Approach B.
+  - **6-Metric Institutional Telemetry Grid:** Compounded Balance, Max Drawdown %, Profit Factor, Realized Asymmetry Ratio, Execution Win Rate, and Streak Telemetry.
+  - **Interactive SVG Vector Chart:** High-performance theme-aware SVG with smooth gradient area fill, base capital dashed reference line, peak watermark trajectory line, and interactive mouse-hover crosshairs with floating trade tooltip.
+  - **Collapsible Chronological Trade Ledger:** Expandable table with pagination, setup badges, entry/SL levels, dollar risk, dollar PnL, running equity, and drawdown %.
+- **Scanner Workspace Integration:**
+  - Embedded into `SweepReclaimWorkspace.tsx` and `src/app/quant-lab/page.tsx` (OB Scanner).
+- **Verification:**
+  - `npx tsc --noEmit` verified with **0 errors**.
+
+---
 
 ## 🆕 V16.36 Changelog — Database Egress Optimization & Column Projection Audit (2026-08-20)
 
