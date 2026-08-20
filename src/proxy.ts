@@ -66,11 +66,10 @@ export default auth((req) => {
 });
 
 /**
- * Matcher: Run proxy on all routes EXCEPT static files, images, and favicon.
- * The NextAuth API routes are handled inside the proxy function itself.
+ * Matcher: Run proxy on all routes EXCEPT auth endpoints, static files, images, audio, and manifests.
  */
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|audio|manifest\\.webmanifest|manifest\\.json|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp3)$).*)",
+    "/((?!api/auth|_next/static|_next/image|favicon.ico|audio|manifest\\.webmanifest|manifest\\.json|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp3|wav)$).*)",
   ],
 };

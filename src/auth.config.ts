@@ -1,6 +1,23 @@
 import type { NextAuthConfig } from "next-auth";
 import Google from "next-auth/providers/google";
 
+const googleClientId =
+  process.env.AUTH_GOOGLE_ID ||
+  process.env.GOOGLE_CLIENT_ID ||
+  process.env.GOOGLE_ID ||
+  "";
+
+const googleClientSecret =
+  process.env.AUTH_GOOGLE_SECRET ||
+  process.env.GOOGLE_CLIENT_SECRET ||
+  process.env.GOOGLE_SECRET ||
+  "";
+
+const authSecret =
+  process.env.AUTH_SECRET ||
+  process.env.NEXTAUTH_SECRET ||
+  "";
+
 /**
  * Edge-compatible auth configuration.
  * This file is imported by proxy.ts (Next.js 16's middleware replacement).
@@ -9,10 +26,12 @@ import Google from "next-auth/providers/google";
  * The full auth config with database callbacks lives in auth.ts.
  */
 export const authConfig = {
+  trustHost: true,
+  secret: authSecret,
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: googleClientId,
+      clientSecret: googleClientSecret,
     }),
   ],
   pages: {
@@ -23,3 +42,4 @@ export const authConfig = {
     strategy: "jwt",
   },
 } satisfies NextAuthConfig;
+
