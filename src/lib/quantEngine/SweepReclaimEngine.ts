@@ -71,6 +71,26 @@ export type SweepReclaimStageExitType =
   | 'EXPIRED'
   | 'INVALIDATED';
 
+/**
+ * Retest Entry Model Options:
+ *  - SHELF_LEVEL / RECLAIM_LEVEL: Reclaimed anchor level.
+ *  - FVG_PROXIMAL: Outer opening edge of the displacement FVG.
+ *  - FVG_CE: 50% Consequent Encroachment of the displacement FVG.
+ *  - FVG_DISTAL: Deepest edge of the displacement FVG prior to invalidation.
+ *  - OB_PROXIMAL: Open / first boundary of the sweep Order Block.
+ *  - SWEEP_OB_MT: 50% Mean Threshold of the sweep Order Block.
+ *  - OTE_62: 62% Fibonacci retracement of the displacement impulse.
+ */
+export type SweepReclaimEntryMode =
+  | 'SHELF_LEVEL'
+  | 'RECLAIM_LEVEL' // legacy alias for SHELF_LEVEL
+  | 'FVG_PROXIMAL'
+  | 'FVG_CE'
+  | 'FVG_DISTAL'
+  | 'OB_PROXIMAL'
+  | 'SWEEP_OB_MT'
+  | 'OTE_62';
+
 export interface SweepReclaimSetup {
   id: string;
   type: SweepReclaimType;
@@ -99,6 +119,7 @@ export interface SweepReclaimSetup {
   sweep_wick_ratio: number | null;
   is_wick_rejection_sweep: boolean;
   sweep_ob_mt: number | null;
+  sweep_ob_proximal?: number | null;
   bars_anchor_to_sweep: number | null;
 
   // Phase 3: 3-Pillar Volumetric Reclaim Metrics (Displacement / Inversion)
@@ -112,6 +133,11 @@ export interface SweepReclaimSetup {
   reclaim_fvg_top: number | null;
   reclaim_fvg_bottom: number | null;
   reclaim_fvg_ce: number | null;
+  reclaim_fvg_proximal?: number | null;
+  reclaim_fvg_distal?: number | null;
+  displacement_impulse_high?: number | null;
+  displacement_impulse_low?: number | null;
+  ote_62_price?: number | null;
   bars_sweep_to_reclaim: number | null;
   is_reclaimed: boolean;
 
@@ -134,7 +160,7 @@ export interface SweepReclaimSetup {
   is_valuation_aligned: boolean;
 
   // Risk / Reward & Execution Geometry
-  entry_mode: 'FVG_CE' | 'SWEEP_OB_MT' | 'RECLAIM_LEVEL';
+  entry_mode: SweepReclaimEntryMode;
   entry_price: number;
   stop_loss: number;
   risk_usd: number;
@@ -198,7 +224,7 @@ export interface SweepReclaimScanConfig {
   stage1Multiple?: number;                    // Stage 1 Tranche target R (default: 1.0)
   stage2Multiple?: number;                    // Stage 2 Tranche target R (default: 1.5)
   stage3Multiple?: number;                    // Stage 3 Tranche target R / DOL runner (default: 3.0)
-  entryMode?: 'FVG_CE' | 'SWEEP_OB_MT' | 'RECLAIM_LEVEL'; // (default: 'SWEEP_OB_MT')
+  entryMode?: SweepReclaimEntryMode;          // (default: 'SWEEP_OB_MT')
   enableStructuralTrail?: boolean;            // Trail SL to FVG CE after Stage 1 (default: true)
   enableProfitRatchet?: boolean;              // Ratchet SL to +1.0R floor after Stage 2 (default: true)
   minSweepDepthAtrMultiplier?: number;        // Min sweep penetration in ATR (default: 0.10)
@@ -299,6 +325,155 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   minSweepDepthAtrMultiplier: 0.10,
   slBufferAtrMultiplier: 0.15,
 };
+
+// ── Centralized Retest Price Resolver ────────────────────────────────────────
+
+export interface RetestPriceResolverParams {
+  mode: SweepReclaimEntryMode;
+  isBullish: boolean;
+  anchorLevel: number;
+  sweepCandle?: {
+    high: number;
+    low: number;
+    open?: number;
+    close?: number;
+    mt?: number;
+  } | null;
+  fvg?: {
+    top: number;
+    bottom: number;
+    ce?: number;
+  } | null;
+  displacementExtremes?: {
+    impulseHigh: number;
+    impulseLow: number;
+  } | null;
+}
+
+/**
+ * Resolves the exact limit entry price for a Sweep & Reclaim setup based on the selected Retest Entry Model.
+ * Handles directional orientation (Bullish vs Bearish) and provides safe fallbacks to anchor level.
+ */
+export function resolveRetestEntryPrice(params: RetestPriceResolverParams): number {
+  const { mode, isBullish, anchorLevel, sweepCandle, fvg, displacementExtremes } = params;
+
+  switch (mode) {
+    case 'SHELF_LEVEL':
+    case 'RECLAIM_LEVEL':
+      return parseFloat(anchorLevel.toFixed(4));
+
+    case 'FVG_PROXIMAL':
+      if (fvg && typeof fvg.top === 'number' && typeof fvg.bottom === 'number') {
+        // Bullish (BISI): retracement downward hits upper gap boundary first (fvg.top)
+        // Bearish (SIBI): retracement upward hits lower gap boundary first (fvg.bottom)
+        const proximal = isBullish ? fvg.top : fvg.bottom;
+        return parseFloat(proximal.toFixed(4));
+      }
+      return parseFloat(anchorLevel.toFixed(4));
+
+    case 'FVG_CE':
+      if (fvg && typeof fvg.top === 'number' && typeof fvg.bottom === 'number') {
+        const ce = typeof fvg.ce === 'number' ? fvg.ce : (fvg.top + fvg.bottom) / 2;
+        return parseFloat(ce.toFixed(4));
+      }
+      return parseFloat(anchorLevel.toFixed(4));
+
+    case 'FVG_DISTAL':
+      if (fvg && typeof fvg.top === 'number' && typeof fvg.bottom === 'number') {
+        // Bullish (BISI): deepest boundary before gap mitigation/invalidation is lower gap boundary (fvg.bottom)
+        // Bearish (SIBI): deepest boundary before gap mitigation/invalidation is upper gap boundary (fvg.top)
+        const distal = isBullish ? fvg.bottom : fvg.top;
+        return parseFloat(distal.toFixed(4));
+      }
+      return parseFloat(anchorLevel.toFixed(4));
+
+    case 'OB_PROXIMAL':
+      if (sweepCandle && typeof sweepCandle.high === 'number' && typeof sweepCandle.low === 'number') {
+        // Bullish: pullback from above into sweep OB hits OB top boundary (high)
+        // Bearish: pullback from below into sweep OB hits OB bottom boundary (low)
+        const obProximal = isBullish ? sweepCandle.high : sweepCandle.low;
+        return parseFloat(obProximal.toFixed(4));
+      }
+      return parseFloat(anchorLevel.toFixed(4));
+
+    case 'SWEEP_OB_MT':
+      if (sweepCandle && typeof sweepCandle.high === 'number' && typeof sweepCandle.low === 'number') {
+        const mt = typeof sweepCandle.mt === 'number' ? sweepCandle.mt : (sweepCandle.high + sweepCandle.low) / 2;
+        return parseFloat(mt.toFixed(4));
+      }
+      return parseFloat(anchorLevel.toFixed(4));
+
+    case 'OTE_62':
+      if (
+        displacementExtremes &&
+        typeof displacementExtremes.impulseHigh === 'number' &&
+        typeof displacementExtremes.impulseLow === 'number' &&
+        displacementExtremes.impulseHigh > displacementExtremes.impulseLow
+      ) {
+        const range = displacementExtremes.impulseHigh - displacementExtremes.impulseLow;
+        // Bullish: 62% retracement from peak down toward sweep low
+        // Bearish: 62% retracement from trough up toward sweep high
+        const otePrice = isBullish
+          ? displacementExtremes.impulseHigh - 0.62 * range
+          : displacementExtremes.impulseLow + 0.62 * range;
+        return parseFloat(otePrice.toFixed(4));
+      }
+      return parseFloat(anchorLevel.toFixed(4));
+
+    default:
+      return parseFloat(anchorLevel.toFixed(4));
+  }
+}
+
+/**
+ * Returns human-readable label for a given SweepReclaimEntryMode.
+ */
+export function getEntryModeLabel(mode: SweepReclaimEntryMode): string {
+  switch (mode) {
+    case 'SWEEP_OB_MT':
+      return 'Sweep OB 50% MT';
+    case 'OB_PROXIMAL':
+      return 'Sweep OB Proximal';
+    case 'FVG_CE':
+      return 'Displacement FVG 50% CE';
+    case 'FVG_PROXIMAL':
+      return 'Displacement FVG Proximal';
+    case 'FVG_DISTAL':
+      return 'Displacement FVG Distal';
+    case 'OTE_62':
+      return '62% OTE Retracement';
+    case 'SHELF_LEVEL':
+    case 'RECLAIM_LEVEL':
+      return 'Reclaimed Shelf Level';
+    default:
+      return mode;
+  }
+}
+
+/**
+ * Returns full technical description for a given SweepReclaimEntryMode.
+ */
+export function getEntryModeDescription(mode: SweepReclaimEntryMode): string {
+  switch (mode) {
+    case 'SWEEP_OB_MT':
+      return '50% Mean Threshold midpoint of the liquidity sweep candle / Order Block';
+    case 'OB_PROXIMAL':
+      return 'First boundary edge of the sweep Order Block (High for Longs, Low for Shorts)';
+    case 'FVG_CE':
+      return '50% Consequent Encroachment midpoint of the displacement Fair Value Gap';
+    case 'FVG_PROXIMAL':
+      return 'Outer opening edge of the displacement Fair Value Gap (Top for BISI, Bottom for SIBI)';
+    case 'FVG_DISTAL':
+      return 'Deepest boundary edge of the Fair Value Gap prior to full fill/invalidation';
+    case 'OTE_62':
+      return '62% Fibonacci Retracement of the displacement impulse wave from sweep to reclaim';
+    case 'SHELF_LEVEL':
+    case 'RECLAIM_LEVEL':
+      return 'Exact price level of the reclaimed structural pivot / session anchor shelf';
+    default:
+      return '';
+  }
+}
 
 // ── Internal Helpers ─────────────────────────────────────────────────────────
 
@@ -765,6 +940,7 @@ export class SweepReclaimEngine {
           sweep_wick_ratio: null,
           is_wick_rejection_sweep: false,
           sweep_ob_mt: null,
+          sweep_ob_proximal: null,
           bars_anchor_to_sweep: null,
 
           reclaim_index: null,
@@ -777,6 +953,11 @@ export class SweepReclaimEngine {
           reclaim_fvg_top: null,
           reclaim_fvg_bottom: null,
           reclaim_fvg_ce: null,
+          reclaim_fvg_proximal: null,
+          reclaim_fvg_distal: null,
+          displacement_impulse_high: null,
+          displacement_impulse_low: null,
+          ote_62_price: null,
           bars_sweep_to_reclaim: null,
           is_reclaimed: false,
 
@@ -1013,15 +1194,57 @@ export class SweepReclaimEngine {
       const dealingRangeEquilibrium =
         rangeHigh > rangeLow ? parseFloat(((rangeHigh + rangeLow) / 2).toFixed(4)) : anchorLevel;
 
-      // Select Entry Level: FVG 50% CE vs Sweep OB 50% MT vs Reclaim Shelf
-      let executionEntry = anchorLevel;
-      if (entryMode === 'SWEEP_OB_MT' && sweepObMt !== null) {
-        executionEntry = sweepObMt;
-      } else if (entryMode === 'FVG_CE' && reclaimFvgCe !== null) {
-        executionEntry = reclaimFvgCe;
-      } else {
-        executionEntry = anchorLevel;
+      // Extract displacement impulse bounds from sweep to reclaim
+      let impulseHigh = -Infinity;
+      let impulseLow = Infinity;
+      const impStart = sweepIdx !== null ? sweepIdx : anchorIdx;
+      const impEnd = reclaimIdx !== null ? reclaimIdx : sweepIdx !== null ? sweepIdx : anchorIdx;
+      for (let k = impStart; k <= impEnd; k++) {
+        const cHigh = candles[k].h ?? (candles[k] as any).high;
+        const cLow = candles[k].l ?? (candles[k] as any).low;
+        if (cHigh > impulseHigh) impulseHigh = cHigh;
+        if (cLow < impulseLow) impulseLow = cLow;
       }
+
+      const sweepCandleData = sweepIdx !== null ? {
+        high: candles[sweepIdx].h ?? (candles[sweepIdx] as any).high,
+        low: candles[sweepIdx].l ?? (candles[sweepIdx] as any).low,
+        open: candles[sweepIdx].o ?? (candles[sweepIdx] as any).open,
+        close: candles[sweepIdx].c ?? (candles[sweepIdx] as any).close,
+        mt: sweepObMt ?? ((candles[sweepIdx].h ?? (candles[sweepIdx] as any).high) + (candles[sweepIdx].l ?? (candles[sweepIdx] as any).low)) / 2,
+      } : null;
+
+      const fvgData = (reclaimFvgCreated && reclaimFvgTop !== null && reclaimFvgBottom !== null) ? {
+        top: reclaimFvgTop,
+        bottom: reclaimFvgBottom,
+        ce: reclaimFvgCe ?? (reclaimFvgTop + reclaimFvgBottom) / 2,
+      } : null;
+
+      const displacementData = (impulseHigh > impulseLow) ? {
+        impulseHigh,
+        impulseLow,
+      } : null;
+
+      // Select Entry Level via centralized price resolver
+      const executionEntry = resolveRetestEntryPrice({
+        mode: entryMode,
+        isBullish,
+        anchorLevel,
+        sweepCandle: sweepCandleData,
+        fvg: fvgData,
+        displacementExtremes: displacementData,
+      });
+
+      // Directional geometry fields
+      const sweepObProximal = sweepCandleData ? (isBullish ? sweepCandleData.high : sweepCandleData.low) : null;
+      const reclaimFvgProximal = fvgData ? (isBullish ? fvgData.top : fvgData.bottom) : null;
+      const reclaimFvgDistal = fvgData ? (isBullish ? fvgData.bottom : fvgData.top) : null;
+      const ote62Price = displacementData ? resolveRetestEntryPrice({
+        mode: 'OTE_62',
+        isBullish,
+        anchorLevel,
+        displacementExtremes: displacementData,
+      }) : null;
 
       const isValuationAligned = isBullish
         ? executionEntry <= dealingRangeEquilibrium
@@ -1082,6 +1305,7 @@ export class SweepReclaimEngine {
         sweep_wick_ratio: sweepWickRatio,
         is_wick_rejection_sweep: isWickRejection,
         sweep_ob_mt: sweepObMt,
+        sweep_ob_proximal: sweepObProximal !== null ? parseFloat(sweepObProximal.toFixed(4)) : null,
         bars_anchor_to_sweep: sweepIdx - anchorIdx,
 
         reclaim_index: reclaimIdx,
@@ -1094,6 +1318,11 @@ export class SweepReclaimEngine {
         reclaim_fvg_top: reclaimFvgTop,
         reclaim_fvg_bottom: reclaimFvgBottom,
         reclaim_fvg_ce: reclaimFvgCe,
+        reclaim_fvg_proximal: reclaimFvgProximal !== null ? parseFloat(reclaimFvgProximal.toFixed(4)) : null,
+        reclaim_fvg_distal: reclaimFvgDistal !== null ? parseFloat(reclaimFvgDistal.toFixed(4)) : null,
+        displacement_impulse_high: impulseHigh !== -Infinity ? parseFloat(impulseHigh.toFixed(4)) : null,
+        displacement_impulse_low: impulseLow !== Infinity ? parseFloat(impulseLow.toFixed(4)) : null,
+        ote_62_price: ote62Price !== null ? parseFloat(ote62Price.toFixed(4)) : null,
         bars_sweep_to_reclaim: reclaimIdx !== null ? reclaimIdx - sweepIdx : null,
         is_reclaimed: reclaimFound,
 
