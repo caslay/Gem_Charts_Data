@@ -28,6 +28,12 @@ import {
 } from 'lucide-react';
 import { useLiveOrderBlockExecution, IS_OB_STRATEGY_PAUSED } from '@/hooks/useLiveOrderBlockExecution';
 import { useAutomatedStrategyExecution } from '@/hooks/useAutomatedStrategyExecution';
+import ScannerPresetControlDeck from '@/components/quantLab/ScannerPresetControlDeck';
+import {
+  ScannerPreset,
+  SweepReclaimPresetConfig,
+  OrderBlockPresetConfig
+} from '@/lib/quantEngine/scannerPresets';
 
 interface LiveOrderBlockModalProps {
   isOpen: boolean;
@@ -78,6 +84,97 @@ function LiveOrderBlockModalContent({
   } = useAutomatedStrategyExecution();
 
   const [activeTab, setActiveTab] = useState<'EXECUTION' | 'ZONES' | 'SETTINGS'>('EXECUTION');
+
+  const currentSrLivePresetConfig: SweepReclaimPresetConfig = {
+    symbol: symbol || 'ETHUSDC',
+    timeframe: '15m',
+    anchorTypes: (() => {
+      const result: any[] = [];
+      const list = srSettings?.anchorTypes || ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'];
+      if (list.includes('SWING_PIVOT')) result.push('SWING_PIVOT');
+      if (list.includes('ASIAN')) result.push('ASIAN_HIGH', 'ASIAN_LOW');
+      if (list.includes('LONDON')) result.push('LONDON_HIGH', 'LONDON_LOW');
+      if (list.includes('DAILY')) result.push('PDH', 'PDL');
+      return result;
+    })(),
+    lookbackMajor: 15,
+    lookbackInternal: 5,
+    maxBarsAnchorToSweep: 30,
+    maxBarsSweepToReclaim: 12,
+    maxBarsToRetest: 24,
+    volumeExpansionThreshold: srSettings?.volumeExpansionThreshold ?? 1.50,
+    deltaDominanceThreshold: srSettings?.deltaDominanceThreshold ?? 60.0,
+    bodyRatioThreshold: srSettings?.bodyRatioThreshold ?? 0.60,
+    requireThreePillarDisplacement: true,
+    enforceDiscountPremiumGate: srSettings?.enforceDiscountPremiumGate ?? true,
+    stage1Multiple: 1.0,
+    stage2Multiple: 1.5,
+    stage3Multiple: 3.0,
+    entryMode: srSettings?.entryMode || 'SWEEP_OB_MT',
+    enableStructuralTrail: true,
+    enableProfitRatchet: true,
+    minSweepDepthAtrMultiplier: 0.10,
+    slBufferAtrMultiplier: 0.15,
+  };
+
+  const handleApplySrLivePreset = (preset: ScannerPreset) => {
+    if (preset.strategyType !== 'SWEEP_RECLAIM') return;
+    const cfg = preset.config as SweepReclaimPresetConfig;
+    const liveAnchors: ('SWING_PIVOT' | 'ASIAN' | 'LONDON' | 'DAILY')[] = [];
+    if (cfg.anchorTypes?.includes('SWING_PIVOT')) liveAnchors.push('SWING_PIVOT');
+    if (cfg.anchorTypes?.some((t) => t.startsWith('ASIAN'))) liveAnchors.push('ASIAN');
+    if (cfg.anchorTypes?.some((t) => t.startsWith('LONDON'))) liveAnchors.push('LONDON');
+    if (cfg.anchorTypes?.includes('PDH') || cfg.anchorTypes?.includes('PDL')) liveAnchors.push('DAILY');
+
+    updateSrSettings({
+      entryMode: cfg.entryMode,
+      enforceDiscountPremiumGate: cfg.enforceDiscountPremiumGate,
+      volumeExpansionThreshold: cfg.volumeExpansionThreshold,
+      deltaDominanceThreshold: cfg.deltaDominanceThreshold,
+      bodyRatioThreshold: cfg.bodyRatioThreshold,
+      anchorTypes: liveAnchors.length > 0 ? liveAnchors : ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'],
+    });
+  };
+
+  const currentObLivePresetConfig: OrderBlockPresetConfig = {
+    symbol: symbol || 'ETHUSDC',
+    timeframe: '15m',
+    minTier: 'ALL',
+    strictTierAPlus: false,
+    maxBarsToMitigation: 24,
+    enableBreakerSim: true,
+    maxBreakerRetestBars: 20,
+    enableDynamicMgmt: true,
+    tp1Multiple: 1.0,
+    tp2Multiple: 1.5,
+    positionScalingMode: 'THREE_STAGE_HARVEST',
+    tp1Ratio: 0.40,
+    tp2Ratio: 0.40,
+    tp3Ratio: 0.20,
+    trailingStopMode: 'STRUCTURAL_FVG_TRAIL',
+    trailingBuffer: 0.05,
+    dynamicDolTp2Scaling: true,
+    adaptiveBreakerConfirmation: true,
+    requireBreakerConfirmation: true,
+    requireBreakerDOL: true,
+    requireBreakerVolumetric: true,
+    breakerSessionFilter: 'ALL',
+    aggregateConsecutive: true,
+    maxConsecutive: 5,
+    entryMode: 'BOUNDARY',
+    targetRr: 2.5,
+  };
+
+  const handleApplyObLivePreset = (preset: ScannerPreset) => {
+    if (preset.strategyType !== 'ORDER_BLOCK') return;
+    const cfg = preset.config as OrderBlockPresetConfig;
+    if (cfg.positionScalingMode) {
+      setScalingMode(cfg.positionScalingMode);
+    }
+    if (cfg.trailingStopMode) {
+      setTrailingMode(cfg.trailingStopMode);
+    }
+  };
 
   // Close on escape key
   useEffect(() => {
@@ -740,6 +837,13 @@ function LiveOrderBlockModalContent({
                   </button>
                 </div>
 
+                {/* Preset Deck for Order Block Strategy */}
+                <ScannerPresetControlDeck
+                  strategyType="ORDER_BLOCK"
+                  currentConfig={currentObLivePresetConfig}
+                  onApplyPreset={handleApplyObLivePreset}
+                />
+
                 {/* ── Multi-Timeframe Stream Ingestion Matrix ── */}
                 <div className="flex flex-col gap-2 bg-background/50 p-3 rounded-lg border border-card-border/40">
                   <div className="flex items-center justify-between">
@@ -953,6 +1057,13 @@ function LiveOrderBlockModalContent({
                     <span>{isSweepReclaimAutoExecEnabled ? 'AUTO-EXEC ON' : 'DISABLED'}</span>
                   </button>
                 </div>
+
+                {/* Preset Deck for Sweep & Reclaim Strategy */}
+                <ScannerPresetControlDeck
+                  strategyType="SWEEP_RECLAIM"
+                  currentConfig={currentSrLivePresetConfig}
+                  onApplyPreset={handleApplySrLivePreset}
+                />
 
                 {/* 1. Dynamic Compounding Risk Sizing Selector */}
                 <div className="flex flex-col gap-2">

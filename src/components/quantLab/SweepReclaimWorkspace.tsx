@@ -42,6 +42,8 @@ import {
 } from "@/lib/quantEngine/SweepReclaimEngine";
 import { adaptSweepReclaimSetupsToTrades } from "@/lib/quantEngine/equityCalculator";
 import CapitalGrowthLedger from "@/components/quantLab/CapitalGrowthLedger";
+import ScannerPresetControlDeck from "@/components/quantLab/ScannerPresetControlDeck";
+import { ScannerPreset, SweepReclaimPresetConfig } from "@/lib/quantEngine/scannerPresets";
 import { StoredSrScan } from "@/app/quant-lab/page";
 
 interface SweepReclaimWorkspaceProps {
@@ -148,6 +150,86 @@ export default function SweepReclaimWorkspace({
     }
     return types;
   }, [enabledAnchors]);
+
+  // Current config representation for preset saving
+  const currentSweepReclaimConfig: SweepReclaimPresetConfig = useMemo(() => ({
+    symbol,
+    timeframe,
+    anchorTypes: resolvedAnchorTypes,
+    lookbackMajor,
+    lookbackInternal,
+    maxBarsAnchorToSweep,
+    maxBarsSweepToReclaim,
+    maxBarsToRetest,
+    volumeExpansionThreshold,
+    deltaDominanceThreshold,
+    bodyRatioThreshold,
+    requireThreePillarDisplacement: true,
+    enforceDiscountPremiumGate,
+    stage1Multiple,
+    stage2Multiple,
+    stage3Multiple,
+    entryMode,
+    enableStructuralTrail,
+    enableProfitRatchet,
+    minSweepDepthAtrMultiplier: minSweepDepthAtr,
+    slBufferAtrMultiplier: slBufferAtr,
+  }), [
+    symbol,
+    timeframe,
+    resolvedAnchorTypes,
+    lookbackMajor,
+    lookbackInternal,
+    maxBarsAnchorToSweep,
+    maxBarsSweepToReclaim,
+    maxBarsToRetest,
+    volumeExpansionThreshold,
+    deltaDominanceThreshold,
+    bodyRatioThreshold,
+    enforceDiscountPremiumGate,
+    stage1Multiple,
+    stage2Multiple,
+    stage3Multiple,
+    entryMode,
+    enableStructuralTrail,
+    enableProfitRatchet,
+    minSweepDepthAtr,
+    slBufferAtr,
+  ]);
+
+  const handleApplyPreset = (preset: ScannerPreset) => {
+    if (preset.strategyType !== 'SWEEP_RECLAIM') return;
+    const cfg = preset.config as SweepReclaimPresetConfig;
+
+    if (cfg.symbol) setSymbol(cfg.symbol);
+    if (cfg.timeframe) setTimeframe(cfg.timeframe as "5m" | "15m" | "1h" | "4h");
+    if (cfg.entryMode) setEntryMode(cfg.entryMode);
+    if (typeof cfg.volumeExpansionThreshold === 'number') setVolumeExpansionThreshold(cfg.volumeExpansionThreshold);
+    if (typeof cfg.deltaDominanceThreshold === 'number') setDeltaDominanceThreshold(cfg.deltaDominanceThreshold);
+    if (typeof cfg.bodyRatioThreshold === 'number') setBodyRatioThreshold(cfg.bodyRatioThreshold);
+    if (typeof cfg.enforceDiscountPremiumGate === 'boolean') setEnforceDiscountPremiumGate(cfg.enforceDiscountPremiumGate);
+    if (typeof cfg.stage1Multiple === 'number') setStage1Multiple(cfg.stage1Multiple);
+    if (typeof cfg.stage2Multiple === 'number') setStage2Multiple(cfg.stage2Multiple);
+    if (typeof cfg.stage3Multiple === 'number') setStage3Multiple(cfg.stage3Multiple);
+    if (typeof cfg.enableStructuralTrail === 'boolean') setEnableStructuralTrail(cfg.enableStructuralTrail);
+    if (typeof cfg.enableProfitRatchet === 'boolean') setEnableProfitRatchet(cfg.enableProfitRatchet);
+    if (typeof cfg.lookbackMajor === 'number') setLookbackMajor(cfg.lookbackMajor);
+    if (typeof cfg.lookbackInternal === 'number') setLookbackInternal(cfg.lookbackInternal);
+    if (typeof cfg.maxBarsAnchorToSweep === 'number') setMaxBarsAnchorToSweep(cfg.maxBarsAnchorToSweep);
+    if (typeof cfg.maxBarsSweepToReclaim === 'number') setMaxBarsSweepToReclaim(cfg.maxBarsSweepToReclaim);
+    if (typeof cfg.maxBarsToRetest === 'number') setMaxBarsToRetest(cfg.maxBarsToRetest);
+    if (typeof cfg.minSweepDepthAtrMultiplier === 'number') setMinSweepDepthAtr(cfg.minSweepDepthAtrMultiplier);
+    if (typeof cfg.slBufferAtrMultiplier === 'number') setSlBufferAtr(cfg.slBufferAtrMultiplier);
+
+    if (Array.isArray(cfg.anchorTypes)) {
+      setEnabledAnchors({
+        SWING_PIVOT: cfg.anchorTypes.includes('SWING_PIVOT'),
+        ASIAN: cfg.anchorTypes.some((a) => a.startsWith('ASIAN')),
+        LONDON: cfg.anchorTypes.some((a) => a.startsWith('LONDON')),
+        DAILY: cfg.anchorTypes.includes('PDH') || cfg.anchorTypes.includes('PDL'),
+      });
+    }
+  };
 
   const handleStartScan = () => {
     onRunScan({
@@ -291,6 +373,15 @@ export default function SweepReclaimWorkspace({
               1Y
             </button>
           </div>
+        </div>
+
+        {/* Local-First Scanner Preset Control Deck */}
+        <div className="mb-5">
+          <ScannerPresetControlDeck
+            strategyType="SWEEP_RECLAIM"
+            currentConfig={currentSweepReclaimConfig}
+            onApplyPreset={handleApplyPreset}
+          />
         </div>
 
         {/* Form Inputs Grid */}

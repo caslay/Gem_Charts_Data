@@ -48,6 +48,8 @@ import { adaptOrderBlocksToTrades } from "@/lib/quantEngine/equityCalculator";
 import CapitalGrowthLedger from "@/components/quantLab/CapitalGrowthLedger";
 import SweepReclaimWorkspace from "@/components/quantLab/SweepReclaimWorkspace";
 import SweepReclaimSidebarList from "@/components/quantLab/SweepReclaimSidebarList";
+import ScannerPresetControlDeck from "@/components/quantLab/ScannerPresetControlDeck";
+import { ScannerPreset, OrderBlockPresetConfig } from "@/lib/quantEngine/scannerPresets";
 import SettingsModal from "@/components/modals/SettingsModal";
 
 export interface StoredSrScan {
@@ -215,6 +217,95 @@ export default function QuantLabPage() {
 
   // OB Inspector Modal / Drawer
   const [inspectedOb, setInspectedOb] = useState<InstitutionalOrderBlock | null>(null);
+
+  // Order Block Preset Configuration Model
+  const currentObConfig: OrderBlockPresetConfig = useMemo(() => ({
+    symbol: obSymbol,
+    timeframe: obTimeframe,
+    minTier: obMinTier,
+    strictTierAPlus: obStrictTierAPlus,
+    maxBarsToMitigation: obMaxBarsToMitigation,
+    enableBreakerSim: obEnableBreakerSim,
+    maxBreakerRetestBars: obMaxBreakerRetestBars,
+    enableDynamicMgmt: obEnableDynamicMgmt,
+    tp1Multiple: obTp1Multiple,
+    tp2Multiple: obTp2Multiple,
+    positionScalingMode: obPositionScalingMode,
+    tp1Ratio: obTp1Ratio,
+    tp2Ratio: obTp2Ratio,
+    tp3Ratio: obTp3Ratio,
+    trailingStopMode: obTrailingStopMode,
+    trailingBuffer: obTrailingBuffer,
+    dynamicDolTp2Scaling: obDynamicDolTp2Scaling,
+    adaptiveBreakerConfirmation: obAdaptiveBreakerConfirmation,
+    requireBreakerConfirmation: obRequireBreakerConfirmation,
+    requireBreakerDOL: obRequireBreakerDOL,
+    requireBreakerVolumetric: obRequireBreakerVolumetric,
+    breakerSessionFilter: obBreakerSessionFilter,
+    aggregateConsecutive: obAggregateConsecutive,
+    maxConsecutive: obMaxConsecutive,
+    entryMode: obEntryMode,
+    targetRr: obTargetRr,
+  }), [
+    obSymbol,
+    obTimeframe,
+    obMinTier,
+    obStrictTierAPlus,
+    obMaxBarsToMitigation,
+    obEnableBreakerSim,
+    obMaxBreakerRetestBars,
+    obEnableDynamicMgmt,
+    obTp1Multiple,
+    obTp2Multiple,
+    obPositionScalingMode,
+    obTp1Ratio,
+    obTp2Ratio,
+    obTp3Ratio,
+    obTrailingStopMode,
+    obTrailingBuffer,
+    obDynamicDolTp2Scaling,
+    obAdaptiveBreakerConfirmation,
+    obRequireBreakerConfirmation,
+    obRequireBreakerDOL,
+    obRequireBreakerVolumetric,
+    obBreakerSessionFilter,
+    obAggregateConsecutive,
+    obMaxConsecutive,
+    obEntryMode,
+    obTargetRr,
+  ]);
+
+  const handleApplyObPreset = (preset: ScannerPreset) => {
+    if (preset.strategyType !== 'ORDER_BLOCK') return;
+    const cfg = preset.config as OrderBlockPresetConfig;
+
+    if (cfg.symbol) setObSymbol(cfg.symbol);
+    if (cfg.timeframe) setObTimeframe(cfg.timeframe);
+    if (cfg.minTier) setObMinTier(cfg.minTier);
+    if (typeof cfg.strictTierAPlus === 'boolean') setObStrictTierAPlus(cfg.strictTierAPlus);
+    if (typeof cfg.maxBarsToMitigation === 'number') setObMaxBarsToMitigation(cfg.maxBarsToMitigation);
+    if (typeof cfg.enableBreakerSim === 'boolean') setObEnableBreakerSim(cfg.enableBreakerSim);
+    if (typeof cfg.maxBreakerRetestBars === 'number') setObMaxBreakerRetestBars(cfg.maxBreakerRetestBars);
+    if (typeof cfg.enableDynamicMgmt === 'boolean') setObEnableDynamicMgmt(cfg.enableDynamicMgmt);
+    if (typeof cfg.tp1Multiple === 'number') setObTp1Multiple(cfg.tp1Multiple);
+    if (typeof cfg.tp2Multiple === 'number') setObTp2Multiple(cfg.tp2Multiple);
+    if (cfg.positionScalingMode) setObPositionScalingMode(cfg.positionScalingMode);
+    if (typeof cfg.tp1Ratio === 'number') setObTp1Ratio(cfg.tp1Ratio);
+    if (typeof cfg.tp2Ratio === 'number') setObTp2Ratio(cfg.tp2Ratio);
+    if (typeof cfg.tp3Ratio === 'number') setObTp3Ratio(cfg.tp3Ratio);
+    if (cfg.trailingStopMode) setObTrailingStopMode(cfg.trailingStopMode);
+    if (typeof cfg.trailingBuffer === 'number') setObTrailingBuffer(cfg.trailingBuffer);
+    if (typeof cfg.dynamicDolTp2Scaling === 'boolean') setObDynamicDolTp2Scaling(cfg.dynamicDolTp2Scaling);
+    if (typeof cfg.adaptiveBreakerConfirmation === 'boolean') setObAdaptiveBreakerConfirmation(cfg.adaptiveBreakerConfirmation);
+    if (typeof cfg.requireBreakerConfirmation === 'boolean') setObRequireBreakerConfirmation(cfg.requireBreakerConfirmation);
+    if (typeof cfg.requireBreakerDOL === 'boolean') setObRequireBreakerDOL(cfg.requireBreakerDOL);
+    if (typeof cfg.requireBreakerVolumetric === 'boolean') setObRequireBreakerVolumetric(cfg.requireBreakerVolumetric);
+    if (cfg.breakerSessionFilter) setObBreakerSessionFilter(cfg.breakerSessionFilter);
+    if (typeof cfg.aggregateConsecutive === 'boolean') setObAggregateConsecutive(cfg.aggregateConsecutive);
+    if (typeof cfg.maxConsecutive === 'number') setObMaxConsecutive(cfg.maxConsecutive);
+    if (cfg.entryMode) setObEntryMode(cfg.entryMode);
+    if (typeof cfg.targetRr === 'number') setObTargetRr(cfg.targetRr);
+  };
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Data Fetching: Strategy Runs & OB Scans
@@ -1309,6 +1400,15 @@ export default function QuantLabPage() {
                       180D
                     </button>
                   </div>
+                </div>
+
+                {/* Local-First Scanner Preset Control Deck */}
+                <div className="mb-5">
+                  <ScannerPresetControlDeck
+                    strategyType="ORDER_BLOCK"
+                    currentConfig={currentObConfig}
+                    onApplyPreset={handleApplyObPreset}
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">

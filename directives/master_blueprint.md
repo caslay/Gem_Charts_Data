@@ -141,6 +141,36 @@ Implemented institutional production-grade risk hardening and concurrency guardr
 
 ---
 
+## 🆕 V16.33 Changelog — Local-First Scanner Preset Management System & Resilient Cloud Persistence (2026-08-20)
+
+### Summary
+Architected and implemented a comprehensive **Local-First Scanner Preset Management System** across the Quant Lab (Sweep & Reclaim Scanner, Order Block Scanner) and Live Strategy Execution drawers. Presets operate with 0ms latency and 100% offline resilience via synchronous `localStorage` caching with bundled institutional factory presets, resilient background cloud synchronization, and modular UI preset control decks with visual sync status indicators.
+
+### Key Features & Architectural Directives
+- **Directive 1: Local-First Storage Store & Factory Defaults (`scannerPresets.ts`):**
+  - Created client-side preset store supporting full parameter serialization for Sweep & Reclaim and Order Block strategies.
+  - Bundled 8 immutable institutional Factory Presets:
+    * `Golden Sweep & Reclaim (Platform Default)`: 15m 3-pillar displacement, Sweep OB 50% MT, 40/40/20 scaling.
+    * `ETH High-Velocity 5m Scalper`: 5m FVG 50% CE limit entry with tight structural trail.
+    * `BTC Institutional 15m Sniper`: 15m Sweep OB 50% MT with 65% Delta Dominance.
+    * `Runaway Momentum 62% OTE`: 15m 62% Fibonacci Retracement model.
+    * `Reclaimed Anchor Shelf Breakout`: 15m direct horizontal anchor shelf defense.
+    * `Deep Macro OB 15m Harvest`: Multi-gate macro order block model with 3-Stage Harvest.
+    * `Elite A+ Order Block Sniper`: Strict A+ Tier Order Block scanner with Mean Threshold entry.
+    * `Breaker Momentum 5m Scalper`: 5m Breaker Block transition model with dynamic DOL scaling.
+- **Directive 2: Resilient Background Cloud Synchronization (`/api/quant-lab/presets/route.ts`):**
+  - Implemented self-healing PostgreSQL table `quant_scanner_presets` (`id`, `user_id`, `name`, `strategy_type`, `symbol`, `timeframe`, `config`, `is_factory`, `created_at`, `updated_at`).
+  - Gracefully traps HTTP 402 (Data Quota Exceeded), database connection limits, and network errors, silently keeping presets marked as `local_only` or `pending_sync` with zero UI interruption.
+- **Directive 3: Modular UI Preset Control Deck Component (`ScannerPresetControlDeck.tsx`):**
+  - Reusable component embedded into `SweepReclaimWorkspace.tsx`, `quant-lab/page.tsx` (OB scanner), and `LiveOrderBlockModal.tsx`.
+  - Features: Grouped Factory/Custom dropdown selector, visual sync status badges (`⚡ FACTORY`, `🟢 SYNCED`, `💾 LOCAL`), "Save New Preset" modal, "Update Preset" action, "Delete Preset" action, and 1-click Quick Switch pills.
+- **Directive 4: Automated Verification Suite (`scratch/test_preset_management.ts`):**
+  - Verified factory preset integrity, local-first loading, custom preset CRUD, protected factory immutability, active preset tab persistence, and parameter serialization across all 7 `SweepReclaimEntryMode` types (5/5 stages passed).
+  - All existing test suites (`test_entry_modes_resolver.ts`, `test_golden_sweep_reclaim.ts`, `test_sweep_reclaim_suite.ts`, `test_sr_parameter_matrix.ts`) passed with 100% success.
+  - `npx tsc --noEmit` exits with **0 errors**.
+
+---
+
 ## 🆕 V16.32 Changelog — Retest Entry Model Geometries & Centralized Price Resolver (2026-08-20)
 
 ### Summary
