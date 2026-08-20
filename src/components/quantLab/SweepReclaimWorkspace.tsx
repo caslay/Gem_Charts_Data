@@ -37,6 +37,8 @@ import {
   SweepReclaimScanConfig,
   SweepReclaimAnchorType
 } from "@/lib/quantEngine/SweepReclaimEngine";
+import { adaptSweepReclaimSetupsToTrades } from "@/lib/quantEngine/equityCalculator";
+import CapitalGrowthLedger from "@/components/quantLab/CapitalGrowthLedger";
 import { StoredSrScan } from "@/app/quant-lab/page";
 
 interface SweepReclaimWorkspaceProps {
@@ -235,6 +237,10 @@ export default function SweepReclaimWorkspace({
 
   const totalPages = Math.ceil(filteredSetups.length / itemsPerPage);
   const telemetry = selectedScan?.telemetry_summary;
+
+  const executedSrTrades = useMemo(() => {
+    return selectedScan?.setups ? adaptSweepReclaimSetupsToTrades(selectedScan.setups) : [];
+  }, [selectedScan?.setups]);
 
   return (
     <>
@@ -868,6 +874,19 @@ export default function SweepReclaimWorkspace({
             </div>
           </div>
         </section>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 2.5 CAPITAL GROWTH & CHRONOLOGICAL EQUITY LEDGER                    */}
+      {/* ─────────────────────────────────────────────────────────────────── */}
+      {selectedScan && (
+        <CapitalGrowthLedger
+          trades={executedSrTrades}
+          totalMonitoredCount={telemetry?.total_anchors_detected}
+          monitoredLabel="Anchors"
+          title={`SWEEP & RECLAIM COMPOUNDING LEDGER • ${selectedScan.symbol} (${selectedScan.timeframe})`}
+          subtitle={`Sequential path-dependent walk across ${executedSrTrades.length} executed retest trades from ${selectedScan.scan_name}.`}
+        />
       )}
 
       {/* ─────────────────────────────────────────────────────────────────── */}

@@ -44,6 +44,8 @@ import {
   SweepReclaimTelemetrySummary,
   SweepReclaimScanConfig
 } from "@/lib/quantEngine/SweepReclaimEngine";
+import { adaptOrderBlocksToTrades } from "@/lib/quantEngine/equityCalculator";
+import CapitalGrowthLedger from "@/components/quantLab/CapitalGrowthLedger";
 import SweepReclaimWorkspace from "@/components/quantLab/SweepReclaimWorkspace";
 import SweepReclaimSidebarList from "@/components/quantLab/SweepReclaimSidebarList";
 import SettingsModal from "@/components/modals/SettingsModal";
@@ -968,6 +970,12 @@ export default function QuantLabPage() {
   }, [filteredOrderBlocks, obCurrentPage]);
 
   const totalObPages = Math.ceil(filteredOrderBlocks.length / obsPerPage);
+
+  const executedObTrades = useMemo(() => {
+    return selectedObScan?.order_blocks
+      ? adaptOrderBlocksToTrades(selectedObScan.order_blocks)
+      : [];
+  }, [selectedObScan?.order_blocks]);
 
   const paginatedTrades = useMemo(() => {
     const start = (currentPage - 1) * tradesPerPage;
@@ -2127,6 +2135,19 @@ export default function QuantLabPage() {
                         </span>
                       </div>
                     </div>
+                  </div>
+
+                  {/* ───────────────────────────────────────────────────────── */}
+                  {/* Capital Growth & Chronological Equity Ledger               */}
+                  {/* ───────────────────────────────────────────────────────── */}
+                  <div className="mb-6">
+                    <CapitalGrowthLedger
+                      trades={executedObTrades}
+                      totalMonitoredCount={selectedObScan.total_detected}
+                      monitoredLabel="Order Blocks"
+                      title={`ORDER BLOCK COMPOUNDING LEDGER • ${selectedObScan.symbol} (${selectedObScan.timeframe})`}
+                      subtitle={`Sequential path-dependent walk across ${executedObTrades.length} executed mitigations & breaker tests from ${selectedObScan.scan_name}.`}
+                    />
                   </div>
 
                   {/* ───────────────────────────────────────────────────────── */}
