@@ -139,8 +139,9 @@ export async function GET() {
     return NextResponse.json({ settings, terminalSettings });
   } catch (error: unknown) {
     console.error("[SETTINGS API] GET Error:", error);
+    const message = error instanceof Error ? error.message : "Failed to fetch settings.";
     return NextResponse.json(
-      { error: "Failed to fetch settings." },
+      { error: message, settings: {}, terminalSettings: null },
       { status: 500 }
     );
   }
@@ -294,8 +295,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: "Terminal settings saved." });
     }
 
-    // 2. Otherwise, handle legacy system settings payload
-    const { settings } = body as { settings: Record<string, string> };
+    // 2. Otherwise, handle system/theme settings payload
+    const { settings } = body as { settings: Record<string, any> };
 
     if (!settings || typeof settings !== "object") {
       return NextResponse.json(
@@ -306,11 +307,12 @@ export async function POST(req: Request) {
 
     // Upsert each key-value pair using ON CONFLICT
     for (const [key, value] of Object.entries(settings)) {
-      if (typeof key !== "string" || typeof value !== "string") continue;
+      if (typeof key !== "string" || value === undefined || value === null) continue;
+      const strValue = typeof value === "object" ? JSON.stringify(value) : String(value);
 
       await sql`
         INSERT INTO system_settings (key_name, key_value)
-        VALUES (${key}, ${value})
+        VALUES (${key}, ${strValue})
         ON CONFLICT (key_name)
         DO UPDATE SET key_value = EXCLUDED.key_value, updated_at = NOW()
       `;
@@ -319,8 +321,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, message: "Settings saved." });
   } catch (error: unknown) {
     console.error("[SETTINGS API] POST Error:", error);
+    const message = error instanceof Error ? error.message : "Failed to save settings.";
     return NextResponse.json(
-      { error: "Failed to save settings." },
+      { error: message },
       { status: 500 }
     );
   }
