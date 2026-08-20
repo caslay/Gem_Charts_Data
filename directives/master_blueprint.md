@@ -1,8 +1,51 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.34
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.36
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-20 (V16.34 — OAuth Authentication Resilience & Self-Healing Whitelist)  
+> **Last Updated:** 2026-08-20 (V16.36 — Database Egress Optimization & Column Projection Audit)  
+
+## 🆕 V16.36 Changelog — Database Egress Optimization & Column Projection Audit (2026-08-20)
+
+### Summary
+Comprehensive architectural refactor across Neon PostgreSQL database query pipelines to eliminate bandwidth spikes, prevent HTTP 402 quota exhaustion, and optimize serverless egress. Separated summary list queries from single-item detail queries, implemented strict server-side pagination across all index routes, introduced lazy detail hydration on the client, and hardened database error handling against quota/disconnect failures.
+
+### Key Features & Architectural Directives
+- **Column Projection & Query Separation:**
+  - `/api/quant-lab/runs`: List queries select only scalar metadata (excluding heavy `strategy_config` JSONB). Single run queries (`?id=<uuid>`) return full config.
+  - `/api/quant-lab/ob-scans`: List queries select only scalar detection metrics (excluding multi-megabyte `order_blocks` JSONB). Single scan queries (`?id=<uuid>`) return full order blocks.
+  - `/api/quant-lab/sr-scans`: List queries select only scalar summary metrics (excluding `setups` JSONB). Single scan queries (`?id=<uuid>`) return full setups.
+  - `/api/quant-lab/trades`: List queries exclude `ipda_metrics_at_entry` unless `detail=true`.
+  - `/api/trades` & `/api/backtest-trades`: Index queries select scalar trade execution fields and enforce pagination bounds.
+  - `/api/strategies`: Added `summary=true` parameter and single-strategy `?id=<uuid>` resolution.
+- **Client Lazy Detail Hydration (`src/app/quant-lab/page.tsx`):**
+  - Mount requests only fetch lightweight summary lists.
+  - Selecting any historical run or scan dynamically fetches its full detail record on demand (`loadSrScanDetail`, `loadObScanDetail`).
+- **Strict Pagination & Query Bounds:**
+  - Enforced default bounds (`LIMIT 25`, max 100 on scans/runs; `LIMIT 50-100`, max 500 on trades) with offset pagination across all GET endpoints.
+- **Resilient Quota Error Handling:**
+  - Trapped PostgreSQL code `53000` / HTTP 402 errors to return clean `{ success: false, quota_exceeded: true, error: "..." }` responses with appropriate status codes.
+- **Verification:**
+  - `npx tsc --noEmit` verified with **0 errors**.
+
+---
+
+## 🆕 V16.35 Changelog — Session Extraction & Self-Healing Settings Seeding (2026-08-20)
+
+### Summary
+Resolved dashboard mount race-condition 401s during production NextAuth session hydration and eliminated `terminalSettings: null` edge-cases. Gated client-side settings fetching in `useMarketData` strictly on `status === 'authenticated'`, enforced `credentials: 'same-origin'` across all settings, account, trade, and drawing network requests, and upgraded `GET /api/settings` to self-seed and return complete default system and terminal settings for authenticated accounts.
+
+### Key Features & Architectural Directives
+- **Client Session Synchronization (`useMarketData.ts` & `useSettings`):**
+  - Gated background settings SWR rehydration on `authStatus === 'authenticated'`.
+  - Added `credentials: 'same-origin'` across all API fetch handlers (`/api/settings`, `/api/account`, `/api/trades`, `/api/drawings`, `/api/strategies`).
+- **Self-Healing Settings Seeding (`src/app/api/settings/route.ts`):**
+  - Auto-seeds `system_settings` with `ACTIVE_MODEL: 'gemini-3.5-flash'` if unset.
+  - Auto-inserts and returns `DEFAULT_SIGNAL_SOUNDS` and `DEFAULT_ENABLED_SIGNALS` for authenticated users with zero previous configuration rows.
+  - Guarantees `terminalSettings` payload is always populated with non-null structured defaults.
+- **Verification:**
+  - `npx tsc --noEmit` verified with **0 errors**.
+
+---
 
 ## 🆕 V16.34 Changelog — OAuth Authentication Resilience & Self-Healing Whitelist (2026-08-20)
 

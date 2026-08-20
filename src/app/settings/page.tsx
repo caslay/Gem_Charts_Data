@@ -217,7 +217,7 @@ export default function SettingsPage() {
       setErrorMessage("");
 
       // 1. Fetch AI & Terminal settings
-      const settingsRes = await fetch("/api/settings");
+      const settingsRes = await fetch("/api/settings", { credentials: "same-origin" });
       if (!settingsRes.ok) throw new Error("Failed to fetch settings from cloud vault.");
       const settingsData = await settingsRes.json();
 
@@ -249,7 +249,7 @@ export default function SettingsPage() {
       }
 
       // 2. Fetch Account & Risk settings
-      const accountRes = await fetch("/api/account");
+      const accountRes = await fetch("/api/account", { credentials: "same-origin" });
       if (accountRes.ok) {
         const accountData = await accountRes.json();
         if (accountData.account) {
@@ -285,6 +285,7 @@ export default function SettingsPage() {
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ settings: themeSettings }),
       });
 
@@ -315,6 +316,7 @@ export default function SettingsPage() {
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ settings: quantSettings }),
       });
 
@@ -352,6 +354,7 @@ export default function SettingsPage() {
       const accountRes = await fetch("/api/account", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           initial_capital: capital,
           max_risk_limit_pct: riskLimit,
@@ -396,6 +399,7 @@ export default function SettingsPage() {
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({
           terminalSettings: {
             signalSounds: signalAlerts,

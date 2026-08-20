@@ -125,7 +125,7 @@ export function useAutomatedStrategyExecution(
   // ── 1. Query Active Portfolio Equity from /api/account ─────────────────────
   const fetchAccountEquity = useCallback(async () => {
     try {
-      const res = await fetch('/api/account');
+      const res = await fetch('/api/account', { credentials: 'same-origin' });
       if (!res.ok) return;
       const data = await res.json();
       if (data.account?.current_balance) {
@@ -150,7 +150,7 @@ export function useAutomatedStrategyExecution(
 
     async function rehydrateFromDatabase() {
       try {
-        const res = await fetch('/api/trades');
+        const res = await fetch('/api/trades', { credentials: 'same-origin' });
         if (!res.ok) return;
         const data = await res.json();
         const trades = data.trades || [];
@@ -242,6 +242,7 @@ export function useAutomatedStrategyExecution(
           const res = await fetch('/api/trades', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify(payload),
           });
 
@@ -289,6 +290,7 @@ export function useAutomatedStrategyExecution(
           await fetch('/api/trades', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify({
               trade_id: pos.dbTradeId,
               status: pos.status,
@@ -312,6 +314,7 @@ export function useAutomatedStrategyExecution(
           await fetch('/api/trades', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify({
               trade_id: pos.dbTradeId,
               status: 'CLOSED',

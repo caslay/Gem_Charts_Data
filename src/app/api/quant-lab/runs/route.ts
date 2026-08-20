@@ -48,21 +48,57 @@ async function initTables() {
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
+    const url = new URL(req.url);
+    const id = url.searchParams.get("id");
+    const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || "25", 10), 1), 100);
+    const offset = Math.max(parseInt(url.searchParams.get("offset") || "0", 10), 0);
+
     await initTables();
+
+    // 1. Single run detail fetch with full strategy config
+    if (id) {
+      const runRes = await sql`
+        SELECT * FROM quant_lab_runs WHERE id = ${id} LIMIT 1
+      `;
+      if (runRes.rows.length === 0) {
+        return NextResponse.json({ error: "Run not found" }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, run: runRes.rows[0] });
+    }
+
+    // 2. Lightweight summary list query (excludes heavy strategy_config JSONB column)
     const runsRes = await sql`
-      SELECT * FROM quant_lab_runs ORDER BY created_at DESC
+      SELECT 
+        id, name, symbol, start_date, end_date, initial_balance, final_balance,
+        total_trades, winning_trades, losing_trades, win_rate_pct, total_pnl, created_at
+      FROM quant_lab_runs 
+      ORDER BY created_at DESC
+      LIMIT ${limit}
+      OFFSET ${offset}
     `;
-    return NextResponse.json({ success: true, runs: runsRes.rows });
+
+    return NextResponse.json({ 
+      success: true, 
+      runs: runsRes.rows,
+      pagination: { limit, offset, count: runsRes.rows.length }
+    });
   } catch (error: any) {
     console.error("[QUANT LAB GET RUNS] Fetch failed:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const isQuotaExceeded = error?.code === "53000" || error?.message?.includes("quota") || error?.status === 402;
+    return NextResponse.json(
+      { 
+        error: isQuotaExceeded ? "Database bandwidth quota exceeded. Upgrade plan or contact administrator." : error.message,
+        quota_exceeded: isQuotaExceeded
+      }, 
+      { status: isQuotaExceeded ? 402 : 500 }
+    );
   }
 }
 
@@ -92,6 +128,13 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ success: true, deleted_id: id });
   } catch (error: any) {
     console.error("[QUANT LAB DELETE RUN] Failed:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const isQuotaExceeded = error?.code === "53000" || error?.message?.includes("quota") || error?.status === 402;
+    return NextResponse.json(
+      { 
+        error: isQuotaExceeded ? "Database bandwidth quota exceeded." : error.message,
+        quota_exceeded: isQuotaExceeded
+      }, 
+      { status: isQuotaExceeded ? 402 : 500 }
+    );
   }
 }

@@ -33,7 +33,7 @@ async function ensureTable() {
 }
 
 // ─── GET: Fetch all strategies for the current user ───────────────────────────
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await auth();
     if (!session?.user) {
@@ -43,15 +43,57 @@ export async function GET() {
       );
     }
 
+    const url = new URL(req.url);
+    const id = url.searchParams.get("id");
+    const summary = url.searchParams.get("summary") === "true";
+    const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || "50", 10), 1), 200);
+    const offset = Math.max(parseInt(url.searchParams.get("offset") || "0", 10), 0);
+
     await ensureTable();
 
     const userEmail = session.user.email;
-    const { rows } = await sql`
-      SELECT id, name, logic_json, is_active, target_environment, created_at, updated_at
-      FROM custom_strategies
-      WHERE user_id = ${userEmail}
-      ORDER BY created_at DESC
-    `;
+
+    if (id) {
+      const { rows } = await sql`
+        SELECT id, name, logic_json, is_active, target_environment, created_at, updated_at
+        FROM custom_strategies
+        WHERE id = ${id} AND user_id = ${userEmail}
+        LIMIT 1
+      `;
+      if (rows.length === 0) {
+        return NextResponse.json({ error: "Strategy not found" }, { status: 404 });
+      }
+      const row = rows[0];
+      return NextResponse.json({
+        strategy: {
+          id: row.id,
+          name: row.name,
+          conditions: row.logic_json,
+          is_active: row.is_active,
+          target_environment: row.target_environment || 'BOTH',
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+        }
+      });
+    }
+
+    const { rows } = summary
+      ? await sql`
+          SELECT id, name, is_active, target_environment, created_at, updated_at
+          FROM custom_strategies
+          WHERE user_id = ${userEmail}
+          ORDER BY created_at DESC
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `
+      : await sql`
+          SELECT id, name, logic_json, is_active, target_environment, created_at, updated_at
+          FROM custom_strategies
+          WHERE user_id = ${userEmail}
+          ORDER BY created_at DESC
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `;
 
     // Transform rows to frontend-friendly shape
     const strategies = rows.map((row) => ({
@@ -64,12 +106,19 @@ export async function GET() {
       updated_at: row.updated_at,
     }));
 
-    return NextResponse.json({ strategies });
-  } catch (error: unknown) {
+    return NextResponse.json({ 
+      strategies,
+      pagination: { limit, offset, count: strategies.length }
+    });
+  } catch (error: any) {
     console.error("[STRATEGIES API] GET Error:", error);
+    const isQuotaExceeded = error?.code === "53000" || error?.message?.includes("quota") || error?.status === 402;
     return NextResponse.json(
-      { error: "Failed to fetch strategies." },
-      { status: 500 }
+      { 
+        error: isQuotaExceeded ? "Database bandwidth quota exceeded." : "Failed to fetch strategies.",
+        quota_exceeded: isQuotaExceeded
+      },
+      { status: isQuotaExceeded ? 402 : 500 }
     );
   }
 }
