@@ -144,7 +144,7 @@ export function useLiveOrderBlockExecution(
 
     async function rehydrateFromDatabase() {
       try {
-        const res = await fetch('/api/trades');
+        const res = await fetch('/api/trades', { credentials: 'same-origin' });
         if (!res.ok) return;
 
         const data = await res.json();
@@ -231,6 +231,7 @@ export function useLiveOrderBlockExecution(
           const res = await fetch('/api/trades', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify(payload)
           });
 
@@ -285,6 +286,7 @@ export function useLiveOrderBlockExecution(
             await fetch('/api/trades', {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
               body: JSON.stringify(patchPayload)
             });
 
@@ -314,6 +316,7 @@ export function useLiveOrderBlockExecution(
             await fetch('/api/trades', {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
               body: JSON.stringify(patchPayload)
             });
 
@@ -353,6 +356,7 @@ export function useLiveOrderBlockExecution(
             await fetch('/api/trades', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
+              credentials: 'same-origin',
               body: JSON.stringify(payload)
             });
 

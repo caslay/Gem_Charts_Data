@@ -624,7 +624,7 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
   // ── Fetch active strategies from the API ────────────────────────────────
   const fetchStrategies = useCallback(async () => {
     try {
-      const res = await fetch('/api/strategies');
+      const res = await fetch('/api/strategies', { credentials: 'same-origin' });
       if (res.ok) {
         const contentType = res.headers.get('content-type');
         if (contentType && !contentType.includes('application/json')) {

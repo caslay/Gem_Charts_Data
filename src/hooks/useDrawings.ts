@@ -48,7 +48,9 @@ export function useDrawings({ symbol = 'ETHUSDC', interval = '5m', enabled = tru
 
     async function fetchDrawings() {
       try {
-        const res = await fetch(`/api/drawings?symbol=${encodeURIComponent(symbol)}`);
+        const res = await fetch(`/api/drawings?symbol=${encodeURIComponent(symbol)}`, {
+          credentials: 'same-origin',
+        });
         if (res.ok) {
           const json = await res.json();
           if (json.drawings && Array.isArray(json.drawings)) {
@@ -78,6 +80,7 @@ export function useDrawings({ symbol = 'ETHUSDC', interval = '5m', enabled = tru
           await fetch('/api/drawings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify({ symbol, drawings }),
           });
         } catch (err) {

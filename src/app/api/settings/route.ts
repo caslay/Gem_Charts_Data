@@ -74,6 +74,31 @@ async function initTables() {
   }
 }
 
+// ─── Default Constants ────────────────────────────────────────────────────────
+const DEFAULT_SIGNAL_SOUNDS = {
+  FVG_DETECTION: "fvg_alert.mp3",
+  DISPLACEMENT_CONFIRMED: "flow_state.wav",
+  SMT_TRAP_ACTIVE: "smt_trap.wav",
+  DOL_EXHAUSTED: "objective_update.wav",
+  SESSION_TRANSITION: "session_transition.wav",
+  PRICING_SHIFT: "pricing_shift.wav",
+  SWEEP_ALERT: "sweep_alert.mp3",
+  FLOW_STATE_CHANGE: "flow_state.wav",
+  DEAD_ZONE_ENTER: "dead_zone.mp3",
+};
+
+const DEFAULT_ENABLED_SIGNALS = {
+  FVG_DETECTION: true,
+  DISPLACEMENT_CONFIRMED: true,
+  SMT_TRAP_ACTIVE: true,
+  DOL_EXHAUSTED: true,
+  SESSION_TRANSITION: true,
+  PRICING_SHIFT: true,
+  SWEEP_ALERT: true,
+  FLOW_STATE_CHANGE: true,
+  DEAD_ZONE_ENTER: true,
+};
+
 // ─── GET: Fetch all settings ──────────────────────────────────────────────────
 export async function GET() {
   try {
@@ -99,9 +124,23 @@ export async function GET() {
       settings[row.key_name] = row.key_value;
     }
 
+    // Self-seed ACTIVE_MODEL if not present
+    if (!settings.ACTIVE_MODEL) {
+      settings.ACTIVE_MODEL = "gemini-3.5-flash";
+      try {
+        await sql`
+          INSERT INTO system_settings (key_name, key_value)
+          VALUES ('ACTIVE_MODEL', 'gemini-3.5-flash')
+          ON CONFLICT (key_name) DO NOTHING;
+        `;
+      } catch (seedErr) {
+        console.warn("[SETTINGS API] Auto-seed ACTIVE_MODEL skipped:", seedErr);
+      }
+    }
+
     // 2. Fetch specific user's terminal settings
-    const userEmail = session.user.email;
-    const { rows: termRows } = await sql`
+    const userEmail = session.user.email || "default_user";
+    let { rows: termRows } = await sql`
       SELECT signal_sounds, enabled_signals, atr_period, adaptive_n_min, adaptive_n_max, mss_body_ratio, displacement_vef, sharp_departure_mult,
              candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
              include_btc_correlation, include_structure_analysis, include_fvg_detection,
@@ -110,31 +149,67 @@ export async function GET() {
       LIMIT 1
     `;
 
-    const terminalSettings = termRows.length > 0 ? {
-      signalSounds: termRows[0].signal_sounds,
-      enabledSignals: termRows[0].enabled_signals,
-      atrPeriod: termRows[0].atr_period ?? 14,
-      adaptiveNMin: termRows[0].adaptive_n_min ?? 3,
-      adaptiveNMax: termRows[0].adaptive_n_max ?? 15,
-      mssBodyRatio: termRows[0].mss_body_ratio ?? 0.70,
-      displacementVef: termRows[0].displacement_vef ?? 1.50,
-      sharpDepartureMult: termRows[0].sharp_departure_mult ?? 1.50,
-      candlesLimit1m: termRows[0].candles_limit_1m ?? 1000,
-      candlesLimit5m: termRows[0].candles_limit_5m ?? 1000,
-      candlesLimit15m: termRows[0].candles_limit_15m ?? 1000,
-      candlesLimit1h: termRows[0].candles_limit_1h ?? 1000,
-      candlesLimit4h: termRows[0].candles_limit_4h ?? 1000,
-      includeBtcCorrelation: termRows[0].include_btc_correlation !== false,
-      includeStructureAnalysis: termRows[0].include_structure_analysis !== false,
-      includeFvgDetection: termRows[0].include_fvg_detection !== false,
-      visualizePerfectMovementOnly: !!termRows[0].visualize_perfect_movement_only,
-      pmAtrMultiplier: termRows[0].pm_atr_multiplier ?? 0.5,
-      pmVolumeSmaPeriod: termRows[0].pm_volume_sma_period ?? 10,
-      pmMinBodyRatio: termRows[0].pm_min_body_ratio ?? 0.3,
-      pmMaxWickRatio: termRows[0].pm_max_wick_ratio ?? 0.5,
-      pmMaxRetracementLimit: termRows[0].pm_max_retracement_limit ?? 0.7,
-      pmSweepLookback: termRows[0].pm_sweep_lookback ?? 5,
-    } : null;
+    // If user does not have terminal_settings yet, auto-seed default row
+    if (termRows.length === 0) {
+      try {
+        await sql`
+          INSERT INTO terminal_settings (
+            user_id, signal_sounds, enabled_signals,
+            atr_period, adaptive_n_min, adaptive_n_max,
+            mss_body_ratio, displacement_vef, sharp_departure_mult,
+            candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
+            include_btc_correlation, include_structure_analysis, include_fvg_detection,
+            visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback
+          )
+          VALUES (
+            ${userEmail}, ${JSON.stringify(DEFAULT_SIGNAL_SOUNDS)}, ${JSON.stringify(DEFAULT_ENABLED_SIGNALS)},
+            14, 3, 15,
+            0.70, 1.50, 1.50,
+            350, 350, 250, 120, 80,
+            true, true, true,
+            false, 0.5, 10, 0.3, 0.5, 0.7, 5
+          )
+          ON CONFLICT (user_id) DO NOTHING;
+        `;
+        const refetch = await sql`
+          SELECT signal_sounds, enabled_signals, atr_period, adaptive_n_min, adaptive_n_max, mss_body_ratio, displacement_vef, sharp_departure_mult,
+                 candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
+                 include_btc_correlation, include_structure_analysis, include_fvg_detection,
+                 visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback FROM terminal_settings
+          WHERE user_id = ${userEmail}
+          LIMIT 1
+        `;
+        termRows = refetch.rows;
+      } catch (seedErr) {
+        console.warn("[SETTINGS API] Auto-seed terminal_settings skipped:", seedErr);
+      }
+    }
+
+    const terminalSettings = {
+      signalSounds: termRows[0]?.signal_sounds || DEFAULT_SIGNAL_SOUNDS,
+      enabledSignals: termRows[0]?.enabled_signals || DEFAULT_ENABLED_SIGNALS,
+      atrPeriod: termRows[0]?.atr_period ?? 14,
+      adaptiveNMin: termRows[0]?.adaptive_n_min ?? 3,
+      adaptiveNMax: termRows[0]?.adaptive_n_max ?? 15,
+      mssBodyRatio: termRows[0]?.mss_body_ratio ?? 0.70,
+      displacementVef: termRows[0]?.displacement_vef ?? 1.50,
+      sharpDepartureMult: termRows[0]?.sharp_departure_mult ?? 1.50,
+      candlesLimit1m: termRows[0]?.candles_limit_1m ?? 350,
+      candlesLimit5m: termRows[0]?.candles_limit_5m ?? 350,
+      candlesLimit15m: termRows[0]?.candles_limit_15m ?? 250,
+      candlesLimit1h: termRows[0]?.candles_limit_1h ?? 120,
+      candlesLimit4h: termRows[0]?.candles_limit_4h ?? 80,
+      includeBtcCorrelation: termRows[0]?.include_btc_correlation !== false,
+      includeStructureAnalysis: termRows[0]?.include_structure_analysis !== false,
+      includeFvgDetection: termRows[0]?.include_fvg_detection !== false,
+      visualizePerfectMovementOnly: !!termRows[0]?.visualize_perfect_movement_only,
+      pmAtrMultiplier: termRows[0]?.pm_atr_multiplier ?? 0.5,
+      pmVolumeSmaPeriod: termRows[0]?.pm_volume_sma_period ?? 10,
+      pmMinBodyRatio: termRows[0]?.pm_min_body_ratio ?? 0.3,
+      pmMaxWickRatio: termRows[0]?.pm_max_wick_ratio ?? 0.5,
+      pmMaxRetracementLimit: termRows[0]?.pm_max_retracement_limit ?? 0.7,
+      pmSweepLookback: termRows[0]?.pm_sweep_lookback ?? 5,
+    };
 
     return NextResponse.json({ settings, terminalSettings });
   } catch (error: unknown) {

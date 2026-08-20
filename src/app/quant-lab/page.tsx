@@ -218,10 +218,52 @@ export default function QuantLabPage() {
   // Data Fetching: Strategy Runs & OB Scans
   // ─────────────────────────────────────────────────────────────────────────────
 
+  const loadSrScanDetail = useCallback(async (scanId: string) => {
+    try {
+      const res = await fetch(`/api/quant-lab/sr-scans?id=${scanId}`, { credentials: "same-origin" });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.scan) {
+          setSelectedSrScan(json.scan);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch full SR scan detail:", err);
+    }
+  }, []);
+
+  const loadObScanDetail = useCallback(async (scanId: string) => {
+    try {
+      const res = await fetch(`/api/quant-lab/ob-scans?id=${scanId}`, { credentials: "same-origin" });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.scan) {
+          setSelectedObScan(json.scan);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch full OB scan detail:", err);
+    }
+  }, []);
+
+  const handleSelectSrScan = useCallback(async (scan: StoredSrScan) => {
+    setSelectedSrScan(scan);
+    if (!scan.setups || scan.setups.length === 0) {
+      await loadSrScanDetail(scan.id);
+    }
+  }, [loadSrScanDetail]);
+
+  const handleSelectObScan = useCallback(async (scan: StoredObScan) => {
+    setSelectedObScan(scan);
+    if (!scan.order_blocks || scan.order_blocks.length === 0) {
+      await loadObScanDetail(scan.id);
+    }
+  }, [loadObScanDetail]);
+
   const fetchRuns = useCallback(async () => {
     setLoadingRuns(true);
     try {
-      const res = await fetch("/api/quant-lab/runs");
+      const res = await fetch("/api/quant-lab/runs", { credentials: "same-origin" });
       if (res.ok) {
         const json = await res.json();
         setRuns(json.runs || []);
@@ -236,12 +278,12 @@ export default function QuantLabPage() {
   const fetchSrScans = useCallback(async () => {
     setLoadingSrScans(true);
     try {
-      const res = await fetch("/api/quant-lab/sr-scans");
+      const res = await fetch("/api/quant-lab/sr-scans", { credentials: "same-origin" });
       if (res.ok) {
         const json = await res.json();
         setSrScansList(json.scans || []);
         if (!selectedSrScan && json.scans && json.scans.length > 0) {
-          setSelectedSrScan(json.scans[0]);
+          loadSrScanDetail(json.scans[0].id);
         }
       }
     } catch (err) {
@@ -249,18 +291,18 @@ export default function QuantLabPage() {
     } finally {
       setLoadingSrScans(false);
     }
-  }, [selectedSrScan]);
+  }, [selectedSrScan, loadSrScanDetail]);
 
   const fetchObScans = useCallback(async () => {
     setLoadingObScans(true);
     try {
-      const res = await fetch("/api/quant-lab/ob-scans");
+      const res = await fetch("/api/quant-lab/ob-scans", { credentials: "same-origin" });
       if (res.ok) {
         const json = await res.json();
         setObScansList(json.scans || []);
         // Auto-select first scan if none selected
         if (!selectedObScan && json.scans && json.scans.length > 0) {
-          setSelectedObScan(json.scans[0]);
+          loadObScanDetail(json.scans[0].id);
         }
       }
     } catch (err) {
@@ -268,7 +310,7 @@ export default function QuantLabPage() {
     } finally {
       setLoadingObScans(false);
     }
-  }, [selectedObScan]);
+  }, [selectedObScan, loadObScanDetail]);
 
   useEffect(() => {
     fetchRuns();
@@ -279,7 +321,7 @@ export default function QuantLabPage() {
   const fetchTradesForRun = useCallback(async (runId: string) => {
     setLoadingTrades(true);
     try {
-      const res = await fetch(`/api/quant-lab/trades?run_id=${runId}`);
+      const res = await fetch(`/api/quant-lab/trades?run_id=${runId}`, { credentials: "same-origin" });
       if (res.ok) {
         const json = await res.json();
         setTrades(json.trades || []);
@@ -292,9 +334,22 @@ export default function QuantLabPage() {
     }
   }, []);
 
-  const handleSelectRun = (run: QuantLabRun) => {
+  const handleSelectRun = async (run: QuantLabRun) => {
     setSelectedRun(run);
     fetchTradesForRun(run.id);
+    if (!run.strategy_config) {
+      try {
+        const res = await fetch(`/api/quant-lab/runs?id=${run.id}`, { credentials: "same-origin" });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.run) {
+            setSelectedRun(json.run);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch full run detail:", err);
+      }
+    }
   };
 
   const handleDeleteRun = async (e: React.MouseEvent, runId: string) => {
@@ -1019,7 +1074,7 @@ export default function QuantLabPage() {
             <SweepReclaimSidebarList
               scans={srScansList}
               selectedScan={selectedSrScan}
-              onSelectScan={setSelectedSrScan}
+              onSelectScan={handleSelectSrScan}
               onDeleteScan={handleDeleteSrScan}
               loading={loadingSrScans}
             />
@@ -1056,7 +1111,7 @@ export default function QuantLabPage() {
                     return (
                       <div
                         key={scan.id}
-                        onClick={() => setSelectedObScan(scan)}
+                        onClick={() => handleSelectObScan(scan)}
                         className={`group cursor-pointer border rounded-lg p-3.5 transition text-left flex flex-col justify-between ${
                           isSelected
                             ? "border-emerald-500/60 bg-emerald-950/15 shadow-sm shadow-emerald-500/10"
@@ -1197,7 +1252,7 @@ export default function QuantLabPage() {
             <SweepReclaimWorkspace
               scansList={srScansList}
               selectedScan={selectedSrScan}
-              onSelectScan={setSelectedSrScan}
+              onSelectScan={handleSelectSrScan}
               isScanning={srScanning}
               statusMsg={srStatusMsg}
               progress={srProgress}

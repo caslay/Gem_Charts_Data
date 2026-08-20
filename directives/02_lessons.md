@@ -570,3 +570,28 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   2. **Self-Healing Whitelist:** Added dynamic `CREATE TABLE IF NOT EXISTS whitelisted_users`, case-insensitive lookup (`LOWER(email)`), initial-admin auto-whitelisting on empty tables, and non-blocking defensive error handling.
   3. **Configured `trustHost: true`:** Added `trustHost: true` across `auth.ts` and `auth.config.ts`.
   4. **Explicit Proxy Matcher Exclusion:** Excluded `api/auth` directly in `src/proxy.ts` matcher.
+
+### 48. Settings Load Race Condition (401) & Default Schema Auto-Seeding (Resolved in V16.35)
+- **The Bug:** On dashboard mount in production, the client threw "FAILED TO LOAD SETTINGS - Using default configuration (401 Unauthorized)".
+- **The Cause:**
+  1. **Ungated Mount-Time Fetch Race:** `src/hooks/useMarketData.ts` immediately dispatched `fetch('/api/settings')` on component mount before NextAuth's `useSession()` resolved from `loading` to `authenticated`.
+  2. **Omitted Same-Origin Credentials:** Client-side `fetch` calls omitted explicit `credentials: 'same-origin'`, risking cookie stripping on HTTPS production environments.
+  3. **Missing Terminal Settings Default Return:** In `src/app/api/settings/route.ts`, if an authenticated user did not yet have a record in `terminal_settings`, the GET endpoint returned `terminalSettings: null` and did not auto-seed defaults in Neon.
+- **The Fix:**
+  1. **Auth Status Gate:** Gated `loadSettings()` in `useMarketData.ts` on `authStatus === 'authenticated'`.
+  2. **Same-Origin Credentials:** Added `credentials: 'same-origin'` across all settings, account, trade, strategy, and drawing fetch calls.
+  3. **Self-Healing Settings Seeding:** Refactored `GET /api/settings` to automatically insert and return complete `DEFAULT_SIGNAL_SOUNDS` and `DEFAULT_ENABLED_SIGNALS` for authenticated users without existing rows, guaranteeing `terminalSettings` is never null for logged-in sessions.
+
+### 49. Neon Database Egress Spike & Unpruned Query Projection (Resolved in V16.36)
+- **The Bug:** Neon PostgreSQL database threw HTTP 402 ("project has exceeded the data transfer quota" / code 53000) due to excessive data egress across Quant Lab and trading endpoints.
+- **The Cause:**
+  1. **Unprojected JSONB Queries:** `GET /api/quant-lab/runs`, `GET /api/quant-lab/ob-scans`, `GET /api/quant-lab/sr-scans`, and `GET /api/quant-lab/trades` executed `SELECT *` without column projection, streaming multi-megabyte JSONB structures (`order_blocks`, `setups`, `strategy_config`, `ipda_metrics_at_entry`) on every list or index request.
+  2. **Missing Pagination & Query Bounds:** Scans, runs, and trade queries lacked default `LIMIT` clauses, dumping entire tables across the serverless wire.
+  3. **Uncaught Quota Exceptions:** When quota was exceeded, endpoints threw generic 500 errors instead of structured 402 / quota alert responses.
+- **The Fix:**
+  1. **Split Summary vs Detail Queries:** Separated index/sidebar list queries (projecting only scalar metadata) from dedicated single-item detail queries (`?id=<uuid>`).
+  2. **Client Lazy Detail Hydration:** In `src/app/quant-lab/page.tsx`, loaded lightweight lists on mount and dynamically fetched complete scan/run payloads only upon explicit user selection.
+  3. **Strict Pagination:** Implemented default bounds (`LIMIT 25`, max 100 on scans/runs; `LIMIT 50-100`, max 500 on trades) with offset pagination across all endpoints (`/api/quant-lab/runs`, `/api/quant-lab/ob-scans`, `/api/quant-lab/sr-scans`, `/api/quant-lab/trades`, `/api/trades`, `/api/backtest-trades`, `/api/strategies`).
+  4. **Resilient Quota Error Handling:** Trapped PostgreSQL code `53000` / HTTP 402 errors to return clean `{ success: false, quota_exceeded: true, error: "..." }` responses.
+
+

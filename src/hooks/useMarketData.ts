@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSession } from 'next-auth/react';
 import { slicePayloadByLookback } from '@/components/Sidebar';
 import { SYSTEM_VERSION } from '@/lib/version';
 import { useLiveAlerts } from './useLiveAlerts';
@@ -529,6 +530,8 @@ export function useMarketData(
     };
   }, [selectedInterval]);
 
+  const { status: authStatus } = useSession();
+
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => {
     if (typeof window === 'undefined') return DEFAULT_THEME_SETTINGS;
     try {
@@ -613,6 +616,7 @@ export function useMarketData(
       fetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify({ settings: newSettings }),
       }).catch(err => console.error('[MarketData] Failed to sync theme settings:', err));
 
@@ -620,11 +624,13 @@ export function useMarketData(
     });
   }, []);
 
-  // Background SWR Rehydration: fetch settings from Neon on mount to overwrite localStorage
+  // Background SWR Rehydration: fetch settings from Neon when authenticated to overwrite localStorage
   useEffect(() => {
+    if (authStatus !== 'authenticated') return;
+
     const loadSettings = async () => {
       try {
-        const res = await fetch('/api/settings');
+        const res = await fetch('/api/settings', { credentials: 'same-origin' });
         if (res.ok) {
           const data = await res.json();
           
@@ -695,7 +701,7 @@ export function useMarketData(
       }
     };
     loadSettings();
-  }, []);
+  }, [authStatus]);
 
   // Debounced Neon PostgreSQL sync
   const queueSettingsSync = useCallback(() => {
@@ -708,6 +714,7 @@ export function useMarketData(
         const res = await fetch('/api/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
           body: JSON.stringify({
             terminalSettings: {
               signalSounds: signalAlertsRef.current,

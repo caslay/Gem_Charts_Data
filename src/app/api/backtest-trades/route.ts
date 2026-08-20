@@ -1101,7 +1101,7 @@ export async function POST(req: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json(
@@ -1117,17 +1117,62 @@ export async function GET() {
   }
 
   try {
+    const url = new URL(req.url);
+    const id = url.searchParams.get("id");
+    const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || "100", 10), 1), 500);
+    const offset = Math.max(parseInt(url.searchParams.get("offset") || "0", 10), 0);
+    const detail = url.searchParams.get("detail") === "true";
+
     await initTradesTable();
     const account = await getOrCreateAccount(userEmail);
 
-    const { rows } = await sql`
-      SELECT * FROM backtest_trades
-      ORDER BY created_at DESC
-    `;
+    if (id) {
+      const { rows } = await sql`
+        SELECT * FROM backtest_trades WHERE id = ${id} LIMIT 1
+      `;
+      if (rows.length === 0) {
+        return NextResponse.json({ error: "Backtest trade not found" }, { status: 404 });
+      }
+      return NextResponse.json({ success: true, trade: rows[0], account });
+    }
 
-    return NextResponse.json({ success: true, trades: rows, account });
-  } catch (error: unknown) {
+    const { rows } = detail
+      ? await sql`
+          SELECT * FROM backtest_trades
+          ORDER BY created_at DESC
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `
+      : await sql`
+          SELECT 
+            id, symbol, direction, entry_price, stop_loss, take_profit, status,
+            strategy_name, ai_narrative_summary, position_size, risk_amount_usd,
+            exit_price, realized_pnl, opened_at, closed_at, created_at
+          FROM backtest_trades
+          ORDER BY created_at DESC
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `;
+
+    return NextResponse.json({ 
+      success: true, 
+      trades: rows, 
+      account,
+      pagination: { limit, offset, count: rows.length }
+    });
+  } catch (error: any) {
     console.error("[BACKTEST TRADES API] GET Error:", error);
+    const isQuotaExceeded = error?.code === "53000" || error?.message?.includes("quota") || error?.status === 402;
+    if (isQuotaExceeded) {
+      return NextResponse.json(
+        { 
+          error: "Database bandwidth quota exceeded.",
+          quota_exceeded: true,
+          trades: []
+        }, 
+        { status: 402 }
+      );
+    }
     console.warn("[BACKTEST TRADES API] DB connection error during GET. Activating in-memory fallback.");
     isDbOffline = true;
     return handleGetFallback(userEmail);
