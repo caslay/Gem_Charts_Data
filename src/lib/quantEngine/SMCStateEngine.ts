@@ -20,6 +20,16 @@ export class SMCStateEngine {
   public active_swing_low: number | null = null;
   public active_idm_level: number | null = null;
 
+  // ─── Ephemeral Expansion Float State (Range Freeze Resolution) ────────────
+  /** Live floating ceiling during BULLISH expansion (post-BOS, pre-fractal). */
+  public expansion_high_float: number | null = null;
+  /** Live floating floor during BEARISH expansion (post-BOS, pre-fractal). */
+  public expansion_low_float: number | null = null;
+  /** TRUE between BOS confirmation and the next confirmed MAJOR fractal pivot. */
+  public is_in_expansion: boolean = false;
+  /** The structural level that was broken by the BOS (for market_velocity calculation). */
+  public expansion_origin_price: number | null = null;
+
   public registered_events: StructuralEvent[] = [];
   public pending_breaks: { event_idx: number; p_ref: number; type: string; direction: string }[] = [];
   
@@ -78,18 +88,59 @@ export class SMCStateEngine {
       if (pivot.type === 'SWING_HIGH') {
         this.active_swing_high = pivot.price;
         this.protected_low = this.active_swing_low; // Lock the bottom
+
+        // ─── EXPANSION FLOAT CLEAR: Bullish expansion leg crystallizes into confirmed fractal ───
+        // The live floating ceiling is no longer needed — a real structural HIGH now anchors the range.
+        if (this.is_in_expansion && this.expansion_high_float !== null) {
+          this.expansion_high_float = null;
+          this.is_in_expansion = false;
+          this.expansion_origin_price = null;
+        }
       } else {
-        this.active_swing_low = pivot.price;
-        this.protected_high = this.active_swing_high; // Lock the top
+        // SWING_LOW confirmed
+
+        // ─── PULLBACK UPGRADE: During active BULLISH expansion, immediately promote retrace low ───
+        // This is the sponsoring structural floor for the expansion leg.
+        // Do NOT wait for another swing high — lock the floor immediately.
+        if (this.is_in_expansion && this.expansion_high_float !== null) {
+          this.active_swing_low = pivot.price;
+          this.protected_low = pivot.price; // Immediate promotion — no downstream wave confirmation needed
+        } else {
+          this.active_swing_low = pivot.price;
+          this.protected_high = this.active_swing_high; // Lock the top (standard path)
+        }
+
+        // ─── EXPANSION FLOAT CLEAR: Bearish expansion leg crystallizes into confirmed fractal ───
+        if (this.is_in_expansion && this.expansion_low_float !== null) {
+          this.expansion_low_float = null;
+          this.is_in_expansion = false;
+          this.expansion_origin_price = null;
+        }
       }
     }
   }
 
   public processCandle(candle: Candle, candles: Candle[], idx: number, atr: number) {
     if (this.current_trend_state === 'BULLISH_SWING') {
+      // ─── Track Running Extreme During Active BULLISH Expansion ────────────
+      // This must execute on EVERY candle during expansion, BEFORE the BOS check,
+      // so even the bar that confirms a new fractal high updates the float first.
+      if (this.is_in_expansion && this.expansion_high_float !== null) {
+        if (candle.high > this.expansion_high_float) {
+          this.expansion_high_float = candle.high;
+        }
+      }
+
       // BOS Evaluation
       if (this.active_swing_high !== null) {
         if (candle.isClosed !== false && candle.close > this.active_swing_high) {
+          // ─── EXPANSION FLOAT ACTIVATION ───────────────────────────────────
+          // Seed the float with the BOS bar's own high — this is the first expansion extreme.
+          // expansion_origin_price records the structural level that was broken (for velocity calc).
+          this.expansion_origin_price = this.active_swing_high;
+          this.expansion_high_float = candle.high;
+          this.is_in_expansion = true;
+
           this.registered_events.push({
             type: 'BOS', direction: 'BULLISH', level: this.active_swing_high, index: idx, timestamp: candle.t
           });
@@ -120,6 +171,17 @@ export class SMCStateEngine {
           this.current_trend_state = 'BEARISH_SWING';
           this.protected_high = this.active_swing_high;
           this.active_swing_low = candle.low; // Candidate bottom
+
+          // ─── BEARISH EXPANSION FLOAT ACTIVATION (MSS from BULLISH) ─────────
+          // If this is a displaced MSS, activate the bearish expansion float.
+          if (is_displaced) {
+            this.expansion_origin_price = this.protected_low;
+            this.expansion_low_float = candle.low;
+            this.is_in_expansion = true;
+          }
+          // Clear any stale bullish float
+          this.expansion_high_float = null;
+
         } else if (candle.low < this.protected_low) {
           this.registered_events.push({
             type: 'SWEEP', direction: 'BEARISH', level: this.protected_low, index: idx, timestamp: candle.t
@@ -127,9 +189,21 @@ export class SMCStateEngine {
         }
       }
     } else {
+      // ─── Track Running Extreme During Active BEARISH Expansion ────────────
+      if (this.is_in_expansion && this.expansion_low_float !== null) {
+        if (candle.low < this.expansion_low_float) {
+          this.expansion_low_float = candle.low;
+        }
+      }
+
       // BOS Evaluation
       if (this.active_swing_low !== null) {
         if (candle.isClosed !== false && candle.close < this.active_swing_low) {
+          // ─── BEARISH EXPANSION FLOAT ACTIVATION (BOS from BEARISH) ─────────
+          this.expansion_origin_price = this.active_swing_low;
+          this.expansion_low_float = candle.low;
+          this.is_in_expansion = true;
+
           this.registered_events.push({
             type: 'BOS', direction: 'BEARISH', level: this.active_swing_low, index: idx, timestamp: candle.t
           });
@@ -159,6 +233,16 @@ export class SMCStateEngine {
           this.current_trend_state = 'BULLISH_SWING';
           this.protected_low = this.active_swing_low;
           this.active_swing_high = candle.high; // Candidate top
+
+          // ─── BULLISH EXPANSION FLOAT ACTIVATION (MSS from BEARISH) ─────────
+          if (is_displaced) {
+            this.expansion_origin_price = this.protected_high;
+            this.expansion_high_float = candle.high;
+            this.is_in_expansion = true;
+          }
+          // Clear any stale bearish float
+          this.expansion_low_float = null;
+
         } else if (candle.high > this.protected_high) {
           this.registered_events.push({
             type: 'SWEEP', direction: 'BULLISH', level: this.protected_high, index: idx, timestamp: candle.t

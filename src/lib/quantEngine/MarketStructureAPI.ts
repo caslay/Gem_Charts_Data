@@ -167,6 +167,20 @@ export class MarketStructureAPI {
       internalDealingRange.current_status = currentPrice > internalDealingRange.equilibrium ? 'PREMIUM' : 'DISCOUNT';
     }
 
+    // ─── Expansion Telemetry ─────────────────────────────────────────────────
+    // Compute ATR estimate from last 14 candles for market_velocity (ATR-relative expansion speed)
+    const lastN = normalizedCandles.slice(-14);
+    const atr14 = lastN.length > 0
+      ? lastN.reduce((sum, c) => sum + (c.high - c.low), 0) / lastN.length
+      : 1;
+
+    const is_in_expansion = stateEngine.is_in_expansion;
+    const expansion_mode: 'NORMAL' | 'RUNAWAY' = is_in_expansion ? 'RUNAWAY' : 'NORMAL';
+    const market_velocity = (is_in_expansion && stateEngine.expansion_origin_price !== null)
+      ? parseFloat((Math.abs(currentPrice - stateEngine.expansion_origin_price) / (atr14 || 1)).toFixed(2))
+      : 0;
+    const runaway_origin_price = stateEngine.expansion_origin_price;
+
     return {
       last_processed_index: normalizedCandles.length - 1,
       engine_state: {
@@ -181,9 +195,14 @@ export class MarketStructureAPI {
       swing_points: pivotEngine.pivots,
       structural_events: stateEngine.registered_events,
       liquidity_zones: liquidityEngine.activeFVGs, // Or merge with OBs
-      expansion_mode: 'NORMAL',
-      market_velocity: 0,
-      runaway_origin_price: null,
+      expansion_mode,
+      market_velocity,
+      runaway_origin_price,
+
+      // ─── NEW Expansion Telemetry ──────────────────────────────────────────
+      is_in_expansion,
+      expansion_high_float: stateEngine.expansion_high_float,
+      expansion_low_float: stateEngine.expansion_low_float,
 
       swings,
       zigzag,
@@ -266,26 +285,48 @@ export class MarketStructureAPI {
     let lowPrice: number = Infinity;
 
     if (stateEngine.current_trend_state === 'BULLISH_SWING') {
-      highPrice = stateEngine.active_swing_high ?? Math.max(currentPrice, ...swings.filter(s => s.type === 'HIGH').map(s => Number(s.price)));
+      // ─── 3-TIER CEILING RESOLUTION (Bullish) ─────────────────────────────
+      // Priority 1: Live expansion float (is_in_expansion, pre-fractal momentum leg)
+      // Priority 2: Confirmed fractal pivot (active_swing_high)
+      // Priority 3: Historical candle scan fallback
+      if (stateEngine.is_in_expansion && stateEngine.expansion_high_float !== null) {
+        highPrice = stateEngine.expansion_high_float;
+      } else if (stateEngine.active_swing_high !== null) {
+        highPrice = stateEngine.active_swing_high;
+      } else {
+        highPrice = Math.max(currentPrice, ...swings.filter(s => s.type === 'HIGH').map(s => Number(s.price)));
+      }
+
       lowPrice = stateEngine.protected_low ?? Math.min(...swings.filter(s => s.type === 'LOW').map(s => Number(s.price)));
       
-      // If we are discovering a new high, find the absolute highest high since the protected low
-      if (stateEngine.active_swing_high === null) {
-          const anchorSwing = [...swings].reverse().find(s => s.type === 'LOW' && s.price === lowPrice);
-          const anchorIdx = anchorSwing?.candle_index ?? 0;
-          const candlesSinceAnchor = normalizedCandles.slice(anchorIdx);
-          highPrice = candlesSinceAnchor.length > 0 ? Math.max(...candlesSinceAnchor.map(c => c.high)) : currentPrice;
+      // If we are discovering a new low, find the absolute lowest low since the protected high
+      if (stateEngine.protected_low === null && stateEngine.active_swing_high === null && !stateEngine.is_in_expansion) {
+        const anchorSwing = [...swings].reverse().find(s => s.type === 'LOW' && s.price === lowPrice);
+        const anchorIdx = anchorSwing?.candle_index ?? 0;
+        const candlesSinceAnchor = normalizedCandles.slice(anchorIdx);
+        highPrice = candlesSinceAnchor.length > 0 ? Math.max(...candlesSinceAnchor.map(c => c.high)) : currentPrice;
       }
     } else {
-      highPrice = stateEngine.protected_high ?? Math.max(...swings.filter(s => s.type === 'HIGH').map(s => Number(s.price)));
-      lowPrice = stateEngine.active_swing_low ?? currentPrice;
+      // ─── 3-TIER FLOOR RESOLUTION (Bearish) ───────────────────────────────
+      // Priority 1: Live expansion float (is_in_expansion, pre-fractal momentum leg)
+      // Priority 2: Confirmed fractal pivot (active_swing_low)
+      // Priority 3: Historical candle scan fallback
+      if (stateEngine.is_in_expansion && stateEngine.expansion_low_float !== null) {
+        lowPrice = stateEngine.expansion_low_float;
+      } else if (stateEngine.active_swing_low !== null) {
+        lowPrice = stateEngine.active_swing_low;
+      } else {
+        lowPrice = Math.min(currentPrice, ...swings.filter(s => s.type === 'LOW').map(s => Number(s.price)));
+      }
 
-      // If we are discovering a new low, find the absolute lowest low since the protected high
-      if (stateEngine.active_swing_low === null) {
-          const anchorSwing = [...swings].reverse().find(s => s.type === 'HIGH' && s.price === highPrice);
-          const anchorIdx = anchorSwing?.candle_index ?? 0;
-          const candlesSinceAnchor = normalizedCandles.slice(anchorIdx);
-          lowPrice = candlesSinceAnchor.length > 0 ? Math.min(...candlesSinceAnchor.map(c => c.low)) : currentPrice;
+      highPrice = stateEngine.protected_high ?? Math.max(...swings.filter(s => s.type === 'HIGH').map(s => Number(s.price)));
+
+      // If we are discovering a new high, find the absolute highest high since the protected low
+      if (stateEngine.active_swing_low === null && !stateEngine.is_in_expansion) {
+        const anchorSwing = [...swings].reverse().find(s => s.type === 'HIGH' && s.price === highPrice);
+        const anchorIdx = anchorSwing?.candle_index ?? 0;
+        const candlesSinceAnchor = normalizedCandles.slice(anchorIdx);
+        lowPrice = candlesSinceAnchor.length > 0 ? Math.min(...candlesSinceAnchor.map(c => c.low)) : currentPrice;
       }
     }
 
@@ -297,78 +338,118 @@ export class MarketStructureAPI {
       lowPrice = currentPrice;
     }
 
+    // ─── ANCHOR SWING RESOLUTION ─────────────────────────────────────────────
     // Find the latest swings that match these anchor prices
-    let anchor_high_swing = [...swings].reverse().find(s => s.type === 'HIGH' && s.price === highPrice) || null;
-    if (anchor_high_swing === null && normalizedCandles.length > 0) {
-      let minDiff = Infinity;
-      let closestIdx = -1;
-      for (let i = 0; i < normalizedCandles.length; i++) {
-        const diff = Math.abs(normalizedCandles[i].high - highPrice);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestIdx = i;
+
+    // HIGH anchor
+    let anchor_high_swing: StructuralSwing | null = null;
+
+    if (stateEngine.is_in_expansion && stateEngine.expansion_high_float !== null) {
+      // ─── LIVE EXPANSION ANCHOR (anti-repainting firewall) ─────────────────
+      // Use the last candle as the live timestamp — NOT the stale pre-BOS pivot timestamp.
+      // confirmed: false + is_expansion_float: true signals the visual layer to render as dashed.
+      const lastCandle = normalizedCandles[normalizedCandles.length - 1];
+      anchor_high_swing = {
+        t: lastCandle.t,
+        price: stateEngine.expansion_high_float,
+        type: 'HIGH',
+        grade: (swings[0]?.grade || 'MAJOR') as 'MAJOR' | 'INTERNAL' | 'INNER',
+        colorValidated: false,         // Not yet institutionally confirmed via fractal
+        candle_index: normalizedCandles.length - 1,
+        timestamp: new Date(lastCandle.t).toISOString(),
+        structure_type: (swings[0]?.structure_type || 'MAJOR') as 'MAJOR' | 'INTERNAL' | 'INNER',
+        confirmed: false,              // Anti-repainting gate: must render as dashed/translucent
+        is_expansion_float: true,      // Additional visual layer gate
+      };
+    } else {
+      anchor_high_swing = [...swings].reverse().find(s => s.type === 'HIGH' && s.price === highPrice) || null;
+      if (anchor_high_swing === null && normalizedCandles.length > 0) {
+        let minDiff = Infinity;
+        let closestIdx = -1;
+        for (let i = 0; i < normalizedCandles.length; i++) {
+          const diff = Math.abs(normalizedCandles[i].high - highPrice);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closestIdx = i;
+          }
         }
-      }
-      if (closestIdx !== -1) {
-        const c = normalizedCandles[closestIdx];
-        const prev = closestIdx > 0 ? normalizedCandles[closestIdx - 1] : null;
-        // FIX GAP-1: derive colorValidated from actual candle color — don't hardcode true
-        // A fallback HIGH anchor is color-validated if the candle is red (close < open)
-        // AND the preceding candle is green (close > open).
-        const cClose = c.close ?? c.c;
-        const cOpen  = c.open ?? c.o;
-        const prevClose = prev ? (prev.close ?? prev.c) : null;
-        const prevOpen  = prev ? (prev.open  ?? prev.o) : null;
-        const fallbackHighColorValidated = cClose < cOpen &&
-          prevClose !== null && prevOpen !== null && prevClose > prevOpen;
-        anchor_high_swing = {
-          t: c.t,
-          price: c.high,
-          type: 'HIGH',
-          grade: swings[0]?.grade || 'MAJOR',
-          colorValidated: fallbackHighColorValidated,
-          candle_index: closestIdx,
-          timestamp: new Date(c.t).toISOString(),
-          structure_type: swings[0]?.structure_type || 'MAJOR',
-          confirmed: true
-        };
+        if (closestIdx !== -1) {
+          const c = normalizedCandles[closestIdx];
+          const prev = closestIdx > 0 ? normalizedCandles[closestIdx - 1] : null;
+          // FIX GAP-1: derive colorValidated from actual candle color — don't hardcode true
+          const cClose = c.close ?? c.c;
+          const cOpen  = c.open ?? c.o;
+          const prevClose = prev ? (prev.close ?? prev.c) : null;
+          const prevOpen  = prev ? (prev.open  ?? prev.o) : null;
+          const fallbackHighColorValidated = cClose < cOpen &&
+            prevClose !== null && prevOpen !== null && prevClose > prevOpen;
+          anchor_high_swing = {
+            t: c.t,
+            price: c.high,
+            type: 'HIGH',
+            grade: swings[0]?.grade || 'MAJOR',
+            colorValidated: fallbackHighColorValidated,
+            candle_index: closestIdx,
+            timestamp: new Date(c.t).toISOString(),
+            structure_type: swings[0]?.structure_type || 'MAJOR',
+            confirmed: true
+          };
+        }
       }
     }
 
-    let anchor_low_swing = [...swings].reverse().find(s => s.type === 'LOW' && s.price === lowPrice) || null;
-    if (anchor_low_swing === null && normalizedCandles.length > 0) {
-      let minDiff = Infinity;
-      let closestIdx = -1;
-      for (let i = 0; i < normalizedCandles.length; i++) {
-        const diff = Math.abs(normalizedCandles[i].low - lowPrice);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestIdx = i;
+    // LOW anchor
+    let anchor_low_swing: StructuralSwing | null = null;
+
+    if (stateEngine.is_in_expansion && stateEngine.expansion_low_float !== null) {
+      // ─── LIVE EXPANSION ANCHOR (BEARISH) ──────────────────────────────────
+      const lastCandle = normalizedCandles[normalizedCandles.length - 1];
+      anchor_low_swing = {
+        t: lastCandle.t,
+        price: stateEngine.expansion_low_float,
+        type: 'LOW',
+        grade: (swings[0]?.grade || 'MAJOR') as 'MAJOR' | 'INTERNAL' | 'INNER',
+        colorValidated: false,
+        candle_index: normalizedCandles.length - 1,
+        timestamp: new Date(lastCandle.t).toISOString(),
+        structure_type: (swings[0]?.structure_type || 'MAJOR') as 'MAJOR' | 'INTERNAL' | 'INNER',
+        confirmed: false,
+        is_expansion_float: true,
+      };
+    } else {
+      anchor_low_swing = [...swings].reverse().find(s => s.type === 'LOW' && s.price === lowPrice) || null;
+      if (anchor_low_swing === null && normalizedCandles.length > 0) {
+        let minDiff = Infinity;
+        let closestIdx = -1;
+        for (let i = 0; i < normalizedCandles.length; i++) {
+          const diff = Math.abs(normalizedCandles[i].low - lowPrice);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closestIdx = i;
+          }
         }
-      }
-      if (closestIdx !== -1) {
-        const c = normalizedCandles[closestIdx];
-        const prev = closestIdx > 0 ? normalizedCandles[closestIdx - 1] : null;
-        // FIX GAP-1: derive colorValidated from actual candle color — don't hardcode true
-        // A fallback LOW anchor is color-validated if the candle is green (close > open)
-        // AND the preceding candle is red (close < open).
-        const cClose = c.close ?? c.c;
-        const cOpen  = c.open ?? c.o;
-        const prevClose = prev ? (prev.close ?? prev.c) : null;
-        const prevOpen  = prev ? (prev.open  ?? prev.o) : null;
-        const fallbackLowColorValidated = cClose > cOpen &&
-          prevClose !== null && prevOpen !== null && prevClose < prevOpen;
-        anchor_low_swing = {
-          t: c.t,
-          price: c.low,
-          type: 'LOW',
-          grade: swings[0]?.grade || 'MAJOR',
-          colorValidated: fallbackLowColorValidated,
-          candle_index: closestIdx,
-          timestamp: new Date(c.t).toISOString(),
-          structure_type: swings[0]?.structure_type || 'MAJOR',
-          confirmed: true
-        };
+        if (closestIdx !== -1) {
+          const c = normalizedCandles[closestIdx];
+          const prev = closestIdx > 0 ? normalizedCandles[closestIdx - 1] : null;
+          // FIX GAP-1: derive colorValidated from actual candle color
+          const cClose = c.close ?? c.c;
+          const cOpen  = c.open ?? c.o;
+          const prevClose = prev ? (prev.close ?? prev.c) : null;
+          const prevOpen  = prev ? (prev.open  ?? prev.o) : null;
+          const fallbackLowColorValidated = cClose > cOpen &&
+            prevClose !== null && prevOpen !== null && prevClose < prevOpen;
+          anchor_low_swing = {
+            t: c.t,
+            price: c.low,
+            type: 'LOW',
+            grade: swings[0]?.grade || 'MAJOR',
+            colorValidated: fallbackLowColorValidated,
+            candle_index: closestIdx,
+            timestamp: new Date(c.t).toISOString(),
+            structure_type: swings[0]?.structure_type || 'MAJOR',
+            confirmed: true
+          };
+        }
       }
     }
     
@@ -385,7 +466,8 @@ export class MarketStructureAPI {
       anchor_low_swing
     };
 
-    dr.profile_metrics = calculateVolumeProfile(dr, normalizedCandles);
+    // Thread is_in_expansion to VolumeProfileEngine so the AMT window extends to the live edge
+    dr.profile_metrics = calculateVolumeProfile(dr, normalizedCandles, stateEngine.is_in_expansion);
     return dr;
   }
 
@@ -404,6 +486,9 @@ export class MarketStructureAPI {
       expansion_mode: 'NORMAL',
       market_velocity: 0,
       runaway_origin_price: null,
+      is_in_expansion: false,
+      expansion_high_float: null,
+      expansion_low_float: null,
       swings: [],
       zigzag: [],
       dealingRange: {

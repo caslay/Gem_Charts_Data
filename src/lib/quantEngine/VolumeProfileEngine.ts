@@ -13,11 +13,14 @@ export interface VolumeProfileMetrics {
  *
  * @param dr The active StructuralDealingRange
  * @param candles The raw OHLCV candle array
+ * @param isInExpansion When TRUE, extends the calculation window to the live candle edge so
+ *   VAH/VAL/POC can migrate into the post-BOS expansion territory. Defaults to false.
  * @returns The computed VolumeProfileMetrics or null if inputs are insufficient
  */
 export function calculateVolumeProfile(
   dr: StructuralDealingRange | null,
-  candles: Candle[]
+  candles: Candle[],
+  isInExpansion: boolean = false
 ): VolumeProfileMetrics | null {
   if (
     !dr ||
@@ -38,7 +41,12 @@ export function calculateVolumeProfile(
 
   // Determine the start and end timestamps of the structural dealing range
   const startTime = Math.min(Number(dr.anchor_low_swing.t), Number(dr.anchor_high_swing.t));
-  const endTime = Math.max(Number(dr.anchor_low_swing.t), Number(dr.anchor_high_swing.t));
+  // During active expansion, extend the window to the live candle edge so new post-BOS
+  // candles are included in the volume distribution. This allows POC/VAH/VAL to migrate.
+  const anchorEndTime = Math.max(Number(dr.anchor_low_swing.t), Number(dr.anchor_high_swing.t));
+  const endTime = (isInExpansion && candles.length > 0)
+    ? candles[candles.length - 1].t  // Live edge — includes all expansion candles
+    : anchorEndTime;                  // Standard — bounded by confirmed anchor timestamps
 
   // Filter candles spanning the range
   const rangeCandles = candles.filter((c) => c.t >= startTime && c.t <= endTime);

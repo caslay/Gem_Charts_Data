@@ -403,27 +403,50 @@ export const structureLayer: ChartLayer = {
       }
     });
 
-    // ─── 3. Implement The Dealing Range Shadow Box & Equilibrium ───
+    // ─── 3. Override Dealing Range Visuals During Active Expansion ───────────
+    // When is_in_expansion is true, override the visual ceiling/floor with the float values.
+    // The DR shadow box and equilibrium line must reflect the live expanding boundary.
+    const isInExpansion = (analysis as any).expansion_mode === 'RUNAWAY';
+    const expansionHighFloat: number | null = (analysis as any).expansion_high_float ?? null;
+    const expansionLowFloat: number | null = (analysis as any).expansion_low_float ?? null;
+    const marketVelocity: number = (analysis as any).market_velocity ?? 0;
+    const trendState = analysis.currentTrend || 'UNSET';
+
+    // Override visual ceiling/floor with float when in expansion
+    const visualDealingHigh = (isInExpansion && expansionHighFloat !== null)
+      ? expansionHighFloat
+      : (analysis.dealingRange?.high ?? null);
+    const visualDealingLow = (isInExpansion && expansionLowFloat !== null)
+      ? expansionLowFloat
+      : (analysis.dealingRange?.low ?? null);
+
+    // ─── 3b. Dealing Range Shadow Box & Equilibrium (using visual overrides) ─
     let drShadowBox: React.ReactElement | null = null;
     const drEqMidline: React.ReactElement[] = [];
     let savpValueArea: React.ReactElement | null = null;
     let savpPocLine: React.ReactElement | null = null;
 
     const dr = analysis.dealingRange;
-    if (dr && dr.anchor_high_swing && dr.anchor_low_swing && dr.high !== null && dr.low !== null && dr.equilibrium !== null) {
-      const rawHighX = timeScale.timeToCoordinate(Math.floor(dr.anchor_high_swing.t / 1000) as any);
-      const rawLowX = timeScale.timeToCoordinate(Math.floor(dr.anchor_low_swing.t / 1000) as any);
-      const boxTopY = series.priceToCoordinate(dr.high);
-      const boxBottomY = series.priceToCoordinate(dr.low);
-      const eqY = series.priceToCoordinate(dr.equilibrium);
-
+    if (dr && dr.anchor_low_swing && visualDealingHigh !== null && visualDealingLow !== null) {
+      // Box start X: use the low anchor (or high anchor if it's earlier), same as before
+      const rawHighX = dr.anchor_high_swing
+        ? timeScale.timeToCoordinate(Math.floor(dr.anchor_high_swing.t / 1000) as any)
+        : null;
+      const rawLowX = dr.anchor_low_swing
+        ? timeScale.timeToCoordinate(Math.floor(dr.anchor_low_swing.t / 1000) as any)
+        : null;
       const highX = rawHighX !== null ? (rawHighX as unknown as number) : 0;
       const lowX = rawLowX !== null ? (rawLowX as unknown as number) : 0;
+      const boxStartX = Math.min(highX, lowX);
+
+      // Use visual overrides for the box boundaries (float during expansion, confirmed otherwise)
+      const boxTopY = series.priceToCoordinate(visualDealingHigh);
+      const boxBottomY = series.priceToCoordinate(visualDealingLow);
+      // Dynamic equilibrium: recompute from visual boundaries (tracks expansion ceiling in real time)
+      const visualEq = (visualDealingHigh + visualDealingLow) / 2;
+      const eqY = series.priceToCoordinate(visualEq);
 
       if (boxTopY !== null && boxBottomY !== null && eqY !== null) {
-        const boxStartX = Math.min(highX, lowX);
-        const trendState = analysis.currentTrend || 'UNSET';
-        
         let fillStyle = `color-mix(in srgb, ${accentColor} 4%, transparent)`;
         if (trendState === 'BULLISH') {
           fillStyle = `color-mix(in srgb, ${swingLowColor} 4%, transparent)`;
@@ -431,7 +454,7 @@ export const structureLayer: ChartLayer = {
           fillStyle = `color-mix(in srgb, ${swingHighColor} 4%, transparent)`;
         }
 
-        // Draw shadow rectangle
+        // Draw shadow rectangle (height expands with the float during expansion)
         drShadowBox = React.createElement('rect', {
           key: 'dr-shadow-box',
           x: boxStartX,
@@ -442,7 +465,7 @@ export const structureLayer: ChartLayer = {
           stroke: 'none',
         });
 
-        // Draw SAVP Value Area and POC if metrics are available
+        // Draw SAVP Value Area and POC (migrates into expansion zone when window is extended)
         if (dr.profile_metrics && dr.profile_metrics.poc !== null) {
           const pm = dr.profile_metrics;
           const pocY = series.priceToCoordinate(pm.poc);
@@ -474,41 +497,140 @@ export const structureLayer: ChartLayer = {
           }
         }
 
-        // Draw dashed midline at 50% Equilibrium
-        drEqMidline.push(
-          React.createElement('line', {
-            key: 'dr-eq-midline',
-            x1: boxStartX,
-            y1: eqY,
-            x2: rightX,
-            y2: eqY,
-            stroke: theme === 'dark' ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.25)',
-            strokeWidth: 1.0,
-            strokeDasharray: '4,4',
-          })
-        );
+        // Equilibrium midline — dashed amber during expansion (tracks live float), standard otherwise
+        const eqLineColor = isInExpansion
+          ? 'rgba(245, 158, 11, 0.45)'
+          : (theme === 'dark' ? 'rgba(255, 255, 255, 0.25)' : 'rgba(0, 0, 0, 0.25)');
+        drEqMidline.push(React.createElement('line', {
+          key: 'dr-eq-midline',
+          x1: boxStartX,
+          y1: eqY,
+          x2: rightX,
+          y2: eqY,
+          stroke: eqLineColor,
+          strokeWidth: 1.0,
+          strokeDasharray: '4,4',
+        }));
 
-        // Draw equilibrium label
-        drEqMidline.push(
-          React.createElement(
-            'text',
-            {
-              key: 'dr-eq-label',
-              x: rightX - 52,
-              y: eqY - 4,
-              fill: theme === 'dark' ? 'rgba(255, 255, 255, 0.45)' : 'rgba(0, 0, 0, 0.45)',
-              fontSize: '6px',
-              fontFamily: 'monospace',
-              fontWeight: 'bold',
-            },
-            'EQUILIBRIUM (0.50)'
-          )
-        );
+        const eqLabel = isInExpansion
+          ? `LIVE EQ (${visualEq.toFixed(2)})`
+          : 'EQUILIBRIUM (0.50)';
+        drEqMidline.push(React.createElement('text', {
+          key: 'dr-eq-label',
+          x: rightX - 68,
+          y: eqY - 4,
+          fill: isInExpansion
+            ? 'rgba(245, 158, 11, 0.75)'
+            : (theme === 'dark' ? 'rgba(255, 255, 255, 0.45)' : 'rgba(0, 0, 0, 0.45)'),
+          fontSize: '6px',
+          fontFamily: 'monospace',
+          fontWeight: 'bold',
+        }, eqLabel));
       }
     }
 
-    // ─── 4. Implement The Active Expansion Trace Ray (Unconfirmed Swings) ───
+    // ─── 4. Implement The Active Expansion Trace Ray (Unconfirmed Boundaries) ─
     const expansionRays: React.ReactElement[] = [];
+
+    if (isInExpansion && showParent && showMajor) {
+      // Bullish expansion — floating ceiling ray
+      if (expansionHighFloat !== null && trendState === 'BULLISH') {
+        const floatY = series.priceToCoordinate(expansionHighFloat);
+        const bosEvent = (analysis.structural_events || [])
+          .filter((e: any) => e.type === 'BOS' && e.direction === 'BULLISH')
+          .slice(-1)[0];
+        const bosX = bosEvent
+          ? (timeScale.timeToCoordinate(Math.floor(bosEvent.timestamp / 1000) as any) ?? 0)
+          : 0;
+        const rayStartX = Math.max(0, bosX as number);
+
+        if (floatY !== null) {
+          // Dashed amber expansion ray — extends past rightX to signal open-ended expansion
+          expansionRays.push(React.createElement('line', {
+            key: 'expansion-ceil-ray',
+            x1: rayStartX,
+            y1: floatY,
+            x2: rightX + 48,
+            y2: floatY,
+            stroke: '#f59e0b',
+            strokeWidth: 1.5,
+            strokeDasharray: '5,3',
+            opacity: 0.85,
+          }));
+          // Right-side expansion label
+          expansionRays.push(React.createElement('text', {
+            key: 'expansion-ceil-label',
+            x: rightX + 4,
+            y: floatY - 4,
+            fill: '#f59e0b',
+            fontSize: '6',
+            fontFamily: 'monospace',
+            fontWeight: 'bold',
+          }, `▲ FLOAT CEIL (BOS)`));
+        }
+      }
+
+      // Bearish expansion — floating floor ray
+      if (expansionLowFloat !== null && trendState === 'BEARISH') {
+        const floatY = series.priceToCoordinate(expansionLowFloat);
+        const bosEvent = (analysis.structural_events || [])
+          .filter((e: any) => e.type === 'BOS' && e.direction === 'BEARISH')
+          .slice(-1)[0];
+        const bosX = bosEvent
+          ? (timeScale.timeToCoordinate(Math.floor(bosEvent.timestamp / 1000) as any) ?? 0)
+          : 0;
+        const rayStartX = Math.max(0, bosX as number);
+
+        if (floatY !== null) {
+          expansionRays.push(React.createElement('line', {
+            key: 'expansion-floor-ray',
+            x1: rayStartX,
+            y1: floatY,
+            x2: rightX + 48,
+            y2: floatY,
+            stroke: '#f59e0b',
+            strokeWidth: 1.5,
+            strokeDasharray: '5,3',
+            opacity: 0.85,
+          }));
+          expansionRays.push(React.createElement('text', {
+            key: 'expansion-floor-label',
+            x: rightX + 4,
+            y: floatY + 9,
+            fill: '#f59e0b',
+            fontSize: '6',
+            fontFamily: 'monospace',
+            fontWeight: 'bold',
+          }, `▼ FLOAT FLOOR (BOS)`));
+        }
+      }
+
+      // EXPANSION mode velocity badge (top-right corner)
+      if (marketVelocity > 0) {
+        expansionRays.push(React.createElement('g', { key: 'expansion-velocity-badge' },
+          React.createElement('rect', {
+            x: rightX - 168,
+            y: 32,
+            width: 165,
+            height: 16,
+            rx: 4,
+            fill: 'rgba(245, 158, 11, 0.10)',
+            stroke: 'rgba(245, 158, 11, 0.50)',
+            strokeWidth: 0.8,
+            opacity: 0.95,
+          }),
+          React.createElement('text', {
+            x: rightX - 87,
+            y: 42,
+            fill: 'rgba(245, 158, 11, 0.95)',
+            fontSize: '6.5',
+            fontFamily: 'monospace',
+            fontWeight: 'bold',
+            textAnchor: 'middle',
+          }, `⚡ RUNAWAY EXPANSION · ${marketVelocity.toFixed(1)}× ATR`)
+        ));
+      }
+    }
 
     // 5. Native SVG Canvas Assembly
     return React.createElement(
