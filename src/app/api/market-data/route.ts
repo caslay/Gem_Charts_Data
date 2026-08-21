@@ -1197,6 +1197,10 @@ export async function GET(req: Request) {
       expansion_mode: structureAnalysis.expansion_mode || 'NORMAL',
       market_velocity: structureAnalysis.market_velocity || 0,
       runaway_origin_price: structureAnalysis.runaway_origin_price || null,
+      // ─── Expansion Telemetry (Dynamic Range Freeze Resolution) ─────────────
+      is_in_expansion: structureAnalysis.is_in_expansion || false,
+      expansion_high_float: structureAnalysis.expansion_high_float ?? null,
+      expansion_low_float: structureAnalysis.expansion_low_float ?? null,
       full_structure_map: {
         swing_points: structureAnalysis.swing_points,
         structural_events: structureAnalysis.structural_events,
@@ -1214,7 +1218,13 @@ export async function GET(req: Request) {
         internalDealingRange: internal_dealing_range,
         latestMSS: structureAnalysis.latestMSS || null,
         market_structure_shift: structureAnalysis.market_structure_shift || false,
-        market_structure_shift_direction: structureAnalysis.market_structure_shift_direction || null
+        market_structure_shift_direction: structureAnalysis.market_structure_shift_direction || null,
+        // Expansion fields for chart layer consumption
+        expansion_mode: structureAnalysis.expansion_mode || 'NORMAL',
+        is_in_expansion: structureAnalysis.is_in_expansion || false,
+        expansion_high_float: structureAnalysis.expansion_high_float ?? null,
+        expansion_low_float: structureAnalysis.expansion_low_float ?? null,
+        market_velocity: structureAnalysis.market_velocity || 0,
       },
       global_anchors: {
         high: localDealingRange.high,

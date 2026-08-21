@@ -1,8 +1,63 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.38
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.39
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-21 (V16.38 — High-Contrast Active State & Multi-Timeframe Stream Matrix Overhaul)  
+> **Last Updated:** 2026-08-21 (V16.39 — Range Freeze & Dynamic Expansion Resolution)  
+
+## 🆕 V16.39 Changelog — Range Freeze & Dynamic Expansion Resolution (2026-08-21)
+
+### Summary
+Resolved a systemic range freeze during active trend expansions where `dealingRange.high`, the AMT Equilibrium, and the Volume Profile (VAH/VAL/POC) remained locked to the pre-BOS Major High fractal while live price extended into new territory. The fix introduces an ephemeral float state layer in the SMC State Engine, a 3-tier ceiling/floor resolution in the Dealing Range Builder, a dynamic window extension in the Volume Profile Engine, and expansion-aware visual rendering across the chart layer and HUD.
+
+### Root Causes Resolved
+- **B1/B5** (`SMCStateEngine`): `active_swing_high = null` after BOS with no float mechanism to bridge the gap until the next confirmed fractal.
+- **B2** (`MarketStructureAPI`): Unreliable null-branch fallback; anchor index search fragile on exact price match failure.
+- **B3** (`VolumeProfileEngine`): `endTime` clamped to stale `anchor_high_swing.t` (pre-BOS timestamp) — all expansion candles excluded from AMT window.
+- **B4** (`MarketStructureAPI`): Synthesized anchor wrong timestamp from nearest-candle fallback.
+- **B6** (`MarketStructureAPI`): `expansion_mode` hardcoded `'NORMAL'`; `market_velocity` and `runaway_origin_price` never computed.
+- **B7** (`structureLayer`): No visual expansion ray — static closed box regardless of state.
+- **B8** (`SMCStateEngine`): Pullback low not promoted to `protected_low` until next swing high confirmed.
+
+### Files Modified
+- **`src/lib/quantEngine/SMCStateEngine.ts`**
+  - Added 4 public ephemeral fields: `expansion_high_float`, `expansion_low_float`, `is_in_expansion`, `expansion_origin_price`.
+  - `processCandle()`: BULLISH/BEARISH BOS paths now seed the float and set `is_in_expansion = true`. Running-extreme tracking updates the float on every subsequent candle (only ever moves in the expansion direction — zero repainting).
+  - `processCandle()` MSS paths: Activate the opposing expansion float when displacement is confirmed; clear the stale float.
+  - `processPivot()`: Clears the expansion float when the next confirmed MAJOR fractal arrives. Pullback pivot during active expansion immediately promoted to `protected_low` / `protected_high` (no downstream wave wait).
+
+- **`src/lib/quantEngine/MarketStructureAPI.ts`**
+  - `buildDealingRange()`: Replaced flat `active_swing_high ?? max()` with a 3-tier priority resolution: (1) `expansion_high_float`, (2) `active_swing_high`, (3) candle scan. Mirror for BEARISH floor.
+  - Anchor swing synthesis: When float is active, synthesizes a live anchor with `t = lastCandle.t` (NOT stale pre-BOS timestamp), `confirmed: false`, and `is_expansion_float: true` — anti-repainting firewall.
+  - Computes and returns `expansion_mode: 'NORMAL' | 'RUNAWAY'`, `market_velocity` (ATR-relative), and `runaway_origin_price` (no longer stubs).
+  - `createEmptyState()`: Initializes the 3 new required interface fields.
+  - Threads `stateEngine.is_in_expansion` to `calculateVolumeProfile()`.
+
+- **`src/lib/quantEngine/VolumeProfileEngine.ts`**
+  - `calculateVolumeProfile(dr, candles, isInExpansion?)`: Added third parameter. When `isInExpansion = true`, overrides `endTime` with `candles[last].t` (live edge) instead of the stale anchor timestamp. VAH/VAL/POC now migrate into post-BOS territory.
+
+- **`src/lib/quantEngine/types.ts`**
+  - `StructuralSwing`: Added `is_expansion_float?: boolean` (anti-repainting firewall flag).
+  - `MarketStructureAnalysis`: Added `is_in_expansion: boolean`, `expansion_high_float: number | null`, `expansion_low_float: number | null`. Documented the three previously-stubbed expansion fields.
+
+- **`src/lib/chartLayers/plugins/structureLayer.ts`**
+  - Reads `expansion_mode`, `expansion_high_float`, `expansion_low_float`, `market_velocity` from `analysis`.
+  - Computes `visualDealingHigh` / `visualDealingLow` using float override when in expansion.
+  - DR shadow box height now expands with the float boundary in real time.
+  - Equilibrium line dynamically recomputed from float — amber dashed during expansion (labeled `LIVE EQ (price)`).
+  - `expansionRays[]` now populated: amber dashed ray from BOS event X to `rightX + 48px` with `▲ FLOAT CEIL (BOS)` / `▼ FLOAT FLOOR (BOS)` label. Velocity badge `⚡ RUNAWAY EXPANSION · N× ATR` rendered top-right.
+
+- **`src/components/DashboardMetrics.tsx`** (`ValueAreaRangeCard`)
+  - Reads `structureState.expansion_mode`, `expansion_high_float`, `expansion_low_float`, `market_velocity`.
+  - `effectiveEquilibrium`: dynamically recomputed from float during expansion.
+  - HUD pill overrides to `EXPANSION ↑ · N× ATR` / `EXPANSION ↓ · N× ATR` with amber styling during `RUNAWAY` mode.
+
+- **`src/app/api/market-data/route.ts`** (God Node — additive only)
+  - Added `is_in_expansion`, `expansion_high_float`, `expansion_low_float` to `ipda_metrics` top-level and to `full_structure_map` nested object. Safe `|| false` / `?? null` fallbacks — backward compatible.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors** (exit code 0).
+
+---
 
 ## 🆕 V16.38 Changelog — High-Contrast Active State & Multi-Timeframe Stream Matrix Overhaul (2026-08-21)
 

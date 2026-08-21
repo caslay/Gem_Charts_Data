@@ -17,6 +17,12 @@ export interface StructuralSwing {
   structure_type?: 'MAJOR' | 'INTERNAL' | 'INNER';
   /** Confirmation flag: TRUE only when the succeeding candles have fully closed */
   confirmed?: boolean;
+  /**
+   * Anti-repainting firewall flag.
+   * TRUE when this swing is a live synthesized expansion anchor (not yet a confirmed fractal).
+   * Visual layers MUST render these as dashed/translucent — never as solid historical pivots.
+   */
+  is_expansion_float?: boolean;
 }
 
 export interface ZigZagSegment {
@@ -85,10 +91,21 @@ export interface MarketStructureAnalysis {
   swing_points: Pivot[];
   structural_events: any[];
   liquidity_zones: any[];
+  /** 'RUNAWAY' when a displacement-backed BOS is actively expanding before fractal confirmation. */
   expansion_mode: 'NORMAL' | 'RUNAWAY';
+  /** ATR-relative momentum speed since BOS origin. 0 when NORMAL. */
   market_velocity: number;
+  /** Price of the structural level broken by the BOS that triggered expansion. null when NORMAL. */
   runaway_origin_price: number | null;
-  
+
+  // ─── Expansion Telemetry (NEW — Dynamic Range Freeze Resolution) ───────────
+  /** TRUE during an active momentum leg between BOS confirmation and next confirmed MAJOR fractal. */
+  is_in_expansion: boolean;
+  /** Live floating ceiling during BULLISH expansion. null when not in expansion. Anti-repaints: never overwrites confirmed historical pivots. */
+  expansion_high_float: number | null;
+  /** Live floating floor during BEARISH expansion. null when not in expansion. Anti-repaints: never overwrites confirmed historical pivots. */
+  expansion_low_float: number | null;
+
   // Mapped visual properties
   swings: StructuralSwing[];
   zigzag: ZigZagSegment[];

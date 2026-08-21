@@ -62,6 +62,28 @@ const ValueAreaRangeCard = memo(function ValueAreaRangeCard({
   const equilibrium = staticContext?.data?.ipda_metrics?.pricing_context?.local_dealing_range?.equilibrium ?? null;
   const candles = staticContext?.data?.data_payload?.candles_15m || [];
 
+  // ─── Expansion State (from structureState) ───────────────────────────────
+  const structureState = staticContext?.structureState;
+  const expansionMode: string = (structureState as any)?.expansion_mode ?? 'NORMAL';
+  const isInExpansion = expansionMode === 'RUNAWAY';
+  const expansionHighFloat: number | null = (structureState as any)?.expansion_high_float ?? null;
+  const expansionLowFloat: number | null = (structureState as any)?.expansion_low_float ?? null;
+  const marketVelocity: number = (structureState as any)?.market_velocity ?? 0;
+  const currentTrend: string = structureState?.currentTrend ?? 'UNSET';
+
+  // Dynamic equilibrium: use float if in expansion, fallback to static API equilibrium
+  const effectiveEquilibrium = useMemo(() => {
+    if (isInExpansion && expansionHighFloat !== null && structureState?.dealingRange?.low != null) {
+      const drLow = structureState?.dealingRange?.low ?? 0;
+      return (expansionHighFloat + drLow) / 2;
+    }
+    if (isInExpansion && expansionLowFloat !== null && structureState?.dealingRange?.high != null) {
+      const drHigh = structureState?.dealingRange?.high ?? 0;
+      return (drHigh + expansionLowFloat) / 2;
+    }
+    return equilibrium !== null ? Number(equilibrium) : null;
+  }, [isInExpansion, expansionHighFloat, expansionLowFloat, structureState, equilibrium]);
+
   // Approximate Value Area from candles
   const { vah, val } = useMemo(() => {
     if (!candles || candles.length === 0) return { vah: null, val: null };
@@ -79,14 +101,25 @@ const ValueAreaRangeCard = memo(function ValueAreaRangeCard({
   }, [candles]);
 
   const { statusLabel, colorClass } = useMemo(() => {
+    // ─── EXPANSION MODE: Override the label entirely ──────────────────────
+    if (isInExpansion) {
+      const isBullishExpansion = currentTrend === 'BULLISH';
+      const velocityStr = marketVelocity > 0 ? ` · ${marketVelocity.toFixed(1)}× ATR` : '';
+      return {
+        statusLabel: isBullishExpansion
+          ? `EXPANSION ↑${velocityStr}`
+          : `EXPANSION ↓${velocityStr}`,
+        colorClass: 'bg-amber-500/10 border-amber-500/40 text-amber-400'
+      };
+    }
     if (livePrice && val && livePrice <= val) {
       return { statusLabel: 'DISCOUNT AUCTION (< VAL)', colorClass: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' };
     }
     if (livePrice && vah && livePrice >= vah) {
       return { statusLabel: 'PREMIUM AUCTION (> VAH)', colorClass: 'bg-rose-500/10 border-rose-500/30 text-rose-400' };
     }
-    if (isLive && livePrice && equilibrium) {
-      const isDisc = livePrice <= Number(equilibrium);
+    if (isLive && livePrice && effectiveEquilibrium) {
+      const isDisc = livePrice <= effectiveEquilibrium;
       return {
         statusLabel: isDisc ? 'DISCOUNT VALUE' : 'PREMIUM VALUE',
         colorClass: isDisc ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
@@ -96,7 +129,7 @@ const ValueAreaRangeCard = memo(function ValueAreaRangeCard({
       statusLabel: staticPricing || 'SCANNING VALUE',
       colorClass: 'bg-card/40 border-card-border text-amber-400'
     };
-  }, [livePrice, val, vah, isLive, equilibrium, staticPricing]);
+  }, [livePrice, val, vah, isLive, effectiveEquilibrium, isInExpansion, currentTrend, marketVelocity, staticPricing]);
 
   return (
     <div className={`flex items-center justify-between px-3 py-1.5 rounded-lg border backdrop-blur-md transition-all duration-200 ${colorClass}`}>
