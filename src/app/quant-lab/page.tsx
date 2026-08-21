@@ -48,6 +48,10 @@ import { adaptOrderBlocksToTrades } from "@/lib/quantEngine/equityCalculator";
 import CapitalGrowthLedger from "@/components/quantLab/CapitalGrowthLedger";
 import SweepReclaimWorkspace from "@/components/quantLab/SweepReclaimWorkspace";
 import SweepReclaimSidebarList from "@/components/quantLab/SweepReclaimSidebarList";
+import ScannerPresetControlDeck from "@/components/quantLab/ScannerPresetControlDeck";
+import { ScannerPreset, OrderBlockPresetConfig } from "@/lib/quantEngine/scannerPresets";
+import LiveCockpitStatusBadge from "@/components/LiveCockpitStatusBadge";
+import LiveOrderBlockModal from "@/components/modals/LiveOrderBlockModal";
 import SettingsModal from "@/components/modals/SettingsModal";
 
 export interface StoredSrScan {
@@ -215,6 +219,96 @@ export default function QuantLabPage() {
 
   // OB Inspector Modal / Drawer
   const [inspectedOb, setInspectedOb] = useState<InstitutionalOrderBlock | null>(null);
+  const [isLiveOBModalOpen, setIsLiveOBModalOpen] = useState(false);
+
+  // Order Block Preset Configuration Model
+  const currentObConfig: OrderBlockPresetConfig = useMemo(() => ({
+    symbol: obSymbol,
+    timeframe: obTimeframe,
+    minTier: obMinTier,
+    strictTierAPlus: obStrictTierAPlus,
+    maxBarsToMitigation: obMaxBarsToMitigation,
+    enableBreakerSim: obEnableBreakerSim,
+    maxBreakerRetestBars: obMaxBreakerRetestBars,
+    enableDynamicMgmt: obEnableDynamicMgmt,
+    tp1Multiple: obTp1Multiple,
+    tp2Multiple: obTp2Multiple,
+    positionScalingMode: obPositionScalingMode,
+    tp1Ratio: obTp1Ratio,
+    tp2Ratio: obTp2Ratio,
+    tp3Ratio: obTp3Ratio,
+    trailingStopMode: obTrailingStopMode,
+    trailingBuffer: obTrailingBuffer,
+    dynamicDolTp2Scaling: obDynamicDolTp2Scaling,
+    adaptiveBreakerConfirmation: obAdaptiveBreakerConfirmation,
+    requireBreakerConfirmation: obRequireBreakerConfirmation,
+    requireBreakerDOL: obRequireBreakerDOL,
+    requireBreakerVolumetric: obRequireBreakerVolumetric,
+    breakerSessionFilter: obBreakerSessionFilter,
+    aggregateConsecutive: obAggregateConsecutive,
+    maxConsecutive: obMaxConsecutive,
+    entryMode: obEntryMode,
+    targetRr: obTargetRr,
+  }), [
+    obSymbol,
+    obTimeframe,
+    obMinTier,
+    obStrictTierAPlus,
+    obMaxBarsToMitigation,
+    obEnableBreakerSim,
+    obMaxBreakerRetestBars,
+    obEnableDynamicMgmt,
+    obTp1Multiple,
+    obTp2Multiple,
+    obPositionScalingMode,
+    obTp1Ratio,
+    obTp2Ratio,
+    obTp3Ratio,
+    obTrailingStopMode,
+    obTrailingBuffer,
+    obDynamicDolTp2Scaling,
+    obAdaptiveBreakerConfirmation,
+    obRequireBreakerConfirmation,
+    obRequireBreakerDOL,
+    obRequireBreakerVolumetric,
+    obBreakerSessionFilter,
+    obAggregateConsecutive,
+    obMaxConsecutive,
+    obEntryMode,
+    obTargetRr,
+  ]);
+
+  const handleApplyObPreset = (preset: ScannerPreset) => {
+    if (preset.strategyType !== 'ORDER_BLOCK') return;
+    const cfg = preset.config as OrderBlockPresetConfig;
+
+    if (cfg.symbol) setObSymbol(cfg.symbol);
+    if (cfg.timeframe) setObTimeframe(cfg.timeframe);
+    if (cfg.minTier) setObMinTier(cfg.minTier);
+    if (typeof cfg.strictTierAPlus === 'boolean') setObStrictTierAPlus(cfg.strictTierAPlus);
+    if (typeof cfg.maxBarsToMitigation === 'number') setObMaxBarsToMitigation(cfg.maxBarsToMitigation);
+    if (typeof cfg.enableBreakerSim === 'boolean') setObEnableBreakerSim(cfg.enableBreakerSim);
+    if (typeof cfg.maxBreakerRetestBars === 'number') setObMaxBreakerRetestBars(cfg.maxBreakerRetestBars);
+    if (typeof cfg.enableDynamicMgmt === 'boolean') setObEnableDynamicMgmt(cfg.enableDynamicMgmt);
+    if (typeof cfg.tp1Multiple === 'number') setObTp1Multiple(cfg.tp1Multiple);
+    if (typeof cfg.tp2Multiple === 'number') setObTp2Multiple(cfg.tp2Multiple);
+    if (cfg.positionScalingMode) setObPositionScalingMode(cfg.positionScalingMode);
+    if (typeof cfg.tp1Ratio === 'number') setObTp1Ratio(cfg.tp1Ratio);
+    if (typeof cfg.tp2Ratio === 'number') setObTp2Ratio(cfg.tp2Ratio);
+    if (typeof cfg.tp3Ratio === 'number') setObTp3Ratio(cfg.tp3Ratio);
+    if (cfg.trailingStopMode) setObTrailingStopMode(cfg.trailingStopMode);
+    if (typeof cfg.trailingBuffer === 'number') setObTrailingBuffer(cfg.trailingBuffer);
+    if (typeof cfg.dynamicDolTp2Scaling === 'boolean') setObDynamicDolTp2Scaling(cfg.dynamicDolTp2Scaling);
+    if (typeof cfg.adaptiveBreakerConfirmation === 'boolean') setObAdaptiveBreakerConfirmation(cfg.adaptiveBreakerConfirmation);
+    if (typeof cfg.requireBreakerConfirmation === 'boolean') setObRequireBreakerConfirmation(cfg.requireBreakerConfirmation);
+    if (typeof cfg.requireBreakerDOL === 'boolean') setObRequireBreakerDOL(cfg.requireBreakerDOL);
+    if (typeof cfg.requireBreakerVolumetric === 'boolean') setObRequireBreakerVolumetric(cfg.requireBreakerVolumetric);
+    if (cfg.breakerSessionFilter) setObBreakerSessionFilter(cfg.breakerSessionFilter);
+    if (typeof cfg.aggregateConsecutive === 'boolean') setObAggregateConsecutive(cfg.aggregateConsecutive);
+    if (typeof cfg.maxConsecutive === 'number') setObMaxConsecutive(cfg.maxConsecutive);
+    if (cfg.entryMode) setObEntryMode(cfg.entryMode);
+    if (typeof cfg.targetRr === 'number') setObTargetRr(cfg.targetRr);
+  };
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Data Fetching: Strategy Runs & OB Scans
@@ -1015,45 +1109,63 @@ export default function QuantLabPage() {
 
         {/* Mode Switcher Tabs + Status */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-slate-900/90 border border-slate-800 p-1 rounded-lg flex items-center gap-1 font-mono text-xs font-bold">
+          <div className="bg-slate-950/90 border border-slate-800 p-1 rounded-xl flex items-center gap-1 font-mono text-xs font-bold shadow-inner">
+            {/* SWEEP & RECLAIM SCANNER TAB */}
             <button
               onClick={() => setActiveMainTab('SWEEP_RECLAIM_SCANNER')}
-              className={`px-3 py-1.5 rounded flex items-center gap-1.5 transition ${
+              className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 cursor-pointer ${
                 activeMainTab === 'SWEEP_RECLAIM_SCANNER'
-                  ? 'bg-cyan-500 text-slate-950 shadow-sm shadow-cyan-500/20'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  ? 'bg-cyan-400 border border-cyan-300 text-slate-950 shadow-[0_0_14px_rgba(34,211,238,0.5)] font-black'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
               }`}
             >
-              <Repeat className="w-3.5 h-3.5" />
+              {activeMainTab === 'SWEEP_RECLAIM_SCANNER' ? (
+                <span className="w-2 h-2 rounded-full bg-slate-950 shadow-[0_0_6px_rgba(0,0,0,0.5)] shrink-0" />
+              ) : (
+                <Repeat className="w-3.5 h-3.5" />
+              )}
               <span>SWEEP & RECLAIM SCANNER</span>
             </button>
 
+            {/* INSTITUTIONAL OB SCANNER TAB */}
             <button
               onClick={() => setActiveMainTab('OB_SCANNER')}
-              className={`px-3 py-1.5 rounded flex items-center gap-1.5 transition ${
+              className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 cursor-pointer ${
                 activeMainTab === 'OB_SCANNER'
-                  ? 'bg-emerald-500 text-slate-950 shadow-sm shadow-emerald-500/20'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  ? 'bg-emerald-400 border border-emerald-300 text-slate-950 shadow-[0_0_14px_rgba(52,211,153,0.5)] font-black'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
               }`}
             >
-              <Layers className="w-3.5 h-3.5" />
+              {activeMainTab === 'OB_SCANNER' ? (
+                <span className="w-2 h-2 rounded-full bg-slate-950 shadow-[0_0_6px_rgba(0,0,0,0.5)] shrink-0" />
+              ) : (
+                <Layers className="w-3.5 h-3.5" />
+              )}
               <span>INSTITUTIONAL OB SCANNER</span>
             </button>
 
+            {/* STRATEGY BACKTEST TAB */}
             <button
               onClick={() => setActiveMainTab('STRATEGY_BACKTEST')}
-              className={`px-3 py-1.5 rounded flex items-center gap-1.5 transition ${
+              className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 cursor-pointer ${
                 activeMainTab === 'STRATEGY_BACKTEST'
-                  ? 'bg-emerald-500 text-slate-950 shadow-sm shadow-emerald-500/20'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+                  ? 'bg-purple-400 border border-purple-300 text-slate-950 shadow-[0_0_14px_rgba(192,132,252,0.5)] font-black'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
               }`}
             >
-              <FileCode className="w-3.5 h-3.5" />
+              {activeMainTab === 'STRATEGY_BACKTEST' ? (
+                <span className="w-2 h-2 rounded-full bg-slate-950 shadow-[0_0_6px_rgba(0,0,0,0.5)] shrink-0" />
+              ) : (
+                <FileCode className="w-3.5 h-3.5" />
+              )}
               <span>STRATEGY BACKTEST</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            {/* Live Cockpit Execution Status Badge */}
+            <LiveCockpitStatusBadge onClick={() => setIsLiveOBModalOpen(true)} variant="full" />
+
             <div className="hidden lg:flex flex-col text-right font-mono pr-3 border-r border-slate-800/50">
               <span className="text-[9px] text-slate-500 uppercase">Engine Node</span>
               <span className="text-xs text-emerald-400 font-bold flex items-center gap-1.5 justify-end">
@@ -1064,7 +1176,7 @@ export default function QuantLabPage() {
 
             <button
               onClick={() => setIsSoundSettingsOpen(true)}
-              className="px-3 py-1.5 border border-purple-500/30 text-[10px] font-mono font-bold uppercase rounded bg-purple-950/20 text-purple-400 hover:bg-purple-950/40 hover:border-purple-400/50 transition cursor-pointer"
+              className="px-3 py-1.5 border border-purple-500/30 text-[10px] font-mono font-bold uppercase rounded-lg bg-purple-950/20 text-purple-400 hover:bg-purple-950/40 hover:border-purple-400/50 transition cursor-pointer"
             >
               Command Center
             </button>
@@ -1309,6 +1421,15 @@ export default function QuantLabPage() {
                       180D
                     </button>
                   </div>
+                </div>
+
+                {/* Local-First Scanner Preset Control Deck */}
+                <div className="mb-5">
+                  <ScannerPresetControlDeck
+                    strategyType="ORDER_BLOCK"
+                    currentConfig={currentObConfig}
+                    onApplyPreset={handleApplyObPreset}
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
@@ -3171,6 +3292,12 @@ export default function QuantLabPage() {
         alert={null}
         onSave={() => {}}
         onDelete={() => {}}
+      />
+
+      {/* Live Strategy Execution Cockpit Modal */}
+      <LiveOrderBlockModal
+        isOpen={isLiveOBModalOpen}
+        onClose={() => setIsLiveOBModalOpen(false)}
       />
     </div>
   );

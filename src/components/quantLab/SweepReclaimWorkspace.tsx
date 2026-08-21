@@ -42,6 +42,8 @@ import {
 } from "@/lib/quantEngine/SweepReclaimEngine";
 import { adaptSweepReclaimSetupsToTrades } from "@/lib/quantEngine/equityCalculator";
 import CapitalGrowthLedger from "@/components/quantLab/CapitalGrowthLedger";
+import ScannerPresetControlDeck from "@/components/quantLab/ScannerPresetControlDeck";
+import { ScannerPreset, SweepReclaimPresetConfig } from "@/lib/quantEngine/scannerPresets";
 import { StoredSrScan } from "@/app/quant-lab/page";
 
 interface SweepReclaimWorkspaceProps {
@@ -148,6 +150,86 @@ export default function SweepReclaimWorkspace({
     }
     return types;
   }, [enabledAnchors]);
+
+  // Current config representation for preset saving
+  const currentSweepReclaimConfig: SweepReclaimPresetConfig = useMemo(() => ({
+    symbol,
+    timeframe,
+    anchorTypes: resolvedAnchorTypes,
+    lookbackMajor,
+    lookbackInternal,
+    maxBarsAnchorToSweep,
+    maxBarsSweepToReclaim,
+    maxBarsToRetest,
+    volumeExpansionThreshold,
+    deltaDominanceThreshold,
+    bodyRatioThreshold,
+    requireThreePillarDisplacement: true,
+    enforceDiscountPremiumGate,
+    stage1Multiple,
+    stage2Multiple,
+    stage3Multiple,
+    entryMode,
+    enableStructuralTrail,
+    enableProfitRatchet,
+    minSweepDepthAtrMultiplier: minSweepDepthAtr,
+    slBufferAtrMultiplier: slBufferAtr,
+  }), [
+    symbol,
+    timeframe,
+    resolvedAnchorTypes,
+    lookbackMajor,
+    lookbackInternal,
+    maxBarsAnchorToSweep,
+    maxBarsSweepToReclaim,
+    maxBarsToRetest,
+    volumeExpansionThreshold,
+    deltaDominanceThreshold,
+    bodyRatioThreshold,
+    enforceDiscountPremiumGate,
+    stage1Multiple,
+    stage2Multiple,
+    stage3Multiple,
+    entryMode,
+    enableStructuralTrail,
+    enableProfitRatchet,
+    minSweepDepthAtr,
+    slBufferAtr,
+  ]);
+
+  const handleApplyPreset = (preset: ScannerPreset) => {
+    if (preset.strategyType !== 'SWEEP_RECLAIM') return;
+    const cfg = preset.config as SweepReclaimPresetConfig;
+
+    if (cfg.symbol) setSymbol(cfg.symbol);
+    if (cfg.timeframe) setTimeframe(cfg.timeframe as "5m" | "15m" | "1h" | "4h");
+    if (cfg.entryMode) setEntryMode(cfg.entryMode);
+    if (typeof cfg.volumeExpansionThreshold === 'number') setVolumeExpansionThreshold(cfg.volumeExpansionThreshold);
+    if (typeof cfg.deltaDominanceThreshold === 'number') setDeltaDominanceThreshold(cfg.deltaDominanceThreshold);
+    if (typeof cfg.bodyRatioThreshold === 'number') setBodyRatioThreshold(cfg.bodyRatioThreshold);
+    if (typeof cfg.enforceDiscountPremiumGate === 'boolean') setEnforceDiscountPremiumGate(cfg.enforceDiscountPremiumGate);
+    if (typeof cfg.stage1Multiple === 'number') setStage1Multiple(cfg.stage1Multiple);
+    if (typeof cfg.stage2Multiple === 'number') setStage2Multiple(cfg.stage2Multiple);
+    if (typeof cfg.stage3Multiple === 'number') setStage3Multiple(cfg.stage3Multiple);
+    if (typeof cfg.enableStructuralTrail === 'boolean') setEnableStructuralTrail(cfg.enableStructuralTrail);
+    if (typeof cfg.enableProfitRatchet === 'boolean') setEnableProfitRatchet(cfg.enableProfitRatchet);
+    if (typeof cfg.lookbackMajor === 'number') setLookbackMajor(cfg.lookbackMajor);
+    if (typeof cfg.lookbackInternal === 'number') setLookbackInternal(cfg.lookbackInternal);
+    if (typeof cfg.maxBarsAnchorToSweep === 'number') setMaxBarsAnchorToSweep(cfg.maxBarsAnchorToSweep);
+    if (typeof cfg.maxBarsSweepToReclaim === 'number') setMaxBarsSweepToReclaim(cfg.maxBarsSweepToReclaim);
+    if (typeof cfg.maxBarsToRetest === 'number') setMaxBarsToRetest(cfg.maxBarsToRetest);
+    if (typeof cfg.minSweepDepthAtrMultiplier === 'number') setMinSweepDepthAtr(cfg.minSweepDepthAtrMultiplier);
+    if (typeof cfg.slBufferAtrMultiplier === 'number') setSlBufferAtr(cfg.slBufferAtrMultiplier);
+
+    if (Array.isArray(cfg.anchorTypes)) {
+      setEnabledAnchors({
+        SWING_PIVOT: cfg.anchorTypes.includes('SWING_PIVOT'),
+        ASIAN: cfg.anchorTypes.some((a) => a.startsWith('ASIAN')),
+        LONDON: cfg.anchorTypes.some((a) => a.startsWith('LONDON')),
+        DAILY: cfg.anchorTypes.includes('PDH') || cfg.anchorTypes.includes('PDL'),
+      });
+    }
+  };
 
   const handleStartScan = () => {
     onRunScan({
@@ -293,6 +375,15 @@ export default function SweepReclaimWorkspace({
           </div>
         </div>
 
+        {/* Local-First Scanner Preset Control Deck */}
+        <div className="mb-5">
+          <ScannerPresetControlDeck
+            strategyType="SWEEP_RECLAIM"
+            currentConfig={currentSweepReclaimConfig}
+            onApplyPreset={handleApplyPreset}
+          />
+        </div>
+
         {/* Form Inputs Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
           {/* Scan Name */}
@@ -386,56 +477,56 @@ export default function SweepReclaimWorkspace({
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("SWING_PIVOT")}
-              className={`px-3 py-2 rounded text-xs font-mono font-semibold border flex items-center justify-between transition ${
+              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${
                 enabledAnchors.SWING_PIVOT
-                  ? "bg-cyan-950/40 border-cyan-500/50 text-cyan-300"
-                  : "bg-slate-950 border-slate-800 text-slate-500"
+                  ? "bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]"
+                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
               }`}
             >
               <span>Major Pivots</span>
-              {enabledAnchors.SWING_PIVOT && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+              {enabledAnchors.SWING_PIVOT && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
             </button>
 
             <button
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("ASIAN")}
-              className={`px-3 py-2 rounded text-xs font-mono font-semibold border flex items-center justify-between transition ${
+              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${
                 enabledAnchors.ASIAN
-                  ? "bg-amber-950/40 border-amber-500/50 text-amber-300"
-                  : "bg-slate-950 border-slate-800 text-slate-500"
+                  ? "bg-amber-400 border-amber-300 text-slate-950 shadow-[0_0_10px_rgba(251,191,36,0.4)]"
+                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
               }`}
             >
               <span>Asian Session (H/L)</span>
-              {enabledAnchors.ASIAN && <Check className="w-3.5 h-3.5 text-amber-400" />}
+              {enabledAnchors.ASIAN && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
             </button>
 
             <button
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("LONDON")}
-              className={`px-3 py-2 rounded text-xs font-mono font-semibold border flex items-center justify-between transition ${
+              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${
                 enabledAnchors.LONDON
-                  ? "bg-blue-950/40 border-blue-500/50 text-blue-300"
-                  : "bg-slate-950 border-slate-800 text-slate-500"
+                  ? "bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]"
+                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
               }`}
             >
               <span>London Session (H/L)</span>
-              {enabledAnchors.LONDON && <Check className="w-3.5 h-3.5 text-blue-400" />}
+              {enabledAnchors.LONDON && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
             </button>
 
             <button
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("DAILY")}
-              className={`px-3 py-2 rounded text-xs font-mono font-semibold border flex items-center justify-between transition ${
+              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${
                 enabledAnchors.DAILY
-                  ? "bg-purple-950/40 border-purple-500/50 text-purple-300"
-                  : "bg-slate-950 border-slate-800 text-slate-500"
+                  ? "bg-purple-400 border-purple-300 text-slate-950 shadow-[0_0_10px_rgba(192,132,252,0.4)]"
+                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
               }`}
             >
               <span>Previous Day (PDH/PDL)</span>
-              {enabledAnchors.DAILY && <Check className="w-3.5 h-3.5 text-purple-400" />}
+              {enabledAnchors.DAILY && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
             </button>
           </div>
         </div>
@@ -524,6 +615,7 @@ export default function SweepReclaimWorkspace({
                 <option value="FVG_DISTAL">Displacement FVG Distal Edge</option>
                 <option value="OTE_62">62% OTE Fibonacci Retracement</option>
                 <option value="SHELF_LEVEL">Reclaimed Anchor Shelf Level</option>
+                <option value="RECLAIM_LEVEL">Reclaimed Horizontal Level (Explicit)</option>
               </select>
               <span className="text-[9px] text-slate-500 font-mono">
                 {getEntryModeDescription(entryMode)}

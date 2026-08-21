@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Zap, Lock, Save, Power, PowerOff, Loader2, ChevronRight, Copy, Download } from 'lucide-react';
+import { armCustomStrategy, purgeConditionCache } from '@/lib/quantEngine/scannerPresets';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -361,6 +362,12 @@ export default function EquationBuilder() {
             prev.map((s) => (s.id === selectedId ? savedStrategy : s))
           );
         }
+
+        if (editActive) {
+          armCustomStrategy(savedStrategy);
+        } else {
+          purgeConditionCache();
+        }
       }
     } catch (err) {
       console.error('[EquationBuilder] Save error:', err);
@@ -387,6 +394,7 @@ export default function EquationBuilder() {
 
     setStrategies((prev) => prev.filter((s) => s.id !== selectedId));
     setSelectedId(null);
+    purgeConditionCache();
   };
 
   const handleToggleActive = async (strategyId: string) => {
@@ -397,6 +405,12 @@ export default function EquationBuilder() {
     setStrategies((prev) =>
       prev.map((s) => (s.id === strategyId ? { ...s, is_active: newActive } : s))
     );
+
+    if (newActive) {
+      armCustomStrategy({ id: strategy.id, name: strategy.name });
+    } else {
+      purgeConditionCache();
+    }
 
     try {
       await fetch('/api/strategies', {
