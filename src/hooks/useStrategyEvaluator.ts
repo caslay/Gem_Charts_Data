@@ -703,6 +703,27 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
     };
   }, [refreshActiveTradeNames, isBacktest]);
 
+  // Purge debounce locks and re-fetch conditions upon preset / strategy switch
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handlePurge = () => {
+      firedLockRef.current.clear();
+      fetchStrategies();
+      refreshActiveTradeNames();
+    };
+
+    window.addEventListener('flow-state-purge-cache', handlePurge);
+    window.addEventListener('scanner-presets-changed', handlePurge);
+    window.addEventListener('flow-state-armed-state-changed', handlePurge);
+
+    return () => {
+      window.removeEventListener('flow-state-purge-cache', handlePurge);
+      window.removeEventListener('scanner-presets-changed', handlePurge);
+      window.removeEventListener('flow-state-armed-state-changed', handlePurge);
+    };
+  }, [fetchStrategies, refreshActiveTradeNames]);
+
   // ── Main Evaluation Loop ────────────────────────────────────────────────
   useEffect(() => {
     if (!data || strategies.length === 0) return;

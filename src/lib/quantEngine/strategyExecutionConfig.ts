@@ -34,6 +34,11 @@ export interface OBTimeframeToggleState {
   enabledTimeframes: SupportedOBTimeframe[];
 }
 
+export type LiveExecutionTiming = 'INSTANT' | 'ON_CLOSE';
+export type LiveOlsSensitivity = 'STRICT' | 'RELAXED' | 'OFF';
+export type LiveDirectionalLock = 'DUAL' | 'LONGS_ONLY' | 'SHORTS_ONLY';
+export type LiveSessionKillzone = 'ASIAN' | 'LONDON' | 'NY';
+
 export interface SweepReclaimLiveSettings {
   compoundingRiskPct: number; // 1.0, 2.0, 3.0 (default: 2.0)
   enabledTimeframes: SupportedOBTimeframe[]; // ['5m', '15m', '1h'] (default: ['5m', '15m', '1h'])
@@ -45,8 +50,16 @@ export interface SweepReclaimLiveSettings {
   enforceDiscountPremiumGate: boolean; // default: true
   enableStructuralTrail: boolean; // default: true
   enableProfitRatchet: boolean; // default: true
+  enableTp1AutoBreakeven: boolean; // default: true (close partial at TP1, move SL to breakeven 0.0R)
+  stage1Multiple: number; // default: 1.0
   stage2Multiple: number; // default: 1.5
   stage3Multiple: number; // default: 3.0
+  routeRunnerToHtfDol: boolean; // default: true (route TP3 runner to resting HTF liquidity pools)
+  executionTiming: LiveExecutionTiming; // default: 'INSTANT'
+  olsSensitivity: LiveOlsSensitivity; // default: 'RELAXED'
+  enableMomentumOverride: boolean; // default: true (runaway market protection)
+  sessionGates: LiveSessionKillzone[]; // default: ['ASIAN', 'LONDON', 'NY']
+  directionalLock: LiveDirectionalLock; // default: 'DUAL'
 }
 
 export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
@@ -60,8 +73,16 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   enforceDiscountPremiumGate: true,
   enableStructuralTrail: true,
   enableProfitRatchet: true,
+  enableTp1AutoBreakeven: true,
+  stage1Multiple: 1.0,
   stage2Multiple: 1.5,
   stage3Multiple: 3.0,
+  routeRunnerToHtfDol: true,
+  executionTiming: 'INSTANT',
+  olsSensitivity: 'RELAXED',
+  enableMomentumOverride: true,
+  sessionGates: ['ASIAN', 'LONDON', 'NY'],
+  directionalLock: 'DUAL',
 };
 
 // Master Reversible Pause Switch for Order Block & Breaker Pipeline

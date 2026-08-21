@@ -15,12 +15,32 @@ import {
   SweepReclaimAnchorType,
   SweepReclaimEntryMode,
 } from './SweepReclaimEngine';
+import {
+  updateSweepReclaimLiveSettings,
+  getSweepReclaimAutoExec,
+  getOrderBlockAutoExec,
+} from './strategyExecutionConfig';
 
 export type ScannerStrategyType = 'SWEEP_RECLAIM' | 'ORDER_BLOCK';
+export type StrategyArmedType = 'SWEEP_RECLAIM' | 'ORDER_BLOCK' | 'CUSTOM_STRATEGY';
 
 export const STORAGE_KEY_SCANNER_PRESETS = 'FLOW_STATE_SCANNER_PRESETS';
 export const STORAGE_KEY_ACTIVE_PRESET_PREFIX = 'FLOW_STATE_ACTIVE_PRESET_';
+export const STORAGE_KEY_ARMED_EXECUTION = 'FLOW_STATE_ARMED_EXECUTION';
+
 export const SCANNER_PRESETS_CHANGED_EVENT = 'scanner-presets-changed';
+export const FLOW_STATE_ARMED_STATE_CHANGED = 'flow-state-armed-state-changed';
+export const FLOW_STATE_PURGE_CACHE_EVENT = 'flow-state-purge-cache';
+
+export interface ArmedExecutionStatus {
+  type: StrategyArmedType;
+  id: string;
+  name: string;
+  isAutoExecEnabled: boolean;
+  timeframe?: string;
+  symbol?: string;
+  updatedAt: number;
+}
 
 export interface SweepReclaimPresetConfig {
   symbol: string;
@@ -675,3 +695,137 @@ export async function syncPresetsWithCloud(): Promise<{ syncedCount: number; isO
     return { syncedCount: 0, isOffline: true };
   }
 }
+
+// ── Armed Execution Cockpit State & Live Strategy Linkage ─────────────────────
+
+/**
+ * Dispatches a global event instructing all strategy evaluators to clear debounce locks and condition caches.
+ */
+export function purgeConditionCache(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const event = new CustomEvent(FLOW_STATE_PURGE_CACHE_EVENT, { detail: { timestamp: Date.now() } });
+    window.dispatchEvent(event);
+  } catch (err) {
+    console.warn('[scannerPresets] Failed to dispatch purge cache event:', err);
+  }
+}
+
+/**
+ * Retrieves the currently armed execution status from localStorage.
+ */
+export function getArmedExecutionStatus(): ArmedExecutionStatus {
+  const defaultStatus: ArmedExecutionStatus = {
+    type: 'SWEEP_RECLAIM',
+    id: 'factory_sr_golden_default',
+    name: 'Golden Sweep & Reclaim (Platform Default)',
+    isAutoExecEnabled: getSweepReclaimAutoExec(),
+    symbol: 'ETHUSDC',
+    timeframe: '15m',
+    updatedAt: Date.now(),
+  };
+
+  if (typeof window === 'undefined') return defaultStatus;
+
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_ARMED_EXECUTION);
+    if (!raw) return defaultStatus;
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      isAutoExecEnabled:
+        parsed.type === 'SWEEP_RECLAIM'
+          ? getSweepReclaimAutoExec()
+          : parsed.type === 'ORDER_BLOCK'
+          ? getOrderBlockAutoExec()
+          : true,
+    };
+  } catch {
+    return defaultStatus;
+  }
+}
+
+/**
+ * Updates the currently armed execution status and notifies listeners.
+ */
+export function setArmedExecutionStatus(status: ArmedExecutionStatus): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_ARMED_EXECUTION, JSON.stringify(status));
+    const event = new CustomEvent(FLOW_STATE_ARMED_STATE_CHANGED, { detail: status });
+    window.dispatchEvent(event);
+  } catch (err) {
+    console.warn('[scannerPresets] Failed to set armed execution status:', err);
+  }
+}
+
+/**
+ * Arms any preset (Sweep & Reclaim, Order Block, or User Custom) directly into the live automated execution engine.
+ */
+export function applyPresetToLiveExecution(preset: ScannerPreset): void {
+  setActivePresetId(preset.strategyType, preset.id);
+
+  if (preset.strategyType === 'SWEEP_RECLAIM') {
+    const cfg = preset.config as SweepReclaimPresetConfig;
+    const liveAnchors: ('SWING_PIVOT' | 'ASIAN' | 'LONDON' | 'DAILY')[] = [];
+    if (cfg.anchorTypes?.includes('SWING_PIVOT')) liveAnchors.push('SWING_PIVOT');
+    if (cfg.anchorTypes?.some((t) => t.startsWith('ASIAN'))) liveAnchors.push('ASIAN');
+    if (cfg.anchorTypes?.some((t) => t.startsWith('LONDON'))) liveAnchors.push('LONDON');
+    if (cfg.anchorTypes?.includes('PDH') || cfg.anchorTypes?.includes('PDL')) liveAnchors.push('DAILY');
+
+    updateSweepReclaimLiveSettings({
+      entryMode: cfg.entryMode,
+      enforceDiscountPremiumGate: cfg.enforceDiscountPremiumGate,
+      volumeExpansionThreshold: cfg.volumeExpansionThreshold,
+      deltaDominanceThreshold: cfg.deltaDominanceThreshold,
+      bodyRatioThreshold: cfg.bodyRatioThreshold,
+      stage2Multiple: cfg.stage2Multiple,
+      stage3Multiple: cfg.stage3Multiple,
+      enableStructuralTrail: cfg.enableStructuralTrail,
+      enableProfitRatchet: cfg.enableProfitRatchet,
+      anchorTypes: liveAnchors.length > 0 ? liveAnchors : ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'],
+    });
+
+    setArmedExecutionStatus({
+      type: 'SWEEP_RECLAIM',
+      id: preset.id,
+      name: preset.name,
+      isAutoExecEnabled: getSweepReclaimAutoExec(),
+      symbol: cfg.symbol || 'ETHUSDC',
+      timeframe: cfg.timeframe || '15m',
+      updatedAt: Date.now(),
+    });
+  } else if (preset.strategyType === 'ORDER_BLOCK') {
+    const cfg = preset.config as OrderBlockPresetConfig;
+    setArmedExecutionStatus({
+      type: 'ORDER_BLOCK',
+      id: preset.id,
+      name: preset.name,
+      isAutoExecEnabled: getOrderBlockAutoExec(),
+      symbol: cfg.symbol || 'ETHUSDC',
+      timeframe: cfg.timeframe || '15m',
+      updatedAt: Date.now(),
+    });
+  }
+
+  // Purge any transient condition locks so new parameters take effect on the current tick
+  purgeConditionCache();
+}
+
+/**
+ * Arms a custom Equation Builder strategy for live evaluation.
+ */
+export function armCustomStrategy(strategy: { id: string; name: string; target_environment?: string }): void {
+  setArmedExecutionStatus({
+    type: 'CUSTOM_STRATEGY',
+    id: strategy.id,
+    name: strategy.name,
+    isAutoExecEnabled: true,
+    symbol: 'ETHUSDC',
+    timeframe: '5m',
+    updatedAt: Date.now(),
+  });
+
+  purgeConditionCache();
+}
+

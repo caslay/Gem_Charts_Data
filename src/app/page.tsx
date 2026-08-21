@@ -15,6 +15,7 @@ import ManualOrderPanel from '@/components/ManualOrderPanel';
 import OrderFlowTimelineRibbon from '@/components/OrderFlowTimelineRibbon';
 import OrderFlowTimelineModal from '@/components/modals/OrderFlowTimelineModal';
 import LiveOrderBlockModal from '@/components/modals/LiveOrderBlockModal';
+import LiveCockpitStatusBadge from '@/components/LiveCockpitStatusBadge';
 import { useLiveOrderBlockExecution } from '@/hooks/useLiveOrderBlockExecution';
 import { useAutomatedStrategyExecution } from '@/hooks/useAutomatedStrategyExecution';
 import { calculateATR } from '@/lib/riskEngine';
@@ -350,30 +351,41 @@ export default function Home() {
             <LiveTicker variant="large" />
           </div>
 
-          {/* Timeframe selector + hamburger */}
-          <div className="flex items-center gap-3 shrink-0">
-            {/* Alert Sounds Config Button */}
+          {/* Toolbar & Live Execution HUD Controls */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            {/* Persistent Cockpit Execution Status Badge */}
+            <LiveCockpitStatusBadge onClick={() => setIsLiveOBModalOpen(true)} variant="compact" />
+
+            {/* Alert Sounds & Command Center Button */}
             <button
               onClick={() => {
                 setCommandCenterTab('strategy');
                 setIsSoundSettingsOpen(true);
               }}
-              className="bg-card border border-card-border hover:border-accent text-muted hover:text-foreground px-3 py-1.5 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm"
+              className="bg-slate-950/80 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white px-3 py-1.5 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm"
               title="Open Command Center"
             >
               <Settings size={12} />
-              <span className="hidden sm:inline">[ COMMAND CENTER ]</span>
+              <span className="hidden xl:inline">[ COMMAND CENTER ]</span>
             </button>
 
+            {/* Manual Trading Toggle Button */}
             <button
               onClick={() => setIsManualTradingActive((prev) => !prev)}
-              className={`border px-3.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm ${
+              className={`border px-3.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-widest transition-all duration-200 rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm ${
                 isManualTradingActive
-                  ? 'bg-accent text-accent-foreground border-accent shadow-[0_0_12px_rgba(168,85,247,0.2)]'
-                  : 'bg-card border-card-border text-muted hover:text-foreground hover:border-accent'
+                  ? 'bg-purple-400 border-purple-300 text-slate-950 shadow-[0_0_12px_rgba(192,132,252,0.45)]'
+                  : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
               }`}
             >
-              <Shield size={12} className={isManualTradingActive ? 'animate-pulse' : ''} />
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isManualTradingActive
+                    ? 'bg-slate-950 shadow-[0_0_4px_rgba(0,0,0,0.5)]'
+                    : 'bg-slate-600'
+                }`}
+              />
+              <Shield size={12} className={isManualTradingActive ? 'text-slate-950' : 'text-slate-500'} />
               <span>[ MANUAL TRADING ]</span>
             </button>
 
@@ -383,7 +395,7 @@ export default function Home() {
             <button
               id="btn-open-sidebar"
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 bg-card border border-card-border text-muted hover:text-foreground hover:border-accent transition-all rounded-full"
+              className="lg:hidden p-2 bg-slate-950/80 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-all rounded-full"
               aria-label="Open sidebar"
             >
               <Menu className="w-4 h-4" />

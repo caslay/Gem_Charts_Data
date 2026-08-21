@@ -462,6 +462,7 @@ export function useAutomatedStrategyExecution(
     setEngineConfig(prev => ({
       ...prev,
       compoundingRiskPct: next.compoundingRiskPct ?? prev.compoundingRiskPct,
+      stage1Multiple: next.stage1Multiple ?? prev.stage1Multiple,
       stage2Multiple: next.stage2Multiple ?? prev.stage2Multiple,
       stage3Multiple: next.stage3Multiple ?? prev.stage3Multiple,
       enableStructuralTrail: next.enableStructuralTrail ?? prev.enableStructuralTrail,
@@ -471,6 +472,7 @@ export function useAutomatedStrategyExecution(
     if (engineRef.current) {
       engineRef.current.updateConfig({
         compoundingRiskPct: next.compoundingRiskPct,
+        stage1Multiple: next.stage1Multiple,
         stage2Multiple: next.stage2Multiple,
         stage3Multiple: next.stage3Multiple,
         enableStructuralTrail: next.enableStructuralTrail,

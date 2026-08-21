@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import MatrixConfigDrawer from "./MatrixConfigDrawer";
 import PotentialTradesModal from "./modals/PotentialTradesModal";
+import LiveOrderBlockModal from "./modals/LiveOrderBlockModal";
+import LiveCockpitStatusBadge from "./LiveCockpitStatusBadge";
 import { useMarketDataContext } from "@/context/MarketDataContext";
 import { LiveTicker } from "./LiveTicker";
 
@@ -31,6 +33,7 @@ export function NavigationHeader() {
 
   const [isMatrixOpen, setIsMatrixOpen] = useState(false);
   const [isTradesModalOpen, setIsTradesModalOpen] = useState(false);
+  const [isLiveOBModalOpen, setIsLiveOBModalOpen] = useState(false);
   const [resetStatus, setResetStatus] = useState<ResetStatus>('idle');
   const [cairoTime, setCairoTime] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -94,76 +97,60 @@ export function NavigationHeader() {
             <div className="w-7 h-7 rounded bg-gradient-to-tr from-purple-600 to-indigo-600 dark:from-purple-500 dark:to-emerald-500 flex items-center justify-center shadow-md">
               <span className="text-white text-xs font-black tracking-tighter">FS</span>
             </div>
-            <span className="px-1.5 py-0.5 bg-accent/10 text-[8px] font-black text-accent border border-accent/20 leading-none rounded-sm">
+            <span className="px-1.5 py-0.5 bg-accent/10 text-[8px] font-black text-accent border border-accent/20 leading-none rounded-sm font-mono">
               V{SYSTEM_VERSION}
             </span>
           </div>
 
-          {/* CENTER SECTION (Tactical Link Group Switcher - Premium Tabs) */}
-          <div className="hidden md:flex items-center bg-background/50 border border-card-border rounded-full p-1 gap-0.5">
-            <Link
-              href="/"
-              className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-wider uppercase transition-all duration-300 ${pathname === '/'
-                ? 'bg-accent text-accent-foreground shadow-sm shadow-accent/25'
-                : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
-                }`}
-            >
-              LIVE HUD
-            </Link>
-            <Link
-              href="/backtest"
-              className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-wider uppercase transition-all duration-300 ${pathname === '/backtest'
-                ? 'bg-accent text-accent-foreground shadow-sm shadow-accent/25'
-                : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
-                }`}
-            >
-              BACKTEST
-            </Link>
-            <Link
-              href="/quant-lab"
-              className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-wider uppercase transition-all duration-300 ${pathname === '/quant-lab'
-                ? 'bg-accent text-accent-foreground shadow-sm shadow-accent/25'
-                : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'}`}
-            >
-              QUANT LAB
-            </Link>
-            <Link
-              href="/compounding"
-              className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-wider uppercase transition-all duration-300 ${pathname === '/compounding'
-                ? 'bg-accent text-accent-foreground shadow-sm shadow-accent/25'
-                : 'text-slate-600 dark:text-zinc-400 hover:text-foreground'
-                }`}
-            >
-              COMPOUNDING
-            </Link>
-            <Link
-              href="/quant-sandbox"
-              className={`px-3 py-1.5 rounded-full text-[10px] font-black tracking-wider uppercase transition-all duration-300 ${pathname === '/quant-sandbox'
-                ? 'bg-purple-600 text-white shadow-sm shadow-purple-500/25'
-                : 'text-purple-400 hover:text-purple-300 bg-purple-950/40 border border-purple-800/40'
-                }`}
-            >
-              UI SANDBOX
-            </Link>
+          {/* CENTER SECTION (Tactical Link Group Switcher - Dark Brutalist Active Contract) */}
+          <div className="hidden md:flex items-center bg-slate-950/80 border border-slate-800/80 rounded-full p-1 gap-1 shadow-inner">
+            {[
+              { href: '/', label: 'LIVE HUD' },
+              { href: '/backtest', label: 'BACKTEST' },
+              { href: '/quant-lab', label: 'QUANT LAB' },
+              { href: '/compounding', label: 'COMPOUNDING' },
+              { href: '/quant-sandbox', label: 'UI SANDBOX' },
+            ].map((link) => {
+              const isActive = pathname === link.href;
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className={`px-3.5 py-1.5 rounded-full text-[10px] font-mono font-black tracking-wider uppercase transition-all duration-200 flex items-center gap-1.5 ${
+                    isActive
+                      ? 'bg-slate-900 border border-cyan-500/80 text-white shadow-[0_0_12px_rgba(6,182,212,0.25)]'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
+                  }`}
+                >
+                  {isActive && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee] animate-pulse shrink-0" />
+                  )}
+                  <span>{link.label}</span>
+                </Link>
+              );
+            })}
           </div>
 
-          {/* RIGHT SECTION (Awareness & Global Triggers) */}
+          {/* RIGHT SECTION (Awareness, Execution Cockpit & Global Triggers) */}
           <div className="flex items-center gap-2.5">
 
+            {/* Persistent Live Cockpit Execution Status Badge */}
+            <LiveCockpitStatusBadge onClick={() => setIsLiveOBModalOpen(true)} variant="full" />
+
             {/* Session Indicator */}
-            <div className="hidden lg:flex px-2 py-1 bg-background/50 border border-card-border rounded text-[9px] font-mono font-bold text-accent shrink-0 uppercase">
+            <div className="hidden xl:flex px-2 py-1 bg-background/50 border border-card-border rounded text-[9px] font-mono font-bold text-accent shrink-0 uppercase">
               [{session}]
             </div>
 
             {/* Time & Live Sync — cairo clock and pulse dot */}
-            <div className="flex items-center gap-2 px-2.5 py-1 bg-background/50 border border-card-border rounded-full shrink-0">
+            <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-background/50 border border-card-border rounded-full shrink-0">
               <span className={`w-1.5 h-1.5 rounded-full ${wsStatus === 'OPEN' ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-500'}`} />
               <span className="font-mono text-[9px] font-black text-muted uppercase leading-none tracking-wider">
                 {cairoTime ? `${cairoTime} UTC+3` : '--:-- UTC+3'}
               </span>
             </div>
 
-            <div className="w-px h-4 bg-card-border" />
+            <div className="w-px h-4 bg-card-border hidden sm:block" />
 
             {/* Secondary Pages Icons */}
             <Link
@@ -254,6 +241,11 @@ export function NavigationHeader() {
       <PotentialTradesModal
         isOpen={isTradesModalOpen}
         onClose={() => setIsTradesModalOpen(false)}
+      />
+
+      <LiveOrderBlockModal
+        isOpen={isLiveOBModalOpen}
+        onClose={() => setIsLiveOBModalOpen(false)}
       />
     </>
   );

@@ -26,6 +26,7 @@ import {
   deleteCustomPreset,
   getActivePresetId,
   setActivePresetId,
+  applyPresetToLiveExecution,
   syncPresetsWithCloud,
   SCANNER_PRESETS_CHANGED_EVENT
 } from '@/lib/quantEngine/scannerPresets';
@@ -97,8 +98,9 @@ export default function ScannerPresetControlDeck({
 
     setActivePresetId(strategyType, presetId);
     setActivePresetIdState(presetId);
+    applyPresetToLiveExecution(selected);
     onApplyPreset(selected);
-    triggerFeedback(`Loaded: ${selected.name}`);
+    triggerFeedback(`Armed Live Engine: ${selected.name}`);
   };
 
   // Handle Save New Preset
@@ -117,11 +119,13 @@ export default function ScannerPresetControlDeck({
 
     setActivePresetId(strategyType, saved.id);
     setActivePresetIdState(saved.id);
+    applyPresetToLiveExecution(saved);
+    onApplyPreset(saved);
     setIsSaveModalOpen(false);
     setPresetNameInput('');
     setPresetDescInput('');
     refreshPresets();
-    triggerFeedback(`Saved preset: "${saved.name}"`);
+    triggerFeedback(`Saved & Armed: "${saved.name}"`);
   };
 
   // Handle Overwrite / Update Active Custom Preset
@@ -298,13 +302,16 @@ export default function ScannerPresetControlDeck({
               key={fp.id}
               type="button"
               onClick={() => handleSelectPreset(fp.id)}
-              className={`text-[9px] font-mono px-2 py-0.5 rounded border transition shrink-0 cursor-pointer ${
+              className={`text-[9px] font-mono px-2.5 py-1 rounded-md border transition-all duration-200 shrink-0 cursor-pointer flex items-center gap-1.5 ${
                 isSelected
-                  ? 'bg-cyan-950/80 border-cyan-500 text-cyan-300 shadow-[0_0_6px_rgba(6,182,212,0.2)]'
-                  : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                  ? 'bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_12px_rgba(34,211,238,0.5)] font-black'
+                  : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
               }`}
             >
-              {fp.name.replace(' (Platform Default)', '').replace(' Scalper', '').replace(' Sniper', '')}
+              {isSelected && (
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-950 shadow-[0_0_4px_rgba(0,0,0,0.5)] shrink-0" />
+              )}
+              <span>{fp.name.replace(' (Platform Default)', '').replace(' Scalper', '').replace(' Sniper', '')}</span>
             </button>
           );
         })}

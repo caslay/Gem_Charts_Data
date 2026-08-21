@@ -1,8 +1,31 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.37
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.38
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-20 (V16.37 — Institutional Capital Growth & Chronological Equity Ledger)  
+> **Last Updated:** 2026-08-21 (V16.38 — High-Contrast Active State & Multi-Timeframe Stream Matrix Overhaul)  
+
+## 🆕 V16.38 Changelog — High-Contrast Active State & Multi-Timeframe Stream Matrix Overhaul (2026-08-21)
+
+### Summary
+Overhauled all active button states, steppers, toggle pills, and Multi-Timeframe Ingestion Matrix cards across the Live Strategy Execution Cockpit modal, Quant Lab workspaces, and global toolbars. Resolved dark-on-dark contrast ambiguities by enforcing high-luminance glowing titles, pulsating indicator pips, vivid subtext, and rich container backgrounds.
+
+### Key Features & Architectural Directives
+- **Multi-Timeframe Ingestion Matrix High-Contrast Styling (`src/components/modals/LiveOrderBlockModal.tsx`):**
+  - Replaced black text (`text-slate-950`) and dark indicator dots on dark backgrounds with glowing color-coded typography and pulsating status LEDs:
+    - **5M Precision Stream:** Active state renders `bg-amber-950/40 border-2 border-amber-400 text-amber-300 shadow-[0_0_15px_rgba(251,191,36,0.3)]` with `text-amber-400 font-mono font-black text-xs uppercase`, pulsating amber LED dot (`bg-amber-400 shadow-[0_0_8px_#fbbf24] animate-pulse`), and crisp `text-amber-200 font-bold` subtext.
+    - **15M Structural Stream:** Active state renders `bg-purple-950/40 border-2 border-purple-400 text-purple-300 shadow-[0_0_15px_rgba(192,132,252,0.3)]` with `text-purple-400 font-mono font-black text-xs uppercase`, pulsating purple LED dot (`bg-purple-400 shadow-[0_0_8px_#c084fc] animate-pulse`), and crisp `text-purple-200 font-bold` subtext.
+    - **1H Macro Stream:** Active state renders `bg-cyan-950/40 border-2 border-cyan-400 text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.3)]` with `text-cyan-400 font-mono font-black text-xs uppercase`, pulsating cyan LED dot (`bg-cyan-400 shadow-[0_0_8px_#22d3ee] animate-pulse`), and crisp `text-cyan-200 font-bold` subtext.
+    - **Inactive/Suspended:** Clean muted container `bg-slate-950/80 border border-slate-800 text-slate-500` with muted gray pip `bg-slate-700` and `STREAM SUSPENDED` label.
+- **Full UI Active Button Contrast Overhaul (`LiveOrderBlockModal.tsx`, `ScannerPresetControlDeck.tsx`, `SweepReclaimWorkspace.tsx`, `TimeframeSwitcher.tsx`, `page.tsx`):**
+  - **Pill Buttons & Steppers:** 3-Pillar Displacement steppers, 8 Retest Entry Models, Valuation Gate, Multi-Stage Harvest Steppers, Temporal/Statistical Gates, and Session Killzones all feature high-luminance solid fills (`bg-cyan-400`, `bg-emerald-400`, `bg-amber-400`, `bg-purple-400`) with ultra-readable bold text.
+- **React 19 / Next.js 16 Script Tag Warning Filter (`src/components/ThemeProvider.tsx`):**
+  - Added development-mode console error filter to silence the React 19 false-positive script warning (`Encountered a script tag while rendering React component`) caused by `next-themes`'s inline anti-FOUC theme script.
+- **Verification:**
+  - `npx tsc --noEmit` verified with **0 errors**.
+  - `npx tsx scratch/test_live_execution_ui_parity.ts` (4/4 passed).
+  - `npx tsx scratch/test_live_preset_sync.ts` (4/4 passed).
+
+---
 
 ## 🆕 V16.37 Changelog — Institutional Capital Growth & Chronological Equity Ledger (2026-08-20)
 
@@ -137,6 +160,58 @@ Implemented institutional production-grade risk hardening and concurrency guardr
   - For normal structural setups ($\ge 0.15\%$), exact ICT structural invalidation points are preserved without modification.
 - **Directive 3: Automated Verification Suite (`scratch/test_hardening_guardrails.ts`):**
   - Comprehensive automated test suite verified 100% enforcement of concurrency locks, veto messages, micro-wick clamping, position sizing safety, and backtest integrity.
+  - `npx tsc --noEmit` exits with **0 errors**.
+
+---
+
+## 🆕 V16.35 Changelog — 1:1 Live Execution UI Parity with Quant Lab & Master Blueprint (2026-08-21)
+
+### Summary
+Achieved complete 1:1 architectural and UI parity between the Live Strategy Execution Drawer/Cockpit (`LiveOrderBlockModal.tsx`), the Quant Lab scanners, and the Master Blueprint. Exposed all 8 Retest Entry Models (`SWEEP_OB_MT`, `OB_PROXIMAL`, `FVG_CE`, `FVG_PROXIMAL`, `FVG_DISTAL`, `OTE_62`, `SHELF_LEVEL`, `RECLAIM_LEVEL`), dynamic multi-stage trade management controls (TP1 scale-out with auto-breakeven, TP2 harvest, TP3 runner with HTF DOL liquidity pool routing, and structural FVG trailing stop loss with +1.0R profit ratchet), and comprehensive quant gatekeeper toggles (Execution timing, OLS sensitivity, Runaway momentum protection, Session killzones, and Directional locks).
+
+### Key Features & Architectural Directives
+- **Directive 1: Full 8-Mode Retest Entry Model Selector in Live Cockpit (`LiveOrderBlockModal.tsx`, `strategyExecutionConfig.ts`):**
+  - Exposed all 8 Retest Entry Models in the live settings drawer with real-time binding to `resolveRetestEntryPrice()` on the next incoming market tick.
+  - Added high-contrast Dark Brutalist pill buttons with active indicator pips and tooltips for each geometry.
+- **Directive 2: Dynamic Multi-Stage Trade Management Controls (`strategyExecutionConfig.ts`, `AutomatedStrategyExecutionEngine.ts`):**
+  - Added `enableTp1AutoBreakeven` toggle and `stage1Multiple` target stepper (`0.75R`, `1.00R`, `1.25R`) to automatically scale out 40%-50% and move active SL to entry (0.0R) upon TP1 hit.
+  - Added `stage2Multiple` harvest stepper (`1.50R`, `2.00R`, `2.50R`).
+  - Added `stage3Multiple` runner stepper (`3.00R`, `4.00R`, `5.00R`) and `routeRunnerToHtfDol` toggle to dynamically route runner exits to resting HTF liquidity pools.
+  - Preserved `enableStructuralTrail` (Structural FVG CE trailing stop) and `enableProfitRatchet` (+1.0R floor upon Stage 2 hit).
+- **Directive 3: Temporal, Statistical, Session & Directional Gate Toggles (`strategyExecutionConfig.ts`, `LiveOrderBlockModal.tsx`):**
+  - Execution Timing: `⚡ INSTANT (Tick-Speed Debounce)` vs `⏳ ON_CLOSE (Candle-Close Gate)`.
+  - OLS Statistical Sensitivity: `STRICT (R² ≥ 0.70 & p < 0.01)`, `RELAXED (R² ≥ 0.50 & p < 0.05)`, and `OFF (Bypass OLS)`.
+  - Momentum Override: `Runaway Momentum Override` toggle for rapid trend protection.
+  - Session Killzone Gates: Active filter toggles for `Asian Session`, `London Killzone`, and `NY AM/PM Killzone`.
+  - Directional Execution Locks: `DUAL (Longs & Shorts)`, `LONGS ONLY`, `SHORTS ONLY`.
+- **Directive 4: Automated Verification Suite (`scratch/test_live_execution_ui_parity.ts`):**
+  - Verified all 8 entry modes, price resolver calculations, multi-stage harvest settings, temporal/statistical gates, and reactive event dispatching (4/4 stages passed).
+  - `npx tsc --noEmit` exits with **0 errors**.
+
+---
+
+## 🆕 V16.34 Changelog — UI Active-State Overhaul & Full-Spectrum Strategy Cockpit Synchronization (2026-08-21)
+
+### Summary
+Engineered a comprehensive active-state visual hierarchy across the top navigation bar, engine mode tabs, and timeframe selectors adhering to the Dark Brutalist design system with illuminated glowing pips. Expanded the Centralized Reactive Execution Store and live automated pipeline to cover the FULL spectrum of strategy options (Sweep & Reclaim presets, Institutional Order Block presets, and custom Equation Builder strategies) with zero logic bleed via real-time transient condition cache purging.
+
+### Key Features & Architectural Directives
+- **Directive 1: High-Contrast Dark Brutalist Active States & Visual Hierarchy (`NavigationHeader.tsx`, `TimeframeSwitcher.tsx`, `quant-lab/page.tsx`, `page.tsx`):**
+  - Upgraded top navigation links (`LIVE HUD`, `BACKTEST`, `QUANT LAB`, `COMPOUNDING`, `UI SANDBOX`) with high-contrast active borders (`border-cyan-500/80`), lifted backgrounds (`bg-slate-900`), bright text, and illuminated glowing status pips (`w-1.5 h-1.5 bg-cyan-400 shadow-[0_0_8px_#22d3ee] animate-pulse`).
+  - Redesigned Quant Lab engine mode tabs (`SWEEP_RECLAIM_SCANNER`, `OB_SCANNER`, `STRATEGY_BACKTEST`) with color-coded high-contrast active states and animated status pips (Cyan, Emerald, Purple).
+  - Overhauled Timeframe Switcher trigger and dropdown items with active indicator pips and high-contrast borders.
+  - Enhanced Command Center and Manual Trading toolbar controls with Dark Brutalist styling.
+- **Directive 2: Full-Spectrum Strategy & Preset Synchronization (`scannerPresets.ts`, `EquationBuilder.tsx`, `useStrategyEvaluator.ts`):**
+  - Extended the Centralized Reactive Execution Store with `StrategyArmedType = 'SWEEP_RECLAIM' | 'ORDER_BLOCK' | 'CUSTOM_STRATEGY'` and `ArmedExecutionStatus`.
+  - Implemented `applyPresetToLiveExecution(preset)` and `armCustomStrategy(strategy)` to immediately arm live execution parameters into `SweepReclaimLiveSettings`, `AutomatedStrategyExecutionEngine`, and `useStrategyEvaluator` on the current tick.
+  - Implemented transient condition cache purging via `purgeConditionCache()` and `FLOW_STATE_PURGE_CACHE_EVENT`, clearing debounce locks (`firedLockRef.current.clear()`) upon preset or strategy switch to eliminate logic bleed.
+- **Directive 3: Persistent Live Cockpit Execution Status Badge (`LiveCockpitStatusBadge.tsx`):**
+  - Created `<LiveCockpitStatusBadge />` embedded across the top navigation bar, Quant Lab header, and Live HUD toolbar.
+  - Dynamically displays `🟢 ARMED: [PRESET_NAME]` with pulsing emerald glow when auto-execution is armed, and `⚪ STANDBY: [PRESET_NAME]` in manual/standby mode.
+  - One-click trigger opens the Live Strategy Execution Cockpit modal (`LiveOrderBlockModal.tsx`).
+- **Directive 4: Automated Verification Suite (`scratch/test_live_preset_sync.ts`):**
+  - Verified live arming for built-in S&R presets, OB presets, and custom Equation Builder strategies (4/4 stages passed).
+  - Verified transient condition cache purging and parameter ingestion into `SweepReclaimLiveSettings`.
   - `npx tsc --noEmit` exits with **0 errors**.
 
 ---

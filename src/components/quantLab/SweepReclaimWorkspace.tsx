@@ -477,56 +477,56 @@ export default function SweepReclaimWorkspace({
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("SWING_PIVOT")}
-              className={`px-3 py-2 rounded text-xs font-mono font-semibold border flex items-center justify-between transition ${
+              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${
                 enabledAnchors.SWING_PIVOT
-                  ? "bg-cyan-950/40 border-cyan-500/50 text-cyan-300"
-                  : "bg-slate-950 border-slate-800 text-slate-500"
+                  ? "bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]"
+                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
               }`}
             >
               <span>Major Pivots</span>
-              {enabledAnchors.SWING_PIVOT && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+              {enabledAnchors.SWING_PIVOT && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
             </button>
 
             <button
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("ASIAN")}
-              className={`px-3 py-2 rounded text-xs font-mono font-semibold border flex items-center justify-between transition ${
+              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${
                 enabledAnchors.ASIAN
-                  ? "bg-amber-950/40 border-amber-500/50 text-amber-300"
-                  : "bg-slate-950 border-slate-800 text-slate-500"
+                  ? "bg-amber-400 border-amber-300 text-slate-950 shadow-[0_0_10px_rgba(251,191,36,0.4)]"
+                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
               }`}
             >
               <span>Asian Session (H/L)</span>
-              {enabledAnchors.ASIAN && <Check className="w-3.5 h-3.5 text-amber-400" />}
+              {enabledAnchors.ASIAN && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
             </button>
 
             <button
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("LONDON")}
-              className={`px-3 py-2 rounded text-xs font-mono font-semibold border flex items-center justify-between transition ${
+              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${
                 enabledAnchors.LONDON
-                  ? "bg-blue-950/40 border-blue-500/50 text-blue-300"
-                  : "bg-slate-950 border-slate-800 text-slate-500"
+                  ? "bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]"
+                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
               }`}
             >
               <span>London Session (H/L)</span>
-              {enabledAnchors.LONDON && <Check className="w-3.5 h-3.5 text-blue-400" />}
+              {enabledAnchors.LONDON && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
             </button>
 
             <button
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("DAILY")}
-              className={`px-3 py-2 rounded text-xs font-mono font-semibold border flex items-center justify-between transition ${
+              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${
                 enabledAnchors.DAILY
-                  ? "bg-purple-950/40 border-purple-500/50 text-purple-300"
-                  : "bg-slate-950 border-slate-800 text-slate-500"
+                  ? "bg-purple-400 border-purple-300 text-slate-950 shadow-[0_0_10px_rgba(192,132,252,0.4)]"
+                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
               }`}
             >
               <span>Previous Day (PDH/PDL)</span>
-              {enabledAnchors.DAILY && <Check className="w-3.5 h-3.5 text-purple-400" />}
+              {enabledAnchors.DAILY && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
             </button>
           </div>
         </div>
@@ -615,6 +615,7 @@ export default function SweepReclaimWorkspace({
                 <option value="FVG_DISTAL">Displacement FVG Distal Edge</option>
                 <option value="OTE_62">62% OTE Fibonacci Retracement</option>
                 <option value="SHELF_LEVEL">Reclaimed Anchor Shelf Level</option>
+                <option value="RECLAIM_LEVEL">Reclaimed Horizontal Level (Explicit)</option>
               </select>
               <span className="text-[9px] text-slate-500 font-mono">
                 {getEntryModeDescription(entryMode)}
