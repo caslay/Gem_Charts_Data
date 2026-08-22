@@ -16,6 +16,7 @@ import ChartLayerHud from './ChartLayerHud';
 import { useDrawings } from '@/hooks/useDrawings';
 import DrawingCanvasOverlay from './drawings/DrawingCanvasOverlay';
 import DrawingToolbar from './drawings/DrawingToolbar';
+import type { SweepReclaimOverlayData } from '@/hooks/useBacktestStrategyExecution';
 // Imports of detectActiveFVGs, mapAndConsolidateFVGs, and analyzeMarketStructure removed to prevent main-thread blocking calculations
 
 function findCandleByTime(candles: Candle[] | undefined, targetSec: number): Candle | undefined {
@@ -62,6 +63,7 @@ interface ChartProps {
   openTrades?: any[];
   onUpdateTradeLevels?: (tradeId: string, tp: number | null, sl: number | null) => Promise<void>;
   symbol?: string;
+  srOverlay?: SweepReclaimOverlayData | null;
 }
 
 export default function Chart({
@@ -88,6 +90,7 @@ export default function Chart({
   openTrades = [],
   onUpdateTradeLevels,
   symbol = 'ETHUSDC',
+  srOverlay = null,
 }: ChartProps) {
   const { theme } = useTheme();
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -231,6 +234,11 @@ export default function Chart({
   const [snappedPrice, setSnappedPrice] = useState<number | null>(null);
   const [snapNotification, setSnapNotification] = useState<string | null>(null);
   const [isSnapDropdownOpen, setIsSnapDropdownOpen] = useState(false);
+
+  const isSnapEnabledRef = useRef(isSnapEnabled);
+  isSnapEnabledRef.current = isSnapEnabled;
+  const snapTargetRef = useRef(snapTarget);
+  snapTargetRef.current = snapTarget;
 
   // Keyboard shortcut effect for Magnet Snapping (Key: 'S')
   useEffect(() => {
@@ -565,7 +573,19 @@ export default function Chart({
       .filter((pos): pos is { id: string; y: number; price: number; color: string; status: 'active' | 'triggered' } => pos.y !== null);
 
     setAlertLabelPositions((prev) => {
-      if (prev.length === 0 && positions.length === 0) return prev;
+      if (
+        prev.length === positions.length &&
+        prev.every(
+          (p, i) =>
+            p.id === positions[i].id &&
+            p.y === positions[i].y &&
+            p.price === positions[i].price &&
+            p.color === positions[i].color &&
+            p.status === positions[i].status
+        )
+      ) {
+        return prev;
+      }
       return positions;
     });
   }, [alerts]);
@@ -909,15 +929,48 @@ export default function Chart({
         }
       }
     });
-  }, [openTrades]);
 
-  // Sync coordinates when openTrades or data changes
+    // ── Update Sweep & Reclaim Overlay DOM Lines & Labels ──
+    if (srOverlay) {
+      const updateSrLineAndLabel = (idPrefix: string, price: number | null | undefined, xOffset = 10) => {
+        const lineEl = document.getElementById(`svg-sr-line-${idPrefix}`);
+        const labelEl = document.getElementById(`svg-sr-label-${idPrefix}`);
+        const y = price !== null && price !== undefined && price > 0 ? series.priceToCoordinate(price) : null;
+        if (lineEl) {
+          if (y !== null && !isNaN(y)) {
+            lineEl.setAttribute('y1', String(y));
+            lineEl.setAttribute('y2', String(y));
+          } else {
+            lineEl.setAttribute('y1', '-1000');
+            lineEl.setAttribute('y2', '-1000');
+          }
+        }
+        if (labelEl) {
+          if (y !== null && !isNaN(y)) {
+            labelEl.setAttribute('transform', `translate(${xOffset}, ${y})`);
+          } else {
+            labelEl.setAttribute('transform', `translate(${xOffset}, -1000)`);
+          }
+        }
+      };
+
+      updateSrLineAndLabel('anchor', srOverlay.anchorLevel, 10);
+      updateSrLineAndLabel('reclaim', srOverlay.fvgCe ?? srOverlay.reclaimPrice ?? srOverlay.sweepObMt, 10);
+      updateSrLineAndLabel('entry', srOverlay.entryPrice, 10);
+      updateSrLineAndLabel('sl', srOverlay.stopLoss, 10);
+      updateSrLineAndLabel('tp1', srOverlay.target1, 10);
+      updateSrLineAndLabel('tp2', srOverlay.target2, 10);
+      updateSrLineAndLabel('tp3', srOverlay.target3, 10);
+    }
+  }, [openTrades, srOverlay]);
+
+  // Sync coordinates when openTrades, srOverlay, or data changes
   useEffect(() => {
     const timer = setTimeout(() => {
       updateSvgCoordinates();
     }, 50);
     return () => clearTimeout(timer);
-  }, [openTrades, data, updateSvgCoordinates]);
+  }, [openTrades, srOverlay, data, updateSvgCoordinates]);
 
   // ── Drag & Drop Pointer Event Handlers ─────────────────────────────────────
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -1171,6 +1224,7 @@ export default function Chart({
 
     // Keep track of the last hovered candle values to avoid duplicate state updates
     let prevHovered: { open: number; high: number; low: number; close: number; volume: number } | null = null;
+    let prevSnapped: number | null = null;
 
     // Crosshair movement listener
     const handleCrosshairMove = (param: any) => {
@@ -1183,24 +1237,33 @@ export default function Chart({
           const low = seriesData.low !== undefined ? seriesData.low : seriesData.close;
           const close = seriesData.close;
 
-          // Target anchor calculation for magnet snapping
-          let calculatedSnap = close;
-          if (snapTarget === 'HIGH') calculatedSnap = high;
-          else if (snapTarget === 'LOW') calculatedSnap = low;
-          else if (snapTarget === 'OPEN') calculatedSnap = open;
-          else if (snapTarget === 'CLOSE') calculatedSnap = close;
-          else if (snapTarget === 'NEAREST') {
-            if (param.point && candlestickSeries) {
-              const yPrice = candlestickSeries.coordinateToPrice(param.point.y);
-              if (yPrice !== null) {
-                const candidates = [open, high, low, close];
-                calculatedSnap = candidates.reduce((prev, curr) =>
-                  Math.abs(curr - yPrice) < Math.abs(prev - yPrice) ? curr : prev
-                );
+          // Target anchor calculation for magnet snapping (ONLY when magnet snapping is enabled)
+          if (isSnapEnabledRef.current) {
+            let calculatedSnap = close;
+            const currentTarget = snapTargetRef.current;
+            if (currentTarget === 'HIGH') calculatedSnap = high;
+            else if (currentTarget === 'LOW') calculatedSnap = low;
+            else if (currentTarget === 'OPEN') calculatedSnap = open;
+            else if (currentTarget === 'CLOSE') calculatedSnap = close;
+            else if (currentTarget === 'NEAREST') {
+              if (param.point && candlestickSeries) {
+                const yPrice = candlestickSeries.coordinateToPrice(param.point.y);
+                if (yPrice !== null) {
+                  const candidates = [open, high, low, close];
+                  calculatedSnap = candidates.reduce((prev, curr) =>
+                    Math.abs(curr - yPrice) < Math.abs(prev - yPrice) ? curr : prev
+                  );
+                }
               }
             }
+            if (prevSnapped !== calculatedSnap) {
+              prevSnapped = calculatedSnap;
+              setSnappedPrice(calculatedSnap);
+            }
+          } else if (prevSnapped !== null) {
+            prevSnapped = null;
+            setSnappedPrice(null);
           }
-          setSnappedPrice(calculatedSnap);
 
           // Fast binary search lookup for hovered candle volume
           let volume = 0;
@@ -1227,7 +1290,10 @@ export default function Chart({
       }
 
       cursorTimeRef.current = null;
-      setSnappedPrice(null);
+      if (prevSnapped !== null) {
+        prevSnapped = null;
+        setSnappedPrice(null);
+      }
       if (prevHovered !== null) {
         prevHovered = null;
         setHoveredCandle(null);
@@ -1668,10 +1734,38 @@ export default function Chart({
     }
 
     setFvgOverlayBoxes((prev) => {
-      if (prev.length === 0 && boxes.length === 0) return prev;
+      if (
+        prev.length === boxes.length &&
+        prev.every(
+          (b, i) =>
+            b.key === boxes[i].key &&
+            b.top === boxes[i].top &&
+            b.height === boxes[i].height &&
+            b.left === boxes[i].left &&
+            b.width === boxes[i].width &&
+            b.isBullish === boxes[i].isBullish
+        )
+      ) {
+        return prev;
+      }
       return boxes;
     });
   }, [activeFvgs]);
+
+  // Callback refs to stabilize layout scheduler dependencies
+  const updateAlertPositionsRef = useRef(updateAlertPositions);
+  updateAlertPositionsRef.current = updateAlertPositions;
+  const computeFvgOverlayRef = useRef(computeFvgOverlay);
+  computeFvgOverlayRef.current = computeFvgOverlay;
+  const updateSvgCoordinatesRef = useRef(updateSvgCoordinates);
+  updateSvgCoordinatesRef.current = updateSvgCoordinates;
+  const updateCountdownPositionRef = useRef(updateCountdownPosition);
+  updateCountdownPositionRef.current = updateCountdownPosition;
+
+  const loadMoreHistoryRef = useRef(loadMoreHistory);
+  loadMoreHistoryRef.current = loadMoreHistory;
+  const isFetchingMoreRef = useRef(isFetchingMore);
+  isFetchingMoreRef.current = isFetchingMore;
 
   // ── Throttled Layout Update Scheduler (requestAnimationFrame) ──────────────
   const rafScheduledRef = useRef(false);
@@ -1680,12 +1774,12 @@ export default function Chart({
     rafScheduledRef.current = true;
     requestAnimationFrame(() => {
       rafScheduledRef.current = false;
-      updateAlertPositions();
-      computeFvgOverlay();
-      updateSvgCoordinates();
-      updateCountdownPosition();
+      updateAlertPositionsRef.current?.();
+      computeFvgOverlayRef.current?.();
+      updateSvgCoordinatesRef.current?.();
+      updateCountdownPositionRef.current?.();
     });
-  }, [updateAlertPositions, computeFvgOverlay, updateSvgCoordinates, updateCountdownPosition]);
+  }, []);
 
   useEffect(() => {
     const chart = chartRef.current;
@@ -1694,8 +1788,8 @@ export default function Chart({
     const handleChartUpdate = (logicalRange?: any) => {
       scheduleLayoutUpdates();
 
-      if (logicalRange && logicalRange.from < 15 && loadMoreHistory && !isFetchingMore) {
-        loadMoreHistory();
+      if (logicalRange && logicalRange.from < 15 && loadMoreHistoryRef.current && !isFetchingMoreRef.current) {
+        loadMoreHistoryRef.current();
       }
     };
 
@@ -1714,7 +1808,7 @@ export default function Chart({
         priceScaleApi.unsubscribeVisiblePriceRangeChange(handleChartUpdate);
       }
     };
-  }, [alerts, scheduleLayoutUpdates, loadMoreHistory, isFetchingMore]); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduleLayoutUpdates]);
 
   // Recompute FVG overlay whenever activeFvgs or localCandles updates
   useEffect(() => {
@@ -1953,6 +2047,207 @@ export default function Chart({
             </g>
           );
         })}
+
+        {/* Sweep & Reclaim Quantitative Strategy SVG Overlay */}
+        {srOverlay && (
+          <g id="svg-sr-overlay-group">
+            {/* Swept Anchor Line & Label */}
+            <line
+              id="svg-sr-line-anchor"
+              x1="0"
+              x2="100%"
+              y1="-1000"
+              y2="-1000"
+              stroke="#38bdf8"
+              strokeDasharray="6 3"
+              strokeWidth="1.5"
+            />
+            <g id="svg-sr-label-anchor" transform="translate(10, -1000)">
+              <rect x="5" y="-9" width="230" height="18" fill="#0f172a" rx="3" stroke="#38bdf8" strokeWidth="1" />
+              <text x="12" y="4" fill="#38bdf8" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
+                {`⚓ ANCHOR (${srOverlay.anchorName}): $${srOverlay.anchorLevel.toFixed(2)} [SWEPT]`}
+              </text>
+            </g>
+
+            {/* Reclaim Shelf / Displacement FVG CE Line & Label */}
+            {(srOverlay.fvgCe || srOverlay.reclaimPrice || srOverlay.sweepObMt) && (
+              <>
+                <line
+                  id="svg-sr-line-reclaim"
+                  x1="0"
+                  x2="100%"
+                  y1="-1000"
+                  y2="-1000"
+                  stroke="#c084fc"
+                  strokeDasharray="4 3"
+                  strokeWidth="1.5"
+                />
+                <g id="svg-sr-label-reclaim" transform="translate(10, -1000)">
+                  <rect x="5" y="-9" width="240" height="18" fill="#1e1035" rx="3" stroke="#c084fc" strokeWidth="1" />
+                  <text x="12" y="4" fill="#c084fc" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
+                    {`⚡ RECLAIM SHELF / FVG CE: $${(srOverlay.fvgCe ?? srOverlay.reclaimPrice ?? srOverlay.sweepObMt ?? 0).toFixed(2)}`}
+                  </text>
+                </g>
+              </>
+            )}
+
+            {/* Limit Entry Line & Label */}
+            {srOverlay.entryPrice > 0 && (
+              <>
+                <line
+                  id="svg-sr-line-entry"
+                  x1="0"
+                  x2="100%"
+                  y1="-1000"
+                  y2="-1000"
+                  stroke="#38bdf8"
+                  strokeDasharray="3 3"
+                  strokeWidth="2"
+                />
+                <g id="svg-sr-label-entry" transform="translate(10, -1000)">
+                  <rect x="5" y="-9" width="200" height="18" fill="#0c2340" rx="3" stroke="#38bdf8" strokeWidth="1.2" />
+                  <text x="12" y="4" fill="#38bdf8" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
+                    {`🎯 S&R ENTRY (${srOverlay.type === 'BULLISH' ? 'LONG' : 'SHORT'}): $${srOverlay.entryPrice.toFixed(2)}`}
+                  </text>
+                </g>
+              </>
+            )}
+
+            {/* Stop Loss Line & Label (Dynamic Multi-Stage Trailing Color & Label) */}
+            {srOverlay.stopLoss > 0 && (
+              <>
+                <line
+                  id="svg-sr-line-sl"
+                  x1="0"
+                  x2="100%"
+                  y1="-1000"
+                  y2="-1000"
+                  stroke={
+                    srOverlay.isStage2Filled
+                      ? '#34d399'
+                      : srOverlay.isStage1Filled
+                      ? '#facc15'
+                      : '#f43f5e'
+                  }
+                  strokeDasharray="4 2"
+                  strokeWidth="1.5"
+                />
+                <g id="svg-sr-label-sl" transform="translate(10, -1000)">
+                  <rect
+                    x="5"
+                    y="-9"
+                    width={srOverlay.isStage2Filled ? 220 : srOverlay.isStage1Filled ? 215 : 200}
+                    height="18"
+                    fill={
+                      srOverlay.isStage2Filled
+                        ? '#02140f'
+                        : srOverlay.isStage1Filled
+                        ? '#281c03'
+                        : '#2c0b0e'
+                    }
+                    rx="3"
+                    stroke={
+                      srOverlay.isStage2Filled
+                        ? '#34d399'
+                        : srOverlay.isStage1Filled
+                        ? '#facc15'
+                        : '#f43f5e'
+                    }
+                    strokeWidth="1"
+                  />
+                  <text
+                    x="12"
+                    y="4"
+                    fill={
+                      srOverlay.isStage2Filled
+                        ? '#34d399'
+                        : srOverlay.isStage1Filled
+                        ? '#facc15'
+                        : '#f43f5e'
+                    }
+                    fontSize="9.5"
+                    fontFamily="monospace"
+                    fontWeight="bold"
+                  >
+                    {`🛑 S&R SL: $${srOverlay.stopLoss.toFixed(2)} ${
+                      srOverlay.isStage2Filled
+                        ? '(+1.0R FLOOR)'
+                        : srOverlay.isStage1Filled
+                        ? '(FVG CE / BE)'
+                        : '(-1.0R HARD)'
+                    }`}
+                  </text>
+                </g>
+              </>
+            )}
+
+            {/* Stage 1 Target (40% @ 1.0R) - Unmounts when Stage 1 is Filled */}
+            {srOverlay.target1 > 0 && !srOverlay.isStage1Filled && (
+              <>
+                <line
+                  id="svg-sr-line-tp1"
+                  x1="0"
+                  x2="100%"
+                  y1="-1000"
+                  y2="-1000"
+                  stroke="#34d399"
+                  strokeDasharray="4 2"
+                  strokeWidth="1.5"
+                />
+                <g id="svg-sr-label-tp1" transform="translate(10, -1000)">
+                  <rect x="5" y="-9" width="205" height="18" fill="#06281e" rx="3" stroke="#34d399" strokeWidth="1" />
+                  <text x="12" y="4" fill="#34d399" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
+                    {`🏆 TP1 (40% @ 1.0R): $${srOverlay.target1.toFixed(2)}`}
+                  </text>
+                </g>
+              </>
+            )}
+
+            {/* Stage 2 Target (40% @ 1.5R) - Unmounts when Stage 2 is Filled */}
+            {srOverlay.target2 > 0 && !srOverlay.isStage2Filled && (
+              <>
+                <line
+                  id="svg-sr-line-tp2"
+                  x1="0"
+                  x2="100%"
+                  y1="-1000"
+                  y2="-1000"
+                  stroke="#10b981"
+                  strokeDasharray="4 2"
+                  strokeWidth="1.5"
+                />
+                <g id="svg-sr-label-tp2" transform="translate(10, -1000)">
+                  <rect x="5" y="-9" width="205" height="18" fill="#042018" rx="3" stroke="#10b981" strokeWidth="1" />
+                  <text x="12" y="4" fill="#10b981" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
+                    {`💎 TP2 (40% @ 1.5R): $${srOverlay.target2.toFixed(2)}`}
+                  </text>
+                </g>
+              </>
+            )}
+
+            {/* Stage 3 Target (20% @ 3.0R Runner) - Unmounts when Stage 3 is Filled */}
+            {srOverlay.target3 > 0 && !srOverlay.isStage3Filled && (
+              <>
+                <line
+                  id="svg-sr-line-tp3"
+                  x1="0"
+                  x2="100%"
+                  y1="-1000"
+                  y2="-1000"
+                  stroke="#059669"
+                  strokeDasharray="4 2"
+                  strokeWidth="1.5"
+                />
+                <g id="svg-sr-label-tp3" transform="translate(10, -1000)">
+                  <rect x="5" y="-9" width="220" height="18" fill="#02140f" rx="3" stroke="#059669" strokeWidth="1" />
+                  <text x="12" y="4" fill="#059669" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
+                    {`🚀 TP3 RUNNER (20% @ 3.0R): $${srOverlay.target3.toFixed(2)}`}
+                  </text>
+                </g>
+              </>
+            )}
+          </g>
+        )}
       </svg>
 
       {/* Dynamic Layer Orchestrator HTML Overlays */}
@@ -1994,6 +2289,79 @@ export default function Chart({
 
       {/* Persistent Layer Visibility Control HUD Panel */}
       <ChartLayerHud />
+
+      {/* Active Sweep & Reclaim Replay HUD Badge */}
+      {srOverlay && (
+        <div className="absolute top-12 left-4 z-20 pointer-events-auto select-none bg-card/90 backdrop-blur-md border border-card-border/80 px-3 py-2 rounded-xl shadow-2xl flex flex-col gap-1 max-w-[280px] animate-[fade-in_0.2s_ease-out]">
+          <div className="flex items-center justify-between gap-2 border-b border-card-border/40 pb-1">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full animate-ping bg-accent" />
+              <span className="text-[10px] font-black text-foreground tracking-wider uppercase">
+                S&R 3-Pillar
+              </span>
+            </div>
+            <span
+              className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded border ${
+                srOverlay.type === 'BULLISH'
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+              }`}
+            >
+              {srOverlay.type} ({srOverlay.phase})
+            </span>
+          </div>
+
+          <div className="text-[9.5px] font-mono text-muted flex justify-between items-center">
+            <span>{srOverlay.anchorName}</span>
+            <span className="font-bold text-foreground">${srOverlay.anchorLevel.toFixed(2)}</span>
+          </div>
+
+          {/* 3-Pillar Displacement Status */}
+          <div className="grid grid-cols-3 gap-1 pt-1 text-[8.5px] font-mono text-center">
+            <div
+              className={`px-1 py-0.5 rounded border ${
+                srOverlay.volExpansion >= 1.5
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : 'bg-card text-muted border-card-border'
+              }`}
+              title="Volume Expansion vs 20-SMA"
+            >
+              Vol: {srOverlay.volExpansion.toFixed(1)}x
+            </div>
+            <div
+              className={`px-1 py-0.5 rounded border ${
+                srOverlay.deltaDominance >= 60
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : 'bg-card text-muted border-card-border'
+              }`}
+              title="Taker Delta Dominance %"
+            >
+              Δ {srOverlay.deltaDominance.toFixed(0)}%
+            </div>
+            <div
+              className={`px-1 py-0.5 rounded border ${
+                srOverlay.bodyRatio >= 60
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : 'bg-card text-muted border-card-border'
+              }`}
+              title="Candle Body Ratio %"
+            >
+              Body: {srOverlay.bodyRatio.toFixed(0)}%
+            </div>
+          </div>
+
+          {/* Active P&L / Status text */}
+          <div className="text-[9px] font-mono font-bold text-accent pt-0.5 flex justify-between">
+            <span>{srOverlay.statusText}</span>
+            {srOverlay.unrealizedR !== 0 && (
+              <span className={srOverlay.unrealizedR > 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                {srOverlay.unrealizedR > 0 ? '+' : ''}
+                {srOverlay.unrealizedR.toFixed(2)}R
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Interactive User Drawing Canvas Overlay */}
       <DrawingCanvasOverlay

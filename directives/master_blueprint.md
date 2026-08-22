@@ -1,8 +1,110 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.39
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.42
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-21 (V16.39 — Range Freeze & Dynamic Expansion Resolution)  
+> **Last Updated:** 2026-08-23 (V16.42 — Backtest NaN R / Zero-Target Position Lockup: 6-Bug Batch Fix)  
+
+## 🆕 V16.42 Changelog — Backtest NaN R / Zero-Target Position Lockup: 6-Bug Batch Fix (2026-08-23)
+
+### Summary
+Resolved a compounding 6-bug cluster in `SweepReclaimEngine.ts` and `useBacktestStrategyExecution.ts` that caused backtest replay positions to open with `unrealizedR = NaN` and `stage1Target = 0`, permanently locking the execution engine. For LONG positions, Stage 1 fired instantly on the first candle (`high >= 0` always true). For SHORT positions, Stage 1 never fired (`low <= 0` never true at real ETH prices), leaving `activePositionRef` permanently occupied and blocking all future setup detection.
+
+### Key Architectural Changes
+
+1. **`ANCHOR_ONLY` Setup Geometry Sanitization (`src/lib/quantEngine/SweepReclaimEngine.ts`):**
+   - `anchorOnlySetup` previously emitted `entry_price === stop_loss` (zero risk) and `stage1/2/3_target = 0`.
+   - Now emits `stop_loss = anchorLevel ± 1.0` and stage targets computed from R-multiples — safe display-only placeholders that cannot produce false harvest triggers even if they reach the hook.
+
+2. **`Number.isFinite()` Guards in `resolveRetestEntryPrice` (`SweepReclaimEngine.ts`):**
+   - All 6 entry mode case branches replaced `typeof x === 'number'` with `Number.isFinite(x)`.
+   - Added `high > low` directional sanity checks to all OB and FVG cases.
+   - Critical: `typeof NaN === 'number'` is `true` in JavaScript — the old guards silently passed NaN OHLC values from offline mock candles into arithmetic, producing NaN entry prices.
+
+3. **`Math.max(NaN)` Safety Clamp Fix (`useBacktestStrategyExecution.ts` L296):**
+   - `Math.max(0.50, NaN)` returns `NaN` in JavaScript — NOT `0.50`. The prior safety clamp was silently defeated.
+   - Replaced with explicit `Number.isFinite(rawDist) && rawDist > 0.01 ? rawDist : 0.50`.
+
+4. **Pre-Flight Geometry Abort Guard (`useBacktestStrategyExecution.ts` STEP A):**
+   - Added full validation block before any `PENDING_LIMIT` order is created: checks `Number.isFinite(entryPrice)`, `Number.isFinite(stopLoss)`, `entryPrice !== stopLoss`, `stage1_target !== 0`, and `stage2_target !== 0`.
+   - Any degenerate setup geometry is logged and the entire pending-order creation is skipped.
+
+5. **Zombie Position Self-Healing Guard (`useBacktestStrategyExecution.ts` STEP C):**
+   - Added auto-abort block at the top of the STEP C harvest loop: inspects `pos.entryPrice`, `pos.riskDistance`, `pos.stage1Target`, `pos.stage2Target` for NaN/zero.
+   - On corruption detection: logs `[ZOMBIE_POS]` error, adds `setupId` to `closedSetupIdsRef`, sets `activePositionRef.current = null`, and returns — immediately unlocking the engine.
+   - `floatingR` computation guards: `Number.isFinite(currentDelta)` check before division.
+
+6. **`closedSetupIdsRef` Blacklist ID Uniqueness (`SweepReclaimEngine.ts` L915):**
+   - Setup IDs now include `_SW{sweepIdx}` suffix when a sweep candle is identified.
+   - Old: `SR_BULL_PDH_2450.00_1753000000` — collides across re-sweeps of same structural level.
+   - New: `SR_BULL_PDH_2450.00_1753000000_SW347` — unique per sweep event.
+
+7. **Volume SMA NaN Contamination Guard (`SweepReclaimEngine.ts`):**
+   - Rolling 20-period volume SMA now uses `Number.isFinite(c.v)` guards instead of `c.v ?? 0`.
+   - `curVolExp` divisions in both bullish and bearish reclaim loops guarded against `avgVol = 0` and `NaN` volume, with fallback to `1.0` (neutral ratio, no false pillar vetoes).
+
+### Verification
+- `npx tsc --noEmit` → **0 errors** (exit code 0).
+
+
+### Summary
+Resolved three critical trade lifecycle and visual canvas desynchronization issues in the Backtest Replay Suite (`/backtest`): (1) Trailing Stop Loss mutation in memory and database now propagates instantaneously to the visual SVG canvas layer without frame lag; (2) Take Profit lines and labels dynamically unmount from the canvas the moment their respective harvest stage fills; (3) Closed trades trigger immediate post-trade garbage collection purging all SVG order lines from the DOM, backed by a persistent `closedSetupIds` blacklist preventing stale setup respawns during continuous replay candle steps.
+
+### Key Features & Architectural Directives
+1. **Instant Trailing Stop Loss State Flush (`src/hooks/useBacktestStrategyExecution.ts`):**
+   - Eliminated frame lag during 3-Stage Harvest position scaling. Whenever `pos.activeStopLoss` mutates on Stage 1 Fill (FVG CE / Breakeven) or Stage 2 Fill (+1.0R Ratchet Floor), `activePositionRef.current = { ...pos }` and `setActivePosition({ ...pos })` are executed immediately.
+   - Removed redundant duplicate state-setting calls at the end of the harvest loop.
+   - Downstream `srOverlay` `useMemo` now recalculates on the exact fill tick, propagating mutated stops to `Chart.tsx`'s SVG coordinate engine.
+
+2. **Target Line Fill-State Gating & Dynamic SL Staging (`src/components/Chart.tsx` & `useBacktestStrategyExecution.ts`):**
+   - Augmented `SweepReclaimOverlayData` interface with explicit tranche fill flags (`isStage1Filled`, `isStage2Filled`, `isStage3Filled`, `isClosed`).
+   - Gated TP1, TP2, and TP3 SVG `<line>` and `<g>` elements behind `!srOverlay.isStageXFilled` conditions, cleanly unmounting completed target lines upon fill.
+   - Upgraded the Stop Loss SVG line and badge label to render dynamic multi-stage color and tier text:
+     * **Hard Initial SL:** Rose/Red (`#f43f5e`) with label `🛑 S&R SL: $[price] (-1.0R HARD)`.
+     * **Stage 1 Trailed SL:** Amber (`#facc15`) with label `🛑 S&R SL: $[price] (FVG CE / BE)`.
+     * **Stage 2 Ratchet SL:** Emerald (`#34d399`) with label `🛑 S&R SL: $[price] (+1.0R FLOOR)`.
+
+3. **Post-Trade Canvas Garbage Collection & Setup Blacklisting (`useBacktestStrategyExecution.ts`):**
+   - On trade exit (Stage 3 Full TP or Stop Loss breach), both `activePosition` and `activeSetup` states are set to `null`, collapsing `srOverlay` to `null` and instantly unmounting the entire `<g id="svg-sr-overlay-group">` from the SVG DOM.
+   - Introduced a `closedSetupIdsRef = useRef<Set<string>>(new Set())` blacklist. Closed setup IDs are registered upon trade termination, ensuring the background historical scan effect ignores completed setups and prevents ghost line respawns during forward replay steps.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors** (exit code 0).
+- Automated test suite (`test_backtest_trailing_gc.ts`): 4/4 stages passed (Initial Open, Stage 1 FVG CE trail, Stage 2 +1.0R ratchet, Trade close & canvas garbage collection).
+
+---
+
+## 🆕 V16.40 Changelog — Sweep & Reclaim Backtest Replay Suite Integration (2026-08-22)
+
+### Summary
+Successfully integrated the institutional **Sweep & Reclaim (Failed Signal Reversal / 3-Pillar Displacement)** quantitative strategy directly into the interactive Backtest Replay Suite (`/backtest`). Features deterministic 4-phase state machine evaluation with strict zero look-ahead bias on historical candle slices, 3-pillar displacement gating, 3-stage harvest position scaling (40% @ 1.0R with FVG CE trailing stop, 40% @ 1.5R with +1.0R profit ratchet floor, and 20% @ 3.0R runner), real-time SVG chart canvas overlays, and full-duplex journal persistence with `/api/backtest-trades`.
+
+### Key Features & Architectural Directives
+1. **Dedicated Replay Strategy Execution Hook (`src/hooks/useBacktestStrategyExecution.ts`):**
+   - Evaluates multi-timeframe anchors (Swing Pivots, Asian High/Low, London High/Low, PDH/PDL), liquidity sweeps, and 3-pillar volumetric displacement reclaims (Volume Ratio $\ge 1.50\times$, Taker Delta Dominance $\ge 60\%$, Body Ratio $\ge 60\%$) strictly on closed bars of the visible historical slice.
+   - Enforces zero look-ahead bias by consuming `visibleArrays` bounded by the active replay cursor.
+   - Resolves limit entries via `resolveRetestEntryPrice` with 7 selectable entry modes (`SWEEP_OB_MT`, `FVG_CE`, `SHELF_LEVEL`, `OTE_62`, `FVG_PROXIMAL`, `FVG_DISTAL`, `OB_PROXIMAL`) and hard Stop Loss 1 tick beyond the sweep extreme wick with a $0.15\%$ minimum buffer.
+   - Tracks the full 3-Stage Harvest position lifecycle:
+     - **Stage 1 Fill (40% @ 1.0R):** Realizes $+0.40\text{R}$ and advances SL to FVG CE / Breakeven.
+     - **Stage 2 Fill (40% @ 1.5R):** Realizes $+0.60\text{R}$ and ratchets SL to $+1.0\text{R}$ profit floor.
+     - **Stage 3 Runner (20% @ 3.0R / DOL):** Full exit with `FULL_TP3_WIN`.
+     - **Stop Loss Breach:** Evaluates exit reason (`STOPPED_OUT`, `STAGE_1_SCRATCH`, `STAGE_2_WIN`).
+   - Automatically synchronizes with `/api/backtest-trades` using exact candle timestamps (`opened_at`, `closed_at`).
+
+2. **Visual Replay Overlays & Dynamic Canvas Sync (`src/components/Chart.tsx`):**
+   - High-contrast SVG overlay elements: Swept Anchor line & badge (`#38bdf8` cyan), Reclaim Shelf / FVG CE line (`#c084fc` purple), Entry line (`#38bdf8`), Stop Loss line (`#f43f5e` red), and TP1 / TP2 / TP3 target lines (`#34d399` / `#10b981` / `#059669` emerald).
+   - High-performance direct DOM style updates targeting 120 FPS inside `updateSvgCoordinates` on chart zoom, pan, and candle steps.
+   - Floating on-chart HUD badge showing active phase, 3-pillar verification metrics, and floating/unrealized R-multiple.
+
+3. **Backtest Replay Workspace Controls & HUD Sync (`src/app/backtest/page.tsx` & `src/app/backtest/BacktestSidebar.tsx`):**
+   - Header Strategy Preset Selector pill for fast preset switching and auto-execution toggling.
+   - Dedicated Left Aside "⚡ Sweep & Reclaim Quantitative Strategy" control card with entry mode selector, 3-pillar gate switch, valuation gate switch, and active setup phase card.
+   - Dedicated "⚡ Sweep & Reclaim 3-Pillar Setup" card in `BacktestSidebar.tsx` with live 3-pillar telemetry checklist and target progression.
+   - Strict decoupling: live execution (`/api/trades`) and the Quant Lab scanner remain completely unaffected.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors** (exit code 0).
+
+---
 
 ## 🆕 V16.39 Changelog — Range Freeze & Dynamic Expansion Resolution (2026-08-21)
 

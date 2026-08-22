@@ -357,13 +357,16 @@ export interface RetestPriceResolverParams {
 export function resolveRetestEntryPrice(params: RetestPriceResolverParams): number {
   const { mode, isBullish, anchorLevel, sweepCandle, fvg, displacementExtremes } = params;
 
+  // FIX-2: Use Number.isFinite() throughout — typeof NaN === 'number' is true and would
+  // silently pass NaN values into arithmetic, producing a NaN entry price that cascades
+  // into NaN riskDistance, NaN unrealizedR, and a permanent engine lockup.
   switch (mode) {
     case 'SHELF_LEVEL':
     case 'RECLAIM_LEVEL':
       return parseFloat(anchorLevel.toFixed(4));
 
     case 'FVG_PROXIMAL':
-      if (fvg && typeof fvg.top === 'number' && typeof fvg.bottom === 'number') {
+      if (fvg && Number.isFinite(fvg.top) && Number.isFinite(fvg.bottom) && fvg.top > fvg.bottom) {
         // Bullish (BISI): retracement downward hits upper gap boundary first (fvg.top)
         // Bearish (SIBI): retracement upward hits lower gap boundary first (fvg.bottom)
         const proximal = isBullish ? fvg.top : fvg.bottom;
@@ -372,14 +375,16 @@ export function resolveRetestEntryPrice(params: RetestPriceResolverParams): numb
       return parseFloat(anchorLevel.toFixed(4));
 
     case 'FVG_CE':
-      if (fvg && typeof fvg.top === 'number' && typeof fvg.bottom === 'number') {
-        const ce = typeof fvg.ce === 'number' ? fvg.ce : (fvg.top + fvg.bottom) / 2;
+      if (fvg && Number.isFinite(fvg.top) && Number.isFinite(fvg.bottom) && fvg.top > fvg.bottom) {
+        const ce = (Number.isFinite(fvg.ce) && fvg.ce !== undefined)
+          ? fvg.ce
+          : (fvg.top + fvg.bottom) / 2;
         return parseFloat(ce.toFixed(4));
       }
       return parseFloat(anchorLevel.toFixed(4));
 
     case 'FVG_DISTAL':
-      if (fvg && typeof fvg.top === 'number' && typeof fvg.bottom === 'number') {
+      if (fvg && Number.isFinite(fvg.top) && Number.isFinite(fvg.bottom) && fvg.top > fvg.bottom) {
         // Bullish (BISI): deepest boundary before gap mitigation/invalidation is lower gap boundary (fvg.bottom)
         // Bearish (SIBI): deepest boundary before gap mitigation/invalidation is upper gap boundary (fvg.top)
         const distal = isBullish ? fvg.bottom : fvg.top;
@@ -388,7 +393,7 @@ export function resolveRetestEntryPrice(params: RetestPriceResolverParams): numb
       return parseFloat(anchorLevel.toFixed(4));
 
     case 'OB_PROXIMAL':
-      if (sweepCandle && typeof sweepCandle.high === 'number' && typeof sweepCandle.low === 'number') {
+      if (sweepCandle && Number.isFinite(sweepCandle.high) && Number.isFinite(sweepCandle.low) && sweepCandle.high > sweepCandle.low) {
         // Bullish: pullback from above into sweep OB hits OB top boundary (high)
         // Bearish: pullback from below into sweep OB hits OB bottom boundary (low)
         const obProximal = isBullish ? sweepCandle.high : sweepCandle.low;
@@ -397,8 +402,10 @@ export function resolveRetestEntryPrice(params: RetestPriceResolverParams): numb
       return parseFloat(anchorLevel.toFixed(4));
 
     case 'SWEEP_OB_MT':
-      if (sweepCandle && typeof sweepCandle.high === 'number' && typeof sweepCandle.low === 'number') {
-        const mt = typeof sweepCandle.mt === 'number' ? sweepCandle.mt : (sweepCandle.high + sweepCandle.low) / 2;
+      if (sweepCandle && Number.isFinite(sweepCandle.high) && Number.isFinite(sweepCandle.low) && sweepCandle.high > sweepCandle.low) {
+        const mt = (Number.isFinite(sweepCandle.mt) && sweepCandle.mt !== undefined)
+          ? sweepCandle.mt
+          : (sweepCandle.high + sweepCandle.low) / 2;
         return parseFloat(mt.toFixed(4));
       }
       return parseFloat(anchorLevel.toFixed(4));
@@ -406,8 +413,8 @@ export function resolveRetestEntryPrice(params: RetestPriceResolverParams): numb
     case 'OTE_62':
       if (
         displacementExtremes &&
-        typeof displacementExtremes.impulseHigh === 'number' &&
-        typeof displacementExtremes.impulseLow === 'number' &&
+        Number.isFinite(displacementExtremes.impulseHigh) &&
+        Number.isFinite(displacementExtremes.impulseLow) &&
         displacementExtremes.impulseHigh > displacementExtremes.impulseLow
       ) {
         const range = displacementExtremes.impulseHigh - displacementExtremes.impulseLow;
@@ -758,16 +765,21 @@ export class SweepReclaimEngine {
     const detectedSetups: SweepReclaimSetup[] = [];
 
     // Rolling 20-period Volume SMA
+    // FIX-6: Use Number.isFinite() to guard against undefined/NaN volume fields from offline
+    // mock candles or incomplete historical data. candles[i].v ?? 0 passes when v is undefined
+    // but still passes through NaN if v is explicitly NaN. Number.isFinite() rejects both.
     const volSmaSeries: number[] = new Array(n).fill(1);
     const volPeriod = 20;
     let volSum = 0;
     for (let i = 0; i < n; i++) {
-      volSum += candles[i].v ?? 0;
+      const vol = Number.isFinite(candles[i].v) ? (candles[i].v as number) : 0;
+      volSum += vol;
       if (i >= volPeriod) {
-        volSum -= candles[i - volPeriod].v ?? 0;
-        volSmaSeries[i] = volSum / volPeriod;
+        const prevVol = Number.isFinite(candles[i - volPeriod].v) ? (candles[i - volPeriod].v as number) : 0;
+        volSum -= prevVol;
+        volSmaSeries[i] = volPeriod > 0 ? volSum / volPeriod : 1;
       } else {
-        volSmaSeries[i] = volSum / (i + 1);
+        volSmaSeries[i] = (i + 1) > 0 ? volSum / (i + 1) : 1;
       }
     }
 
@@ -912,7 +924,11 @@ export class SweepReclaimEngine {
         }
       }
 
-      const setupId = `SR_${isBullish ? 'BULL' : 'BEAR'}_${anchorType}_${anchorLevel.toFixed(2)}_${anchorTime}`;
+      // FIX-5: Include sweep candle index in ID so re-sweeps of the same anchor produce distinct
+      // blacklist keys. Without this, two sweeps of the same PDH/Asian High produce identical
+      // IDs and the second (new) setup is permanently vetoed by closedSetupIdsRef.
+      const sweepTag = sweepFound && sweepIdx !== null ? `_SW${sweepIdx}` : '';
+      const setupId = `SR_${isBullish ? 'BULL' : 'BEAR'}_${anchorType}_${anchorLevel.toFixed(2)}_${anchorTime}${sweepTag}`;
 
       if (!sweepFound || sweepIdx === null || sweepExtremePrice === null || sweepExtremeTime === null) {
         const anchorOnlySetup: SweepReclaimSetup = {
@@ -978,12 +994,26 @@ export class SweepReclaimEngine {
 
           entry_mode: entryMode,
           entry_price: parseFloat(anchorLevel.toFixed(4)),
-          stop_loss: parseFloat(anchorLevel.toFixed(4)),
-          risk_usd: 0,
-          risk_pct: 0,
-          stage1_target: 0,
-          stage2_target: 0,
-          stage3_target: 0,
+          // FIX-1: stop_loss must NEVER equal entry_price (zero risk distance).
+          // For ANCHOR_ONLY setups, use ±1.0 placeholder. This is display-only —
+          // the pending-order gate (RECLAIMED_NO_RETEST check) prevents these from
+          // ever creating a real ReplayPosition.
+          stop_loss: parseFloat(
+            (isBullish ? anchorLevel - 1.0 : anchorLevel + 1.0).toFixed(4)
+          ),
+          risk_usd: 1.0,
+          risk_pct: parseFloat(((1.0 / anchorLevel) * 100).toFixed(3)),
+          // FIX-1: Stage targets of 0 cause immediate false-fills (LONG: high >= 0 is
+          // always true) or permanent lockouts (SHORT: low <= 0 is never true at real prices).
+          stage1_target: parseFloat(
+            (isBullish ? anchorLevel + stage1Multiple : anchorLevel - stage1Multiple).toFixed(4)
+          ),
+          stage2_target: parseFloat(
+            (isBullish ? anchorLevel + stage2Multiple * 1.5 : anchorLevel - stage2Multiple * 1.5).toFixed(4)
+          ),
+          stage3_target: parseFloat(
+            (isBullish ? anchorLevel + stage3Multiple * 3.0 : anchorLevel - stage3Multiple * 3.0).toFixed(4)
+          ),
           stage1_multiple: stage1Multiple,
           stage2_multiple: stage2Multiple,
           stage3_multiple: stage3Multiple,
@@ -996,7 +1026,9 @@ export class SweepReclaimEngine {
           stage2_hit_index: null,
           stage3_hit_time: null,
           stage3_hit_index: null,
-          active_trailing_sl: parseFloat(anchorLevel.toFixed(4)),
+          active_trailing_sl: parseFloat(
+            (isBullish ? anchorLevel - 1.0 : anchorLevel + 1.0).toFixed(4)
+          ),
           active_ratchet_floor: null,
           trailing_sl_source: 'INITIAL',
           is_be_scratch: false,
@@ -1049,7 +1081,9 @@ export class SweepReclaimEngine {
           // Reclaim: confirmed body close strictly ABOVE the anchor shelf
           if (close > anchorLevel && close > open) {
             const avgVol = volSmaSeries[i] || 1;
-            const curVolExp = (c.v ?? 0) / avgVol;
+            // FIX-6: Guard against NaN/Infinity from undefined volume or zero SMA
+            const rawVol = Number.isFinite(c.v) ? (c.v as number) : 0;
+            const curVolExp = (Number.isFinite(avgVol) && avgVol > 0) ? rawVol / avgVol : 1.0;
 
             let curDeltaPct = 50.0;
             if (c.taker_buy_vol !== undefined && (c.v ?? 0) > 0) {
@@ -1115,7 +1149,9 @@ export class SweepReclaimEngine {
           // Bearish: confirmed body close strictly BELOW the anchor shelf
           if (close < anchorLevel && close < open) {
             const avgVol = volSmaSeries[i] || 1;
-            const curVolExp = (c.v ?? 0) / avgVol;
+            // FIX-6: Guard against NaN/Infinity from undefined volume or zero SMA
+            const rawVol = Number.isFinite(c.v) ? (c.v as number) : 0;
+            const curVolExp = (Number.isFinite(avgVol) && avgVol > 0) ? rawVol / avgVol : 1.0;
 
             let curDeltaPct = 50.0;
             if (c.taker_sell_vol !== undefined && (c.v ?? 0) > 0) {

@@ -594,4 +594,37 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   3. **Strict Pagination:** Implemented default bounds (`LIMIT 25`, max 100 on scans/runs; `LIMIT 50-100`, max 500 on trades) with offset pagination across all endpoints (`/api/quant-lab/runs`, `/api/quant-lab/ob-scans`, `/api/quant-lab/sr-scans`, `/api/quant-lab/trades`, `/api/trades`, `/api/backtest-trades`, `/api/strategies`).
   4. **Resilient Quota Error Handling:** Trapped PostgreSQL code `53000` / HTTP 402 errors to return clean `{ success: false, quota_exceeded: true, error: "..." }` responses.
 
+### 50. Live Cockpit Status Badge SSR/Client LocalStorage Hydration Mismatch (Resolved in V16.40)
+- **The Bug:** Next.js threw a recoverable Hydration Mismatch error on `LiveCockpitStatusBadge.tsx` during initial page load: `Hydration failed because the server rendered text didn't match the client`.
+- **The Cause:** `LiveCockpitStatusBadge` initialized its state synchronously using `() => getArmedExecutionStatus()`. On the server (SSR), `window` was undefined so it rendered the platform default preset name (`Golden Sweep & Reclaim`). On the client during hydration, `window` was defined and read the user's custom armed preset (`ETH RASL No DP (Golden)`) from `localStorage`. The differing HTML produced a hydration error.
+- **The Fix:** Implemented a standard `mounted` client gate initialized to `false` and set to `true` in `useEffect`. Server render and initial client hydration paint output the constant `DEFAULT_SERVER_STATUS`, and custom storage settings are safely rendered on the subsequent client paint, eliminating the hydration mismatch.
+
+### 51. Chart Layout Scheduler Cyclical Re-render Loop & S&R Overlay Undefined Guard (Resolved in V16.40)
+- **The Bug:** 
+  1. `TypeError: Cannot read properties of undefined (reading 'toFixed')` at `useBacktestStrategyExecution.useMemo[srOverlay]`.
+  2. `Maximum update depth exceeded` at `Chart.useCallback[updateAlertPositions]` and `Chart.useCallback[scheduleLayoutUpdates]`.
+- **The Cause:**
+  1. `activePosition.unrealizedR` and `pendingLimitOrder.entryPrice` were accessed with `.toFixed(2)` without default fallback guards (`?? 0`), failing when newly initialized.
+  2. In `Chart.tsx`, `updateAlertPositions` and `computeFvgOverlay` called `setAlertLabelPositions(positions)` and `setFvgOverlayBoxes(boxes)` returning new array references on every calculation frame. This re-triggered `scheduleLayoutUpdates` and the chart logical range subscription in an infinite loop.
+- **The Fix:**
+  1. Added null-safe guards `(activePosition.unrealizedR ?? 0).toFixed(2)` and `(pendingLimitOrder.entryPrice ?? 0).toFixed(2)` in `useBacktestStrategyExecution.ts`.
+  2. Added element-wise memoized equality checks inside `setAlertLabelPositions` and `setFvgOverlayBoxes` in `Chart.tsx`.
+  3. Stabilized `scheduleLayoutUpdates` with callback refs (`updateAlertPositionsRef`, `computeFvgOverlayRef`, `updateSvgCoordinatesRef`, `updateCountdownPositionRef`), breaking the re-render cycle.
+
+### 41. NaN R / Zero-Target Backtest Position Lockup — 6-Bug Batch (Resolved in V15.6)
+- **The Bug:** During backtest replay, positions opened with `unrealizedR = NaN`, `stage1Target = 0`, and never reached any harvest tranche. For LONG setups, Stage 1 fired immediately on the first candle (`high >= 0` is always true). For SHORT setups, Stage 1 never fired (`low <= 0` is never true at real ETH prices), permanently locking the engine. No subsequent setups could form because `activePositionRef` was occupied indefinitely.
+- **The Root Causes (6 compounding bugs):**
+  1. **(BUG-1) `ANCHOR_ONLY` zero targets:** `SweepReclaimEngine.ts` emitted `anchorOnlySetup` with `entry_price === stop_loss` (zero risk) and `stage1/2/3_target = 0`. These are display-only stubs, but the hook's pending-order gate occasionally allowed them through, injecting degenerate geometry into `ReplayPosition`.
+  2. **(BUG-2) `Math.max(0.50, NaN) === NaN`:** The safety clamp `Math.max(0.50, Math.abs(entry - sl))` in `useBacktestStrategyExecution.ts` is silently defeated when either coordinate is `NaN`. In JavaScript, `Math.max(x, NaN)` always returns `NaN`, not `x`.
+  3. **(BUG-3) `typeof NaN === 'number'`:** The guards in `resolveRetestEntryPrice` used `typeof fvg.top === 'number'` which passes for `NaN`, allowing NaN OHLC values from offline simulation candles to produce NaN entry prices.
+  4. **(BUG-4) No zombie-position self-healing:** Once a corrupted position was in `activePositionRef`, there was no automatic detection or cleanup — it ran on every candle tick for the remainder of the replay.
+  5. **(BUG-5) `closedSetupIdsRef` ID collision:** Setup IDs excluded the sweep candle index. Re-sweeps of the same structural anchor (PDH, Asian High, etc.) at a later bar produced the same string ID as the closed setup, permanently blacklisting the new, distinct setup.
+  6. **(BUG-6) Volume SMA `NaN` contamination:** `candles[i].v ?? 0` passes through an explicit `NaN` volume value (e.g. from offline mock candles). `NaN` propagated through the rolling SMA into `curVolExp`, silently defeating all 3-pillar volume gates or producing `Infinity`.
+- **The Fixes:**
+  1. `ANCHOR_ONLY` setups now emit `stop_loss = anchorLevel ± 1.0` and `stageN_target` computed from R-multiples — never `0` or identical to `entry_price`.
+  2. `Math.max(0.50, ...)` replaced with explicit `Number.isFinite(rawDist) && rawDist > 0.01 ? rawDist : 0.50`.
+  3. All 6 case branches in `resolveRetestEntryPrice` replaced `typeof x === 'number'` with `Number.isFinite(x)` and added `high > low` directional sanity checks.
+  4. Zombie position self-healing guard added at top of STEP C: auto-aborts and garbage-collects any position with corrupted geometry, then `closedSetupIdsRef.add()` blacklists it so the same setup can't re-enter.
+  5. Setup ID schema extended: `SR_BULL_PDH_2450.00_1753...` → `SR_BULL_PDH_2450.00_1753..._SW347` (includes sweep candle index).
+  6. Volume SMA loop and `curVolExp` divisions wrapped in `Number.isFinite()` guards with safe fallback to `1.0`.
 
