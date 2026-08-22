@@ -24,6 +24,7 @@ import { useMarketDataContext } from '@/context/MarketDataContext';
 import { calculateATR } from '@/lib/riskEngine';
 import OrderFlowTimelineModal from '@/components/modals/OrderFlowTimelineModal';
 import { getStateMetadata, formatDuration, getUnifiedTimelineSegments } from '@/components/OrderFlowTimelineRibbon';
+import type { SweepReclaimOverlayData } from '@/hooks/useBacktestStrategyExecution';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 interface BacktestSidebarProps {
@@ -35,6 +36,7 @@ interface BacktestSidebarProps {
   triggerAiAnalysisScan: (payload: MarketDataPayload) => Promise<void>;
   isOpen: boolean;
   onClose: () => void;
+  srOverlay?: SweepReclaimOverlayData | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -119,6 +121,7 @@ export default function BacktestSidebar({
   triggerAiAnalysisScan,
   isOpen,
   onClose,
+  srOverlay = null,
 }: BacktestSidebarProps) {
   const [isHudExpanded, setIsHudExpanded] = useState(false);
   const [isOrderFlowModalOpen, setIsOrderFlowModalOpen] = useState(false);
@@ -466,6 +469,121 @@ export default function BacktestSidebar({
                   </div>
                 )}
               </div>
+            </div>
+
+            {/* Card: Sweep & Reclaim 3-Pillar Quantitative Setup */}
+            <div className="glass-panel p-4 space-y-3 relative overflow-hidden group">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-muted uppercase font-bold text-[11px] tracking-widest">
+                  <Zap size={12} className="text-accent animate-pulse" />
+                  <span>Sweep & Reclaim</span>
+                </div>
+                {srOverlay ? (
+                  <span
+                    className={`px-1.5 py-0.5 text-[8px] font-black rounded border tracking-widest uppercase ${
+                      srOverlay.type === 'BULLISH'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                    }`}
+                  >
+                    {srOverlay.type} ({srOverlay.phase})
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-card-border/30 text-muted uppercase">
+                    SCANNING
+                  </span>
+                )}
+              </div>
+
+              {srOverlay ? (
+                <div className="space-y-2.5 text-[10px]">
+                  {/* Anchor & Reclaim Levels */}
+                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted uppercase font-bold">Swept Anchor</span>
+                      <span className="font-mono font-bold text-foreground">
+                        {srOverlay.anchorName} (${srOverlay.anchorLevel.toFixed(2)})
+                      </span>
+                    </div>
+                    {(srOverlay.fvgCe || srOverlay.reclaimPrice) && (
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted uppercase font-bold">Reclaim / FVG CE</span>
+                        <span className="font-mono font-bold text-accent">
+                          ${(srOverlay.fvgCe ?? srOverlay.reclaimPrice ?? 0).toFixed(2)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center border-t border-card-border/30 pt-1">
+                      <span className="text-muted uppercase font-bold">Entry Price</span>
+                      <span className="font-mono font-bold text-emerald-400">
+                        ${srOverlay.entryPrice.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted uppercase font-bold">Hard Stop Loss</span>
+                      <span className="font-mono font-bold text-rose-400">
+                        ${srOverlay.stopLoss.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 3-Pillar Displacement Gatekeeper Checklist */}
+                  <div className="bg-background/40 p-2.5 border border-card-border rounded-lg space-y-1.5">
+                    <span className="text-[9px] font-black text-muted uppercase tracking-wider block">
+                      3-Pillar Displacement Gatekeeper
+                    </span>
+                    <div className="grid grid-cols-3 gap-1 text-[9px] font-mono text-center">
+                      <div
+                        className={`p-1 rounded border ${
+                          srOverlay.volExpansion >= 1.5
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-bold'
+                            : 'bg-card text-muted border-card-border'
+                        }`}
+                      >
+                        Vol: {srOverlay.volExpansion.toFixed(2)}x
+                      </div>
+                      <div
+                        className={`p-1 rounded border ${
+                          srOverlay.deltaDominance >= 60
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-bold'
+                            : 'bg-card text-muted border-card-border'
+                        }`}
+                      >
+                        Δ {srOverlay.deltaDominance.toFixed(1)}%
+                      </div>
+                      <div
+                        className={`p-1 rounded border ${
+                          srOverlay.bodyRatio >= 60
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-bold'
+                            : 'bg-card text-muted border-card-border'
+                        }`}
+                      >
+                        Body: {srOverlay.bodyRatio.toFixed(1)}%
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3-Stage Harvest Targets */}
+                  <div className="bg-background/40 p-2 border border-card-border rounded-lg space-y-1 text-[9px] font-mono">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted">TP1 (40% @ 1.0R):</span>
+                      <span className="font-bold text-emerald-400">${srOverlay.target1.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted">TP2 (40% @ 1.5R):</span>
+                      <span className="font-bold text-emerald-400">${srOverlay.target2.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted">TP3 Runner (20% @ 3.0R):</span>
+                      <span className="font-bold text-emerald-400">${srOverlay.target3.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-[10px] text-muted italic text-center py-2 bg-background/20 rounded-lg border border-card-border/30">
+                  Scanning for 3-pillar sweeps & reclaims…
+                </div>
+              )}
             </div>
 
             {/* Card: Order Flow & State Tracker */}

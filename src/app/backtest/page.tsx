@@ -16,7 +16,7 @@ import {
   ChevronLeft, ChevronRight, Eye, Download, Copy,
   Calendar, Clock, BarChart2, Loader2, AlertTriangle,
   ArrowLeft, Zap, CheckCheck, Brain, TrendingUp, Percent, AlertCircle,
-  Settings, Activity, Shield
+  Settings, Activity, Shield, Check, Sliders, Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
@@ -29,6 +29,8 @@ import OrderFlowTimelineRibbon from '@/components/OrderFlowTimelineRibbon';
 import OrderFlowTimelineModal from '@/components/modals/OrderFlowTimelineModal';
 import type { PotentialTrade } from '@/lib/quantTradeEngine';
 import { useAutoTradeExecutor } from '@/hooks/useAutoTradeExecutor';
+import { useBacktestStrategyExecution } from '@/hooks/useBacktestStrategyExecution';
+import { SweepReclaimEntryMode, getEntryModeLabel } from '@/lib/quantEngine/SweepReclaimEngine';
 
 // ─── Stat badge ──────────────────────────────────────────────────────────────
 interface StatBadgeProps {
@@ -67,6 +69,7 @@ export default function BacktestPage() {
   const [isTfDropdownOpen, setIsTfDropdownOpen] = useState(false);
   const [isPotentialTradesOpen, setIsPotentialTradesOpen] = useState(false);
   const [isOrderFlowModalOpen, setIsOrderFlowModalOpen] = useState(false);
+  const [isStrategyDropdownOpen, setIsStrategyDropdownOpen] = useState(false);
 
   const { signalAlertsEnabled } = useMarketDataContext();
 
@@ -200,6 +203,18 @@ export default function BacktestPage() {
       isClosed: true,
     }
     : null;
+ 
+  // ── Dedicated Sweep & Reclaim Replay Execution Engine (Zero Look-Ahead Bias) ──
+  const backtestSr = useBacktestStrategyExecution({
+    visibleArrays: engine.visibleArrays,
+    activeTimeframe,
+    currentIndex: engine.currentIndex,
+    lastPrice,
+    lastCandle,
+    triggerSmartAlert,
+    accountEquity: backtestAccount ? parseFloat(String(backtestAccount.current_balance)) : 10000,
+    onTradesRefresh: fetchBacktestTrades,
+  });
 
   // ── Manual Trading Hook Effects & Submission Handler ───────────────────────
   const handleSetDirection = (d: 'LONG' | 'SHORT') => {
@@ -746,6 +761,77 @@ export default function BacktestPage() {
             <span>[ POTENTIAL TRADES ]</span>
           </button>
 
+          {/* Replay Strategy Preset Dropdown */}
+          <div className="relative inline-block text-left">
+            <button
+              onClick={() => setIsStrategyDropdownOpen(!isStrategyDropdownOpen)}
+              className={`border px-3.5 py-2 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm ${
+                backtestSr.isAutoExecuteEnabled
+                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
+                  : 'bg-card border-card-border text-slate-500 dark:text-zinc-400 hover:text-foreground hover:border-accent'
+              }`}
+              title="Select Replay Quantitative Strategy & Preset"
+            >
+              <Zap className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">STRATEGY: S&R ({getEntryModeLabel(backtestSr.config.entryMode || 'SWEEP_OB_MT')})</span>
+              <span className="sm:hidden">S&R</span>
+              <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${isStrategyDropdownOpen ? 'rotate-90 text-emerald-400' : ''}`} />
+            </button>
+
+            {isStrategyDropdownOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-30"
+                  onClick={() => setIsStrategyDropdownOpen(false)}
+                />
+                <div className="absolute right-0 z-40 mt-1.5 w-72 origin-top-right rounded-2xl bg-card border border-card-border shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-1 duration-150 p-2 space-y-2">
+                  <div className="px-2 pt-1 flex items-center justify-between border-b border-card-border/40 pb-2">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-muted">S&R Presets</span>
+                    <button
+                      type="button"
+                      onClick={backtestSr.toggleAutoExecute}
+                      className={`text-[8px] font-black uppercase px-2 py-0.5 rounded border transition-all cursor-pointer ${
+                        backtestSr.isAutoExecuteEnabled
+                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                          : 'bg-card-border/40 text-muted border-card-border'
+                      }`}
+                    >
+                      {backtestSr.isAutoExecuteEnabled ? '⚡ AUTO-EXEC ON' : '⏸️ AUTO-EXEC OFF'}
+                    </button>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto space-y-1 scrollbar-thin">
+                    {backtestSr.availablePresets.map((preset) => {
+                      const isSelected = preset.id === backtestSr.selectedPresetId;
+                      return (
+                        <button
+                          key={preset.id}
+                          onClick={() => {
+                            backtestSr.selectPreset(preset.id);
+                            setIsStrategyDropdownOpen(false);
+                          }}
+                          className={`w-full text-left p-2 rounded-xl transition-all flex flex-col gap-0.5 cursor-pointer ${
+                            isSelected
+                              ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+                              : 'hover:bg-accent/5 text-foreground border border-transparent'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-tight">{preset.name}</span>
+                            {isSelected && <Check className="w-3 h-3 text-emerald-400 shrink-0" />}
+                          </div>
+                          {preset.description && (
+                            <span className="text-[8.5px] text-muted line-clamp-1">{preset.description}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Manual Trading Toggle */}
           <button
             onClick={() => setIsManualTradingActive((prev) => !prev)}
@@ -918,6 +1004,112 @@ export default function BacktestPage() {
                 <><BarChart2 className="w-4 h-4" /> Load Replay Range</>
               )}
             </button>
+          </div>
+
+          {/* Section: Replay Quantitative Strategy (Sweep & Reclaim) ───── */}
+          <div className="flex flex-col gap-3 p-3.5 rounded-2xl border border-card-border bg-card/40 backdrop-blur-md shadow-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Zap className="w-4 h-4 text-accent animate-pulse" />
+                <span className="text-[11px] font-black text-foreground uppercase tracking-wider">
+                  Sweep & Reclaim
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={backtestSr.toggleAutoExecute}
+                className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
+                  backtestSr.isAutoExecuteEnabled
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                    : 'bg-card-border/40 text-muted border-card-border'
+                }`}
+                title="Toggle Auto-Execution in Replay"
+              >
+                {backtestSr.isAutoExecuteEnabled ? '⚡ AUTO ON' : 'PAUSED'}
+              </button>
+            </div>
+
+            {/* Entry Mode Selector */}
+            <div className="flex flex-col gap-1">
+              <label htmlFor="bt-entry-mode" className="text-[10px] font-bold text-slate-400 uppercase">
+                Retest Entry Model
+              </label>
+              <select
+                id="bt-entry-mode"
+                value={backtestSr.config.entryMode || 'SWEEP_OB_MT'}
+                onChange={(e) => backtestSr.updateConfig({ entryMode: e.target.value as SweepReclaimEntryMode })}
+                className="w-full bg-card/70 border border-card-border focus:border-accent focus:outline-none px-2.5 py-1.5 text-[11px] text-foreground font-mono rounded-lg transition-all cursor-pointer"
+              >
+                <option value="SWEEP_OB_MT">Sweep OB 50% Mean Threshold</option>
+                <option value="FVG_CE">Displacement FVG 50% CE</option>
+                <option value="SHELF_LEVEL">Reclaimed Anchor Shelf Level</option>
+                <option value="OTE_62">62% Optimal Trade Entry (OTE)</option>
+                <option value="FVG_PROXIMAL">FVG Proximal Edge</option>
+                <option value="FVG_DISTAL">FVG Distal Edge</option>
+                <option value="OB_PROXIMAL">Sweep OB Proximal Boundary</option>
+              </select>
+            </div>
+
+            {/* Quick Gates Checkboxes */}
+            <div className="grid grid-cols-2 gap-2 text-[9.5px] font-bold text-muted">
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={backtestSr.config.requireThreePillarDisplacement !== false}
+                  onChange={(e) => backtestSr.updateConfig({ requireThreePillarDisplacement: e.target.checked })}
+                  className="rounded border-card-border text-accent focus:ring-accent w-3 h-3"
+                />
+                <span>3-Pillar Gate</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={backtestSr.config.enforceDiscountPremiumGate !== false}
+                  onChange={(e) => backtestSr.updateConfig({ enforceDiscountPremiumGate: e.target.checked })}
+                  className="rounded border-card-border text-accent focus:ring-accent w-3 h-3"
+                />
+                <span>Valuation Gate</span>
+              </label>
+            </div>
+
+            {/* Active Setup Phase Monitor Card */}
+            {backtestSr.activeSetup ? (
+              <div className="bg-background/40 p-2.5 rounded-xl border border-card-border/80 space-y-1.5 text-[10px]">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold uppercase text-foreground">
+                    {backtestSr.activeSetup.anchor_name}
+                  </span>
+                  <span
+                    className={`text-[8px] font-black uppercase px-1.5 py-0.2 rounded border ${
+                      backtestSr.activeSetup.type === 'BULLISH'
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                    }`}
+                  >
+                    {backtestSr.activeSetup.type}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-muted font-mono text-[9px]">
+                  <span>Anchor: ${backtestSr.activeSetup.anchor_level.toFixed(2)}</span>
+                  <span>Entry: ${backtestSr.activeSetup.entry_price.toFixed(2)}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-1 pt-1 text-[8.5px] font-mono text-center">
+                  <div className={`p-0.5 rounded border ${(backtestSr.activeSetup.reclaim_volume_expansion ?? 0) >= 1.5 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-card text-muted border-card-border'}`}>
+                    {(backtestSr.activeSetup.reclaim_volume_expansion ?? 1.0).toFixed(1)}x Vol
+                  </div>
+                  <div className={`p-0.5 rounded border ${(backtestSr.activeSetup.reclaim_delta_dominance_pct ?? 0) >= 60 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-card text-muted border-card-border'}`}>
+                    {(backtestSr.activeSetup.reclaim_delta_dominance_pct ?? 50.0).toFixed(0)}% Δ
+                  </div>
+                  <div className={`p-0.5 rounded border ${(backtestSr.activeSetup.reclaim_body_ratio ?? 0) >= 60 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-card text-muted border-card-border'}`}>
+                    {(backtestSr.activeSetup.reclaim_body_ratio ?? 50.0).toFixed(0)}% Body
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-[9.5px] text-muted italic text-center py-1.5 bg-background/20 rounded-lg border border-card-border/30">
+                Awaiting 3-pillar displacement signal…
+              </div>
+            )}
           </div>
 
           {/* Section: Stats (only when ready) ───────────── */}
@@ -1115,6 +1307,7 @@ export default function BacktestPage() {
                       openTrades={backtestTrades.filter((t) => t.status === 'OPEN')}
                       onUpdateTradeLevels={handleUpdateBacktestTradeLevels}
                       symbol="ETHUSDC"
+                      srOverlay={backtestSr.srOverlay}
                     />
                   )
                   : (
@@ -1273,6 +1466,7 @@ export default function BacktestPage() {
           triggerAiAnalysisScan={triggerAiAnalysisScan}
           isOpen={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          srOverlay={backtestSr.srOverlay}
         />
       </div>
 

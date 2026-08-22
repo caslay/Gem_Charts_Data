@@ -13,6 +13,16 @@ import {
   StrategyAutoExecState,
 } from '@/lib/quantEngine/strategyExecutionConfig';
 
+const DEFAULT_SERVER_STATUS: ArmedExecutionStatus = {
+  type: 'SWEEP_RECLAIM',
+  id: 'factory_sr_golden_default',
+  name: 'Golden Sweep & Reclaim',
+  isAutoExecEnabled: true,
+  symbol: 'ETHUSDC',
+  timeframe: '15m',
+  updatedAt: 0,
+};
+
 interface LiveCockpitStatusBadgeProps {
   onClick?: () => void;
   className?: string;
@@ -24,9 +34,12 @@ export default function LiveCockpitStatusBadge({
   className = '',
   variant = 'compact',
 }: LiveCockpitStatusBadgeProps) {
-  const [status, setStatus] = useState<ArmedExecutionStatus>(() => getArmedExecutionStatus());
+  const [mounted, setMounted] = useState(false);
+  const [status, setStatus] = useState<ArmedExecutionStatus>(DEFAULT_SERVER_STATUS);
 
   useEffect(() => {
+    setMounted(true);
+    setStatus(getArmedExecutionStatus());
     const handleArmedStateChange = (e: Event) => {
       const customEvent = e as CustomEvent<ArmedExecutionStatus>;
       if (customEvent.detail) {
@@ -66,11 +79,12 @@ export default function LiveCockpitStatusBadge({
     };
   }, []);
 
-  const isArmed = status.isAutoExecEnabled;
-  const isCustom = status.type === 'CUSTOM_STRATEGY';
-  const isSR = status.type === 'SWEEP_RECLAIM';
+  const activeStatus = mounted ? status : DEFAULT_SERVER_STATUS;
+  const isArmed = activeStatus.isAutoExecEnabled;
+  const isCustom = activeStatus.type === 'CUSTOM_STRATEGY';
+  const isSR = activeStatus.type === 'SWEEP_RECLAIM';
 
-  const cleanName = status.name
+  const cleanName = activeStatus.name
     .replace(' (Platform Default)', '')
     .replace(' Scalper', '')
     .replace(' Sniper', '');
@@ -84,7 +98,7 @@ export default function LiveCockpitStatusBadge({
           ? 'bg-emerald-950/80 border-emerald-500/80 text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.25)] hover:border-emerald-400 hover:shadow-[0_0_16px_rgba(16,185,129,0.4)]'
           : 'bg-slate-900/90 border-slate-700 text-slate-300 hover:border-slate-500 hover:text-white shadow-sm'
       } ${className}`}
-      title={`Live Strategy: ${status.name} (${isArmed ? 'ARMED & EXECUTING' : 'STANDBY MODE'})`}
+      title={`Live Strategy: ${activeStatus.name} (${isArmed ? 'ARMED & EXECUTING' : 'STANDBY MODE'})`}
     >
       {/* Animated Glowing Pip */}
       <span className="relative flex h-2 w-2">
