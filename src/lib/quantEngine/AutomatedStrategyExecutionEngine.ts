@@ -378,12 +378,11 @@ export class AutomatedStrategyExecutionEngine {
       return { success: false, message: 'Automated execution is currently disabled in configuration.' };
     }
 
-    // ── Guardrail 2: Concurrency Cap (maxOpenPositions: 1) ──
-    const totalActive = this.activePositions.length + this.pendingLimitOrders.length;
-    if (totalActive >= this.config.maxOpenPositions) {
+    // ── Guardrail 2: Concurrency Cap (maxOpenPositions: 1 on ACTIVE positions) ──
+    if (this.activePositions.length >= this.config.maxOpenPositions) {
       return {
         success: false,
-        message: `[CONCURRENCY_CAP] Maximum open positions (${this.config.maxOpenPositions}) already active.`,
+        message: `[CONCURRENCY_CAP] Maximum active positions (${this.config.maxOpenPositions}) already open.`,
       };
     }
 
@@ -543,6 +542,9 @@ export class AutomatedStrategyExecutionEngine {
       newPosition.openTime = now;
       this.activePositions.push(newPosition);
 
+      // ATOMIC QUEUE FLUSH: Purge all competing pending limit orders immediately
+      this.pendingLimitOrders = [];
+
       const msg = `🚀 [ORDER_FILLED] ${direction} position opened on ${symbol} (${timeframe}) @ $${currentPrice.toFixed(
         2
       )} | Size: ${newPosition.contractSize} contracts ($${newPosition.riskUsd.toFixed(2)} Risk, 2.0% Compounded).`;
@@ -570,56 +572,28 @@ export class AutomatedStrategyExecutionEngine {
     if (!livePrice || isNaN(livePrice) || livePrice <= 0) return;
     const now = Date.now();
 
-    // ── Step A: Evaluate Pending Limit Orders for Touch Execution & TTL Expiration ──
-    const maxPendingOrderTtlMs = 7200000; // 2 hours (24 x 5m bars)
-    for (let i = this.pendingLimitOrders.length - 1; i >= 0; i--) {
-      const order = this.pendingLimitOrders[i];
-      const isLong = order.direction === 'LONG';
-      const isTouched = isLong ? livePrice <= order.limitEntryPrice : livePrice >= order.limitEntryPrice;
+    // ── Step A: Evaluate Pending Limit Orders for Touch Execution & Atomic Queue Flush ──
+    if (this.activePositions.length === 0) {
+      for (let i = 0; i < this.pendingLimitOrders.length; i++) {
+        const order = this.pendingLimitOrders[i];
+        const isLong = order.direction === 'LONG';
+        const isTouched = isLong ? livePrice <= order.limitEntryPrice : livePrice >= order.limitEntryPrice;
 
-      // Check TTL Expiration
-      if (now - order.pendingTime > maxPendingOrderTtlMs) {
-        this.pendingLimitOrders.splice(i, 1);
-        if (order.originZoneId) {
-          this.consumedZoneIds.delete(order.originZoneId);
+        if (isTouched) {
+          order.status = 'OPEN';
+          order.entryPrice = order.limitEntryPrice;
+          order.openTime = now;
+          this.activePositions.push(order);
+
+          // ATOMIC QUEUE FLUSH: Immediately purge all competing pending limit orders
+          this.pendingLimitOrders = [];
+
+          const msg = `🚀 [ORDER_FILLED] Limit ${order.direction} triggered on ${order.symbol} @ $${order.entryPrice.toFixed(
+            2
+          )} | Size: ${order.contractSize} ($${order.riskUsd.toFixed(2)} Risk, 2% Compounded).`;
+          this.emit('ORDER_FILLED', msg, order);
+          break;
         }
-        const expireMsg = `⌛ [LIMIT_EXPIRED] Resting ${order.direction} limit @ $${order.limitEntryPrice.toFixed(
-          2
-        )} expired without touch (TTL 2h elapsed). Concurrency slot released.`;
-        this.emit('POSITION_CLOSED', expireMsg, order);
-        continue;
-      }
-
-      // Check Missed Expansion (price reached TP1/target before touch fill)
-      const tp1 = order.stage1Target;
-      const isMissedExpansion =
-        Number.isFinite(tp1) &&
-        tp1 > 0 &&
-        (isLong ? livePrice >= tp1 : livePrice <= tp1);
-
-      if (isMissedExpansion) {
-        this.pendingLimitOrders.splice(i, 1);
-        if (order.originZoneId) {
-          this.consumedZoneIds.delete(order.originZoneId);
-        }
-        const expandMsg = `🚫 [INVALIDATED_EXPANDED] Resting ${order.direction} limit @ $${order.limitEntryPrice.toFixed(
-          2
-        )} cancelled — price expanded directly to TP1 target ($${tp1.toFixed(2)}) without filling retest.`;
-        this.emit('POSITION_CLOSED', expandMsg, order);
-        continue;
-      }
-
-      if (isTouched) {
-        order.status = 'OPEN';
-        order.entryPrice = order.limitEntryPrice;
-        order.openTime = now;
-        this.pendingLimitOrders.splice(i, 1);
-        this.activePositions.push(order);
-
-        const msg = `🚀 [ORDER_FILLED] Limit ${order.direction} triggered on ${order.symbol} @ $${order.entryPrice.toFixed(
-          2
-        )} | Size: ${order.contractSize} ($${order.riskUsd.toFixed(2)} Risk, 2% Compounded).`;
-        this.emit('ORDER_FILLED', msg, order);
       }
     }
 
@@ -1062,66 +1036,14 @@ export class AutomatedStrategyExecutionEngine {
         for (const s of setups) {
           scanned.push(s);
 
-          // ── STRICT FRESHNESS & REAL-TIME RECENTNESS GUARD ──
-          // A setup is eligible for live execution if:
-          // 1. It is waiting for retest (RECLAIMED_NO_RETEST) and reclaim occurred recently (within last 12 bars)
-          // 2. OR it was retested on the latest closed bars (retest_index >= candles.length - 3)
-          // 3. OR it was flagged as an immediate fill on the reclaim bar
-          const isFreshReclaim =
-            s.status === 'RECLAIMED_NO_RETEST' &&
-            s.reclaim_index !== null &&
-            s.reclaim_index >= candles.length - 12;
-
-          const isLatestRetest =
-            s.status === 'RETESTED' &&
-            s.retest_index !== null &&
-            s.retest_index >= candles.length - 3;
-
-          const isImmediateFill =
-            Boolean(s.is_immediate_fill) &&
-            s.reclaim_index !== null &&
-            s.reclaim_index >= candles.length - 3;
-
-          if (!isFreshReclaim && !isLatestRetest && !isImmediateFill) {
-            continue;
-          }
-
-          // ── MISSED EXPANSION GATE ──────────────────────────────────────────────────
-          // If current market price has already reached or exceeded TP1 in the setup's favor,
-          // the entry opportunity has already expanded. Placing a resting limit now would
-          // risk being caught in an over-extended move or filling retroactively.
-          const isLongSetup = s.type === 'BULLISH';
-          const tp1 = s.stage1_target;
-          const isMissedExpansion =
-            Number.isFinite(tp1) &&
-            tp1 > 0 &&
-            (isLongSetup ? latestPrice >= tp1 : latestPrice <= tp1);
-
-          if (isMissedExpansion) {
-            continue;
-          }
-
-          // ── WALL-CLOCK RETEST TTL GUARD ───────────────────────────────────────────
-          // Prevent stale setups from spawning limits on page refresh/mount when the
-          // reclaim occurred outside the active freshness window.
-          const tfMs: Record<string, number> = { '5m': 300_000, '15m': 900_000, '1h': 3_600_000 };
-          const barMs = tfMs[tf] ?? 300_000;
-          const maxRetestWindowMs = (scanConfig.maxBarsToRetest ?? 30) * barMs;
-          const normalizedReclaimTime =
-            s.reclaim_time !== null && s.reclaim_time > 0
-              ? (s.reclaim_time < 1e11 ? s.reclaim_time * 1000 : s.reclaim_time)
-              : null;
-          const reclaimAgeMs =
-            normalizedReclaimTime !== null
-              ? Date.now() - normalizedReclaimTime
-              : Infinity;
-
-          if (reclaimAgeMs > maxRetestWindowMs) {
+          // If a position is already active, enforce strict single-position concurrency lock
+          if (this.activePositions.length > 0) {
             continue;
           }
 
           // Check if setup is confirmed for live entry (3-Pillars passed and Valuation aligned)
           const isConfirmed =
+            s.is_reclaimed &&
             s.three_pillar_displacement_passed &&
             (!settings.enforceDiscountPremiumGate || s.is_valuation_aligned);
 

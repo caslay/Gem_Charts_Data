@@ -312,28 +312,14 @@ export function useBacktestStrategyExecution({
         ? close >= Math.min(currentPending.anchorLevel, currentPending.entryPrice)
         : close <= Math.max(currentPending.anchorLevel, currentPending.entryPrice);
 
-      // Check Expiration (TTL = maxBarsToRetest, default: 24 bars)
-      const maxRetestBars = config.maxBarsToRetest ?? 24;
-      const isExpired = currentSetup?.reclaim_index !== null && currentSetup?.reclaim_index !== undefined
-        ? (currentCandleIdx - currentSetup.reclaim_index > maxRetestBars)
-        : false;
-
-      if (isExpired) {
-        pendingLimitOrderRef.current = null;
-        setPendingLimitOrder(null);
-        triggerSmartAlert?.(
-          'SMT_TRAP',
-          `⌛ [S&R EXPIRED] Retest window elapsed (${maxRetestBars} bars). Resting limit cancelled.`,
-          '/audio/dead_zone.wav',
-          'REPLAY_STRATEGY'
-        );
-      } else if (isLimitTouched && isBodyDefended) {
+      if (isLimitTouched && isBodyDefended) {
         const openedPosition: ReplayPosition = {
           ...currentPending,
           status: 'OPEN',
           openTime: candleTime,
         };
 
+        // ATOMIC QUEUE FLUSH: Transition to OPEN and purge all pending candidate queues
         activePositionRef.current = openedPosition;
         pendingLimitOrderRef.current = null;
         setActivePosition(openedPosition);

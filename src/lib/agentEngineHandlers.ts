@@ -97,17 +97,29 @@ export async function fetchLivePrice(symbol: string): Promise<number | null> {
 /** Parse Binance raw klines array into the internal Candle shape. */
 function parseBinanceKlines(raw: any[]): any[] {
   return raw.map((c: any) => {
+    const o = parseFloat(c[1]);
+    const h = parseFloat(c[2]);
+    const l = parseFloat(c[3]);
+    const close = parseFloat(c[4]);
     const vol = parseFloat(c[5]) || 0;
-    const takerBuyVol = parseFloat(c[9]) || vol * 0.5;
+    let rawTakerBuy = parseFloat(c[9]);
+    let takerBuyVol: number;
+    if (Number.isFinite(rawTakerBuy) && !isNaN(rawTakerBuy) && rawTakerBuy > 0) {
+      takerBuyVol = parseFloat(rawTakerBuy.toFixed(4));
+    } else {
+      const range = Math.max(0.0001, h - l);
+      const conviction = Math.min(1.0, Math.max(0.0, (close - l) / range));
+      takerBuyVol = parseFloat((conviction * vol).toFixed(4));
+    }
     return {
       t: c[0],
-      o: parseFloat(c[1]),
-      h: parseFloat(c[2]),
-      l: parseFloat(c[3]),
-      c: parseFloat(c[4]),
+      o,
+      h,
+      l,
+      c: close,
       v: vol,
       taker_buy_vol: takerBuyVol,
-      taker_sell_vol: vol - takerBuyVol,
+      taker_sell_vol: parseFloat(Math.max(0, vol - takerBuyVol).toFixed(4)),
       isClosed: true,
     };
   });

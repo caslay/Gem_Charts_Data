@@ -12,17 +12,33 @@ const BINANCE_REST = 'https://fapi.binance.com/fapi/v1/klines';
 
 function parseBinanceKlines(raw: unknown[][]): Candle[] {
   return raw.map((c) => {
-    const v = parseFloat(c[5] as string);
-    const taker_buy_vol = parseFloat(c[9] as string);
+    const o = parseFloat(c[1] as string);
+    const h = parseFloat(c[2] as string);
+    const l = parseFloat(c[3] as string);
+    const close = parseFloat(c[4] as string);
+    const v = parseFloat(c[5] as string) || 0;
+
+    let rawTakerBuy = parseFloat(c[9] as string);
+    let taker_buy_vol: number;
+    if (Number.isFinite(rawTakerBuy) && !isNaN(rawTakerBuy) && rawTakerBuy > 0) {
+      taker_buy_vol = parseFloat(rawTakerBuy.toFixed(4));
+    } else {
+      // Wyckoff price-range conviction estimator fallback (Directive 1)
+      const range = Math.max(0.0001, h - l);
+      const conviction = Math.min(1.0, Math.max(0.0, (close - l) / range));
+      taker_buy_vol = parseFloat((conviction * v).toFixed(4));
+    }
+    const taker_sell_vol = parseFloat(Math.max(0, v - taker_buy_vol).toFixed(4));
+
     return {
       t: Number(c[0]),
-      o: parseFloat(c[1] as string),
-      h: parseFloat(c[2] as string),
-      l: parseFloat(c[3] as string),
-      c: parseFloat(c[4] as string),
+      o,
+      h,
+      l,
+      c: close,
       v,
       taker_buy_vol,
-      taker_sell_vol: parseFloat((v - taker_buy_vol).toFixed(4)),
+      taker_sell_vol,
       isClosed: true,
     };
   });
@@ -93,7 +109,10 @@ function generateMockKlines(startMs: number, endMs: number, interval: string): C
     const h = Math.max(o, c) + Math.random() * 6.0;
     const l = Math.min(o, c) - Math.random() * 6.0;
     const v = 800 + Math.random() * 1400;
-    const taker_buy_vol = v * (0.4 + Math.random() * 0.2);
+    const range = Math.max(0.0001, h - l);
+    const conviction = Math.min(1.0, Math.max(0.0, (c - l) / range));
+    const taker_buy_vol = parseFloat((v * conviction).toFixed(2));
+    const taker_sell_vol = parseFloat(Math.max(0, v - taker_buy_vol).toFixed(2));
 
     candles.push({
       t,
@@ -102,8 +121,8 @@ function generateMockKlines(startMs: number, endMs: number, interval: string): C
       l: parseFloat(l.toFixed(2)),
       c: parseFloat(c.toFixed(2)),
       v: parseFloat(v.toFixed(2)),
-      taker_buy_vol: parseFloat(taker_buy_vol.toFixed(2)),
-      taker_sell_vol: parseFloat((v - taker_buy_vol).toFixed(2)),
+      taker_buy_vol,
+      taker_sell_vol,
       isClosed: true,
     });
 

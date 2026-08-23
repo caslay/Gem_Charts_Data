@@ -19,17 +19,33 @@ const BINANCE_REST = 'https://fapi.binance.com/fapi/v1/klines';
 
 function parseBinanceKlines(raw: unknown[][]): Candle[] {
   return raw.map((c) => {
-    const v = parseFloat(c[5] as string);
-    const taker_buy_vol = parseFloat(c[9] as string);
+    const o = parseFloat(c[1] as string);
+    const h = parseFloat(c[2] as string);
+    const l = parseFloat(c[3] as string);
+    const close = parseFloat(c[4] as string);
+    const v = parseFloat(c[5] as string) || 0;
+
+    let rawTakerBuy = parseFloat(c[9] as string);
+    let taker_buy_vol: number;
+    if (Number.isFinite(rawTakerBuy) && !isNaN(rawTakerBuy) && rawTakerBuy > 0) {
+      taker_buy_vol = parseFloat(rawTakerBuy.toFixed(4));
+    } else {
+      // Wyckoff price-range conviction estimator fallback (Directive 1)
+      const range = Math.max(0.0001, h - l);
+      const conviction = Math.min(1.0, Math.max(0.0, (close - l) / range));
+      taker_buy_vol = parseFloat((conviction * v).toFixed(4));
+    }
+    const taker_sell_vol = parseFloat(Math.max(0, v - taker_buy_vol).toFixed(4));
+
     return {
       t: Number(c[0]),
-      o: parseFloat(c[1] as string),
-      h: parseFloat(c[2] as string),
-      l: parseFloat(c[3] as string),
-      c: parseFloat(c[4] as string),
+      o,
+      h,
+      l,
+      c: close,
       v,
       taker_buy_vol,
-      taker_sell_vol: parseFloat((v - taker_buy_vol).toFixed(4)),
+      taker_sell_vol,
       isClosed: true,
     };
   });
@@ -100,7 +116,10 @@ function generateMockKlines(startMs: number, endMs: number, interval: string): C
     const h = Math.max(o, c) + Math.random() * 6.0;
     const l = Math.min(o, c) - Math.random() * 6.0;
     const v = 800 + Math.random() * 1400;
-    const taker_buy_vol = v * (0.4 + Math.random() * 0.2);
+    const range = Math.max(0.0001, h - l);
+    const conviction = Math.min(1.0, Math.max(0.0, (c - l) / range));
+    const taker_buy_vol = parseFloat((v * conviction).toFixed(2));
+    const taker_sell_vol = parseFloat(Math.max(0, v - taker_buy_vol).toFixed(2));
 
     candles.push({
       t,
@@ -109,8 +128,8 @@ function generateMockKlines(startMs: number, endMs: number, interval: string): C
       l: parseFloat(l.toFixed(2)),
       c: parseFloat(c.toFixed(2)),
       v: parseFloat(v.toFixed(2)),
-      taker_buy_vol: parseFloat(taker_buy_vol.toFixed(2)),
-      taker_sell_vol: parseFloat((v - taker_buy_vol).toFixed(2)),
+      taker_buy_vol,
+      taker_sell_vol,
       isClosed: true,
     });
 
@@ -184,9 +203,10 @@ export async function POST(req: Request) {
         const max_bars_anchor_to_sweep = Number(body.maxBarsAnchorToSweep ?? body.max_bars_anchor_to_sweep ?? 30);
         const max_bars_sweep_to_reclaim = Number(body.maxBarsSweepToReclaim ?? body.max_bars_sweep_to_reclaim ?? 12);
         const max_bars_to_retest = Number(body.maxBarsToRetest ?? body.max_bars_to_retest ?? 24);
+        const volume_sma_period = Number(body.volumeSmaPeriod ?? body.volume_sma_period ?? 20);
         const volume_expansion_threshold = Number(body.volumeExpansionThreshold ?? body.volume_expansion_threshold ?? 1.50);
-        const delta_dominance_threshold = Number(body.deltaDominanceThreshold ?? body.delta_dominance_threshold ?? 60.0);
-        const body_ratio_threshold = Number(body.bodyRatioThreshold ?? body.body_ratio_threshold ?? 0.60);
+        const delta_dominance_threshold = Number(body.deltaDominanceThreshold ?? body.delta_dominance_threshold ?? 55.0);
+        const body_ratio_threshold = Number(body.bodyRatioThreshold ?? body.body_ratio_threshold ?? body.minBodyRatio ?? body.min_body_ratio ?? 0.55);
         const require_three_pillar_displacement = (body.requireThreePillarDisplacement ?? body.require_three_pillar_displacement) !== false;
         const enforce_discount_premium_gate = (body.enforceDiscountPremiumGate ?? body.enforce_discount_premium_gate) !== undefined ? Boolean(body.enforceDiscountPremiumGate ?? body.enforce_discount_premium_gate) : true;
         const stage1_multiple = Number(body.stage1Multiple ?? body.stage1_multiple ?? 1.0);
@@ -229,12 +249,24 @@ export async function POST(req: Request) {
           return;
         }
 
+        // Enforce 200-bar historical pre-warmup lookback buffer for indicator stabilization
+        const tfMs: Record<string, number> = {
+          '5m': 300000,
+          '15m': 900000,
+          '1h': 3600000,
+          '4h': 14400000,
+          '1d': 86400000,
+        };
+        const warmupBars = 200;
+        const warmupMs = (tfMs[timeframe] ?? 900000) * warmupBars;
+        const fetchStartMs = Math.max(0, startMs - warmupMs);
+
         sendChunk({
           type: "status",
-          message: `Ingesting historical ${timeframe} ${symbol} candlestick data from Binance...`
+          message: `Ingesting historical ${timeframe} ${symbol} candlestick data from Binance (including 200-bar pre-warmup buffer)...`
         });
 
-        let candles = await fetchPagedKlines(symbol, timeframe, startMs, endMs, (count, lastT) => {
+        let candles = await fetchPagedKlines(symbol, timeframe, fetchStartMs, endMs, (count, lastT) => {
           sendChunk({
             type: "progress",
             phase: "FETCHING_DATA",
@@ -246,7 +278,7 @@ export async function POST(req: Request) {
         if (candles.length === 0) {
           console.warn("[SR SCANNER] Live fetch returned 0 candles, deploying offline mock simulation fallback...");
           sendChunk({ type: "status", message: "Live connection throttled. Generating simulation stream..." });
-          candles = generateMockKlines(startMs, endMs, timeframe);
+          candles = generateMockKlines(fetchStartMs, endMs, timeframe);
         }
 
         sendChunk({
@@ -264,9 +296,11 @@ export async function POST(req: Request) {
           maxBarsAnchorToSweep: max_bars_anchor_to_sweep,
           maxBarsSweepToReclaim: max_bars_sweep_to_reclaim,
           maxBarsToRetest: max_bars_to_retest,
+          volumeSmaPeriod: volume_sma_period,
           volumeExpansionThreshold: volume_expansion_threshold,
           deltaDominanceThreshold: delta_dominance_threshold,
           bodyRatioThreshold: body_ratio_threshold,
+          minBodyRatio: body_ratio_threshold,
           requireThreePillarDisplacement: require_three_pillar_displacement,
           enforceDiscountPremiumGate: enforce_discount_premium_gate,
           stage1Multiple: stage1_multiple,
