@@ -17,6 +17,7 @@ import OrderFlowTimelineModal from '@/components/modals/OrderFlowTimelineModal';
 import LiveOrderBlockModal from '@/components/modals/LiveOrderBlockModal';
 import LiveCockpitStatusBadge from '@/components/LiveCockpitStatusBadge';
 import { useAutomatedStrategyExecution } from '@/hooks/useAutomatedStrategyExecution';
+import { useSessionJournalStore } from '@/lib/quantEngine/sessionJournalStore';
 import { calculateATR } from '@/lib/riskEngine';
 import { safeParseAiJson } from '@/lib/aiJsonParser';
 
@@ -102,6 +103,13 @@ export default function Home() {
   // Fetch open trades
   const fetchOpenTrades = async () => {
     try {
+      // 1. Sync immediately from in-memory session store
+      const localOpenTrades = useSessionJournalStore.getState().getOpenTrades('LIVE');
+      if (localOpenTrades.length > 0) {
+        setOpenTrades(localOpenTrades);
+      }
+
+      // 2. Background cloud DB sync fallback
       const res = await fetch('/api/trades');
       if (res.ok) {
         const contentType = res.headers.get('content-type');
@@ -109,17 +117,29 @@ export default function Home() {
         const json = await res.json();
         if (json.trades) {
           const openOnly = json.trades.filter((t: any) => t.status === 'OPEN');
-          setOpenTrades(openOnly);
+          setOpenTrades(openOnly.length > 0 ? openOnly : localOpenTrades);
         }
       }
     } catch (e) {
-      console.error('[Manual Trading] Failed to fetch open trades:', e);
+      console.debug('[Manual Trading] Cloud sync skipped (in-memory journal preserved):', e);
     }
   };
 
   const handleUpdateTradeLevels = async (tradeId: string, tp: number | null, sl: number | null) => {
     try {
-      const res = await fetch('/api/trades', {
+      // 1. Instant local update in session journal store
+      useSessionJournalStore.getState().updateTrade(tradeId, {
+        take_profit: tp ?? undefined,
+        stop_loss: sl ?? undefined,
+      });
+
+      if (typeof window !== 'undefined' && signalAlertsEnabled?.PRICING_SHIFT !== false) {
+        const audio = new Audio('/sounds/pricing_shift.wav');
+        audio.play().catch(() => {});
+      }
+
+      // 2. Fire-and-forget background cloud sync
+      fetch('/api/trades', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -127,18 +147,7 @@ export default function Home() {
           take_profit: tp,
           stop_loss: sl,
         }),
-      });
-
-      if (res.ok) {
-        if (typeof window !== 'undefined' && signalAlertsEnabled?.PRICING_SHIFT !== false) {
-          const audio = new Audio('/sounds/pricing_shift.wav');
-          audio.play().catch(() => {});
-        }
-        window.dispatchEvent(new Event('trades-refresh'));
-      } else {
-        const json = await res.json();
-        console.error('[Manual Trading] Failed to update trade levels:', json.error);
-      }
+      }).catch(() => {});
     } catch (e) {
       console.error('[Manual Trading] Error updating trade levels:', e);
     }

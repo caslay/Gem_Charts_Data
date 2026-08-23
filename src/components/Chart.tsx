@@ -7,8 +7,8 @@ import { generateVolumetricMarkers } from '@/utils/generateChartMarkers';
 import type { LiveCandle } from '@/hooks/useBinanceWS';
 import SettingsModal, { Alert } from './modals/SettingsModal';
 import { AlertSound, useAlertSounds } from '@/hooks/useAlertSounds';
+import { Volume2, X, Info, Sparkles, Activity, ShieldCheck } from 'lucide-react';
 import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
-import { Volume2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { registry } from '@/lib/chartLayers/registry';
 import { useLayerStore } from '@/lib/chartLayers/store';
@@ -106,13 +106,6 @@ export default function Chart({
   const manualEntryLineRef = useRef<any | null>(null);
   const manualTpLineRef = useRef<any | null>(null);
   const manualSlLineRef = useRef<any | null>(null);
-  const [activeDragLine, setActiveDragLine] = useState<'entry' | 'tp' | 'sl' | null>(null);
-  const activeDragLineRef = useRef<'entry' | 'tp' | 'sl' | null>(null);
-
-  // Dynamic price tracking for SVG line drag-and-drop
-  const lastSnappedPriceRef = useRef<number | null>(null);
-  const [activeDragTradeLine, setActiveDragTradeLine] = useState<{ tradeId: string; type: 'tp' | 'sl' } | null>(null);
-  const activeDragTradeLineRef = useRef<{ tradeId: string; type: 'tp' | 'sl' } | null>(null);
 
   // Zustand persistent chart layer store visibility states
   const { visibility } = useLayerStore();
@@ -234,6 +227,7 @@ export default function Chart({
   const [snappedPrice, setSnappedPrice] = useState<number | null>(null);
   const [snapNotification, setSnapNotification] = useState<string | null>(null);
   const [isSnapDropdownOpen, setIsSnapDropdownOpen] = useState(false);
+  const [isAuditPopoverOpen, setIsAuditPopoverOpen] = useState(false);
 
   const isSnapEnabledRef = useRef(isSnapEnabled);
   isSnapEnabledRef.current = isSnapEnabled;
@@ -648,7 +642,6 @@ export default function Chart({
   // ── Event Handlers ────────────────────────────────────────────────────────
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!chartRef.current || !seriesRef.current) return;
-    if (activeDragLineRef.current) return;
     
     // Use native event pixel offsets directly to eliminate synchronous getBoundingClientRect layout reflows
     const offsetX = e.nativeEvent.offsetX;
@@ -836,25 +829,6 @@ export default function Chart({
     theme
   ]);
 
-  // ── SVG Overlay Pointer Capture & Rendering Handlers ───────────────────────
-  const handleSvgPointerDown = useCallback((e: React.PointerEvent<SVGElement>, tradeId: string, type: 'tp' | 'sl') => {
-    if (!chartRef.current || !seriesRef.current || !chartContainerRef.current) return;
-    if (e.button !== 0) return; // Only left-click
-    e.preventDefault();
-    e.stopPropagation();
-
-    activeDragTradeLineRef.current = { tradeId, type };
-    setActiveDragTradeLine({ tradeId, type });
-
-    chartRef.current.applyOptions({
-      handleScroll: false,
-      handleScale: false,
-    });
-
-    // Capture pointer on the chart container to track movements smoothly outside SVG boundaries
-    chartContainerRef.current.setPointerCapture(e.pointerId);
-  }, []);
-
   // Update SVG line and label coordinates directly in DOM styles to target 120 FPS
   const updateSvgCoordinates = useCallback(() => {
     const series = seriesRef.current;
@@ -959,13 +933,24 @@ export default function Chart({
         srOverlay.anchorLevel > 0 &&
         Math.abs(srOverlay.entryPrice - srOverlay.anchorLevel) < 0.05;
 
+      const isPositionOpen = srOverlay.isPositionOpen || srOverlay.phase === 'OPEN';
+
       updateSrLineAndLabel('anchor', srOverlay.anchorLevel, 10);
       updateSrLineAndLabel('reclaim', srOverlay.fvgCe ?? srOverlay.reclaimPrice ?? srOverlay.sweepObMt, 10);
       updateSrLineAndLabel('entry', srOverlay.entryPrice, 10);
-      updateSrLineAndLabel('sl', srOverlay.stopLoss, 10);
-      updateSrLineAndLabel('tp1', srOverlay.target1, 10);
-      updateSrLineAndLabel('tp2', srOverlay.target2, 10);
-      updateSrLineAndLabel('tp3', srOverlay.target3, 10);
+
+      // Gated Overlay: Only render/position SL and TP lines when position is actively OPEN
+      if (isPositionOpen) {
+        updateSrLineAndLabel('sl', srOverlay.stopLoss, 10);
+        updateSrLineAndLabel('tp1', srOverlay.target1, 10);
+        updateSrLineAndLabel('tp2', srOverlay.target2, 10);
+        updateSrLineAndLabel('tp3', srOverlay.target3, 10);
+      } else {
+        updateSrLineAndLabel('sl', null, 10);
+        updateSrLineAndLabel('tp1', null, 10);
+        updateSrLineAndLabel('tp2', null, 10);
+        updateSrLineAndLabel('tp3', null, 10);
+      }
 
       // When entry is co-located with anchor level, suppress redundant anchor badge
       if (entryCollidesWithAnchor) {
@@ -984,180 +969,6 @@ export default function Chart({
     }, 50);
     return () => clearTimeout(timer);
   }, [openTrades, srOverlay, data, updateSvgCoordinates]);
-
-  // ── Drag & Drop Pointer Event Handlers ─────────────────────────────────────
-  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!chartRef.current || !seriesRef.current) return;
-    if (e.button !== 0) return; // Only left-click
-    
-    const pointerY = e.nativeEvent.offsetY;
-    const series = seriesRef.current;
-    
-    const clickThreshold = 12;
-    let target: 'entry' | 'tp' | 'sl' | null = null;
-    let minDistance = clickThreshold;
-    
-    // Check manual order entry layout lines (if active)
-    if (isManualTradingActive) {
-      const entryY = manualEntryPrice !== null ? series.priceToCoordinate(manualEntryPrice) : null;
-      const tpY = manualTakeProfit !== null ? series.priceToCoordinate(manualTakeProfit) : null;
-      const slY = manualStopLoss !== null ? series.priceToCoordinate(manualStopLoss) : null;
-      
-      if (entryY !== null && manualOrderType !== 'MARKET') {
-        const dist = Math.abs(pointerY - entryY);
-        if (dist < minDistance) {
-          minDistance = dist;
-          target = 'entry';
-        }
-      }
-      if (tpY !== null) {
-        const dist = Math.abs(pointerY - tpY);
-        if (dist < minDistance) {
-          minDistance = dist;
-          target = 'tp';
-        }
-      }
-      if (slY !== null) {
-        const dist = Math.abs(pointerY - slY);
-        if (dist < minDistance) {
-          minDistance = dist;
-          target = 'sl';
-        }
-      }
-    }
-    
-    if (target) {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      activeDragLineRef.current = target;
-      setActiveDragLine(target);
-      
-      chartRef.current.applyOptions({
-        handleScroll: false,
-        handleScale: false,
-      });
-      e.currentTarget.setPointerCapture(e.pointerId);
-    }
-  };
-
-  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!seriesRef.current) return;
-    
-    const pointerY = e.nativeEvent.offsetY;
-    const rawPrice = seriesRef.current.coordinateToPrice(pointerY);
-    if (rawPrice === null || isNaN(rawPrice)) return;
-    
-    const snappedPrice = Math.round(rawPrice / 0.05) * 0.05;
-    
-    // A. Handle manual layout lines
-    if (activeDragLineRef.current && onManualPricesChange) {
-      let nextEntry = manualEntryPrice ?? 0;
-      let nextTp = manualTakeProfit ?? 0;
-      let nextSl = manualStopLoss ?? 0;
-      
-      if (activeDragLineRef.current === 'entry' && manualOrderType !== 'MARKET') {
-        nextEntry = snappedPrice;
-      } else if (activeDragLineRef.current === 'tp') {
-        nextTp = snappedPrice;
-      } else if (activeDragLineRef.current === 'sl') {
-        nextSl = snappedPrice;
-      }
-      
-      onManualPricesChange(nextEntry, nextTp, nextSl);
-    }
-    
-    // B. Handle open trades SVG lines (smooth sliding direct-DOM feedback)
-    if (activeDragTradeLineRef.current) {
-      const { tradeId, type } = activeDragTradeLineRef.current;
-      const trade = openTrades?.find((t) => t.id === tradeId);
-      if (trade) {
-        lastSnappedPriceRef.current = snappedPrice;
-
-        // Update SVG line directly in DOM
-        const lineEl = document.getElementById(`svg-line-${tradeId}-${type}`);
-        if (lineEl) {
-          lineEl.setAttribute('y1', String(pointerY));
-          lineEl.setAttribute('y2', String(pointerY));
-        }
-        // Update SVG label coordinates directly in DOM
-        const labelEl = document.getElementById(`svg-label-${tradeId}-${type}`);
-        if (labelEl) {
-          labelEl.setAttribute('transform', `translate(10, ${pointerY})`);
-        }
-        // Update SVG text contents directly in DOM
-        const textEl = document.getElementById(`svg-text-${tradeId}-${type}`);
-        if (textEl) {
-          const suffix = type.toUpperCase();
-          textEl.textContent = `${suffix} (${trade.direction}): ${snappedPrice.toFixed(2)}`;
-        }
-      }
-    }
-  };
-
-  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    // 1. Finish manual layout drag
-    if (activeDragLineRef.current) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-      activeDragLineRef.current = null;
-      setActiveDragLine(null);
-    }
-    
-    // 2. Finish open trade drag and submit update
-    if (activeDragTradeLineRef.current) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-      const { tradeId, type } = activeDragTradeLineRef.current;
-      
-      const trade = openTrades?.find((t) => t.id === tradeId);
-      const finalPrice = lastSnappedPriceRef.current;
-      
-      if (trade && onUpdateTradeLevels && finalPrice !== null && !isNaN(finalPrice)) {
-        // Local validation logic matching backend gates
-        let isValid = true;
-        if (trade.direction === 'LONG') {
-          if (type === 'tp' && finalPrice <= parseFloat(trade.entry_price)) {
-            alert('LONG Take Profit must be greater than Entry Price.');
-            isValid = false;
-          }
-          if (type === 'sl' && finalPrice >= parseFloat(trade.entry_price)) {
-            alert('LONG Stop Loss must be less than Entry Price.');
-            isValid = false;
-          }
-        } else if (trade.direction === 'SHORT') {
-          if (type === 'tp' && finalPrice >= parseFloat(trade.entry_price)) {
-            alert('SHORT Take Profit must be less than Entry Price.');
-            isValid = false;
-          }
-          if (type === 'sl' && finalPrice <= parseFloat(trade.entry_price)) {
-            alert('SHORT Stop Loss must be greater than Entry Price.');
-            isValid = false;
-          }
-        }
-
-        if (isValid) {
-          const nextTp = type === 'tp' ? finalPrice : parseFloat(trade.take_profit);
-          const nextSl = type === 'sl' ? finalPrice : parseFloat(trade.stop_loss);
-          onUpdateTradeLevels(tradeId, nextTp, nextSl);
-        } else {
-          // Revert visual coordinates to stored values
-          updateSvgCoordinates();
-        }
-      } else {
-        updateSvgCoordinates();
-      }
-      activeDragTradeLineRef.current = null;
-      setActiveDragTradeLine(null);
-      lastSnappedPriceRef.current = null;
-    }
-    
-    // 3. Restore scroll/scale options
-    if (chartRef.current) {
-      chartRef.current.applyOptions({
-        handleScroll: true,
-        handleScale: true
-      });
-    }
-  };
 
   // ── Main Chart Initialization ─────────────────────────────────────────────
   useEffect(() => {
@@ -1575,10 +1386,7 @@ export default function Chart({
       lastVisibleRangeRef.current.to !== visibleRange?.to;
 
     // Interactivity bypass checks
-    const isInteracting = activeDragLine !== null || 
-      activeDragTradeLine !== null || 
-      isHotkeyAlertModeActive || 
-      hoveredCandle !== null;
+    const isInteracting = isHotkeyAlertModeActive || hoveredCandle !== null;
 
     // Check if configuration has changed
     const prevVisibility = prevVisibilityRef.current;
@@ -1657,7 +1465,7 @@ export default function Chart({
         }
       }
     });
-  }, [localCandles, marketContextData, visibility, theme, themeSettings, getLayerStorage, activeStructureState, structureState, contextAnchorTimestamp, context.engineSettings, activeDragLine, activeDragTradeLine, isHotkeyAlertModeActive]);
+  }, [localCandles, marketContextData, visibility, theme, themeSettings, getLayerStorage, activeStructureState, structureState, contextAnchorTimestamp, context.engineSettings, isHotkeyAlertModeActive]);
 
   // ── Sync Active Alerts with Price Lines ───────────────────────────────────
   useEffect(() => {
@@ -1953,17 +1761,14 @@ export default function Chart({
         ref={chartContainerRef}
         className="w-full h-full absolute inset-0"
         style={{
-          cursor: activeDrawingTool !== 'CURSOR' ? 'crosshair' : activeDragLine || activeDragTradeLine ? 'ns-resize' : isManualTradingActive ? 'crosshair' : 'default'
+          cursor: activeDrawingTool !== 'CURSOR' ? 'crosshair' : isManualTradingActive ? 'crosshair' : 'default'
         }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         onClick={handleChartClick}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
       />
 
-      {/* SVG Overlay Container for Open Trades */}
+      {/* SVG Overlay Container for Open Trades (Non-blocking structural reference) */}
       <svg className="absolute inset-0 pointer-events-none w-full h-full z-15 select-none">
         {openTrades && openTrades.map((trade) => {
           const entryPrice = parseFloat(trade.entry_price);
@@ -1971,7 +1776,7 @@ export default function Chart({
           const slPrice = parseFloat(trade.stop_loss);
 
           return (
-            <g key={trade.id} id={`svg-trade-group-${trade.id}`}>
+            <g key={trade.id} id={`svg-trade-group-${trade.id}`} className="pointer-events-none">
               {/* Entry Line */}
               <line
                 id={`svg-line-${trade.id}-entry`}
@@ -2003,13 +1808,7 @@ export default function Chart({
                     strokeDasharray="4 2"
                     strokeWidth="1.5"
                   />
-                  {/* TP Label & Draggable Handle Group */}
-                  <g
-                    id={`svg-label-${trade.id}-tp`}
-                    transform="translate(10, -1000)"
-                    className="pointer-events-auto cursor-ns-resize"
-                    onPointerDown={(e) => handleSvgPointerDown(e, trade.id, 'tp')}
-                  >
+                  <g id={`svg-label-${trade.id}-tp`} transform="translate(10, -1000)">
                     <rect x="5" y="-8" width="165" height="16" fill="#141416" rx="2" stroke="#10b981" strokeWidth="1" />
                     <text
                       id={`svg-text-${trade.id}-tp`}
@@ -2022,7 +1821,6 @@ export default function Chart({
                     >
                       {`TP (${trade.direction}): ${tpPrice.toFixed(2)}`}
                     </text>
-                    <circle cx="155" cy="0" r="3" fill="#10b981" />
                   </g>
                 </>
               )}
@@ -2040,13 +1838,7 @@ export default function Chart({
                     strokeDasharray="4 2"
                     strokeWidth="1.5"
                   />
-                  {/* SL Label & Draggable Handle Group */}
-                  <g
-                    id={`svg-label-${trade.id}-sl`}
-                    transform="translate(10, -1000)"
-                    className="pointer-events-auto cursor-ns-resize"
-                    onPointerDown={(e) => handleSvgPointerDown(e, trade.id, 'sl')}
-                  >
+                  <g id={`svg-label-${trade.id}-sl`} transform="translate(10, -1000)">
                     <rect x="5" y="-8" width="165" height="16" fill="#141416" rx="2" stroke="#ef4444" strokeWidth="1" />
                     <text
                       id={`svg-text-${trade.id}-sl`}
@@ -2059,7 +1851,6 @@ export default function Chart({
                     >
                       {`SL (${trade.direction}): ${slPrice.toFixed(2)}`}
                     </text>
-                    <circle cx="155" cy="0" r="3" fill="#ef4444" />
                   </g>
                 </>
               )}
@@ -2069,6 +1860,7 @@ export default function Chart({
 
         {/* Sweep & Reclaim Quantitative Strategy SVG Overlay */}
         {srOverlay && (() => {
+          const isPositionOpen = srOverlay.isPositionOpen || srOverlay.phase === 'OPEN';
           const entryCollidesWithAnchor =
             srOverlay.entryPrice > 0 &&
             srOverlay.anchorLevel > 0 &&
@@ -2137,7 +1929,7 @@ export default function Chart({
                     <rect
                       x="5"
                       y="-9"
-                      width={entryCollidesWithAnchor ? 295 : 200}
+                      width={entryCollidesWithAnchor ? 285 : 190}
                       height="18"
                       fill="#0c2340"
                       rx="3"
@@ -2149,144 +1941,180 @@ export default function Chart({
                         ? `🎯 S&R ENTRY / ⚓ SHELF (${srOverlay.type === 'BULLISH' ? 'LONG' : 'SHORT'}): $${srOverlay.entryPrice.toFixed(2)}`
                         : `🎯 S&R ENTRY (${srOverlay.type === 'BULLISH' ? 'LONG' : 'SHORT'}): $${srOverlay.entryPrice.toFixed(2)}`}
                     </text>
+
+                    {/* Interactive Setup Audit Badge */}
+                    <g
+                      className="pointer-events-auto cursor-pointer"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsAuditPopoverOpen((prev) => !prev);
+                      }}
+                    >
+                      <rect
+                        x={entryCollidesWithAnchor ? 295 : 200}
+                        y="-9"
+                        width="70"
+                        height="18"
+                        fill="#0369a1"
+                        rx="3"
+                        stroke="#38bdf8"
+                        strokeWidth="1"
+                      />
+                      <text
+                        x={entryCollidesWithAnchor ? 301 : 206}
+                        y="4"
+                        fill="#ffffff"
+                        fontSize="9"
+                        fontFamily="monospace"
+                        fontWeight="bold"
+                      >
+                        🔍 AUDIT
+                      </text>
+                    </g>
                   </g>
                 </>
               )}
 
-            {/* Stop Loss Line & Label (Dynamic Multi-Stage Trailing Color & Label) */}
-            {srOverlay.stopLoss > 0 && (
-              <>
-                <line
-                  id="svg-sr-line-sl"
-                  x1="0"
-                  x2="100%"
-                  y1="-1000"
-                  y2="-1000"
-                  stroke={
-                    srOverlay.isStage2Filled
-                      ? '#34d399'
-                      : srOverlay.isStage1Filled
-                      ? '#facc15'
-                      : '#f43f5e'
-                  }
-                  strokeDasharray="4 2"
-                  strokeWidth="1.5"
-                />
-                <g id="svg-sr-label-sl" transform="translate(10, -1000)">
-                  <rect
-                    x="5"
-                    y="-9"
-                    width={srOverlay.isStage2Filled ? 220 : srOverlay.isStage1Filled ? 215 : 200}
-                    height="18"
-                    fill={
-                      srOverlay.isStage2Filled
-                        ? '#02140f'
-                        : srOverlay.isStage1Filled
-                        ? '#281c03'
-                        : '#2c0b0e'
-                    }
-                    rx="3"
-                    stroke={
-                      srOverlay.isStage2Filled
-                        ? '#34d399'
-                        : srOverlay.isStage1Filled
-                        ? '#facc15'
-                        : '#f43f5e'
-                    }
-                    strokeWidth="1"
-                  />
-                  <text
-                    x="12"
-                    y="4"
-                    fill={
-                      srOverlay.isStage2Filled
-                        ? '#34d399'
-                        : srOverlay.isStage1Filled
-                        ? '#facc15'
-                        : '#f43f5e'
-                    }
-                    fontSize="9.5"
-                    fontFamily="monospace"
-                    fontWeight="bold"
-                  >
-                    {`🛑 S&R SL: $${srOverlay.stopLoss.toFixed(2)} ${
-                      srOverlay.isStage2Filled
-                        ? '(+1.0R FLOOR)'
-                        : srOverlay.isStage1Filled
-                        ? '(FVG CE / BE)'
-                        : '(-1.0R HARD)'
-                    }`}
-                  </text>
-                </g>
-              </>
-            )}
+              {/* Stop Loss & Take Profit Target Lines - GATED to Active / Open Positions */}
+              {isPositionOpen && (
+                <>
+                  {/* Stop Loss Line & Label (Dynamic Multi-Stage Trailing Color & Label) */}
+                  {srOverlay.stopLoss > 0 && (
+                    <>
+                      <line
+                        id="svg-sr-line-sl"
+                        x1="0"
+                        x2="100%"
+                        y1="-1000"
+                        y2="-1000"
+                        stroke={
+                          srOverlay.isStage2Filled
+                            ? '#34d399'
+                            : srOverlay.isStage1Filled
+                            ? '#facc15'
+                            : '#f43f5e'
+                        }
+                        strokeDasharray="4 2"
+                        strokeWidth="1.5"
+                      />
+                      <g id="svg-sr-label-sl" transform="translate(10, -1000)">
+                        <rect
+                          x="5"
+                          y="-9"
+                          width={srOverlay.isStage2Filled ? 220 : srOverlay.isStage1Filled ? 215 : 200}
+                          height="18"
+                          fill={
+                            srOverlay.isStage2Filled
+                              ? '#02140f'
+                              : srOverlay.isStage1Filled
+                              ? '#281c03'
+                              : '#2c0b0e'
+                          }
+                          rx="3"
+                          stroke={
+                            srOverlay.isStage2Filled
+                              ? '#34d399'
+                              : srOverlay.isStage1Filled
+                              ? '#facc15'
+                              : '#f43f5e'
+                          }
+                          strokeWidth="1"
+                        />
+                        <text
+                          x="12"
+                          y="4"
+                          fill={
+                            srOverlay.isStage2Filled
+                              ? '#34d399'
+                              : srOverlay.isStage1Filled
+                              ? '#facc15'
+                              : '#f43f5e'
+                          }
+                          fontSize="9.5"
+                          fontFamily="monospace"
+                          fontWeight="bold"
+                        >
+                          {`🛑 S&R SL: $${srOverlay.stopLoss.toFixed(2)} ${
+                            srOverlay.isStage2Filled
+                              ? '(+1.0R FLOOR)'
+                              : srOverlay.isStage1Filled
+                              ? '(FVG CE / BE)'
+                              : '(-1.0R HARD)'
+                          }`}
+                        </text>
+                      </g>
+                    </>
+                  )}
 
-            {/* Stage 1 Target (40% @ 1.0R) - Unmounts when Stage 1 is Filled */}
-            {srOverlay.target1 > 0 && !srOverlay.isStage1Filled && (
-              <>
-                <line
-                  id="svg-sr-line-tp1"
-                  x1="0"
-                  x2="100%"
-                  y1="-1000"
-                  y2="-1000"
-                  stroke="#34d399"
-                  strokeDasharray="4 2"
-                  strokeWidth="1.5"
-                />
-                <g id="svg-sr-label-tp1" transform="translate(10, -1000)">
-                  <rect x="5" y="-9" width="205" height="18" fill="#06281e" rx="3" stroke="#34d399" strokeWidth="1" />
-                  <text x="12" y="4" fill="#34d399" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
-                    {`🏆 TP1 (40% @ 1.0R): $${srOverlay.target1.toFixed(2)}`}
-                  </text>
-                </g>
-              </>
-            )}
+                  {/* Stage 1 Target (40% @ 1.0R) - Unmounts when Stage 1 is Filled */}
+                  {srOverlay.target1 > 0 && !srOverlay.isStage1Filled && (
+                    <>
+                      <line
+                        id="svg-sr-line-tp1"
+                        x1="0"
+                        x2="100%"
+                        y1="-1000"
+                        y2="-1000"
+                        stroke="#34d399"
+                        strokeDasharray="4 2"
+                        strokeWidth="1.5"
+                      />
+                      <g id="svg-sr-label-tp1" transform="translate(10, -1000)">
+                        <rect x="5" y="-9" width="205" height="18" fill="#06281e" rx="3" stroke="#34d399" strokeWidth="1" />
+                        <text x="12" y="4" fill="#34d399" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
+                          {`🏆 TP1 (40% @ 1.0R): $${srOverlay.target1.toFixed(2)}`}
+                        </text>
+                      </g>
+                    </>
+                  )}
 
-            {/* Stage 2 Target (40% @ 1.5R) - Unmounts when Stage 2 is Filled */}
-            {srOverlay.target2 > 0 && !srOverlay.isStage2Filled && (
-              <>
-                <line
-                  id="svg-sr-line-tp2"
-                  x1="0"
-                  x2="100%"
-                  y1="-1000"
-                  y2="-1000"
-                  stroke="#10b981"
-                  strokeDasharray="4 2"
-                  strokeWidth="1.5"
-                />
-                <g id="svg-sr-label-tp2" transform="translate(10, -1000)">
-                  <rect x="5" y="-9" width="205" height="18" fill="#042018" rx="3" stroke="#10b981" strokeWidth="1" />
-                  <text x="12" y="4" fill="#10b981" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
-                    {`💎 TP2 (40% @ 1.5R): $${srOverlay.target2.toFixed(2)}`}
-                  </text>
-                </g>
-              </>
-            )}
+                  {/* Stage 2 Target (40% @ 1.5R) - Unmounts when Stage 2 is Filled */}
+                  {srOverlay.target2 > 0 && !srOverlay.isStage2Filled && (
+                    <>
+                      <line
+                        id="svg-sr-line-tp2"
+                        x1="0"
+                        x2="100%"
+                        y1="-1000"
+                        y2="-1000"
+                        stroke="#10b981"
+                        strokeDasharray="4 2"
+                        strokeWidth="1.5"
+                      />
+                      <g id="svg-sr-label-tp2" transform="translate(10, -1000)">
+                        <rect x="5" y="-9" width="205" height="18" fill="#042018" rx="3" stroke="#10b981" strokeWidth="1" />
+                        <text x="12" y="4" fill="#10b981" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
+                          {`💎 TP2 (40% @ 1.5R): $${srOverlay.target2.toFixed(2)}`}
+                        </text>
+                      </g>
+                    </>
+                  )}
 
-            {/* Stage 3 Target (20% @ 3.0R Runner) - Unmounts when Stage 3 is Filled */}
-            {srOverlay.target3 > 0 && !srOverlay.isStage3Filled && (
-              <>
-                <line
-                  id="svg-sr-line-tp3"
-                  x1="0"
-                  x2="100%"
-                  y1="-1000"
-                  y2="-1000"
-                  stroke="#059669"
-                  strokeDasharray="4 2"
-                  strokeWidth="1.5"
-                />
-                <g id="svg-sr-label-tp3" transform="translate(10, -1000)">
-                  <rect x="5" y="-9" width="220" height="18" fill="#02140f" rx="3" stroke="#059669" strokeWidth="1" />
-                  <text x="12" y="4" fill="#059669" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
-                    {`🚀 TP3 RUNNER (20% @ 3.0R): $${srOverlay.target3.toFixed(2)}`}
-                  </text>
-                </g>
-              </>
-            )}
-          </g>
+                  {/* Stage 3 Target (20% @ 3.0R Runner) - Unmounts when Stage 3 is Filled */}
+                  {srOverlay.target3 > 0 && !srOverlay.isStage3Filled && (
+                    <>
+                      <line
+                        id="svg-sr-line-tp3"
+                        x1="0"
+                        x2="100%"
+                        y1="-1000"
+                        y2="-1000"
+                        stroke="#059669"
+                        strokeDasharray="4 2"
+                        strokeWidth="1.5"
+                      />
+                      <g id="svg-sr-label-tp3" transform="translate(10, -1000)">
+                        <rect x="5" y="-9" width="220" height="18" fill="#02140f" rx="3" stroke="#059669" strokeWidth="1" />
+                        <text x="12" y="4" fill="#059669" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
+                          {`🚀 TP3 RUNNER (20% @ 3.0R): $${srOverlay.target3.toFixed(2)}`}
+                        </text>
+                      </g>
+                    </>
+                  )}
+                </>
+              )}
+            </g>
           );
         })()}
       </svg>
@@ -2341,15 +2169,24 @@ export default function Chart({
                 S&R 3-Pillar
               </span>
             </div>
-            <span
-              className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded border ${
-                srOverlay.type === 'BULLISH'
-                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                  : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-              }`}
-            >
-              {srOverlay.type} ({srOverlay.phase})
-            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setIsAuditPopoverOpen((prev) => !prev)}
+                className="text-[8.5px] font-mono font-bold uppercase px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400 border border-sky-500/30 hover:bg-sky-500/30 transition-colors cursor-pointer"
+                title="Inspect Displacement & Risk Metrics"
+              >
+                🔍 Audit
+              </button>
+              <span
+                className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded border ${
+                  srOverlay.type === 'BULLISH'
+                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                    : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                }`}
+              >
+                {srOverlay.type} ({srOverlay.phase})
+              </span>
+            </div>
           </div>
 
           <div className="text-[9.5px] font-mono text-muted flex justify-between items-center">
@@ -2400,6 +2237,178 @@ export default function Chart({
                 {srOverlay.unrealizedR.toFixed(2)}R
               </span>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Setup & Displacement Origin Audit Popover */}
+      {isAuditPopoverOpen && srOverlay && (
+        <div
+          className="absolute top-14 left-14 z-50 max-w-lg w-[480px] bg-[#0c0e17]/95 backdrop-blur-2xl border border-sky-500/40 rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)] p-4 text-xs font-sans text-foreground animate-in fade-in zoom-in-95 duration-150 pointer-events-auto select-none"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-white/10 pb-2.5 mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse" />
+              <span className="font-mono text-xs font-black uppercase tracking-wider text-sky-400">
+                Institutional Setup Audit
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
+                  srOverlay.isPositionOpen || srOverlay.phase === 'OPEN'
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                }`}
+              >
+                {srOverlay.isPositionOpen || srOverlay.phase === 'OPEN' ? 'Position Active' : 'Pending Retest Limit'}
+              </span>
+            </div>
+            <button
+              onClick={() => setIsAuditPopoverOpen(false)}
+              className="w-6 h-6 rounded-md hover:bg-white/10 flex items-center justify-center text-muted hover:text-white transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Core Geometry Grid */}
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="bg-[#121524]/80 border border-white/5 p-2.5 rounded-xl">
+              <span className="text-[9px] font-bold text-muted uppercase font-mono block mb-1">
+                Execution Geometry
+              </span>
+              <div className="flex items-baseline justify-between font-mono text-[11px]">
+                <span className="text-muted">Direction:</span>
+                <span className={`font-bold ${srOverlay.type === 'BULLISH' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {srOverlay.type === 'BULLISH' ? 'LONG 🐂' : 'SHORT 🐻'}
+                </span>
+              </div>
+              <div className="flex items-baseline justify-between font-mono text-[11px] mt-0.5">
+                <span className="text-muted">Planned Entry:</span>
+                <span className="font-bold text-sky-400">${srOverlay.entryPrice.toFixed(2)}</span>
+              </div>
+              <div className="flex items-baseline justify-between font-mono text-[11px] mt-0.5">
+                <span className="text-muted">Anchor Shelf:</span>
+                <span className="text-foreground">{srOverlay.anchorName} (${srOverlay.anchorLevel.toFixed(2)})</span>
+              </div>
+            </div>
+
+            <div className="bg-[#121524]/80 border border-white/5 p-2.5 rounded-xl">
+              <span className="text-[9px] font-bold text-muted uppercase font-mono block mb-1">
+                Risk Parameters
+              </span>
+              <div className="flex items-baseline justify-between font-mono text-[11px]">
+                <span className="text-muted">Initial Stop Loss:</span>
+                <span className="font-bold text-rose-400">${srOverlay.stopLoss.toFixed(2)}</span>
+              </div>
+              <div className="flex items-baseline justify-between font-mono text-[11px] mt-0.5">
+                <span className="text-muted">Risk Distance:</span>
+                <span className="text-foreground">${Math.abs(srOverlay.entryPrice - srOverlay.stopLoss).toFixed(2)}</span>
+              </div>
+              <div className="flex items-baseline justify-between font-mono text-[11px] mt-0.5">
+                <span className="text-muted">Risk Capital:</span>
+                <span className="text-amber-400 font-bold">${(srOverlay.riskUsd ?? Math.abs(srOverlay.entryPrice - srOverlay.stopLoss)).toFixed(2)} ({(srOverlay.riskPct ?? 1.0).toFixed(2)}%)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Projected Profit Target Continuum */}
+          <div className="bg-[#121524]/80 border border-white/5 p-2.5 rounded-xl mb-3">
+            <span className="text-[9px] font-bold text-muted uppercase font-mono block mb-1.5">
+              Projected 3-Stage Harvest Continuum
+            </span>
+            <div className="grid grid-cols-3 gap-2 font-mono text-[10px]">
+              <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                <div className="text-emerald-400 font-bold text-[10.5px]">TP1 (40% @ 1.0R)</div>
+                <div className="text-white font-bold text-xs mt-0.5">${srOverlay.target1.toFixed(2)}</div>
+                <div className="text-[8.5px] text-muted mt-0.5">Trails SL to BE / FVG CE</div>
+              </div>
+              <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                <div className="text-emerald-400 font-bold text-[10.5px]">TP2 (40% @ 1.5R)</div>
+                <div className="text-white font-bold text-xs mt-0.5">${srOverlay.target2.toFixed(2)}</div>
+                <div className="text-[8.5px] text-muted mt-0.5">Ratchets SL to +1.0R Floor</div>
+              </div>
+              <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                <div className="text-emerald-400 font-bold text-[10.5px]">TP3 (20% Runner)</div>
+                <div className="text-white font-bold text-xs mt-0.5">${srOverlay.target3.toFixed(2)}</div>
+                <div className="text-[8.5px] text-muted mt-0.5">Macro DOL Target</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3-Pillar Volumetric Conviction */}
+          <div className="bg-[#121524]/80 border border-white/5 p-2.5 rounded-xl mb-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[9px] font-bold text-muted uppercase font-mono">
+                3-Pillar Volumetric Conviction
+              </span>
+              <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                ✓ 3-Pillars Confirmed
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 font-mono text-[10px]">
+              <div className="p-1.5 bg-black/40 border border-white/5 rounded-lg text-center">
+                <span className="text-muted text-[8.5px] block">P1 Volume Exp</span>
+                <span className="font-bold text-foreground text-xs">{srOverlay.volExpansion.toFixed(2)}x</span>
+                <span className="text-[8px] text-muted block">vs 20-SMA</span>
+              </div>
+              <div className="p-1.5 bg-black/40 border border-white/5 rounded-lg text-center">
+                <span className="text-muted text-[8.5px] block">P2 Taker Delta</span>
+                <span className="font-bold text-foreground text-xs">{srOverlay.deltaDominance.toFixed(1)}%</span>
+                <span className="text-[8px] text-muted block">{srOverlay.type === 'BULLISH' ? 'Taker Buy' : 'Taker Sell'}</span>
+              </div>
+              <div className="p-1.5 bg-black/40 border border-white/5 rounded-lg text-center">
+                <span className="text-muted text-[8.5px] block">P3 Body Ratio</span>
+                <span className="font-bold text-foreground text-xs">{srOverlay.bodyRatio.toFixed(1)}%</span>
+                <span className="text-[8px] text-muted block">Conviction</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Displacement Origin Audit (3 Candles) */}
+          <div className="bg-[#121524]/80 border border-white/5 p-2.5 rounded-xl">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[9px] font-bold text-muted uppercase font-mono">
+                Displacement Origin Audit (3-Candle Impulse Leg)
+              </span>
+              <span className="text-[8.5px] font-mono text-muted">
+                {srOverlay.displacementCandles && srOverlay.displacementCandles.length > 0 ? 'Exact Kline Coordinates' : 'Algorithmic Anchor Bounds'}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1.5 font-mono text-[9.5px]">
+              {srOverlay.displacementCandles && srOverlay.displacementCandles.length > 0 ? (
+                srOverlay.displacementCandles.map((dc, idx) => {
+                  const d = new Date(dc.time > 1e11 ? dc.time : dc.time * 1000);
+                  const dateStr = d.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+                  const isBull = dc.close >= dc.open;
+                  return (
+                    <div key={idx} className="p-2 bg-black/50 border border-white/5 rounded-lg flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sky-300 text-[10px]">{dc.label}</span>
+                        <span className="text-[8.5px] text-muted">{dateStr}</span>
+                      </div>
+                      <div className="grid grid-cols-5 gap-1 text-[9px]">
+                        <div><span className="text-muted">O: </span><span className="text-foreground">${dc.open.toFixed(2)}</span></div>
+                        <div><span className="text-muted">H: </span><span className="text-emerald-400">${dc.high.toFixed(2)}</span></div>
+                        <div><span className="text-muted">L: </span><span className="text-rose-400">${dc.low.toFixed(2)}</span></div>
+                        <div><span className="text-muted">C: </span><span className={isBull ? 'text-emerald-400' : 'text-rose-400'}>${dc.close.toFixed(2)}</span></div>
+                        {dc.volume !== undefined && (
+                          <div><span className="text-muted">V: </span><span className="text-foreground">{dc.volume.toFixed(1)}</span></div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-2.5 bg-black/40 border border-white/5 rounded-lg text-[9.5px] text-muted text-center flex flex-col gap-1">
+                  <div>Displacement leg confirmed at anchor shelf <span className="text-sky-300 font-bold">${srOverlay.anchorLevel.toFixed(2)}</span>.</div>
+                  <div className="text-[8.5px] text-muted/80">
+                    Sweep Extreme: ${srOverlay.sweepPrice?.toFixed(2) ?? 'N/A'} ➔ Reclaim Close: ${srOverlay.reclaimPrice?.toFixed(2) ?? 'N/A'}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
