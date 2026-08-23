@@ -486,7 +486,7 @@ async function handlePatchFallback(req: Request, parsedBody?: any) {
 
     if (uppercaseStatus === "CLOSED") {
       if (trade.status === "CLOSED") {
-        return NextResponse.json({ error: `Trade with ID ${trade_id} is already CLOSED.` }, { status: 400 });
+        return NextResponse.json({ success: true, message: `Trade with ID ${trade_id} is already CLOSED.`, trade }, { status: 200 });
       }
 
       let exit_price = body.exit_price !== undefined && body.exit_price !== null 
@@ -1451,8 +1451,8 @@ export async function PATCH(req: Request) {
         if (trade.status === "CLOSED") {
           await sql`ROLLBACK`;
           return NextResponse.json(
-            { error: `Trade with ID ${trade_id} is already CLOSED.` },
-            { status: 400 }
+            { success: true, message: `Trade with ID ${trade_id} is already CLOSED.`, trade },
+            { status: 200 }
           );
         }
 

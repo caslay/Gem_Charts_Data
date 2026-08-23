@@ -954,6 +954,11 @@ export default function Chart({
         }
       };
 
+      const entryCollidesWithAnchor =
+        srOverlay.entryPrice > 0 &&
+        srOverlay.anchorLevel > 0 &&
+        Math.abs(srOverlay.entryPrice - srOverlay.anchorLevel) < 0.05;
+
       updateSrLineAndLabel('anchor', srOverlay.anchorLevel, 10);
       updateSrLineAndLabel('reclaim', srOverlay.fvgCe ?? srOverlay.reclaimPrice ?? srOverlay.sweepObMt, 10);
       updateSrLineAndLabel('entry', srOverlay.entryPrice, 10);
@@ -961,6 +966,14 @@ export default function Chart({
       updateSrLineAndLabel('tp1', srOverlay.target1, 10);
       updateSrLineAndLabel('tp2', srOverlay.target2, 10);
       updateSrLineAndLabel('tp3', srOverlay.target3, 10);
+
+      // When entry is co-located with anchor level, suppress redundant anchor badge
+      if (entryCollidesWithAnchor) {
+        const anchorLabelEl = document.getElementById('svg-sr-label-anchor');
+        if (anchorLabelEl) {
+          anchorLabelEl.setAttribute('transform', 'translate(10, -1000)');
+        }
+      }
     }
   }, [openTrades, srOverlay]);
 
@@ -1419,14 +1432,9 @@ export default function Chart({
       // Format and deduplicate candles by timestamp (in seconds) to guarantee strictly ascending order for Lightweight Charts
       const candleMap = new Map<number, { time: any; open: number; high: number; low: number; close: number }>();
       
-      // Calculate median baseline price from the dataset to filter isolated extreme outliers (>25%)
-      const closes = data.map(d => d.c).filter(c => c > 0).sort((a, b) => a - b);
-      const medianPrice = closes.length > 0 ? closes[Math.floor(closes.length / 2)] : 0;
-
       for (const d of data) {
-        // Outlier filter against dataset median: reject any bar deviating >25% from active dataset median
-        if (medianPrice > 0 && Math.abs(d.c - medianPrice) / medianPrice > 0.25) {
-          console.warn(`[OUTLIER_DATA_DROP] Filtered out historical anomaly candle (t=${d.t}, c=${d.c}): deviates >25% from dataset median ${medianPrice}.`);
+        // Price sanity validation: ensure valid positive finite values
+        if (!d.t || !Number.isFinite(d.t) || d.c <= 0 || !Number.isFinite(d.c)) {
           continue;
         }
 
@@ -2060,69 +2068,90 @@ export default function Chart({
         })}
 
         {/* Sweep & Reclaim Quantitative Strategy SVG Overlay */}
-        {srOverlay && (
-          <g id="svg-sr-overlay-group">
-            {/* Swept Anchor Line & Label */}
-            <line
-              id="svg-sr-line-anchor"
-              x1="0"
-              x2="100%"
-              y1="-1000"
-              y2="-1000"
-              stroke="#38bdf8"
-              strokeDasharray="6 3"
-              strokeWidth="1.5"
-            />
-            <g id="svg-sr-label-anchor" transform="translate(10, -1000)">
-              <rect x="5" y="-9" width="230" height="18" fill="#0f172a" rx="3" stroke="#38bdf8" strokeWidth="1" />
-              <text x="12" y="4" fill="#38bdf8" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
-                {`⚓ ANCHOR (${srOverlay.anchorName}): $${srOverlay.anchorLevel.toFixed(2)} [SWEPT]`}
-              </text>
-            </g>
+        {srOverlay && (() => {
+          const entryCollidesWithAnchor =
+            srOverlay.entryPrice > 0 &&
+            srOverlay.anchorLevel > 0 &&
+            Math.abs(srOverlay.entryPrice - srOverlay.anchorLevel) < 0.05;
 
-            {/* Reclaim Shelf / Displacement FVG CE Line & Label */}
-            {(srOverlay.fvgCe || srOverlay.reclaimPrice || srOverlay.sweepObMt) && (
-              <>
-                <line
-                  id="svg-sr-line-reclaim"
-                  x1="0"
-                  x2="100%"
-                  y1="-1000"
-                  y2="-1000"
-                  stroke="#c084fc"
-                  strokeDasharray="4 3"
-                  strokeWidth="1.5"
-                />
-                <g id="svg-sr-label-reclaim" transform="translate(10, -1000)">
-                  <rect x="5" y="-9" width="240" height="18" fill="#1e1035" rx="3" stroke="#c084fc" strokeWidth="1" />
-                  <text x="12" y="4" fill="#c084fc" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
-                    {`⚡ RECLAIM SHELF / FVG CE: $${(srOverlay.fvgCe ?? srOverlay.reclaimPrice ?? srOverlay.sweepObMt ?? 0).toFixed(2)}`}
-                  </text>
-                </g>
-              </>
-            )}
+          return (
+            <g id="svg-sr-overlay-group">
+              {/* Swept Anchor Line & Label */}
+              <line
+                id="svg-sr-line-anchor"
+                x1="0"
+                x2="100%"
+                y1="-1000"
+                y2="-1000"
+                stroke="#38bdf8"
+                strokeDasharray="6 3"
+                strokeWidth="1.5"
+              />
+              <g
+                id="svg-sr-label-anchor"
+                transform="translate(10, -1000)"
+                style={{ display: entryCollidesWithAnchor ? 'none' : 'block' }}
+              >
+                <rect x="5" y="-9" width="230" height="18" fill="#0f172a" rx="3" stroke="#38bdf8" strokeWidth="1" />
+                <text x="12" y="4" fill="#38bdf8" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
+                  {`⚓ ANCHOR (${srOverlay.anchorName}): $${srOverlay.anchorLevel.toFixed(2)} [SWEPT]`}
+                </text>
+              </g>
 
-            {/* Limit Entry Line & Label */}
-            {srOverlay.entryPrice > 0 && (
-              <>
-                <line
-                  id="svg-sr-line-entry"
-                  x1="0"
-                  x2="100%"
-                  y1="-1000"
-                  y2="-1000"
-                  stroke="#38bdf8"
-                  strokeDasharray="3 3"
-                  strokeWidth="2"
-                />
-                <g id="svg-sr-label-entry" transform="translate(10, -1000)">
-                  <rect x="5" y="-9" width="200" height="18" fill="#0c2340" rx="3" stroke="#38bdf8" strokeWidth="1.2" />
-                  <text x="12" y="4" fill="#38bdf8" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
-                    {`🎯 S&R ENTRY (${srOverlay.type === 'BULLISH' ? 'LONG' : 'SHORT'}): $${srOverlay.entryPrice.toFixed(2)}`}
-                  </text>
-                </g>
-              </>
-            )}
+              {/* Reclaim Shelf / Displacement FVG CE Line & Label */}
+              {(srOverlay.fvgCe || srOverlay.reclaimPrice || srOverlay.sweepObMt) && (
+                <>
+                  <line
+                    id="svg-sr-line-reclaim"
+                    x1="0"
+                    x2="100%"
+                    y1="-1000"
+                    y2="-1000"
+                    stroke="#c084fc"
+                    strokeDasharray="4 3"
+                    strokeWidth="1.5"
+                  />
+                  <g id="svg-sr-label-reclaim" transform="translate(10, -1000)">
+                    <rect x="5" y="-9" width="240" height="18" fill="#1e1035" rx="3" stroke="#c084fc" strokeWidth="1" />
+                    <text x="12" y="4" fill="#c084fc" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
+                      {`⚡ RECLAIM SHELF / FVG CE: $${(srOverlay.fvgCe ?? srOverlay.reclaimPrice ?? srOverlay.sweepObMt ?? 0).toFixed(2)}`}
+                    </text>
+                  </g>
+                </>
+              )}
+
+              {/* Limit Entry Line & Label */}
+              {srOverlay.entryPrice > 0 && (
+                <>
+                  <line
+                    id="svg-sr-line-entry"
+                    x1="0"
+                    x2="100%"
+                    y1="-1000"
+                    y2="-1000"
+                    stroke="#38bdf8"
+                    strokeDasharray="3 3"
+                    strokeWidth="2"
+                  />
+                  <g id="svg-sr-label-entry" transform="translate(10, -1000)">
+                    <rect
+                      x="5"
+                      y="-9"
+                      width={entryCollidesWithAnchor ? 295 : 200}
+                      height="18"
+                      fill="#0c2340"
+                      rx="3"
+                      stroke="#38bdf8"
+                      strokeWidth="1.2"
+                    />
+                    <text x="12" y="4" fill="#38bdf8" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
+                      {entryCollidesWithAnchor
+                        ? `🎯 S&R ENTRY / ⚓ SHELF (${srOverlay.type === 'BULLISH' ? 'LONG' : 'SHORT'}): $${srOverlay.entryPrice.toFixed(2)}`
+                        : `🎯 S&R ENTRY (${srOverlay.type === 'BULLISH' ? 'LONG' : 'SHORT'}): $${srOverlay.entryPrice.toFixed(2)}`}
+                    </text>
+                  </g>
+                </>
+              )}
 
             {/* Stop Loss Line & Label (Dynamic Multi-Stage Trailing Color & Label) */}
             {srOverlay.stopLoss > 0 && (
@@ -2258,7 +2287,8 @@ export default function Chart({
               </>
             )}
           </g>
-        )}
+          );
+        })()}
       </svg>
 
       {/* Dynamic Layer Orchestrator HTML Overlays */}
