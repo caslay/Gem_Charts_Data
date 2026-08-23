@@ -2343,9 +2343,15 @@ export default function Chart({
               <span className="text-[9px] font-bold text-muted uppercase font-mono">
                 3-Pillar Volumetric Conviction
               </span>
-              <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                ✓ 3-Pillars Confirmed
-              </span>
+              {srOverlay.threePillarsPassed ? (
+                <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                  ✓ 3-Pillars Confirmed
+                </span>
+              ) : (
+                <span className="text-[9px] font-mono font-bold text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
+                  ✗ Pillars Failed
+                </span>
+              )}
             </div>
             <div className="grid grid-cols-3 gap-2 font-mono text-[10px]">
               <div className="p-1.5 bg-black/40 border border-white/5 rounded-lg text-center">

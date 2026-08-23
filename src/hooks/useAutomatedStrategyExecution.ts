@@ -609,7 +609,42 @@ export function useAutomatedStrategyExecution(
   const srOverlay = useMemo<SweepReclaimOverlayData | null>(() => {
     const activePos = activePositions.length > 0 ? activePositions[0] : null;
     const pendingOrd = pendingOrders.length > 0 ? pendingOrders[0] : null;
-    const latestActiveSetup = scannedSetups.length > 0 ? scannedSetups[scannedSetups.length - 1] : null;
+
+    // ── Directional-Aware Setup Selector ──────────────────────────────────────
+    // Priority chain (highest → lowest):
+    //   1. Setup whose ID matches the active position's origin setup ID
+    //   2. Setup whose ID matches the pending order's origin setup ID
+    //   3. Most recent RECLAIMED setup that matches the active direction
+    //   4. Most recent RECLAIMED setup (any direction)
+    //   5. Last scanned setup (absolute fallback)
+    //
+    // This prevents a BEARISH active position from pulling displacement candles,
+    // sweep/reclaim prices, and pillar metrics from a BULLISH ANCHOR_ONLY record
+    // that happened to be last in the scanned queue.
+    const activeDir = activePos?.direction ?? (pendingOrd?.direction ?? null);
+    const activeDirType = activeDir === 'LONG' ? 'BULLISH' : activeDir === 'SHORT' ? 'BEARISH' : null;
+
+    const matchById =
+      (activePos && (activePos as any).setupId
+        ? scannedSetups.find((s) => s.id === (activePos as any).setupId)
+        : null) ??
+      (pendingOrd && (pendingOrd as any).setupId
+        ? scannedSetups.find((s) => s.id === (pendingOrd as any).setupId)
+        : null);
+
+    const matchByDirAndReclaim = activeDirType
+      ? [...scannedSetups].reverse().find(
+          (s) => s.type === activeDirType && s.is_reclaimed
+        ) ?? null
+      : null;
+
+    const matchByReclaimAny = [...scannedSetups].reverse().find((s) => s.is_reclaimed) ?? null;
+
+    const latestActiveSetup =
+      matchById ??
+      matchByDirAndReclaim ??
+      matchByReclaimAny ??
+      (scannedSetups.length > 0 ? scannedSetups[scannedSetups.length - 1] : null);
 
     if (!activePos && !pendingOrd && !latestActiveSetup) return null;
 
@@ -647,6 +682,36 @@ export function useAutomatedStrategyExecution(
     const riskUsd = activePos?.riskUsd ?? pendingOrd?.riskUsd ?? latestActiveSetup?.risk_usd ?? Math.abs(entryPrice - stopLoss);
     const riskPct = activePos?.riskPct ?? pendingOrd?.riskPct ?? latestActiveSetup?.risk_pct ?? (engineConfig.liveSettings?.compoundingRiskPct ?? 2.0);
 
+    // ── Derive stage targets from riskUsd when active position targets look wrong ──
+    // If the active position's stage1Target deviates from the expected 1.0R by more
+    // than 5x (i.e. stale pre-bug targets from a corrupted position), fall back to
+    // recomputing from the live entryPrice / riskUsd / stageMultiples.
+    const posTarget1 = activePos?.stage1Target ?? pendingOrd?.stage1Target ?? null;
+    const posTarget2 = activePos?.stage2Target ?? pendingOrd?.stage2Target ?? null;
+    const posTarget3 = activePos?.stage3Target ?? pendingOrd?.dynamicDolTarget ?? pendingOrd?.stage3Target ?? null;
+
+    const s1Multiple = engineConfig.liveSettings?.stage1Multiple ?? engineConfig.stage1Multiple ?? 1.0;
+    const s2Multiple = engineConfig.liveSettings?.stage2Multiple ?? engineConfig.stage2Multiple ?? 1.5;
+    const s3Multiple = engineConfig.liveSettings?.stage3Multiple ?? engineConfig.stage3Multiple ?? 3.0;
+
+    // Tolerance check: if stored target1 deviates more than 5× riskUsd from expected, recompute.
+    const expectedT1 = isBull ? entryPrice + s1Multiple * riskUsd : entryPrice - s1Multiple * riskUsd;
+    const storedT1Deviation = posTarget1 !== null ? Math.abs(posTarget1 - expectedT1) : Infinity;
+    const useStoredTargets = posTarget1 !== null && storedT1Deviation <= 5 * riskUsd;
+
+    const target1 = useStoredTargets
+      ? posTarget1!
+      : latestActiveSetup?.stage1_target ??
+        (isBull ? entryPrice + s1Multiple * riskUsd : entryPrice - s1Multiple * riskUsd);
+    const target2 = useStoredTargets
+      ? (posTarget2 ?? (isBull ? entryPrice + s2Multiple * riskUsd : entryPrice - s2Multiple * riskUsd))
+      : latestActiveSetup?.stage2_target ??
+        (isBull ? entryPrice + s2Multiple * riskUsd : entryPrice - s2Multiple * riskUsd);
+    const target3 = useStoredTargets
+      ? (posTarget3 ?? (isBull ? entryPrice + s3Multiple * riskUsd : entryPrice - s3Multiple * riskUsd))
+      : latestActiveSetup?.stage3_target ??
+        (isBull ? entryPrice + s3Multiple * riskUsd : entryPrice - s3Multiple * riskUsd);
+
     return {
       id: activePos?.id ?? pendingOrd?.id ?? latestActiveSetup?.id ?? 'LIVE_SR',
       type: isBull ? 'BULLISH' : 'BEARISH',
@@ -661,13 +726,15 @@ export function useAutomatedStrategyExecution(
       fvgCe: activePos?.fvgCeLevel ?? pendingOrd?.fvgCeLevel ?? latestActiveSetup?.reclaim_fvg_ce ?? null,
       entryPrice,
       stopLoss,
-      target1: activePos?.stage1Target ?? pendingOrd?.stage1Target ?? latestActiveSetup?.stage1_target ?? 0,
-      target2: activePos?.stage2Target ?? pendingOrd?.stage2Target ?? latestActiveSetup?.stage2_target ?? 0,
-      target3: activePos?.stage3Target ?? pendingOrd?.dynamicDolTarget ?? pendingOrd?.stage3Target ?? latestActiveSetup?.stage3_target ?? 0,
+      target1,
+      target2,
+      target3,
       volExpansion: latestActiveSetup?.reclaim_volume_expansion ?? 1.0,
       deltaDominance: latestActiveSetup?.reclaim_delta_dominance_pct ?? 50.0,
       bodyRatio: latestActiveSetup?.reclaim_body_ratio ?? 50.0,
-      threePillarsPassed: latestActiveSetup?.three_pillar_displacement_passed ?? true,
+      // FIX: Default to FALSE — ANCHOR_ONLY setups have null three_pillar_displacement_passed.
+      // Defaulting to true was causing the badge to show 'Confirmed' for unconfirmed setups.
+      threePillarsPassed: latestActiveSetup?.three_pillar_displacement_passed ?? false,
       isValuationAligned: latestActiveSetup?.is_valuation_aligned ?? true,
       realizedR: activePos?.realizedR ?? 0,
       unrealizedR: activePos?.unrealizedR ?? 0,
@@ -684,7 +751,8 @@ export function useAutomatedStrategyExecution(
       sweepTime: latestActiveSetup?.sweep_time ?? undefined,
       reclaimTime: latestActiveSetup?.reclaim_time ?? undefined,
     };
-  }, [scannedSetups, activePositions, pendingOrders, engineConfig.liveSettings?.compoundingRiskPct]);
+  }, [scannedSetups, activePositions, pendingOrders, engineConfig.liveSettings?.compoundingRiskPct, engineConfig.stage1Multiple, engineConfig.stage2Multiple, engineConfig.stage3Multiple]);
+
 
   const riskPct = engineConfig.liveSettings?.compoundingRiskPct ?? engineConfig.compoundingRiskPct ?? 2.0;
   const riskUsd2Pct = parseFloat((accountEquity * (riskPct / 100)).toFixed(2));
