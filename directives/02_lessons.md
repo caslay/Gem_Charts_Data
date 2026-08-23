@@ -611,20 +611,21 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   2. Added element-wise memoized equality checks inside `setAlertLabelPositions` and `setFvgOverlayBoxes` in `Chart.tsx`.
   3. Stabilized `scheduleLayoutUpdates` with callback refs (`updateAlertPositionsRef`, `computeFvgOverlayRef`, `updateSvgCoordinatesRef`, `updateCountdownPositionRef`), breaking the re-render cycle.
 
-### 41. NaN R / Zero-Target Backtest Position Lockup — 6-Bug Batch (Resolved in V15.6)
-- **The Bug:** During backtest replay, positions opened with `unrealizedR = NaN`, `stage1Target = 0`, and never reached any harvest tranche. For LONG setups, Stage 1 fired immediately on the first candle (`high >= 0` is always true). For SHORT setups, Stage 1 never fired (`low <= 0` is never true at real ETH prices), permanently locking the engine. No subsequent setups could form because `activePositionRef` was occupied indefinitely.
-- **The Root Causes (6 compounding bugs):**
-  1. **(BUG-1) `ANCHOR_ONLY` zero targets:** `SweepReclaimEngine.ts` emitted `anchorOnlySetup` with `entry_price === stop_loss` (zero risk) and `stage1/2/3_target = 0`. These are display-only stubs, but the hook's pending-order gate occasionally allowed them through, injecting degenerate geometry into `ReplayPosition`.
-  2. **(BUG-2) `Math.max(0.50, NaN) === NaN`:** The safety clamp `Math.max(0.50, Math.abs(entry - sl))` in `useBacktestStrategyExecution.ts` is silently defeated when either coordinate is `NaN`. In JavaScript, `Math.max(x, NaN)` always returns `NaN`, not `x`.
-  3. **(BUG-3) `typeof NaN === 'number'`:** The guards in `resolveRetestEntryPrice` used `typeof fvg.top === 'number'` which passes for `NaN`, allowing NaN OHLC values from offline simulation candles to produce NaN entry prices.
-  4. **(BUG-4) No zombie-position self-healing:** Once a corrupted position was in `activePositionRef`, there was no automatic detection or cleanup — it ran on every candle tick for the remainder of the replay.
-  5. **(BUG-5) `closedSetupIdsRef` ID collision:** Setup IDs excluded the sweep candle index. Re-sweeps of the same structural anchor (PDH, Asian High, etc.) at a later bar produced the same string ID as the closed setup, permanently blacklisting the new, distinct setup.
-  6. **(BUG-6) Volume SMA `NaN` contamination:** `candles[i].v ?? 0` passes through an explicit `NaN` volume value (e.g. from offline mock candles). `NaN` propagated through the rolling SMA into `curVolExp`, silently defeating all 3-pillar volume gates or producing `Infinity`.
+### 52. Execution Parity & Autonomous Engine Harmonization across Quant Lab, Replay, and Live HUD (Resolved in V16.42)
+- **The Bug:**
+  1. **Untriggered Limit Orders in Backtest Replay:** Setups were detected in Quant Lab batch scans, but when stepping through the historical replay, limit orders were stranded in pending state or skipped entirely.
+  2. **Zero Live HUD Trades:** Live autonomous execution never placed or filled trades on incoming market data streams.
+- **The Root Causes:**
+  1. **Hook Effect Race Condition:** In `useBacktestStrategyExecution.ts`, `useEffect #2` ran before `useEffect #1` updated `activeSetupRef.current`, stamped `lastProcessedCandleTimeRef`, and aborted early on subsequent re-renders, skipping the pending limit order placement pass (`STEP A`).
+  2. **Status Gating Exclusion:** When a candle retested the entry, `scanHistoricalSetups` set `status: 'RETESTED'`. The replay hook strictly required `RECLAIMED_NO_RETEST`, causing retested bars to be vetoed rather than immediately filled.
+  3. **Stranded Limits & Concurrency Deadlock:** Pending limit orders lacked a Time-To-Live (TTL) expiration mechanism. In both Replay and Live HUD (`maxOpenPositions = 1`), a single untriggered limit order occupied the slot indefinitely, permanently deadlocking all subsequent setups.
+  4. **Premature Setup Blacklisting:** `AutomatedStrategyExecutionEngine.ts` permanently blacklisted setups on temporary price distance checks (`priceDistancePct > 0.05`).
+  5. **Mount Point Isolation:** `useAutomatedStrategyExecution` was mounted only on `src/app/page.tsx` instead of the global `MarketDataProvider`, halting background scans on route navigation.
 - **The Fixes:**
-  1. `ANCHOR_ONLY` setups now emit `stop_loss = anchorLevel ± 1.0` and `stageN_target` computed from R-multiples — never `0` or identical to `entry_price`.
-  2. `Math.max(0.50, ...)` replaced with explicit `Number.isFinite(rawDist) && rawDist > 0.01 ? rawDist : 0.50`.
-  3. All 6 case branches in `resolveRetestEntryPrice` replaced `typeof x === 'number'` with `Number.isFinite(x)` and added `high > low` directional sanity checks.
-  4. Zombie position self-healing guard added at top of STEP C: auto-aborts and garbage-collects any position with corrupted geometry, then `closedSetupIdsRef.add()` blacklists it so the same setup can't re-enter.
-  5. Setup ID schema extended: `SR_BULL_PDH_2450.00_1753...` → `SR_BULL_PDH_2450.00_1753..._SW347` (includes sweep candle index).
-  6. Volume SMA loop and `curVolExp` divisions wrapped in `Number.isFinite()` guards with safe fallback to `1.0`.
+  1. **Synchronized Replay Execution:** Unified visible candle scan evaluation with position lifecycle in `useBacktestStrategyExecution.ts`. Added support for immediate touch fills on `RETESTED` candles.
+  2. **Time-To-Live Expiration (TTL):** Added automatic TTL expiration (24 bars / 2 hours) to pending limit orders in both `useBacktestStrategyExecution.ts` and `AutomatedStrategyExecutionEngine.ts`, auto-cancelling dead limits and freeing the concurrency slot.
+  3. **Immediate Touch Protocol in Engine:** Added `is_immediate_fill`, `max_retest_index`, and `is_expired` metadata to `SweepReclaimSetup` in `SweepReclaimEngine.ts`.
+  4. **Global Host in MarketDataProvider:** Hoisted `AutonomousExecutionHost` directly into `MarketDataProvider` in `src/context/MarketDataContext.tsx`, ensuring 24/7 background execution across all routes.
+  5. **Sanitized Blacklisting:** Removed premature blacklisting on temporary distance deviations in `AutomatedStrategyExecutionEngine.ts`.
+
 

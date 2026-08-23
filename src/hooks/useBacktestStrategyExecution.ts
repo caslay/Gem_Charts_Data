@@ -179,10 +179,28 @@ export function useBacktestStrategyExecution({
     return visibleArrays.candles_5m as unknown as Candle[];
   }, [visibleArrays, activeTimeframe]);
 
+  // Track previous index to auto-reset on scrub backward
+  const prevCurrentIndexRef = useRef<number>(currentIndex);
+  useEffect(() => {
+    if (currentIndex < prevCurrentIndexRef.current) {
+      // User scrubbed backward — clean up transient positions
+      activePositionRef.current = null;
+      pendingLimitOrderRef.current = null;
+      activeSetupRef.current = null;
+      setActivePosition(null);
+      setPendingLimitOrder(null);
+      setActiveSetup(null);
+      closedSetupIdsRef.current.clear();
+      lastProcessedCandleTimeRef.current = null;
+    }
+    prevCurrentIndexRef.current = currentIndex;
+  }, [currentIndex]);
+
   // Run SweepReclaimEngine on the visible slice (Strict zero look-ahead)
   useEffect(() => {
     if (!evaluationCandles || evaluationCandles.length < 15) {
       setActiveSetup(null);
+      activeSetupRef.current = null;
       return;
     }
 
@@ -218,7 +236,6 @@ export function useBacktestStrategyExecution({
       // Filter out any setup that has already been closed/completed in this session
       const unclosedSetups = setups.filter((s) => !closedSetupIdsRef.current.has(s.id));
 
-      // Find the most recent active setup that is relevant to the current replay cursor
       if (unclosedSetups.length > 0) {
         // Priority 1: Confirmed setup waiting for retest or recently retested
         const activeOrRetested = unclosedSetups.filter(
@@ -230,13 +247,16 @@ export function useBacktestStrategyExecution({
         );
         if (activeOrRetested.length > 0) {
           const latest = activeOrRetested[activeOrRetested.length - 1];
+          activeSetupRef.current = latest;
           setActiveSetup(latest);
         } else {
           // Priority 2: Latest swept or anchor setup
           const latest = unclosedSetups[unclosedSetups.length - 1];
+          activeSetupRef.current = latest;
           setActiveSetup(latest);
         }
       } else {
+        activeSetupRef.current = null;
         setActiveSetup(null);
       }
     } catch (err) {
@@ -251,11 +271,11 @@ export function useBacktestStrategyExecution({
     if (!lastCandle || !isAutoExecuteEnabled) return;
 
     const candleTime = lastCandle.t;
-    const currentSetup = activeSetupRef.current;
     const currentPos = activePositionRef.current;
     const currentPending = pendingLimitOrderRef.current;
+    const currentSetup = activeSetupRef.current;
 
-    // Fast path: If the candle hasn't advanced, only update live floating R metrics
+    // Fast path: If the candle timestamp hasn't advanced, only update live floating R metrics
     if (lastProcessedCandleTimeRef.current === candleTime) {
       if (currentPos && currentPos.status !== 'CLOSED' && lastPrice) {
         const isLong = currentPos.direction === 'LONG';
@@ -278,100 +298,9 @@ export function useBacktestStrategyExecution({
     const low = lastCandle.l ?? lastCandle.low;
     const high = lastCandle.h ?? lastCandle.high;
     const close = lastCandle.c ?? lastCandle.close;
+    const currentCandleIdx = evaluationCandles.length - 1;
 
-    // ── STEP A: Queue Pending Limit Order upon Confirmed 3-Pillar Reclaim ──────
-    if (currentSetup) {
-      const isConfirmedReclaim =
-        currentSetup.three_pillar_displacement_passed &&
-        (!config.enforceDiscountPremiumGate || currentSetup.is_valuation_aligned) &&
-        (currentSetup.status === 'RECLAIMED_NO_RETEST' || currentSetup.phase === 'RECLAIM');
-
-      if (isConfirmedReclaim && !currentPos && !currentPending) {
-        const entryPrice = currentSetup.entry_price;
-        const stopLoss = currentSetup.stop_loss;
-
-        // FIX-3: Pre-flight geometry validation — abort if the engine returned degenerate
-        // coordinates. Math.max(0.50, NaN) === NaN in JavaScript (NOT 0.50), so the prior
-        // safety clamp was silently defeated whenever entry_price or stop_loss was NaN.
-        // Also blocks ANCHOR_ONLY setups that slipped through with equal entry/SL.
-        if (
-          !Number.isFinite(entryPrice) ||
-          !Number.isFinite(stopLoss) ||
-          entryPrice === stopLoss ||
-          !Number.isFinite(currentSetup.stage1_target) ||
-          currentSetup.stage1_target === 0 ||
-          !Number.isFinite(currentSetup.stage2_target) ||
-          currentSetup.stage2_target === 0
-        ) {
-          console.warn(
-            '[useBacktestStrategyExecution] SKIPPED: Degenerate setup geometry — cannot create pending order.',
-            {
-              setupId: currentSetup.id,
-              entryPrice,
-              stopLoss,
-              stage1: currentSetup.stage1_target,
-              stage2: currentSetup.stage2_target,
-            }
-          );
-          return;
-        }
-
-        // FIX-3: Guard Math.max against NaN — Math.max(0.50, NaN) returns NaN, not 0.50.
-        // Use explicit Number.isFinite check so the 0.50 clamp actually takes effect.
-        const rawDist = Math.abs(entryPrice - stopLoss);
-        const riskDistance = Number.isFinite(rawDist) && rawDist > 0.01 ? rawDist : 0.50;
-
-        // Calculate dynamic compounded sizing (2.0% risk)
-        const equity = accountEquity > 0 ? accountEquity : 10000;
-        const riskPct = 2.0;
-        const riskUsd = parseFloat((equity * (riskPct / 100)).toFixed(2));
-        const contractSize = parseFloat((riskUsd / riskDistance).toFixed(3));
-
-        const newPendingOrder: ReplayPosition = {
-          id: `BT_POS_${currentSetup.type}_${candleTime}`,
-          setupId: currentSetup.id,
-          direction: currentSetup.type === 'BULLISH' ? 'LONG' : 'SHORT',
-          status: 'PENDING_LIMIT',
-          entryPrice,
-          initialStopLoss: stopLoss,
-          activeStopLoss: stopLoss,
-          stage1Target: currentSetup.stage1_target,
-          stage2Target: currentSetup.stage2_target,
-          stage3Target: currentSetup.stage3_target,
-          fvgCeLevel: currentSetup.reclaim_fvg_ce,
-          riskUsd,
-          riskDistance,
-          contractSize,
-          riskPct,
-          realizedR: 0,
-          realizedUsd: 0,
-          unrealizedR: 0,
-          unrealizedUsd: 0,
-          isStage1Filled: false,
-          isStage2Filled: false,
-          isStage3Filled: false,
-          openTime: candleTime,
-          closeTime: null,
-          exitPrice: null,
-          exitReason: null,
-          anchorLevel: currentSetup.anchor_level,
-          timeframe: activeTimeframe,
-        };
-
-        pendingLimitOrderRef.current = newPendingOrder;
-        setPendingLimitOrder(newPendingOrder);
-        triggerSmartAlert?.(
-          'AUTO_ORDER_ROUTED',
-          `⏳ [S&R LIMIT PLACED] ${newPendingOrder.direction} Limit resting @ $${entryPrice.toFixed(
-            2
-          )} (${currentSetup.anchor_name}) | 3-Pillars Confirmed | Risk: $${riskUsd.toFixed(2)} (2.0%).`,
-          '/audio/fvg_alert.mp3',
-          'REPLAY_STRATEGY'
-        );
-      }
-    }
-
-    // ── STEP B: Check Limit Fill for Pending Limit Orders ─────────────────────
+    // ── STEP A: Evaluate Pending Limit Orders (Touch, Expiration, or Invalidation) ──
     if (currentPending && currentPending.status === 'PENDING_LIMIT') {
       const isLong = currentPending.direction === 'LONG';
       const isLimitTouched = isLong
@@ -383,7 +312,22 @@ export function useBacktestStrategyExecution({
         ? close >= Math.min(currentPending.anchorLevel, currentPending.entryPrice)
         : close <= Math.max(currentPending.anchorLevel, currentPending.entryPrice);
 
-      if (isLimitTouched && isBodyDefended) {
+      // Check Expiration (TTL = maxBarsToRetest, default: 24 bars)
+      const maxRetestBars = config.maxBarsToRetest ?? 24;
+      const isExpired = currentSetup?.reclaim_index !== null && currentSetup?.reclaim_index !== undefined
+        ? (currentCandleIdx - currentSetup.reclaim_index > maxRetestBars)
+        : false;
+
+      if (isExpired) {
+        pendingLimitOrderRef.current = null;
+        setPendingLimitOrder(null);
+        triggerSmartAlert?.(
+          'SMT_TRAP',
+          `⌛ [S&R EXPIRED] Retest window elapsed (${maxRetestBars} bars). Resting limit cancelled.`,
+          '/audio/dead_zone.wav',
+          'REPLAY_STRATEGY'
+        );
+      } else if (isLimitTouched && isBodyDefended) {
         const openedPosition: ReplayPosition = {
           ...currentPending,
           status: 'OPEN',
@@ -459,6 +403,159 @@ export function useBacktestStrategyExecution({
           '/audio/dead_zone.wav',
           'REPLAY_STRATEGY'
         );
+      }
+    }
+
+    // ── STEP B: Immediate Touch Fill or Queue Pending Limit for Fresh Setups ──
+    const freshPos = activePositionRef.current;
+    const freshPending = pendingLimitOrderRef.current;
+
+    if (currentSetup && !freshPos && !freshPending) {
+      const isConfirmed =
+        currentSetup.three_pillar_displacement_passed &&
+        (!config.enforceDiscountPremiumGate || currentSetup.is_valuation_aligned);
+
+      if (isConfirmed) {
+        const entryPrice = currentSetup.entry_price;
+        const stopLoss = currentSetup.stop_loss;
+
+        // Pre-flight geometry validation
+        const isValidGeometry =
+          Number.isFinite(entryPrice) &&
+          Number.isFinite(stopLoss) &&
+          entryPrice !== stopLoss &&
+          Number.isFinite(currentSetup.stage1_target) &&
+          currentSetup.stage1_target !== 0 &&
+          Number.isFinite(currentSetup.stage2_target) &&
+          currentSetup.stage2_target !== 0;
+
+        if (isValidGeometry) {
+          const rawDist = Math.abs(entryPrice - stopLoss);
+          const riskDistance = Number.isFinite(rawDist) && rawDist > 0.01 ? rawDist : 0.50;
+
+          const equity = accountEquity > 0 ? accountEquity : 10000;
+          const riskPct = 2.0;
+          const riskUsd = parseFloat((equity * (riskPct / 100)).toFixed(2));
+          const contractSize = parseFloat((riskUsd / riskDistance).toFixed(3));
+
+          const basePositionData: ReplayPosition = {
+            id: `BT_POS_${currentSetup.type}_${candleTime}`,
+            setupId: currentSetup.id,
+            direction: currentSetup.type === 'BULLISH' ? 'LONG' : 'SHORT',
+            status: 'PENDING_LIMIT',
+            entryPrice,
+            initialStopLoss: stopLoss,
+            activeStopLoss: stopLoss,
+            stage1Target: currentSetup.stage1_target,
+            stage2Target: currentSetup.stage2_target,
+            stage3Target: currentSetup.stage3_target,
+            fvgCeLevel: currentSetup.reclaim_fvg_ce,
+            riskUsd,
+            riskDistance,
+            contractSize,
+            riskPct,
+            realizedR: 0,
+            realizedUsd: 0,
+            unrealizedR: 0,
+            unrealizedUsd: 0,
+            isStage1Filled: false,
+            isStage2Filled: false,
+            isStage3Filled: false,
+            openTime: candleTime,
+            closeTime: null,
+            exitPrice: null,
+            exitReason: null,
+            anchorLevel: currentSetup.anchor_level,
+            timeframe: activeTimeframe,
+          };
+
+          const isLong = basePositionData.direction === 'LONG';
+          const isImmediateTouchOnCurrentBar = isLong
+            ? low <= entryPrice && close >= Math.min(currentSetup.anchor_level, entryPrice)
+            : high >= entryPrice && close <= Math.max(currentSetup.anchor_level, entryPrice);
+
+          const isRetestedOnCurrentBar =
+            currentSetup.status === 'RETESTED' &&
+            (currentSetup.retest_index === currentCandleIdx || currentSetup.is_immediate_fill);
+
+          if (isImmediateTouchOnCurrentBar || isRetestedOnCurrentBar) {
+            // Immediate Touch / Retroactive Fill on Current Candle
+            const openedPosition: ReplayPosition = {
+              ...basePositionData,
+              status: 'OPEN',
+            };
+
+            activePositionRef.current = openedPosition;
+            setActivePosition(openedPosition);
+
+            triggerSmartAlert?.(
+              'AUTO_ORDER_ROUTED',
+              `🚀 [S&R RETEST FILLED] ${openedPosition.direction} position opened @ $${openedPosition.entryPrice.toFixed(
+                2
+              )} | Size: ${openedPosition.contractSize} ETH | SL: $${openedPosition.activeStopLoss.toFixed(2)}`,
+              '/audio/sweep_alert.mp3',
+              'REPLAY_STRATEGY'
+            );
+
+            // POST to /api/backtest-trades
+            const tradePayload = {
+              symbol: 'ETHUSDC',
+              direction: openedPosition.direction,
+              entry_price: openedPosition.entryPrice,
+              stop_loss: openedPosition.activeStopLoss,
+              take_profit: openedPosition.stage3Target,
+              position_size: openedPosition.contractSize,
+              risk_amount_usd: openedPosition.riskUsd,
+              risk_percent: openedPosition.riskPct,
+              strategy_name: `Sweep & Reclaim (3-Pillar Reversal - ${openedPosition.direction})`,
+              ai_narrative_summary: `[Backtest Replay S&R Execution] ${openedPosition.direction} @ $${openedPosition.entryPrice.toFixed(2)} | Anchor: $${openedPosition.anchorLevel.toFixed(2)}`,
+              status: 'OPEN',
+              opened_at: new Date(candleTime).toISOString(),
+              created_at: new Date(candleTime).toISOString(),
+              ipda_metrics: {
+                timeframe: activeTimeframe,
+                stage1_target: openedPosition.stage1Target,
+                stage2_target: openedPosition.stage2Target,
+                stage3_target: openedPosition.stage3Target,
+                fvg_ce: openedPosition.fvgCeLevel,
+                anchor_level: openedPosition.anchorLevel,
+              },
+            };
+
+            fetch('/api/backtest-trades', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(tradePayload),
+            })
+              .then(async (res) => {
+                if (res.ok) {
+                  const data = await res.json();
+                  if (data.trade_id) {
+                    const updated = { ...activePositionRef.current!, dbTradeId: data.trade_id };
+                    activePositionRef.current = updated;
+                    setActivePosition(updated);
+                  }
+                  onTradesRefresh?.();
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new Event('backtest-trades-refresh'));
+                  }
+                }
+              })
+              .catch((err) => console.warn('[useBacktestStrategyExecution] POST trade error:', err));
+          } else if (currentSetup.status === 'RECLAIMED_NO_RETEST' || currentSetup.phase === 'RECLAIM') {
+            // Queue Resting Limit Order for future candle retest
+            pendingLimitOrderRef.current = basePositionData;
+            setPendingLimitOrder(basePositionData);
+            triggerSmartAlert?.(
+              'AUTO_ORDER_ROUTED',
+              `⏳ [S&R LIMIT PLACED] ${basePositionData.direction} Limit resting @ $${entryPrice.toFixed(
+                2
+              )} (${currentSetup.anchor_name}) | 3-Pillars Confirmed | Risk: $${riskUsd.toFixed(2)} (2.0%).`,
+              '/audio/fvg_alert.mp3',
+              'REPLAY_STRATEGY'
+            );
+          }
+        }
       }
     }
 

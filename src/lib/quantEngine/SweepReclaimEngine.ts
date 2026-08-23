@@ -153,6 +153,9 @@ export interface SweepReclaimSetup {
   retest_price: number | null;
   bars_reclaim_to_retest: number | null;
   is_retested: boolean;
+  is_immediate_fill?: boolean;
+  max_retest_index?: number | null;
+  is_expired?: boolean;
   body_defense_passed: boolean;
 
   // Dealing Range & Valuation Gating
@@ -799,7 +802,7 @@ export class SweepReclaimEngine {
       startIdx: number;
       endIdx: number;
       anchorLevel: number;
-      sweepExtreme: number | null;
+      sweepIdx: number;
       isBullish: boolean;
     }> = [];
 
@@ -987,6 +990,9 @@ export class SweepReclaimEngine {
           retest_price: null,
           bars_reclaim_to_retest: null,
           is_retested: false,
+          is_immediate_fill: false,
+          max_retest_index: null,
+          is_expired: false,
           body_defense_passed: false,
 
           dealing_range_equilibrium: null,
@@ -1315,6 +1321,29 @@ export class SweepReclaimEngine {
         ? executionEntry + stage3Multiple * riskUsd
         : executionEntry - stage3Multiple * riskUsd;
 
+      // ─── Immediate Touch Check on Reclaim Candle ───
+      let isImmediateTouch = false;
+      if (reclaimFound && reclaimIdx !== null) {
+        const rc = candles[reclaimIdx];
+        const rcLow = rc.l ?? (rc as any).low;
+        const rcHigh = rc.h ?? (rc as any).high;
+        const rcClose = rc.c ?? (rc as any).close;
+        if (isBullish) {
+          const defenseFloor = Math.min(anchorLevel, executionEntry);
+          if (rcLow <= executionEntry && rcClose >= defenseFloor) {
+            isImmediateTouch = true;
+          }
+        } else {
+          const defenseCeiling = Math.max(anchorLevel, executionEntry);
+          if (rcHigh >= executionEntry && rcClose <= defenseCeiling) {
+            isImmediateTouch = true;
+          }
+        }
+      }
+
+      const maxRetestIdx = reclaimIdx !== null ? Math.min(n - 1, reclaimIdx + (this.config.maxBarsToRetest ?? 24)) : null;
+      const isExpired = reclaimIdx !== null ? (n - 1 > reclaimIdx + (this.config.maxBarsToRetest ?? 24)) : false;
+
       const baseSetup: SweepReclaimSetup = {
         id: setupId,
         type: isBullish ? 'BULLISH' : 'BEARISH',
@@ -1372,6 +1401,9 @@ export class SweepReclaimEngine {
         retest_price: null,
         bars_reclaim_to_retest: null,
         is_retested: false,
+        is_immediate_fill: isImmediateTouch,
+        max_retest_index: maxRetestIdx,
+        is_expired: isExpired,
         body_defense_passed: false,
 
         dealing_range_equilibrium: dealingRangeEquilibrium,
@@ -1430,14 +1462,23 @@ export class SweepReclaimEngine {
       }
 
       // ─── Phase 4: Retest & 3-Stage Harvest Execution Simulation ────────────
-      const maxRetestIdx = Math.min(n - 1, reclaimIdx + (this.config.maxBarsToRetest ?? 24));
+      const effectiveMaxRetestIdx = Math.min(n - 1, reclaimIdx + (this.config.maxBarsToRetest ?? 24));
       let retestFound = false;
       let retestIdx: number | null = null;
       let retestPrice: number | null = null;
       let retestTime: number | null = null;
       let bodyDefenseValid = false;
 
-      for (let i = reclaimIdx + 1; i <= maxRetestIdx; i++) {
+      // If reclaim candle itself was an immediate touch, seed candidate
+      if (isImmediateTouch) {
+        retestFound = true;
+        retestIdx = reclaimIdx;
+        retestPrice = executionEntry;
+        retestTime = candles[reclaimIdx].t;
+        bodyDefenseValid = true;
+      }
+
+      for (let i = reclaimIdx + 1; i <= effectiveMaxRetestIdx; i++) {
         const c = candles[i];
         const low = c.l ?? (c as any).low;
         const high = c.h ?? (c as any).high;
@@ -1460,6 +1501,8 @@ export class SweepReclaimEngine {
               baseSetup.status = 'INVALIDATED_AT_RETEST';
               baseSetup.simulated_outcome = 'INVALIDATED';
               baseSetup.stage_exit_type = 'INVALIDATED';
+              retestFound = false;
+              bodyDefenseValid = false;
               break;
             }
           }
@@ -1480,6 +1523,8 @@ export class SweepReclaimEngine {
               baseSetup.status = 'INVALIDATED_AT_RETEST';
               baseSetup.simulated_outcome = 'INVALIDATED';
               baseSetup.stage_exit_type = 'INVALIDATED';
+              retestFound = false;
+              bodyDefenseValid = false;
               break;
             }
           }
@@ -1496,21 +1541,16 @@ export class SweepReclaimEngine {
         continue;
       }
 
-      // ── One-Active-Position-Per-Structural-Wave Concurrency Lock ──
+      // ── One-Active-Position-Per-Structural-Wave Deduplication ──
       const isWaveAlreadyActive = activeTradeIntervals.some(
         (t) =>
           t.isBullish === isBullish &&
-          (t.sweepExtreme === sweepExtremePrice || Math.abs(t.anchorLevel - anchorLevel) < 0.50) &&
+          t.sweepIdx === sweepIdx &&
           retestIdx! >= t.startIdx &&
           retestIdx! <= t.endIdx
       );
 
       if (isWaveAlreadyActive) {
-        console.warn(`[EXECUTION_LOCK] Vetoed duplicate entry for active zone: ${anchorLevel}`);
-        baseSetup.status = 'RECLAIMED_NO_RETEST';
-        baseSetup.simulated_outcome = 'INVALIDATED';
-        baseSetup.stage_exit_type = 'INVALIDATED';
-        detectedSetups.push(baseSetup);
         continue;
       }
 
@@ -1773,9 +1813,9 @@ export class SweepReclaimEngine {
       if (retestIdx !== null) {
         activeTradeIntervals.push({
           startIdx: retestIdx,
-          endIdx: exitIdx !== null ? exitIdx : n - 1,
+          endIdx: exitIdx !== null ? exitIdx : Math.min(n - 1, retestIdx + (this.config.maxBarsToRetest ?? 24)),
           anchorLevel,
-          sweepExtreme: sweepExtremePrice,
+          sweepIdx,
           isBullish,
         });
       }

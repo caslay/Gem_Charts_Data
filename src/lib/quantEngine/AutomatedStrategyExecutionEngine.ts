@@ -570,11 +570,25 @@ export class AutomatedStrategyExecutionEngine {
     if (!livePrice || isNaN(livePrice) || livePrice <= 0) return;
     const now = Date.now();
 
-    // ── Step A: Evaluate Pending Limit Orders for Touch Execution ──
+    // ── Step A: Evaluate Pending Limit Orders for Touch Execution & TTL Expiration ──
+    const maxPendingOrderTtlMs = 7200000; // 2 hours (24 x 5m bars)
     for (let i = this.pendingLimitOrders.length - 1; i >= 0; i--) {
       const order = this.pendingLimitOrders[i];
       const isLong = order.direction === 'LONG';
       const isTouched = isLong ? livePrice <= order.limitEntryPrice : livePrice >= order.limitEntryPrice;
+
+      // Check TTL Expiration
+      if (now - order.pendingTime > maxPendingOrderTtlMs) {
+        this.pendingLimitOrders.splice(i, 1);
+        if (order.originZoneId) {
+          this.consumedZoneIds.delete(order.originZoneId);
+        }
+        const expireMsg = `⌛ [LIMIT_EXPIRED] Resting ${order.direction} limit @ $${order.limitEntryPrice.toFixed(
+          2
+        )} expired without touch (TTL 2h elapsed). Concurrency slot released.`;
+        this.emit('POSITION_CLOSED', expireMsg, order);
+        continue;
+      }
 
       if (isTouched) {
         order.status = 'OPEN';
@@ -1030,23 +1044,26 @@ export class AutomatedStrategyExecutionEngine {
           scanned.push(s);
 
           // ── STRICT FRESHNESS & REAL-TIME RECENTNESS GUARD ──
-          // A setup is ONLY eligible for live execution if:
-          // 1. It is currently waiting for retest (RECLAIMED_NO_RETEST) and the reclaim occurred on a recent bar (within last 6 bars)
-          // 2. OR it was retested on the very latest closed bar (retest_index >= candles.length - 2)
-          // All older historical setups are marked processed and ignored for live execution.
+          // A setup is eligible for live execution if:
+          // 1. It is waiting for retest (RECLAIMED_NO_RETEST) and reclaim occurred recently (within last 12 bars)
+          // 2. OR it was retested on the latest closed bars (retest_index >= candles.length - 3)
+          // 3. OR it was flagged as an immediate fill on the reclaim bar
           const isFreshReclaim =
             s.status === 'RECLAIMED_NO_RETEST' &&
             s.reclaim_index !== null &&
-            s.reclaim_index >= candles.length - 6;
+            s.reclaim_index >= candles.length - 12;
 
           const isLatestRetest =
             s.status === 'RETESTED' &&
             s.retest_index !== null &&
-            s.retest_index >= candles.length - 2;
+            s.retest_index >= candles.length - 3;
 
-          if (!isFreshReclaim && !isLatestRetest) {
-            // Stale historical setup: mark as processed to prevent back-execution
-            this.processedSetupIds.add(s.id);
+          const isImmediateFill =
+            Boolean(s.is_immediate_fill) &&
+            s.reclaim_index !== null &&
+            s.reclaim_index >= candles.length - 3;
+
+          if (!isFreshReclaim && !isLatestRetest && !isImmediateFill) {
             continue;
           }
 
@@ -1070,8 +1087,6 @@ export class AutomatedStrategyExecutionEngine {
               );
 
             if (isZoneAlreadyActive) {
-              console.warn(`[EXECUTION_LOCK] Vetoed duplicate entry for active zone: ${s.anchor_level}`);
-              this.processedSetupIds.add(s.id);
               continue;
             }
 
@@ -1106,7 +1121,7 @@ export class AutomatedStrategyExecutionEngine {
             // Price Sanity Guard: Ensure entry level is within 5% of current market price
             const priceDistancePct = Math.abs(entryPrice - latestPrice) / latestPrice;
             if (priceDistancePct > 0.05) {
-              this.processedSetupIds.add(s.id);
+              // Temporary distance mismatch: do NOT permanently blacklist
               continue;
             }
 
