@@ -370,9 +370,9 @@ export function resolveRetestEntryPrice(params: RetestPriceResolverParams): numb
 
     case 'FVG_PROXIMAL':
       if (fvg && Number.isFinite(fvg.top) && Number.isFinite(fvg.bottom) && fvg.top > fvg.bottom) {
-        // Bullish (BISI): retracement downward hits upper gap boundary first (fvg.top)
-        // Bearish (SIBI): retracement upward hits lower gap boundary first (fvg.bottom)
-        const proximal = isBullish ? fvg.top : fvg.bottom;
+        // Bullish (BISI): retracement downward → hits LOWER gap boundary first = Candle 1 High = fvg.bottom
+        // Bearish (SIBI): retracement upward  → hits UPPER gap boundary first = Candle 1 Low  = fvg.top
+        const proximal = isBullish ? fvg.bottom : fvg.top;
         return parseFloat(proximal.toFixed(4));
       }
       return parseFloat(anchorLevel.toFixed(4));
@@ -388,9 +388,9 @@ export function resolveRetestEntryPrice(params: RetestPriceResolverParams): numb
 
     case 'FVG_DISTAL':
       if (fvg && Number.isFinite(fvg.top) && Number.isFinite(fvg.bottom) && fvg.top > fvg.bottom) {
-        // Bullish (BISI): deepest boundary before gap mitigation/invalidation is lower gap boundary (fvg.bottom)
-        // Bearish (SIBI): deepest boundary before gap mitigation/invalidation is upper gap boundary (fvg.top)
-        const distal = isBullish ? fvg.bottom : fvg.top;
+        // Bullish (BISI): deepest boundary before gap mitigation/invalidation = Candle 3 Low = fvg.top
+        // Bearish (SIBI): deepest boundary before gap mitigation/invalidation = Candle 3 High = fvg.bottom
+        const distal = isBullish ? fvg.top : fvg.bottom;
         return parseFloat(distal.toFixed(4));
       }
       return parseFloat(anchorLevel.toFixed(4));
@@ -1284,8 +1284,14 @@ export class SweepReclaimEngine {
 
       // Directional geometry fields
       const sweepObProximal = sweepCandleData ? (isBullish ? sweepCandleData.high : sweepCandleData.low) : null;
-      const reclaimFvgProximal = fvgData ? (isBullish ? fvgData.top : fvgData.bottom) : null;
-      const reclaimFvgDistal = fvgData ? (isBullish ? fvgData.bottom : fvgData.top) : null;
+      // Proximal = Candle 1 boundary (first touched on retracement):
+      //   Bullish (BISI): retracement down → Candle 1 High = fvgData.bottom
+      //   Bearish (SIBI): retracement up   → Candle 1 Low  = fvgData.top
+      const reclaimFvgProximal = fvgData ? (isBullish ? fvgData.bottom : fvgData.top) : null;
+      // Distal = Candle 3 boundary (deepest fill before gap invalidation):
+      //   Bullish (BISI): Candle 3 Low  = fvgData.top
+      //   Bearish (SIBI): Candle 3 High = fvgData.bottom
+      const reclaimFvgDistal = fvgData ? (isBullish ? fvgData.top : fvgData.bottom) : null;
       const ote62Price = displacementData ? resolveRetestEntryPrice({
         mode: 'OTE_62',
         isBullish,

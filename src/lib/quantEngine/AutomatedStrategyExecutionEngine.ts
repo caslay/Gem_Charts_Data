@@ -590,6 +590,25 @@ export class AutomatedStrategyExecutionEngine {
         continue;
       }
 
+      // Check Missed Expansion (price reached TP1/target before touch fill)
+      const tp1 = order.stage1Target;
+      const isMissedExpansion =
+        Number.isFinite(tp1) &&
+        tp1 > 0 &&
+        (isLong ? livePrice >= tp1 : livePrice <= tp1);
+
+      if (isMissedExpansion) {
+        this.pendingLimitOrders.splice(i, 1);
+        if (order.originZoneId) {
+          this.consumedZoneIds.delete(order.originZoneId);
+        }
+        const expandMsg = `🚫 [INVALIDATED_EXPANDED] Resting ${order.direction} limit @ $${order.limitEntryPrice.toFixed(
+          2
+        )} cancelled — price expanded directly to TP1 target ($${tp1.toFixed(2)}) without filling retest.`;
+        this.emit('POSITION_CLOSED', expandMsg, order);
+        continue;
+      }
+
       if (isTouched) {
         order.status = 'OPEN';
         order.entryPrice = order.limitEntryPrice;
@@ -1064,6 +1083,40 @@ export class AutomatedStrategyExecutionEngine {
             s.reclaim_index >= candles.length - 3;
 
           if (!isFreshReclaim && !isLatestRetest && !isImmediateFill) {
+            continue;
+          }
+
+          // ── MISSED EXPANSION GATE ──────────────────────────────────────────────────
+          // If current market price has already reached or exceeded TP1 in the setup's favor,
+          // the entry opportunity has already expanded. Placing a resting limit now would
+          // risk being caught in an over-extended move or filling retroactively.
+          const isLongSetup = s.type === 'BULLISH';
+          const tp1 = s.stage1_target;
+          const isMissedExpansion =
+            Number.isFinite(tp1) &&
+            tp1 > 0 &&
+            (isLongSetup ? latestPrice >= tp1 : latestPrice <= tp1);
+
+          if (isMissedExpansion) {
+            continue;
+          }
+
+          // ── WALL-CLOCK RETEST TTL GUARD ───────────────────────────────────────────
+          // Prevent stale setups from spawning limits on page refresh/mount when the
+          // reclaim occurred outside the active freshness window.
+          const tfMs: Record<string, number> = { '5m': 300_000, '15m': 900_000, '1h': 3_600_000 };
+          const barMs = tfMs[tf] ?? 300_000;
+          const maxRetestWindowMs = (scanConfig.maxBarsToRetest ?? 30) * barMs;
+          const normalizedReclaimTime =
+            s.reclaim_time !== null && s.reclaim_time > 0
+              ? (s.reclaim_time < 1e11 ? s.reclaim_time * 1000 : s.reclaim_time)
+              : null;
+          const reclaimAgeMs =
+            normalizedReclaimTime !== null
+              ? Date.now() - normalizedReclaimTime
+              : Infinity;
+
+          if (reclaimAgeMs > maxRetestWindowMs) {
             continue;
           }
 

@@ -1,8 +1,98 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.45
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.48
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-23 (V16.45 — TP1/TP2 Target Inversion: Two-Part Forensic Fix)  
+> **Last Updated:** 2026-08-23 (V16.48 — Flawed Historical Median Drop Elimination & Trade Close Idempotency)  
+
+## 🆕 V16.48 Changelog — Flawed Historical Median Drop Elimination & Trade Close Idempotency (2026-08-23)
+
+### Summary
+1. **Flawed Historical Median Drop Removal (`Chart.tsx`):**
+   - Eliminated the static dataset median outlier drop check (`Math.abs(d.c - medianPrice) / medianPrice > 0.25`) that incorrectly flagged legitimate trending candles ($2388-$2457 ETH) as outliers simply because the overall historical dataset median was lower ($1910).
+   - Replaced with robust finite positive numerical validation, allowing normal market trends to render seamlessly while bar-to-bar outlier protection remains strictly in active streaming handlers (`useMarketData.ts`, `useBinanceWS.ts`, and `LiveSeriesCanvasUpdater`).
+2. **Trade Close Idempotency (`/api/backtest-trades` & `/api/trades`):**
+   - Updated PATCH handlers to return status `200 OK` with `{ success: true, message: "Trade is already CLOSED." }` instead of `400 Bad Request` when auto-closing or manually closing a trade that is already in `CLOSED` state.
+   - Prevents auto-close retry loops and console errors in `BacktestPage` and live trading workspaces.
+
+---
+
+## 🆕 V16.47 Changelog — Stale Pending Limit Respawning & Co-Located Chart Label Collision Fix (2026-08-23)
+
+### Summary
+1. **Missed Expansion Gate & Wall-Clock Retest TTL Guard (`AutomatedStrategyExecutionEngine.ts`):**
+   - Prevented historical setups from spawning active resting limit orders on client mount/refresh when price has already expanded past TP1 in the setup's favor or when elapsed time since `reclaim_time` exceeds the maximum retest duration (`maxBarsToRetest × timeframe_ms`).
+   - Added real-time Missed Expansion monitoring to active pending limit orders inside `processMarketTick()`, automatically invalidating and cancelling orders with `INVALIDATED_EXPANDED` if market price moves straight to target without filling the retest.
+2. **Chart Visualizer Label Collision Deduplication (`Chart.tsx`):**
+   - Implemented dynamic collision tolerance checking (`Math.abs(entryPrice - anchorLevel) < 0.05`) between the Sweep & Reclaim entry price and swept structural anchor level.
+   - When co-located (e.g. in `SHELF_LEVEL` / `RECLAIM_LEVEL` mode), the redundant underlying anchor text badge is suppressed while maintaining the dashed reference line, and the entry badge label is enriched to `"🎯 S&R ENTRY / ⚓ SHELF (DIRECTION): $PRICE"`, eliminating text overplotting.
+
+---
+
+## 🆕 V16.46 Changelog — FVG Proximal/Distal Polarity Inversion Fix (2026-08-23)
+
+### Summary
+Corrected an inverted proximal/distal boundary assignment in `resolveRetestEntryPrice()` and the downstream `reclaimFvgProximal` / `reclaimFvgDistal` directional geometry fields within `SweepReclaimEngine.ts`. Entry prices for `FVG_PROXIMAL` and `FVG_DISTAL` modes were resolving to the **wrong** gap boundary for both Bullish (BISI) and Bearish (SIBI) setups, misguiding precision limit order routing.
+
+### ICT 3-Candle FVG Mapping
+
+The engine uses a 3-candle sliding window. In ICT nomenclature mapped to code:
+
+| ICT Name | Code Variable | Array Index |
+|---|---|---|
+| Candle 1 (pre-displacement) | `c0` | `candles[f - 2]` |
+| Candle 2 (displacement body) | *(not extracted)* | `candles[f - 1]` |
+| Candle 3 (post-displacement) | `c2` | `candles[f]` |
+
+Stored FVG: `{ top: <higher price>, bottom: <lower price> }`.
+- **BISI**: `fvgTop = c2.low` (Candle 3 Low), `fvgBottom = c0.high` (Candle 1 High)
+- **SIBI**: `fvgTop = c0.low` (Candle 1 Low), `fvgBottom = c2.high` (Candle 3 High)
+
+### Forensic Root Cause
+
+**File:** `src/lib/quantEngine/SweepReclaimEngine.ts` — `resolveRetestEntryPrice()` (lines 371–396) and downstream geometry fields (lines 1285–1288).
+
+The `FVG_PROXIMAL` and `FVG_DISTAL` cases had the directional ternary **inverted** — they returned the Candle 3 boundary as proximal and the Candle 1 boundary as distal. This is wrong because:
+
+- **Bullish (BISI)**: Price retraces **downward** into the gap. The **proximal** boundary (first touched) is `fvg.bottom` = Candle 1 High (lower price, nearest to price descending). The **distal** (deepest fill before invalidation) is `fvg.top` = Candle 3 Low.
+- **Bearish (SIBI)**: Price retraces **upward** into the gap. The **proximal** boundary (first touched) is `fvg.top` = Candle 1 Low (upper price, nearest to price ascending). The **distal** is `fvg.bottom` = Candle 3 High.
+
+### Key Fixes
+
+**`src/lib/quantEngine/SweepReclaimEngine.ts`** — `resolveRetestEntryPrice()`:
+
+```diff
+// FVG_PROXIMAL
+- const proximal = isBullish ? fvg.top : fvg.bottom;
++ const proximal = isBullish ? fvg.bottom : fvg.top;
+
+// FVG_DISTAL
+- const distal = isBullish ? fvg.bottom : fvg.top;
++ const distal = isBullish ? fvg.top : fvg.bottom;
+```
+
+**`src/lib/quantEngine/SweepReclaimEngine.ts`** — Downstream geometry fields:
+
+```diff
+- const reclaimFvgProximal = fvgData ? (isBullish ? fvgData.top    : fvgData.bottom) : null;
+- const reclaimFvgDistal   = fvgData ? (isBullish ? fvgData.bottom : fvgData.top)    : null;
++ const reclaimFvgProximal = fvgData ? (isBullish ? fvgData.bottom : fvgData.top)    : null;
++ const reclaimFvgDistal   = fvgData ? (isBullish ? fvgData.top    : fvgData.bottom) : null;
+```
+
+### What Was Not Changed
+- **Gap boundary extraction** (`fvgTop`/`fvgBottom` assignments in BISI/SIBI detection loops) — **correct**, unchanged.
+- **`FVG_CE` midpoint formula** (`(fvgTop + fvgBottom) / 2`) — polarity-agnostic, **correct**, unchanged.
+- **`SHELF_LEVEL` / `RECLAIM_LEVEL`** — uses direction-independent `anchorLevel`, unchanged.
+- **Chart SVG overlay** (`Chart.tsx` line 958) — draws at `fvgCe` midpoint, polarity-agnostic, unchanged.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors** (exit code 0). ✅
+- **Bearish SIBI** `FVG_PROXIMAL` entry = `fvg.top` = Candle 1 Low ✅
+- **Bullish BISI** `FVG_PROXIMAL` entry = `fvg.bottom` = Candle 1 High ✅
+
+---
+
+
 
 ## 🆕 V16.45 Changelog — ANCHOR_ONLY Stage Target Double-Multiplier Inversion Fix (2026-08-23)
 
