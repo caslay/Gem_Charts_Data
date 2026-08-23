@@ -23,9 +23,13 @@ export const magnetsLayer: ChartLayer = {
     const bslRaw = orderFlow.resting_liquidity_pools?.BSL_Magnets || [];
     const sslRaw = orderFlow.resting_liquidity_pools?.SSL_Magnets || [];
 
-    // Deduplicate and limit to strictly 3 unique price levels max
-    const bsl = Array.from(new Set(bslRaw.map((p: any) => Number(p)).filter((p: number) => !isNaN(p)))).slice(0, 3);
-    const ssl = Array.from(new Set(sslRaw.map((p: any) => Number(p)).filter((p: number) => !isNaN(p)))).slice(0, 3);
+    const lastCandle = context.activeCandles?.[context.activeCandles.length - 1];
+    const currentPrice = lastCandle ? lastCandle.c : 0;
+    const isPriceValid = (p: number) => !isNaN(p) && p > 0 && (currentPrice === 0 || Math.abs(p - currentPrice) / currentPrice <= 0.20);
+
+    // Deduplicate and limit to strictly 3 unique price levels max (clamped within 20% of current asset price)
+    const bsl = Array.from(new Set(bslRaw.map((p: any) => Number(p)).filter(isPriceValid))).slice(0, 3);
+    const ssl = Array.from(new Set(sslRaw.map((p: any) => Number(p)).filter(isPriceValid))).slice(0, 3);
 
     const newLines: any[] = [];
 

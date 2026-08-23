@@ -194,6 +194,17 @@ export function useBinanceWS({
 
       const { candle, interval: msgInterval } = res;
 
+      // ── Outlier Price Sanity Gate (>15% Variance Rejection & Silent Resync) ──
+      const currentKnownPrice = livePriceRef.current;
+      if (currentKnownPrice !== null && currentKnownPrice > 0) {
+        const deviation = Math.abs(candle.close - currentKnownPrice) / currentKnownPrice;
+        if (deviation > 0.15) {
+          console.warn(`[OUTLIER_DATA_DROP] Rejected WebSocket tick for ${msgInterval} (price: ${candle.close}): deviates >15% from last price ${currentKnownPrice}. Triggering silent resync.`);
+          scheduleReconnectRef.current();
+          return;
+        }
+      }
+
       // Update multi-candles dictionary
       liveCandlesRef.current[msgInterval] = candle;
       livePriceRef.current = candle.close;

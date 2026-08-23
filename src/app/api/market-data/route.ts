@@ -59,8 +59,30 @@ async function fetchLargeHistory(symbol: string, interval: string, totalLimit: n
   return allKlines.sort((a, b) => a[0] - b[0]);
 }
 
+// ── Dynamic In-Memory Price Cache (Lesson #41) ──────────────────────────────────
+// Caches latest verified live prices per symbol to anchor offline mock generators dynamically
+const LAST_KNOWN_PRICES = new Map<string, number>([
+  ['ETHUSDC', 2400.00],
+  ['ETHUSDT', 2400.00],
+  ['BTCUSDT', 67000.00],
+  ['BTCUSDC', 67000.00],
+  ['SOLUSDC', 160.00],
+  ['SOLUSDT', 160.00],
+  ['XRPUSDC', 0.50],
+  ['XRPUSDT', 0.50],
+  ['BNBUSDC', 580.00],
+  ['BNBUSDT', 580.00],
+  ['ADAUSDC', 0.45],
+  ['ADAUSDT', 0.45],
+  ['DOTUSDC', 6.00],
+  ['DOTUSDT', 6.00],
+]);
+
 /**
- * Generates mathematically sound, realistic simulated candles for offline simulation mode.
+ * Enhanced Brownian motion candle generator for offline development & backtest fallback.
+ * Generates continuous synthetic OHLCV data ending at the requested `endTimestamp`.
+ * Supports arbitrary intervals, dynamic symbol pricing, and taker order flow volumes.
+ * Performs a backward walk in time from `now` to `now - count * interval`.
  *
  * @param interval  - Binance-style interval string (e.g. '1m', '5m', '30m', '1h', '4h', '1d', '1w', '1M').
  *                    Parsed with a generic regex so any numeric prefix + unit combo works.
@@ -94,15 +116,18 @@ function generateMockCandles(
     else if (unit === 'M') intervalMs = value * 30 * 24 * 60 * 60 * 1000;
   }
 
-  // ── Base price: use startPrice if provided (client anchor), else default by symbol ──
+  // ── Base price: startPrice (client anchor) > LAST_KNOWN_PRICES > default by symbol ──
   const sym = symbol.toUpperCase();
-  let basePrice = 3300.00;
-  if (sym.includes('BTC')) basePrice = 67000.00;
-  else if (sym.includes('SOL')) basePrice = 160.00;
-  else if (sym.includes('XRP')) basePrice = 0.50;
-  else if (sym.includes('BNB')) basePrice = 580.00;
-  else if (sym.includes('ADA')) basePrice = 0.45;
-  else if (sym.includes('DOT')) basePrice = 6.00;
+  let basePrice = LAST_KNOWN_PRICES.get(sym);
+  if (!basePrice) {
+    if (sym.includes('BTC')) basePrice = 67000.00;
+    else if (sym.includes('SOL')) basePrice = 160.00;
+    else if (sym.includes('XRP')) basePrice = 0.50;
+    else if (sym.includes('BNB')) basePrice = 580.00;
+    else if (sym.includes('ADA')) basePrice = 0.45;
+    else if (sym.includes('DOT')) basePrice = 6.00;
+    else basePrice = 2400.00;
+  }
 
   // If the client passed its oldest candle's close price, anchor the walk there for
   // seamless price continuity across the lazy-load boundary.
@@ -224,10 +249,16 @@ export async function GET(req: Request) {
 
     const endTime = url.searchParams.get('endTime') || '';
 
-    // Optional price anchor sent by the client — the close of its current oldest candle.
-    // Consumed only by the offline simulation fallback to guarantee seamless price continuity.
-    const fallbackPriceParam = url.searchParams.get('fallbackPrice');
-    const fallbackPrice = fallbackPriceParam ? parseFloat(fallbackPriceParam) : undefined;
+    // Optional price anchor sent by the client — the close of its current oldest/newest candle.
+    // Consumed by offline simulation fallback to guarantee seamless price continuity and prevent outlier jumps.
+    const fallbackPriceParam = url.searchParams.get('fallbackPrice') || url.searchParams.get('lastPrice');
+    const fallbackPrice = (fallbackPriceParam && !isNaN(parseFloat(fallbackPriceParam)) && parseFloat(fallbackPriceParam) > 0)
+      ? parseFloat(fallbackPriceParam)
+      : undefined;
+
+    if (fallbackPrice) {
+      LAST_KNOWN_PRICES.set(symbol.toUpperCase(), fallbackPrice);
+    }
 
     if (endTime) {
       // Direct fast path for historical lazy-loading.
@@ -277,9 +308,10 @@ export async function GET(req: Request) {
       } catch (err: any) {
         console.warn(`[MarketData API] Operating in OFFLINE SIMULATION MODE. Historical lazy-load Binance feed unavailable: ${err.message || err}`);
         
-        // Pass fallbackPrice so the backward walk starts exactly at the client's oldest
+        // Pass dynamic anchor price so the backward walk starts exactly at the client's oldest
         // candle close — preventing vertical price jumps at the lazy-load boundary.
-        const mockHist = generateMockCandles(visualInterval, 100, Number(endTime), symbol, fallbackPrice);
+        const resolvedLazyFallback = fallbackPrice || LAST_KNOWN_PRICES.get(symbol.toUpperCase()) || 2400.00;
+        const mockHist = generateMockCandles(visualInterval, 100, Number(endTime), symbol, resolvedLazyFallback);
         annotateCandlesWithVolumetricSignals(mockHist);
 
         const payload = {
@@ -431,20 +463,23 @@ export async function GET(req: Request) {
     let candlesBtc1h: any[] = [];
 
     if (isOffline) {
-      candles5m = generateMockCandles('5m', limit5m, undefined, symbol);
-      candles15m = generateMockCandles('15m', limit15m, undefined, symbol);
-      candles1h = generateMockCandles('1h', limit1h, undefined, symbol);
-      candles4h = generateMockCandles('4h', limit4h, undefined, symbol);
-      candlesBtc5m = generateMockCandles('5m', 20, undefined, 'BTCUSDT');
-      candlesBtc15m = generateMockCandles('15m', 20, undefined, 'BTCUSDT');
-      candlesBtc1h = generateMockCandles('1h', 24, undefined, 'BTCUSDT');
-      candles1d = generateMockCandles('1d', 100, undefined, symbol);
-      candles1w = generateMockCandles('1w', 100, undefined, symbol);
-      candles1M = generateMockCandles('1M', 24, undefined, symbol);
+      const activeAnchorPrice = fallbackPrice || LAST_KNOWN_PRICES.get(symbol.toUpperCase()) || 2400.00;
+      const btcAnchorPrice = LAST_KNOWN_PRICES.get('BTCUSDT') || 67000.00;
+
+      candles5m = generateMockCandles('5m', limit5m, undefined, symbol, activeAnchorPrice);
+      candles15m = generateMockCandles('15m', limit15m, undefined, symbol, activeAnchorPrice);
+      candles1h = generateMockCandles('1h', limit1h, undefined, symbol, activeAnchorPrice);
+      candles4h = generateMockCandles('4h', limit4h, undefined, symbol, activeAnchorPrice);
+      candlesBtc5m = generateMockCandles('5m', 20, undefined, 'BTCUSDT', btcAnchorPrice);
+      candlesBtc15m = generateMockCandles('15m', 20, undefined, 'BTCUSDT', btcAnchorPrice);
+      candlesBtc1h = generateMockCandles('1h', 24, undefined, 'BTCUSDT', btcAnchorPrice);
+      candles1d = generateMockCandles('1d', 100, undefined, symbol, activeAnchorPrice);
+      candles1w = generateMockCandles('1w', 100, undefined, symbol, activeAnchorPrice);
+      candles1M = generateMockCandles('1M', 24, undefined, symbol, activeAnchorPrice);
       resting_liquidity_pools = { BSL_Magnets: [], SSL_Magnets: [] };
       smart_money_sentiment = { funding_rate_status: 'NEUTRAL', smart_money_divergence: false };
       if (!isStandardInterval) {
-        dynamicVisualCandles = generateMockCandles(visualInterval, visualLimit, undefined, symbol);
+        dynamicVisualCandles = generateMockCandles(visualInterval, visualLimit, undefined, symbol, activeAnchorPrice);
       }
     } else {
       candles4h = formatCandles(data4h);
@@ -482,6 +517,9 @@ export async function GET(req: Request) {
     }
 
     const currentLivePrice = latestCandleFromAny ? latestCandleFromAny.c : 0;
+    if (!isOffline && currentLivePrice > 0) {
+      LAST_KNOWN_PRICES.set(symbol.toUpperCase(), currentLivePrice);
+    }
 
     // BTC PDH and PDL solvers (based on last 24h of 1h klines)
     let btcPdh = 0;
@@ -1161,6 +1199,9 @@ export async function GET(req: Request) {
 
     // Calculate SMT context using the new SMT Detection Engine
     const btcPrice = candlesBtc5m.length > 0 ? candlesBtc5m[candlesBtc5m.length - 1].c : 0;
+    if (!isOffline && btcPrice > 0) {
+      LAST_KNOWN_PRICES.set('BTCUSDT', btcPrice);
+    }
     // Use previous 15m close as performance anchor (replaces True Day Open)
     const ethPrevClose = candles15m.length > 1 ? candles15m[candles15m.length - 2].c : null;
     const btcPrevClose = candlesBtc15m.length > 1 ? candlesBtc15m[candlesBtc15m.length - 2].c : null;

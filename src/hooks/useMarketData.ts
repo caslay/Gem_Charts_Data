@@ -436,7 +436,26 @@ export function mergeDeltaPayload(
   
   // Merge only the last few candles, matching by timestamp
   const candleMap = new Map(prevCandles.map(c => [c.t, c]));
-  (delta.delta_candles || []).forEach(c => candleMap.set(c.t, c));
+  const lastKnownCandle = prevCandles.length > 0 ? prevCandles[prevCandles.length - 1] : null;
+  const lastKnownClose = lastKnownCandle ? lastKnownCandle.c : 0;
+
+  // Outlier Price Sanity Gate (>15% Drop & Silent Resync)
+  const MAX_PRICE_DEVIATION_RATIO = 0.15; // 15% max bar-to-bar price variance
+  const validDeltaCandles: Candle[] = [];
+
+  for (const c of (delta.delta_candles || [])) {
+    if (lastKnownClose > 0) {
+      const devClose = Math.abs(c.c - lastKnownClose) / lastKnownClose;
+      const devOpen = Math.abs(c.o - lastKnownClose) / lastKnownClose;
+      if (devClose > MAX_PRICE_DEVIATION_RATIO || devOpen > MAX_PRICE_DEVIATION_RATIO) {
+        console.warn(`[OUTLIER_DATA_DROP] Rejected delta candle for ${activeKey} (t=${c.t}, c=${c.c}, o=${c.o}): deviates >15% from last known close ${lastKnownClose}.`);
+        continue;
+      }
+    }
+    validDeltaCandles.push(c);
+  }
+
+  validDeltaCandles.forEach(c => candleMap.set(c.t, c));
   const mergedCandles = Array.from(candleMap.values()).sort((a, b) => a.t - b.t);
 
   return {
@@ -798,6 +817,16 @@ export function useMarketData(
     });
   }, [queueSettingsSync]);
 
+  const dataRef = useRef<MarketDataPayload | null>(null);
+  useEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+
+  const liveCandleRef = useRef<LiveCandle | null>(null);
+  useEffect(() => {
+    liveCandleRef.current = liveCandle;
+  }, [liveCandle]);
+
   const fetchDataRef = useRef<((isPolling?: boolean) => Promise<void>) | null>(null);
 
   const fetchData = useCallback(async (isPolling = false) => {
@@ -810,12 +839,21 @@ export function useMarketData(
       const timeframeGatedParam = '&timeframeGated=true';
       const activeIntervalParam = `&activeInterval=${selectedInterval}`;
       const initParam = !isPolling ? '&init=true' : '';
-      const limitParams = `&limit1m=${engineSettings.candlesLimit1m ?? 350}&limit5m=${engineSettings.candlesLimit5m ?? 350}&limit15m=${engineSettings.candlesLimit15m ?? 250}&limit1h=${engineSettings.candlesLimit1h ?? 120}&limit4h=${engineSettings.candlesLimit4h ?? 80}`;
-      const featureParams = `&includeBtc=${engineSettings.includeBtcCorrelation !== false}&includeStructure=${engineSettings.includeStructureAnalysis !== false}&includeFvg=${engineSettings.includeFvgDetection !== false}`;
+      const settings = engineSettingsRef.current;
+      const limitParams = `&limit1m=${settings.candlesLimit1m ?? 350}&limit5m=${settings.candlesLimit5m ?? 350}&limit15m=${settings.candlesLimit15m ?? 250}&limit1h=${settings.candlesLimit1h ?? 120}&limit4h=${settings.candlesLimit4h ?? 80}`;
+      const featureParams = `&includeBtc=${settings.includeBtcCorrelation !== false}&includeStructure=${settings.includeStructureAnalysis !== false}&includeFvg=${settings.includeFvgDetection !== false}`;
       
-      const res = await fetch(`/api/market-data?interval=${selectedInterval}${pollParam}${timeframeGatedParam}${activeIntervalParam}${initParam}${limitParams}${featureParams}`);
+      const currentActiveCandles = dataRef.current?.data_payload?.[`candles_${selectedInterval}`] || [];
+      const latestPrice = liveCandleRef.current?.close || (currentActiveCandles.length > 0 ? currentActiveCandles[currentActiveCandles.length - 1].c : undefined);
+      const fallbackParam = (latestPrice && isFinite(latestPrice) && latestPrice > 0) ? `&fallbackPrice=${latestPrice}&lastPrice=${latestPrice}` : '';
+
+      const res = await fetch(`/api/market-data?interval=${selectedInterval}${pollParam}${timeframeGatedParam}${activeIntervalParam}${initParam}${limitParams}${featureParams}${fallbackParam}`);
       if (!res.ok) {
-        throw new Error('Failed to fetch market data');
+        if (isPolling) {
+          console.warn(`[MarketData] Polling request returned status ${res.status}. Retaining existing state.`);
+          return;
+        }
+        throw new Error(`Failed to fetch market data: ${res.statusText || res.status}`);
       }
       const jsonData: MarketDataPayload = await res.json();
 
@@ -829,14 +867,30 @@ export function useMarketData(
           return mergeDeltaPayload(prev, delta, selectedInterval);
         }
 
+        // Full payload outlier sanity check (>15% jump relative to active series)
+        const prevActive = prev.data_payload[`candles_${selectedInterval}`] || [];
+        const incomingActive = jsonData.data_payload?.[`candles_${selectedInterval}`] || [];
+        if (prevActive.length > 0 && incomingActive.length > 0) {
+          const prevClose = prevActive[prevActive.length - 1].c;
+          const incomingClose = incomingActive[incomingActive.length - 1].c;
+          if (prevClose > 0 && Math.abs(incomingClose - prevClose) / prevClose > 0.15) {
+            console.warn(`[OUTLIER_DATA_DROP] Rejected full payload replacement for ${selectedInterval}: incoming price ${incomingClose} deviates >15% from active price ${prevClose}. Triggering silent resync.`);
+            setTimeout(() => {
+              if (fetchDataRef.current) fetchDataRef.current(false);
+            }, 2000);
+            return prev;
+          }
+        }
+
         return jsonData;
       });
 
       // Clear any pre-existing initial load error upon a successful poll
       setError(null);
     } catch (err: unknown) {
-      console.warn('[MarketData] Background poll error caught:', err);
-      if (!isPolling) {
+      if (isPolling) {
+        console.warn('[MarketData] Background poll error caught:', err);
+      } else {
         setError(err instanceof Error ? err.message : 'An error occurred');
       }
     } finally {
@@ -844,7 +898,7 @@ export function useMarketData(
         setIsLoading(false);
       }
     }
-  }, [selectedInterval, engineSettings]);
+  }, [selectedInterval]);
 
   useEffect(() => {
     fetchDataRef.current = fetchData;
@@ -894,6 +948,12 @@ export function useMarketData(
 
     const lastCandle = currentCandles[currentCandles.length - 1];
     const lastTimeSec = Math.floor(lastCandle.t / 1000);
+
+    // Outlier Sanity Gate (>15% Drop & Rejection)
+    if (lastCandle.c > 0 && Math.abs(closedCandle.close - lastCandle.c) / lastCandle.c > 0.15) {
+      console.warn(`[OUTLIER_DATA_DROP] Rejected closed candle for ${closedInterval}: price ${closedCandle.close} deviates >15% from last candle ${lastCandle.c}.`);
+      return;
+    }
 
     const isSameTime = closedCandle.time === lastTimeSec;
     const isNewerTime = closedCandle.time > lastTimeSec;
@@ -972,6 +1032,12 @@ export function useMarketData(
 
     const lastCandle = prevCandles[prevCandles.length - 1];
     const lastTimeSec = Math.floor(lastCandle.t / 1000);
+
+    // Outlier Sanity Gate (>15% Drop & Rejection)
+    if (lastCandle.c > 0 && Math.abs(liveCandle.close - lastCandle.c) / lastCandle.c > 0.15) {
+      console.warn(`[OUTLIER_DATA_DROP] Rejected live candle tick for ${selectedInterval}: price ${liveCandle.close} deviates >15% from last series candle ${lastCandle.c}.`);
+      return;
+    }
 
     const isSameTime = liveCandle.time === lastTimeSec;
     const isNewerTime = liveCandle.time > lastTimeSec;
