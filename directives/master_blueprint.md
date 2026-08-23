@@ -1,8 +1,82 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.43
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.45
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-23 (V16.43 — Execution Parity & Autonomous Engine Harmonization across Quant Lab, Replay, and Live HUD)  
+> **Last Updated:** 2026-08-23 (V16.45 — TP1/TP2 Target Inversion: Two-Part Forensic Fix)  
+
+## 🆕 V16.45 Changelog — ANCHOR_ONLY Stage Target Double-Multiplier Inversion Fix (2026-08-23)
+
+### Summary
+Resolved a critical target price inversion where TP1 (~\$2426.64) and TP2 (~\$2425.60) plotted significantly **above** TP3 (\$2410.14) on active Bullish S&R setups. The root cause was a double-multiplier formula error in the `ANCHOR_ONLY` placeholder setup block of `SweepReclaimEngine.ts`.
+
+### Forensic Root Cause
+
+**File:** `src/lib/quantEngine/SweepReclaimEngine.ts` — Lines 1014–1022 (ANCHOR_ONLY early-exit path)
+
+The ANCHOR_ONLY placeholder targets (emitted before a sweep is confirmed) were computed with the stage multiple applied **to itself** as both a value and an additional scalar:
+
+```ts
+// BUGGY (before fix)
+stage1_target = anchorLevel + stage1Multiple           // 1.0 × 1    = $1.00 offset  ✅ OK by accident
+stage2_target = anchorLevel + stage2Multiple * 1.5    // 1.5 × 1.5  = $2.25 offset  ❌ DOUBLE MULTIPLY
+stage3_target = anchorLevel + stage3Multiple * 3.0    // 3.0 × 3.0  = $9.00 offset  ❌ DOUBLE MULTIPLY
+```
+
+When an ANCHOR_ONLY setup near the session anchor level (~\$2425) was the `latestActiveSetup` in `scannedSetups`, the `srOverlay` fallback chain in `useAutomatedStrategyExecution.ts` (line 539–541) served these inflated placeholder targets to `Chart.tsx` instead of the real setup's targets. This produced TP1 = \$2426.64 and TP2 = \$2425.60 — both **above** the real TP3 = \$2410.14.
+
+### Key Fix
+
+**`src/lib/quantEngine/SweepReclaimEngine.ts`** — ANCHOR_ONLY placeholder block:
+```diff
+- stage1_target: anchorLevel + stage1Multiple
+- stage2_target: anchorLevel + stage2Multiple * 1.5
+- stage3_target: anchorLevel + stage3Multiple * 3.0
++ stage1_target: anchorLevel + stage1Multiple * 1.0  // riskUsd placeholder = 1.0
++ stage2_target: anchorLevel + stage2Multiple * 1.0  // uniform formula matches active-setup math
++ stage3_target: anchorLevel + stage3Multiple * 1.0  // produces monotonically ascending target ladder
+```
+
+Placeholder targets now use the uniform formula `anchorLevel ± (stageMultiple × riskUsd)` with `riskUsd = 1.0`, matching the correct active-setup formula on lines 1312–1322 exactly. The ANCHOR_ONLY targets are display-only placeholders and never create real positions (gated by `RECLAIMED_NO_RETEST` phase check), but their values must remain geometrically sane so the overlay fallback chain does not corrupt the chart.
+
+### Verification
+- TP1 (1.0R) = `entryPrice + 1.0 × riskDistance` = \$2367.40 + \$14.25 = **\$2381.65** ✅
+- TP2 (1.5R) = `entryPrice + 1.5 × riskDistance` = \$2367.40 + \$21.375 = **\$2388.78** ✅  
+- TP3 (3.0R) = `entryPrice + 3.0 × riskDistance` = \$2367.40 + \$42.75 = **\$2410.15** ✅ (ascending ladder restored)
+
+---
+
+
+
+## 🆕 V16.44 Changelog — Outlier Candle Injection & Multi-Tier Scale Protection (2026-08-23)
+
+### Summary
+Eliminated the `$3300.00` outlier ghost candle cluster anomaly that expanded the Lightweight Charts vertical price scale (from 2200 to 3600) and compressed the chart viewport into a flat line. Engineered a bulletproof 3-tier defense architecture spanning server-side dynamic fallback anchoring, client-side 15% outlier price sanity gating, and visual layer coordinate clamping.
+
+### Key Architectural Changes
+
+1. **Server In-Memory Price Cache & Dynamic Offline Mock Anchoring (`src/app/api/market-data/route.ts`):**
+   - Implemented `LAST_KNOWN_PRICES: Map<string, number>` caching live close prices for every traded asset (`ETHUSDC`, `BTCUSDT`, etc.).
+   - Refactored `generateMockCandles()` and all offline fallback invocations (`5m`, `15m`, `1h`, `4h`, `1d`, `1w`, `1M`, `dynamicVisualCandles`, `lazy-load`) to dynamically derive base price from incoming `fallbackPrice`/`lastPrice` parameters or `LAST_KNOWN_PRICES`, completely eradicating the legacy hardcoded `$3300.00` default.
+   - Updated `useMarketData.ts` `fetchData()` to transmit `&fallbackPrice=${latestPrice}&lastPrice=${latestPrice}` on all polls.
+
+2. **Client-Side Outlier Sanity Gates (>15% Drop & Silent Resync) (`useMarketData.ts`, `useBinanceWS.ts`, `Chart.tsx`):**
+   - **Delta Compression Merger (`mergeDeltaPayload`):** Inspects incoming `delta_candles` against the active series' last known close. Drops any candle deviating >15% from the active price with an `[OUTLIER_DATA_DROP]` warning.
+   - **Full Payload Validator (`setData`):** Rejects incoming full payload series that deviate >15% from active local price, scheduling a silent background retry without corrupting the chart state.
+   - **WebSocket Tick Interceptor (`useBinanceWS.ts`):** Validates incoming WebSocket kline ticks against `livePriceRef.current`. Drops ticks with >15% variance and schedules a clean socket reconnect.
+   - **Canvas Series Updater (`LiveSeriesCanvasUpdater` in `Chart.tsx`):** Prevents `seriesRef.current.update()` and `setLocalCandles` from mutating the active series if `liveCandle.close` deviates >15% from the preceding bar.
+   - **Historical Candle Sanitizer (`Chart.tsx`):** Filters out rogue candles deviating >25% from the historical dataset median prior to `seriesRef.current.setData()`.
+
+3. **Visual Layer Price Scale Auto-Scale Clamping (`sessionsLayer.ts`, `magnetsLayer.ts`):**
+   - Added `isPriceValid` guards to `sessionsLayer.ts` and `magnetsLayer.ts` ensuring `series.createPriceLine()` and session SVG boxes only render for levels within 20% of the active market price, preventing anomalous price lines or distorted session boxes from locking the vertical price scale in an expanded state.
+
+4. **Hook Dependency Cycle & Infinite Refetch Elimination (`src/hooks/useMarketData.ts`):**
+   - Decoupled `fetchData` from mutating state objects (`data`, `liveCandle`) using stable references (`dataRef`, `liveCandleRef`), preventing rapid-fire cyclical `init=true` full chart reloads (flashing) and locking polling strictly to 5-second delta ticks (`poll=true`).
+
+### Verification
+- `npx tsc --noEmit` → **0 errors** (exit code 0).
+- Automated test suite (`test_outlier_filter.ts`): 100% pass rate on rejecting $3300 corrupt delta candles while seamlessly merging valid $2415 delta ticks.
+
+---
 
 ## 🆕 V16.43 Changelog — Execution Parity & Autonomous Engine Harmonization (2026-08-23)
 

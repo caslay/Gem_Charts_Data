@@ -536,9 +536,15 @@ export function useAutomatedStrategyExecution(
       fvgCe: activePos?.fvgCeLevel ?? pendingOrd?.fvgCeLevel ?? latestActiveSetup?.reclaim_fvg_ce ?? null,
       entryPrice,
       stopLoss,
-      target1: activePos?.stage1Target ?? latestActiveSetup?.stage1_target ?? 0,
-      target2: activePos?.stage2Target ?? latestActiveSetup?.stage2_target ?? 0,
-      target3: activePos?.stage3Target ?? pendingOrd?.dynamicDolTarget ?? latestActiveSetup?.stage3_target ?? 0,
+      // FIX-OVERLAY: Include pendingOrd stage targets in the priority chain.
+      // Previously, target1/target2 skipped pendingOrd and fell back directly to
+      // latestActiveSetup?.stage1_target — an ANCHOR_ONLY placeholder anchored to
+      // the session level (~$2425), not the actual entry price. The pending order's
+      // stage targets are computed correctly by AutomatedStrategyExecutionEngine
+      // (entry ± stageMultiple × riskUsd) and must take priority over the setup placeholder.
+      target1: activePos?.stage1Target ?? pendingOrd?.stage1Target ?? latestActiveSetup?.stage1_target ?? 0,
+      target2: activePos?.stage2Target ?? pendingOrd?.stage2Target ?? latestActiveSetup?.stage2_target ?? 0,
+      target3: activePos?.stage3Target ?? pendingOrd?.dynamicDolTarget ?? pendingOrd?.stage3Target ?? latestActiveSetup?.stage3_target ?? 0,
       volExpansion: latestActiveSetup?.reclaim_volume_expansion ?? 1.0,
       deltaDominance: latestActiveSetup?.reclaim_delta_dominance_pct ?? 50.0,
       bodyRatio: latestActiveSetup?.reclaim_body_ratio ?? 50.0,

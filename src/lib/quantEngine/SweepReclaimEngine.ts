@@ -1011,14 +1011,19 @@ export class SweepReclaimEngine {
           risk_pct: parseFloat(((1.0 / anchorLevel) * 100).toFixed(3)),
           // FIX-1: Stage targets of 0 cause immediate false-fills (LONG: high >= 0 is
           // always true) or permanent lockouts (SHORT: low <= 0 is never true at real prices).
+          // FIX-TP-INVERSION: Use uniform formula anchorLevel ± (stageMultiple × riskUsd).
+          // riskUsd placeholder is 1.0 for ANCHOR_ONLY setups (see risk_usd above), so targets
+          // are anchorLevel ± stageMultiple. The prior code applied the multiplier twice
+          // (e.g. stage2Multiple × 1.5 = 2.25, stage3Multiple × 3.0 = 9.0), producing
+          // ANCHOR_ONLY placeholder targets that overshot real setup targets by +$15.
           stage1_target: parseFloat(
-            (isBullish ? anchorLevel + stage1Multiple : anchorLevel - stage1Multiple).toFixed(4)
+            (isBullish ? anchorLevel + stage1Multiple * 1.0 : anchorLevel - stage1Multiple * 1.0).toFixed(4)
           ),
           stage2_target: parseFloat(
-            (isBullish ? anchorLevel + stage2Multiple * 1.5 : anchorLevel - stage2Multiple * 1.5).toFixed(4)
+            (isBullish ? anchorLevel + stage2Multiple * 1.0 : anchorLevel - stage2Multiple * 1.0).toFixed(4)
           ),
           stage3_target: parseFloat(
-            (isBullish ? anchorLevel + stage3Multiple * 3.0 : anchorLevel - stage3Multiple * 3.0).toFixed(4)
+            (isBullish ? anchorLevel + stage3Multiple * 1.0 : anchorLevel - stage3Multiple * 1.0).toFixed(4)
           ),
           stage1_multiple: stage1Multiple,
           stage2_multiple: stage2Multiple,

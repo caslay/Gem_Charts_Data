@@ -24,10 +24,14 @@ export const sessionsLayer: ChartLayer = {
     const asian = ranges.asian_range || {};
     const london = ranges.london_range || {};
 
+    const lastCandle = context.activeCandles?.[context.activeCandles.length - 1];
+    const currentPrice = lastCandle ? lastCandle.c : 0;
+    const isPriceValid = (p: any) => typeof p === 'number' && p > 0 && (currentPrice === 0 || Math.abs(p - currentPrice) / currentPrice <= 0.20);
+
     const newLines: any[] = [];
 
     // Draw Asian High/Low
-    if (typeof asian.high === 'number' && asian.high > 0) {
+    if (isPriceValid(asian.high)) {
       const line = series.createPriceLine({
         price: asian.high,
         color: theme === 'dark' ? (themeSettings?.dark_chart_session_asian || 'rgba(245, 158, 11, 0.5)') : (themeSettings?.light_chart_session_asian || 'rgba(217, 119, 6, 0.5)'),
@@ -38,7 +42,7 @@ export const sessionsLayer: ChartLayer = {
       });
       newLines.push(line);
     }
-    if (typeof asian.low === 'number' && asian.low > 0) {
+    if (isPriceValid(asian.low)) {
       const line = series.createPriceLine({
         price: asian.low,
         color: theme === 'dark' ? (themeSettings?.dark_chart_session_asian || 'rgba(245, 158, 11, 0.5)') : (themeSettings?.light_chart_session_asian || 'rgba(217, 119, 6, 0.5)'),
@@ -51,7 +55,7 @@ export const sessionsLayer: ChartLayer = {
     }
 
     // Draw London High/Low
-    if (typeof london.high === 'number' && london.high > 0) {
+    if (isPriceValid(london.high)) {
       const line = series.createPriceLine({
         price: london.high,
         color: theme === 'dark' ? (themeSettings?.dark_chart_session_london || 'rgba(59, 130, 246, 0.5)') : (themeSettings?.light_chart_session_london || 'rgba(37, 99, 235, 0.5)'),
@@ -62,7 +66,7 @@ export const sessionsLayer: ChartLayer = {
       });
       newLines.push(line);
     }
-    if (typeof london.low === 'number' && london.low > 0) {
+    if (isPriceValid(london.low)) {
       const line = series.createPriceLine({
         price: london.low,
         color: theme === 'dark' ? (themeSettings?.dark_chart_session_london || 'rgba(59, 130, 246, 0.5)') : (themeSettings?.light_chart_session_london || 'rgba(37, 99, 235, 0.5)'),
@@ -94,6 +98,9 @@ export const sessionsLayer: ChartLayer = {
     const maxLookback = 350;
     const candlesToProcess = activeCandles.length > maxLookback ? activeCandles.slice(activeCandles.length - maxLookback) : activeCandles;
 
+    const lastActiveCandle = activeCandles[activeCandles.length - 1];
+    const currentPrice = lastActiveCandle ? lastActiveCandle.c : 0;
+
     // 1. Group active candles by calendar day in UTC
     interface SessionGroup {
       candles: any[];
@@ -109,6 +116,9 @@ export const sessionsLayer: ChartLayer = {
     // Group candles by UTC calendar day string: "YYYY-MM-DD"
     const candlesByDay = new Map<string, any[]>();
     candlesToProcess.forEach(c => {
+      // Ignore severe single-bar outliers when building session boxes
+      if (currentPrice > 0 && Math.abs(c.c - currentPrice) / currentPrice > 0.20) return;
+
       const date = new Date(c.t);
       const dayStr = `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()}`;
       if (!candlesByDay.has(dayStr)) {
@@ -134,25 +144,33 @@ export const sessionsLayer: ChartLayer = {
       if (asianCandles.length > 0) {
         const highs = asianCandles.map(c => c.h);
         const lows = asianCandles.map(c => c.l);
-        asianGroups.push({
-          candles: asianCandles,
-          firstCandle: asianCandles[0],
-          lastCandle: asianCandles[asianCandles.length - 1],
-          high: Math.max(...highs),
-          low: Math.min(...lows)
-        });
+        const maxH = Math.max(...highs);
+        const minL = Math.min(...lows);
+        if (currentPrice === 0 || (Math.abs(maxH - currentPrice) / currentPrice <= 0.20 && Math.abs(minL - currentPrice) / currentPrice <= 0.20)) {
+          asianGroups.push({
+            candles: asianCandles,
+            firstCandle: asianCandles[0],
+            lastCandle: asianCandles[asianCandles.length - 1],
+            high: maxH,
+            low: minL
+          });
+        }
       }
 
       if (londonCandles.length > 0) {
         const highs = londonCandles.map(c => c.h);
         const lows = londonCandles.map(c => c.l);
-        londonGroups.push({
-          candles: londonCandles,
-          firstCandle: londonCandles[0],
-          lastCandle: londonCandles[londonCandles.length - 1],
-          high: Math.max(...highs),
-          low: Math.min(...lows)
-        });
+        const maxH = Math.max(...highs);
+        const minL = Math.min(...lows);
+        if (currentPrice === 0 || (Math.abs(maxH - currentPrice) / currentPrice <= 0.20 && Math.abs(minL - currentPrice) / currentPrice <= 0.20)) {
+          londonGroups.push({
+            candles: londonCandles,
+            firstCandle: londonCandles[0],
+            lastCandle: londonCandles[londonCandles.length - 1],
+            high: maxH,
+            low: minL
+          });
+        }
       }
     });
 

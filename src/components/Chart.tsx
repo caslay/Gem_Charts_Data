@@ -1418,7 +1418,18 @@ export default function Chart({
     if (seriesRef.current && data && data.length > 0) {
       // Format and deduplicate candles by timestamp (in seconds) to guarantee strictly ascending order for Lightweight Charts
       const candleMap = new Map<number, { time: any; open: number; high: number; low: number; close: number }>();
+      
+      // Calculate median baseline price from the dataset to filter isolated extreme outliers (>25%)
+      const closes = data.map(d => d.c).filter(c => c > 0).sort((a, b) => a - b);
+      const medianPrice = closes.length > 0 ? closes[Math.floor(closes.length / 2)] : 0;
+
       for (const d of data) {
+        // Outlier filter against dataset median: reject any bar deviating >25% from active dataset median
+        if (medianPrice > 0 && Math.abs(d.c - medianPrice) / medianPrice > 0.25) {
+          console.warn(`[OUTLIER_DATA_DROP] Filtered out historical anomaly candle (t=${d.t}, c=${d.c}): deviates >25% from dataset median ${medianPrice}.`);
+          continue;
+        }
+
         const timeSec = Math.floor(d.t / 1000);
         candleMap.set(timeSec, {
           time: timeSec as any,
@@ -2719,6 +2730,13 @@ const LiveSeriesCanvasUpdater = memo(function LiveSeriesCanvasUpdater({
       try {
         const lastBar = candles[candles.length - 1];
         const lastBarTimeSec = Math.floor(lastBar.t / 1000);
+        const lastBarPrice = lastBar.c;
+
+        // ── Outlier Price Sanity Gate (>15% Drop & Canvas Protection) ──
+        if (lastBarPrice > 0 && Math.abs(liveCandle.close - lastBarPrice) / lastBarPrice > 0.15) {
+          console.warn(`[OUTLIER_DATA_DROP] Rejected chart series update: liveCandle price ${liveCandle.close} deviates >15% from last chart bar ${lastBarPrice}.`);
+          return;
+        }
 
         if (liveCandle.time >= lastBarTimeSec) {
           seriesRef.current.update(liveCandle as any);
