@@ -9,3 +9,4 @@ export * from './LiveOrderBlockExecutionEngine';
 export * from './AutomatedStrategyExecutionEngine';
 export * from './strategyExecutionConfig';
 export * from './scannerPresets';
+export * from './sessionJournalStore';

@@ -51,6 +51,7 @@ export interface SweepReclaimPresetConfig {
   maxBarsAnchorToSweep: number;
   maxBarsSweepToReclaim: number;
   maxBarsToRetest: number;
+  volumeSmaPeriod?: number;
   volumeExpansionThreshold: number;
   deltaDominanceThreshold: number;
   bodyRatioThreshold: number;
@@ -133,8 +134,8 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
       maxBarsSweepToReclaim: 12,
       maxBarsToRetest: 24,
       volumeExpansionThreshold: 1.50,
-      deltaDominanceThreshold: 60.0,
-      bodyRatioThreshold: 0.60,
+      deltaDominanceThreshold: 55.0,
+      bodyRatioThreshold: 0.55,
       requireThreePillarDisplacement: true,
       enforceDiscountPremiumGate: true,
       stage1Multiple: 1.0,
@@ -168,8 +169,8 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
       maxBarsSweepToReclaim: 10,
       maxBarsToRetest: 20,
       volumeExpansionThreshold: 1.50,
-      deltaDominanceThreshold: 60.0,
-      bodyRatioThreshold: 0.60,
+      deltaDominanceThreshold: 55.0,
+      bodyRatioThreshold: 0.55,
       requireThreePillarDisplacement: true,
       enforceDiscountPremiumGate: true,
       stage1Multiple: 1.0,
@@ -510,7 +511,7 @@ export function saveCustomPreset(
   saveCustomPresetsToLocalStorage(updated);
 
   // Trigger background cloud sync defensively
-  syncPresetToCloud(newPreset).catch(() => {});
+  syncPresetToCloud(newPreset).catch(() => { });
 
   return newPreset;
 }
@@ -542,7 +543,7 @@ export function updateCustomPreset(
   saveCustomPresetsToLocalStorage(existingCustom);
 
   // Trigger background cloud sync defensively
-  syncPresetToCloud(updatedPreset).catch(() => {});
+  syncPresetToCloud(updatedPreset).catch(() => { });
 
   return updatedPreset;
 }
@@ -561,7 +562,7 @@ export function deleteCustomPreset(id: string): boolean {
   saveCustomPresetsToLocalStorage(filtered);
 
   // Delete from cloud in background
-  deletePresetFromCloud(id).catch(() => {});
+  deletePresetFromCloud(id).catch(() => { });
 
   return true;
 }
@@ -737,8 +738,8 @@ export function getArmedExecutionStatus(): ArmedExecutionStatus {
         parsed.type === 'SWEEP_RECLAIM'
           ? getSweepReclaimAutoExec()
           : parsed.type === 'ORDER_BLOCK'
-          ? getOrderBlockAutoExec()
-          : true,
+            ? getOrderBlockAutoExec()
+            : true,
     };
   } catch {
     return defaultStatus;

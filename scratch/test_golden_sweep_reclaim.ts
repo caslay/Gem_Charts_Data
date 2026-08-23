@@ -50,12 +50,12 @@ assert(
   'SweepReclaimEngine DEFAULT_SWEEP_RECLAIM_CONFIG.volumeExpansionThreshold === 1.50'
 );
 assert(
-  DEFAULT_SWEEP_RECLAIM_CONFIG.deltaDominanceThreshold === 60.0,
-  'SweepReclaimEngine DEFAULT_SWEEP_RECLAIM_CONFIG.deltaDominanceThreshold === 60.0'
+  DEFAULT_SWEEP_RECLAIM_CONFIG.deltaDominanceThreshold === 55.0,
+  'SweepReclaimEngine DEFAULT_SWEEP_RECLAIM_CONFIG.deltaDominanceThreshold === 55.0'
 );
 assert(
-  DEFAULT_SWEEP_RECLAIM_CONFIG.bodyRatioThreshold === 0.60,
-  'SweepReclaimEngine DEFAULT_SWEEP_RECLAIM_CONFIG.bodyRatioThreshold === 0.60'
+  DEFAULT_SWEEP_RECLAIM_CONFIG.bodyRatioThreshold === 0.55,
+  'SweepReclaimEngine DEFAULT_SWEEP_RECLAIM_CONFIG.bodyRatioThreshold === 0.55'
 );
 assert(
   DEFAULT_SWEEP_RECLAIM_CONFIG.stage1Multiple === 1.0,

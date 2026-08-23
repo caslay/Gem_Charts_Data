@@ -1,8 +1,222 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.48
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.54
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-23 (V16.48 — Flawed Historical Median Drop Elimination & Trade Close Idempotency)  
+> **Last Updated:** 2026-08-23 (V16.54 — 3-Candle Displacement Indexing Fix, Strict 3-Pillar Boolean Gating, Anchor Polarity Hard Gate & 3-Day Cold-Start Historical Reconciliation)
+
+## 🆕 V16.54 Changelog — 4-Bug Batch Fix: Displacement Indexing, 3-Pillar Gating, Anchor Polarity & Cold-Start Reconciliation (2026-08-23)
+
+### Summary
+Resolved four critical defects exposed by the Institutional Setup Audit inspector spanning the `SweepReclaimEngine` historical scanner and the `useAutomatedStrategyExecution` lifecycle hook. The fixes restore mathematical integrity to the 3-candle sequence audit trail, eliminate semantic drift between Audit Inspector badge states and pillar metric display, enforce strict Buy-Side / Sell-Side Liquidity directional alignment at the anchor level, and synchronize the live candidate queue between local development (persistent Node.js process) and Vercel serverless production (ephemeral cold Lambdas).
+
+### Key Architectural Deliverables
+
+1. **BUG-1 Fix — 3-Candle Displacement Sequence Indexing (`SweepReclaimEngine.ts` ~L1404):**
+   - **Root Cause:** The previous code extracted Candle 1 = `candles[sweepIdx]`, Candle 2 = `candles[sweepIdx + 1]`, Candle 3 = `candles[reclaimIdx]`. When the sweep-to-reclaim span exceeded 2 bars, Candle 2 and Candle 1 could share the same index, producing duplicate timestamps and corrupt OHLCV in the Audit Inspector.
+   - **Fix:** When `reclaimIdx` is valid (≥ 2), the three-candle sequence is now anchored strictly to the reclaim confirmation bar:
+     - Candle 1 (Origin / Sweep Base): `candles[reclaimIdx - 2]`
+     - Candle 2 (Expansion Impulse): `candles[reclaimIdx - 1]`
+     - Candle 3 (Confirmation / Reclaim Close): `candles[reclaimIdx]`
+   - Applied defensive boundary clamping (`[0, n-1]`) and a uniqueness deduplication guard: if any two resolved indices are identical, the code falls back to sweep-relative indexing (`sweepIdx`, `sweepIdx+1`, `sweepIdx+2`) to guarantee the Audit Inspector never displays duplicate timestamps.
+   - Candle label strings updated to: `'Candle 1 (Origin / Sweep Base)'`, `'Candle 2 (Expansion Impulse)'`, `'Candle 3 (Confirmation / Reclaim Close)'`.
+
+2. **BUG-2 Fix — Strict 3-Pillar Boolean Conjunction & Audit Badge Consistency (`SweepReclaimEngine.ts` ~L1490):**
+   - **Root Cause:** The stored `three_pillar_displacement_passed` was derived from `curAll3`, a window-maxed intermediate variable. The Audit Inspector displayed the stored `reclaim_volume_expansion`, `reclaim_delta_dominance_pct`, and `reclaim_body_ratio` — which are also window-maxed final metrics — but these could diverge from the intermediate `curP1/P2/P3` booleans when the window-max candle differed from the reclaim candle, causing the badge to show "Confirmed" while individual pillar metrics showed sub-threshold values.
+   - **Fix:** After `baseSetup` assembly, the three individual pillar boolean flags and the `three_pillar_displacement_passed` conjunction flag are now explicitly recorded as `p1Passed && p2Passed && p3Passed`. Additionally, the `three_pillar_displacement_passed` field on `baseSetup` is explicitly set using strict `&&` conjunction: `p1Passed && p2Passed && p3Passed`. A single failing pillar is now sufficient to render the Audit badge as "Failed / Unconfirmed" with zero ambiguity.
+
+3. **BUG-3 Fix — Post-Phase-2 Anchor Polarity Hard Gate (`SweepReclaimEngine.ts` ~L942):**
+   - **Root Cause:** No explicit directional polarity validation existed between the Phase 2 sweep detection result and Phase 3 reclaim evaluation. In theory, if an anchor's `bias` field were mismatched with `isBullish` (derived from `anchor.bias`), an inverted candidate (Short paired with swept Low, Long paired with swept High) could reach Phase 3 and generate a live order.
+   - **Fix:** Immediately after the `setupId` is constructed and before the `!sweepFound` short-circuit, a new explicit polarity guard checks `anchor.bias === (isBullish ? 'BULLISH' : 'BEARISH')`. Any mismatch:
+     - Emits a minimal `ANCHOR_ONLY` / `ANCHOR_ONLY` telemetry record (no active orders, no reclaim evaluation).
+     - Calls `continue` to skip Phase 3 and Phase 4 entirely.
+   - **Directional enforcement:** BULLISH/LONG setups are exclusively bound to Sell-Side Liquidity (`SWING_LOW`, `ASIAN_LOW`, `LONDON_LOW`, `PDL`). BEARISH/SHORT setups are exclusively bound to Buy-Side Liquidity (`SWING_HIGH`, `ASIAN_HIGH`, `LONDON_HIGH`, `PDH`).
+
+4. **BUG-4 Fix — 3-Day Cold-Start Historical State Reconciliation (`useAutomatedStrategyExecution.ts` ~L407):**
+   - **Root Cause:** On cold start or tab refocus, the hook rehydrated open positions from localStorage and the cloud database but never re-scanned the preceding 72h of candle history. This caused local development (persistent `sharedStrategyEngineInstance` with in-memory candidates from previous hot-reload sessions) and Vercel production (cold Lambda with no memory, forcing fresh API scan) to display divergent pending setup queues.
+   - **Fix:** A new `useEffect` (Effect #5) is inserted between the candle ingestion effect and the tick processing pipeline:
+     - On **initial mount**: immediately calls `run3DayHistoricalReconciliation()`.
+     - On **`document.visibilitychange`** (tab regains focus): calls `run3DayHistoricalReconciliation()`.
+     - The reconciliation function:
+       1. Fetches 288 × 15m bars (72h) via `GET /api/market-data?interval=15m&limit=288&poll=false` with an `AbortController` set to a 5-second hard timeout for resilience.
+       2. Guards require a minimum of 20 bars before running the engine scan.
+       3. Calls `engineRef.current.onMultiTimeframeCandles({ '15m': candles15m }, macroContext)` to rebuild the candidate pool.
+       4. Syncs all four UI state slices: `scannedSetups`, `activePositions`, `pendingOrders`, `closedTrades`.
+       5. A `reconciliationRunRef` boolean prevents concurrent overlapping runs.
+       6. `AbortError` is silently suppressed; other fetch errors log a non-blocking `console.warn`.
+     - Effect dependency array is `[]` (mount-only) — the `visibilitychange` listener handles all subsequent triggers.
+
+### Files Modified
+- **`src/lib/quantEngine/SweepReclaimEngine.ts`**: BUG-1, BUG-2, BUG-3 fixes.
+- **`src/hooks/useAutomatedStrategyExecution.ts`**: BUG-4 fix.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors** (exit code 0). ✅
+
+---
+
+## 🆕 V16.53 Changelog — Gated Trade Overlay Visibility & Interactive Pending Setup Audit Badge (2026-08-23)
+
+### Summary
+Cleaned up chart visual real estate by gating Strategy Overlay rendering between Pending Setups and Active Trades. Suppressed Stop Loss and Take Profit target lines during resting/pending phases, rendering ONLY the single horizontal Entry Price line (`🎯 S&R ENTRY / ⚓ SHELF`). Attached an interactive `[ 🔍 AUDIT ]` inspector badge directly to the Entry Price line label and HUD deck that opens a glassmorphic Popover detailing complete trade geometry, risk allocations ($ and %), 3-Stage Harvest continuum targets, 3-Pillar volumetric conviction metrics, and exact 3-Candle Displacement Origin coordinates (Candle 1 Sweep Origin, Candle 2 Expansion, Candle 3 Confirmation Reclaim). Mounted Stop Loss and Take Profit target lines dynamically upon position execution (`phase === 'OPEN'`).
+
+### Key Architectural Deliverables
+
+1. **Overlay Gating (Pending vs. Active Trades):**
+   - In `Chart.tsx`, evaluated `isPositionOpen = srOverlay.isPositionOpen || srOverlay.phase === 'OPEN'`.
+   - **Pending / Resting State (`!isPositionOpen`):**
+     * Suppressed the Stop Loss line (`svg-sr-line-sl`) and all 3 Take Profit target lines (`TP1`, `TP2`, `TP3`) from the chart canvas.
+     * Rendered ONLY the horizontal **Entry Price Line** (`🎯 S&R ENTRY / ⚓ SHELF`) with anchor alignment.
+   - **Active / Executed State (`isPositionOpen`):**
+     * Mounted the active dynamic Stop Loss line (with multi-stage trailing colors: Hard SL, FVG CE / BE, +1.0R Floor) and unfulfilled Take Profit targets (`TP1`, `TP2`, `TP3`).
+   - Clean lifecycle unmounting: zero lingering DOM artifacts upon position closure.
+
+2. **Interactive Audit Badge & Floating Inspector Card (`Chart.tsx`):**
+   - Attached an interactive `[ 🔍 AUDIT ]` click target directly into the SVG entry label (`svg-sr-label-entry`) and the S&R HUD badge.
+   - Built a sleek, glassmorphic Inspector Card popover displaying:
+     * **Header & Status Badge**: Execution Direction (`LONG` / `SHORT`) and lifecycle phase (`PENDING RETEST LIMIT` vs `POSITION ACTIVE`).
+     * **Execution Geometry**: Planned Entry Price, Direction, Anchor Shelf name and level.
+     * **Risk Parameters**: Initial Stop Loss, Dollar Risk ($), Capital Risk Percentage (%).
+     * **Projected 3-Stage Harvest Continuum**: Projected TP1 (40% @ 1.0R), TP2 (40% @ 1.5R), and TP3 (20% Macro DOL Runner).
+     * **3-Pillar Volumetric Conviction**: P1 Volume Expansion (vs 20-SMA), P2 Directional Taker Delta %, P3 Body-to-Range conviction %.
+     * **Displacement Origin 3-Candle Audit**: Exact dates, UTC timestamps, Open, High, Low, Close, and Volume for Candle 1 (Origin / Sweep), Candle 2 (Expansion), and Candle 3 (Confirmation / Reclaim).
+
+3. **Engine-Wide Displacement Candle Coordinate Serialization:**
+   - Extended `SweepReclaimSetup` and `SweepReclaimOverlayData` with `displacement_candles` / `displacementCandles: DisplacementCandleAudit[]`.
+   - Populated exact candle timestamps, OHLCV bounds, and conviction parameters across `SweepReclaimEngine.ts`, `useBacktestStrategyExecution.ts`, and `useAutomatedStrategyExecution.ts`.
+
+### Summary
+Streamlined the platform architecture by standardizing Live Execution, Backtest Replay, and Quant Lab onto a single, unified in-memory quantitative engine (`SweepReclaimEngine`). Decoupled active trade journaling from external database I/O to a reactive in-memory session store (`sessionJournalStore.ts`) with client-side localStorage persistence and 1-click JSON/CSV export capabilities. Purged interactive drag-and-drop canvas listeners and DOM locks from `Chart.tsx`, eliminating mouse capture freezes, frame drops, and phantom trade-blocking states while preserving high-clarity structural visual levels and the institutional 3-Stage Harvest continuum.
+
+### Key Architectural Deliverables
+
+1. **Unified Engine Core Across Live, Backtest, and Quant Lab:**
+   - Standardized all execution modes onto the single headless quantitative state machine (`SweepReclaimEngine.ts`).
+   - Live WebSocket ticks, historical backtest candles, and Quant Lab batch datasets evaluate identically through the 4-Phase State Machine (`ANCHOR` -> `SWEEP` -> `RECLAIM` -> `RETEST`) and 3-Pillar Volumetric Displacement gates.
+   - Enforced First-Triggered Execution with instantaneous Atomic Queue Flush (`pendingLimitOrders = []`, `candidatePool = []`) across all environments, eliminating setup divergence.
+
+2. **Decoupled Database I/O to Local Session-Scoped Journaling (`sessionJournalStore.ts`):**
+   - Removed synchronous blocking `/api/trades` and `/api/backtest-trades` POST/PATCH database writes and rollback guards from active execution hot loops.
+   - Built a sub-millisecond reactive Zustand store (`useSessionJournalStore`) with localStorage persistence (`'flow_state_session_journal_v1'`).
+   - Position transitions (`ORDER_FILLED`, `STAGE_1_FILLED`, `STAGE_2_FILLED`, `CLOSED`) mutate immediately in memory.
+   - Built 1-click on-demand client-side export generators: **"Export Session Journal (.JSON)"** and **"Export Session Journal (.CSV)"**, plus **"Clear Session"** management in `JournalTable.tsx`.
+   - Cloud database sync converted to non-blocking fire-and-forget background operations with graceful offline resilience.
+
+3. **Purged Interactive Drag-and-Drop Canvas Clutter:**
+   - Removed persistent interactive SVG trade lines, `cursor-ns-resize`, `onPointerDown`, pointer captures (`setPointerCapture`), and circle drag handles from `Chart.tsx`.
+   - Replaced interactive SVG trade overlays with non-blocking structural SVG price reference levels (`pointer-events-none`).
+   - Restored native Lightweight Charts panning and zooming without mouse interception or frame drops.
+   - Guaranteed that position closures leave zero residual memory locks or visual artifacts on the chart.
+
+4. **Standardized 3-Stage Harvest & Risk Engine:**
+   - Retained the institutional 3-Stage Harvest continuum purely in memory:
+     - **Tranche 1 (40% @ 1.0R)**: Realizes partial gain, trails SL to displacement FVG 50% CE or Breakeven.
+     - **Tranche 2 (40% @ 1.5R)**: Realizes second tranche, ratchets SL to guaranteed +1.0R profit floor.
+     - **Tranche 3 (20% @ Macro DOL runner)**: Rides to Draw On Liquidity (3.0R default).
+
+---
+
+## 🆕 V16.51 Changelog — Volumetric Reclaim Pipeline Audit, Taker Volume Parser Fix & Setting Synchronization (2026-08-23)
+
+### Summary
+Resolved the 0.4% Volumetric Reclaim chokepoint in the Sweep & Reclaim strategy pipeline by repairing the historical kline taker volume parser across all data ingestion routes, introducing the Wyckoff Price-Range Conviction synthetic delta fallback, implementing Multi-Candle Displacement Window verification (absorption at sweep + expansion on follow-through), synchronizing volumetric parameter overrides across Command Center and Quant Lab UI decks, and expanding telemetry funnel diagnostics.
+
+### Key Architectural Deliverables
+
+1. **Historical Kline Taker Volume Parser & Wyckoff Fallback:**
+   - Audited all kline parsing pipelines (`/api/quant-lab/sweep-reclaim-scanner/route.ts`, `/api/quant-lab/ob-scanner/route.ts`, `/api/quant-lab/run/route.ts`, `useBacktestEngine.ts`, `agentEngineHandlers.ts`).
+   - Verified that index 9 (`taker_buy_base_asset_volume`) is correctly parsed as `taker_buy_vol` and `taker_sell_vol = Math.max(0, v - taker_buy_vol)`.
+   - **Wyckoff Conviction Fallback Estimator**: Implemented synthetic delta calculation `taker_buy_vol = ((close - low) / (high - low)) * volume` when raw taker volume is missing or NaN on archived/mock data slices, eliminating false-negative 3-Pillar vetoes.
+
+2. **Multi-Candle Displacement Window Verification:**
+   - Upgraded Phase 3 in `SweepReclaimEngine.ts` to inspect the entire displacement impulse window `[sweepIdx..i]` (1 to `maxBarsSweepToReclaim` candles, typically 1–3 bars following the sweep extreme) rather than requiring all 3 pillars to peak on a single isolated bar:
+     - **Pillar 1 (Volume Expansion)**: Confirmed if the sweep absorption bar, the reclaim bar, or window max volume ratio $\ge$ `volumeExpansionThreshold` vs rolling Volume SMA.
+     - **Pillar 2 (Taker Delta Dominance)**: Confirmed if cumulative window taker delta or reclaim candle delta $\ge$ `deltaDominanceThreshold` (55.0%).
+     - **Pillar 3 (Body-to-Range Ratio)**: Confirmed if the reclaim candle body or window max displacement body ratio $\ge$ `bodyRatioThreshold` (0.55).
+     - **Displacement FVG**: Extracted across `[sweepIdx..i+2]`.
+
+3. **Command Center & Quant Lab Parameter Synchronization:**
+   - Ingested and bound user overrides directly into the backend engine:
+     - `volumeSmaPeriod` (configurable 7 to 50 bars, default 20).
+     - `volumeExpansionThreshold` (1.00x to 2.50x, default 1.50x).
+     - `deltaDominanceThreshold` (50.0% to 75.0%, default 55.0%).
+     - `bodyRatioThreshold` / `minBodyRatio` (0.30 to 0.80, default 0.55).
+     - `maxBarsSweepToReclaim` (1 to 12 bars).
+   - Eliminated hardcoded constant overrides in the scan loop.
+
+4. **Telemetry & Funnel Diagnostics:**
+   - Surfaced individual pass counters and percentages in the telemetry payload:
+     - `pillar1_volume_passed_count` / `pillar1_pass_count`
+     - `pillar2_delta_passed_count` / `pillar2_pass_count`
+     - `pillar3_body_passed_count` / `pillar3_pass_count`
+     - `three_pillar_all_passed_count` / `three_pillar_all_pass_count`
+   - Bound telemetry cards dynamically in `SweepReclaimWorkspace.tsx` to reflect active configured thresholds.
+
+5. **Live Execution Modal UI Alignment with Quant Lab:**
+   - Replaced fixed button groups in `LiveOrderBlockModal.tsx` (`Live Execution > Engine Settings > 3-Pillar Displacement Gatekeeper Thresholds`) with continuous slider controls identically matching `SweepReclaimWorkspace.tsx`.
+   - Added the missing **Volume SMA Period slider** (7 to 50 bars, default 20) to `LiveOrderBlockModal.tsx` alongside P1 Volume Expansion (1.00x–2.50x), P2 Taker Delta Dominance (50.0%–75.0%), and P3 Body-to-Range (30%–80%).
+   - Aligned preset serialization and live execution settings state to eliminate setting drift between Quant Lab research and live automated execution.
+
+---
+
+## 🆕 V16.50 Changelog — Sweep & Reclaim Clean Architectural Audit & Reset (2026-08-23)
+
+### Summary
+Performed a systematic clean architectural audit and parameter synchronization across the Sweep & Reclaim quantitative engine (`SweepReclaimEngine.ts`), Live Automated Execution Engine (`AutomatedStrategyExecutionEngine.ts`), Quant Lab workspace UI (`SweepReclaimWorkspace.tsx`), API route handlers (`/api/quant-lab/sweep-reclaim-scanner`), and preset storage (`scannerPresets.ts`).
+
+### Key Architectural Deliverables
+
+1. **Quant Lab Historical Mode vs. Live Execution Mode Decoupling:**
+   - **Quant Lab Historical Mode (`SweepReclaimEngine.ts`)**: Evaluates EVERY valid candidate setup independently across its own lifecycle to compute true, un-throttled mathematical expectancy (Win Rate %, Profit Factor, $E[R]$, MFE/MAE distributions) across the dataset without artificial active-trade blocking.
+   - **Live Execution Mode (`AutomatedStrategyExecutionEngine.ts`)**: Enforces strict single-position capital protection (`maxOpenPositions: 1`), directional hedging vetoes, and First-Triggered Execution with instantaneous Atomic Queue Flush (`this.pendingLimitOrders = []`).
+   - **200-Bar Historical Pre-Warmup Buffer**: Enforced across all historical fetches (`fetchPagedKlines` / `generateMockKlines`) in `/api/quant-lab/sweep-reclaim-scanner/route.ts` to ensure identical indicator stabilization (Volume SMAs, ATR baselines, Dealing Ranges) across arbitrary test start dates.
+
+2. **Phase 4 Retest & Lifecycle Evaluation Hardening:**
+   - The displacement/reclaim candle itself is verified to NEVER trigger a `MISSED_EXPANSION` invalidation.
+   - Target clearance checks occur strictly on candles *after* the reclaim candle has closed (`barIndex > reclaimIndex`).
+   - Limit entry triggers on the first subsequent bar whose price touches the configured entry level (`SWEEP_OB_MT`, `FVG_CE`, or `RECLAIM_LEVEL`) with ICT body defense.
+   - Stop Loss is locked strictly 1 tick beyond the sweep extreme with the Anti-Micro-Friction 0.15% minimum safety floor.
+
+3. **Volumetric & Valuation Threshold Calibration:**
+   - Calibrated 3-Pillar institutional defaults to realistic baselines:
+     - **Volume Expansion**: 1.50x rolling 20-period Volume SMA.
+     - **Taker Delta Dominance**: 55.0% (taker buy for Bullish, taker sell for Bearish).
+     - **Body-to-Range Ratio**: 55.0% (0.55).
+     - **Liquidity Anchor Multi-Select**: Enabled `SWING_PIVOT` by default alongside Session Extremes (`ASIAN_HIGH/LOW`, `LONDON_HIGH/LOW`, `PDH/PDL`).
+
+4. **UI-to-Engine Parameter Synchronization:**
+   - Verified that all interactive controls (Anchor Selectors, 3-Pillar Sliders, Entry Mode Dropdowns, Retest Window Sliders, Valuation Gate Toggles) in `SweepReclaimWorkspace.tsx` serialize fully and pass through `/api/quant-lab/sweep-reclaim-scanner/route.ts` directly into `SweepReclaimEngine`.
+   - Verified that telemetry and Trade Adapter (`adaptSweepReclaimSetupsToTrades`) feed the Trade Journal and Dual Compounding Equity Curve calculator (`equityCalculator.ts`) with 100% mathematical parity.
+
+---
+
+## 🆕 V16.49 Changelog — First-Triggered Execution & Pending Queue Flush Architecture (2026-08-23)
+
+### Summary
+Restored natural quantitative trade frequency (~200–400 setups/year on 5m ETHUSDC, ~50–100/year on 15m) and eliminated trade starvation and ghost fill collisions by implementing the **First-Triggered Execution & Pending Queue Flush Architecture** across `SweepReclaimEngine.ts`, `AutomatedStrategyExecutionEngine.ts`, and `useBacktestStrategyExecution.ts`.
+
+### Key Architectural Upgrades
+
+1. **Unrestricted Candidate Setup Pool:**
+   - Eliminated artificial bar-count TTL expirations (e.g. 12-bar reclaim freshness and 24-bar / 2-hour retest drops) and premature displacement-candle target clearances across both historical scanning and live execution pipelines.
+   - Retained the 200-bar historical pre-warmup lookback buffer to maintain stabilized Volume SMAs, ATR baselines, and dealing ranges across all test dates.
+
+2. **First-Touch Trigger & Instantaneous Atomic Queue Flush:**
+   - In both historical chronological scanning (`SweepReclaimEngine.ts`) and live automated execution (`AutomatedStrategyExecutionEngine.ts`), candidate setups are monitored concurrently in memory.
+   - The exact moment market price touches the entry price (`Sweep OB MT`, `FVG CE`, or `Reclaim Shelf`) of *any* valid candidate setup, that setup transitions immediately to `OPEN` / `RETESTED`.
+   - **Atomic Queue Flush**: At that exact instant, the engine immediately purges, cancels, and clears all other competing pending setups and older candidate queues from active memory (`candidatePool = []`, `pendingLimitOrders = []`), completely preventing ghost fills, duplicate re-entries, or lagging historical orders on overlapping price waves.
+
+3. **Strict Single-Position Active Lifecycle Management (`maxOpenPositions = 1`):**
+   - While a trade is active (`OPEN`, `STAGE_1_FILLED`, `STAGE_2_FILLED`), strict single-position concurrency is enforced across the engine. No new trades or overlapping orders are executed.
+   - Position is managed through the 3-Stage Harvest Protocol:
+     - **Tranche 1 (40% @ 1.0R)**: Realizes partial gain, trails SL to displacement FVG 50% CE or Breakeven.
+     - **Tranche 2 (40% @ 1.5R)**: Realizes partial gain, ratchets SL to guaranteed +1.0R profit floor.
+     - **Tranche 3 (20% @ Macro DOL / Stage 3 Target)**: Closes remaining inventory at full TP3 win.
+
+4. **Post-Exit State Reset & Fresh Candidate Ingestion:**
+   - When the active trade reaches a terminal state (stopped out, TP target hit, or closed), all exit parameters, MFE/MAE, and realized R are recorded in the trade journal ledger.
+   - The concurrency lock is released (`activeTrade = null`), and candidate pools are reset to allow fresh setup candidates from newly formed market structure to be ingested from that point forward.
+
+---
 
 ## 🆕 V16.48 Changelog — Flawed Historical Median Drop Elimination & Trade Close Idempotency (2026-08-23)
 

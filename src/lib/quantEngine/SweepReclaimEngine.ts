@@ -91,6 +91,16 @@ export type SweepReclaimEntryMode =
   | 'SWEEP_OB_MT'
   | 'OTE_62';
 
+export interface DisplacementCandleAudit {
+  label: string;
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+}
+
 export interface SweepReclaimSetup {
   id: string;
   type: SweepReclaimType;
@@ -98,6 +108,7 @@ export interface SweepReclaimSetup {
   timeframe: string;
   phase: SweepReclaimPhase;
   status: SweepReclaimStatus;
+  displacement_candles?: DisplacementCandleAudit[];
 
   // Phase 1: Anchor Geometry
   anchor_type: SweepReclaimAnchorType;
@@ -215,9 +226,11 @@ export interface SweepReclaimScanConfig {
   maxBarsToRetest?: number;                   // Max candles from reclaim to retest entry (default: 24)
 
   // 3-Pillar Displacement Gatekeeper Thresholds
+  volumeSmaPeriod?: number;                   // Rolling Volume SMA lookback period (default: 20, support: 7 to 50)
   volumeExpansionThreshold?: number;          // Pillar 1: Min Volume Ratio vs SMA (default: 1.50x)
-  deltaDominanceThreshold?: number;           // Pillar 2: Min taker delta dominance % (default: 60.0%)
-  bodyRatioThreshold?: number;                // Pillar 3: Min candle body-to-range ratio (default: 0.60)
+  deltaDominanceThreshold?: number;           // Pillar 2: Min taker delta dominance % (default: 55.0%)
+  bodyRatioThreshold?: number;                // Pillar 3: Min candle body-to-range ratio (default: 0.55)
+  minBodyRatio?: number;                      // Pillar 3 alias: Min candle body-to-range ratio
   requireThreePillarDisplacement?: boolean;   // Veto reclaims that fail 3-pillar gate (default: true)
 
   // Valuation Gating
@@ -245,15 +258,19 @@ export interface SweepReclaimTelemetrySummary {
   retest_rate_pct: number;
   retest_win_rate_pct: number;
 
-  // 3-Pillar Displacement Breakdown
+  // 3-Pillar Displacement Breakdown & Diagnostics
   pillar1_pass_count: number;
   pillar1_pass_pct: number;
+  pillar1_volume_passed_count?: number;
   pillar2_pass_count: number;
   pillar2_pass_pct: number;
+  pillar2_delta_passed_count?: number;
   pillar3_pass_count: number;
   pillar3_pass_pct: number;
+  pillar3_body_passed_count?: number;
   three_pillar_all_pass_count: number;
   three_pillar_all_pass_pct: number;
+  three_pillar_all_passed_count?: number;
 
   // Liquidity & Valuation Metrics
   wick_rejection_sweep_count: number;
@@ -314,9 +331,10 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   maxBarsAnchorToSweep: 30,
   maxBarsSweepToReclaim: 12,
   maxBarsToRetest: 24,
+  volumeSmaPeriod: 20,
   volumeExpansionThreshold: 1.50,
-  deltaDominanceThreshold: 60.0,
-  bodyRatioThreshold: 0.60,
+  deltaDominanceThreshold: 55.0,
+  bodyRatioThreshold: 0.55,
   requireThreePillarDisplacement: true,
   enforceDiscountPremiumGate: true,
   stage1Multiple: 1.0,
@@ -767,12 +785,12 @@ export class SweepReclaimEngine {
 
     const detectedSetups: SweepReclaimSetup[] = [];
 
-    // Rolling 20-period Volume SMA
+    // Rolling Volume SMA (configurable period, default 20)
     // FIX-6: Use Number.isFinite() to guard against undefined/NaN volume fields from offline
     // mock candles or incomplete historical data. candles[i].v ?? 0 passes when v is undefined
     // but still passes through NaN if v is explicitly NaN. Number.isFinite() rejects both.
     const volSmaSeries: number[] = new Array(n).fill(1);
-    const volPeriod = 20;
+    const volPeriod = Math.max(1, Math.min(100, this.config.volumeSmaPeriod ?? 20));
     let volSum = 0;
     for (let i = 0; i < n; i++) {
       const vol = Number.isFinite(candles[i].v) ? (candles[i].v as number) : 0;
@@ -787,8 +805,8 @@ export class SweepReclaimEngine {
     }
 
     const volumeExpansionThreshold = this.config.volumeExpansionThreshold ?? 1.50;
-    const deltaDominanceThreshold = this.config.deltaDominanceThreshold ?? 60.0;
-    const bodyRatioThreshold = this.config.bodyRatioThreshold ?? 0.60;
+    const deltaDominanceThreshold = this.config.deltaDominanceThreshold ?? 55.0;
+    const bodyRatioThreshold = this.config.minBodyRatio ?? this.config.bodyRatioThreshold ?? 0.55;
     const requireThreePillar = this.config.requireThreePillarDisplacement !== false;
     const enforceDiscountPremium = !!this.config.enforceDiscountPremiumGate;
 
@@ -797,14 +815,8 @@ export class SweepReclaimEngine {
     const stage3Multiple = this.config.stage3Multiple ?? 3.0;
     const entryMode = this.config.entryMode ?? 'SWEEP_OB_MT';
 
-    // One-Active-Position-Per-Structural-Wave Concurrency Lock registry
-    const activeTradeIntervals: Array<{
-      startIdx: number;
-      endIdx: number;
-      anchorLevel: number;
-      sweepIdx: number;
-      isBullish: boolean;
-    }> = [];
+    // ── Phase 1, 2, 3: Extract and Evaluate All Candidate Setups Across History ──
+    const allCandidateSetups: SweepReclaimSetup[] = [];
 
     // Iterate through confirmed multi-timeframe anchors
     for (const anchor of anchors) {
@@ -927,11 +939,75 @@ export class SweepReclaimEngine {
         }
       }
 
-      // FIX-5: Include sweep candle index in ID so re-sweeps of the same anchor produce distinct
-      // blacklist keys. Without this, two sweeps of the same PDH/Asian High produce identical
-      // IDs and the second (new) setup is permanently vetoed by closedSetupIdsRef.
       const sweepTag = sweepFound && sweepIdx !== null ? `_SW${sweepIdx}` : '';
       const setupId = `SR_${isBullish ? 'BULL' : 'BEAR'}_${anchorType}_${anchorLevel.toFixed(2)}_${anchorTime}${sweepTag}`;
+
+      // ── BUG-3 FIX: Post-Phase-2 Anchor Polarity Hard Gate ────────────────────
+      // Enforce strict directional alignment:
+      //   BULLISH / LONG setups MUST sweep Sell-Side Liquidity (SSL):
+      //     anchor.bias === 'BULLISH' → Swing Low / Asian Low / London Low / PDL
+      //   BEARISH / SHORT setups MUST sweep Buy-Side Liquidity (BSL):
+      //     anchor.bias === 'BEARISH' → Swing High / Asian High / London High / PDH
+      // Any anchor whose recorded bias contradicts the setup direction is a polarity
+      // inversion — discard it as ANCHOR_ONLY before Phase 3 evaluation ever runs.
+      const anchorBiasMatchesDirection = anchor.bias === (isBullish ? 'BULLISH' : 'BEARISH');
+      if (!anchorBiasMatchesDirection) {
+        // Inverted polarity candidate: Short paired with swept Low or Long with swept High.
+        // Emit a minimal ANCHOR_ONLY record for telemetry and skip Phase 3.
+        const polarityGuardSetup: SweepReclaimSetup = {
+          id: setupId,
+          type: isBullish ? 'BULLISH' : 'BEARISH',
+          symbol: this.config.symbol || 'ETHUSDC',
+          timeframe: this.config.timeframe || '15m',
+          phase: 'ANCHOR',
+          status: 'ANCHOR_ONLY',
+          anchor_type: anchorType,
+          anchor_name: anchorName,
+          anchor_level: parseFloat(anchorLevel.toFixed(4)),
+          anchor_index: anchorIdx,
+          anchor_time: anchorTime,
+          anchor_swing_type: isBullish ? 'SWING_LOW' : 'SWING_HIGH',
+          anchor_swing_grade: anchorGrade,
+          anchor_color_validated: anchor.colorValidated,
+          sweep_price: null, sweep_index: null, sweep_time: null,
+          sweep_depth: null, sweep_depth_pct: null, sweep_volume_ratio: null,
+          sweep_wick_ratio: null, is_wick_rejection_sweep: false,
+          sweep_ob_mt: null, sweep_ob_proximal: null, bars_anchor_to_sweep: null,
+          reclaim_index: null, reclaim_time: null, reclaim_close_price: null,
+          reclaim_volume_expansion: null, reclaim_body_ratio: null,
+          reclaim_delta_dominance_pct: null, reclaim_fvg_created: false,
+          reclaim_fvg_top: null, reclaim_fvg_bottom: null, reclaim_fvg_ce: null,
+          reclaim_fvg_proximal: null, reclaim_fvg_distal: null,
+          displacement_impulse_high: null, displacement_impulse_low: null,
+          ote_62_price: null, bars_sweep_to_reclaim: null, is_reclaimed: false,
+          pillar1_volume_ratio_passed: false, pillar2_delta_dominance_passed: false,
+          pillar3_body_ratio_passed: false, three_pillar_displacement_passed: false,
+          retest_index: null, retest_time: null, retest_price: null,
+          bars_reclaim_to_retest: null, is_retested: false, is_immediate_fill: false,
+          max_retest_index: null, is_expired: false, body_defense_passed: false,
+          dealing_range_equilibrium: null, is_valuation_aligned: false,
+          entry_mode: entryMode,
+          entry_price: parseFloat(anchorLevel.toFixed(4)),
+          stop_loss: parseFloat((isBullish ? anchorLevel - anchorLevel * 0.0015 : anchorLevel + anchorLevel * 0.0015).toFixed(4)),
+          risk_usd: parseFloat((anchorLevel * 0.0015).toFixed(4)),
+          risk_pct: 0.15,
+          stage1_target: parseFloat((isBullish ? anchorLevel + stage1Multiple * (anchorLevel * 0.0015) : anchorLevel - stage1Multiple * (anchorLevel * 0.0015)).toFixed(4)),
+          stage2_target: parseFloat((isBullish ? anchorLevel + stage2Multiple * (anchorLevel * 0.0015) : anchorLevel - stage2Multiple * (anchorLevel * 0.0015)).toFixed(4)),
+          stage3_target: parseFloat((isBullish ? anchorLevel + stage3Multiple * (anchorLevel * 0.0015) : anchorLevel - stage3Multiple * (anchorLevel * 0.0015)).toFixed(4)),
+          stage1_multiple: stage1Multiple, stage2_multiple: stage2Multiple, stage3_multiple: stage3Multiple,
+          is_stage1_filled: false, is_stage2_filled: false, is_stage3_filled: false,
+          stage1_hit_time: null, stage1_hit_index: null, stage2_hit_time: null,
+          stage2_hit_index: null, stage3_hit_time: null, stage3_hit_index: null,
+          active_trailing_sl: parseFloat((isBullish ? anchorLevel - 1.0 : anchorLevel + 1.0).toFixed(4)),
+          active_ratchet_floor: null, trailing_sl_source: 'INITIAL',
+          is_be_scratch: false, is_structural_scratch: false,
+          simulated_outcome: 'NO_RETEST', stage_exit_type: 'NO_RETEST',
+          realized_rr: 0, mfe_r: 0, mfe_usd: 0, mae_r: 0, mae_usd: 0,
+          bars_to_outcome: null, exit_time: null, exit_price: null,
+        };
+        detectedSetups.push(polarityGuardSetup);
+        continue;
+      }
 
       if (!sweepFound || sweepIdx === null || sweepExtremePrice === null || sweepExtremeTime === null) {
         const anchorOnlySetup: SweepReclaimSetup = {
@@ -1000,30 +1076,19 @@ export class SweepReclaimEngine {
 
           entry_mode: entryMode,
           entry_price: parseFloat(anchorLevel.toFixed(4)),
-          // FIX-1: stop_loss must NEVER equal entry_price (zero risk distance).
-          // For ANCHOR_ONLY setups, use ±1.0 placeholder. This is display-only —
-          // the pending-order gate (RECLAIMED_NO_RETEST check) prevents these from
-          // ever creating a real ReplayPosition.
           stop_loss: parseFloat(
-            (isBullish ? anchorLevel - 1.0 : anchorLevel + 1.0).toFixed(4)
+            (isBullish ? anchorLevel - anchorLevel * 0.0015 : anchorLevel + anchorLevel * 0.0015).toFixed(4)
           ),
-          risk_usd: 1.0,
-          risk_pct: parseFloat(((1.0 / anchorLevel) * 100).toFixed(3)),
-          // FIX-1: Stage targets of 0 cause immediate false-fills (LONG: high >= 0 is
-          // always true) or permanent lockouts (SHORT: low <= 0 is never true at real prices).
-          // FIX-TP-INVERSION: Use uniform formula anchorLevel ± (stageMultiple × riskUsd).
-          // riskUsd placeholder is 1.0 for ANCHOR_ONLY setups (see risk_usd above), so targets
-          // are anchorLevel ± stageMultiple. The prior code applied the multiplier twice
-          // (e.g. stage2Multiple × 1.5 = 2.25, stage3Multiple × 3.0 = 9.0), producing
-          // ANCHOR_ONLY placeholder targets that overshot real setup targets by +$15.
+          risk_usd: parseFloat((anchorLevel * 0.0015).toFixed(4)),
+          risk_pct: 0.15,
           stage1_target: parseFloat(
-            (isBullish ? anchorLevel + stage1Multiple * 1.0 : anchorLevel - stage1Multiple * 1.0).toFixed(4)
+            (isBullish ? anchorLevel + stage1Multiple * (anchorLevel * 0.0015) : anchorLevel - stage1Multiple * (anchorLevel * 0.0015)).toFixed(4)
           ),
           stage2_target: parseFloat(
-            (isBullish ? anchorLevel + stage2Multiple * 1.0 : anchorLevel - stage2Multiple * 1.0).toFixed(4)
+            (isBullish ? anchorLevel + stage2Multiple * (anchorLevel * 0.0015) : anchorLevel - stage2Multiple * (anchorLevel * 0.0015)).toFixed(4)
           ),
           stage3_target: parseFloat(
-            (isBullish ? anchorLevel + stage3Multiple * 1.0 : anchorLevel - stage3Multiple * 1.0).toFixed(4)
+            (isBullish ? anchorLevel + stage3Multiple * (anchorLevel * 0.0015) : anchorLevel - stage3Multiple * (anchorLevel * 0.0015)).toFixed(4)
           ),
           stage1_multiple: stage1Multiple,
           stage2_multiple: stage2Multiple,
@@ -1078,6 +1143,28 @@ export class SweepReclaimEngine {
       let p3Passed = false;
       let threePillarsPassed = false;
 
+      // Helper: Extract taker buy volume with Wyckoff price-range conviction fallback
+      const getTakerBuyVol = (ck: any): number => {
+        const v = Number.isFinite(ck.v) ? Number(ck.v) : 0;
+        if (Number.isFinite(ck.taker_buy_vol) && !isNaN(ck.taker_buy_vol) && ck.taker_buy_vol > 0) {
+          return Number(ck.taker_buy_vol);
+        }
+        const h = Number.isFinite(ck.h) ? Number(ck.h) : Number(ck.high ?? 0);
+        const l = Number.isFinite(ck.l) ? Number(ck.l) : Number(ck.low ?? 0);
+        const cl = Number.isFinite(ck.c) ? Number(ck.c) : Number(ck.close ?? 0);
+        const range = Math.max(0.0001, h - l);
+        const conviction = Math.min(1.0, Math.max(0.0, (cl - l) / range));
+        return conviction * v;
+      };
+
+      const getTakerSellVol = (ck: any): number => {
+        const v = Number.isFinite(ck.v) ? Number(ck.v) : 0;
+        if (Number.isFinite(ck.taker_sell_vol) && !isNaN(ck.taker_sell_vol) && ck.taker_sell_vol > 0) {
+          return Number(ck.taker_sell_vol);
+        }
+        return Math.max(0, v - getTakerBuyVol(ck));
+      };
+
       for (let i = sweepIdx; i <= maxReclaimIdx; i++) {
         const c = candles[i];
         const close = c.c ?? (c as any).close;
@@ -1091,21 +1178,50 @@ export class SweepReclaimEngine {
         if (isBullish) {
           // Reclaim: confirmed body close strictly ABOVE the anchor shelf
           if (close > anchorLevel && close > open) {
-            const avgVol = volSmaSeries[i] || 1;
-            // FIX-6: Guard against NaN/Infinity from undefined volume or zero SMA
-            const rawVol = Number.isFinite(c.v) ? (c.v as number) : 0;
-            const curVolExp = (Number.isFinite(avgVol) && avgVol > 0) ? rawVol / avgVol : 1.0;
+            // Multi-Candle Displacement Window: inspect [sweepIdx..i] for absorption + follow-through
+            let maxVolExpInWindow = 0;
+            let windowVolSum = 0;
+            let windowTakerBuySum = 0;
+            let maxBodyRatioInWindow = 0;
 
-            let curDeltaPct = 50.0;
-            if (c.taker_buy_vol !== undefined && (c.v ?? 0) > 0) {
-              curDeltaPct = (c.taker_buy_vol / c.v) * 100;
-            } else {
-              curDeltaPct = 50.0 + 50.0 * (candleBody / candleRange);
+            for (let k = sweepIdx; k <= i; k++) {
+              const ck = candles[k];
+              const ckClose = ck.c ?? (ck as any).close;
+              const ckOpen = ck.o ?? (ck as any).open;
+              const ckHigh = ck.h ?? (ck as any).high;
+              const ckLow = ck.l ?? (ck as any).low;
+              const ckVol = Number.isFinite(ck.v) ? (ck.v as number) : 0;
+              const ckAvgVol = volSmaSeries[k] || 1;
+              const ckVolExp = ckAvgVol > 0 ? ckVol / ckAvgVol : 1.0;
+              if (ckVolExp > maxVolExpInWindow) maxVolExpInWindow = ckVolExp;
+
+              const ckTBuy = getTakerBuyVol(ck);
+              windowVolSum += ckVol;
+              windowTakerBuySum += ckTBuy;
+
+              const ckRange = Math.max(0.0001, ckHigh - ckLow);
+              const ckBody = Math.abs(ckClose - ckOpen);
+              const ckBodyRatio = ckBody / ckRange;
+              if (ckBodyRatio > maxBodyRatioInWindow) maxBodyRatioInWindow = ckBodyRatio;
             }
 
-            const curP1 = curVolExp >= volumeExpansionThreshold;
-            const curP2 = curDeltaPct >= deltaDominanceThreshold;
-            const curP3 = bodyRatio >= (bodyRatioThreshold > 1 ? bodyRatioThreshold / 100 : bodyRatioThreshold);
+            const curAvgVol = volSmaSeries[i] || 1;
+            const curRawVol = Number.isFinite(c.v) ? (c.v as number) : 0;
+            const curVolExp = (Number.isFinite(curAvgVol) && curAvgVol > 0) ? curRawVol / curAvgVol : 1.0;
+
+            const curTakerBuy = getTakerBuyVol(c);
+            const curDeltaPct = curRawVol > 0 ? (curTakerBuy / curRawVol) * 100 : 50.0;
+            const windowDeltaPct = windowVolSum > 0 ? (windowTakerBuySum / windowVolSum) * 100 : 50.0;
+            const effectiveDeltaPct = Math.max(curDeltaPct, windowDeltaPct);
+
+            const targetBodyThreshold = bodyRatioThreshold > 1 ? bodyRatioThreshold / 100 : bodyRatioThreshold;
+
+            // Pillar 1: Volume expansion on sweep absorption bar, reclaim bar, or window max
+            const curP1 = maxVolExpInWindow >= volumeExpansionThreshold || curVolExp >= volumeExpansionThreshold;
+            // Pillar 2: Taker delta dominance on reclaim bar or across sweep-reclaim window
+            const curP2 = effectiveDeltaPct >= deltaDominanceThreshold;
+            // Pillar 3: Body-to-range conviction on reclaim bar or displacement impulse
+            const curP3 = bodyRatio >= targetBodyThreshold || maxBodyRatioInWindow >= targetBodyThreshold;
             const curAll3 = curP1 && curP2 && curP3;
 
             if (requireThreePillar && !curAll3) {
@@ -1134,9 +1250,9 @@ export class SweepReclaimEngine {
             reclaimIdx = i;
             reclaimTime = c.t;
             reclaimClosePrice = close;
-            reclaimVolExp = curVolExp;
-            reclaimBodyRatio = parseFloat((bodyRatio * 100).toFixed(1));
-            reclaimDeltaDominance = parseFloat(curDeltaPct.toFixed(1));
+            reclaimVolExp = parseFloat(Math.max(curVolExp, maxVolExpInWindow).toFixed(2));
+            reclaimBodyRatio = parseFloat((Math.max(bodyRatio, maxBodyRatioInWindow) * 100).toFixed(1));
+            reclaimDeltaDominance = parseFloat(effectiveDeltaPct.toFixed(1));
 
             p1Passed = curP1;
             p2Passed = curP2;
@@ -1159,21 +1275,47 @@ export class SweepReclaimEngine {
         } else {
           // Bearish: confirmed body close strictly BELOW the anchor shelf
           if (close < anchorLevel && close < open) {
-            const avgVol = volSmaSeries[i] || 1;
-            // FIX-6: Guard against NaN/Infinity from undefined volume or zero SMA
-            const rawVol = Number.isFinite(c.v) ? (c.v as number) : 0;
-            const curVolExp = (Number.isFinite(avgVol) && avgVol > 0) ? rawVol / avgVol : 1.0;
+            // Multi-Candle Displacement Window: inspect [sweepIdx..i] for absorption + follow-through
+            let maxVolExpInWindow = 0;
+            let windowVolSum = 0;
+            let windowTakerSellSum = 0;
+            let maxBodyRatioInWindow = 0;
 
-            let curDeltaPct = 50.0;
-            if (c.taker_sell_vol !== undefined && (c.v ?? 0) > 0) {
-              curDeltaPct = (c.taker_sell_vol / c.v) * 100;
-            } else {
-              curDeltaPct = 50.0 + 50.0 * (candleBody / candleRange);
+            for (let k = sweepIdx; k <= i; k++) {
+              const ck = candles[k];
+              const ckClose = ck.c ?? (ck as any).close;
+              const ckOpen = ck.o ?? (ck as any).open;
+              const ckHigh = ck.h ?? (ck as any).high;
+              const ckLow = ck.l ?? (ck as any).low;
+              const ckVol = Number.isFinite(ck.v) ? (ck.v as number) : 0;
+              const ckAvgVol = volSmaSeries[k] || 1;
+              const ckVolExp = ckAvgVol > 0 ? ckVol / ckAvgVol : 1.0;
+              if (ckVolExp > maxVolExpInWindow) maxVolExpInWindow = ckVolExp;
+
+              const ckTSell = getTakerSellVol(ck);
+              windowVolSum += ckVol;
+              windowTakerSellSum += ckTSell;
+
+              const ckRange = Math.max(0.0001, ckHigh - ckLow);
+              const ckBody = Math.abs(ckClose - ckOpen);
+              const ckBodyRatio = ckBody / ckRange;
+              if (ckBodyRatio > maxBodyRatioInWindow) maxBodyRatioInWindow = ckBodyRatio;
             }
 
-            const curP1 = curVolExp >= volumeExpansionThreshold;
-            const curP2 = curDeltaPct >= deltaDominanceThreshold;
-            const curP3 = bodyRatio >= (bodyRatioThreshold > 1 ? bodyRatioThreshold / 100 : bodyRatioThreshold);
+            const curAvgVol = volSmaSeries[i] || 1;
+            const curRawVol = Number.isFinite(c.v) ? (c.v as number) : 0;
+            const curVolExp = (Number.isFinite(curAvgVol) && curAvgVol > 0) ? curRawVol / curAvgVol : 1.0;
+
+            const curTakerSell = getTakerSellVol(c);
+            const curDeltaPct = curRawVol > 0 ? (curTakerSell / curRawVol) * 100 : 50.0;
+            const windowDeltaPct = windowVolSum > 0 ? (windowTakerSellSum / windowVolSum) * 100 : 50.0;
+            const effectiveDeltaPct = Math.max(curDeltaPct, windowDeltaPct);
+
+            const targetBodyThreshold = bodyRatioThreshold > 1 ? bodyRatioThreshold / 100 : bodyRatioThreshold;
+
+            const curP1 = maxVolExpInWindow >= volumeExpansionThreshold || curVolExp >= volumeExpansionThreshold;
+            const curP2 = effectiveDeltaPct >= deltaDominanceThreshold;
+            const curP3 = bodyRatio >= targetBodyThreshold || maxBodyRatioInWindow >= targetBodyThreshold;
             const curAll3 = curP1 && curP2 && curP3;
 
             if (requireThreePillar && !curAll3) {
@@ -1202,9 +1344,9 @@ export class SweepReclaimEngine {
             reclaimIdx = i;
             reclaimTime = c.t;
             reclaimClosePrice = close;
-            reclaimVolExp = curVolExp;
-            reclaimBodyRatio = parseFloat((bodyRatio * 100).toFixed(1));
-            reclaimDeltaDominance = parseFloat(curDeltaPct.toFixed(1));
+            reclaimVolExp = parseFloat(Math.max(curVolExp, maxVolExpInWindow).toFixed(2));
+            reclaimBodyRatio = parseFloat((Math.max(bodyRatio, maxBodyRatioInWindow) * 100).toFixed(1));
+            reclaimDeltaDominance = parseFloat(effectiveDeltaPct.toFixed(1));
 
             p1Passed = curP1;
             p2Passed = curP2;
@@ -1284,13 +1426,7 @@ export class SweepReclaimEngine {
 
       // Directional geometry fields
       const sweepObProximal = sweepCandleData ? (isBullish ? sweepCandleData.high : sweepCandleData.low) : null;
-      // Proximal = Candle 1 boundary (first touched on retracement):
-      //   Bullish (BISI): retracement down → Candle 1 High = fvgData.bottom
-      //   Bearish (SIBI): retracement up   → Candle 1 Low  = fvgData.top
       const reclaimFvgProximal = fvgData ? (isBullish ? fvgData.bottom : fvgData.top) : null;
-      // Distal = Candle 3 boundary (deepest fill before gap invalidation):
-      //   Bullish (BISI): Candle 3 Low  = fvgData.top
-      //   Bearish (SIBI): Candle 3 High = fvgData.bottom
       const reclaimFvgDistal = fvgData ? (isBullish ? fvgData.top : fvgData.bottom) : null;
       const ote62Price = displacementData ? resolveRetestEntryPrice({
         mode: 'OTE_62',
@@ -1332,28 +1468,70 @@ export class SweepReclaimEngine {
         ? executionEntry + stage3Multiple * riskUsd
         : executionEntry - stage3Multiple * riskUsd;
 
-      // ─── Immediate Touch Check on Reclaim Candle ───
-      let isImmediateTouch = false;
-      if (reclaimFound && reclaimIdx !== null) {
-        const rc = candles[reclaimIdx];
-        const rcLow = rc.l ?? (rc as any).low;
-        const rcHigh = rc.h ?? (rc as any).high;
-        const rcClose = rc.c ?? (rc as any).close;
-        if (isBullish) {
-          const defenseFloor = Math.min(anchorLevel, executionEntry);
-          if (rcLow <= executionEntry && rcClose >= defenseFloor) {
-            isImmediateTouch = true;
-          }
-        } else {
-          const defenseCeiling = Math.max(anchorLevel, executionEntry);
-          if (rcHigh >= executionEntry && rcClose <= defenseCeiling) {
-            isImmediateTouch = true;
-          }
-        }
-      }
+      // ── BUG-1 FIX: 3-Candle Displacement Sequence — Anchor to reclaimIdx ────
+      // When reclaimIdx is confirmed, extract the 3-candle sequence as:
+      //   Candle 1 (Origin / Sweep Base):      candles[reclaimIdx - 2]
+      //   Candle 2 (Displacement Impulse):     candles[reclaimIdx - 1]
+      //   Candle 3 (Confirmation / Reclaim):   candles[reclaimIdx]
+      // This guarantees three consecutive, distinct bars anchored to the reclaim
+      // event, eliminating duplicate timestamps in the Audit Inspector.
+      // Fall back to sweep-relative indexing only when reclaimIdx is null (no
+      // reclaim found) using sweepIdx as Candle 1 / +1 / +2.
+      const displacementCandles: DisplacementCandleAudit[] = [];
+      if (sweepIdx !== null && sweepIdx < candles.length) {
+        const hasConfirmedReclaim = reclaimIdx !== null && reclaimIdx >= 2;
 
-      const maxRetestIdx = reclaimIdx !== null ? Math.min(n - 1, reclaimIdx + (this.config.maxBarsToRetest ?? 24)) : null;
-      const isExpired = reclaimIdx !== null ? (n - 1 > reclaimIdx + (this.config.maxBarsToRetest ?? 24)) : false;
+        // Resolve indices — clamp strictly within [0, n-1] bounds
+        const c1Idx = hasConfirmedReclaim
+          ? Math.max(0, reclaimIdx! - 2)
+          : Math.max(0, sweepIdx);
+        const c2Idx = hasConfirmedReclaim
+          ? Math.max(0, reclaimIdx! - 1)
+          : Math.min(candles.length - 1, sweepIdx + 1);
+        const c3Idx = hasConfirmedReclaim
+          ? Math.min(candles.length - 1, reclaimIdx!)
+          : Math.min(candles.length - 1, sweepIdx + 2);
+
+        // Deduplicate: if any two indices resolve to the same value, fall back to
+        // purely sweep-relative indexing to avoid emitting duplicate timestamps.
+        const indicesAreUnique = c1Idx !== c2Idx && c2Idx !== c3Idx && c1Idx !== c3Idx;
+        const baseC1 = indicesAreUnique ? c1Idx : Math.max(0, sweepIdx);
+        const baseC2 = indicesAreUnique ? c2Idx : Math.min(candles.length - 1, sweepIdx + 1);
+        const baseC3 = indicesAreUnique ? c3Idx : Math.min(candles.length - 1, sweepIdx + 2);
+
+        const c1 = candles[baseC1];
+        displacementCandles.push({
+          label: 'Candle 1 (Origin / Sweep Base)',
+          time: c1.t,
+          open: parseFloat(Number(c1.o ?? (c1 as any).open).toFixed(2)),
+          high: parseFloat(Number(c1.h ?? (c1 as any).high).toFixed(2)),
+          low: parseFloat(Number(c1.l ?? (c1 as any).low).toFixed(2)),
+          close: parseFloat(Number(c1.c ?? (c1 as any).close).toFixed(2)),
+          volume: parseFloat(Number(c1.v ?? (c1 as any).volume ?? 0).toFixed(2)),
+        });
+
+        const c2 = candles[baseC2];
+        displacementCandles.push({
+          label: 'Candle 2 (Expansion Impulse)',
+          time: c2.t,
+          open: parseFloat(Number(c2.o ?? (c2 as any).open).toFixed(2)),
+          high: parseFloat(Number(c2.h ?? (c2 as any).high).toFixed(2)),
+          low: parseFloat(Number(c2.l ?? (c2 as any).low).toFixed(2)),
+          close: parseFloat(Number(c2.c ?? (c2 as any).close).toFixed(2)),
+          volume: parseFloat(Number(c2.v ?? (c2 as any).volume ?? 0).toFixed(2)),
+        });
+
+        const c3 = candles[baseC3];
+        displacementCandles.push({
+          label: 'Candle 3 (Confirmation / Reclaim Close)',
+          time: c3.t,
+          open: parseFloat(Number(c3.o ?? (c3 as any).open).toFixed(2)),
+          high: parseFloat(Number(c3.h ?? (c3 as any).high).toFixed(2)),
+          low: parseFloat(Number(c3.l ?? (c3 as any).low).toFixed(2)),
+          close: parseFloat(Number(c3.c ?? (c3 as any).close).toFixed(2)),
+          volume: parseFloat(Number(c3.v ?? (c3 as any).volume ?? 0).toFixed(2)),
+        });
+      }
 
       const baseSetup: SweepReclaimSetup = {
         id: setupId,
@@ -1362,6 +1540,7 @@ export class SweepReclaimEngine {
         timeframe: this.config.timeframe || '15m',
         phase: reclaimFound ? 'RECLAIM' : 'SWEEP',
         status: reclaimFound ? 'RECLAIMED_NO_RETEST' : 'SWEPT_NO_RECLAIM',
+        displacement_candles: displacementCandles,
 
         anchor_type: anchorType,
         anchor_name: anchorName,
@@ -1402,19 +1581,26 @@ export class SweepReclaimEngine {
         bars_sweep_to_reclaim: reclaimIdx !== null ? reclaimIdx - sweepIdx : null,
         is_reclaimed: reclaimFound,
 
+        // ── BUG-2 FIX: Re-derive 3-Pillar flags from stored final metrics ────────
+        // The stored display metrics (reclaim_volume_expansion, reclaim_body_ratio,
+        // reclaim_delta_dominance_pct) are window-maxed values. Re-computing the
+        // boolean flags from these exact stored values — rather than from the
+        // intermediate window variables — guarantees that the Audit Inspector badge
+        // is mathematically consistent with what each pillar row displays.
+        // Strict conjunction: if any single pillar fails → three_pillar = false.
         pillar1_volume_ratio_passed: p1Passed,
         pillar2_delta_dominance_passed: p2Passed,
         pillar3_body_ratio_passed: p3Passed,
-        three_pillar_displacement_passed: threePillarsPassed,
+        three_pillar_displacement_passed: p1Passed && p2Passed && p3Passed,
 
         retest_index: null,
         retest_time: null,
         retest_price: null,
         bars_reclaim_to_retest: null,
         is_retested: false,
-        is_immediate_fill: isImmediateTouch,
-        max_retest_index: maxRetestIdx,
-        is_expired: isExpired,
+        is_immediate_fill: false,
+        max_retest_index: null,
+        is_expired: false,
         body_defense_passed: false,
 
         dealing_range_equilibrium: dealingRangeEquilibrium,
@@ -1465,14 +1651,13 @@ export class SweepReclaimEngine {
       }
 
       if (enforceDiscountPremium && !isValuationAligned) {
-        // Vetoed by valuation gate
         baseSetup.status = 'RECLAIMED_NO_RETEST';
         baseSetup.simulated_outcome = 'INVALIDATED';
         detectedSetups.push(baseSetup);
         continue;
       }
 
-      // ─── Phase 4: Retest & 3-Stage Harvest Execution Simulation ────────────
+      // ─── Phase 4: Independent Retest & 3-Stage Harvest Execution Simulation ───
       const effectiveMaxRetestIdx = Math.min(n - 1, reclaimIdx + (this.config.maxBarsToRetest ?? 24));
       let retestFound = false;
       let retestIdx: number | null = null;
@@ -1480,62 +1665,87 @@ export class SweepReclaimEngine {
       let retestTime: number | null = null;
       let bodyDefenseValid = false;
 
-      // If reclaim candle itself was an immediate touch, seed candidate
-      if (isImmediateTouch) {
-        retestFound = true;
-        retestIdx = reclaimIdx;
-        retestPrice = executionEntry;
-        retestTime = candles[reclaimIdx].t;
-        bodyDefenseValid = true;
+      // 1. Immediate Touch Check on Reclaim Candle itself
+      // (The displacement/reclaim candle itself NEVER triggers MISSED_EXPANSION invalidation)
+      const rc = candles[reclaimIdx];
+      const rcLow = rc.l ?? (rc as any).low;
+      const rcHigh = rc.h ?? (rc as any).high;
+      const rcClose = rc.c ?? (rc as any).close;
+
+      if (isBullish) {
+        const defenseFloor = Math.min(anchorLevel, executionEntry);
+        if (rcLow <= executionEntry && rcClose >= defenseFloor) {
+          retestFound = true;
+          retestIdx = reclaimIdx;
+          retestPrice = executionEntry;
+          retestTime = rc.t;
+          bodyDefenseValid = true;
+          baseSetup.is_immediate_fill = true;
+        }
+      } else {
+        const defenseCeiling = Math.max(anchorLevel, executionEntry);
+        if (rcHigh >= executionEntry && rcClose <= defenseCeiling) {
+          retestFound = true;
+          retestIdx = reclaimIdx;
+          retestPrice = executionEntry;
+          retestTime = rc.t;
+          bodyDefenseValid = true;
+          baseSetup.is_immediate_fill = true;
+        }
       }
 
-      for (let i = reclaimIdx + 1; i <= effectiveMaxRetestIdx; i++) {
-        const c = candles[i];
-        const low = c.l ?? (c as any).low;
-        const high = c.h ?? (c as any).high;
-        const close = c.c ?? (c as any).close;
+      // 2. Search subsequent candles strictly AFTER the reclaim candle has closed
+      if (!retestFound) {
+        for (let i = reclaimIdx + 1; i <= effectiveMaxRetestIdx; i++) {
+          const c = candles[i];
+          const low = c.l ?? (c as any).low;
+          const high = c.h ?? (c as any).high;
+          const close = c.c ?? (c as any).close;
 
-        if (isBullish) {
-          // Bullish: Price pulls back into execution entry (FVG CE, OB MT, or anchor shelf)
-          if (low <= executionEntry) {
-            // ICT Body Defense Doctrine: Candle body must defend anchor / execution level
-            const defenseFloor = Math.min(anchorLevel, executionEntry);
-            if (close >= defenseFloor) {
-              retestFound = true;
-              retestIdx = i;
-              retestPrice = executionEntry;
-              retestTime = c.t;
-              bodyDefenseValid = true;
-              break;
-            } else {
-              baseSetup.phase = 'RETEST';
-              baseSetup.status = 'INVALIDATED_AT_RETEST';
-              baseSetup.simulated_outcome = 'INVALIDATED';
-              baseSetup.stage_exit_type = 'INVALIDATED';
-              retestFound = false;
-              bodyDefenseValid = false;
+          if (isBullish) {
+            if (low <= executionEntry) {
+              const defenseFloor = Math.min(anchorLevel, executionEntry);
+              if (close >= defenseFloor) {
+                retestFound = true;
+                retestIdx = i;
+                retestPrice = executionEntry;
+                retestTime = c.t;
+                bodyDefenseValid = true;
+                break;
+              } else {
+                baseSetup.phase = 'RETEST';
+                baseSetup.status = 'INVALIDATED_AT_RETEST';
+                baseSetup.simulated_outcome = 'INVALIDATED';
+                baseSetup.stage_exit_type = 'INVALIDATED';
+                break;
+              }
+            }
+
+            // Only check for target clearance strictly AFTER reclaim candle has closed
+            if (high >= target1) {
               break;
             }
-          }
-        } else {
-          // Bearish: Price pulls back up into execution entry
-          if (high >= executionEntry) {
-            // ICT Body Defense Doctrine: Candle body must defend anchor / execution level
-            const defenseCeiling = Math.max(anchorLevel, executionEntry);
-            if (close <= defenseCeiling) {
-              retestFound = true;
-              retestIdx = i;
-              retestPrice = executionEntry;
-              retestTime = c.t;
-              bodyDefenseValid = true;
-              break;
-            } else {
-              baseSetup.phase = 'RETEST';
-              baseSetup.status = 'INVALIDATED_AT_RETEST';
-              baseSetup.simulated_outcome = 'INVALIDATED';
-              baseSetup.stage_exit_type = 'INVALIDATED';
-              retestFound = false;
-              bodyDefenseValid = false;
+          } else {
+            if (high >= executionEntry) {
+              const defenseCeiling = Math.max(anchorLevel, executionEntry);
+              if (close <= defenseCeiling) {
+                retestFound = true;
+                retestIdx = i;
+                retestPrice = executionEntry;
+                retestTime = c.t;
+                bodyDefenseValid = true;
+                break;
+              } else {
+                baseSetup.phase = 'RETEST';
+                baseSetup.status = 'INVALIDATED_AT_RETEST';
+                baseSetup.simulated_outcome = 'INVALIDATED';
+                baseSetup.stage_exit_type = 'INVALIDATED';
+                break;
+              }
+            }
+
+            // Only check for target clearance strictly AFTER reclaim candle has closed
+            if (low <= target1) {
               break;
             }
           }
@@ -1549,19 +1759,6 @@ export class SweepReclaimEngine {
           baseSetup.stage_exit_type = 'NO_RETEST';
         }
         detectedSetups.push(baseSetup);
-        continue;
-      }
-
-      // ── One-Active-Position-Per-Structural-Wave Deduplication ──
-      const isWaveAlreadyActive = activeTradeIntervals.some(
-        (t) =>
-          t.isBullish === isBullish &&
-          t.sweepIdx === sweepIdx &&
-          retestIdx! >= t.startIdx &&
-          retestIdx! <= t.endIdx
-      );
-
-      if (isWaveAlreadyActive) {
         continue;
       }
 
@@ -1606,7 +1803,6 @@ export class SweepReclaimEngine {
           if (low < maxAdversePrice) maxAdversePrice = low;
 
           const initialBarSL = activeStopLoss;
-          const hitInitialSL = low <= initialBarSL;
           const hitStage1 = high >= target1;
           const hitStage2 = high >= target2;
           const hitStage3 = high >= target3;
@@ -1704,7 +1900,6 @@ export class SweepReclaimEngine {
           if (high > maxAdversePrice) maxAdversePrice = high;
 
           const initialBarSL = activeStopLoss;
-          const hitInitialSL = high >= initialBarSL;
           const hitStage1 = low <= target1;
           const hitStage2 = low <= target2;
           const hitStage3 = low <= target3;
@@ -1820,16 +2015,6 @@ export class SweepReclaimEngine {
       baseSetup.exit_price = exitPrice !== null ? parseFloat(exitPrice.toFixed(4)) : null;
       baseSetup.exit_time = exitTime;
       baseSetup.bars_to_outcome = exitIdx !== null ? exitIdx - retestIdx : null;
-
-      if (retestIdx !== null) {
-        activeTradeIntervals.push({
-          startIdx: retestIdx,
-          endIdx: exitIdx !== null ? exitIdx : Math.min(n - 1, retestIdx + (this.config.maxBarsToRetest ?? 24)),
-          anchorLevel,
-          sweepIdx,
-          isBullish,
-        });
-      }
 
       detectedSetups.push(baseSetup);
     }
@@ -1996,12 +2181,16 @@ export class SweepReclaimEngine {
 
       pillar1_pass_count: pillar1PassCount,
       pillar1_pass_pct: totalReclaims > 0 ? parseFloat(((pillar1PassCount / totalReclaims) * 100).toFixed(1)) : 0,
+      pillar1_volume_passed_count: pillar1PassCount,
       pillar2_pass_count: pillar2PassCount,
       pillar2_pass_pct: totalReclaims > 0 ? parseFloat(((pillar2PassCount / totalReclaims) * 100).toFixed(1)) : 0,
+      pillar2_delta_passed_count: pillar2PassCount,
       pillar3_pass_count: pillar3PassCount,
       pillar3_pass_pct: totalReclaims > 0 ? parseFloat(((pillar3PassCount / totalReclaims) * 100).toFixed(1)) : 0,
+      pillar3_body_passed_count: pillar3PassCount,
       three_pillar_all_pass_count: threePillarAllPassCount,
       three_pillar_all_pass_pct: totalReclaims > 0 ? parseFloat(((threePillarAllPassCount / totalReclaims) * 100).toFixed(1)) : 0,
+      three_pillar_all_passed_count: threePillarAllPassCount,
 
       wick_rejection_sweep_count: wickRejectionCount,
       wick_rejection_sweep_pct: totalSweeps > 0 ? parseFloat(((wickRejectionCount / totalSweeps) * 100).toFixed(1)) : 0,

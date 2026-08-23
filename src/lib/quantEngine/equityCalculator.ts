@@ -194,8 +194,8 @@ export function adaptOrderBlocksToTrades(
 
     const isMitigated =
       (ob.mitigation_time !== null ||
-       ob.lifecycle_status === 'MITIGATED_RESPECTED' ||
-       ob.lifecycle_status === 'MEAN_THRESHOLD_VIOLATED') &&
+        ob.lifecycle_status === 'MITIGATED_RESPECTED' ||
+        ob.lifecycle_status === 'MEAN_THRESHOLD_VIOLATED') &&
       validMitigationOutcomes.includes(ob.simulated_outcome as string) &&
       ob.lifecycle_status !== 'UNTESTED' &&
       ob.lifecycle_status !== 'EXPIRED_STALE' &&
@@ -381,7 +381,7 @@ export function calculateCompoundingMetrics(
   // 3. Approach A: Theoretical Closed Expectancy
   // EV_R = (WinRate * AvgWinR) - (LossRate * AvgLossR)
   const expectedValueR = parseFloat(((winRate * avgWinningR) - (lossRate * avgLosingR)).toFixed(3));
-  
+
   // Theoretical standard fractional capital growth across trade count:
   // Growth Factor per trade = (1 + (RiskPct/100) * EV_R)
   const growthMultiplier = 1 + (riskPerTradePct / 100) * expectedValueR;

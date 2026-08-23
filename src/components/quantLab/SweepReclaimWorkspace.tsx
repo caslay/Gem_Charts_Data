@@ -58,7 +58,7 @@ interface SweepReclaimWorkspaceProps {
     candlesFetched?: number;
     detectedCount?: number;
   } | null;
-  onRunScan: (config: SweepReclaimScanConfig & { scan_name: string; start_date: string; end_date: string; [key: string]: any }) => void;
+  onRunScan: (config: SweepReclaimScanConfig & { scan_name: string; start_date: string; end_date: string;[key: string]: any }) => void;
   onExportJson: () => void;
   onExportCsv: () => void;
 }
@@ -88,9 +88,10 @@ export default function SweepReclaimWorkspace({
   });
 
   // Volumetric & Displacement Gating (3-Pillar Gatekeeper)
+  const [volumeSmaPeriod, setVolumeSmaPeriod] = useState(20);
   const [volumeExpansionThreshold, setVolumeExpansionThreshold] = useState(1.50);
-  const [deltaDominanceThreshold, setDeltaDominanceThreshold] = useState(60.0);
-  const [bodyRatioThreshold, setBodyRatioThreshold] = useState(0.60);
+  const [deltaDominanceThreshold, setDeltaDominanceThreshold] = useState(55.0);
+  const [bodyRatioThreshold, setBodyRatioThreshold] = useState(0.55);
   const [enforceDiscountPremiumGate, setEnforceDiscountPremiumGate] = useState(true);
 
   // 3-Stage Harvest & Risk Controls
@@ -161,6 +162,7 @@ export default function SweepReclaimWorkspace({
     maxBarsAnchorToSweep,
     maxBarsSweepToReclaim,
     maxBarsToRetest,
+    volumeSmaPeriod,
     volumeExpansionThreshold,
     deltaDominanceThreshold,
     bodyRatioThreshold,
@@ -183,6 +185,7 @@ export default function SweepReclaimWorkspace({
     maxBarsAnchorToSweep,
     maxBarsSweepToReclaim,
     maxBarsToRetest,
+    volumeSmaPeriod,
     volumeExpansionThreshold,
     deltaDominanceThreshold,
     bodyRatioThreshold,
@@ -204,6 +207,7 @@ export default function SweepReclaimWorkspace({
     if (cfg.symbol) setSymbol(cfg.symbol);
     if (cfg.timeframe) setTimeframe(cfg.timeframe as "5m" | "15m" | "1h" | "4h");
     if (cfg.entryMode) setEntryMode(cfg.entryMode);
+    if (typeof cfg.volumeSmaPeriod === 'number') setVolumeSmaPeriod(cfg.volumeSmaPeriod);
     if (typeof cfg.volumeExpansionThreshold === 'number') setVolumeExpansionThreshold(cfg.volumeExpansionThreshold);
     if (typeof cfg.deltaDominanceThreshold === 'number') setDeltaDominanceThreshold(cfg.deltaDominanceThreshold);
     if (typeof cfg.bodyRatioThreshold === 'number') setBodyRatioThreshold(cfg.bodyRatioThreshold);
@@ -253,6 +257,8 @@ export default function SweepReclaimWorkspace({
       max_bars_sweep_to_reclaim: maxBarsSweepToReclaim,
       maxBarsToRetest,
       max_bars_to_retest: maxBarsToRetest,
+      volumeSmaPeriod,
+      volume_sma_period: volumeSmaPeriod,
       volumeExpansionThreshold,
       volume_expansion_threshold: volumeExpansionThreshold,
       deltaDominanceThreshold,
@@ -477,11 +483,10 @@ export default function SweepReclaimWorkspace({
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("SWING_PIVOT")}
-              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${
-                enabledAnchors.SWING_PIVOT
+              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${enabledAnchors.SWING_PIVOT
                   ? "bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]"
                   : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
-              }`}
+                }`}
             >
               <span>Major Pivots</span>
               {enabledAnchors.SWING_PIVOT && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
@@ -491,11 +496,10 @@ export default function SweepReclaimWorkspace({
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("ASIAN")}
-              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${
-                enabledAnchors.ASIAN
+              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${enabledAnchors.ASIAN
                   ? "bg-amber-400 border-amber-300 text-slate-950 shadow-[0_0_10px_rgba(251,191,36,0.4)]"
                   : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
-              }`}
+                }`}
             >
               <span>Asian Session (H/L)</span>
               {enabledAnchors.ASIAN && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
@@ -505,11 +509,10 @@ export default function SweepReclaimWorkspace({
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("LONDON")}
-              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${
-                enabledAnchors.LONDON
+              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${enabledAnchors.LONDON
                   ? "bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]"
                   : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
-              }`}
+                }`}
             >
               <span>London Session (H/L)</span>
               {enabledAnchors.LONDON && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
@@ -519,11 +522,10 @@ export default function SweepReclaimWorkspace({
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("DAILY")}
-              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${
-                enabledAnchors.DAILY
+              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${enabledAnchors.DAILY
                   ? "bg-purple-400 border-purple-300 text-slate-950 shadow-[0_0_10px_rgba(192,132,252,0.4)]"
                   : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
-              }`}
+                }`}
             >
               <span>Previous Day (PDH/PDL)</span>
               {enabledAnchors.DAILY && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
@@ -551,7 +553,7 @@ export default function SweepReclaimWorkspace({
                 className="w-full accent-cyan-400"
               />
               <span className="text-[9px] text-slate-500 font-mono">
-                Min volume vs 20-period SMA
+                Min volume vs {volumeSmaPeriod}-period SMA
               </span>
             </div>
 
@@ -584,7 +586,7 @@ export default function SweepReclaimWorkspace({
               </label>
               <input
                 type="range"
-                min="0.40"
+                min="0.30"
                 max="0.80"
                 step="0.05"
                 disabled={isScanning}
@@ -594,6 +596,27 @@ export default function SweepReclaimWorkspace({
               />
               <span className="text-[9px] text-slate-500 font-mono">
                 Min body ratio |c - o| / (h - l)
+              </span>
+            </div>
+
+            {/* Volume SMA Period */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center justify-between">
+                <span>Volume SMA Period</span>
+                <span className="text-cyan-400 font-bold">{volumeSmaPeriod} bars</span>
+              </label>
+              <input
+                type="range"
+                min="7"
+                max="50"
+                step="1"
+                disabled={isScanning}
+                value={volumeSmaPeriod}
+                onChange={(e) => setVolumeSmaPeriod(parseInt(e.target.value, 10))}
+                className="w-full accent-cyan-400"
+              />
+              <span className="text-[9px] text-slate-500 font-mono">
+                Baseline SMA lookback window
               </span>
             </div>
 
@@ -930,29 +953,29 @@ export default function SweepReclaimWorkspace({
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-center">
                 {/* Pillar 1 */}
                 <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Pillar 1: Vol Ratio &ge; 1.5x</span>
-                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar1_pass_count ?? 0}</span>
+                  <span className="text-[8px] uppercase text-slate-500 block">Pillar 1: Vol &ge; {volumeExpansionThreshold.toFixed(2)}x</span>
+                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar1_volume_passed_count ?? telemetry.pillar1_pass_count ?? 0}</span>
                   <span className="text-[9px] text-slate-400 block">{telemetry.pillar1_pass_pct ?? 0}% Passed</span>
                 </div>
 
                 {/* Pillar 2 */}
                 <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Pillar 2: Delta &ge; 60%</span>
-                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar2_pass_count ?? 0}</span>
+                  <span className="text-[8px] uppercase text-slate-500 block">Pillar 2: Delta &ge; {deltaDominanceThreshold.toFixed(0)}%</span>
+                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar2_delta_passed_count ?? telemetry.pillar2_pass_count ?? 0}</span>
                   <span className="text-[9px] text-slate-400 block">{telemetry.pillar2_pass_pct ?? 0}% Passed</span>
                 </div>
 
                 {/* Pillar 3 */}
                 <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Pillar 3: Body &ge; 60%</span>
-                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar3_pass_count ?? 0}</span>
+                  <span className="text-[8px] uppercase text-slate-500 block">Pillar 3: Body &ge; {(bodyRatioThreshold * 100).toFixed(0)}%</span>
+                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar3_body_passed_count ?? telemetry.pillar3_pass_count ?? 0}</span>
                   <span className="text-[9px] text-slate-400 block">{telemetry.pillar3_pass_pct ?? 0}% Passed</span>
                 </div>
 
                 {/* All 3 Pillars */}
                 <div className="p-2.5 rounded bg-cyan-950/30 border border-cyan-500/40">
                   <span className="text-[8px] uppercase text-cyan-400 block font-bold">3-Pillars All Pass</span>
-                  <span className="text-sm font-bold text-cyan-300">{telemetry.three_pillar_all_pass_count ?? 0}</span>
+                  <span className="text-sm font-bold text-cyan-300">{telemetry.three_pillar_all_passed_count ?? telemetry.three_pillar_all_pass_count ?? 0}</span>
                   <span className="text-[9px] text-cyan-400/80 block">{telemetry.three_pillar_all_pass_pct ?? 0}% Confirmed</span>
                 </div>
 
@@ -1135,11 +1158,10 @@ export default function SweepReclaimWorkspace({
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           <span
-                            className={`p-1 rounded text-[9px] font-bold ${
-                              isBull
+                            className={`p-1 rounded text-[9px] font-bold ${isBull
                                 ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
                                 : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
-                            }`}
+                              }`}
                           >
                             {isBull ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                           </span>
@@ -1153,15 +1175,14 @@ export default function SweepReclaimWorkspace({
                       {/* Anchor Reference */}
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         <div className="flex flex-col">
-                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded w-fit ${
-                            (setup.anchor_type || "").includes("ASIAN")
+                          <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded w-fit ${(setup.anchor_type || "").includes("ASIAN")
                               ? "bg-amber-950/60 text-amber-300 border border-amber-500/30"
                               : (setup.anchor_type || "").includes("LONDON")
-                              ? "bg-blue-950/60 text-blue-300 border border-blue-500/30"
-                              : (setup.anchor_type || "").includes("PD")
-                              ? "bg-purple-950/60 text-purple-300 border border-purple-500/30"
-                              : "bg-slate-800 text-slate-300"
-                          }`}>
+                                ? "bg-blue-950/60 text-blue-300 border border-blue-500/30"
+                                : (setup.anchor_type || "").includes("PD")
+                                  ? "bg-purple-950/60 text-purple-300 border border-purple-500/30"
+                                  : "bg-slate-800 text-slate-300"
+                            }`}>
                             {(setup.anchor_type || setup.anchor_swing_grade || "SWING PIVOT").replace(/_/g, " ")}
                           </span>
                           <span className="text-white font-bold mt-0.5">${setup.anchor_level.toFixed(2)}</span>
@@ -1219,15 +1240,14 @@ export default function SweepReclaimWorkspace({
 
                       {/* Outcome Badge */}
                       <td className="py-2.5 px-3 whitespace-nowrap">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                          isWin
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${isWin
                             ? "bg-emerald-950/80 text-emerald-300 border border-emerald-500/30"
                             : isScratch
-                            ? "bg-cyan-950/80 text-cyan-300 border border-cyan-500/30"
-                            : setup.simulated_outcome === "STOPPED_OUT"
-                            ? "bg-rose-950/80 text-rose-300 border border-rose-500/30"
-                            : "bg-slate-800 text-slate-400"
-                        }`}>
+                              ? "bg-cyan-950/80 text-cyan-300 border border-cyan-500/30"
+                              : setup.simulated_outcome === "STOPPED_OUT"
+                                ? "bg-rose-950/80 text-rose-300 border border-rose-500/30"
+                                : "bg-slate-800 text-slate-400"
+                          }`}>
                           {setup.simulated_outcome.replace(/_/g, " ")}
                         </span>
                       </td>
@@ -1296,11 +1316,10 @@ export default function SweepReclaimWorkspace({
             <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
               <div className="flex items-center gap-2.5">
                 <span
-                  className={`p-1.5 rounded-md font-bold text-xs ${
-                    inspectedSetup.type === "BULLISH"
+                  className={`p-1.5 rounded-md font-bold text-xs ${inspectedSetup.type === "BULLISH"
                       ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                       : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
-                  }`}
+                    }`}
                 >
                   {inspectedSetup.type === "BULLISH" ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
                 </span>

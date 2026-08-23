@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useCallback, useMemo, memo, useRef, useEffect } from "react";
-import { Play, Pause, XCircle, Trash2, Loader2, RefreshCw, AlertTriangle } from "lucide-react";
+import { Play, Pause, XCircle, Trash2, Loader2, RefreshCw, AlertTriangle, Download, Trash } from "lucide-react";
 import { useMarketDataContext, useMarketDataLiveContext } from "@/context/MarketDataContext";
+import { useSessionJournalStore } from "@/lib/quantEngine/sessionJournalStore";
 
 export interface TradeRecord {
   id: string;
@@ -670,24 +671,30 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
   const refreshTrades = useCallback(async () => {
     setIsRefreshing(true);
     try {
+      // 1. Sync from local in-memory session journal first
+      const localTrades = useSessionJournalStore.getState().getTradesByMode(isBacktest ? 'BACKTEST' : 'LIVE');
+      if (localTrades.length > 0) {
+        setTrades(localTrades as unknown as TradeRecord[]);
+      }
+
+      // 2. Non-blocking background sync from cloud DB
       const res = await fetch(tradesApiUrl);
       if (res.ok) {
         const json = await res.json();
-        setTrades(json.trades || []);
+        const combined = json.trades && json.trades.length > 0 ? json.trades : localTrades;
+        setTrades(combined || []);
         if (json.account) {
           setAccount(json.account);
         }
-      } else {
-        console.error("[JOURNAL] Failed to fetch latest trades:", res.statusText);
       }
     } catch (err) {
-      console.error("[JOURNAL] Refresh request failed:", err);
+      console.debug("[JOURNAL] Cloud sync skipped (in-memory journal preserved):", err);
     } finally {
       setIsRefreshing(false);
     }
-  }, [tradesApiUrl]);
+  }, [tradesApiUrl, isBacktest]);
 
-  // Listen to server-side scan triggers to automatically update local journal state
+  // Listen to server-side and local scan triggers to automatically update journal state
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handleRefresh = () => {
@@ -700,40 +707,26 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
     };
   }, [refreshTrades, isBacktest]);
 
-  // ── 2. PATCH: Toggle position status (Pause / Stop / Reactivate) ────────
+  // ── 2. PATCH: Toggle position status (Pause / Reactivate) ────────
   const handleToggleStatus = useCallback(async (trade: TradeRecord) => {
     const nextStatus = trade.status === "PAUSED" ? "OPEN" : "PAUSED";
     setActionLoadingId(`${trade.id}-toggle`);
 
-    try {
-      const res = await fetch(tradesApiUrl, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trade_id: trade.id, status: nextStatus })
-      });
+    // 1. Update in-memory session store immediately
+    useSessionJournalStore.getState().toggleTradeStatus(trade.id);
+    setTrades(prev =>
+      prev.map(t => (t.id === trade.id ? { ...t, status: nextStatus } : t))
+    );
 
-      if (res.ok) {
-        const json = await res.json();
-        // Optimistically update the status locally for fluid UI interaction
-        setTrades(prev =>
-          prev.map(t => (t.id === trade.id ? { ...t, status: json.trade.status } : t))
-        );
-        if (json.account) {
-          setAccount(json.account);
-        }
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event(isBacktest ? 'backtest-trades-refresh' : 'trades-refresh'));
-        }
-      } else {
-        const json = await res.json();
-        alert(`Failed to toggle position: ${json.error}`);
-      }
-    } catch (err) {
-      console.error("[JOURNAL] Toggle request failed:", err);
-    } finally {
-      setActionLoadingId(null);
-    }
-  }, [tradesApiUrl, isBacktest]);
+    // 2. Fire-and-forget background cloud sync
+    fetch(tradesApiUrl, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trade_id: trade.id, status: nextStatus })
+    }).catch(() => {});
+
+    setActionLoadingId(null);
+  }, [tradesApiUrl]);
 
   // ── 3. PATCH: Manually close active trade ──────────────────────────────
   const handleClosePosition = useCallback(async (tradeId: string, exitPrice?: number | null) => {
@@ -743,72 +736,46 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
       ? new Date(backtestCandleTime).toISOString() 
       : new Date().toISOString();
 
-    try {
-      const res = await fetch(tradesApiUrl, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          trade_id: tradeId, 
-          status: "CLOSED",
-          exit_price: exitPrice !== undefined ? exitPrice : null,
-          closed_at: closedAt
-        })
-      });
+    const targetTrade = trades.find((t) => t.id === tradeId);
+    const resolvedExit = exitPrice ?? (targetTrade ? parseFloat(String(targetTrade.entry_price)) : 0);
 
-      if (res.ok) {
-        const json = await res.json();
-        // Optimistically update the status locally for fluid UI interaction
-        setTrades(prev =>
-          prev.map(t => (t.id === tradeId ? { ...t, ...json.trade } : t))
-        );
-        if (json.account) {
-          setAccount(json.account);
-        }
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event(isBacktest ? 'backtest-trades-refresh' : 'trades-refresh'));
-        }
-      } else {
-        const json = await res.json();
-        alert(`Failed to close position: ${json.error}`);
-      }
-    } catch (err) {
-      console.error("[JOURNAL] Close request failed:", err);
-    } finally {
-      setActionLoadingId(null);
-    }
-  }, [tradesApiUrl, isBacktest]);
+    // 1. Close in in-memory session store immediately
+    useSessionJournalStore.getState().closeTrade(tradeId, resolvedExit, 'MANUAL_EXIT', closedAt);
+    setTrades(prev =>
+      prev.map(t => (t.id === tradeId ? { ...t, status: "CLOSED" as const, exit_price: resolvedExit, closed_at: closedAt } : t))
+    );
+
+    // 2. Fire-and-forget background cloud sync
+    fetch(tradesApiUrl, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        trade_id: tradeId, 
+        status: "CLOSED",
+        exit_price: resolvedExit,
+        closed_at: closedAt
+      })
+    }).catch(() => {});
+
+    setActionLoadingId(null);
+  }, [tradesApiUrl, isBacktest, backtestCandleTime, trades]);
 
   // ── 4. DELETE: Surgical hard row deletion ──────────────────────────────
   const handleDeleteTrade = useCallback(async (tradeId: string) => {
     setActionLoadingId(`${tradeId}-delete`);
 
-    try {
-      const res = await fetch(`${tradesApiUrl}?trade_id=${tradeId}`, {
-        method: "DELETE"
-      });
+    // 1. Delete from in-memory session store immediately
+    useSessionJournalStore.getState().deleteTrade(tradeId);
+    setTrades(prev => prev.filter(t => t.id !== tradeId));
+    setDeleteConfirmId(null);
 
-      if (res.ok) {
-        const json = await res.json();
-        // Optimistically delete from the local trade array
-        setTrades(prev => prev.filter(t => t.id !== tradeId));
-        setDeleteConfirmId(null);
-        // V8.5 — Refresh balance after delete to reflect recalculation
-        if (json.account) {
-          setAccount(json.account);
-        }
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event(isBacktest ? 'backtest-trades-refresh' : 'trades-refresh'));
-        }
-      } else {
-        const json = await res.json();
-        alert(`Failed to delete trade record: ${json.error}`);
-      }
-    } catch (err) {
-      console.error("[JOURNAL] Delete request failed:", err);
-    } finally {
-      setActionLoadingId(null);
-    }
-  }, [tradesApiUrl, isBacktest]);
+    // 2. Fire-and-forget background cloud sync
+    fetch(`${tradesApiUrl}?trade_id=${tradeId}`, {
+      method: "DELETE"
+    }).catch(() => {});
+
+    setActionLoadingId(null);
+  }, [tradesApiUrl]);
 
   const handleBulkArchive = useCallback(async () => {
     if (selectedTradeIds.length === 0) return;
@@ -1000,18 +967,59 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
           </div>
         </div>
 
-        <button
-          onClick={refreshTrades}
-          disabled={isRefreshing}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-card hover:bg-card/85 border border-card-border hover:border-accent text-muted hover:text-accent font-mono text-[9px] font-bold uppercase tracking-wider transition-all rounded-lg shadow-md cursor-pointer disabled:opacity-50"
-        >
-          {isRefreshing ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="w-3.5 h-3.5" />
-          )}
-          <span>[ Sync Logs ]</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 1-Click Export JSON */}
+          <button
+            type="button"
+            onClick={() => useSessionJournalStore.getState().exportSessionJson(isBacktest ? 'BACKTEST' : 'LIVE')}
+            title="Download complete session trade log as structured JSON"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-mono text-[9px] font-bold uppercase tracking-wider transition-all rounded-lg shadow-sm cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export JSON</span>
+          </button>
+
+          {/* 1-Click Export CSV */}
+          <button
+            type="button"
+            onClick={() => useSessionJournalStore.getState().exportSessionCsv(isBacktest ? 'BACKTEST' : 'LIVE')}
+            title="Download session audit ledger as spreadsheet CSV"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 font-mono text-[9px] font-bold uppercase tracking-wider transition-all rounded-lg shadow-sm cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export CSV</span>
+          </button>
+
+          {/* Clear Session */}
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm(`Are you sure you want to clear all ${isBacktest ? 'backtest' : 'live'} session trades from local memory?`)) {
+                useSessionJournalStore.getState().clearSession(isBacktest ? 'BACKTEST' : 'LIVE');
+                setTrades([]);
+              }
+            }}
+            title="Clear all session trades from in-memory journal"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 font-mono text-[9px] font-bold uppercase tracking-wider transition-all rounded-lg shadow-sm cursor-pointer"
+          >
+            <Trash className="w-3.5 h-3.5" />
+            <span>Clear</span>
+          </button>
+
+          {/* Sync Logs */}
+          <button
+            onClick={refreshTrades}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-card hover:bg-card/85 border border-card-border hover:border-accent text-muted hover:text-accent font-mono text-[9px] font-bold uppercase tracking-wider transition-all rounded-lg shadow-md cursor-pointer disabled:opacity-50"
+          >
+            {isRefreshing ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="w-3.5 h-3.5" />
+            )}
+            <span>[ Sync Logs ]</span>
+          </button>
+        </div>
       </div>
 
       {/* Bulk Action Bar Banner */}

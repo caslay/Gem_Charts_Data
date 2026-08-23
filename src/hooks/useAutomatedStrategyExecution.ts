@@ -26,6 +26,7 @@ import {
   SupportedOBTimeframe,
 } from '@/lib/quantEngine/strategyExecutionConfig';
 import type { SmartAlert } from '@/hooks/useLiveAlerts';
+import { useSessionJournalStore, type SessionTradeStatus } from '@/lib/quantEngine/sessionJournalStore';
 
 // Global singleton instance ensures background tick execution persists across tabs & modals
 let sharedStrategyEngineInstance: AutomatedStrategyExecutionEngine | null = null;
@@ -145,12 +146,28 @@ export function useAutomatedStrategyExecution(
     fetchAccountEquity();
   }, [fetchAccountEquity]);
 
-  // ── 2. On-Mount Database Re-hydration from /api/trades (Namespace Isolated) ──
+  // ── 2. On-Mount In-Memory & Database Re-hydration (Namespace Isolated) ──
   useEffect(() => {
     let isMounted = true;
 
-    async function rehydrateFromDatabase() {
+    async function rehydrateSessionAndDb() {
       try {
+        // 1. Rehydrate first from instant local session journal
+        const localTrades = useSessionJournalStore.getState().getTradesByMode('LIVE');
+        const openLocalTrades = localTrades.filter(
+          (t) => t.status === 'OPEN' || t.status === 'STAGE_1_FILLED' || t.status === 'STAGE_2_FILLED'
+        );
+
+        if (openLocalTrades.length > 0 && engineRef.current && isMounted) {
+          const rehydrated = engineRef.current.rehydrateOpenPositions(openLocalTrades as any);
+          if (rehydrated.length > 0) {
+            setActivePositions([...engineRef.current.getActivePositions()]);
+            setPendingOrders([...engineRef.current.getPendingLimitOrders()]);
+            setClosedTrades([...engineRef.current.getClosedPositions()]);
+          }
+        }
+
+        // 2. Non-blocking background sync from cloud database if available
         const res = await fetch('/api/trades', { credentials: 'same-origin' });
         if (!res.ok) return;
         const data = await res.json();
@@ -180,17 +197,17 @@ export function useAutomatedStrategyExecution(
           }
         }
       } catch (err) {
-        console.warn('[useAutomatedStrategyExecution] On-mount DB re-hydration error:', err);
+        console.warn('[useAutomatedStrategyExecution] On-mount DB re-hydration warning (offline safe):', err);
       }
     }
 
-    rehydrateFromDatabase();
+    rehydrateSessionAndDb();
     return () => {
       isMounted = false;
     };
   }, []);
 
-  // ── 3. Subscribe to Engine Lifecycle Events & Full-Duplex Trade Journal ────
+  // ── 3. Subscribe to Engine Lifecycle Events & Local Session Journal ────
   useEffect(() => {
     if (!engineRef.current) return;
 
@@ -205,7 +222,7 @@ export function useAutomatedStrategyExecution(
       // ── Event Bus Audio / Toast Notifications ──
       if (event.type === 'LIMIT_ORDER_PLACED') {
         dispatchAlert?.('AUTO_ORDER_ROUTED', event.message, '/audio/fvg_alert.mp3', 'STRATEGY_EXECUTION');
-      } else if (event.type === 'ORDER_FILLED' && pos?.dbTradeId) {
+      } else if (event.type === 'ORDER_FILLED') {
         dispatchAlert?.('AUTO_ORDER_ROUTED', event.message, '/audio/sweep_alert.mp3', 'STRATEGY_EXECUTION');
       } else if (event.type === 'STAGE_1_HARVEST' || event.type === 'STAGE_2_HARVEST') {
         dispatchAlert?.('STAGE_FILL', event.message, '/audio/objective_update.wav', 'STRATEGY_EXECUTION');
@@ -213,10 +230,41 @@ export function useAutomatedStrategyExecution(
         dispatchAlert?.('SMT_TRAP', event.message, '/audio/flow_state.wav', 'STRATEGY_EXECUTION');
       }
 
-      // ── A. Atomic Trade Entry: POST /api/trades with Rollback Guard ──
-      if (event.type === 'ORDER_FILLED' && pos && !pos.dbTradeId) {
-        try {
-          const payload = {
+      // ── A. Instant Local Session Journal Entry: addTrade ──
+      if (event.type === 'ORDER_FILLED' && pos) {
+        // Record in fast reactive in-memory store immediately
+        const journalTrade = useSessionJournalStore.getState().addTrade({
+          id: pos.id,
+          symbol: pos.symbol,
+          direction: pos.direction,
+          strategy_name: pos.strategyName,
+          ai_narrative_summary: `[Auto 2% Compounded 3-Stage Harvest] ${event.message}`,
+          entry_price: pos.entryPrice,
+          stop_loss: pos.initialStopLoss,
+          take_profit: pos.stage3Target,
+          status: 'OPEN',
+          mode: 'LIVE',
+          position_size: pos.contractSize,
+          risk_amount_usd: pos.riskUsd,
+          risk_percent: pos.riskPct,
+          opened_at: new Date(pos.openTime || Date.now()).toISOString(),
+          ipda_metrics: {
+            timeframe: pos.timeframe,
+            fvg_ce: pos.fvgCeLevel,
+            dol_target: pos.dynamicDolTarget,
+            stage1_target: pos.stage1Target,
+            stage2_target: pos.stage2Target,
+            stage3_target: pos.stage3Target,
+            equity_at_entry: pos.equityAtEntry,
+          },
+        });
+
+        // Fire-and-forget non-blocking background sync to cloud DB
+        fetch('/api/trades', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
             symbol: pos.symbol,
             direction: pos.direction,
             strategy_name: pos.strategyName,
@@ -229,66 +277,36 @@ export function useAutomatedStrategyExecution(
             risk_amount_usd: pos.riskUsd,
             risk_percent: pos.riskPct,
             opened_at: new Date(pos.openTime || Date.now()).toISOString(),
-            ipda_metrics: {
-              timeframe: pos.timeframe,
-              fvg_ce: pos.fvgCeLevel,
-              dol_target: pos.dynamicDolTarget,
-              stage1_target: pos.stage1Target,
-              stage2_target: pos.stage2Target,
-              stage3_target: pos.stage3Target,
-              equity_at_entry: pos.equityAtEntry,
-            },
-          };
-
-          const res = await fetch('/api/trades', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify(payload),
-          });
-
-          if (!res.ok) {
-            const errorJson = await res.json().catch(() => ({}));
-            const errorMsg = errorJson.error || errorJson.message || `HTTP ${res.status}`;
-            console.warn('[useAutomatedStrategyExecution] DB Trade creation vetoed/failed, triggering rollback:', errorMsg);
-            dispatchAlert?.('SMT_TRAP', `🛡️ [PORTFOLIO GUARD] Order placement vetoed: ${errorMsg}`, undefined, 'STRATEGY_EXECUTION');
-            // Atomic rollback on failure
-            engineRef.current.rollbackPosition(pos.id, errorMsg);
-            setActivePositions([...engineRef.current.getActivePositions()]);
-            setPendingOrders([...engineRef.current.getPendingLimitOrders()]);
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('trades-refresh'));
+            ipda_metrics: journalTrade.ipda_metrics,
+          }),
+        })
+          .then(async (res) => {
+            if (res.ok) {
+              const data = await res.json();
+              const dbId = data.trade_id || data.trade?.id;
+              if (dbId && engineRef.current) {
+                engineRef.current.linkDbTradeId(pos.id, dbId);
+              }
             }
-            return;
-          }
-
-          const data = await res.json();
-          const dbId = data.trade_id || data.trade?.id;
-          if (dbId) {
-            engineRef.current.linkDbTradeId(pos.id, dbId);
-            setActivePositions([...engineRef.current.getActivePositions()]);
-            // Dispatch verified entry alert after DB confirmation
-            dispatchAlert?.('AUTO_ORDER_ROUTED', event.message, '/audio/sweep_alert.mp3', 'STRATEGY_EXECUTION');
-          }
-
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('trades-refresh'));
-          }
-        } catch (err) {
-          console.warn('[useAutomatedStrategyExecution] Network failure during trade creation, rolling back:', err);
-          engineRef.current.rollbackPosition(pos.id, 'Network failure during trade entry persistence');
-          setActivePositions([...engineRef.current.getActivePositions()]);
-          setPendingOrders([...engineRef.current.getPendingLimitOrders()]);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('trades-refresh'));
-          }
-        }
+          })
+          .catch((err) => {
+            console.debug('[useAutomatedStrategyExecution] Background cloud DB sync skipped (in-memory preserved):', err);
+          });
       }
 
-      // ── B. Progressive Stage Updates: PATCH /api/trades on Stage 1 / 2 ──
-      if ((event.type === 'STAGE_1_HARVEST' || event.type === 'STAGE_2_HARVEST') && pos && pos.dbTradeId) {
-        try {
-          await fetch('/api/trades', {
+      // ── B. Instant Local Session Stage Updates: updateTrade on Stage 1 / 2 ──
+      if ((event.type === 'STAGE_1_HARVEST' || event.type === 'STAGE_2_HARVEST') && pos) {
+        useSessionJournalStore.getState().updateTrade(pos.id, {
+          status: pos.status as unknown as SessionTradeStatus,
+          stop_loss: pos.activeStopLoss,
+          realized_pnl: pos.realizedUsd,
+          realized_r: pos.realizedR,
+          ai_narrative_summary: `[${pos.status}] ${event.message}`,
+        });
+
+        // Fire-and-forget background cloud sync
+        if (pos.dbTradeId) {
+          fetch('/api/trades', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
@@ -299,20 +317,32 @@ export function useAutomatedStrategyExecution(
               realized_pnl: pos.realizedUsd,
               ai_narrative_summary: `[${pos.status}] ${event.message}`,
             }),
-          });
-
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('trades-refresh'));
-          }
-        } catch (err) {
-          console.warn('[useAutomatedStrategyExecution] Stage harvest PATCH failed:', err);
+          }).catch(() => {});
         }
       }
 
-      // ── C. Final Trade Closure: PATCH /api/trades ──
-      if (event.type === 'POSITION_CLOSED' && pos && pos.dbTradeId) {
-        try {
-          await fetch('/api/trades', {
+      // ── C. Instant Local Session Trade Closure: closeTrade ──
+      if (event.type === 'POSITION_CLOSED' && pos) {
+        const exitPrice = pos.exitPrice ?? (pos.direction === 'LONG' ? pos.activeStopLoss : pos.activeStopLoss);
+        useSessionJournalStore.getState().closeTrade(
+          pos.id,
+          exitPrice,
+          pos.exitReason || 'CLOSED',
+          new Date(pos.closeTime || Date.now()).toISOString()
+        );
+
+        // Update equity directly in session journal store
+        if (pos.realizedUsd) {
+          setAccountEquity((prev) => {
+            const next = parseFloat((prev + pos.realizedUsd).toFixed(2));
+            if (engineRef.current) engineRef.current.setAccountEquity(next);
+            return next;
+          });
+        }
+
+        // Fire-and-forget background cloud sync
+        if (pos.dbTradeId) {
+          fetch('/api/trades', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
@@ -327,16 +357,7 @@ export function useAutomatedStrategyExecution(
                 2
               )}R ($${pos.realizedUsd.toFixed(2)})`,
             }),
-          });
-
-          // Refresh account equity dynamically after closing trade
-          fetchAccountEquity();
-
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('trades-refresh'));
-          }
-        } catch (err) {
-          console.warn('[useAutomatedStrategyExecution] Final close PATCH failed:', err);
+          }).catch(() => {});
         }
       }
     });
@@ -344,7 +365,7 @@ export function useAutomatedStrategyExecution(
     return () => {
       unsubscribe();
     };
-  }, [dispatchAlert, fetchAccountEquity]);
+  }, [dispatchAlert]);
 
   // ── 4. Multi-Timeframe Background Candle Ingestion (5m, 15m, 1h) ────────────
   const lastProcessedSrCandleRef = useRef<string>('');
@@ -383,7 +404,108 @@ export function useAutomatedStrategyExecution(
     setClosedTrades([...engineRef.current.getClosedPositions()]);
   }, [marketData?.data_payload]);
 
-  // ── 5. Real-Time Market Tick Processing Pipeline (Throttled UI state sync) ──
+  // ── 5. BUG-4 FIX: 3-Day Cold-Start Historical State Reconciliation ───────────
+  // On initial mount AND every time the browser tab regains focus:
+  //   1. Fetch the preceding 72h of 15m candles (288 bars × 15min) from the
+  //      market-data endpoint using poll=false to bypass delta-diffing.
+  //   2. Re-run the engine's multi-timeframe candle ingestion pass so the
+  //      candidate pool is rebuilt from real closed-bar history.
+  //   3. Sync all UI state slices to reflect the reconciled candidate queue.
+  //
+  // This eliminates the environment divergence between:
+  //   - Local dev: persistent Node.js process keeps in-memory candidates across
+  //     hot reloads and browser refreshes.
+  //   - Vercel production: ephemeral serverless Lambdas restart with no memory,
+  //     forcing a fresh scan from the live API on every cold start.
+  //
+  // After reconciliation, stale/mitigated historical candidates (whose entry
+  // zones have already been traded through or whose maxBarsToRetest TTL has
+  // expired) are correctly excluded from the active pending setup queue.
+  const reconciliationRunRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+    async function run3DayHistoricalReconciliation() {
+      if (!engineRef.current) return;
+
+      // Prevent concurrent reconciliation runs
+      if (reconciliationRunRef.current) return;
+      reconciliationRunRef.current = true;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s hard timeout
+
+      try {
+        // Fetch 288 × 15m bars = 72h of history (matching the 3-day directive)
+        // poll=false bypasses the delta-diffing path and returns a full payload.
+        const res = await fetch(
+          '/api/market-data?interval=15m&limit=288&poll=false',
+          { signal: controller.signal, credentials: 'same-origin' }
+        );
+        clearTimeout(timeoutId);
+
+        if (!res.ok) return;
+
+        const json = await res.json();
+        const payload = json?.data_payload || {};
+        const candles15m: Candle[] = payload.candles_15m || [];
+
+        // Guard: need at least 20 bars for the engine to produce meaningful output
+        if (candles15m.length < 20) return;
+
+        // Re-run ingestion using the historical 15m slice as the structural anchor.
+        // 5m and 1h slices are optional for reconciliation — 15m is the primary
+        // structural frame for the Sweep & Reclaim strategy.
+        const ipda = json?.ipda_metrics || {};
+        const macroContext = {
+          macroDailyBias: ipda.macro_daily_bias,
+          dolDirection: ipda.dol_direction,
+          localDealingRange: ipda.pricing_context?.local_dealing_range,
+        };
+
+        const res2 = engineRef.current.onMultiTimeframeCandles(
+          { '15m': candles15m },
+          macroContext
+        );
+
+        setScannedSetups(res2.scannedSetups);
+        setActivePositions([...engineRef.current.getActivePositions()]);
+        setPendingOrders([...engineRef.current.getPendingLimitOrders()]);
+        setClosedTrades([...engineRef.current.getClosedPositions()]);
+
+        console.debug(
+          `[3DayReconciliation] Synchronized: ${res2.scannedSetups.length} setups from ${candles15m.length} historical 15m bars`
+        );
+      } catch (err: unknown) {
+        // AbortError is expected on timeout — not a critical failure
+        if ((err as Error)?.name !== 'AbortError') {
+          console.warn('[3DayReconciliation] Non-blocking reconciliation warning:', err);
+        }
+      } finally {
+        reconciliationRunRef.current = false;
+      }
+    }
+
+    // 1. Run immediately on mount
+    run3DayHistoricalReconciliation();
+
+    // 2. Subscribe to browser tab visibility change
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        // Tab just became visible (user switched back) — re-reconcile
+        run3DayHistoricalReconciliation();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Mount-only — visibilitychange listener handles all subsequent triggers
+
+  // ── 6. Real-Time Market Tick Processing Pipeline (Throttled UI state sync) ──
   const lastSrUiSyncTimeRef = useRef<number>(0);
   const prevSrActiveCountRef = useRef<number>(0);
   const prevSrPendingCountRef = useRef<number>(0);
@@ -518,9 +640,12 @@ export function useAutomatedStrategyExecution(
       statusText = 'Phase 2: Liquidity Swept';
     }
 
+    const isPositionOpen = !!activePos && activePos.status !== 'CLOSED';
     const entryPrice = activePos?.entryPrice ?? pendingOrd?.limitEntryPrice ?? latestActiveSetup?.entry_price ?? 0;
     const stopLoss = activePos?.activeStopLoss ?? pendingOrd?.activeStopLoss ?? latestActiveSetup?.stop_loss ?? 0;
     const anchorLevel = activePos?.originAnchorLevel ?? pendingOrd?.originAnchorLevel ?? latestActiveSetup?.anchor_level ?? 0;
+    const riskUsd = activePos?.riskUsd ?? pendingOrd?.riskUsd ?? latestActiveSetup?.risk_usd ?? Math.abs(entryPrice - stopLoss);
+    const riskPct = activePos?.riskPct ?? pendingOrd?.riskPct ?? latestActiveSetup?.risk_pct ?? (engineConfig.liveSettings?.compoundingRiskPct ?? 2.0);
 
     return {
       id: activePos?.id ?? pendingOrd?.id ?? latestActiveSetup?.id ?? 'LIVE_SR',
@@ -536,12 +661,6 @@ export function useAutomatedStrategyExecution(
       fvgCe: activePos?.fvgCeLevel ?? pendingOrd?.fvgCeLevel ?? latestActiveSetup?.reclaim_fvg_ce ?? null,
       entryPrice,
       stopLoss,
-      // FIX-OVERLAY: Include pendingOrd stage targets in the priority chain.
-      // Previously, target1/target2 skipped pendingOrd and fell back directly to
-      // latestActiveSetup?.stage1_target — an ANCHOR_ONLY placeholder anchored to
-      // the session level (~$2425), not the actual entry price. The pending order's
-      // stage targets are computed correctly by AutomatedStrategyExecutionEngine
-      // (entry ± stageMultiple × riskUsd) and must take priority over the setup placeholder.
       target1: activePos?.stage1Target ?? pendingOrd?.stage1Target ?? latestActiveSetup?.stage1_target ?? 0,
       target2: activePos?.stage2Target ?? pendingOrd?.stage2Target ?? latestActiveSetup?.stage2_target ?? 0,
       target3: activePos?.stage3Target ?? pendingOrd?.dynamicDolTarget ?? pendingOrd?.stage3Target ?? latestActiveSetup?.stage3_target ?? 0,
@@ -557,8 +676,15 @@ export function useAutomatedStrategyExecution(
       isStage2Filled: activePos?.isStage2Filled ?? false,
       isStage3Filled: activePos?.isStage3Filled ?? false,
       isClosed: false,
+      isPositionOpen,
+      riskUsd,
+      riskPct,
+      displacementCandles: latestActiveSetup?.displacement_candles,
+      anchorTime: latestActiveSetup?.anchor_time,
+      sweepTime: latestActiveSetup?.sweep_time ?? undefined,
+      reclaimTime: latestActiveSetup?.reclaim_time ?? undefined,
     };
-  }, [scannedSetups, activePositions, pendingOrders]);
+  }, [scannedSetups, activePositions, pendingOrders, engineConfig.liveSettings?.compoundingRiskPct]);
 
   const riskPct = engineConfig.liveSettings?.compoundingRiskPct ?? engineConfig.compoundingRiskPct ?? 2.0;
   const riskUsd2Pct = parseFloat((accountEquity * (riskPct / 100)).toFixed(2));

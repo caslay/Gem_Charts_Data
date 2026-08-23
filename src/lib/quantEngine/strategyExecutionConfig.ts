@@ -44,9 +44,10 @@ export interface SweepReclaimLiveSettings {
   enabledTimeframes: SupportedOBTimeframe[]; // ['5m', '15m', '1h'] (default: ['5m', '15m', '1h'])
   anchorTypes: ('SWING_PIVOT' | 'ASIAN' | 'LONDON' | 'DAILY')[]; // default: ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY']
   entryMode: SweepReclaimEntryMode; // default: 'SWEEP_OB_MT'
+  volumeSmaPeriod?: number; // default: 20 (lookback period for Volume SMA)
   volumeExpansionThreshold: number; // default: 1.50
-  deltaDominanceThreshold: number; // default: 60.0
-  bodyRatioThreshold: number; // default: 0.60
+  deltaDominanceThreshold: number; // default: 55.0
+  bodyRatioThreshold: number; // default: 0.55
   enforceDiscountPremiumGate: boolean; // default: true
   enableStructuralTrail: boolean; // default: true
   enableProfitRatchet: boolean; // default: true
@@ -67,9 +68,10 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   enabledTimeframes: ['5m', '15m', '1h'],
   anchorTypes: ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'],
   entryMode: 'SWEEP_OB_MT',
+  volumeSmaPeriod: 20,
   volumeExpansionThreshold: 1.50,
-  deltaDominanceThreshold: 60.0,
-  bodyRatioThreshold: 0.60,
+  deltaDominanceThreshold: 55.0,
+  bodyRatioThreshold: 0.55,
   enforceDiscountPremiumGate: true,
   enableStructuralTrail: true,
   enableProfitRatchet: true,

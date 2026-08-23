@@ -108,9 +108,10 @@ function LiveOrderBlockModalContent({
     maxBarsAnchorToSweep: 30,
     maxBarsSweepToReclaim: 12,
     maxBarsToRetest: 24,
+    volumeSmaPeriod: srSettings?.volumeSmaPeriod ?? 20,
     volumeExpansionThreshold: srSettings?.volumeExpansionThreshold ?? 1.50,
-    deltaDominanceThreshold: srSettings?.deltaDominanceThreshold ?? 60.0,
-    bodyRatioThreshold: srSettings?.bodyRatioThreshold ?? 0.60,
+    deltaDominanceThreshold: srSettings?.deltaDominanceThreshold ?? 55.0,
+    bodyRatioThreshold: srSettings?.bodyRatioThreshold ?? 0.55,
     requireThreePillarDisplacement: true,
     enforceDiscountPremiumGate: srSettings?.enforceDiscountPremiumGate ?? true,
     stage1Multiple: srSettings?.stage1Multiple ?? 1.0,
@@ -135,6 +136,7 @@ function LiveOrderBlockModalContent({
     updateSrSettings({
       entryMode: cfg.entryMode,
       enforceDiscountPremiumGate: cfg.enforceDiscountPremiumGate,
+      volumeSmaPeriod: cfg.volumeSmaPeriod ?? 20,
       volumeExpansionThreshold: cfg.volumeExpansionThreshold,
       deltaDominanceThreshold: cfg.deltaDominanceThreshold,
       bodyRatioThreshold: cfg.bodyRatioThreshold,
@@ -1242,7 +1244,7 @@ function LiveOrderBlockModalContent({
                   </div>
                 </div>
 
-                {/* 4. 3-Pillar Displacement Gatekeeper Steppers */}
+                {/* 4. 3-Pillar Displacement Gatekeeper & Volumetric Parameters */}
                 <div className="bg-background/50 p-3 rounded-lg border border-card-border/40 flex flex-col gap-2.5">
                   <div className="font-bold text-slate-300 uppercase text-[10px] flex items-center justify-between">
                     <span className="flex items-center gap-1.5">
@@ -1252,77 +1254,93 @@ function LiveOrderBlockModalContent({
                     <span className="text-cyan-400 text-[9px] font-mono font-bold">STRICT GATING</span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[9px]">
-                    {/* Pillar 1: Volume Ratio */}
-                    <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col gap-1.5">
-                      <span className="text-slate-400 text-[8px] uppercase font-bold">P1: Volume Expansion</span>
-                      <div className="grid grid-cols-3 gap-1">
-                        {[1.25, 1.50, 1.75].map((val) => {
-                          const isSelected = (srSettings?.volumeExpansionThreshold ?? 1.50) === val;
-                          return (
-                            <button
-                              key={val}
-                              type="button"
-                              onClick={() => updateSrSettings({ volumeExpansionThreshold: val })}
-                              className={`py-1.5 rounded border text-center font-mono font-black text-[9px] cursor-pointer transition ${
-                                isSelected
-                                  ? 'bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.45)]'
-                                  : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-slate-200'
-                              }`}
-                            >
-                              &ge;{val.toFixed(2)}x
-                            </button>
-                          );
-                        })}
-                      </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-[10px] font-mono">
+                    {/* Pillar 1: Volume Ratio vs SMA */}
+                    <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                      <label className="text-[10px] uppercase font-semibold text-slate-400 flex items-center justify-between">
+                        <span>P1: Volume Expansion</span>
+                        <span className="text-cyan-400 font-bold">
+                          {(srSettings?.volumeExpansionThreshold ?? 1.50).toFixed(2)}x
+                        </span>
+                      </label>
+                      <input
+                        type="range"
+                        min="1.0"
+                        max="2.5"
+                        step="0.05"
+                        value={srSettings?.volumeExpansionThreshold ?? 1.50}
+                        onChange={(e) => updateSrSettings({ volumeExpansionThreshold: parseFloat(e.target.value) })}
+                        className="w-full accent-cyan-400"
+                      />
+                      <span className="text-[9px] text-slate-500">
+                        Min volume vs {srSettings?.volumeSmaPeriod ?? 20}-period SMA
+                      </span>
                     </div>
 
-                    {/* Pillar 2: Taker Delta */}
-                    <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col gap-1.5">
-                      <span className="text-slate-400 text-[8px] uppercase font-bold">P2: Taker Delta Ratio</span>
-                      <div className="grid grid-cols-3 gap-1">
-                        {[50.0, 60.0, 65.0].map((val) => {
-                          const isSelected = (srSettings?.deltaDominanceThreshold ?? 60.0) === val;
-                          return (
-                            <button
-                              key={val}
-                              type="button"
-                              onClick={() => updateSrSettings({ deltaDominanceThreshold: val })}
-                              className={`py-1.5 rounded border text-center font-mono font-black text-[9px] cursor-pointer transition ${
-                                isSelected
-                                  ? 'bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.45)]'
-                                  : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-slate-200'
-                              }`}
-                            >
-                              &ge;{val.toFixed(0)}%
-                            </button>
-                          );
-                        })}
-                      </div>
+                    {/* Pillar 2: Taker Delta Dominance Threshold */}
+                    <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                      <label className="text-[10px] uppercase font-semibold text-slate-400 flex items-center justify-between">
+                        <span>P2: Delta Dominance</span>
+                        <span className="text-cyan-400 font-bold">
+                          {(srSettings?.deltaDominanceThreshold ?? 55.0).toFixed(1)}%
+                        </span>
+                      </label>
+                      <input
+                        type="range"
+                        min="50.0"
+                        max="75.0"
+                        step="0.5"
+                        value={srSettings?.deltaDominanceThreshold ?? 55.0}
+                        onChange={(e) => updateSrSettings({ deltaDominanceThreshold: parseFloat(e.target.value) })}
+                        className="w-full accent-cyan-400"
+                      />
+                      <span className="text-[9px] text-slate-500">
+                        Min directional taker delta %
+                      </span>
                     </div>
 
-                    {/* Pillar 3: Body Ratio */}
-                    <div className="p-2 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col gap-1.5">
-                      <span className="text-slate-400 text-[8px] uppercase font-bold">P3: Candle Body Ratio</span>
-                      <div className="grid grid-cols-3 gap-1">
-                        {[0.50, 0.60, 0.70].map((val) => {
-                          const isSelected = (srSettings?.bodyRatioThreshold ?? 0.60) === val;
-                          return (
-                            <button
-                              key={val}
-                              type="button"
-                              onClick={() => updateSrSettings({ bodyRatioThreshold: val })}
-                              className={`py-1.5 rounded border text-center font-mono font-black text-[9px] cursor-pointer transition ${
-                                isSelected
-                                  ? 'bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.45)]'
-                                  : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-slate-200'
-                              }`}
-                            >
-                              &ge;{(val * 100).toFixed(0)}%
-                            </button>
-                          );
-                        })}
-                      </div>
+                    {/* Pillar 3: Candle Body-to-Range Ratio */}
+                    <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                      <label className="text-[10px] uppercase font-semibold text-slate-400 flex items-center justify-between">
+                        <span>P3: Body-to-Range</span>
+                        <span className="text-cyan-400 font-bold">
+                          {((srSettings?.bodyRatioThreshold ?? 0.55) * 100).toFixed(0)}%
+                        </span>
+                      </label>
+                      <input
+                        type="range"
+                        min="0.30"
+                        max="0.80"
+                        step="0.05"
+                        value={srSettings?.bodyRatioThreshold ?? 0.55}
+                        onChange={(e) => updateSrSettings({ bodyRatioThreshold: parseFloat(e.target.value) })}
+                        className="w-full accent-cyan-400"
+                      />
+                      <span className="text-[9px] text-slate-500">
+                        Min body ratio |c - o| / (h - l)
+                      </span>
+                    </div>
+
+                    {/* Volume SMA Period */}
+                    <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                      <label className="text-[10px] uppercase font-semibold text-slate-400 flex items-center justify-between">
+                        <span>Volume SMA Period</span>
+                        <span className="text-cyan-400 font-bold">
+                          {srSettings?.volumeSmaPeriod ?? 20} bars
+                        </span>
+                      </label>
+                      <input
+                        type="range"
+                        min="7"
+                        max="50"
+                        step="1"
+                        value={srSettings?.volumeSmaPeriod ?? 20}
+                        onChange={(e) => updateSrSettings({ volumeSmaPeriod: parseInt(e.target.value, 10) })}
+                        className="w-full accent-cyan-400"
+                      />
+                      <span className="text-[9px] text-slate-500">
+                        Baseline SMA lookback window
+                      </span>
                     </div>
                   </div>
                 </div>

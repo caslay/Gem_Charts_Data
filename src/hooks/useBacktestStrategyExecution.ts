@@ -19,6 +19,17 @@ import {
 } from '@/lib/quantEngine/scannerPresets';
 import type { BtMasterArrays, BacktestTimeframe } from '@/hooks/useBacktestEngine';
 import type { SmartAlert } from '@/hooks/useLiveAlerts';
+import { useSessionJournalStore } from '@/lib/quantEngine/sessionJournalStore';
+
+export interface DisplacementCandleAudit {
+  label: string;
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+}
 
 export interface SweepReclaimOverlayData {
   id: string;
@@ -49,6 +60,13 @@ export interface SweepReclaimOverlayData {
   isStage2Filled: boolean;
   isStage3Filled: boolean;
   isClosed: boolean;
+  isPositionOpen: boolean;
+  riskUsd?: number;
+  riskPct?: number;
+  displacementCandles?: DisplacementCandleAudit[];
+  anchorTime?: number;
+  sweepTime?: number;
+  reclaimTime?: number;
 }
 
 export interface ReplayPosition {
@@ -312,28 +330,14 @@ export function useBacktestStrategyExecution({
         ? close >= Math.min(currentPending.anchorLevel, currentPending.entryPrice)
         : close <= Math.max(currentPending.anchorLevel, currentPending.entryPrice);
 
-      // Check Expiration (TTL = maxBarsToRetest, default: 24 bars)
-      const maxRetestBars = config.maxBarsToRetest ?? 24;
-      const isExpired = currentSetup?.reclaim_index !== null && currentSetup?.reclaim_index !== undefined
-        ? (currentCandleIdx - currentSetup.reclaim_index > maxRetestBars)
-        : false;
-
-      if (isExpired) {
-        pendingLimitOrderRef.current = null;
-        setPendingLimitOrder(null);
-        triggerSmartAlert?.(
-          'SMT_TRAP',
-          `⌛ [S&R EXPIRED] Retest window elapsed (${maxRetestBars} bars). Resting limit cancelled.`,
-          '/audio/dead_zone.wav',
-          'REPLAY_STRATEGY'
-        );
-      } else if (isLimitTouched && isBodyDefended) {
+      if (isLimitTouched && isBodyDefended) {
         const openedPosition: ReplayPosition = {
           ...currentPending,
           status: 'OPEN',
           openTime: candleTime,
         };
 
+        // ATOMIC QUEUE FLUSH: Transition to OPEN and purge all pending candidate queues
         activePositionRef.current = openedPosition;
         pendingLimitOrderRef.current = null;
         setActivePosition(openedPosition);
@@ -348,8 +352,9 @@ export function useBacktestStrategyExecution({
           'REPLAY_STRATEGY'
         );
 
-        // POST to /api/backtest-trades
-        const tradePayload = {
+        // Instant In-Memory Session Journal Record
+        const journalTrade = useSessionJournalStore.getState().addTrade({
+          id: openedPosition.id,
           symbol: 'ETHUSDC',
           direction: openedPosition.direction,
           entry_price: openedPosition.entryPrice,
@@ -361,8 +366,8 @@ export function useBacktestStrategyExecution({
           strategy_name: `Sweep & Reclaim (3-Pillar Reversal - ${openedPosition.direction})`,
           ai_narrative_summary: `[Backtest Replay S&R Execution] ${openedPosition.direction} @ $${openedPosition.entryPrice.toFixed(2)} | Anchor: $${openedPosition.anchorLevel.toFixed(2)}`,
           status: 'OPEN',
+          mode: 'BACKTEST',
           opened_at: new Date(candleTime).toISOString(),
-          created_at: new Date(candleTime).toISOString(),
           ipda_metrics: {
             timeframe: activeTimeframe,
             stage1_target: openedPosition.stage1Target,
@@ -371,28 +376,12 @@ export function useBacktestStrategyExecution({
             fvg_ce: openedPosition.fvgCeLevel,
             anchor_level: openedPosition.anchorLevel,
           },
-        };
+        });
 
-        fetch('/api/backtest-trades', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(tradePayload),
-        })
-          .then(async (res) => {
-            if (res.ok) {
-              const data = await res.json();
-              if (data.trade_id) {
-                const updated = { ...activePositionRef.current!, dbTradeId: data.trade_id };
-                activePositionRef.current = updated;
-                setActivePosition(updated);
-              }
-              onTradesRefresh?.();
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(new Event('backtest-trades-refresh'));
-              }
-            }
-          })
-          .catch((err) => console.warn('[useBacktestStrategyExecution] POST trade error:', err));
+        openedPosition.dbTradeId = journalTrade.id;
+        activePositionRef.current = openedPosition;
+        setActivePosition(openedPosition);
+        onTradesRefresh?.();
       } else if (isLimitTouched && !isBodyDefended) {
         // Body defense failed -> Invalidate pending limit
         pendingLimitOrderRef.current = null;
@@ -497,8 +486,9 @@ export function useBacktestStrategyExecution({
               'REPLAY_STRATEGY'
             );
 
-            // POST to /api/backtest-trades
-            const tradePayload = {
+            // Instant In-Memory Session Journal Record
+            const journalTrade = useSessionJournalStore.getState().addTrade({
+              id: openedPosition.id,
               symbol: 'ETHUSDC',
               direction: openedPosition.direction,
               entry_price: openedPosition.entryPrice,
@@ -510,8 +500,8 @@ export function useBacktestStrategyExecution({
               strategy_name: `Sweep & Reclaim (3-Pillar Reversal - ${openedPosition.direction})`,
               ai_narrative_summary: `[Backtest Replay S&R Execution] ${openedPosition.direction} @ $${openedPosition.entryPrice.toFixed(2)} | Anchor: $${openedPosition.anchorLevel.toFixed(2)}`,
               status: 'OPEN',
+              mode: 'BACKTEST',
               opened_at: new Date(candleTime).toISOString(),
-              created_at: new Date(candleTime).toISOString(),
               ipda_metrics: {
                 timeframe: activeTimeframe,
                 stage1_target: openedPosition.stage1Target,
@@ -520,28 +510,12 @@ export function useBacktestStrategyExecution({
                 fvg_ce: openedPosition.fvgCeLevel,
                 anchor_level: openedPosition.anchorLevel,
               },
-            };
+            });
 
-            fetch('/api/backtest-trades', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(tradePayload),
-            })
-              .then(async (res) => {
-                if (res.ok) {
-                  const data = await res.json();
-                  if (data.trade_id) {
-                    const updated = { ...activePositionRef.current!, dbTradeId: data.trade_id };
-                    activePositionRef.current = updated;
-                    setActivePosition(updated);
-                  }
-                  onTradesRefresh?.();
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new Event('backtest-trades-refresh'));
-                  }
-                }
-              })
-              .catch((err) => console.warn('[useBacktestStrategyExecution] POST trade error:', err));
+            openedPosition.dbTradeId = journalTrade.id;
+            activePositionRef.current = openedPosition;
+            setActivePosition(openedPosition);
+            onTradesRefresh?.();
           } else if (currentSetup.status === 'RECLAIMED_NO_RETEST' || currentSetup.phase === 'RECLAIM') {
             // Queue Resting Limit Order for future candle retest
             pendingLimitOrderRef.current = basePositionData;
@@ -637,20 +611,15 @@ export function useBacktestStrategyExecution({
             'REPLAY_STRATEGY'
           );
 
-          if (pos.dbTradeId) {
-            fetch('/api/backtest-trades', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                trade_id: pos.dbTradeId,
-                status: 'STAGE_1_FILLED',
-                stop_loss: pos.activeStopLoss,
-                realized_pnl: pos.realizedUsd,
-              }),
-            })
-              .then(() => onTradesRefresh?.())
-              .catch(() => {});
-          }
+          // Immediate In-Memory Session Journal Update
+          useSessionJournalStore.getState().updateTrade(pos.id, {
+            status: 'STAGE_1_FILLED',
+            stop_loss: pos.activeStopLoss,
+            realized_pnl: pos.realizedUsd,
+            realized_r: pos.realizedR,
+            ai_narrative_summary: `[STAGE_1_FILLED] Scaled 40% @ 1.0R ($${pos.stage1Target.toFixed(2)})`,
+          });
+          onTradesRefresh?.();
         }
       }
 
@@ -685,20 +654,15 @@ export function useBacktestStrategyExecution({
             'REPLAY_STRATEGY'
           );
 
-          if (pos.dbTradeId) {
-            fetch('/api/backtest-trades', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                trade_id: pos.dbTradeId,
-                status: 'STAGE_2_FILLED',
-                stop_loss: pos.activeStopLoss,
-                realized_pnl: pos.realizedUsd,
-              }),
-            })
-              .then(() => onTradesRefresh?.())
-              .catch(() => {});
-          }
+          // Immediate In-Memory Session Journal Update
+          useSessionJournalStore.getState().updateTrade(pos.id, {
+            status: 'STAGE_2_FILLED',
+            stop_loss: pos.activeStopLoss,
+            realized_pnl: pos.realizedUsd,
+            realized_r: pos.realizedR,
+            ai_narrative_summary: `[STAGE_2_FILLED] Scaled 40% @ 1.5R ($${pos.stage2Target.toFixed(2)})`,
+          });
+          onTradesRefresh?.();
         }
       }
 
@@ -736,25 +700,14 @@ export function useBacktestStrategyExecution({
             'REPLAY_STRATEGY'
           );
 
-          if (pos.dbTradeId) {
-            fetch('/api/backtest-trades', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                trade_id: pos.dbTradeId,
-                status: 'CLOSED',
-                exit_price: pos.exitPrice,
-                realized_pnl: pos.realizedUsd,
-                outcome: 'WIN',
-                closed_at: new Date(candleTime).toISOString(),
-              }),
-            })
-              .then(() => {
-                onTradesRefresh?.();
-                if (typeof window !== 'undefined') window.dispatchEvent(new Event('backtest-trades-refresh'));
-              })
-              .catch(() => {});
-          }
+          // Immediate In-Memory Session Journal Closure
+          useSessionJournalStore.getState().closeTrade(
+            pos.id,
+            pos.stage3Target,
+            'FULL_TP3_WIN',
+            new Date(candleTime).toISOString()
+          );
+          onTradesRefresh?.();
           return;
         }
       }
@@ -788,6 +741,15 @@ export function useBacktestStrategyExecution({
         activeSetupRef.current = null;
         setActiveSetup(null);
         setClosedReplayPositions((prev) => [pos, ...prev]);
+
+        // Immediate In-Memory Session Journal Closure
+        useSessionJournalStore.getState().closeTrade(
+          pos.id,
+          pos.activeStopLoss,
+          pos.exitReason,
+          new Date(candleTime).toISOString()
+        );
+        onTradesRefresh?.();
 
         const outcomeType = pos.realizedR > 0 ? 'WIN' : pos.realizedR === 0 ? 'BE_SCRATCH' : 'LOSS';
         const emoji = outcomeType === 'WIN' ? '🏆' : outcomeType === 'BE_SCRATCH' ? '🛡️' : '🛑';
@@ -865,6 +827,12 @@ export function useBacktestStrategyExecution({
       statusText = 'Phase 2: Liquidity Swept';
     }
 
+    const isPositionOpen = !!activePosition && (activePosition.status as string) !== 'CLOSED';
+    const entryPrice = activePosition?.entryPrice ?? pendingLimitOrder?.entryPrice ?? activeSetup.entry_price;
+    const stopLoss = activePosition?.activeStopLoss ?? pendingLimitOrder?.activeStopLoss ?? activeSetup.stop_loss;
+    const riskUsd = activePosition?.riskUsd ?? pendingLimitOrder?.riskUsd ?? activeSetup.risk_usd ?? Math.abs(entryPrice - stopLoss);
+    const riskPct = activePosition?.riskPct ?? pendingLimitOrder?.riskPct ?? activeSetup.risk_pct ?? 1.0;
+
     return {
       id: activeSetup.id,
       type: isBull ? 'BULLISH' : 'BEARISH',
@@ -877,8 +845,8 @@ export function useBacktestStrategyExecution({
       fvgTop: activeSetup.reclaim_fvg_top,
       fvgBottom: activeSetup.reclaim_fvg_bottom,
       fvgCe: activeSetup.reclaim_fvg_ce,
-      entryPrice: activePosition?.entryPrice ?? pendingLimitOrder?.entryPrice ?? activeSetup.entry_price,
-      stopLoss: activePosition?.activeStopLoss ?? pendingLimitOrder?.activeStopLoss ?? activeSetup.stop_loss,
+      entryPrice,
+      stopLoss,
       target1: activePosition?.stage1Target ?? activeSetup.stage1_target,
       target2: activePosition?.stage2Target ?? activeSetup.stage2_target,
       target3: activePosition?.stage3Target ?? activeSetup.stage3_target,
@@ -894,6 +862,13 @@ export function useBacktestStrategyExecution({
       isStage2Filled: activePosition?.isStage2Filled ?? false,
       isStage3Filled: activePosition?.isStage3Filled ?? false,
       isClosed: false,
+      isPositionOpen,
+      riskUsd,
+      riskPct,
+      displacementCandles: activeSetup.displacement_candles,
+      anchorTime: activeSetup.anchor_time,
+      sweepTime: activeSetup.sweep_time ?? undefined,
+      reclaimTime: activeSetup.reclaim_time ?? undefined,
     };
   }, [activeSetup, activePosition, pendingLimitOrder]);
 
