@@ -6,6 +6,9 @@ import { useBinanceWS } from '@/hooks/useBinanceWS';
 import { useAutoTradeExecutor } from '@/hooks/useAutoTradeExecutor';
 import type { LiveCandle, WSStatus } from '@/hooks/useBinanceWS';
 
+import { useAutomatedStrategyExecution } from '@/hooks/useAutomatedStrategyExecution';
+import { useLiveOrderBlockExecution } from '@/hooks/useLiveOrderBlockExecution';
+
 type MarketDataReturnType = ReturnType<typeof useMarketDataHook>;
 
 export interface MarketDataContextValue extends Omit<MarketDataReturnType, 'liveCandle' | 'livePrice'> {
@@ -22,6 +25,13 @@ export interface MarketDataLiveContextValue {
 
 const MarketDataStaticContext = createContext<MarketDataContextValue | null>(null);
 const MarketDataLiveContext = createContext<MarketDataLiveContextValue | null>(null);
+
+// Global background host component that executes autonomous strategy and order block scanners 24/7
+function AutonomousExecutionHost() {
+  useAutomatedStrategyExecution();
+  useLiveOrderBlockExecution();
+  return null;
+}
 
 export function MarketDataProvider({ children }: { children: ReactNode }) {
   // Centralized WS interval state — Chart and other consumers set this
@@ -66,6 +76,7 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
   return (
     <MarketDataStaticContext.Provider value={staticValue}>
       <MarketDataLiveContext.Provider value={liveValue}>
+        <AutonomousExecutionHost />
         {children}
       </MarketDataLiveContext.Provider>
     </MarketDataStaticContext.Provider>

@@ -1,8 +1,45 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.42
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.43
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-23 (V16.42 — Backtest NaN R / Zero-Target Position Lockup: 6-Bug Batch Fix)  
+> **Last Updated:** 2026-08-23 (V16.43 — Execution Parity & Autonomous Engine Harmonization across Quant Lab, Replay, and Live HUD)  
+
+## 🆕 V16.43 Changelog — Execution Parity & Autonomous Engine Harmonization (2026-08-23)
+
+### Summary
+Achieved complete operational parity across all three quantitative execution engines: **Quant Lab (Batch Scanner)**, **Backtest Replay (Interactive Stepper)**, and **Live HUD Autonomous Execution**. Resolved the core divergence where Quant Lab reported simulated fills while Backtest Replay stranded limit orders in pending state and Live HUD generated zero trades.
+
+### Key Architectural Changes
+
+1. **Immediate Touch & Retroactive Retest Protocol (`src/lib/quantEngine/SweepReclaimEngine.ts`):**
+   - Implemented immediate touch evaluation on confirming 3-Pillar Reclaim candles (`isImmediateTouch`).
+   - If the reclaim candle wicks into the entry zone (FVG CE, Sweep OB MT, Shelf Level) with ICT body defense, or if the retest occurs on the confirmation bar, the setup is flagged with `is_immediate_fill: true`.
+   - Added `max_retest_index` and `is_expired` metadata to `SweepReclaimSetup` based on `maxBarsToRetest` (default 24 bars).
+
+2. **Synchronized Replay Execution & Race Condition Resolution (`src/hooks/useBacktestStrategyExecution.ts`):**
+   - Eliminated the React effect race condition where `useEffect #2` stamped `lastProcessedCandleTimeRef` before `useEffect #1` updated `activeSetupRef.current`.
+   - Expanded entry gating to immediately open positions when a setup transitions to `RETESTED` or `is_immediate_fill` on the current visible bar.
+   - Added automated Time-To-Live (TTL) expiration: pending limit orders older than `maxBarsToRetest` (24 bars) are automatically cancelled, preventing stranded orders.
+   - Added timeline scrub detection to reset transient replay positions when scrubbing backwards.
+
+3. **Global Live Execution Provider Hoisting (`src/context/MarketDataContext.tsx`):**
+   - Hoisted `AutonomousExecutionHost` directly inside the top-level `MarketDataProvider`.
+   - Live strategy execution and order block scanning run 24/7 in the background across all application routes (`/`, `/backtest`, `/quant-lab`, `/journal`, `/settings`).
+   - Removed duplicate leaf runners from `src/app/page.tsx`.
+
+4. **Live Engine Deadlock Elimination & Sanitized Ingestion (`src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`):**
+   - Added 2-hour TTL expiration (24 x 5m bars) in `processMarketTick` to auto-cancel untriggered pending limit orders and release the `maxOpenPositions = 1` concurrency lock.
+   - Removed premature setup blacklisting on temporary price distance checks (`priceDistancePct > 0.05`).
+   - Connected dynamic threshold settings and enabled real WebSocket taker buy/sell volumes in live candle adapters.
+
+5. **Universal 3-Stage Harvest Parity:**
+   - Standardized all three execution environments on the institutional 3-Stage Harvest parameters: 40% TP1 @ 1.0R (FVG CE / BE trail), 40% TP2 @ 1.5R (+1.0R ratchet floor), and 20% TP3 Runner (Macro DOL).
+
+### Verification
+- `npx tsc --noEmit` → **0 errors** (exit code 0).
+- Automated test suite (`test_sr_engine.ts`): 100% win rate across 3-stage harvest tracking with immediate fill and TTL metadata verification.
+
+---
 
 ## 🆕 V16.42 Changelog — Backtest NaN R / Zero-Target Position Lockup: 6-Bug Batch Fix (2026-08-23)
 

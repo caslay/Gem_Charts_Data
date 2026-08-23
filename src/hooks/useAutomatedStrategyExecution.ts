@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
+import type { SweepReclaimOverlayData } from '@/hooks/useBacktestStrategyExecution';
 import {
   AutomatedStrategyExecutionEngine,
   StrategyExecutionPosition,
@@ -398,8 +399,8 @@ export function useAutomatedStrategyExecution(
             l: liveCandle.low,
             c: liveCandle.close,
             v: liveCandle.volume || 0,
-            taker_buy_vol: (liveCandle.volume || 0) * 0.5,
-            taker_sell_vol: (liveCandle.volume || 0) * 0.5,
+            taker_buy_vol: liveCandle.taker_buy_vol ?? ((liveCandle.volume || 0) * 0.5),
+            taker_sell_vol: liveCandle.taker_sell_vol ?? ((liveCandle.volume || 0) * 0.5),
             isClosed: !!liveCandle.isClosed,
           }
         : null;
@@ -483,6 +484,76 @@ export function useAutomatedStrategyExecution(
     return next;
   }, []);
 
+  const srOverlay = useMemo<SweepReclaimOverlayData | null>(() => {
+    const activePos = activePositions.length > 0 ? activePositions[0] : null;
+    const pendingOrd = pendingOrders.length > 0 ? pendingOrders[0] : null;
+    const latestActiveSetup = scannedSetups.length > 0 ? scannedSetups[scannedSetups.length - 1] : null;
+
+    if (!activePos && !pendingOrd && !latestActiveSetup) return null;
+
+    const isBull = activePos
+      ? activePos.direction === 'LONG'
+      : pendingOrd
+      ? pendingOrd.direction === 'LONG'
+      : latestActiveSetup?.type === 'BULLISH';
+
+    let phase: SweepReclaimOverlayData['phase'] = 'ANCHOR';
+    let statusText = 'Phase 1: Anchor Detected';
+
+    if (activePos) {
+      phase = 'OPEN';
+      const uR = activePos.unrealizedR ?? 0;
+      statusText = `Live Position OPEN (${activePos.direction}) | ${uR > 0 ? '+' : ''}${uR.toFixed(2)}R`;
+    } else if (pendingOrd) {
+      phase = 'RETEST';
+      statusText = `Live Pending Limit Resting @ $${(pendingOrd.limitEntryPrice ?? 0).toFixed(2)}`;
+    } else if (latestActiveSetup?.status === 'RETESTED' || latestActiveSetup?.is_retested) {
+      phase = 'RETEST';
+      statusText = 'Phase 4: Retest Confirmed';
+    } else if (latestActiveSetup?.status === 'RECLAIMED_NO_RETEST' || latestActiveSetup?.is_reclaimed) {
+      phase = 'RECLAIM';
+      statusText = 'Phase 3: 3-Pillar Reclaim Confirmed';
+    } else if (latestActiveSetup?.status === 'SWEPT_NO_RECLAIM' || latestActiveSetup?.sweep_index !== null) {
+      phase = 'SWEEP';
+      statusText = 'Phase 2: Liquidity Swept';
+    }
+
+    const entryPrice = activePos?.entryPrice ?? pendingOrd?.limitEntryPrice ?? latestActiveSetup?.entry_price ?? 0;
+    const stopLoss = activePos?.activeStopLoss ?? pendingOrd?.activeStopLoss ?? latestActiveSetup?.stop_loss ?? 0;
+    const anchorLevel = activePos?.originAnchorLevel ?? pendingOrd?.originAnchorLevel ?? latestActiveSetup?.anchor_level ?? 0;
+
+    return {
+      id: activePos?.id ?? pendingOrd?.id ?? latestActiveSetup?.id ?? 'LIVE_SR',
+      type: isBull ? 'BULLISH' : 'BEARISH',
+      phase,
+      anchorName: latestActiveSetup?.anchor_name || (isBull ? 'Bullish Anchor' : 'Bearish Anchor'),
+      anchorLevel,
+      sweepPrice: latestActiveSetup?.sweep_price ?? null,
+      sweepObMt: latestActiveSetup?.sweep_ob_mt ?? null,
+      reclaimPrice: latestActiveSetup?.reclaim_close_price ?? null,
+      fvgTop: latestActiveSetup?.reclaim_fvg_top ?? null,
+      fvgBottom: latestActiveSetup?.reclaim_fvg_bottom ?? null,
+      fvgCe: activePos?.fvgCeLevel ?? pendingOrd?.fvgCeLevel ?? latestActiveSetup?.reclaim_fvg_ce ?? null,
+      entryPrice,
+      stopLoss,
+      target1: activePos?.stage1Target ?? latestActiveSetup?.stage1_target ?? 0,
+      target2: activePos?.stage2Target ?? latestActiveSetup?.stage2_target ?? 0,
+      target3: activePos?.stage3Target ?? pendingOrd?.dynamicDolTarget ?? latestActiveSetup?.stage3_target ?? 0,
+      volExpansion: latestActiveSetup?.reclaim_volume_expansion ?? 1.0,
+      deltaDominance: latestActiveSetup?.reclaim_delta_dominance_pct ?? 50.0,
+      bodyRatio: latestActiveSetup?.reclaim_body_ratio ?? 50.0,
+      threePillarsPassed: latestActiveSetup?.three_pillar_displacement_passed ?? true,
+      isValuationAligned: latestActiveSetup?.is_valuation_aligned ?? true,
+      realizedR: activePos?.realizedR ?? 0,
+      unrealizedR: activePos?.unrealizedR ?? 0,
+      statusText,
+      isStage1Filled: activePos?.isStage1Filled ?? false,
+      isStage2Filled: activePos?.isStage2Filled ?? false,
+      isStage3Filled: activePos?.isStage3Filled ?? false,
+      isClosed: false,
+    };
+  }, [scannedSetups, activePositions, pendingOrders]);
+
   const riskPct = engineConfig.liveSettings?.compoundingRiskPct ?? engineConfig.compoundingRiskPct ?? 2.0;
   const riskUsd2Pct = parseFloat((accountEquity * (riskPct / 100)).toFixed(2));
 
@@ -497,6 +568,7 @@ export function useAutomatedStrategyExecution(
     pendingOrders,
     closedTrades,
     scannedSetups,
+    srOverlay,
     accountEquity,
     riskUsd2Pct,
     lastEvent,
