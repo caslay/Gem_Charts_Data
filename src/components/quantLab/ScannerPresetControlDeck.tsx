@@ -36,6 +36,8 @@ interface ScannerPresetControlDeckProps {
   currentConfig: SweepReclaimPresetConfig | OrderBlockPresetConfig;
   onApplyPreset: (preset: ScannerPreset) => void;
   className?: string;
+  presetTimeframe?: string;
+  presetSymbol?: string;
 }
 
 export default function ScannerPresetControlDeck({
@@ -43,9 +45,16 @@ export default function ScannerPresetControlDeck({
   currentConfig,
   onApplyPreset,
   className = '',
+  presetTimeframe,
+  presetSymbol,
 }: ScannerPresetControlDeckProps) {
-  const [presets, setPresets] = useState<ScannerPreset[]>(() => loadScannerPresets(strategyType));
-  const [activePresetId, setActivePresetIdState] = useState<string | null>(() => getActivePresetId(strategyType));
+  const [presets, setPresets] = useState<ScannerPreset[]>(() => {
+    // To prevent hydration mismatch, only load factory presets on initial render.
+    // The useEffect will load custom presets from localStorage after mount.
+    if (typeof window === 'undefined') return loadScannerPresets(strategyType);
+    return loadScannerPresets(strategyType).filter(p => p.isFactory);
+  });
+  const [activePresetId, setActivePresetIdState] = useState<string | null>(null);
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
   const [presetNameInput, setPresetNameInput] = useState('');
   const [presetDescInput, setPresetDescInput] = useState('');
@@ -112,8 +121,8 @@ export default function ScannerPresetControlDeck({
       name: presetNameInput.trim(),
       description: presetDescInput.trim() || undefined,
       strategyType,
-      symbol: (currentConfig as any).symbol || 'ETHUSDC',
-      timeframe: (currentConfig as any).timeframe || '15m',
+      symbol: presetSymbol || (currentConfig as any).symbol || 'ETHUSDC',
+      timeframe: presetTimeframe || activePreset?.timeframe || (currentConfig as any).timeframe || '15m',
       config: currentConfig,
     });
 
@@ -134,8 +143,8 @@ export default function ScannerPresetControlDeck({
 
     const updated = updateCustomPreset(activePreset.id, {
       config: currentConfig,
-      symbol: (currentConfig as any).symbol || activePreset.symbol,
-      timeframe: (currentConfig as any).timeframe || activePreset.timeframe,
+      symbol: presetSymbol || (currentConfig as any).symbol || activePreset.symbol,
+      timeframe: presetTimeframe || activePreset.timeframe, // Always fallback to active preset's timeframe on update if no explicit prop
     });
 
     if (updated) {
@@ -241,7 +250,9 @@ export default function ScannerPresetControlDeck({
           <button
             type="button"
             onClick={() => {
-              setPresetNameInput(`${(currentConfig as any).symbol || 'ETHUSDC'} ${(currentConfig as any).timeframe || '15m'} - Custom Setup`);
+              const suggestedSymbol = presetSymbol || (currentConfig as any).symbol || 'ETHUSDC';
+              const suggestedTimeframe = presetTimeframe || activePreset?.timeframe || (currentConfig as any).timeframe || '15m';
+              setPresetNameInput(`${suggestedSymbol} ${suggestedTimeframe} - Custom Setup`);
               setIsSaveModalOpen(true);
             }}
             className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-300 font-mono text-[10px] font-semibold transition"

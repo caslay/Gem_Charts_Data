@@ -575,8 +575,9 @@ export default function QuantLabPage() {
     const end = new Date();
     const start = new Date();
     start.setDate(start.getDate() - days);
-    setObEndDate(end.toISOString().slice(0, 10));
-    setObStartDate(start.toISOString().slice(0, 10));
+    const cairoFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' });
+    setObEndDate(cairoFormatter.format(end));
+    setObStartDate(cairoFormatter.format(start));
   };
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -2441,7 +2442,7 @@ export default function QuantLabPage() {
                                       day: "numeric",
                                       hour: "2-digit",
                                       minute: "2-digit",
-                                      timeZone: "UTC"
+                                      timeZone: "Africa/Cairo"
                                     })}
                                   </td>
 
@@ -2950,7 +2951,7 @@ export default function QuantLabPage() {
                                       day: "numeric",
                                       hour: "2-digit",
                                       minute: "2-digit",
-                                      timeZone: "UTC"
+                                      timeZone: "Africa/Cairo"
                                     })}
                                   </td>
                                   <td className="py-3 px-2">
@@ -3188,8 +3189,8 @@ export default function QuantLabPage() {
 
               {inspectedOb.is_be_active && (
                 <div className="border-t border-slate-800/60 pt-2.5 mt-2 flex flex-wrap items-center justify-between text-[9px] text-slate-400 gap-y-1.5">
-                  <span>Tranche 1 (40% @ 1.0R): <strong className="text-emerald-400">{inspectedOb.tp1_hit_time ? `${new Date(inspectedOb.tp1_hit_time).toLocaleTimeString()} (+0.4R)` : "—"}</strong></span>
-                  <span>Tranche 2 (40% @ 1.5R): <strong className={inspectedOb.is_tp2_filled ? "text-emerald-400" : "text-slate-500"}>{inspectedOb.tp2_hit_time ? `${new Date(inspectedOb.tp2_hit_time).toLocaleTimeString()} (+0.6R)` : "Pending"}</strong></span>
+                  <span>Tranche 1 (40% @ 1.0R): <strong className="text-emerald-400">{inspectedOb.tp1_hit_time ? `${new Date(inspectedOb.tp1_hit_time).toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" })} (+0.4R)` : "—"}</strong></span>
+                  <span>Tranche 2 (40% @ 1.5R): <strong className={inspectedOb.is_tp2_filled ? "text-emerald-400" : "text-slate-500"}>{inspectedOb.tp2_hit_time ? `${new Date(inspectedOb.tp2_hit_time).toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" })} (+0.6R)` : "Pending"}</strong></span>
                   <span>Tranche 3 (20% DOL): <strong className={inspectedOb.is_tp3_filled ? "text-purple-400" : "text-slate-500"}>{inspectedOb.is_tp3_filled ? `Filled (${inspectedOb.realized_rr}R Total)` : "Trailing"}</strong></span>
                   <span>Active SL Trail: <strong className="text-cyan-300">${inspectedOb.active_trailing_sl ?? inspectedOb.simulated_entry_price} ({inspectedOb.trailing_sl_source ?? "BREAKEVEN"})</strong></span>
                 </div>
@@ -3253,7 +3254,7 @@ export default function QuantLabPage() {
                   <div className="border-t border-purple-500/20 pt-2.5 mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[9px] text-purple-200">
                     <div>
                       <span className="text-slate-500 block text-[7px] uppercase">Confirmation Time</span>
-                      <span>{inspectedOb.breaker_confirmation_time ? new Date(inspectedOb.breaker_confirmation_time).toLocaleTimeString() : "—"}</span>
+                      <span>{inspectedOb.breaker_confirmation_time ? new Date(inspectedOb.breaker_confirmation_time).toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" }) : "—"}</span>
                     </div>
                     <div>
                       <span className="text-slate-500 block text-[7px] uppercase">Confirmed FVG Range</span>
