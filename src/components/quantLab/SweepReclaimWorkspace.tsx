@@ -129,8 +129,9 @@ export default function SweepReclaimWorkspace({
     const end = new Date();
     const start = new Date();
     start.setDate(start.getDate() - days);
-    setEndDate(end.toISOString().slice(0, 10));
-    setStartDate(start.toISOString().slice(0, 10));
+    const cairoFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' });
+    setEndDate(cairoFormatter.format(end));
+    setStartDate(cairoFormatter.format(start));
   };
 
   const toggleAnchorGroup = (key: string) => {
@@ -1360,7 +1361,7 @@ export default function SweepReclaimWorkspace({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Anchor Time:</span>
-                    <span className="text-slate-300">{new Date(inspectedSetup.anchor_time).toISOString().replace("T", " ").slice(0, 16)}</span>
+                    <span className="text-slate-300">{new Date(inspectedSetup.anchor_time).toLocaleString("en-US", { timeZone: "Africa/Cairo", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Color Locked:</span>
