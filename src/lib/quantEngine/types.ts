@@ -184,3 +184,38 @@ export interface OrderFlowTimelineSummary {
   stats: OrderFlowTimelineStats;
 }
 
+// ─── Midnight State Ledger & T-Zero Re-hydration Types ──────────────────────
+
+export interface StructuralStateSnapshot {
+  current_trend_state: 'BULLISH_SWING' | 'BEARISH_SWING';
+  protected_high: number | null;
+  protected_low: number | null;
+  active_swing_high: number | null;
+  active_swing_low: number | null;
+  expansion_high_float: number | null;
+  expansion_low_float: number | null;
+  is_in_expansion: boolean;
+  expansion_origin_price: number | null;
+}
+
+export interface StructuralBootstrapContext {
+  majorSnapshot: StructuralStateSnapshot;
+  internalSnapshot: StructuralStateSnapshot;
+  microSnapshot: StructuralStateSnapshot;
+  confirmedPivots: Pivot[];
+  activeFVGs: any[];
+  activeOrderBlocks: any[];
+  institutionalOrderBlocks: any[];
+  lastConfirmedDealingRange: StructuralDealingRange | null;
+  warmupCutoffTs: number;
+}
+
+export interface MidnightLedgerRecord {
+  id: string;
+  symbol: string;
+  timeframe: string;
+  snapshot_date: string; // ISO string UTC 00:00
+  state_json: StructuralBootstrapContext;
+  updated_at: string;
+}
+

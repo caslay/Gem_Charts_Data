@@ -228,12 +228,25 @@ export async function POST(req: Request) {
           return;
         }
 
+        sendChunk({ type: "status", message: "Querying Midnight State Ledger for T-Zero Structural Seed..." });
+        
+        const { computeStructuralBootstrap } = await import("@/lib/quantEngine/structuralBootstrap");
+        const { warmupStartMs, bootstrap } = await computeStructuralBootstrap(symbol, timeframe, startMs, {
+          lookbackMajor: 15, // OrderBlockEngine uses internal PivotEngine which defaults to 15
+        });
+
+        if (bootstrap) {
+          sendChunk({ type: "status", message: "T-Zero Snapshot Found. Re-hydrating Quantitative Engine..." });
+        } else {
+          sendChunk({ type: "status", message: "Snapshot missing. Falling back to dynamic structural warmup..." });
+        }
+
         sendChunk({
           type: "status",
           message: `Ingesting historical ${timeframe} ${symbol} candlestick & taker volume data from Binance...`
         });
 
-        let candles = await fetchPagedKlines(symbol, timeframe, startMs, endMs, (count, lastT) => {
+        let candles = await fetchPagedKlines(symbol, timeframe, warmupStartMs, endMs, (count, lastT) => {
           sendChunk({
             type: "progress",
             phase: "FETCHING_DATA",
@@ -245,7 +258,7 @@ export async function POST(req: Request) {
         if (candles.length === 0) {
           console.warn("[OB SCANNER] Live fetch returned 0 candles, deploying offline mock simulation fallback...");
           sendChunk({ type: "status", message: "Live connection throttled. Generating simulation stream..." });
-          candles = generateMockKlines(startMs, endMs, timeframe);
+          candles = generateMockKlines(warmupStartMs, endMs, timeframe);
         }
 
         sendChunk({
@@ -284,7 +297,7 @@ export async function POST(req: Request) {
         };
 
         const engine = new OrderBlockEngine(scanConfig);
-        const { orderBlocks, telemetry } = engine.scanHistoricalOrderBlocks(candles);
+        const { orderBlocks, telemetry } = engine.scanHistoricalOrderBlocks(candles, bootstrap);
 
 
         sendChunk({
