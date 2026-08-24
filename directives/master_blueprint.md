@@ -1,8 +1,30 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.54
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.55
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-23 (V16.54 — 3-Candle Displacement Indexing Fix, Strict 3-Pillar Boolean Gating, Anchor Polarity Hard Gate & 3-Day Cold-Start Historical Reconciliation)
+> **Last Updated:** 2026-08-24 (V16.55 — Midnight State Ledger & T-Zero Engine Re-hydration)
+
+## 🆕 V16.55 Changelog — Midnight State Ledger & T-Zero Engine Re-hydration (2026-08-24)
+
+### Summary
+Eliminated start-date backtest drift and established 100% mathematical parity between Quant Lab backtests and Live Execution by implementing the Midnight State Ledger (Database Snapshot) and T-Zero Re-hydration engine.
+
+### Key Architectural Deliverables
+1. **Database Schema (The Midnight Ledger):** Created `quant_lab_daily_structural_snapshots` in Neon PostgreSQL via `/api/quant-lab/ledger-sync` with columns for symbol, timeframe, UTC 00:00 snapshot date, and JSONB structural state.
+2. **T-Zero Re-hydration Protocol:** Implemented `computeStructuralBootstrap` and `generateSnapshot` in `structuralBootstrap.ts`. The read path safely fetches from Neon SQL, while the fallback securely reverts to a 200-bar dynamic warmup sequence.
+3. **Engine Seeding Injection:** Extended `SMCStateEngine.ts` with `captureSnapshot` and `restoreFromSnapshot`. Extended `PivotEngine.ts` with `seedConfirmedPivots`. Extended `LiquidityEngine.ts` with explicit FVG seeding and chronological mitigation mapping against the snapshot bounds.
+4. **Quant Lab Orchestration:** Re-routed all three strategy endpoints (`/api/quant-lab/run`, `sweep-reclaim-scanner`, `ob-scanner`) to hydrate their environments via `computeStructuralBootstrap` instead of naive localized lookbacks.
+5. **Zero Live Mutation:** Segregated initialization into `analyzeWarmup()` and `analyzeWithBootstrap()` in `MarketStructureAPI.ts`, leaving the primary `analyze()` completely untouched to prevent Live WebSocket ingestion breakage.
+
+### Files Modified
+- **`src/app/api/quant-lab/ledger-sync/route.ts`** (New Sync Utility)
+- **`src/app/api/quant-lab/run/route.ts`**, **`sweep-reclaim-scanner/route.ts`**, **`ob-scanner/route.ts`**
+- **`src/lib/quantEngine/structuralBootstrap.ts`** (New Bootstrap Orchestrator)
+- **`src/lib/quantEngine/MarketStructureAPI.ts`**, **`PivotEngine.ts`**, **`SMCStateEngine.ts`**, **`LiquidityEngine.ts`**
+- **`src/lib/quantLabEngine.ts`**, **`SweepReclaimEngine.ts`**, **`OrderBlockEngine.ts`**
+
+### Verification
+- `npx tsc --noEmit` → **0 errors** (exit code 0). ✅
 
 ## 🆕 V16.54 Changelog — 4-Bug Batch Fix: Displacement Indexing, 3-Pillar Gating, Anchor Polarity & Cold-Start Reconciliation (2026-08-23)
 

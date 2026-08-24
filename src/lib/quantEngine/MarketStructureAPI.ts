@@ -21,6 +21,91 @@ export class MarketStructureAPI {
     currentPrice: number,
     displacementStatus?: InstitutionalSponsorship | null
   ): MarketStructureAnalysis {
+    return this.internalAnalyze(candles, currentPrice, displacementStatus);
+  }
+
+  public analyzeWarmup(warmupCandles: Candle[]): import('./types').StructuralBootstrapContext {
+    // Normalize
+    const normalizedCandles = warmupCandles.map(c => ({
+      ...c,
+      open: c.open !== undefined ? c.open : c.o,
+      high: c.high !== undefined ? c.high : c.h,
+      low: c.low !== undefined ? c.low : c.l,
+      close: c.close !== undefined ? c.close : c.c,
+      volume: c.volume !== undefined ? c.volume : c.v
+    }));
+
+    const pivotEngine = new PivotEngine(this.config);
+    pivotEngine.processCandles(normalizedCandles);
+
+    const stateEngine     = new SMCStateEngine(this.config, 2);
+    const innerStateEngine = new SMCStateEngine(this.config, 1);
+    const microStateEngine = new SMCStateEngine(this.config, 0);
+
+    stateEngine.initializeFromFirstPivot(pivotEngine.pivots);
+    innerStateEngine.initializeFromFirstPivot(pivotEngine.pivots);
+    microStateEngine.initializeFromFirstPivot(pivotEngine.pivots);
+
+    for (let i = 0; i < normalizedCandles.length; i++) {
+      const c = normalizedCandles[i];
+      const currentPivots = pivotEngine.pivots.filter(p => p.index === i && p.confirmed);
+      for (const p of currentPivots) {
+        stateEngine.processPivot(p, normalizedCandles);
+        innerStateEngine.processPivot(p, normalizedCandles);
+        microStateEngine.processPivot(p, normalizedCandles);
+      }
+      const atr = c.high - c.low;
+      stateEngine.processCandle(c, normalizedCandles, i, atr);
+      innerStateEngine.processCandle(c, normalizedCandles, i, atr);
+      microStateEngine.processCandle(c, normalizedCandles, i, atr);
+    }
+
+    const liquidityEngine = new LiquidityEngine();
+    liquidityEngine.processCandlesForLiquidity(normalizedCandles);
+
+    const majorPivots = pivotEngine.pivots.filter(p => p.level === 2);
+    const majorSwings: StructuralSwing[] = majorPivots.map(pt => ({
+      t: pt.timestamp,
+      price: pt.price,
+      type: pt.type === 'SWING_HIGH' ? 'HIGH' : 'LOW',
+      grade: 'MAJOR',
+      colorValidated: pt.colorValidated ?? false,
+      candle_index: pt.index,
+      timestamp: new Date(pt.timestamp).toISOString(),
+      structure_type: 'MAJOR',
+      confirmed: pt.confirmed
+    }));
+    
+    // We only really need to pass back the final dealing range state if we want it,
+    // but the engine recomputes it dynamically anyway. Let's just capture snapshots.
+    return {
+      majorSnapshot: stateEngine.captureSnapshot(),
+      internalSnapshot: innerStateEngine.captureSnapshot(),
+      microSnapshot: microStateEngine.captureSnapshot(),
+      confirmedPivots: pivotEngine.pivots.filter(p => p.confirmed && p.colorValidated),
+      activeFVGs: liquidityEngine.activeFVGs,
+      activeOrderBlocks: liquidityEngine.activeOrderBlocks,
+      institutionalOrderBlocks: liquidityEngine.institutionalOrderBlocks,
+      lastConfirmedDealingRange: null, // Build if needed
+      warmupCutoffTs: normalizedCandles.length > 0 ? normalizedCandles[normalizedCandles.length - 1].t : 0
+    };
+  }
+
+  public analyzeWithBootstrap(
+    evaluationCandles: Candle[],
+    currentPrice: number,
+    displacementStatus: InstitutionalSponsorship | null | undefined,
+    bootstrap: import('./types').StructuralBootstrapContext
+  ): MarketStructureAnalysis {
+    return this.internalAnalyze(evaluationCandles, currentPrice, displacementStatus, bootstrap);
+  }
+
+  private internalAnalyze(
+    candles: Candle[],
+    currentPrice: number,
+    displacementStatus?: InstitutionalSponsorship | null,
+    bootstrap?: import('./types').StructuralBootstrapContext
+  ): MarketStructureAnalysis {
     if (candles.length === 0) {
       return this.createEmptyState();
     }
@@ -37,32 +122,40 @@ export class MarketStructureAPI {
 
     // 1. Pivot Engine (Directional Change)
     const pivotEngine = new PivotEngine(this.config);
+    if (bootstrap) {
+      pivotEngine.seedConfirmedPivots(bootstrap.confirmedPivots);
+    }
     pivotEngine.processCandles(normalizedCandles);
 
     // 2. State Engine (SMC Rules)
-    // Three separate engines — one per structural level — to prevent cross-contamination
-    // of registered events between Major (L2), Internal (L1), and Inner (L0) pivots.
-    const stateEngine     = new SMCStateEngine(this.config, 2); // MAJOR
-    const innerStateEngine = new SMCStateEngine(this.config, 1); // INTERNAL
-    const microStateEngine = new SMCStateEngine(this.config, 0); // INNER (FIX BUG-2)
+    const stateEngine     = new SMCStateEngine(this.config, 2);
+    const innerStateEngine = new SMCStateEngine(this.config, 1);
+    const microStateEngine = new SMCStateEngine(this.config, 0);
 
-    // FIX GAP-2: Bootstrap initial trend direction from first confirmed pivot per level
-    // so engines never start with a false BULLISH bias on bearish-opening datasets.
-    stateEngine.initializeFromFirstPivot(pivotEngine.pivots);
-    innerStateEngine.initializeFromFirstPivot(pivotEngine.pivots);
-    microStateEngine.initializeFromFirstPivot(pivotEngine.pivots);
+    if (bootstrap) {
+      stateEngine.restoreFromSnapshot(bootstrap.majorSnapshot);
+      innerStateEngine.restoreFromSnapshot(bootstrap.internalSnapshot);
+      microStateEngine.restoreFromSnapshot(bootstrap.microSnapshot);
+    } else {
+      stateEngine.initializeFromFirstPivot(pivotEngine.pivots);
+      innerStateEngine.initializeFromFirstPivot(pivotEngine.pivots);
+      microStateEngine.initializeFromFirstPivot(pivotEngine.pivots);
+    }
 
     for (let i = 0; i < normalizedCandles.length; i++) {
       const c = normalizedCandles[i];
-      // Feed pivots that occur at this candle index (only confirmed pivots)
+      if (bootstrap && c.t < bootstrap.warmupCutoffTs) {
+        // Skip processing candles that were already processed in warmup
+        continue;
+      }
+      
       const currentPivots = pivotEngine.pivots.filter(p => p.index === i && p.confirmed);
       for (const p of currentPivots) {
         stateEngine.processPivot(p, normalizedCandles);
         innerStateEngine.processPivot(p, normalizedCandles);
         microStateEngine.processPivot(p, normalizedCandles);
       }
-      // Compute pseudo-atr for sharp departure scoring
-      const atr = c.high - c.low; // Simple fallback
+      const atr = c.high - c.low;
       stateEngine.processCandle(c, normalizedCandles, i, atr);
       innerStateEngine.processCandle(c, normalizedCandles, i, atr);
       microStateEngine.processCandle(c, normalizedCandles, i, atr);
@@ -70,7 +163,13 @@ export class MarketStructureAPI {
 
     // 3. Liquidity Engine (FVG & OB)
     const liquidityEngine = new LiquidityEngine();
-    liquidityEngine.processCandlesForLiquidity(normalizedCandles);
+    if (bootstrap) {
+      liquidityEngine.seedLiquidity(bootstrap.activeFVGs, bootstrap.activeOrderBlocks, bootstrap.institutionalOrderBlocks);
+    }
+    
+    // Only process new candles for liquidity to prevent double counting
+    const newCandlesForLiquidity = bootstrap ? normalizedCandles.filter(c => c.t >= bootstrap.warmupCutoffTs) : normalizedCandles;
+    liquidityEngine.processCandlesForLiquidity(newCandlesForLiquidity);
 
     // 4. Map to Downstream Data Contract
 

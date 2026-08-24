@@ -249,6 +249,19 @@ export async function POST(req: Request) {
         const sl_logic = settings.sl_logic || "Structural Swing";
         const tp_logic = settings.tp_logic || "Nearest Order Book Magnet";
         const risk_percent = settings.risk_percent ?? 1.0;
+        
+        sendChunk({ type: "status", message: "Querying Midnight State Ledger for T-Zero Structural Seed..." });
+        
+        const { computeStructuralBootstrap } = await import("@/lib/quantEngine/structuralBootstrap");
+        const { bootstrap } = await computeStructuralBootstrap(symbol, timeframe, startMs, {
+          lookbackMajor: 15
+        });
+
+        if (bootstrap) {
+          sendChunk({ type: "status", message: "T-Zero Snapshot Found. Re-hydrating Quantitative Engine..." });
+        } else {
+          sendChunk({ type: "status", message: "Snapshot missing. Falling back to dynamic structural warmup..." });
+        }
 
         // Sequential Candle-By-Candle Processing Loop (Zero Look-Ahead Bias)
         for (let i = startIndex; i < activeCandles.length; i++) {
@@ -351,7 +364,7 @@ export async function POST(req: Request) {
               candles_1h: visible1h
             };
 
-            const data = buildServerEnrichedPayload(visibleArrays, d.toISOString().slice(0, 10), timeframe, symbol);
+            const data = buildServerEnrichedPayload(visibleArrays, d.toISOString().slice(0, 10), timeframe, symbol, bootstrap);
             const isMatch = evaluateServerStrategy(strategy_config, data, candle.c, candle);
 
             if (isMatch) {

@@ -401,7 +401,10 @@ export class OrderBlockEngine {
    * Ensures zero forward-looking data: every block is detected strictly when its
    * confirmation impulse candle closes.
    */
-  public scanHistoricalOrderBlocks(candles: Candle[]): {
+  public scanHistoricalOrderBlocks(
+    candles: Candle[],
+    bootstrap?: import('./types').StructuralBootstrapContext
+  ): {
     orderBlocks: InstitutionalOrderBlock[];
     telemetry: OrderBlockTelemetrySummary;
   } {
@@ -418,6 +421,9 @@ export class OrderBlockEngine {
     const volSma = this.computeVolumeSmaArray(sortedCandles, 20);
 
     const pivotEngine = new PivotEngine();
+    if (bootstrap) {
+      pivotEngine.seedConfirmedPivots(bootstrap.confirmedPivots);
+    }
     pivotEngine.processCandles(sortedCandles);
     const allPivots = pivotEngine.pivots.filter(p => p.confirmed);
 
@@ -473,6 +479,10 @@ export class OrderBlockEngine {
       filteredBlocks = filteredBlocks.filter(b => b.quality_tier === 'A_PLUS');
     } else if (this.config.minQualityTier === 'A_AND_A_PLUS') {
       filteredBlocks = filteredBlocks.filter(b => b.quality_tier === 'A_PLUS' || b.quality_tier === 'A');
+    }
+
+    if (bootstrap) {
+      filteredBlocks = filteredBlocks.filter(b => b.origin_time >= bootstrap.warmupCutoffTs);
     }
 
     const telemetry = this.calculateTelemetry(filteredBlocks, detectedBlocks);

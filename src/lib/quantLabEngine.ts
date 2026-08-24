@@ -22,12 +22,13 @@ export interface ServerMasterArrays {
 }
 
 export function buildServerEnrichedPayload(
-  visible: ServerMasterArrays,
+  masterArrays: ServerMasterArrays,
   selectedDate: string,
   timeframe: '5m' | '15m' | '1h',
-  symbol: string
+  symbol: string,
+  bootstrap?: import('./quantEngine/types').StructuralBootstrapContext
 ): Record<string, any> {
-  const { candles_1h, candles_15m, candles_5m } = visible;
+  const { candles_1h, candles_15m, candles_5m } = masterArrays;
 
   const activeCandles = timeframe === '1h'
     ? candles_1h
@@ -169,8 +170,11 @@ export function buildServerEnrichedPayload(
   }));
   const structureCandles = activeCandlesWithClosed.slice(-350);
 
+  const structureEngine = new (require('./quantEngine/MarketStructureAPI').MarketStructureAPI)();
   const structureAnalysis = (livePrice !== null)
-    ? analyzeMarketStructure(structureCandles, livePrice, displacement)
+    ? (bootstrap 
+        ? structureEngine.analyzeWithBootstrap(structureCandles, livePrice, displacement, bootstrap)
+        : require('./structureEngine').analyzeMarketStructure(structureCandles, livePrice, displacement))
     : null;
   const localDealingRange = structureAnalysis
     ? structureAnalysis.dealingRange

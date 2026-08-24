@@ -564,7 +564,7 @@ export class SweepReclaimEngine {
   /**
    * Extracts multi-timeframe liquidity anchors chronologically with zero look-ahead bias.
    */
-  private extractAnchors(candles: Candle[]): LiquidityAnchor[] {
+  private extractAnchors(candles: Candle[], bootstrap?: import('./types').StructuralBootstrapContext): LiquidityAnchor[] {
     const anchors: LiquidityAnchor[] = [];
     const n = candles.length;
     if (n < 10) return anchors;
@@ -582,6 +582,9 @@ export class SweepReclaimEngine {
         lookbackInternal: this.config.lookbackInternal ?? 5,
         lookbackMicro: 3,
       });
+      if (bootstrap) {
+        pivotEngine.seedConfirmedPivots(bootstrap.confirmedPivots);
+      }
       pivotEngine.processCandles(candles);
 
       const uniquePivotsMap = new Map<string, (typeof pivotEngine.pivots)[0]>();
@@ -771,7 +774,10 @@ export class SweepReclaimEngine {
   /**
    * Scans a full historical candle series through the 4-phase Sweep & Reclaim state machine.
    */
-  public scanHistoricalSetups(candles: Candle[]): {
+  public scanHistoricalSetups(
+    candles: Candle[], 
+    bootstrap?: import('./types').StructuralBootstrapContext
+  ): {
     setups: SweepReclaimSetup[];
     telemetry: SweepReclaimTelemetrySummary;
   } {
@@ -780,10 +786,10 @@ export class SweepReclaimEngine {
       return { setups: [], telemetry: this.createEmptyTelemetry() };
     }
 
-    const anchors = this.extractAnchors(candles);
+    const anchors = this.extractAnchors(candles, bootstrap);
     const atrSeries = calculateAtrSeries(candles, 14);
 
-    const detectedSetups: SweepReclaimSetup[] = [];
+    let detectedSetups: SweepReclaimSetup[] = [];
 
     // Rolling Volume SMA (configurable period, default 20)
     // FIX-6: Use Number.isFinite() to guard against undefined/NaN volume fields from offline
@@ -2019,7 +2025,13 @@ export class SweepReclaimEngine {
       detectedSetups.push(baseSetup);
     }
 
+    if (bootstrap) {
+      detectedSetups = detectedSetups.filter(s => s.anchor_time >= bootstrap.warmupCutoffTs);
+    }
+    
+    // Calculate Telemetry across detected setups
     const telemetry = this.generateTelemetrySummary(detectedSetups);
+
     return { setups: detectedSetups, telemetry };
   }
 

@@ -18,9 +18,24 @@ export class PivotEngine {
     ];
   }
 
+  public seedConfirmedPivots(pivots: Pivot[]) {
+    this.pivots = [...pivots];
+  }
+
   public processCandles(candles: Candle[]) {
-    // Re-initialize tracking states
-    this.pivots = [];
+    // We do NOT clear this.pivots here if they were pre-seeded by seedConfirmedPivots,
+    // but typically we would re-initialize. Instead of re-initializing to empty,
+    // we just use what is already there (which might be seeded pivots).
+    // Let's filter out any pivots that are within the current candles range 
+    // so we don't duplicate them, or we just keep them and prevent adding duplicates.
+    // The simplest way is just not to clear if we want to retain seeded pivots, 
+    // but the original code was: `this.pivots = [];`
+    
+    // To support seeding, we will only clear if there are NO seeded pivots, OR 
+    // we can just keep the seeded ones and deduplicate.
+    
+    // For now, if we already have pivots, we keep them. We will use a Set of existing timestamps.
+    const existingTimestamps = new Set(this.pivots.map(p => `${p.level}_${p.timestamp}`));
 
     if (candles.length < 2) return;
 
@@ -71,32 +86,38 @@ export class PivotEngine {
 
         if (isPH) {
           const pIdx = c.index ?? i;
-          // Color Lock: red top preceded by green candle
           const colorValidated = cIsRed && prevIsGreen;
-          this.pivots.push({
-            type: 'SWING_HIGH',
-            index: pIdx,
-            price: cHigh,
-            confirmed: isConfirmed,
-            timestamp: c.t,
-            level: lvl.level,
-            colorValidated
-          });
+          const pivotKey = `${lvl.level}_${c.t}`;
+          if (!existingTimestamps.has(pivotKey)) {
+            this.pivots.push({
+              type: 'SWING_HIGH',
+              index: pIdx,
+              price: cHigh,
+              confirmed: isConfirmed,
+              timestamp: c.t,
+              level: lvl.level,
+              colorValidated
+            });
+            existingTimestamps.add(pivotKey);
+          }
         }
 
         if (isPL) {
           const pIdx = c.index ?? i;
-          // Color Lock: green bottom preceded by red candle
           const colorValidated = cIsGreen && prevIsRed;
-          this.pivots.push({
-            type: 'SWING_LOW',
-            index: pIdx,
-            price: cLow,
-            confirmed: isConfirmed,
-            timestamp: c.t,
-            level: lvl.level,
-            colorValidated
-          });
+          const pivotKey = `${lvl.level}_${c.t}`;
+          if (!existingTimestamps.has(pivotKey)) {
+            this.pivots.push({
+              type: 'SWING_LOW',
+              index: pIdx,
+              price: cLow,
+              confirmed: isConfirmed,
+              timestamp: c.t,
+              level: lvl.level,
+              colorValidated
+            });
+            existingTimestamps.add(pivotKey);
+          }
         }
       }
     }

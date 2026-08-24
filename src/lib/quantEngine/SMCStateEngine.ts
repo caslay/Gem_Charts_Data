@@ -45,6 +45,32 @@ export class SMCStateEngine {
     this.target_level = targetLevel;
   }
 
+  public captureSnapshot(): import('./types').StructuralStateSnapshot {
+    return {
+      current_trend_state: this.current_trend_state,
+      protected_high: this.protected_high,
+      protected_low: this.protected_low,
+      active_swing_high: this.active_swing_high,
+      active_swing_low: this.active_swing_low,
+      expansion_high_float: this.expansion_high_float,
+      expansion_low_float: this.expansion_low_float,
+      is_in_expansion: this.is_in_expansion,
+      expansion_origin_price: this.expansion_origin_price,
+    };
+  }
+
+  public restoreFromSnapshot(snapshot: import('./types').StructuralStateSnapshot): void {
+    this.current_trend_state = snapshot.current_trend_state;
+    this.protected_high = snapshot.protected_high;
+    this.protected_low = snapshot.protected_low;
+    this.active_swing_high = snapshot.active_swing_high;
+    this.active_swing_low = snapshot.active_swing_low;
+    this.expansion_high_float = snapshot.expansion_high_float;
+    this.expansion_low_float = snapshot.expansion_low_float;
+    this.is_in_expansion = snapshot.is_in_expansion;
+    this.expansion_origin_price = snapshot.expansion_origin_price;
+  }
+
   /**
    * Bootstrap the trend direction from the first confirmed pivot in the dataset.
    * This prevents the false BULLISH bias on markets that open in a bearish leg.

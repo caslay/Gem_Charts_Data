@@ -249,24 +249,27 @@ export async function POST(req: Request) {
           return;
         }
 
-        // Enforce 200-bar historical pre-warmup lookback buffer for indicator stabilization
-        const tfMs: Record<string, number> = {
-          '5m': 300000,
-          '15m': 900000,
-          '1h': 3600000,
-          '4h': 14400000,
-          '1d': 86400000,
-        };
-        const warmupBars = 200;
-        const warmupMs = (tfMs[timeframe] ?? 900000) * warmupBars;
-        const fetchStartMs = Math.max(0, startMs - warmupMs);
+        sendChunk({ type: "status", message: "Querying Midnight State Ledger for T-Zero Structural Seed..." });
+        
+        // Dynamic load of the bootstrap utility
+        const { computeStructuralBootstrap } = await import("@/lib/quantEngine/structuralBootstrap");
+        const { warmupStartMs, bootstrap } = await computeStructuralBootstrap(symbol, timeframe, startMs, {
+          lookbackMajor: lookback_major,
+          lookbackInternal: lookback_internal
+        });
+
+        if (bootstrap) {
+          sendChunk({ type: "status", message: "T-Zero Snapshot Found. Re-hydrating Quantitative Engine..." });
+        } else {
+          sendChunk({ type: "status", message: "Snapshot missing. Falling back to dynamic structural warmup..." });
+        }
 
         sendChunk({
           type: "status",
-          message: `Ingesting historical ${timeframe} ${symbol} candlestick data from Binance (including 200-bar pre-warmup buffer)...`
+          message: `Ingesting historical ${timeframe} ${symbol} candlestick data from Binance...`
         });
 
-        let candles = await fetchPagedKlines(symbol, timeframe, fetchStartMs, endMs, (count, lastT) => {
+        let candles = await fetchPagedKlines(symbol, timeframe, warmupStartMs, endMs, (count, lastT) => {
           sendChunk({
             type: "progress",
             phase: "FETCHING_DATA",
@@ -278,7 +281,7 @@ export async function POST(req: Request) {
         if (candles.length === 0) {
           console.warn("[SR SCANNER] Live fetch returned 0 candles, deploying offline mock simulation fallback...");
           sendChunk({ type: "status", message: "Live connection throttled. Generating simulation stream..." });
-          candles = generateMockKlines(fetchStartMs, endMs, timeframe);
+          candles = generateMockKlines(warmupStartMs, endMs, timeframe);
         }
 
         sendChunk({
@@ -314,7 +317,7 @@ export async function POST(req: Request) {
         };
 
         const engine = new SweepReclaimEngine(scanConfig);
-        const { setups, telemetry } = engine.scanHistoricalSetups(candles);
+        const { setups, telemetry } = engine.scanHistoricalSetups(candles, bootstrap);
 
         sendChunk({
           type: "progress",

@@ -15,15 +15,59 @@ export class LiquidityEngine {
   public institutionalOrderBlocks: InstitutionalOrderBlock[] = [];
   public activeFVGs: any[] = [];
   
+  public seedLiquidity(activeFVGs: any[], activeOrderBlocks: any[], institutionalOrderBlocks: any[]) {
+    this.activeFVGs = [...activeFVGs];
+    this.activeOrderBlocks = [...activeOrderBlocks];
+    this.institutionalOrderBlocks = [...institutionalOrderBlocks];
+  }
+  
   // FIFO processing for Order Blocks
   public processCandlesForLiquidity(candles: Candle[]) {
     // 1. Detect FVGs using the existing fvgEngine (robust wick-mitigation)
-    this.activeFVGs = mapAndConsolidateFVGs([{ fvgs: detectActiveFVGs(candles, true), timeframe: 'raw' }]);
+    const newFVGs = mapAndConsolidateFVGs([{ fvgs: detectActiveFVGs(candles, true), timeframe: 'raw' }]);
+    
+    // Merge with seeded FVGs and filter out mitigated ones
+    const fvgMap = new Map();
+    for (const fvg of [...this.activeFVGs, ...newFVGs]) {
+      const key = `${fvg.top}_${fvg.bottom}_${fvg.origin_time}`;
+      if (!fvgMap.has(key)) fvgMap.set(key, fvg);
+    }
+    this.activeFVGs = Array.from(fvgMap.values());
+    // (Note: To properly mitigate seeded FVGs, we should run a mitigation check here)
+    for (const c of candles) {
+      for (const fvg of Array.from(fvgMap.values())) {
+        if (fvg.status === 'MITIGATED' || c.t <= fvg.origin_time) continue;
+        
+        if (fvg.type === 'BISI') {
+          if (c.l < fvg.bottom) {
+            fvg.status = 'MITIGATED';
+          } else if (c.l <= fvg.top) {
+            fvg.status = 'RETESTED';
+          }
+        } else if (fvg.type === 'SIBI') {
+          if (c.h > fvg.top) {
+            fvg.status = 'MITIGATED';
+          } else if (c.h >= fvg.bottom) {
+            fvg.status = 'RETESTED';
+          }
+        }
+      }
+    }
+    
+    // Filter out mitigated from active list
+    this.activeFVGs = Array.from(fvgMap.values()).filter(fvg => fvg.status !== 'MITIGATED');
 
     // 2. High-precision Institutional Order Block Detection
     const obEngine = new OrderBlockEngine();
     const { orderBlocks } = obEngine.scanHistoricalOrderBlocks(candles);
-    this.institutionalOrderBlocks = orderBlocks;
+    
+    const obMap = new Map();
+    for (const ob of [...this.institutionalOrderBlocks, ...orderBlocks]) {
+       const key = `${ob.type}_${ob.top}_${ob.bottom}_${ob.origin_time}`;
+       if (!obMap.has(key)) obMap.set(key, ob);
+    }
+    this.institutionalOrderBlocks = Array.from(obMap.values());
+
 
     
     for (let i = 2; i < candles.length - 1; i++) {
