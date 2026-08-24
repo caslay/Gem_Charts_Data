@@ -79,37 +79,21 @@ export default function SweepReclaimWorkspace({
   const [startDate, setStartDate] = useState("2026-03-01");
   const [endDate, setEndDate] = useState("2026-06-01");
 
-  // Multi-Timeframe Anchor Selection
-  const [enabledAnchors, setEnabledAnchors] = useState<Record<string, boolean>>({
-    SWING_PIVOT: true,
-    ASIAN: true,
-    LONDON: true,
-    DAILY: true,
-  });
-
-  // Volumetric & Displacement Gating (3-Pillar Gatekeeper)
+  // PM Volumetric Anchor Parameters
   const [volumeSmaPeriod, setVolumeSmaPeriod] = useState(20);
   const [volumeExpansionThreshold, setVolumeExpansionThreshold] = useState(1.50);
-  const [deltaDominanceThreshold, setDeltaDominanceThreshold] = useState(55.0);
-  const [bodyRatioThreshold, setBodyRatioThreshold] = useState(0.55);
-  const [enforceDiscountPremiumGate, setEnforceDiscountPremiumGate] = useState(true);
+
+  // Expiration TTLs & Execution Bounds
+  const [maxBarsSweepToReclaim, setMaxBarsSweepToReclaim] = useState(50);
+  const [maxBarsToRetest, setMaxBarsToRetest] = useState(24);
+  const [slBufferAtr, setSlBufferAtr] = useState(0.15);
 
   // 3-Stage Harvest & Risk Controls
-  const [entryMode, setEntryMode] = useState<SweepReclaimEntryMode>("SWEEP_OB_MT");
   const [stage1Multiple, setStage1Multiple] = useState(1.0);
   const [stage2Multiple, setStage2Multiple] = useState(1.5);
   const [stage3Multiple, setStage3Multiple] = useState(3.0);
   const [enableStructuralTrail, setEnableStructuralTrail] = useState(true);
   const [enableProfitRatchet, setEnableProfitRatchet] = useState(true);
-
-  // Structural Pivot Lookbacks
-  const [lookbackMajor, setLookbackMajor] = useState(15);
-  const [lookbackInternal, setLookbackInternal] = useState(5);
-  const [maxBarsAnchorToSweep, setMaxBarsAnchorToSweep] = useState(30);
-  const [maxBarsSweepToReclaim, setMaxBarsSweepToReclaim] = useState(12);
-  const [maxBarsToRetest, setMaxBarsToRetest] = useState(24);
-  const [minSweepDepthAtr, setMinSweepDepthAtr] = useState(0.10);
-  const [slBufferAtr, setSlBufferAtr] = useState(0.15);
 
   // Table Filter States
   const [filterDirection, setFilterDirection] = useState<string>("ALL");
@@ -133,70 +117,32 @@ export default function SweepReclaimWorkspace({
     setStartDate(start.toISOString().slice(0, 10));
   };
 
-  const toggleAnchorGroup = (key: string) => {
-    setEnabledAnchors((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const resolvedAnchorTypes = useMemo(() => {
-    const types: SweepReclaimAnchorType[] = [];
-    if (enabledAnchors.SWING_PIVOT) types.push("SWING_PIVOT");
-    if (enabledAnchors.ASIAN) {
-      types.push("ASIAN_HIGH", "ASIAN_LOW");
-    }
-    if (enabledAnchors.LONDON) {
-      types.push("LONDON_HIGH", "LONDON_LOW");
-    }
-    if (enabledAnchors.DAILY) {
-      types.push("PDH", "PDL");
-    }
-    return types;
-  }, [enabledAnchors]);
-
   // Current config representation for preset saving
   const currentSweepReclaimConfig: SweepReclaimPresetConfig = useMemo(() => ({
     symbol,
     timeframe,
-    anchorTypes: resolvedAnchorTypes,
-    lookbackMajor,
-    lookbackInternal,
-    maxBarsAnchorToSweep,
     maxBarsSweepToReclaim,
     maxBarsToRetest,
     volumeSmaPeriod,
     volumeExpansionThreshold,
-    deltaDominanceThreshold,
-    bodyRatioThreshold,
-    requireThreePillarDisplacement: true,
-    enforceDiscountPremiumGate,
     stage1Multiple,
     stage2Multiple,
     stage3Multiple,
-    entryMode,
     enableStructuralTrail,
     enableProfitRatchet,
-    minSweepDepthAtrMultiplier: minSweepDepthAtr,
     slBufferAtrMultiplier: slBufferAtr,
   }), [
     symbol,
     timeframe,
-    resolvedAnchorTypes,
-    lookbackMajor,
-    lookbackInternal,
-    maxBarsAnchorToSweep,
     maxBarsSweepToReclaim,
     maxBarsToRetest,
     volumeSmaPeriod,
     volumeExpansionThreshold,
-    deltaDominanceThreshold,
-    bodyRatioThreshold,
-    enforceDiscountPremiumGate,
     stage1Multiple,
     stage2Multiple,
     stage3Multiple,
-    entryMode,
     enableStructuralTrail,
     enableProfitRatchet,
-    minSweepDepthAtr,
     slBufferAtr,
   ]);
 
@@ -206,33 +152,16 @@ export default function SweepReclaimWorkspace({
 
     if (cfg.symbol) setSymbol(cfg.symbol);
     if (cfg.timeframe) setTimeframe(cfg.timeframe as "5m" | "15m" | "1h" | "4h");
-    if (cfg.entryMode) setEntryMode(cfg.entryMode);
     if (typeof cfg.volumeSmaPeriod === 'number') setVolumeSmaPeriod(cfg.volumeSmaPeriod);
     if (typeof cfg.volumeExpansionThreshold === 'number') setVolumeExpansionThreshold(cfg.volumeExpansionThreshold);
-    if (typeof cfg.deltaDominanceThreshold === 'number') setDeltaDominanceThreshold(cfg.deltaDominanceThreshold);
-    if (typeof cfg.bodyRatioThreshold === 'number') setBodyRatioThreshold(cfg.bodyRatioThreshold);
-    if (typeof cfg.enforceDiscountPremiumGate === 'boolean') setEnforceDiscountPremiumGate(cfg.enforceDiscountPremiumGate);
+    if (typeof cfg.maxBarsSweepToReclaim === 'number') setMaxBarsSweepToReclaim(cfg.maxBarsSweepToReclaim);
+    if (typeof cfg.maxBarsToRetest === 'number') setMaxBarsToRetest(cfg.maxBarsToRetest);
     if (typeof cfg.stage1Multiple === 'number') setStage1Multiple(cfg.stage1Multiple);
     if (typeof cfg.stage2Multiple === 'number') setStage2Multiple(cfg.stage2Multiple);
     if (typeof cfg.stage3Multiple === 'number') setStage3Multiple(cfg.stage3Multiple);
     if (typeof cfg.enableStructuralTrail === 'boolean') setEnableStructuralTrail(cfg.enableStructuralTrail);
     if (typeof cfg.enableProfitRatchet === 'boolean') setEnableProfitRatchet(cfg.enableProfitRatchet);
-    if (typeof cfg.lookbackMajor === 'number') setLookbackMajor(cfg.lookbackMajor);
-    if (typeof cfg.lookbackInternal === 'number') setLookbackInternal(cfg.lookbackInternal);
-    if (typeof cfg.maxBarsAnchorToSweep === 'number') setMaxBarsAnchorToSweep(cfg.maxBarsAnchorToSweep);
-    if (typeof cfg.maxBarsSweepToReclaim === 'number') setMaxBarsSweepToReclaim(cfg.maxBarsSweepToReclaim);
-    if (typeof cfg.maxBarsToRetest === 'number') setMaxBarsToRetest(cfg.maxBarsToRetest);
-    if (typeof cfg.minSweepDepthAtrMultiplier === 'number') setMinSweepDepthAtr(cfg.minSweepDepthAtrMultiplier);
     if (typeof cfg.slBufferAtrMultiplier === 'number') setSlBufferAtr(cfg.slBufferAtrMultiplier);
-
-    if (Array.isArray(cfg.anchorTypes)) {
-      setEnabledAnchors({
-        SWING_PIVOT: cfg.anchorTypes.includes('SWING_PIVOT'),
-        ASIAN: cfg.anchorTypes.some((a) => a.startsWith('ASIAN')),
-        LONDON: cfg.anchorTypes.some((a) => a.startsWith('LONDON')),
-        DAILY: cfg.anchorTypes.includes('PDH') || cfg.anchorTypes.includes('PDL'),
-      });
-    }
   };
 
   const handleStartScan = () => {
@@ -245,14 +174,6 @@ export default function SweepReclaimWorkspace({
       startDate,
       end_date: endDate,
       endDate,
-      anchorTypes: resolvedAnchorTypes,
-      anchor_types: resolvedAnchorTypes,
-      lookbackMajor,
-      lookback_major: lookbackMajor,
-      lookbackInternal,
-      lookback_internal: lookbackInternal,
-      maxBarsAnchorToSweep,
-      max_bars_anchor_to_sweep: maxBarsAnchorToSweep,
       maxBarsSweepToReclaim,
       max_bars_sweep_to_reclaim: maxBarsSweepToReclaim,
       maxBarsToRetest,
@@ -261,28 +182,16 @@ export default function SweepReclaimWorkspace({
       volume_sma_period: volumeSmaPeriod,
       volumeExpansionThreshold,
       volume_expansion_threshold: volumeExpansionThreshold,
-      deltaDominanceThreshold,
-      delta_dominance_threshold: deltaDominanceThreshold,
-      bodyRatioThreshold,
-      body_ratio_threshold: bodyRatioThreshold,
-      requireThreePillarDisplacement: true,
-      require_three_pillar_displacement: true,
-      enforceDiscountPremiumGate,
-      enforce_discount_premium_gate: enforceDiscountPremiumGate,
       stage1Multiple,
       stage1_multiple: stage1Multiple,
       stage2Multiple,
       stage2_multiple: stage2Multiple,
       stage3Multiple,
       stage3_multiple: stage3Multiple,
-      entryMode,
-      entry_mode: entryMode,
       enableStructuralTrail,
       enable_structural_trail: enableStructuralTrail,
       enableProfitRatchet,
       enable_profit_ratchet: enableProfitRatchet,
-      minSweepDepthAtrMultiplier: minSweepDepthAtr,
-      min_sweep_depth_atr: minSweepDepthAtr,
       slBufferAtrMultiplier: slBufferAtr,
       sl_buffer_atr: slBufferAtr,
     });
@@ -472,74 +381,13 @@ export default function SweepReclaimWorkspace({
           </div>
         </div>
 
-        {/* Anchor Selection & Multi-Timeframe Toggles */}
-        <div className="border-t border-slate-800/40 pt-4 mb-4">
-          <label className="text-[10px] uppercase font-mono font-bold text-slate-400 mb-2.5 block flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Multi-Timeframe Liquidity Anchor Sources:</span>
-          </label>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <button
-              type="button"
-              disabled={isScanning}
-              onClick={() => toggleAnchorGroup("SWING_PIVOT")}
-              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${enabledAnchors.SWING_PIVOT
-                  ? "bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]"
-                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
-                }`}
-            >
-              <span>Major Pivots</span>
-              {enabledAnchors.SWING_PIVOT && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
-            </button>
-
-            <button
-              type="button"
-              disabled={isScanning}
-              onClick={() => toggleAnchorGroup("ASIAN")}
-              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${enabledAnchors.ASIAN
-                  ? "bg-amber-400 border-amber-300 text-slate-950 shadow-[0_0_10px_rgba(251,191,36,0.4)]"
-                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
-                }`}
-            >
-              <span>Asian Session (H/L)</span>
-              {enabledAnchors.ASIAN && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
-            </button>
-
-            <button
-              type="button"
-              disabled={isScanning}
-              onClick={() => toggleAnchorGroup("LONDON")}
-              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${enabledAnchors.LONDON
-                  ? "bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]"
-                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
-                }`}
-            >
-              <span>London Session (H/L)</span>
-              {enabledAnchors.LONDON && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
-            </button>
-
-            <button
-              type="button"
-              disabled={isScanning}
-              onClick={() => toggleAnchorGroup("DAILY")}
-              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${enabledAnchors.DAILY
-                  ? "bg-purple-400 border-purple-300 text-slate-950 shadow-[0_0_10px_rgba(192,132,252,0.4)]"
-                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
-                }`}
-            >
-              <span>Previous Day (PDH/PDL)</span>
-              {enabledAnchors.DAILY && <Check className="w-3.5 h-3.5 text-slate-950 stroke-[3]" />}
-            </button>
-          </div>
-        </div>
-
-        {/* 3-Pillar Displacement Gatekeeper & 3-Stage Harvest Parameters */}
+        {/* PM Volumetric Setup & Expiration TTL Parameters */}
         <div className="border-t border-slate-800/40 pt-4 mb-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-            {/* Pillar 1: Volume Ratio vs SMA */}
+            {/* Candle 2 Volume Multiplier vs SMA */}
             <div className="flex flex-col gap-1.5">
               <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center justify-between">
-                <span>P1: Volume Ratio</span>
+                <span>C2 Volume Expansion</span>
                 <span className="text-cyan-400 font-bold">{volumeExpansionThreshold.toFixed(2)}x</span>
               </label>
               <input
@@ -553,49 +401,7 @@ export default function SweepReclaimWorkspace({
                 className="w-full accent-cyan-400"
               />
               <span className="text-[9px] text-slate-500 font-mono">
-                Min volume vs {volumeSmaPeriod}-period SMA
-              </span>
-            </div>
-
-            {/* Pillar 2: Taker Delta Dominance Threshold */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center justify-between">
-                <span>P2: Delta Dominance</span>
-                <span className="text-cyan-400 font-bold">{deltaDominanceThreshold.toFixed(1)}%</span>
-              </label>
-              <input
-                type="range"
-                min="50.0"
-                max="75.0"
-                step="0.5"
-                disabled={isScanning}
-                value={deltaDominanceThreshold}
-                onChange={(e) => setDeltaDominanceThreshold(parseFloat(e.target.value))}
-                className="w-full accent-cyan-400"
-              />
-              <span className="text-[9px] text-slate-500 font-mono">
-                Min directional taker delta %
-              </span>
-            </div>
-
-            {/* Pillar 3: Candle Body-to-Range Ratio */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center justify-between">
-                <span>P3: Body-to-Range</span>
-                <span className="text-cyan-400 font-bold">{(bodyRatioThreshold * 100).toFixed(0)}%</span>
-              </label>
-              <input
-                type="range"
-                min="0.30"
-                max="0.80"
-                step="0.05"
-                disabled={isScanning}
-                value={bodyRatioThreshold}
-                onChange={(e) => setBodyRatioThreshold(parseFloat(e.target.value))}
-                className="w-full accent-cyan-400"
-              />
-              <span className="text-[9px] text-slate-500 font-mono">
-                Min body ratio |c - o| / (h - l)
+                Min volume vs {volumeSmaPeriod}-period SMA on Candle 2
               </span>
             </div>
 
@@ -620,49 +426,66 @@ export default function SweepReclaimWorkspace({
               </span>
             </div>
 
-            {/* Entry Mode */}
+            {/* Reclaim TTL (Time-To-Live) */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400">
-                Retest Entry Model
+              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center justify-between">
+                <span>Phase 3 TTL (Reclaim Limit)</span>
+                <span className="text-emerald-400 font-bold">{maxBarsSweepToReclaim} bars</span>
               </label>
-              <select
+              <input
+                type="range"
+                min="1"
+                max="100"
+                step="1"
                 disabled={isScanning}
-                value={entryMode}
-                onChange={(e) => setEntryMode(e.target.value as SweepReclaimEntryMode)}
-                className="text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500/50 outline-none rounded text-white"
-              >
-                <option value="SWEEP_OB_MT">Sweep OB 50% Mean Threshold (MT)</option>
-                <option value="OB_PROXIMAL">Sweep OB Proximal Boundary</option>
-                <option value="FVG_CE">Displacement FVG 50% CE</option>
-                <option value="FVG_PROXIMAL">Displacement FVG Proximal Edge</option>
-                <option value="FVG_DISTAL">Displacement FVG Distal Edge</option>
-                <option value="OTE_62">62% OTE Fibonacci Retracement</option>
-                <option value="SHELF_LEVEL">Reclaimed Anchor Shelf Level</option>
-                <option value="RECLAIM_LEVEL">Reclaimed Horizontal Level (Explicit)</option>
-              </select>
+                value={maxBarsSweepToReclaim}
+                onChange={(e) => setMaxBarsSweepToReclaim(parseInt(e.target.value, 10))}
+                className="w-full accent-emerald-400"
+              />
               <span className="text-[9px] text-slate-500 font-mono">
-                {getEntryModeDescription(entryMode)}
+                Max bars allowed between Sweep and Reclaim
               </span>
             </div>
 
-            {/* Stage 2 Multiple Target */}
+            {/* Retest TTL (Time-To-Live) */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400">
-                Stage 2 Tranche Target
+              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center justify-between">
+                <span>Phase 4 TTL (Retest Limit)</span>
+                <span className="text-emerald-400 font-bold">{maxBarsToRetest} bars</span>
               </label>
-              <select
+              <input
+                type="range"
+                min="1"
+                max="200"
+                step="1"
                 disabled={isScanning}
-                value={stage2Multiple}
-                onChange={(e) => setStage2Multiple(parseFloat(e.target.value))}
-                className="text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500/50 outline-none rounded text-white"
-              >
-                <option value={1.3}>1.3R (40% Position)</option>
-                <option value={1.5}>1.5R (Institutional Standard)</option>
-                <option value={1.8}>1.8R (Extended)</option>
-                <option value={2.0}>2.0R (Full Macro)</option>
-              </select>
+                value={maxBarsToRetest}
+                onChange={(e) => setMaxBarsToRetest(parseInt(e.target.value, 10))}
+                className="w-full accent-emerald-400"
+              />
               <span className="text-[9px] text-slate-500 font-mono">
-                Tranche 1: 40% @ 1.0R | Tranche 3: 20% DOL
+                Max bars to wait for Breaker Block (C1) retest
+              </span>
+            </div>
+
+            {/* SL Buffer ATR */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center justify-between">
+                <span>SL Buffer ATR</span>
+                <span className="text-cyan-400 font-bold">{slBufferAtr.toFixed(2)} ATR</span>
+              </label>
+              <input
+                type="range"
+                min="0.05"
+                max="0.50"
+                step="0.05"
+                disabled={isScanning}
+                value={slBufferAtr}
+                onChange={(e) => setSlBufferAtr(parseFloat(e.target.value))}
+                className="w-full accent-cyan-400"
+              />
+              <span className="text-[9px] text-slate-500 font-mono">
+                Anti-friction volatility buffer on C2 Stop Loss
               </span>
             </div>
           </div>
@@ -692,23 +515,12 @@ export default function SweepReclaimWorkspace({
               />
               <span>+1.0R Profit Ratchet Floor</span>
             </label>
-
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                disabled={isScanning}
-                checked={enforceDiscountPremiumGate}
-                onChange={(e) => setEnforceDiscountPremiumGate(e.target.checked)}
-                className="rounded accent-cyan-400"
-              />
-              <span>Discount/Premium Valuation Gate</span>
-            </label>
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <button
               onClick={handleStartScan}
-              disabled={isScanning || resolvedAnchorTypes.length === 0}
+              disabled={isScanning}
               className="w-full sm:w-auto px-6 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-mono font-bold text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isScanning ? (
@@ -745,8 +557,23 @@ export default function SweepReclaimWorkspace({
       </section>
 
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* 2. TELEMETRY & 3-STAGE HARVEST PERFORMANCE HUD                       */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
+      {/* 2. TELEMETRY & 3-STAGE HARVEST PERFORMANCE HUD */}
+      {selectedScan && (
+        <div className="p-3.5 rounded-lg border border-cyan-500/30 bg-cyan-950/20 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-cyan-400" />
+            <span className="font-bold text-white">{selectedScan.scan_name}</span>
+            <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40">
+              {selectedScan.symbol} ({selectedScan.timeframe})
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-4 text-slate-300 text-[11px]">
+            <span>Window: <strong className="text-cyan-300">{selectedScan.start_date.slice(0, 10)}</strong> to <strong className="text-cyan-300">{selectedScan.end_date.slice(0, 10)}</strong></span>
+            <span>Total Setups in Range: <strong className="text-white">{selectedScan.setups?.length ?? 0}</strong></span>
+          </div>
+        </div>
+      )}
+
       {telemetry && (
         <section className="flex flex-col gap-4">
           {/* Top Metric Cards Grid */}
@@ -958,39 +785,11 @@ export default function SweepReclaimWorkspace({
                   <span className="text-[9px] text-slate-400 block">{telemetry.pillar1_pass_pct ?? 0}% Passed</span>
                 </div>
 
-                {/* Pillar 2 */}
+                {/* Displacement Conviction */}
                 <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Pillar 2: Delta &ge; {deltaDominanceThreshold.toFixed(0)}%</span>
-                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar2_delta_passed_count ?? telemetry.pillar2_pass_count ?? 0}</span>
-                  <span className="text-[9px] text-slate-400 block">{telemetry.pillar2_pass_pct ?? 0}% Passed</span>
-                </div>
-
-                {/* Pillar 3 */}
-                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Pillar 3: Body &ge; {(bodyRatioThreshold * 100).toFixed(0)}%</span>
-                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar3_body_passed_count ?? telemetry.pillar3_pass_count ?? 0}</span>
-                  <span className="text-[9px] text-slate-400 block">{telemetry.pillar3_pass_pct ?? 0}% Passed</span>
-                </div>
-
-                {/* All 3 Pillars */}
-                <div className="p-2.5 rounded bg-cyan-950/30 border border-cyan-500/40">
-                  <span className="text-[8px] uppercase text-cyan-400 block font-bold">3-Pillars All Pass</span>
-                  <span className="text-sm font-bold text-cyan-300">{telemetry.three_pillar_all_passed_count ?? telemetry.three_pillar_all_pass_count ?? 0}</span>
-                  <span className="text-[9px] text-cyan-400/80 block">{telemetry.three_pillar_all_pass_pct ?? 0}% Confirmed</span>
-                </div>
-
-                {/* Wick Rejection */}
-                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Wick Rejection Sweeps</span>
-                  <span className="text-sm font-bold text-amber-300">{telemetry.wick_rejection_sweep_count ?? 0}</span>
-                  <span className="text-[9px] text-slate-400 block">{telemetry.wick_rejection_sweep_pct ?? 0}% Sweeps</span>
-                </div>
-
-                {/* Valuation Aligned */}
-                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Discount/Premium Aligned</span>
-                  <span className="text-sm font-bold text-purple-300">{telemetry.discount_premium_aligned_count ?? 0}</span>
-                  <span className="text-[9px] text-slate-400 block">{telemetry.discount_premium_aligned_pct ?? 0}% Aligned</span>
+                  <span className="text-[8px] uppercase text-slate-500 block">PM Displacement</span>
+                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar1_volume_passed_count ?? telemetry.pillar1_pass_count ?? 0}</span>
+                  <span className="text-[9px] text-slate-400 block">{telemetry.pillar1_pass_pct ?? 0}% Confirmed</span>
                 </div>
               </div>
             </div>
@@ -1049,12 +848,7 @@ export default function SweepReclaimWorkspace({
               >
                 <option value="ALL">All Anchors</option>
                 <option value="SWING_PIVOT">Major Pivots</option>
-                <option value="ASIAN_HIGH">Asian High</option>
-                <option value="ASIAN_LOW">Asian Low</option>
-                <option value="LONDON_HIGH">London High</option>
-                <option value="LONDON_LOW">London Low</option>
-                <option value="PDH">Previous Day High</option>
-                <option value="PDL">Previous Day Low</option>
+                
               </select>
 
               {/* Status Filter */}
@@ -1132,8 +926,9 @@ export default function SweepReclaimWorkspace({
             <table className="w-full text-left font-mono text-[11px]">
               <thead>
                 <tr className="border-b border-slate-800/80 text-slate-500 uppercase text-[9px] tracking-wider">
+                  <th className="py-2.5 px-3">Date / Time (UTC)</th>
                   <th className="py-2.5 px-3">Setup / Direction</th>
-                  <th className="py-2.5 px-3">Anchor Reference</th>
+                  <th className="py-2.5 px-3">PM Anchor High/Low</th>
                   <th className="py-2.5 px-3">Sweep Depth</th>
                   <th className="py-2.5 px-3">Reclaim Volumetrics</th>
                   <th className="py-2.5 px-3">Retest Entry</th>
@@ -1154,7 +949,17 @@ export default function SweepReclaimWorkspace({
                       className="hover:bg-slate-900/60 transition group cursor-pointer"
                       onClick={() => setInspectedSetup(setup)}
                     >
-                      {/* Type & ID */}
+                      {/* Date & Time (UTC) */}
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <span className="text-white font-bold font-mono">
+                            {new Date(setup.anchor_time).toISOString().replace('T', ' ').slice(0, 16)}
+                          </span>
+                          <span className="text-[9px] text-slate-500 font-mono">{setup.id}</span>
+                        </div>
+                      </td>
+
+                      {/* Type & Direction */}
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           <span
@@ -1165,10 +970,9 @@ export default function SweepReclaimWorkspace({
                           >
                             {isBull ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                           </span>
-                          <div className="flex flex-col">
-                            <span className="font-bold text-white text-[11px]">{setup.type}</span>
-                            <span className="text-[9px] text-slate-500 truncate max-w-[120px]">{setup.id}</span>
-                          </div>
+                          <span className={`font-bold text-[11px] ${isBull ? "text-emerald-400" : "text-rose-400"}`}>
+                            {setup.type}
+                          </span>
                         </div>
                       </td>
 

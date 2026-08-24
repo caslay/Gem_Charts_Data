@@ -42,13 +42,12 @@ export type LiveSessionKillzone = 'ASIAN' | 'LONDON' | 'NY';
 export interface SweepReclaimLiveSettings {
   compoundingRiskPct: number; // 1.0, 2.0, 3.0 (default: 2.0)
   enabledTimeframes: SupportedOBTimeframe[]; // ['5m', '15m', '1h'] (default: ['5m', '15m', '1h'])
-  anchorTypes: ('SWING_PIVOT' | 'ASIAN' | 'LONDON' | 'DAILY')[]; // default: ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY']
-  entryMode: SweepReclaimEntryMode; // default: 'SWEEP_OB_MT'
+  entryMode: SweepReclaimEntryMode; // default: 'BREAKER_BLOCK'
   volumeSmaPeriod?: number; // default: 20 (lookback period for Volume SMA)
-  volumeExpansionThreshold: number; // default: 1.50
-  deltaDominanceThreshold: number; // default: 55.0
-  bodyRatioThreshold: number; // default: 0.55
-  enforceDiscountPremiumGate: boolean; // default: true
+  volumeExpansionThreshold: number; // default: 1.50 (Candle 2 Volume Ratio vs SMA)
+  maxBarsSweepToReclaim: number; // default: 50 (Phase 3 Reclaim TTL)
+  maxBarsToRetest: number; // default: 24 (Phase 4 Retest TTL)
+  slBufferAtrMultiplier?: number; // default: 0.15 (Anti-friction SL buffer)
   enableStructuralTrail: boolean; // default: true
   enableProfitRatchet: boolean; // default: true
   enableTp1AutoBreakeven: boolean; // default: true (close partial at TP1, move SL to breakeven 0.0R)
@@ -57,8 +56,6 @@ export interface SweepReclaimLiveSettings {
   stage3Multiple: number; // default: 3.0
   routeRunnerToHtfDol: boolean; // default: true (route TP3 runner to resting HTF liquidity pools)
   executionTiming: LiveExecutionTiming; // default: 'INSTANT'
-  olsSensitivity: LiveOlsSensitivity; // default: 'RELAXED'
-  enableMomentumOverride: boolean; // default: true (runaway market protection)
   sessionGates: LiveSessionKillzone[]; // default: ['ASIAN', 'LONDON', 'NY']
   directionalLock: LiveDirectionalLock; // default: 'DUAL'
 }
@@ -66,13 +63,12 @@ export interface SweepReclaimLiveSettings {
 export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   compoundingRiskPct: 2.0,
   enabledTimeframes: ['5m', '15m', '1h'],
-  anchorTypes: ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'],
-  entryMode: 'SWEEP_OB_MT',
+  entryMode: 'BREAKER_BLOCK',
   volumeSmaPeriod: 20,
   volumeExpansionThreshold: 1.50,
-  deltaDominanceThreshold: 55.0,
-  bodyRatioThreshold: 0.55,
-  enforceDiscountPremiumGate: true,
+  maxBarsSweepToReclaim: 50,
+  maxBarsToRetest: 24,
+  slBufferAtrMultiplier: 0.15,
   enableStructuralTrail: true,
   enableProfitRatchet: true,
   enableTp1AutoBreakeven: true,
@@ -81,8 +77,6 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   stage3Multiple: 3.0,
   routeRunnerToHtfDol: true,
   executionTiming: 'INSTANT',
-  olsSensitivity: 'RELAXED',
-  enableMomentumOverride: true,
   sessionGates: ['ASIAN', 'LONDON', 'NY'],
   directionalLock: 'DUAL',
 };
@@ -463,25 +457,10 @@ export function useSweepReclaimLiveSettings() {
     return nextTfs;
   }, []);
 
-  const toggleAnchorType = useCallback((anchor: 'SWING_PIVOT' | 'ASIAN' | 'LONDON' | 'DAILY') => {
-    const current = getSweepReclaimLiveSettings();
-    let nextAnchors: ('SWING_PIVOT' | 'ASIAN' | 'LONDON' | 'DAILY')[];
-    if (current.anchorTypes.includes(anchor)) {
-      if (current.anchorTypes.length <= 1) return current.anchorTypes;
-      nextAnchors = current.anchorTypes.filter(a => a !== anchor);
-    } else {
-      nextAnchors = [...current.anchorTypes, anchor];
-    }
-    const next = updateSweepReclaimLiveSettings({ anchorTypes: nextAnchors });
-    setSettingsState(next);
-    return nextAnchors;
-  }, []);
-
   return {
     settings,
     updateSettings,
     toggleTimeframe,
-    toggleAnchorType,
     setSettings: setSweepReclaimLiveSettings,
   };
 }

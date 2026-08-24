@@ -1,8 +1,170 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.54
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.58.0
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-23 (V16.54 — 3-Candle Displacement Indexing Fix, Strict 3-Pillar Boolean Gating, Anchor Polarity Hard Gate & 3-Day Cold-Start Historical Reconciliation)
+> **Last Updated:** 2026-08-24 (V16.58.0 — Quant Lab Date Filtering & Multi-Run Deterministic Parity)
+
+## 🆕 V16.58.0 Changelog — Quant Lab Date Filtering & Multi-Run Deterministic Parity (2026-08-24)
+
+### Summary
+Resolved both date range anomalies in the Quant Lab Sweep & Reclaim strategy scanner: (1) Eliminated pre-warmup date contamination where historical setups prior to `start_date` appeared in scan results, and (2) Achieved 100% mathematical consistency and trade parity across overlapping date windows when altering start dates.
+
+### Key Architectural Deliverables
+
+1. **Strict Scan Window Gating (`SweepReclaimEngine.ts`):**
+   - Updated `scanHistoricalSetups(candles, startMs, endMs)` to enforce strict anchor timestamp bounds (`c2.t >= startMs && c2.t <= endMs`).
+   - Historical candles preceding `startMs` are strictly utilized to stabilize the 20-period Volume SMA and 14-period ATR; no anchor or trade outside the user's selected date range is ever created or returned.
+2. **Calibrated 100-Bar Warmup Lookback (`sweep-reclaim-scanner/route.ts`):**
+   - Replaced the legacy 45-day pre-warmup buffer with a calibrated 100-bar timeframe-relative lookback window (`100 * tfMinutes * 60 * 1000`), stabilizing all indicators 5x over while eliminating Binance API rate limit delays.
+   - Forwarded `startMs` and `endMs` into `engine.scanHistoricalSetups(candles, startMs, endMs)`.
+3. **Workspace Telemetry & Table UI Enhancements (`SweepReclaimWorkspace.tsx`):**
+   - Added a scan metadata banner displaying exact test window bounds (`start_date` to `end_date`), asset, timeframe, and setup count.
+   - Enriched the setup table with a dedicated `Date / Time (UTC)` column formatting `YYYY-MM-DD HH:MM` timestamps.
+4. **Deterministic Validation Test:**
+   - Validated multi-run parity with automated test: Run 1 (June 1 - July 1) and Run 2 (May 1 - July 1) produce 100% identical setups, prices, stop losses, and realized R:R for the common June 1 - July 1 period with 0 trades prior to June 1 in Run 1.
+
+### Files Modified
+- **`src/lib/quantEngine/SweepReclaimEngine.ts`**: Strict `[startMs, endMs]` anchor filtering in `scanHistoricalSetups`.
+- **`src/app/api/quant-lab/sweep-reclaim-scanner/route.ts`**: Calibrated 100-bar warmup and date passing.
+- **`src/components/quantLab/SweepReclaimWorkspace.tsx`**: Scan metadata banner and UTC Date/Time column in setups ledger.
+- **`directives/02_lessons.md`**: Added Lesson #58 documenting warmup date contamination resolution.
+- **`directives/master_blueprint.md`**: Synchronized system blueprint to V16.58.0.
+
+---
+
+## 🆕 V16.57.0 Changelog — Live Execution & Quant Lab Settings Synchronization + Ghost Trade Cleanup (2026-08-24)
+
+### Summary
+Resolved the persistent chart UI overlay bug where ghost trades (ENTRY, SL, TP lines) remained permanently rendered on the main dashboard chart, and completed full bidirectional synchronization between Live Execution (`LiveOrderBlockModal.tsx`), Quant Lab (`SweepReclaimWorkspace.tsx`), and the Replay Backtester (`backtest/page.tsx`). All obsolete legacy parameters (Multi-Timeframe Anchor sources, 3-Pillar Delta Dominance, Body-to-Range ratio, Discount/Premium Valuation gate, and 8 Retest Entry Models) have been cleanly removed, leaving only the pure, usable PM Volumetric parameters across the entire platform.
+
+### Key Architectural Deliverables
+
+1. **Chart UI Ghost Trade Elimination (`src/app/page.tsx`, `src/components/Chart.tsx`):**
+   - **Root Cause:** `fetchOpenTrades` previously fell back to stale in-memory local trades in `sessionJournalStore` whenever the cloud database returned 0 open trades (`setOpenTrades(openOnly.length > 0 ? openOnly : localOpenTrades)`), causing closed historical trades to persist indefinitely as ghost horizontal lines on the chart.
+   - **Fix:** Refactored `fetchOpenTrades` to clear `openTrades` state and purge stale localStorage entries when cloud DB returns 0 open positions.
+   - Added interactive `[✕ CLOSE]` SVG action button directly on the chart entry label tag, enabling one-click instant manual trade liquidation and cloud synchronization.
+2. **Unified PM Volumetric Strategy Settings:**
+   - **Purged Deprecated Parameters:** Removed `deltaDominanceThreshold`, `bodyRatioThreshold`, `olsSensitivity`, `enableMomentumOverride`, `enforceDiscountPremiumGate`, `anchorTypes`, `lookbackMajor`, `lookbackInternal`, `maxBarsAnchorToSweep`, `minSweepDepthAtrMultiplier`, and all 8 legacy `entryMode` options across configs, presets, modals, and workspaces.
+   - **Retained Usable PM Volumetric Controls:**
+     - **C2 Volume Expansion:** Threshold multiplier (>= 1.50x) vs 20-period SMA on Candle 2.
+     - **Volume SMA Period:** Baseline lookback window (default 20 bars).
+     - **Phase 3 Reclaim TTL:** Maximum allowable bars between C2 sweep and C1 reclaim (`maxBarsSweepToReclaim`, default 50 bars).
+     - **Phase 4 Retest TTL:** Maximum allowable bars to wait for C1 Breaker Block touch (`maxBarsToRetest`, default 24 bars).
+     - **SL Volatility Buffer:** ATR-based cushion added to the sweep extreme (`slBufferAtrMultiplier`, default 0.15 ATR).
+     - **3-Stage Dynamic Harvest:** Scaled tranches (1.0R / 1.5R / 3.0R) with Automated Breakeven on TP1 and HTF Draw-on-Liquidity runner targeting.
+     - **Execution & Risk Controls:** Dynamic compounding risk sizing (1.0% - 3.0%), Session Killzone gates (Asian, London, NY), Instant vs. On-Close execution timing, and Directional Locks (Dual, Longs Only, Shorts Only).
+3. **Strict Next.js 16 Type Compliance:**
+   - All components (`LiveOrderBlockModal.tsx`, `SweepReclaimWorkspace.tsx`, `useBacktestStrategyExecution.ts`, `backtest/page.tsx`) pass strict TypeScript compilation with zero `@ts-ignore` hacks and zero build warnings under Turbopack.
+
+### Files Modified
+- **`src/app/page.tsx`**: Ghost trade cleanup, `handleCloseTrade`, `livePrice` binding.
+- **`src/components/Chart.tsx`**: Interactive `[✕ CLOSE]` button on active trade SVG overlay.
+- **`src/lib/quantEngine/strategyExecutionConfig.ts`**: Cleaned `SweepReclaimLiveSettings` and default options.
+- **`src/lib/quantEngine/scannerPresets.ts`**: Cleaned `SweepReclaimPresetConfig` and factory presets.
+- **`src/lib/quantEngine/SweepReclaimEngine.ts`**: Cleaned `SweepReclaimScanConfig`.
+- **`src/components/quantLab/SweepReclaimWorkspace.tsx`**: Complete UI and state cleanup to match PM Volumetric controls.
+- **`src/components/modals/LiveOrderBlockModal.tsx`**: Complete modal sub-panel cleanup to match PM Volumetric controls.
+- **`src/app/backtest/page.tsx`**: Replay strategy dropdown synchronized to PM Breaker Block parameters.
+- **`src/hooks/useBacktestStrategyExecution.ts`**: Backtest replay scanner hooked strictly to PM Volumetric configuration.
+- **`src/app/api/quant-lab/sweep-reclaim-scanner/route.ts`**: Synchronized API scan payload.
+- **`directives/master_blueprint.md`**: Master architecture synchronized to V16.57.0.
+
+---
+
+## 🆕 V16.56.0 Changelog — PM Volumetric Breaker Block Overhaul (2026-08-24)
+
+### Summary
+Executed a complete architectural teardown and rebuild of the **Sweep & Reclaim Engine**. Stripped away the legacy structural anchor detection (PDH/PDL, Sessions, Swing Pivots) and 3-Pillar Reclaim complexity. The strategy is now built 100% on top of the **Perfect Movement (PM) Volumetric Marker** geometry, using Candle 1 as a surgical Breaker Block entry.
+
+### Key Architectural Deliverables
+
+1. **Deprecated Legacy Configuration:**
+   - Removed `anchorTypes`, Pivot Engine lookbacks, Entry Mode dropdowns, ATR sweep depth buffers, and 3-Pillar Reclaim validation requirements.
+   - Cleansed UI elements (`SweepReclaimWorkspace.tsx`, `LiveOrderBlockModal.tsx`).
+2. **PM Breaker Block State Machine:**
+   - **Phase 1 (Formation):** Scans for a 3-candle PM setup. Candle 2 must be the absolute extreme (highest high or lowest low) and hit the $\ge 1.5\times$ Volume SMA multiplier. Candle 1 forms the Breaker Block shelf.
+   - **Phase 2 (Sweep):** Price must explicitly **close** past Candle 2's extreme.
+   - **Phase 3 (Reclaim):** Price must explicitly **close** past Candle 1's extreme (the Breaker Block level) within the `maxBarsSweepToReclaim` TTL limit (default 50 bars).
+   - **Phase 4 (Execution):** The entry limit order is mapped strictly to Candle 1's extreme. Stop Loss is tethered to the extreme of the sweep.
+
+### Files Modified
+- **`src/lib/quantEngine/SweepReclaimEngine.ts`**: Complete state machine rebuild.
+- **`src/lib/quantEngine/scannerPresets.ts`**: Preset data cleansing.
+- **`src/components/quantLab/SweepReclaimWorkspace.tsx`**: UI parameters simplified.
+- **`src/components/liveEngine/LiveOrderBlockModal.tsx`**: UI parameters simplified.
+
+---
+
+## 🆕 V16.55.0 Changelog — 100% Deterministic Backtest Parity & Quant Lab Isolation (2026-08-24)
+
+### Summary
+Achieved 100% deterministic backtest parity by eliminating "Time-Slicing Drift" (where shifting backtest start dates changes trades executed later) and decoupling the `RAW_SIGNAL_SCAN` mode from `maxOpenPositions = 1` concurrency locks in the Quant Lab backtester. Established a flat 45-day absolute macro-structural context buffer to lock structural anchors universally and eliminated silent parameter fallbacks to enforce strict historical replay rules.
+
+### Key Architectural Deliverables
+
+1. **Decoupled "Raw Signal Scanning" from "Account Simulation" (`run/route.ts`):**
+   - Implemented a `RAW_SIGNAL_SCAN` bypass constraint in the Account Simulation (`api/quant-lab/run/route.ts`).
+   - When active (`strategy_config.conditions.RAW_SIGNAL_SCAN === true`), the backtester tracks all valid setups through their lifecycle simultaneously by migrating `active_trade` into an `active_trades` array, bypassing the strict `maxOpenPositions = 1` concurrency lock. This isolates raw theoretical setup frequency from compounding account constraints.
+2. **Absolute Macro-Structural Context Buffer:**
+   - Eradicated dynamic and shallow pre-warmup buffers (e.g. 200 bars on 5m = 16 hours) across both `sweep-reclaim-scanner/route.ts` and `run/route.ts`.
+   - Hardcoded a universal 45-day pre-warmup lookback buffer (`45 * 24 * 60 * 60 * 1000` ms) before the `startMs` of any historical scan. This ensures macro anchors (PDH/PDL) and SMA baselines are mathematically locked prior to the test window, eliminating the "Butterfly Effect".
+3. **Strict Preset Parameter Enforcement (`run/route.ts`):**
+   - Eliminated silent parameter fallbacks during Account Simulation (e.g., defaulting `stop_loss` to 2 × ATR or `take_profit` to strict 1:2 RR).
+   - The engine now strictly skips and continues execution if dynamic geometry fields fail to resolve, ensuring that quantitative backtest parameters remain completely immutable during simulation.
+
+### Files Modified
+- **`src/app/api/quant-lab/run/route.ts`**: Array-based concurrency lock bypass, 45-day buffer, and strict parameter gating.
+- **`src/app/api/quant-lab/sweep-reclaim-scanner/route.ts`**: 45-day buffer synchronization.
+
+---
+
+## 🆕 V16.54.1 Hotfix — Audit Inspector Display Defects (2026-08-23)
+
+### Summary
+Three live display defects were observed in the Institutional Setup Audit Inspector after V16.54 deployment and corrected immediately. All three trace to the `srOverlay` `useMemo` in `useAutomatedStrategyExecution.ts` and the badge rendering in `Chart.tsx`.
+
+### Root Cause Analysis
+
+The `srOverlay` useMemo used `scannedSetups[scannedSetups.length - 1]` — the **last setup in the scan array** — as `latestActiveSetup`. With a live active position open in one direction, a freshly rescanned ANCHOR_ONLY setup from the opposite direction could occupy the last slot, causing three cascading failures in the Audit Inspector panel:
+
+| Symptom | Root Cause | Files |
+|---------|-----------|-------|
+| `Sweep Extreme: $N/A → Reclaim Close: $N/A` | Cross-direction ANCHOR_ONLY setup selected (null sweep/reclaim fields) | `useAutomatedStrategyExecution.ts` |
+| TP1/TP2/TP3 $100+ away despite $6.81 risk | Stale pre-bug stage targets on active position + wrong `latestActiveSetup` contributing dummy targets | `useAutomatedStrategyExecution.ts` |
+| "✓ 3-Pillars Confirmed" badge green despite all pillars below threshold | `threePillarsPassed ?? true` fallback + hardcoded badge element | `useAutomatedStrategyExecution.ts`, `Chart.tsx` |
+
+### Fixes Applied
+
+1. **Directional-Aware `latestActiveSetup` Selector (`useAutomatedStrategyExecution.ts` ~L609):**
+   - Replaced the naive `scannedSetups[last]` selector with a 5-level priority chain:
+     1. Setup whose ID matches the active position's `setupId` (exact lookup via `as any` cast — `StrategyExecutionPosition` does not expose `setupId` in the typed interface but may carry it at runtime).
+     2. Setup whose ID matches the pending order's `setupId`.
+     3. Most recent **RECLAIMED** setup that matches the active position's direction (`BULLISH` ↔ `LONG`, `BEARISH` ↔ `SHORT`).
+     4. Most recent RECLAIMED setup of any direction.
+     5. Absolute last-in-array fallback.
+   - This guarantees a SHORT active position always reads sweep/reclaim/pillar data from a BEARISH reclaimed setup, not a BULLISH ANCHOR_ONLY record.
+
+2. **Stage Target Sanity Guard with 5× Tolerance Check (`useAutomatedStrategyExecution.ts` ~L658):**
+   - Before rendering TP1/TP2/TP3, the overlay now validates the active position's stored `stage1Target` against the expected `entry ± (s1Multiple × riskUsd)`.
+   - If the stored target deviates by more than **5× riskUsd** (indicating stale pre-bug geometry from an old position), it discards the stored value and recomputes from live `entryPrice`, `riskUsd`, and configured stage multiples.
+   - When stored targets are within tolerance (clean positions), they pass through unchanged.
+   - Fallback chain: `latestActiveSetup.stage1_target` → computed from `entryPrice ± R`.
+
+3. **Conditional 3-Pillar Badge Render (`Chart.tsx` ~L2343):**
+   - The `"✓ 3-Pillars Confirmed"` badge was **hardcoded** (always rendered regardless of `srOverlay.threePillarsPassed`).
+   - Replaced with a conditional render:
+     - `threePillarsPassed === true` → `✓ 3-Pillars Confirmed` (emerald)
+     - `threePillarsPassed === false` → `✗ Pillars Failed` (rose/red)
+   - Combined with the `?? true → ?? false` fix from V16.54 BUG-2, the badge now accurately reflects the mathematical outcome.
+
+### Files Modified
+- **`src/hooks/useAutomatedStrategyExecution.ts`**: Directional-aware setup selector + stage target sanity guard + `?? false` fallback.
+- **`src/components/Chart.tsx`**: Conditional 3-Pillar badge rendering.
+
+### Verification
+- `npx tsc --noEmit` → **0 errors** (exit code 0). ✅
+
+---
 
 ## 🆕 V16.54 Changelog — 4-Bug Batch Fix: Displacement Indexing, 3-Pillar Gating, Anchor Polarity & Cold-Start Reconciliation (2026-08-23)
 

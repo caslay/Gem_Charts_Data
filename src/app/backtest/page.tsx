@@ -802,7 +802,7 @@ export default function BacktestPage() {
               title="Select Replay Quantitative Strategy & Preset"
             >
               <Zap className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden sm:inline">STRATEGY: S&R ({getEntryModeLabel(backtestSr.config.entryMode || 'SWEEP_OB_MT')})</span>
+              <span className="hidden sm:inline">STRATEGY: PM BREAKER BLOCK</span>
               <span className="sm:hidden">S&R</span>
               <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${isStrategyDropdownOpen ? 'rotate-90 text-emerald-400' : ''}`} />
             </button>
@@ -1058,47 +1058,55 @@ export default function BacktestPage() {
               </button>
             </div>
 
-            {/* Entry Mode Selector */}
-            <div className="flex flex-col gap-1">
-              <label htmlFor="bt-entry-mode" className="text-[10px] font-bold text-slate-400 uppercase">
-                Retest Entry Model
-              </label>
-              <select
-                id="bt-entry-mode"
-                value={backtestSr.config.entryMode || 'SWEEP_OB_MT'}
-                onChange={(e) => backtestSr.updateConfig({ entryMode: e.target.value as SweepReclaimEntryMode })}
-                className="w-full bg-card/70 border border-card-border focus:border-accent focus:outline-none px-2.5 py-1.5 text-[11px] text-foreground font-mono rounded-lg transition-all cursor-pointer"
-              >
-                <option value="SWEEP_OB_MT">Sweep OB 50% Mean Threshold</option>
-                <option value="FVG_CE">Displacement FVG 50% CE</option>
-                <option value="SHELF_LEVEL">Reclaimed Anchor Shelf Level</option>
-                <option value="OTE_62">62% Optimal Trade Entry (OTE)</option>
-                <option value="FVG_PROXIMAL">FVG Proximal Edge</option>
-                <option value="FVG_DISTAL">FVG Distal Edge</option>
-                <option value="OB_PROXIMAL">Sweep OB Proximal Boundary</option>
-              </select>
-            </div>
+            {/* PM Volumetric Setup Controls */}
+            <div className="space-y-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase flex justify-between">
+                  <span>C2 Volume Ratio</span>
+                  <span className="text-emerald-400 font-mono">{(backtestSr.config.volumeExpansionThreshold ?? 1.5).toFixed(2)}x</span>
+                </label>
+                <input
+                  type="range"
+                  min="1.0"
+                  max="2.5"
+                  step="0.05"
+                  value={backtestSr.config.volumeExpansionThreshold ?? 1.50}
+                  onChange={(e) => backtestSr.updateConfig({ volumeExpansionThreshold: parseFloat(e.target.value) })}
+                  className="w-full accent-emerald-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
+                />
+              </div>
 
-            {/* Quick Gates Checkboxes */}
-            <div className="grid grid-cols-2 gap-2 text-[9.5px] font-bold text-muted">
-              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase flex justify-between">
+                  <span>Phase 3 TTL (Reclaim)</span>
+                  <span className="text-emerald-400 font-mono">{backtestSr.config.maxBarsSweepToReclaim ?? 50} bars</span>
+                </label>
                 <input
-                  type="checkbox"
-                  checked={backtestSr.config.requireThreePillarDisplacement !== false}
-                  onChange={(e) => backtestSr.updateConfig({ requireThreePillarDisplacement: e.target.checked })}
-                  className="rounded border-card-border text-accent focus:ring-accent w-3 h-3"
+                  type="range"
+                  min="1"
+                  max="100"
+                  step="1"
+                  value={backtestSr.config.maxBarsSweepToReclaim ?? 50}
+                  onChange={(e) => backtestSr.updateConfig({ maxBarsSweepToReclaim: parseInt(e.target.value, 10) })}
+                  className="w-full accent-emerald-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
                 />
-                <span>3-Pillar Gate</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-bold text-slate-400 uppercase flex justify-between">
+                  <span>Phase 4 TTL (Retest)</span>
+                  <span className="text-emerald-400 font-mono">{backtestSr.config.maxBarsToRetest ?? 24} bars</span>
+                </label>
                 <input
-                  type="checkbox"
-                  checked={backtestSr.config.enforceDiscountPremiumGate !== false}
-                  onChange={(e) => backtestSr.updateConfig({ enforceDiscountPremiumGate: e.target.checked })}
-                  className="rounded border-card-border text-accent focus:ring-accent w-3 h-3"
+                  type="range"
+                  min="1"
+                  max="200"
+                  step="1"
+                  value={backtestSr.config.maxBarsToRetest ?? 24}
+                  onChange={(e) => backtestSr.updateConfig({ maxBarsToRetest: parseInt(e.target.value, 10) })}
+                  className="w-full accent-emerald-400 h-1 bg-slate-800 rounded-lg cursor-pointer"
                 />
-                <span>Valuation Gate</span>
-              </label>
+              </div>
             </div>
 
             {/* Active Setup Phase Monitor Card */}

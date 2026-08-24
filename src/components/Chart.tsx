@@ -62,6 +62,7 @@ interface ChartProps {
   onManualPricesChange?: (entry: number, tp: number, sl: number) => void;
   openTrades?: any[];
   onUpdateTradeLevels?: (tradeId: string, tp: number | null, sl: number | null) => Promise<void>;
+  onCloseTrade?: (tradeId: string) => void;
   symbol?: string;
   srOverlay?: SweepReclaimOverlayData | null;
 }
@@ -89,6 +90,7 @@ export default function Chart({
   onManualPricesChange,
   openTrades = [],
   onUpdateTradeLevels,
+  onCloseTrade,
   symbol = 'ETHUSDC',
   srOverlay = null,
 }: ChartProps) {
@@ -1789,10 +1791,39 @@ export default function Chart({
                 strokeWidth="1.5"
               />
               <g id={`svg-label-${trade.id}-entry`} transform="translate(10, -1000)">
-                <rect x="5" y="-8" width="165" height="16" fill="#141416" rx="2" stroke="#958da3" strokeWidth="1" />
+                <rect x="5" y="-8" width={onCloseTrade ? 225 : 165} height="16" fill="#141416" rx="2" stroke="#958da3" strokeWidth="1" />
                 <text x="10" y="4" fill="#958da3" fontSize="9" fontFamily="monospace" fontWeight="bold">
                   {`ENTRY (${trade.direction}): ${entryPrice.toFixed(2)}`}
                 </text>
+                {onCloseTrade && (
+                  <g
+                    className="pointer-events-auto cursor-pointer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onCloseTrade(trade.id);
+                    }}
+                  >
+                    <rect
+                      x="175"
+                      y="-7"
+                      width="50"
+                      height="14"
+                      fill="#ef4444"
+                      rx="2"
+                    />
+                    <text
+                      x="180"
+                      y="4"
+                      fill="#ffffff"
+                      fontSize="8.5"
+                      fontFamily="monospace"
+                      fontWeight="bold"
+                    >
+                      ✕ CLOSE
+                    </text>
+                  </g>
+                )}
               </g>
 
               {/* TP Line */}

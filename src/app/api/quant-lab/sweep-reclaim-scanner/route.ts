@@ -214,18 +214,11 @@ export async function POST(req: Request) {
         const stage3_multiple = Number(body.stage3Multiple ?? body.stage3_multiple ?? 3.0);
         const rawEntryMode = String(body.entryMode ?? body.entry_mode ?? "SWEEP_OB_MT").toUpperCase();
         const validEntryModes: SweepReclaimEntryMode[] = [
-          'SHELF_LEVEL',
-          'RECLAIM_LEVEL',
-          'FVG_PROXIMAL',
-          'FVG_CE',
-          'FVG_DISTAL',
-          'OB_PROXIMAL',
-          'SWEEP_OB_MT',
-          'OTE_62',
+          'BREAKER_BLOCK',
         ];
         const entry_mode: SweepReclaimEntryMode = validEntryModes.includes(rawEntryMode as SweepReclaimEntryMode)
           ? (rawEntryMode as SweepReclaimEntryMode)
-          : "SWEEP_OB_MT";
+          : "BREAKER_BLOCK";
         const enable_structural_trail = (body.enableStructuralTrail ?? body.enable_structural_trail) !== false;
         const enable_profit_ratchet = (body.enableProfitRatchet ?? body.enable_profit_ratchet) !== false;
         const min_sweep_depth_atr = Number(body.minSweepDepthAtrMultiplier ?? body.min_sweep_depth_atr ?? 0.10);
@@ -249,16 +242,9 @@ export async function POST(req: Request) {
           return;
         }
 
-        // Enforce 200-bar historical pre-warmup lookback buffer for indicator stabilization
-        const tfMs: Record<string, number> = {
-          '5m': 300000,
-          '15m': 900000,
-          '1h': 3600000,
-          '4h': 14400000,
-          '1d': 86400000,
-        };
-        const warmupBars = 200;
-        const warmupMs = (tfMs[timeframe] ?? 900000) * warmupBars;
+        // Stabilized 100-bar warmup lookback for 20-period Volume SMA and 14-period ATR
+        const tfMinutes = timeframe === '1h' ? 60 : timeframe === '4h' ? 240 : timeframe === '5m' ? 5 : 15;
+        const warmupMs = 100 * tfMinutes * 60 * 1000;
         const fetchStartMs = Math.max(0, startMs - warmupMs);
 
         sendChunk({
@@ -290,31 +276,20 @@ export async function POST(req: Request) {
         const scanConfig: SweepReclaimScanConfig = {
           symbol,
           timeframe,
-          anchorTypes: anchor_types,
-          lookbackMajor: lookback_major,
-          lookbackInternal: lookback_internal,
-          maxBarsAnchorToSweep: max_bars_anchor_to_sweep,
           maxBarsSweepToReclaim: max_bars_sweep_to_reclaim,
           maxBarsToRetest: max_bars_to_retest,
           volumeSmaPeriod: volume_sma_period,
           volumeExpansionThreshold: volume_expansion_threshold,
-          deltaDominanceThreshold: delta_dominance_threshold,
-          bodyRatioThreshold: body_ratio_threshold,
-          minBodyRatio: body_ratio_threshold,
-          requireThreePillarDisplacement: require_three_pillar_displacement,
-          enforceDiscountPremiumGate: enforce_discount_premium_gate,
           stage1Multiple: stage1_multiple,
           stage2Multiple: stage2_multiple,
           stage3Multiple: stage3_multiple,
-          entryMode: entry_mode,
           enableStructuralTrail: enable_structural_trail,
           enableProfitRatchet: enable_profit_ratchet,
-          minSweepDepthAtrMultiplier: min_sweep_depth_atr,
           slBufferAtrMultiplier: sl_buffer_atr,
         };
 
         const engine = new SweepReclaimEngine(scanConfig);
-        const { setups, telemetry } = engine.scanHistoricalSetups(candles);
+        const { setups, telemetry } = engine.scanHistoricalSetups(candles, startMs, endMs);
 
         sendChunk({
           type: "progress",

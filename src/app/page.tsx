@@ -40,6 +40,8 @@ export default function Home() {
     signalAlertsEnabled,
   } = useMarketDataContext();
 
+  const { livePrice } = useMarketDataLiveContext();
+
   const liveSr = useAutomatedStrategyExecution();
 
   const selectedInterval = wsInterval;
@@ -100,28 +102,68 @@ export default function Home() {
 
   const [openTrades, setOpenTrades] = useState<any[]>([]);
 
+  const handleCloseTrade = async (tradeId: string) => {
+    try {
+      const currentTrade = openTrades.find((t) => t.id === tradeId);
+      const exitPrice = livePrice || (currentTrade ? parseFloat(currentTrade.entry_price) : 0);
+      
+      // 1. Instant local session closure
+      useSessionJournalStore.getState().closeTrade(tradeId, exitPrice, 'MANUAL_CLOSE');
+      setOpenTrades((prev) => prev.filter((t) => t.id !== tradeId));
+
+      // 2. Background cloud DB sync
+      fetch('/api/trades', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trade_id: tradeId,
+          status: 'CLOSED',
+          exit_price: exitPrice,
+          exit_reason: 'MANUAL_CLOSE',
+        }),
+      }).catch(() => {});
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('trades-refresh'));
+      }
+    } catch (e) {
+      console.error('[Manual Trading] Error closing trade:', e);
+    }
+  };
+
   // Fetch open trades
   const fetchOpenTrades = async () => {
     try {
-      // 1. Sync immediately from in-memory session store
       const localOpenTrades = useSessionJournalStore.getState().getOpenTrades('LIVE');
-      if (localOpenTrades.length > 0) {
-        setOpenTrades(localOpenTrades);
-      }
 
-      // 2. Background cloud DB sync fallback
+      // 1. Background cloud DB sync
       const res = await fetch('/api/trades');
       if (res.ok) {
         const contentType = res.headers.get('content-type');
         if (contentType && !contentType.includes('application/json')) return;
         const json = await res.json();
-        if (json.trades) {
+        if (json.trades && Array.isArray(json.trades)) {
           const openOnly = json.trades.filter((t: any) => t.status === 'OPEN');
-          setOpenTrades(openOnly.length > 0 ? openOnly : localOpenTrades);
+          if (openOnly.length === 0) {
+            // Clean up any stale local trades that are marked CLOSED in DB
+            localOpenTrades.forEach((lt) => {
+              const matchingCloud = json.trades.find((ct: any) => ct.id === lt.id);
+              if (matchingCloud && matchingCloud.status !== 'OPEN') {
+                useSessionJournalStore.getState().closeTrade(lt.id, matchingCloud.exit_price ?? matchingCloud.entry_price, matchingCloud.exit_reason ?? 'CLOSED');
+              }
+            });
+            setOpenTrades([]);
+          } else {
+            setOpenTrades(openOnly);
+          }
+          return;
         }
       }
+      setOpenTrades(localOpenTrades);
     } catch (e) {
       console.debug('[Manual Trading] Cloud sync skipped (in-memory journal preserved):', e);
+      const localOpenTrades = useSessionJournalStore.getState().getOpenTrades('LIVE');
+      setOpenTrades(localOpenTrades);
     }
   };
 
@@ -460,6 +502,7 @@ export default function Home() {
                 onManualPricesChange={handleManualPricesChange}
                 openTrades={openTrades}
                 onUpdateTradeLevels={handleUpdateTradeLevels}
+                onCloseTrade={handleCloseTrade}
                 srOverlay={liveSr.srOverlay}
                 symbol="ETHUSDC"
               />

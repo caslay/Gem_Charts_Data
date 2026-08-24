@@ -45,25 +45,15 @@ export interface ArmedExecutionStatus {
 export interface SweepReclaimPresetConfig {
   symbol: string;
   timeframe: string;
-  anchorTypes: SweepReclaimAnchorType[];
-  lookbackMajor: number;
-  lookbackInternal: number;
-  maxBarsAnchorToSweep: number;
   maxBarsSweepToReclaim: number;
   maxBarsToRetest: number;
   volumeSmaPeriod?: number;
   volumeExpansionThreshold: number;
-  deltaDominanceThreshold: number;
-  bodyRatioThreshold: number;
-  requireThreePillarDisplacement: boolean;
-  enforceDiscountPremiumGate: boolean;
   stage1Multiple: number;
   stage2Multiple: number;
   stage3Multiple: number;
-  entryMode: SweepReclaimEntryMode;
   enableStructuralTrail: boolean;
   enableProfitRatchet: boolean;
-  minSweepDepthAtrMultiplier: number;
   slBufferAtrMultiplier: number;
 }
 
@@ -127,24 +117,14 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
     config: {
       symbol: 'ETHUSDC',
       timeframe: '15m',
-      anchorTypes: ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL'],
-      lookbackMajor: 15,
-      lookbackInternal: 5,
-      maxBarsAnchorToSweep: 30,
       maxBarsSweepToReclaim: 12,
       maxBarsToRetest: 24,
       volumeExpansionThreshold: 1.50,
-      deltaDominanceThreshold: 55.0,
-      bodyRatioThreshold: 0.55,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
       stage1Multiple: 1.0,
       stage2Multiple: 1.5,
       stage3Multiple: 3.0,
-      entryMode: 'SWEEP_OB_MT',
       enableStructuralTrail: true,
       enableProfitRatchet: true,
-      minSweepDepthAtrMultiplier: 0.10,
       slBufferAtrMultiplier: 0.15,
     } as SweepReclaimPresetConfig,
   },
@@ -162,24 +142,14 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
     config: {
       symbol: 'ETHUSDC',
       timeframe: '5m',
-      anchorTypes: ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW'],
-      lookbackMajor: 10,
-      lookbackInternal: 5,
-      maxBarsAnchorToSweep: 25,
       maxBarsSweepToReclaim: 10,
       maxBarsToRetest: 20,
       volumeExpansionThreshold: 1.50,
-      deltaDominanceThreshold: 55.0,
-      bodyRatioThreshold: 0.55,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
       stage1Multiple: 1.0,
       stage2Multiple: 1.5,
       stage3Multiple: 3.0,
-      entryMode: 'FVG_CE',
       enableStructuralTrail: true,
       enableProfitRatchet: true,
-      minSweepDepthAtrMultiplier: 0.10,
       slBufferAtrMultiplier: 0.15,
     } as SweepReclaimPresetConfig,
   },
@@ -197,24 +167,14 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
     config: {
       symbol: 'ETHUSDC',
       timeframe: '15m',
-      anchorTypes: ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL'],
-      lookbackMajor: 15,
-      lookbackInternal: 5,
-      maxBarsAnchorToSweep: 35,
       maxBarsSweepToReclaim: 14,
       maxBarsToRetest: 30,
       volumeExpansionThreshold: 1.75,
-      deltaDominanceThreshold: 65.0,
-      bodyRatioThreshold: 0.65,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
       stage1Multiple: 1.0,
       stage2Multiple: 2.0,
       stage3Multiple: 4.0,
-      entryMode: 'SWEEP_OB_MT',
       enableStructuralTrail: true,
       enableProfitRatchet: true,
-      minSweepDepthAtrMultiplier: 0.12,
       slBufferAtrMultiplier: 0.18,
     } as SweepReclaimPresetConfig,
   },
@@ -232,24 +192,14 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
     config: {
       symbol: 'ETHUSDC',
       timeframe: '15m',
-      anchorTypes: ['SWING_PIVOT', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL'],
-      lookbackMajor: 15,
-      lookbackInternal: 5,
-      maxBarsAnchorToSweep: 30,
       maxBarsSweepToReclaim: 12,
       maxBarsToRetest: 24,
       volumeExpansionThreshold: 1.80,
-      deltaDominanceThreshold: 65.0,
-      bodyRatioThreshold: 0.65,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
       stage1Multiple: 1.0,
       stage2Multiple: 2.0,
       stage3Multiple: 3.5,
-      entryMode: 'OTE_62',
       enableStructuralTrail: true,
       enableProfitRatchet: true,
-      minSweepDepthAtrMultiplier: 0.10,
       slBufferAtrMultiplier: 0.15,
     } as SweepReclaimPresetConfig,
   },
@@ -267,24 +217,14 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
     config: {
       symbol: 'ETHUSDC',
       timeframe: '15m',
-      anchorTypes: ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL'],
-      lookbackMajor: 15,
-      lookbackInternal: 5,
-      maxBarsAnchorToSweep: 30,
       maxBarsSweepToReclaim: 12,
       maxBarsToRetest: 24,
       volumeExpansionThreshold: 1.50,
-      deltaDominanceThreshold: 60.0,
-      bodyRatioThreshold: 0.60,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
       stage1Multiple: 1.0,
       stage2Multiple: 1.5,
       stage3Multiple: 3.0,
-      entryMode: 'SHELF_LEVEL',
       enableStructuralTrail: true,
       enableProfitRatchet: true,
-      minSweepDepthAtrMultiplier: 0.10,
       slBufferAtrMultiplier: 0.15,
     } as SweepReclaimPresetConfig,
   },
@@ -768,23 +708,13 @@ export function applyPresetToLiveExecution(preset: ScannerPreset): void {
 
   if (preset.strategyType === 'SWEEP_RECLAIM') {
     const cfg = preset.config as SweepReclaimPresetConfig;
-    const liveAnchors: ('SWING_PIVOT' | 'ASIAN' | 'LONDON' | 'DAILY')[] = [];
-    if (cfg.anchorTypes?.includes('SWING_PIVOT')) liveAnchors.push('SWING_PIVOT');
-    if (cfg.anchorTypes?.some((t) => t.startsWith('ASIAN'))) liveAnchors.push('ASIAN');
-    if (cfg.anchorTypes?.some((t) => t.startsWith('LONDON'))) liveAnchors.push('LONDON');
-    if (cfg.anchorTypes?.includes('PDH') || cfg.anchorTypes?.includes('PDL')) liveAnchors.push('DAILY');
 
     updateSweepReclaimLiveSettings({
-      entryMode: cfg.entryMode,
-      enforceDiscountPremiumGate: cfg.enforceDiscountPremiumGate,
       volumeExpansionThreshold: cfg.volumeExpansionThreshold,
-      deltaDominanceThreshold: cfg.deltaDominanceThreshold,
-      bodyRatioThreshold: cfg.bodyRatioThreshold,
       stage2Multiple: cfg.stage2Multiple,
       stage3Multiple: cfg.stage3Multiple,
       enableStructuralTrail: cfg.enableStructuralTrail,
       enableProfitRatchet: cfg.enableProfitRatchet,
-      anchorTypes: liveAnchors.length > 0 ? liveAnchors : ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'],
     });
 
     setArmedExecutionStatus({

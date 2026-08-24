@@ -225,24 +225,15 @@ export function useBacktestStrategyExecution({
     const scanConfig: SweepReclaimScanConfig = {
       symbol: config.symbol || 'ETHUSDC',
       timeframe: activeTimeframe,
-      anchorTypes: config.anchorTypes,
-      lookbackMajor: config.lookbackMajor ?? 15,
-      lookbackInternal: config.lookbackInternal ?? 5,
-      maxBarsAnchorToSweep: config.maxBarsAnchorToSweep ?? 30,
-      maxBarsSweepToReclaim: config.maxBarsSweepToReclaim ?? 12,
+      maxBarsSweepToReclaim: config.maxBarsSweepToReclaim ?? 50,
       maxBarsToRetest: config.maxBarsToRetest ?? 24,
       volumeExpansionThreshold: config.volumeExpansionThreshold ?? 1.50,
-      deltaDominanceThreshold: config.deltaDominanceThreshold ?? 60.0,
-      bodyRatioThreshold: config.bodyRatioThreshold ?? 0.60,
-      requireThreePillarDisplacement: config.requireThreePillarDisplacement !== false,
-      enforceDiscountPremiumGate: config.enforceDiscountPremiumGate !== false,
+      volumeSmaPeriod: config.volumeSmaPeriod ?? 20,
       stage1Multiple: config.stage1Multiple ?? 1.0,
       stage2Multiple: config.stage2Multiple ?? 1.5,
       stage3Multiple: config.stage3Multiple ?? 3.0,
-      entryMode: config.entryMode ?? 'SWEEP_OB_MT',
       enableStructuralTrail: config.enableStructuralTrail !== false,
       enableProfitRatchet: config.enableProfitRatchet !== false,
-      minSweepDepthAtrMultiplier: config.minSweepDepthAtrMultiplier ?? 0.10,
       slBufferAtrMultiplier: config.slBufferAtrMultiplier ?? 0.15,
     };
 
@@ -400,9 +391,7 @@ export function useBacktestStrategyExecution({
     const freshPending = pendingLimitOrderRef.current;
 
     if (currentSetup && !freshPos && !freshPending) {
-      const isConfirmed =
-        currentSetup.three_pillar_displacement_passed &&
-        (!config.enforceDiscountPremiumGate || currentSetup.is_valuation_aligned);
+      const isConfirmed = Boolean(currentSetup.three_pillar_displacement_passed);
 
       if (isConfirmed) {
         const entryPrice = currentSetup.entry_price;

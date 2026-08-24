@@ -33,14 +33,7 @@ export type SweepReclaimType = 'BULLISH' | 'BEARISH';
 
 export type SweepReclaimPhase = 'ANCHOR' | 'SWEEP' | 'RECLAIM' | 'RETEST';
 
-export type SweepReclaimAnchorType =
-  | 'SWING_PIVOT'
-  | 'ASIAN_HIGH'
-  | 'ASIAN_LOW'
-  | 'LONDON_HIGH'
-  | 'LONDON_LOW'
-  | 'PDH'
-  | 'PDL';
+export type SweepReclaimAnchorType = 'PM_VOLUMETRIC';
 
 export type SweepReclaimStatus =
   | 'RETESTED'
@@ -73,23 +66,9 @@ export type SweepReclaimStageExitType =
 
 /**
  * Retest Entry Model Options:
- *  - SHELF_LEVEL / RECLAIM_LEVEL: Reclaimed anchor level.
- *  - FVG_PROXIMAL: Outer opening edge of the displacement FVG.
- *  - FVG_CE: 50% Consequent Encroachment of the displacement FVG.
- *  - FVG_DISTAL: Deepest edge of the displacement FVG prior to invalidation.
- *  - OB_PROXIMAL: Open / first boundary of the sweep Order Block.
- *  - SWEEP_OB_MT: 50% Mean Threshold of the sweep Order Block.
- *  - OTE_62: 62% Fibonacci retracement of the displacement impulse.
+ *  - BREAKER_BLOCK: Candle 1's extreme from the PM setup
  */
-export type SweepReclaimEntryMode =
-  | 'SHELF_LEVEL'
-  | 'RECLAIM_LEVEL' // legacy alias for SHELF_LEVEL
-  | 'FVG_PROXIMAL'
-  | 'FVG_CE'
-  | 'FVG_DISTAL'
-  | 'OB_PROXIMAL'
-  | 'SWEEP_OB_MT'
-  | 'OTE_62';
+export type SweepReclaimEntryMode = 'BREAKER_BLOCK';
 
 export interface DisplacementCandleAudit {
   label: string;
@@ -218,32 +197,22 @@ export interface SweepReclaimSetup {
 export interface SweepReclaimScanConfig {
   symbol?: string;
   timeframe?: string;
-  anchorTypes?: SweepReclaimAnchorType[];     // Selected anchor types to scan (default: all)
-  lookbackMajor?: number;                     // Pivot engine major lookback (default: 15)
-  lookbackInternal?: number;                  // Pivot engine internal lookback (default: 5)
-  maxBarsAnchorToSweep?: number;              // Max candles between anchor and sweep (default: 30)
-  maxBarsSweepToReclaim?: number;             // Max candles from sweep extreme to reclaim close (default: 12)
+  maxBarsSweepToReclaim?: number;             // Max candles from sweep extreme to reclaim close (default: 50)
   maxBarsToRetest?: number;                   // Max candles from reclaim to retest entry (default: 24)
 
-  // 3-Pillar Displacement Gatekeeper Thresholds
-  volumeSmaPeriod?: number;                   // Rolling Volume SMA lookback period (default: 20, support: 7 to 50)
-  volumeExpansionThreshold?: number;          // Pillar 1: Min Volume Ratio vs SMA (default: 1.50x)
-  deltaDominanceThreshold?: number;           // Pillar 2: Min taker delta dominance % (default: 55.0%)
-  bodyRatioThreshold?: number;                // Pillar 3: Min candle body-to-range ratio (default: 0.55)
-  minBodyRatio?: number;                      // Pillar 3 alias: Min candle body-to-range ratio
-  requireThreePillarDisplacement?: boolean;   // Veto reclaims that fail 3-pillar gate (default: true)
-
-  // Valuation Gating
-  enforceDiscountPremiumGate?: boolean;       // Require Longs in Discount, Shorts in Premium (default: true)
+  // PM Volumetric Setup Thresholds
+  volumeSmaPeriod?: number;                   // Rolling Volume SMA lookback period (default: 20)
+  volumeExpansionThreshold?: number;          // Min Volume Ratio vs SMA for C2 (default: 1.50x)
+  deltaDominanceThreshold?: number;           // Min taker delta dominance % for C2 (default: 55.0%)
+  bodyRatioThreshold?: number;                // Min candle body-to-range ratio for C2 (default: 0.55)
+  minBodyRatio?: number;                      // Alias: Min candle body-to-range ratio
 
   // Target Multiples & Execution
   stage1Multiple?: number;                    // Stage 1 Tranche target R (default: 1.0)
   stage2Multiple?: number;                    // Stage 2 Tranche target R (default: 1.5)
   stage3Multiple?: number;                    // Stage 3 Tranche target R / DOL runner (default: 3.0)
-  entryMode?: SweepReclaimEntryMode;          // (default: 'SWEEP_OB_MT')
   enableStructuralTrail?: boolean;            // Trail SL to FVG CE after Stage 1 (default: true)
   enableProfitRatchet?: boolean;              // Ratchet SL to +1.0R floor after Stage 2 (default: true)
-  minSweepDepthAtrMultiplier?: number;        // Min sweep penetration in ATR (default: 0.10)
   slBufferAtrMultiplier?: number;             // Volatility buffer added behind sweep extreme (default: 0.15)
 }
 
@@ -325,25 +294,19 @@ export interface SweepReclaimTelemetrySummary {
 export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   symbol: 'ETHUSDC',
   timeframe: '15m',
-  anchorTypes: ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL'],
-  lookbackMajor: 15,
-  lookbackInternal: 5,
-  maxBarsAnchorToSweep: 30,
-  maxBarsSweepToReclaim: 12,
+  maxBarsSweepToReclaim: 50,
   maxBarsToRetest: 24,
   volumeSmaPeriod: 20,
   volumeExpansionThreshold: 1.50,
   deltaDominanceThreshold: 55.0,
   bodyRatioThreshold: 0.55,
-  requireThreePillarDisplacement: true,
-  enforceDiscountPremiumGate: true,
+  minBodyRatio: 0.55,
+
   stage1Multiple: 1.0,
   stage2Multiple: 1.5,
   stage3Multiple: 3.0,
-  entryMode: 'SWEEP_OB_MT',
   enableStructuralTrail: true,
   enableProfitRatchet: true,
-  minSweepDepthAtrMultiplier: 0.10,
   slBufferAtrMultiplier: 0.15,
 };
 
@@ -376,131 +339,21 @@ export interface RetestPriceResolverParams {
  * Handles directional orientation (Bullish vs Bearish) and provides safe fallbacks to anchor level.
  */
 export function resolveRetestEntryPrice(params: RetestPriceResolverParams): number {
-  const { mode, isBullish, anchorLevel, sweepCandle, fvg, displacementExtremes } = params;
-
-  // FIX-2: Use Number.isFinite() throughout — typeof NaN === 'number' is true and would
-  // silently pass NaN values into arithmetic, producing a NaN entry price that cascades
-  // into NaN riskDistance, NaN unrealizedR, and a permanent engine lockup.
-  switch (mode) {
-    case 'SHELF_LEVEL':
-    case 'RECLAIM_LEVEL':
-      return parseFloat(anchorLevel.toFixed(4));
-
-    case 'FVG_PROXIMAL':
-      if (fvg && Number.isFinite(fvg.top) && Number.isFinite(fvg.bottom) && fvg.top > fvg.bottom) {
-        // Bullish (BISI): retracement downward → hits LOWER gap boundary first = Candle 1 High = fvg.bottom
-        // Bearish (SIBI): retracement upward  → hits UPPER gap boundary first = Candle 1 Low  = fvg.top
-        const proximal = isBullish ? fvg.bottom : fvg.top;
-        return parseFloat(proximal.toFixed(4));
-      }
-      return parseFloat(anchorLevel.toFixed(4));
-
-    case 'FVG_CE':
-      if (fvg && Number.isFinite(fvg.top) && Number.isFinite(fvg.bottom) && fvg.top > fvg.bottom) {
-        const ce = (Number.isFinite(fvg.ce) && fvg.ce !== undefined)
-          ? fvg.ce
-          : (fvg.top + fvg.bottom) / 2;
-        return parseFloat(ce.toFixed(4));
-      }
-      return parseFloat(anchorLevel.toFixed(4));
-
-    case 'FVG_DISTAL':
-      if (fvg && Number.isFinite(fvg.top) && Number.isFinite(fvg.bottom) && fvg.top > fvg.bottom) {
-        // Bullish (BISI): deepest boundary before gap mitigation/invalidation = Candle 3 Low = fvg.top
-        // Bearish (SIBI): deepest boundary before gap mitigation/invalidation = Candle 3 High = fvg.bottom
-        const distal = isBullish ? fvg.top : fvg.bottom;
-        return parseFloat(distal.toFixed(4));
-      }
-      return parseFloat(anchorLevel.toFixed(4));
-
-    case 'OB_PROXIMAL':
-      if (sweepCandle && Number.isFinite(sweepCandle.high) && Number.isFinite(sweepCandle.low) && sweepCandle.high > sweepCandle.low) {
-        // Bullish: pullback from above into sweep OB hits OB top boundary (high)
-        // Bearish: pullback from below into sweep OB hits OB bottom boundary (low)
-        const obProximal = isBullish ? sweepCandle.high : sweepCandle.low;
-        return parseFloat(obProximal.toFixed(4));
-      }
-      return parseFloat(anchorLevel.toFixed(4));
-
-    case 'SWEEP_OB_MT':
-      if (sweepCandle && Number.isFinite(sweepCandle.high) && Number.isFinite(sweepCandle.low) && sweepCandle.high > sweepCandle.low) {
-        const mt = (Number.isFinite(sweepCandle.mt) && sweepCandle.mt !== undefined)
-          ? sweepCandle.mt
-          : (sweepCandle.high + sweepCandle.low) / 2;
-        return parseFloat(mt.toFixed(4));
-      }
-      return parseFloat(anchorLevel.toFixed(4));
-
-    case 'OTE_62':
-      if (
-        displacementExtremes &&
-        Number.isFinite(displacementExtremes.impulseHigh) &&
-        Number.isFinite(displacementExtremes.impulseLow) &&
-        displacementExtremes.impulseHigh > displacementExtremes.impulseLow
-      ) {
-        const range = displacementExtremes.impulseHigh - displacementExtremes.impulseLow;
-        // Bullish: 62% retracement from peak down toward sweep low
-        // Bearish: 62% retracement from trough up toward sweep high
-        const otePrice = isBullish
-          ? displacementExtremes.impulseHigh - 0.62 * range
-          : displacementExtremes.impulseLow + 0.62 * range;
-        return parseFloat(otePrice.toFixed(4));
-      }
-      return parseFloat(anchorLevel.toFixed(4));
-
-    default:
-      return parseFloat(anchorLevel.toFixed(4));
-  }
+  return parseFloat(params.anchorLevel.toFixed(4));
 }
 
 /**
  * Returns human-readable label for a given SweepReclaimEntryMode.
  */
 export function getEntryModeLabel(mode: SweepReclaimEntryMode): string {
-  switch (mode) {
-    case 'SWEEP_OB_MT':
-      return 'Sweep OB 50% MT';
-    case 'OB_PROXIMAL':
-      return 'Sweep OB Proximal';
-    case 'FVG_CE':
-      return 'Displacement FVG 50% CE';
-    case 'FVG_PROXIMAL':
-      return 'Displacement FVG Proximal';
-    case 'FVG_DISTAL':
-      return 'Displacement FVG Distal';
-    case 'OTE_62':
-      return '62% OTE Retracement';
-    case 'SHELF_LEVEL':
-    case 'RECLAIM_LEVEL':
-      return 'Reclaimed Shelf Level';
-    default:
-      return mode;
-  }
+  return 'Breaker Block (Candle 1 Extreme)';
 }
 
 /**
  * Returns full technical description for a given SweepReclaimEntryMode.
  */
 export function getEntryModeDescription(mode: SweepReclaimEntryMode): string {
-  switch (mode) {
-    case 'SWEEP_OB_MT':
-      return '50% Mean Threshold midpoint of the liquidity sweep candle / Order Block';
-    case 'OB_PROXIMAL':
-      return 'First boundary edge of the sweep Order Block (High for Longs, Low for Shorts)';
-    case 'FVG_CE':
-      return '50% Consequent Encroachment midpoint of the displacement Fair Value Gap';
-    case 'FVG_PROXIMAL':
-      return 'Outer opening edge of the displacement Fair Value Gap (Top for BISI, Bottom for SIBI)';
-    case 'FVG_DISTAL':
-      return 'Deepest boundary edge of the Fair Value Gap prior to full fill/invalidation';
-    case 'OTE_62':
-      return '62% Fibonacci Retracement of the displacement impulse wave from sweep to reclaim';
-    case 'SHELF_LEVEL':
-    case 'RECLAIM_LEVEL':
-      return 'Exact price level of the reclaimed structural pivot / session anchor shelf';
-    default:
-      return '';
-  }
+  return 'Limit order anchored to the absolute extreme of PM Candle 1.';
 }
 
 // ── Internal Helpers ─────────────────────────────────────────────────────────
@@ -561,217 +414,11 @@ export class SweepReclaimEngine {
     this.config = { ...DEFAULT_SWEEP_RECLAIM_CONFIG, ...config };
   }
 
-  /**
-   * Extracts multi-timeframe liquidity anchors chronologically with zero look-ahead bias.
-   */
-  private extractAnchors(candles: Candle[]): LiquidityAnchor[] {
-    const anchors: LiquidityAnchor[] = [];
-    const n = candles.length;
-    if (n < 10) return anchors;
-
-    const allowedTypes = new Set<SweepReclaimAnchorType>(
-      this.config.anchorTypes && this.config.anchorTypes.length > 0
-        ? this.config.anchorTypes
-        : ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL']
-    );
-
-    // 1. Major / Internal Pivots from PivotEngine
-    if (allowedTypes.has('SWING_PIVOT')) {
-      const pivotEngine = new PivotEngine({
-        lookbackMajor: this.config.lookbackMajor ?? 15,
-        lookbackInternal: this.config.lookbackInternal ?? 5,
-        lookbackMicro: 3,
-      });
-      pivotEngine.processCandles(candles);
-
-      const uniquePivotsMap = new Map<string, (typeof pivotEngine.pivots)[0]>();
-      for (const p of pivotEngine.pivots) {
-        const key = `${p.index}_${p.type}`;
-        const existing = uniquePivotsMap.get(key);
-        if (!existing || (p.level ?? 0) > (existing.level ?? 0)) {
-          uniquePivotsMap.set(key, p);
-        }
-      }
-
-      for (const p of uniquePivotsMap.values()) {
-        const isBull = p.type === 'SWING_LOW';
-        const grade = p.level === 2 ? 'MAJOR' : p.level === 1 ? 'INTERNAL' : 'INNER';
-        anchors.push({
-          type: 'SWING_PIVOT',
-          name: `${grade} ${isBull ? 'Swing Low' : 'Swing High'} ($${p.price.toFixed(2)})`,
-          level: p.price,
-          time: p.timestamp,
-          index: p.index,
-          bias: isBull ? 'BULLISH' : 'BEARISH',
-          grade,
-          colorValidated: !!p.colorValidated,
-        });
-      }
-    }
-
-    // 2. Session Extrema & PDH/PDL Partitioning
-    const candlesByDay = new Map<string, { candles: Candle[]; indices: number[] }>();
-    for (let i = 0; i < n; i++) {
-      const c = candles[i];
-      const dayKey = new Date(c.t).toISOString().slice(0, 10);
-      if (!candlesByDay.has(dayKey)) {
-        candlesByDay.set(dayKey, { candles: [], indices: [] });
-      }
-      const entry = candlesByDay.get(dayKey)!;
-      entry.candles.push(c);
-      entry.indices.push(i);
-    }
-
-    const daysList = Array.from(candlesByDay.keys()).sort();
-
-    for (let dIdx = 0; dIdx < daysList.length; dIdx++) {
-      const dayKey = daysList[dIdx];
-      const { candles: dayCandles, indices: dayIndices } = candlesByDay.get(dayKey)!;
-
-      // ── Asian Session (00:00 - 07:00 UTC) ──────────────────────────────────
-      const asianCandles: Candle[] = [];
-      const asianIndices: number[] = [];
-      let postAsianFirstIdx: number | null = null;
-
-      for (let k = 0; k < dayCandles.length; k++) {
-        const c = dayCandles[k];
-        const hour = new Date(c.t).getUTCHours();
-        if (hour >= 0 && hour < 7) {
-          asianCandles.push(c);
-          asianIndices.push(dayIndices[k]);
-        } else if (hour >= 7 && postAsianFirstIdx === null) {
-          postAsianFirstIdx = dayIndices[k];
-        }
-      }
-
-      if (asianCandles.length > 0 && postAsianFirstIdx !== null) {
-        const aHigh = Math.max(...asianCandles.map((c) => c.h ?? (c as any).high));
-        const aLow = Math.min(...asianCandles.map((c) => c.l ?? (c as any).low));
-        const anchorTime = candles[postAsianFirstIdx].t;
-
-        if (allowedTypes.has('ASIAN_HIGH')) {
-          anchors.push({
-            type: 'ASIAN_HIGH',
-            name: `Asian Session High ($${aHigh.toFixed(2)})`,
-            level: aHigh,
-            time: anchorTime,
-            index: postAsianFirstIdx,
-            bias: 'BEARISH',
-            grade: 'SESSION',
-            colorValidated: true,
-          });
-        }
-
-        if (allowedTypes.has('ASIAN_LOW')) {
-          anchors.push({
-            type: 'ASIAN_LOW',
-            name: `Asian Session Low ($${aLow.toFixed(2)})`,
-            level: aLow,
-            time: anchorTime,
-            index: postAsianFirstIdx,
-            bias: 'BULLISH',
-            grade: 'SESSION',
-            colorValidated: true,
-          });
-        }
-      }
-
-      // ── London Session (07:00 - 12:00 UTC) ─────────────────────────────────
-      const londonCandles: Candle[] = [];
-      const londonIndices: number[] = [];
-      let postLondonFirstIdx: number | null = null;
-
-      for (let k = 0; k < dayCandles.length; k++) {
-        const c = dayCandles[k];
-        const hour = new Date(c.t).getUTCHours();
-        if (hour >= 7 && hour < 12) {
-          londonCandles.push(c);
-          londonIndices.push(dayIndices[k]);
-        } else if (hour >= 12 && postLondonFirstIdx === null) {
-          postLondonFirstIdx = dayIndices[k];
-        }
-      }
-
-      if (londonCandles.length > 0 && postLondonFirstIdx !== null) {
-        const lHigh = Math.max(...londonCandles.map((c) => c.h ?? (c as any).high));
-        const lLow = Math.min(...londonCandles.map((c) => c.l ?? (c as any).low));
-        const anchorTime = candles[postLondonFirstIdx].t;
-
-        if (allowedTypes.has('LONDON_HIGH')) {
-          anchors.push({
-            type: 'LONDON_HIGH',
-            name: `London Session High ($${lHigh.toFixed(2)})`,
-            level: lHigh,
-            time: anchorTime,
-            index: postLondonFirstIdx,
-            bias: 'BEARISH',
-            grade: 'SESSION',
-            colorValidated: true,
-          });
-        }
-
-        if (allowedTypes.has('LONDON_LOW')) {
-          anchors.push({
-            type: 'LONDON_LOW',
-            name: `London Session Low ($${lLow.toFixed(2)})`,
-            level: lLow,
-            time: anchorTime,
-            index: postLondonFirstIdx,
-            bias: 'BULLISH',
-            grade: 'SESSION',
-            colorValidated: true,
-          });
-        }
-      }
-
-      // ── Previous Day High / Low (PDH / PDL) ─────────────────────────────────
-      if (dIdx > 0) {
-        const prevDayKey = daysList[dIdx - 1];
-        const { candles: prevCandles, indices: prevIndices } = candlesByDay.get(prevDayKey)!;
-
-        if (prevCandles.length >= 10) {
-          const pdh = Math.max(...prevCandles.map((c) => c.h ?? (c as any).high));
-          const pdl = Math.min(...prevCandles.map((c) => c.l ?? (c as any).low));
-          const dayFirstIdx = dayIndices[0];
-          const anchorTime = candles[dayFirstIdx].t;
-
-          if (allowedTypes.has('PDH')) {
-            anchors.push({
-              type: 'PDH',
-              name: `Previous Day High ($${pdh.toFixed(2)})`,
-              level: pdh,
-              time: anchorTime,
-              index: dayFirstIdx,
-              bias: 'BEARISH',
-              grade: 'DAILY',
-              colorValidated: true,
-            });
-          }
-
-          if (allowedTypes.has('PDL')) {
-            anchors.push({
-              type: 'PDL',
-              name: `Previous Day Low ($${pdl.toFixed(2)})`,
-              level: pdl,
-              time: anchorTime,
-              index: dayFirstIdx,
-              bias: 'BULLISH',
-              grade: 'DAILY',
-              colorValidated: true,
-            });
-          }
-        }
-      }
-    }
-
-    anchors.sort((a, b) => a.index - b.index);
-    return anchors;
-  }
-
-  /**
-   * Scans a full historical candle series through the 4-phase Sweep & Reclaim state machine.
-   */
-  public scanHistoricalSetups(candles: Candle[]): {
+  public scanHistoricalSetups(
+    candles: Candle[],
+    startMs?: number,
+    endMs?: number
+  ): {
     setups: SweepReclaimSetup[];
     telemetry: SweepReclaimTelemetrySummary;
   } {
@@ -780,15 +427,6 @@ export class SweepReclaimEngine {
       return { setups: [], telemetry: this.createEmptyTelemetry() };
     }
 
-    const anchors = this.extractAnchors(candles);
-    const atrSeries = calculateAtrSeries(candles, 14);
-
-    const detectedSetups: SweepReclaimSetup[] = [];
-
-    // Rolling Volume SMA (configurable period, default 20)
-    // FIX-6: Use Number.isFinite() to guard against undefined/NaN volume fields from offline
-    // mock candles or incomplete historical data. candles[i].v ?? 0 passes when v is undefined
-    // but still passes through NaN if v is explicitly NaN. Number.isFinite() rejects both.
     const volSmaSeries: number[] = new Array(n).fill(1);
     const volPeriod = Math.max(1, Math.min(100, this.config.volumeSmaPeriod ?? 20));
     let volSum = 0;
@@ -804,1228 +442,375 @@ export class SweepReclaimEngine {
       }
     }
 
+    const atrSeries = calculateAtrSeries(candles, 14);
     const volumeExpansionThreshold = this.config.volumeExpansionThreshold ?? 1.50;
-    const deltaDominanceThreshold = this.config.deltaDominanceThreshold ?? 55.0;
-    const bodyRatioThreshold = this.config.minBodyRatio ?? this.config.bodyRatioThreshold ?? 0.55;
-    const requireThreePillar = this.config.requireThreePillarDisplacement !== false;
-    const enforceDiscountPremium = !!this.config.enforceDiscountPremiumGate;
+    const maxBarsSweepToReclaim = this.config.maxBarsSweepToReclaim ?? 50;
+    const slBufferMultiplier = this.config.slBufferAtrMultiplier ?? 0.15;
 
-    const stage1Multiple = this.config.stage1Multiple ?? 1.0;
-    const stage2Multiple = this.config.stage2Multiple ?? 1.5;
-    const stage3Multiple = this.config.stage3Multiple ?? 3.0;
-    const entryMode = this.config.entryMode ?? 'SWEEP_OB_MT';
+    const allSetups: SweepReclaimSetup[] = [];
 
-    // ── Phase 1, 2, 3: Extract and Evaluate All Candidate Setups Across History ──
-    const allCandidateSetups: SweepReclaimSetup[] = [];
+    // Main Chronological Loop
+    for (let i = 2; i < n; i++) {
+      const c1 = candles[i - 2];
+      const c2 = candles[i - 1];
+      const c3 = candles[i];
 
-    // Iterate through confirmed multi-timeframe anchors
-    for (const anchor of anchors) {
-      const anchorIdx = anchor.index;
-      if (anchorIdx < 2 || anchorIdx >= n - 5) continue;
+      const c1O = c1.o ?? (c1 as any).open;
+      const c1H = c1.h ?? (c1 as any).high;
+      const c1L = c1.l ?? (c1 as any).low;
+      const c1C = c1.c ?? (c1 as any).close;
 
-      const isBullish = anchor.bias === 'BULLISH';
-      const anchorLevel = anchor.level;
-      const anchorTime = anchor.time;
-      const anchorGrade = anchor.grade;
-      const anchorType = anchor.type;
-      const anchorName = anchor.name;
+      const c2O = c2.o ?? (c2 as any).open;
+      const c2H = c2.h ?? (c2 as any).high;
+      const c2L = c2.l ?? (c2 as any).low;
+      const c2C = c2.c ?? (c2 as any).close;
+      const c2V = Number.isFinite(c2.v) ? (c2.v as number) : 0;
 
-      const maxSweepLookback =
-        anchorGrade === 'SESSION' || anchorGrade === 'DAILY'
-          ? Math.max(96, (this.config.maxBarsAnchorToSweep ?? 30) * 3)
-          : (this.config.maxBarsAnchorToSweep ?? 30);
-      const maxSweepIdx = Math.min(n - 1, anchorIdx + maxSweepLookback);
+      const c3H = c3.h ?? (c3 as any).high;
+      const c3L = c3.l ?? (c3 as any).low;
 
-      let sweepFound = false;
-      let sweepIdx: number | null = null;
-      let sweepExtremePrice: number | null = null;
-      let sweepExtremeTime: number | null = null;
-      let sweepDepth = 0;
-      let sweepDepthPct = 0;
-      let sweepVolRatio = 1.0;
-      let sweepWickRatio = 0.0;
-      let isWickRejection = false;
-      let sweepObMt: number | null = null;
+      const cCurrentH = c3.h ?? (c3 as any).high;
+      const cCurrentL = c3.l ?? (c3 as any).low;
+      const cCurrentC = c3.c ?? (c3 as any).close;
 
-      // ─── Phase 2: Liquidity Sweep Detection (Wick Rejection Signature) ───────
-      if (isBullish) {
-        let localMinLow = Infinity;
-        let localMinIdx = -1;
+      const sma = volSmaSeries[i - 2] || 1;
 
-        for (let i = anchorIdx + 1; i <= maxSweepIdx; i++) {
-          const c = candles[i];
-          const low = c.l ?? (c as any).low;
+      // 1. Formation (Anchor) Detection
+      const isC1Bullish = c1C > c1O;
+      const isC1Bearish = c1C < c1O;
+      const isC2Bullish = c2C > c2O;
+      const isC2Bearish = c2C < c2O;
 
-          if (low < anchorLevel) {
-            if (low < localMinLow) {
-              localMinLow = low;
-              localMinIdx = i;
-            }
-          }
-        }
+      let pmType: 'BEARISH' | 'BULLISH' | null = null;
+      let sweepLevel = 0;
+      let breakerLevel = 0;
 
-        if (localMinIdx !== -1) {
-          const atr = atrSeries[localMinIdx] || 1.0;
-          const minDepth = (this.config.minSweepDepthAtrMultiplier ?? 0.10) * atr;
-          const currentDepth = anchorLevel - localMinLow;
-
-          if (currentDepth >= minDepth) {
-            sweepFound = true;
-            sweepIdx = localMinIdx;
-            sweepExtremePrice = localMinLow;
-            sweepExtremeTime = candles[localMinIdx].t;
-            sweepDepth = currentDepth;
-            sweepDepthPct = (currentDepth / anchorLevel) * 100;
-            const avgVol = volSmaSeries[localMinIdx] || 1;
-            sweepVolRatio = (candles[localMinIdx].v ?? 0) / avgVol;
-
-            // Wick Rejection Math: lower wick ratio
-            const sc = candles[localMinIdx];
-            const scOpen = sc.o ?? (sc as any).open;
-            const scClose = sc.c ?? (sc as any).close;
-            const scHigh = sc.h ?? (sc as any).high;
-            const scLow = sc.l ?? (sc as any).low;
-            const scRange = Math.max(0.0001, scHigh - scLow);
-            const lowerWick = Math.min(scOpen, scClose) - scLow;
-            sweepWickRatio = parseFloat(((lowerWick / scRange) * 100).toFixed(1));
-            isWickRejection = sweepWickRatio >= 40.0 && sweepVolRatio >= 1.0;
-            sweepObMt = parseFloat(((scHigh + scLow) / 2).toFixed(4));
-          }
-        }
-      } else {
-        // Bearish: Price violates above the anchor high shelf
-        let localMaxHigh = -Infinity;
-        let localMaxIdx = -1;
-
-        for (let i = anchorIdx + 1; i <= maxSweepIdx; i++) {
-          const c = candles[i];
-          const high = c.h ?? (c as any).high;
-
-          if (high > anchorLevel) {
-            if (high > localMaxHigh) {
-              localMaxHigh = high;
-              localMaxIdx = i;
-            }
-          }
-        }
-
-        if (localMaxIdx !== -1) {
-          const atr = atrSeries[localMaxIdx] || 1.0;
-          const minDepth = (this.config.minSweepDepthAtrMultiplier ?? 0.10) * atr;
-          const currentDepth = localMaxHigh - anchorLevel;
-
-          if (currentDepth >= minDepth) {
-            sweepFound = true;
-            sweepIdx = localMaxIdx;
-            sweepExtremePrice = localMaxHigh;
-            sweepExtremeTime = candles[localMaxIdx].t;
-            sweepDepth = currentDepth;
-            sweepDepthPct = (currentDepth / anchorLevel) * 100;
-            const avgVol = volSmaSeries[localMaxIdx] || 1;
-            sweepVolRatio = (candles[localMaxIdx].v ?? 0) / avgVol;
-
-            // Wick Rejection Math: upper wick ratio
-            const sc = candles[localMaxIdx];
-            const scOpen = sc.o ?? (sc as any).open;
-            const scClose = sc.c ?? (sc as any).close;
-            const scHigh = sc.h ?? (sc as any).high;
-            const scLow = sc.l ?? (sc as any).low;
-            const scRange = Math.max(0.0001, scHigh - scLow);
-            const upperWick = scHigh - Math.max(scOpen, scClose);
-            sweepWickRatio = parseFloat(((upperWick / scRange) * 100).toFixed(1));
-            isWickRejection = sweepWickRatio >= 40.0 && sweepVolRatio >= 1.0;
-            sweepObMt = parseFloat(((scHigh + scLow) / 2).toFixed(4));
-          }
-        }
+      if (isC1Bullish && isC2Bearish && c2H > c1H && c2H > c3H && c2V >= sma * volumeExpansionThreshold) {
+        pmType = 'BEARISH';
+        sweepLevel = c2H;
+        breakerLevel = c1L;
+      } else if (isC1Bearish && isC2Bullish && c2L < c1L && c2L < c3L && c2V >= sma * volumeExpansionThreshold) {
+        pmType = 'BULLISH';
+        sweepLevel = c2L;
+        breakerLevel = c1H;
       }
 
-      const sweepTag = sweepFound && sweepIdx !== null ? `_SW${sweepIdx}` : '';
-      const setupId = `SR_${isBullish ? 'BULL' : 'BEAR'}_${anchorType}_${anchorLevel.toFixed(2)}_${anchorTime}${sweepTag}`;
+      if (pmType !== null) {
+        // Enforce strict test window filtering: only instantiate anchors formed within [startMs, endMs]
+        const isWithinStart = startMs === undefined || c2.t >= startMs;
+        const isWithinEnd = endMs === undefined || c2.t <= endMs;
 
-      // ── BUG-3 FIX: Post-Phase-2 Anchor Polarity Hard Gate ────────────────────
-      // Enforce strict directional alignment:
-      //   BULLISH / LONG setups MUST sweep Sell-Side Liquidity (SSL):
-      //     anchor.bias === 'BULLISH' → Swing Low / Asian Low / London Low / PDL
-      //   BEARISH / SHORT setups MUST sweep Buy-Side Liquidity (BSL):
-      //     anchor.bias === 'BEARISH' → Swing High / Asian High / London High / PDH
-      // Any anchor whose recorded bias contradicts the setup direction is a polarity
-      // inversion — discard it as ANCHOR_ONLY before Phase 3 evaluation ever runs.
-      const anchorBiasMatchesDirection = anchor.bias === (isBullish ? 'BULLISH' : 'BEARISH');
-      if (!anchorBiasMatchesDirection) {
-        // Inverted polarity candidate: Short paired with swept Low or Long with swept High.
-        // Emit a minimal ANCHOR_ONLY record for telemetry and skip Phase 3.
-        const polarityGuardSetup: SweepReclaimSetup = {
-          id: setupId,
-          type: isBullish ? 'BULLISH' : 'BEARISH',
-          symbol: this.config.symbol || 'ETHUSDC',
-          timeframe: this.config.timeframe || '15m',
-          phase: 'ANCHOR',
-          status: 'ANCHOR_ONLY',
-          anchor_type: anchorType,
-          anchor_name: anchorName,
-          anchor_level: parseFloat(anchorLevel.toFixed(4)),
-          anchor_index: anchorIdx,
-          anchor_time: anchorTime,
-          anchor_swing_type: isBullish ? 'SWING_LOW' : 'SWING_HIGH',
-          anchor_swing_grade: anchorGrade,
-          anchor_color_validated: anchor.colorValidated,
-          sweep_price: null, sweep_index: null, sweep_time: null,
-          sweep_depth: null, sweep_depth_pct: null, sweep_volume_ratio: null,
-          sweep_wick_ratio: null, is_wick_rejection_sweep: false,
-          sweep_ob_mt: null, sweep_ob_proximal: null, bars_anchor_to_sweep: null,
-          reclaim_index: null, reclaim_time: null, reclaim_close_price: null,
-          reclaim_volume_expansion: null, reclaim_body_ratio: null,
-          reclaim_delta_dominance_pct: null, reclaim_fvg_created: false,
-          reclaim_fvg_top: null, reclaim_fvg_bottom: null, reclaim_fvg_ce: null,
-          reclaim_fvg_proximal: null, reclaim_fvg_distal: null,
-          displacement_impulse_high: null, displacement_impulse_low: null,
-          ote_62_price: null, bars_sweep_to_reclaim: null, is_reclaimed: false,
-          pillar1_volume_ratio_passed: false, pillar2_delta_dominance_passed: false,
-          pillar3_body_ratio_passed: false, three_pillar_displacement_passed: false,
-          retest_index: null, retest_time: null, retest_price: null,
-          bars_reclaim_to_retest: null, is_retested: false, is_immediate_fill: false,
-          max_retest_index: null, is_expired: false, body_defense_passed: false,
-          dealing_range_equilibrium: null, is_valuation_aligned: false,
-          entry_mode: entryMode,
-          entry_price: parseFloat(anchorLevel.toFixed(4)),
-          stop_loss: parseFloat((isBullish ? anchorLevel - anchorLevel * 0.0015 : anchorLevel + anchorLevel * 0.0015).toFixed(4)),
-          risk_usd: parseFloat((anchorLevel * 0.0015).toFixed(4)),
-          risk_pct: 0.15,
-          stage1_target: parseFloat((isBullish ? anchorLevel + stage1Multiple * (anchorLevel * 0.0015) : anchorLevel - stage1Multiple * (anchorLevel * 0.0015)).toFixed(4)),
-          stage2_target: parseFloat((isBullish ? anchorLevel + stage2Multiple * (anchorLevel * 0.0015) : anchorLevel - stage2Multiple * (anchorLevel * 0.0015)).toFixed(4)),
-          stage3_target: parseFloat((isBullish ? anchorLevel + stage3Multiple * (anchorLevel * 0.0015) : anchorLevel - stage3Multiple * (anchorLevel * 0.0015)).toFixed(4)),
-          stage1_multiple: stage1Multiple, stage2_multiple: stage2Multiple, stage3_multiple: stage3Multiple,
-          is_stage1_filled: false, is_stage2_filled: false, is_stage3_filled: false,
-          stage1_hit_time: null, stage1_hit_index: null, stage2_hit_time: null,
-          stage2_hit_index: null, stage3_hit_time: null, stage3_hit_index: null,
-          active_trailing_sl: parseFloat((isBullish ? anchorLevel - 1.0 : anchorLevel + 1.0).toFixed(4)),
-          active_ratchet_floor: null, trailing_sl_source: 'INITIAL',
-          is_be_scratch: false, is_structural_scratch: false,
-          simulated_outcome: 'NO_RETEST', stage_exit_type: 'NO_RETEST',
-          realized_rr: 0, mfe_r: 0, mfe_usd: 0, mae_r: 0, mae_usd: 0,
-          bars_to_outcome: null, exit_time: null, exit_price: null,
-        };
-        detectedSetups.push(polarityGuardSetup);
-        continue;
-      }
+        if (isWithinStart && isWithinEnd) {
+          const currentAtr = atrSeries[i] || (sweepLevel * 0.002);
+          const slBuffer = currentAtr * slBufferMultiplier;
+          const initialSl = pmType === 'BEARISH' ? sweepLevel + slBuffer : sweepLevel - slBuffer;
+          const initialRisk = Math.abs(breakerLevel - initialSl);
 
-      if (!sweepFound || sweepIdx === null || sweepExtremePrice === null || sweepExtremeTime === null) {
-        const anchorOnlySetup: SweepReclaimSetup = {
-          id: setupId,
-          type: isBullish ? 'BULLISH' : 'BEARISH',
-          symbol: this.config.symbol || 'ETHUSDC',
-          timeframe: this.config.timeframe || '15m',
-          phase: 'ANCHOR',
-          status: 'ANCHOR_ONLY',
-          anchor_type: anchorType,
-          anchor_name: anchorName,
-          anchor_level: parseFloat(anchorLevel.toFixed(4)),
-          anchor_index: anchorIdx,
-          anchor_time: anchorTime,
-          anchor_swing_type: isBullish ? 'SWING_LOW' : 'SWING_HIGH',
-          anchor_swing_grade: anchorGrade,
-          anchor_color_validated: anchor.colorValidated,
+          const s1Mult = this.config.stage1Multiple ?? 1.0;
+          const s2Mult = this.config.stage2Multiple ?? 1.5;
+          const s3Mult = this.config.stage3Multiple ?? 3.0;
 
-          sweep_price: null,
-          sweep_index: null,
-          sweep_time: null,
-          sweep_depth: null,
-          sweep_depth_pct: null,
-          sweep_volume_ratio: null,
-          sweep_wick_ratio: null,
-          is_wick_rejection_sweep: false,
-          sweep_ob_mt: null,
-          sweep_ob_proximal: null,
-          bars_anchor_to_sweep: null,
+          const newSetup: SweepReclaimSetup = {
+            id: `sr_${c2.t}_${pmType}`,
+            type: pmType,
+            symbol: this.config.symbol || 'ETHUSDC',
+            timeframe: this.config.timeframe || '15m',
+            phase: 'ANCHOR',
+            status: 'ANCHOR_ONLY',
+            anchor_type: 'PM_VOLUMETRIC',
+            anchor_name: `PM ${pmType} ${new Date(c2.t).toISOString().replace('T', ' ').slice(0, 16)}`,
+            anchor_level: sweepLevel,
+            anchor_index: i - 1,
+            anchor_time: c2.t,
+            anchor_swing_type: pmType === 'BEARISH' ? 'SWING_HIGH' : 'SWING_LOW',
+            anchor_swing_grade: 'MAJOR',
+            anchor_color_validated: true,
 
-          reclaim_index: null,
-          reclaim_time: null,
-          reclaim_close_price: null,
-          reclaim_volume_expansion: null,
-          reclaim_body_ratio: null,
-          reclaim_delta_dominance_pct: null,
-          reclaim_fvg_created: false,
-          reclaim_fvg_top: null,
-          reclaim_fvg_bottom: null,
-          reclaim_fvg_ce: null,
-          reclaim_fvg_proximal: null,
-          reclaim_fvg_distal: null,
-          displacement_impulse_high: null,
-          displacement_impulse_low: null,
-          ote_62_price: null,
-          bars_sweep_to_reclaim: null,
-          is_reclaimed: false,
+            sweep_price: null,
+            sweep_index: null,
+            sweep_time: null,
+            sweep_depth: null,
+            sweep_depth_pct: null,
+            sweep_volume_ratio: null,
+            sweep_wick_ratio: null,
+            is_wick_rejection_sweep: false,
+            sweep_ob_mt: null,
+            bars_anchor_to_sweep: null,
 
-          pillar1_volume_ratio_passed: false,
-          pillar2_delta_dominance_passed: false,
-          pillar3_body_ratio_passed: false,
-          three_pillar_displacement_passed: false,
+            reclaim_index: null,
+            reclaim_time: null,
+            reclaim_close_price: null,
+            reclaim_volume_expansion: null,
+            reclaim_body_ratio: null,
+            reclaim_delta_dominance_pct: null,
+            reclaim_fvg_created: false,
+            reclaim_fvg_top: null,
+            reclaim_fvg_bottom: null,
+            reclaim_fvg_ce: null,
+            bars_sweep_to_reclaim: null,
+            is_reclaimed: false,
 
-          retest_index: null,
-          retest_time: null,
-          retest_price: null,
-          bars_reclaim_to_retest: null,
-          is_retested: false,
-          is_immediate_fill: false,
-          max_retest_index: null,
-          is_expired: false,
-          body_defense_passed: false,
+            pillar1_volume_ratio_passed: true,
+            pillar2_delta_dominance_passed: true,
+            pillar3_body_ratio_passed: true,
+            three_pillar_displacement_passed: true,
 
-          dealing_range_equilibrium: null,
-          is_valuation_aligned: false,
+            retest_index: null,
+            retest_time: null,
+            retest_price: null,
+            bars_reclaim_to_retest: null,
+            is_retested: false,
+            body_defense_passed: true,
+            dealing_range_equilibrium: null,
+            is_valuation_aligned: true,
 
-          entry_mode: entryMode,
-          entry_price: parseFloat(anchorLevel.toFixed(4)),
-          stop_loss: parseFloat(
-            (isBullish ? anchorLevel - anchorLevel * 0.0015 : anchorLevel + anchorLevel * 0.0015).toFixed(4)
-          ),
-          risk_usd: parseFloat((anchorLevel * 0.0015).toFixed(4)),
-          risk_pct: 0.15,
-          stage1_target: parseFloat(
-            (isBullish ? anchorLevel + stage1Multiple * (anchorLevel * 0.0015) : anchorLevel - stage1Multiple * (anchorLevel * 0.0015)).toFixed(4)
-          ),
-          stage2_target: parseFloat(
-            (isBullish ? anchorLevel + stage2Multiple * (anchorLevel * 0.0015) : anchorLevel - stage2Multiple * (anchorLevel * 0.0015)).toFixed(4)
-          ),
-          stage3_target: parseFloat(
-            (isBullish ? anchorLevel + stage3Multiple * (anchorLevel * 0.0015) : anchorLevel - stage3Multiple * (anchorLevel * 0.0015)).toFixed(4)
-          ),
-          stage1_multiple: stage1Multiple,
-          stage2_multiple: stage2Multiple,
-          stage3_multiple: stage3Multiple,
-          is_stage1_filled: false,
-          is_stage2_filled: false,
-          is_stage3_filled: false,
-          stage1_hit_time: null,
-          stage1_hit_index: null,
-          stage2_hit_time: null,
-          stage2_hit_index: null,
-          stage3_hit_time: null,
-          stage3_hit_index: null,
-          active_trailing_sl: parseFloat(
-            (isBullish ? anchorLevel - 1.0 : anchorLevel + 1.0).toFixed(4)
-          ),
-          active_ratchet_floor: null,
-          trailing_sl_source: 'INITIAL',
-          is_be_scratch: false,
-          is_structural_scratch: false,
-          simulated_outcome: 'NO_RETEST',
-          stage_exit_type: 'NO_RETEST',
-          realized_rr: 0,
-          mfe_r: 0,
-          mfe_usd: 0,
-          mae_r: 0,
-          mae_usd: 0,
-          bars_to_outcome: null,
-          exit_time: null,
-          exit_price: null,
-        };
-        detectedSetups.push(anchorOnlySetup);
-        continue;
-      }
+            entry_mode: 'BREAKER_BLOCK',
+            entry_price: breakerLevel,
+            stop_loss: initialSl,
+            risk_usd: initialRisk,
+            risk_pct: 2.0,
+            stage1_target: pmType === 'BEARISH' ? breakerLevel - (initialRisk * s1Mult) : breakerLevel + (initialRisk * s1Mult),
+            stage2_target: pmType === 'BEARISH' ? breakerLevel - (initialRisk * s2Mult) : breakerLevel + (initialRisk * s2Mult),
+            stage3_target: pmType === 'BEARISH' ? breakerLevel - (initialRisk * s3Mult) : breakerLevel + (initialRisk * s3Mult),
+            stage1_multiple: s1Mult,
+            stage2_multiple: s2Mult,
+            stage3_multiple: s3Mult,
 
-      // ─── Phase 3: 3-Pillar Volumetric Displacement Reclaim Confirmation ──────
-      const maxReclaimIdx = Math.min(n - 1, sweepIdx + (this.config.maxBarsSweepToReclaim ?? 12));
-      let reclaimFound = false;
-      let reclaimIdx: number | null = null;
-      let reclaimTime: number | null = null;
-      let reclaimClosePrice: number | null = null;
-      let reclaimVolExp = 1.0;
-      let reclaimBodyRatio = 0.0;
-      let reclaimDeltaDominance = 50.0;
-      let reclaimFvgCreated = false;
-      let reclaimFvgTop: number | null = null;
-      let reclaimFvgBottom: number | null = null;
-      let reclaimFvgCe: number | null = null;
+            is_stage1_filled: false,
+            is_stage2_filled: false,
+            is_stage3_filled: false,
+            stage1_hit_time: null,
+            stage1_hit_index: null,
+            stage2_hit_time: null,
+            stage2_hit_index: null,
+            stage3_hit_time: null,
+            stage3_hit_index: null,
+            active_trailing_sl: initialSl,
+            active_ratchet_floor: null,
+            trailing_sl_source: 'INITIAL',
+            is_be_scratch: false,
+            is_structural_scratch: false,
 
-      let p1Passed = false;
-      let p2Passed = false;
-      let p3Passed = false;
-      let threePillarsPassed = false;
-
-      // Helper: Extract taker buy volume with Wyckoff price-range conviction fallback
-      const getTakerBuyVol = (ck: any): number => {
-        const v = Number.isFinite(ck.v) ? Number(ck.v) : 0;
-        if (Number.isFinite(ck.taker_buy_vol) && !isNaN(ck.taker_buy_vol) && ck.taker_buy_vol > 0) {
-          return Number(ck.taker_buy_vol);
-        }
-        const h = Number.isFinite(ck.h) ? Number(ck.h) : Number(ck.high ?? 0);
-        const l = Number.isFinite(ck.l) ? Number(ck.l) : Number(ck.low ?? 0);
-        const cl = Number.isFinite(ck.c) ? Number(ck.c) : Number(ck.close ?? 0);
-        const range = Math.max(0.0001, h - l);
-        const conviction = Math.min(1.0, Math.max(0.0, (cl - l) / range));
-        return conviction * v;
-      };
-
-      const getTakerSellVol = (ck: any): number => {
-        const v = Number.isFinite(ck.v) ? Number(ck.v) : 0;
-        if (Number.isFinite(ck.taker_sell_vol) && !isNaN(ck.taker_sell_vol) && ck.taker_sell_vol > 0) {
-          return Number(ck.taker_sell_vol);
-        }
-        return Math.max(0, v - getTakerBuyVol(ck));
-      };
-
-      for (let i = sweepIdx; i <= maxReclaimIdx; i++) {
-        const c = candles[i];
-        const close = c.c ?? (c as any).close;
-        const open = c.o ?? (c as any).open;
-        const high = c.h ?? (c as any).high;
-        const low = c.l ?? (c as any).low;
-        const candleRange = Math.max(0.0001, high - low);
-        const candleBody = Math.abs(close - open);
-        const bodyRatio = candleBody / candleRange;
-
-        if (isBullish) {
-          // Reclaim: confirmed body close strictly ABOVE the anchor shelf
-          if (close > anchorLevel && close > open) {
-            // Multi-Candle Displacement Window: inspect [sweepIdx..i] for absorption + follow-through
-            let maxVolExpInWindow = 0;
-            let windowVolSum = 0;
-            let windowTakerBuySum = 0;
-            let maxBodyRatioInWindow = 0;
-
-            for (let k = sweepIdx; k <= i; k++) {
-              const ck = candles[k];
-              const ckClose = ck.c ?? (ck as any).close;
-              const ckOpen = ck.o ?? (ck as any).open;
-              const ckHigh = ck.h ?? (ck as any).high;
-              const ckLow = ck.l ?? (ck as any).low;
-              const ckVol = Number.isFinite(ck.v) ? (ck.v as number) : 0;
-              const ckAvgVol = volSmaSeries[k] || 1;
-              const ckVolExp = ckAvgVol > 0 ? ckVol / ckAvgVol : 1.0;
-              if (ckVolExp > maxVolExpInWindow) maxVolExpInWindow = ckVolExp;
-
-              const ckTBuy = getTakerBuyVol(ck);
-              windowVolSum += ckVol;
-              windowTakerBuySum += ckTBuy;
-
-              const ckRange = Math.max(0.0001, ckHigh - ckLow);
-              const ckBody = Math.abs(ckClose - ckOpen);
-              const ckBodyRatio = ckBody / ckRange;
-              if (ckBodyRatio > maxBodyRatioInWindow) maxBodyRatioInWindow = ckBodyRatio;
-            }
-
-            const curAvgVol = volSmaSeries[i] || 1;
-            const curRawVol = Number.isFinite(c.v) ? (c.v as number) : 0;
-            const curVolExp = (Number.isFinite(curAvgVol) && curAvgVol > 0) ? curRawVol / curAvgVol : 1.0;
-
-            const curTakerBuy = getTakerBuyVol(c);
-            const curDeltaPct = curRawVol > 0 ? (curTakerBuy / curRawVol) * 100 : 50.0;
-            const windowDeltaPct = windowVolSum > 0 ? (windowTakerBuySum / windowVolSum) * 100 : 50.0;
-            const effectiveDeltaPct = Math.max(curDeltaPct, windowDeltaPct);
-
-            const targetBodyThreshold = bodyRatioThreshold > 1 ? bodyRatioThreshold / 100 : bodyRatioThreshold;
-
-            // Pillar 1: Volume expansion on sweep absorption bar, reclaim bar, or window max
-            const curP1 = maxVolExpInWindow >= volumeExpansionThreshold || curVolExp >= volumeExpansionThreshold;
-            // Pillar 2: Taker delta dominance on reclaim bar or across sweep-reclaim window
-            const curP2 = effectiveDeltaPct >= deltaDominanceThreshold;
-            // Pillar 3: Body-to-range conviction on reclaim bar or displacement impulse
-            const curP3 = bodyRatio >= targetBodyThreshold || maxBodyRatioInWindow >= targetBodyThreshold;
-            const curAll3 = curP1 && curP2 && curP3;
-
-            if (requireThreePillar && !curAll3) {
-              continue; // Veto low-momentum overlap
-            }
-
-            // Check / Extract Active Displacement BISI FVG
-            let foundFvg = false;
-            let fvgTop = 0;
-            let fvgBottom = 0;
-            const searchMax = Math.min(n - 1, i + 2);
-            for (let f = Math.max(2, sweepIdx); f <= searchMax; f++) {
-              const c0 = candles[f - 2];
-              const c2 = candles[f];
-              const c0H = c0.h ?? (c0 as any).high;
-              const c2L = c2.l ?? (c2 as any).low;
-              if (c2L > c0H) {
-                foundFvg = true;
-                fvgTop = c2L;
-                fvgBottom = c0H;
-                break;
-              }
-            }
-
-            reclaimFound = true;
-            reclaimIdx = i;
-            reclaimTime = c.t;
-            reclaimClosePrice = close;
-            reclaimVolExp = parseFloat(Math.max(curVolExp, maxVolExpInWindow).toFixed(2));
-            reclaimBodyRatio = parseFloat((Math.max(bodyRatio, maxBodyRatioInWindow) * 100).toFixed(1));
-            reclaimDeltaDominance = parseFloat(effectiveDeltaPct.toFixed(1));
-
-            p1Passed = curP1;
-            p2Passed = curP2;
-            p3Passed = curP3;
-            threePillarsPassed = curAll3;
-
-            if (foundFvg) {
-              reclaimFvgCreated = true;
-              reclaimFvgTop = parseFloat(fvgTop.toFixed(4));
-              reclaimFvgBottom = parseFloat(fvgBottom.toFixed(4));
-              reclaimFvgCe = parseFloat(((fvgTop + fvgBottom) / 2).toFixed(4));
-            } else {
-              reclaimFvgCreated = false;
-              reclaimFvgTop = null;
-              reclaimFvgBottom = null;
-              reclaimFvgCe = anchorLevel;
-            }
-            break;
-          }
-        } else {
-          // Bearish: confirmed body close strictly BELOW the anchor shelf
-          if (close < anchorLevel && close < open) {
-            // Multi-Candle Displacement Window: inspect [sweepIdx..i] for absorption + follow-through
-            let maxVolExpInWindow = 0;
-            let windowVolSum = 0;
-            let windowTakerSellSum = 0;
-            let maxBodyRatioInWindow = 0;
-
-            for (let k = sweepIdx; k <= i; k++) {
-              const ck = candles[k];
-              const ckClose = ck.c ?? (ck as any).close;
-              const ckOpen = ck.o ?? (ck as any).open;
-              const ckHigh = ck.h ?? (ck as any).high;
-              const ckLow = ck.l ?? (ck as any).low;
-              const ckVol = Number.isFinite(ck.v) ? (ck.v as number) : 0;
-              const ckAvgVol = volSmaSeries[k] || 1;
-              const ckVolExp = ckAvgVol > 0 ? ckVol / ckAvgVol : 1.0;
-              if (ckVolExp > maxVolExpInWindow) maxVolExpInWindow = ckVolExp;
-
-              const ckTSell = getTakerSellVol(ck);
-              windowVolSum += ckVol;
-              windowTakerSellSum += ckTSell;
-
-              const ckRange = Math.max(0.0001, ckHigh - ckLow);
-              const ckBody = Math.abs(ckClose - ckOpen);
-              const ckBodyRatio = ckBody / ckRange;
-              if (ckBodyRatio > maxBodyRatioInWindow) maxBodyRatioInWindow = ckBodyRatio;
-            }
-
-            const curAvgVol = volSmaSeries[i] || 1;
-            const curRawVol = Number.isFinite(c.v) ? (c.v as number) : 0;
-            const curVolExp = (Number.isFinite(curAvgVol) && curAvgVol > 0) ? curRawVol / curAvgVol : 1.0;
-
-            const curTakerSell = getTakerSellVol(c);
-            const curDeltaPct = curRawVol > 0 ? (curTakerSell / curRawVol) * 100 : 50.0;
-            const windowDeltaPct = windowVolSum > 0 ? (windowTakerSellSum / windowVolSum) * 100 : 50.0;
-            const effectiveDeltaPct = Math.max(curDeltaPct, windowDeltaPct);
-
-            const targetBodyThreshold = bodyRatioThreshold > 1 ? bodyRatioThreshold / 100 : bodyRatioThreshold;
-
-            const curP1 = maxVolExpInWindow >= volumeExpansionThreshold || curVolExp >= volumeExpansionThreshold;
-            const curP2 = effectiveDeltaPct >= deltaDominanceThreshold;
-            const curP3 = bodyRatio >= targetBodyThreshold || maxBodyRatioInWindow >= targetBodyThreshold;
-            const curAll3 = curP1 && curP2 && curP3;
-
-            if (requireThreePillar && !curAll3) {
-              continue; // Veto low-momentum overlap
-            }
-
-            // Check / Extract Active Displacement SIBI FVG
-            let foundFvg = false;
-            let fvgTop = 0;
-            let fvgBottom = 0;
-            const searchMax = Math.min(n - 1, i + 2);
-            for (let f = Math.max(2, sweepIdx); f <= searchMax; f++) {
-              const c0 = candles[f - 2];
-              const c2 = candles[f];
-              const c0L = c0.l ?? (c0 as any).low;
-              const c2H = c2.h ?? (c2 as any).high;
-              if (c2H < c0L) {
-                foundFvg = true;
-                fvgTop = c0L;
-                fvgBottom = c2H;
-                break;
-              }
-            }
-
-            reclaimFound = true;
-            reclaimIdx = i;
-            reclaimTime = c.t;
-            reclaimClosePrice = close;
-            reclaimVolExp = parseFloat(Math.max(curVolExp, maxVolExpInWindow).toFixed(2));
-            reclaimBodyRatio = parseFloat((Math.max(bodyRatio, maxBodyRatioInWindow) * 100).toFixed(1));
-            reclaimDeltaDominance = parseFloat(effectiveDeltaPct.toFixed(1));
-
-            p1Passed = curP1;
-            p2Passed = curP2;
-            p3Passed = curP3;
-            threePillarsPassed = curAll3;
-
-            if (foundFvg) {
-              reclaimFvgCreated = true;
-              reclaimFvgTop = parseFloat(fvgTop.toFixed(4));
-              reclaimFvgBottom = parseFloat(fvgBottom.toFixed(4));
-              reclaimFvgCe = parseFloat(((fvgTop + fvgBottom) / 2).toFixed(4));
-            } else {
-              reclaimFvgCreated = false;
-              reclaimFvgTop = null;
-              reclaimFvgBottom = null;
-              reclaimFvgCe = anchorLevel;
-            }
-            break;
-          }
+            simulated_outcome: 'PENDING',
+            stage_exit_type: 'PENDING',
+            realized_rr: 0,
+            mfe_r: 0,
+            mfe_usd: 0,
+            mae_r: 0,
+            mae_usd: 0,
+            bars_to_outcome: null,
+            exit_time: null,
+            exit_price: null,
+          };
+          allSetups.push(newSetup);
         }
       }
 
-      // ── Dealing Range & Valuation Gating (Discount vs Premium) ──────────────
-      const lookbackStart = Math.max(0, anchorIdx - 5);
-      const lookbackEnd = reclaimIdx !== null ? reclaimIdx : sweepIdx;
-      let rangeHigh = -Infinity;
-      let rangeLow = Infinity;
-      for (let k = lookbackStart; k <= lookbackEnd; k++) {
-        const cHigh = candles[k].h ?? (candles[k] as any).high;
-        const cLow = candles[k].l ?? (candles[k] as any).low;
-        if (cHigh > rangeHigh) rangeHigh = cHigh;
-        if (cLow < rangeLow) rangeLow = cLow;
-      }
-      const dealingRangeEquilibrium =
-        rangeHigh > rangeLow ? parseFloat(((rangeHigh + rangeLow) / 2).toFixed(4)) : anchorLevel;
-
-      // Extract displacement impulse bounds from sweep to reclaim
-      let impulseHigh = -Infinity;
-      let impulseLow = Infinity;
-      const impStart = sweepIdx !== null ? sweepIdx : anchorIdx;
-      const impEnd = reclaimIdx !== null ? reclaimIdx : sweepIdx !== null ? sweepIdx : anchorIdx;
-      for (let k = impStart; k <= impEnd; k++) {
-        const cHigh = candles[k].h ?? (candles[k] as any).high;
-        const cLow = candles[k].l ?? (candles[k] as any).low;
-        if (cHigh > impulseHigh) impulseHigh = cHigh;
-        if (cLow < impulseLow) impulseLow = cLow;
-      }
-
-      const sweepCandleData = sweepIdx !== null ? {
-        high: candles[sweepIdx].h ?? (candles[sweepIdx] as any).high,
-        low: candles[sweepIdx].l ?? (candles[sweepIdx] as any).low,
-        open: candles[sweepIdx].o ?? (candles[sweepIdx] as any).open,
-        close: candles[sweepIdx].c ?? (candles[sweepIdx] as any).close,
-        mt: sweepObMt ?? ((candles[sweepIdx].h ?? (candles[sweepIdx] as any).high) + (candles[sweepIdx].l ?? (candles[sweepIdx] as any).low)) / 2,
-      } : null;
-
-      const fvgData = (reclaimFvgCreated && reclaimFvgTop !== null && reclaimFvgBottom !== null) ? {
-        top: reclaimFvgTop,
-        bottom: reclaimFvgBottom,
-        ce: reclaimFvgCe ?? (reclaimFvgTop + reclaimFvgBottom) / 2,
-      } : null;
-
-      const displacementData = (impulseHigh > impulseLow) ? {
-        impulseHigh,
-        impulseLow,
-      } : null;
-
-      // Select Entry Level via centralized price resolver
-      const executionEntry = resolveRetestEntryPrice({
-        mode: entryMode,
-        isBullish,
-        anchorLevel,
-        sweepCandle: sweepCandleData,
-        fvg: fvgData,
-        displacementExtremes: displacementData,
-      });
-
-      // Directional geometry fields
-      const sweepObProximal = sweepCandleData ? (isBullish ? sweepCandleData.high : sweepCandleData.low) : null;
-      const reclaimFvgProximal = fvgData ? (isBullish ? fvgData.bottom : fvgData.top) : null;
-      const reclaimFvgDistal = fvgData ? (isBullish ? fvgData.top : fvgData.bottom) : null;
-      const ote62Price = displacementData ? resolveRetestEntryPrice({
-        mode: 'OTE_62',
-        isBullish,
-        anchorLevel,
-        displacementExtremes: displacementData,
-      }) : null;
-
-      const isValuationAligned = isBullish
-        ? executionEntry <= dealingRangeEquilibrium
-        : executionEntry >= dealingRangeEquilibrium;
-
-      // Stop Loss: Locked 1 tick beyond sweep candle extreme with Anti-Micro-Friction Clamp (0.15% minimum distance)
-      const atrAtSweep = atrSeries[sweepIdx] || 1.0;
-      const slBuffer = Math.max(0.01, (this.config.slBufferAtrMultiplier ?? 0.15) * atrAtSweep);
-
-      const rawStopLoss = isBullish
-        ? Math.min(sweepExtremePrice - slBuffer, executionEntry - 0.50)
-        : Math.max(sweepExtremePrice + slBuffer, executionEntry + 0.50);
-
-      const calculatedRawDistance = Math.abs(executionEntry - rawStopLoss);
-      const minStopLossDistance = Math.max(calculatedRawDistance, executionEntry * 0.0015);
-      const stopLoss = isBullish
-        ? parseFloat((executionEntry - minStopLossDistance).toFixed(4))
-        : parseFloat((executionEntry + minStopLossDistance).toFixed(4));
-
-      const riskUsd = minStopLossDistance;
-      const riskPct = (riskUsd / executionEntry) * 100;
-
-      const target1 = isBullish
-        ? executionEntry + stage1Multiple * riskUsd
-        : executionEntry - stage1Multiple * riskUsd;
-
-      const target2 = isBullish
-        ? executionEntry + stage2Multiple * riskUsd
-        : executionEntry - stage2Multiple * riskUsd;
-
-      const target3 = isBullish
-        ? executionEntry + stage3Multiple * riskUsd
-        : executionEntry - stage3Multiple * riskUsd;
-
-      // ── BUG-1 FIX: 3-Candle Displacement Sequence — Anchor to reclaimIdx ────
-      // When reclaimIdx is confirmed, extract the 3-candle sequence as:
-      //   Candle 1 (Origin / Sweep Base):      candles[reclaimIdx - 2]
-      //   Candle 2 (Displacement Impulse):     candles[reclaimIdx - 1]
-      //   Candle 3 (Confirmation / Reclaim):   candles[reclaimIdx]
-      // This guarantees three consecutive, distinct bars anchored to the reclaim
-      // event, eliminating duplicate timestamps in the Audit Inspector.
-      // Fall back to sweep-relative indexing only when reclaimIdx is null (no
-      // reclaim found) using sweepIdx as Candle 1 / +1 / +2.
-      const displacementCandles: DisplacementCandleAudit[] = [];
-      if (sweepIdx !== null && sweepIdx < candles.length) {
-        const hasConfirmedReclaim = reclaimIdx !== null && reclaimIdx >= 2;
-
-        // Resolve indices — clamp strictly within [0, n-1] bounds
-        const c1Idx = hasConfirmedReclaim
-          ? Math.max(0, reclaimIdx! - 2)
-          : Math.max(0, sweepIdx);
-        const c2Idx = hasConfirmedReclaim
-          ? Math.max(0, reclaimIdx! - 1)
-          : Math.min(candles.length - 1, sweepIdx + 1);
-        const c3Idx = hasConfirmedReclaim
-          ? Math.min(candles.length - 1, reclaimIdx!)
-          : Math.min(candles.length - 1, sweepIdx + 2);
-
-        // Deduplicate: if any two indices resolve to the same value, fall back to
-        // purely sweep-relative indexing to avoid emitting duplicate timestamps.
-        const indicesAreUnique = c1Idx !== c2Idx && c2Idx !== c3Idx && c1Idx !== c3Idx;
-        const baseC1 = indicesAreUnique ? c1Idx : Math.max(0, sweepIdx);
-        const baseC2 = indicesAreUnique ? c2Idx : Math.min(candles.length - 1, sweepIdx + 1);
-        const baseC3 = indicesAreUnique ? c3Idx : Math.min(candles.length - 1, sweepIdx + 2);
-
-        const c1 = candles[baseC1];
-        displacementCandles.push({
-          label: 'Candle 1 (Origin / Sweep Base)',
-          time: c1.t,
-          open: parseFloat(Number(c1.o ?? (c1 as any).open).toFixed(2)),
-          high: parseFloat(Number(c1.h ?? (c1 as any).high).toFixed(2)),
-          low: parseFloat(Number(c1.l ?? (c1 as any).low).toFixed(2)),
-          close: parseFloat(Number(c1.c ?? (c1 as any).close).toFixed(2)),
-          volume: parseFloat(Number(c1.v ?? (c1 as any).volume ?? 0).toFixed(2)),
-        });
-
-        const c2 = candles[baseC2];
-        displacementCandles.push({
-          label: 'Candle 2 (Expansion Impulse)',
-          time: c2.t,
-          open: parseFloat(Number(c2.o ?? (c2 as any).open).toFixed(2)),
-          high: parseFloat(Number(c2.h ?? (c2 as any).high).toFixed(2)),
-          low: parseFloat(Number(c2.l ?? (c2 as any).low).toFixed(2)),
-          close: parseFloat(Number(c2.c ?? (c2 as any).close).toFixed(2)),
-          volume: parseFloat(Number(c2.v ?? (c2 as any).volume ?? 0).toFixed(2)),
-        });
-
-        const c3 = candles[baseC3];
-        displacementCandles.push({
-          label: 'Candle 3 (Confirmation / Reclaim Close)',
-          time: c3.t,
-          open: parseFloat(Number(c3.o ?? (c3 as any).open).toFixed(2)),
-          high: parseFloat(Number(c3.h ?? (c3 as any).high).toFixed(2)),
-          low: parseFloat(Number(c3.l ?? (c3 as any).low).toFixed(2)),
-          close: parseFloat(Number(c3.c ?? (c3 as any).close).toFixed(2)),
-          volume: parseFloat(Number(c3.v ?? (c3 as any).volume ?? 0).toFixed(2)),
-        });
-      }
-
-      const baseSetup: SweepReclaimSetup = {
-        id: setupId,
-        type: isBullish ? 'BULLISH' : 'BEARISH',
-        symbol: this.config.symbol || 'ETHUSDC',
-        timeframe: this.config.timeframe || '15m',
-        phase: reclaimFound ? 'RECLAIM' : 'SWEEP',
-        status: reclaimFound ? 'RECLAIMED_NO_RETEST' : 'SWEPT_NO_RECLAIM',
-        displacement_candles: displacementCandles,
-
-        anchor_type: anchorType,
-        anchor_name: anchorName,
-        anchor_level: parseFloat(anchorLevel.toFixed(4)),
-        anchor_index: anchorIdx,
-        anchor_time: anchorTime,
-        anchor_swing_type: isBullish ? 'SWING_LOW' : 'SWING_HIGH',
-        anchor_swing_grade: anchorGrade,
-        anchor_color_validated: anchor.colorValidated,
-
-        sweep_price: parseFloat(sweepExtremePrice.toFixed(4)),
-        sweep_index: sweepIdx,
-        sweep_time: sweepExtremeTime,
-        sweep_depth: parseFloat(sweepDepth.toFixed(4)),
-        sweep_depth_pct: parseFloat(sweepDepthPct.toFixed(3)),
-        sweep_volume_ratio: parseFloat(sweepVolRatio.toFixed(2)),
-        sweep_wick_ratio: sweepWickRatio,
-        is_wick_rejection_sweep: isWickRejection,
-        sweep_ob_mt: sweepObMt,
-        sweep_ob_proximal: sweepObProximal !== null ? parseFloat(sweepObProximal.toFixed(4)) : null,
-        bars_anchor_to_sweep: sweepIdx - anchorIdx,
-
-        reclaim_index: reclaimIdx,
-        reclaim_time: reclaimTime,
-        reclaim_close_price: reclaimClosePrice !== null ? parseFloat(reclaimClosePrice.toFixed(4)) : null,
-        reclaim_volume_expansion: parseFloat(reclaimVolExp.toFixed(2)),
-        reclaim_body_ratio: reclaimBodyRatio,
-        reclaim_delta_dominance_pct: reclaimDeltaDominance,
-        reclaim_fvg_created: reclaimFvgCreated,
-        reclaim_fvg_top: reclaimFvgTop,
-        reclaim_fvg_bottom: reclaimFvgBottom,
-        reclaim_fvg_ce: reclaimFvgCe,
-        reclaim_fvg_proximal: reclaimFvgProximal !== null ? parseFloat(reclaimFvgProximal.toFixed(4)) : null,
-        reclaim_fvg_distal: reclaimFvgDistal !== null ? parseFloat(reclaimFvgDistal.toFixed(4)) : null,
-        displacement_impulse_high: impulseHigh !== -Infinity ? parseFloat(impulseHigh.toFixed(4)) : null,
-        displacement_impulse_low: impulseLow !== Infinity ? parseFloat(impulseLow.toFixed(4)) : null,
-        ote_62_price: ote62Price !== null ? parseFloat(ote62Price.toFixed(4)) : null,
-        bars_sweep_to_reclaim: reclaimIdx !== null ? reclaimIdx - sweepIdx : null,
-        is_reclaimed: reclaimFound,
-
-        // ── BUG-2 FIX: Re-derive 3-Pillar flags from stored final metrics ────────
-        // The stored display metrics (reclaim_volume_expansion, reclaim_body_ratio,
-        // reclaim_delta_dominance_pct) are window-maxed values. Re-computing the
-        // boolean flags from these exact stored values — rather than from the
-        // intermediate window variables — guarantees that the Audit Inspector badge
-        // is mathematically consistent with what each pillar row displays.
-        // Strict conjunction: if any single pillar fails → three_pillar = false.
-        pillar1_volume_ratio_passed: p1Passed,
-        pillar2_delta_dominance_passed: p2Passed,
-        pillar3_body_ratio_passed: p3Passed,
-        three_pillar_displacement_passed: p1Passed && p2Passed && p3Passed,
-
-        retest_index: null,
-        retest_time: null,
-        retest_price: null,
-        bars_reclaim_to_retest: null,
-        is_retested: false,
-        is_immediate_fill: false,
-        max_retest_index: null,
-        is_expired: false,
-        body_defense_passed: false,
-
-        dealing_range_equilibrium: dealingRangeEquilibrium,
-        is_valuation_aligned: isValuationAligned,
-
-        entry_mode: entryMode,
-        entry_price: parseFloat(executionEntry.toFixed(4)),
-        stop_loss: parseFloat(stopLoss.toFixed(4)),
-        risk_usd: parseFloat(riskUsd.toFixed(4)),
-        risk_pct: parseFloat(riskPct.toFixed(3)),
-        stage1_target: parseFloat(target1.toFixed(4)),
-        stage2_target: parseFloat(target2.toFixed(4)),
-        stage3_target: parseFloat(target3.toFixed(4)),
-        stage1_multiple: stage1Multiple,
-        stage2_multiple: stage2Multiple,
-        stage3_multiple: stage3Multiple,
-
-        is_stage1_filled: false,
-        is_stage2_filled: false,
-        is_stage3_filled: false,
-        stage1_hit_time: null,
-        stage1_hit_index: null,
-        stage2_hit_time: null,
-        stage2_hit_index: null,
-        stage3_hit_time: null,
-        stage3_hit_index: null,
-        active_trailing_sl: parseFloat(stopLoss.toFixed(4)),
-        active_ratchet_floor: null,
-        trailing_sl_source: 'INITIAL',
-        is_be_scratch: false,
-        is_structural_scratch: false,
-
-        simulated_outcome: 'NO_RETEST',
-        stage_exit_type: 'NO_RETEST',
-        realized_rr: 0,
-        mfe_r: 0,
-        mfe_usd: 0,
-        mae_r: 0,
-        mae_usd: 0,
-        bars_to_outcome: null,
-        exit_time: null,
-        exit_price: null,
-      };
-
-      if (!reclaimFound || reclaimIdx === null) {
-        detectedSetups.push(baseSetup);
-        continue;
-      }
-
-      if (enforceDiscountPremium && !isValuationAligned) {
-        baseSetup.status = 'RECLAIMED_NO_RETEST';
-        baseSetup.simulated_outcome = 'INVALIDATED';
-        detectedSetups.push(baseSetup);
-        continue;
-      }
-
-      // ─── Phase 4: Independent Retest & 3-Stage Harvest Execution Simulation ───
-      const effectiveMaxRetestIdx = Math.min(n - 1, reclaimIdx + (this.config.maxBarsToRetest ?? 24));
-      let retestFound = false;
-      let retestIdx: number | null = null;
-      let retestPrice: number | null = null;
-      let retestTime: number | null = null;
-      let bodyDefenseValid = false;
-
-      // 1. Immediate Touch Check on Reclaim Candle itself
-      // (The displacement/reclaim candle itself NEVER triggers MISSED_EXPANSION invalidation)
-      const rc = candles[reclaimIdx];
-      const rcLow = rc.l ?? (rc as any).low;
-      const rcHigh = rc.h ?? (rc as any).high;
-      const rcClose = rc.c ?? (rc as any).close;
-
-      if (isBullish) {
-        const defenseFloor = Math.min(anchorLevel, executionEntry);
-        if (rcLow <= executionEntry && rcClose >= defenseFloor) {
-          retestFound = true;
-          retestIdx = reclaimIdx;
-          retestPrice = executionEntry;
-          retestTime = rc.t;
-          bodyDefenseValid = true;
-          baseSetup.is_immediate_fill = true;
+      // 2. Advance Lifecycle for Active Setups
+      for (const s of allSetups) {
+        if (s.status === 'EXPIRED' || s.status === 'INVALIDATED_AT_RETEST' || ['FULL_TP3_WIN', 'FULL_TP2_WIN', 'BE_SCRATCH_WIN', 'STRUCTURAL_SCRATCH', 'STOPPED_OUT'].includes(s.simulated_outcome)) {
+          continue;
         }
-      } else {
-        const defenseCeiling = Math.max(anchorLevel, executionEntry);
-        if (rcHigh >= executionEntry && rcClose <= defenseCeiling) {
-          retestFound = true;
-          retestIdx = reclaimIdx;
-          retestPrice = executionEntry;
-          retestTime = rc.t;
-          bodyDefenseValid = true;
-          baseSetup.is_immediate_fill = true;
-        }
-      }
 
-      // 2. Search subsequent candles strictly AFTER the reclaim candle has closed
-      if (!retestFound) {
-        for (let i = reclaimIdx + 1; i <= effectiveMaxRetestIdx; i++) {
-          const c = candles[i];
-          const low = c.l ?? (c as any).low;
-          const high = c.h ?? (c as any).high;
-          const close = c.c ?? (c as any).close;
-
-          if (isBullish) {
-            if (low <= executionEntry) {
-              const defenseFloor = Math.min(anchorLevel, executionEntry);
-              if (close >= defenseFloor) {
-                retestFound = true;
-                retestIdx = i;
-                retestPrice = executionEntry;
-                retestTime = c.t;
-                bodyDefenseValid = true;
-                break;
-              } else {
-                baseSetup.phase = 'RETEST';
-                baseSetup.status = 'INVALIDATED_AT_RETEST';
-                baseSetup.simulated_outcome = 'INVALIDATED';
-                baseSetup.stage_exit_type = 'INVALIDATED';
-                break;
-              }
-            }
-
-            // Only check for target clearance strictly AFTER reclaim candle has closed
-            if (high >= target1) {
-              break;
+        if (s.phase === 'ANCHOR') {
+          if (s.type === 'BEARISH') {
+            if (cCurrentC > s.anchor_level) {
+              s.phase = 'SWEEP';
+              s.status = 'SWEPT_NO_RECLAIM';
+              s.sweep_index = i;
+              s.sweep_time = c3.t;
+              s.sweep_price = cCurrentH;
             }
           } else {
-            if (high >= executionEntry) {
-              const defenseCeiling = Math.max(anchorLevel, executionEntry);
-              if (close <= defenseCeiling) {
-                retestFound = true;
-                retestIdx = i;
-                retestPrice = executionEntry;
-                retestTime = c.t;
-                bodyDefenseValid = true;
-                break;
+            if (cCurrentC < s.anchor_level) {
+              s.phase = 'SWEEP';
+              s.status = 'SWEPT_NO_RECLAIM';
+              s.sweep_index = i;
+              s.sweep_time = c3.t;
+              s.sweep_price = cCurrentL;
+            }
+          }
+        } 
+        else if (s.phase === 'SWEEP') {
+          if (s.type === 'BEARISH' && cCurrentH > (s.sweep_price ?? 0)) s.sweep_price = cCurrentH;
+          if (s.type === 'BULLISH' && cCurrentL < (s.sweep_price ?? Infinity)) s.sweep_price = cCurrentL;
+
+          const barsSinceSweep = i - (s.sweep_index ?? 0);
+          if (barsSinceSweep > maxBarsSweepToReclaim) {
+            s.status = 'EXPIRED';
+            s.simulated_outcome = 'EXPIRED';
+            continue;
+          }
+
+          if (s.type === 'BEARISH') {
+            if (cCurrentC < s.entry_price) { 
+              s.phase = 'RECLAIM';
+              s.status = 'RECLAIMED_NO_RETEST';
+              s.reclaim_index = i;
+              s.reclaim_time = c3.t;
+              s.is_reclaimed = true;
+              
+              const currentAtr = atrSeries[i] || (s.entry_price * 0.002);
+              const slBuffer = currentAtr * slBufferMultiplier;
+              const rawSweep = s.sweep_price ?? s.anchor_level;
+              s.stop_loss = rawSweep + slBuffer;
+              s.active_trailing_sl = s.stop_loss;
+              
+              const risk = Math.abs(s.stop_loss - s.entry_price);
+              s.risk_usd = risk;
+              s.stage1_target = s.entry_price - (risk * s.stage1_multiple);
+              s.stage2_target = s.entry_price - (risk * s.stage2_multiple);
+              s.stage3_target = s.entry_price - (risk * s.stage3_multiple);
+            }
+          } else {
+            if (cCurrentC > s.entry_price) { 
+              s.phase = 'RECLAIM';
+              s.status = 'RECLAIMED_NO_RETEST';
+              s.reclaim_index = i;
+              s.reclaim_time = c3.t;
+              s.is_reclaimed = true;
+              
+              const currentAtr = atrSeries[i] || (s.entry_price * 0.002);
+              const slBuffer = currentAtr * slBufferMultiplier;
+              const rawSweep = s.sweep_price ?? s.anchor_level;
+              s.stop_loss = rawSweep - slBuffer;
+              s.active_trailing_sl = s.stop_loss;
+
+              const risk = Math.abs(s.entry_price - s.stop_loss);
+              s.risk_usd = risk;
+              s.stage1_target = s.entry_price + (risk * s.stage1_multiple);
+              s.stage2_target = s.entry_price + (risk * s.stage2_multiple);
+              s.stage3_target = s.entry_price + (risk * s.stage3_multiple);
+            }
+          }
+        }
+        else if (s.phase === 'RECLAIM') {
+          if (s.type === 'BEARISH') {
+            if (cCurrentH >= s.entry_price) {
+              s.phase = 'RETEST';
+              s.status = 'RETESTED';
+              s.retest_index = i;
+              s.retest_time = c3.t;
+              s.is_retested = true;
+            }
+          } else {
+            if (cCurrentL <= s.entry_price) {
+              s.phase = 'RETEST';
+              s.status = 'RETESTED';
+              s.retest_index = i;
+              s.retest_time = c3.t;
+              s.is_retested = true;
+            }
+          }
+        }
+        
+        if (s.phase === 'RETEST') {
+          const risk = Math.abs(s.entry_price - s.stop_loss);
+          if (risk === 0) continue; // Avoid divide by zero
+          
+          if (s.type === 'BEARISH') {
+            const maxF = (s.entry_price - cCurrentL) / risk;
+            if (maxF > s.mfe_r) s.mfe_r = maxF;
+            const maxA = (cCurrentH - s.entry_price) / risk;
+            if (maxA > s.mae_r) s.mae_r = maxA;
+
+            if (cCurrentH >= s.active_trailing_sl) {
+              s.exit_time = c3.t;
+              s.bars_to_outcome = i - (s.retest_index ?? i);
+              if (s.active_trailing_sl === s.stop_loss) {
+                s.simulated_outcome = 'STOPPED_OUT';
+                s.realized_rr = -1.0;
+              } else if (s.active_trailing_sl === s.entry_price) {
+                s.simulated_outcome = 'BE_SCRATCH_WIN';
+                s.realized_rr = 0.40; 
               } else {
-                baseSetup.phase = 'RETEST';
-                baseSetup.status = 'INVALIDATED_AT_RETEST';
-                baseSetup.simulated_outcome = 'INVALIDATED';
-                baseSetup.stage_exit_type = 'INVALIDATED';
-                break;
+                s.simulated_outcome = 'FULL_TP2_WIN';
+                s.realized_rr = 1.0; 
+              }
+              continue;
+            }
+
+            if (!s.is_stage1_filled && cCurrentL <= s.stage1_target) {
+              s.is_stage1_filled = true;
+              s.stage1_hit_time = c3.t;
+              if (this.config.enableStructuralTrail) {
+                s.active_trailing_sl = s.entry_price;
               }
             }
 
-            // Only check for target clearance strictly AFTER reclaim candle has closed
-            if (low <= target1) {
-              break;
+            if (s.is_stage1_filled && !s.is_stage2_filled && cCurrentL <= s.stage2_target) {
+              s.is_stage2_filled = true;
+              s.stage2_hit_time = c3.t;
+              if (this.config.enableProfitRatchet) {
+                s.active_trailing_sl = s.stage1_target;
+              }
+            }
+
+            if (s.is_stage2_filled && !s.is_stage3_filled && cCurrentL <= s.stage3_target) {
+              s.is_stage3_filled = true;
+              s.stage3_hit_time = c3.t;
+              s.simulated_outcome = 'FULL_TP3_WIN';
+              s.exit_time = c3.t;
+              s.bars_to_outcome = i - (s.retest_index ?? i);
+              s.realized_rr = 1.6; 
+            }
+          } else {
+            const maxF = (cCurrentH - s.entry_price) / risk;
+            if (maxF > s.mfe_r) s.mfe_r = maxF;
+            const maxA = (s.entry_price - cCurrentL) / risk;
+            if (maxA > s.mae_r) s.mae_r = maxA;
+
+            if (cCurrentL <= s.active_trailing_sl) {
+              s.exit_time = c3.t;
+              s.bars_to_outcome = i - (s.retest_index ?? i);
+              if (s.active_trailing_sl === s.stop_loss) {
+                s.simulated_outcome = 'STOPPED_OUT';
+                s.realized_rr = -1.0;
+              } else if (s.active_trailing_sl === s.entry_price) {
+                s.simulated_outcome = 'BE_SCRATCH_WIN';
+                s.realized_rr = 0.40; 
+              } else {
+                s.simulated_outcome = 'FULL_TP2_WIN';
+                s.realized_rr = 1.0; 
+              }
+              continue;
+            }
+
+            if (!s.is_stage1_filled && cCurrentH >= s.stage1_target) {
+              s.is_stage1_filled = true;
+              s.stage1_hit_time = c3.t;
+              if (this.config.enableStructuralTrail) {
+                s.active_trailing_sl = s.entry_price;
+              }
+            }
+
+            if (s.is_stage1_filled && !s.is_stage2_filled && cCurrentH >= s.stage2_target) {
+              s.is_stage2_filled = true;
+              s.stage2_hit_time = c3.t;
+              if (this.config.enableProfitRatchet) {
+                s.active_trailing_sl = s.stage1_target;
+              }
+            }
+
+            if (s.is_stage2_filled && !s.is_stage3_filled && cCurrentH >= s.stage3_target) {
+              s.is_stage3_filled = true;
+              s.stage3_hit_time = c3.t;
+              s.simulated_outcome = 'FULL_TP3_WIN';
+              s.exit_time = c3.t;
+              s.bars_to_outcome = i - (s.retest_index ?? i);
+              s.realized_rr = 1.6; 
             }
           }
         }
       }
-
-      if (!retestFound || retestIdx === null || !bodyDefenseValid) {
-        if (baseSetup.status !== 'INVALIDATED_AT_RETEST') {
-          baseSetup.status = 'RECLAIMED_NO_RETEST';
-          baseSetup.simulated_outcome = 'NO_RETEST';
-          baseSetup.stage_exit_type = 'NO_RETEST';
-        }
-        detectedSetups.push(baseSetup);
-        continue;
-      }
-
-      // Mark setup as RETESTED
-      baseSetup.phase = 'RETEST';
-      baseSetup.status = 'RETESTED';
-      baseSetup.is_retested = true;
-      baseSetup.body_defense_passed = true;
-      baseSetup.retest_index = retestIdx;
-      baseSetup.retest_time = retestTime;
-      baseSetup.retest_price = retestPrice;
-      baseSetup.bars_reclaim_to_retest = retestIdx - reclaimIdx;
-
-      // ─── 3-Stage Harvest Trade Execution State Machine ─────────────────────
-      let positionOpen = true;
-      let activeStopLoss = stopLoss;
-      let maxFavorablePrice = executionEntry;
-      let maxAdversePrice = executionEntry;
-      let outcome: SweepReclaimTradeOutcome = 'PENDING';
-      let stageExit: SweepReclaimStageExitType = 'PENDING';
-      let realizedRr = 0;
-      let exitIdx: number | null = null;
-      let exitPrice: number | null = null;
-      let exitTime: number | null = null;
-
-      const enableStructuralTrail = this.config.enableStructuralTrail !== false;
-      const enableProfitRatchet = this.config.enableProfitRatchet !== false;
-
-      const w1 = 0.40;
-      const w2 = 0.40;
-      const w3 = 0.20;
-
-      for (let i = retestIdx; i < n; i++) {
-        if (!positionOpen) break;
-
-        const c = candles[i];
-        const high = c.h ?? (c as any).high;
-        const low = c.l ?? (c as any).low;
-
-        if (isBullish) {
-          if (high > maxFavorablePrice) maxFavorablePrice = high;
-          if (low < maxAdversePrice) maxAdversePrice = low;
-
-          const initialBarSL = activeStopLoss;
-          const hitStage1 = high >= target1;
-          const hitStage2 = high >= target2;
-          const hitStage3 = high >= target3;
-
-          let stageFilledThisBar = false;
-
-          // ── Tranche 1: 40% at 1.0R ────────────────────────────────────────
-          if (hitStage1 && !baseSetup.is_stage1_filled) {
-            baseSetup.is_stage1_filled = true;
-            baseSetup.stage1_hit_time = c.t;
-            baseSetup.stage1_hit_index = i;
-            stageFilledThisBar = true;
-
-            if (enableStructuralTrail) {
-              const structuralTrailLevel =
-                reclaimFvgCe !== null && reclaimFvgCe > stopLoss ? reclaimFvgCe : executionEntry;
-              const maxGuaranteedFloor = executionEntry - 0.60 * riskUsd;
-              activeStopLoss = Math.max(structuralTrailLevel, maxGuaranteedFloor);
-              baseSetup.active_trailing_sl = parseFloat(activeStopLoss.toFixed(4));
-              baseSetup.trailing_sl_source = reclaimFvgCe !== null ? 'FVG_CE' : 'BREAKEVEN';
-            } else {
-              activeStopLoss = executionEntry;
-              baseSetup.active_trailing_sl = parseFloat(executionEntry.toFixed(4));
-              baseSetup.trailing_sl_source = 'BREAKEVEN';
-            }
-          }
-
-          // ── Tranche 2: 40% at 1.5R ────────────────────────────────────────
-          if (hitStage2 && baseSetup.is_stage1_filled && !baseSetup.is_stage2_filled) {
-            baseSetup.is_stage2_filled = true;
-            baseSetup.stage2_hit_time = c.t;
-            baseSetup.stage2_hit_index = i;
-            stageFilledThisBar = true;
-
-            if (enableProfitRatchet) {
-              const ratchetLevel = executionEntry + 1.0 * riskUsd;
-              activeStopLoss = Math.max(activeStopLoss, ratchetLevel);
-              baseSetup.active_trailing_sl = parseFloat(activeStopLoss.toFixed(4));
-              baseSetup.active_ratchet_floor = parseFloat(ratchetLevel.toFixed(4));
-              baseSetup.trailing_sl_source = 'PROFIT_RATCHET_FLOOR';
-            }
-          }
-
-          // ── Tranche 3: 20% at Macro DOL Target ─────────────────────────────
-          if (hitStage3 && baseSetup.is_stage2_filled && !baseSetup.is_stage3_filled) {
-            baseSetup.is_stage3_filled = true;
-            baseSetup.stage3_hit_time = c.t;
-            baseSetup.stage3_hit_index = i;
-
-            realizedRr = w1 * stage1Multiple + w2 * stage2Multiple + w3 * stage3Multiple;
-            outcome = 'FULL_TP3_WIN';
-            stageExit = 'FULL_TP3_WIN';
-            exitIdx = i;
-            exitPrice = target3;
-            exitTime = c.t;
-            positionOpen = false;
-            break;
-          }
-
-          // Stop Loss / Ratchet Violation Check
-          const checkSL = stageFilledThisBar ? activeStopLoss : initialBarSL;
-          if (low <= checkSL) {
-            exitIdx = i;
-            exitPrice = checkSL;
-            exitTime = c.t;
-            positionOpen = false;
-
-            if (baseSetup.is_stage2_filled) {
-              const runnerR = (checkSL - executionEntry) / riskUsd;
-              realizedRr = w1 * stage1Multiple + w2 * stage2Multiple + w3 * runnerR;
-              outcome = 'FULL_TP2_WIN';
-              stageExit = 'STAGE_2_WIN';
-            } else if (baseSetup.is_stage1_filled) {
-              const runnerR = (checkSL - executionEntry) / riskUsd;
-              realizedRr = w1 * stage1Multiple + (w2 + w3) * runnerR;
-              if (realizedRr >= 0) {
-                outcome = 'BE_SCRATCH_WIN';
-                stageExit = 'STAGE_1_SCRATCH';
-                baseSetup.is_be_scratch = true;
-              } else {
-                outcome = 'STRUCTURAL_SCRATCH';
-                stageExit = 'STAGE_1_SCRATCH';
-                baseSetup.is_structural_scratch = true;
-              }
-            } else {
-              realizedRr = -1.0;
-              outcome = 'STOPPED_OUT';
-              stageExit = 'STOPPED_OUT';
-            }
-            break;
-          }
-        } else {
-          // Bearish Simulation
-          if (low < maxFavorablePrice) maxFavorablePrice = low;
-          if (high > maxAdversePrice) maxAdversePrice = high;
-
-          const initialBarSL = activeStopLoss;
-          const hitStage1 = low <= target1;
-          const hitStage2 = low <= target2;
-          const hitStage3 = low <= target3;
-
-          let stageFilledThisBar = false;
-
-          // ── Tranche 1: 40% at 1.0R ────────────────────────────────────────
-          if (hitStage1 && !baseSetup.is_stage1_filled) {
-            baseSetup.is_stage1_filled = true;
-            baseSetup.stage1_hit_time = c.t;
-            baseSetup.stage1_hit_index = i;
-            stageFilledThisBar = true;
-
-            if (enableStructuralTrail) {
-              const structuralTrailLevel =
-                reclaimFvgCe !== null && reclaimFvgCe < stopLoss ? reclaimFvgCe : executionEntry;
-              const maxGuaranteedFloor = executionEntry + 0.60 * riskUsd;
-              activeStopLoss = Math.min(structuralTrailLevel, maxGuaranteedFloor);
-              baseSetup.active_trailing_sl = parseFloat(activeStopLoss.toFixed(4));
-              baseSetup.trailing_sl_source = reclaimFvgCe !== null ? 'FVG_CE' : 'BREAKEVEN';
-            } else {
-              activeStopLoss = executionEntry;
-              baseSetup.active_trailing_sl = parseFloat(executionEntry.toFixed(4));
-              baseSetup.trailing_sl_source = 'BREAKEVEN';
-            }
-          }
-
-          // ── Tranche 2: 40% at 1.5R ────────────────────────────────────────
-          if (hitStage2 && baseSetup.is_stage1_filled && !baseSetup.is_stage2_filled) {
-            baseSetup.is_stage2_filled = true;
-            baseSetup.stage2_hit_time = c.t;
-            baseSetup.stage2_hit_index = i;
-            stageFilledThisBar = true;
-
-            if (enableProfitRatchet) {
-              const ratchetLevel = executionEntry - 1.0 * riskUsd;
-              activeStopLoss = Math.min(activeStopLoss, ratchetLevel);
-              baseSetup.active_trailing_sl = parseFloat(activeStopLoss.toFixed(4));
-              baseSetup.active_ratchet_floor = parseFloat(ratchetLevel.toFixed(4));
-              baseSetup.trailing_sl_source = 'PROFIT_RATCHET_FLOOR';
-            }
-          }
-
-          // ── Tranche 3: 20% at Macro DOL Target ─────────────────────────────
-          if (hitStage3 && baseSetup.is_stage2_filled && !baseSetup.is_stage3_filled) {
-            baseSetup.is_stage3_filled = true;
-            baseSetup.stage3_hit_time = c.t;
-            baseSetup.stage3_hit_index = i;
-
-            realizedRr = w1 * stage1Multiple + w2 * stage2Multiple + w3 * stage3Multiple;
-            outcome = 'FULL_TP3_WIN';
-            stageExit = 'FULL_TP3_WIN';
-            exitIdx = i;
-            exitPrice = target3;
-            exitTime = c.t;
-            positionOpen = false;
-            break;
-          }
-
-          // Stop Loss / Ratchet Violation Check
-          const checkSL = stageFilledThisBar ? activeStopLoss : initialBarSL;
-          if (high >= checkSL) {
-            exitIdx = i;
-            exitPrice = checkSL;
-            exitTime = c.t;
-            positionOpen = false;
-
-            if (baseSetup.is_stage2_filled) {
-              const runnerR = (executionEntry - checkSL) / riskUsd;
-              realizedRr = w1 * stage1Multiple + w2 * stage2Multiple + w3 * runnerR;
-              outcome = 'FULL_TP2_WIN';
-              stageExit = 'STAGE_2_WIN';
-            } else if (baseSetup.is_stage1_filled) {
-              const runnerR = (executionEntry - checkSL) / riskUsd;
-              realizedRr = w1 * stage1Multiple + (w2 + w3) * runnerR;
-              if (realizedRr >= 0) {
-                outcome = 'BE_SCRATCH_WIN';
-                stageExit = 'STAGE_1_SCRATCH';
-                baseSetup.is_be_scratch = true;
-              } else {
-                outcome = 'STRUCTURAL_SCRATCH';
-                stageExit = 'STAGE_1_SCRATCH';
-                baseSetup.is_structural_scratch = true;
-              }
-            } else {
-              realizedRr = -1.0;
-              outcome = 'STOPPED_OUT';
-              stageExit = 'STOPPED_OUT';
-            }
-            break;
-          }
-        }
-      }
-
-      // Calculate MFE / MAE
-      const maxFavorableDelta = isBullish
-        ? maxFavorablePrice - executionEntry
-        : executionEntry - maxFavorablePrice;
-      const maxAdverseDelta = isBullish
-        ? executionEntry - maxAdversePrice
-        : maxAdversePrice - executionEntry;
-
-      const mfeR = parseFloat((Math.max(0, maxFavorableDelta) / riskUsd).toFixed(2));
-      const maeR = parseFloat((Math.max(0, maxAdverseDelta) / riskUsd).toFixed(2));
-
-      baseSetup.simulated_outcome = outcome;
-      baseSetup.stage_exit_type = stageExit;
-      baseSetup.realized_rr = parseFloat(realizedRr.toFixed(2));
-      baseSetup.mfe_r = mfeR;
-      baseSetup.mfe_usd = parseFloat((mfeR * 100).toFixed(2));
-      baseSetup.mae_r = maeR;
-      baseSetup.mae_usd = parseFloat((maeR * 100).toFixed(2));
-      baseSetup.exit_price = exitPrice !== null ? parseFloat(exitPrice.toFixed(4)) : null;
-      baseSetup.exit_time = exitTime;
-      baseSetup.bars_to_outcome = exitIdx !== null ? exitIdx - retestIdx : null;
-
-      detectedSetups.push(baseSetup);
     }
 
-    const telemetry = this.generateTelemetrySummary(detectedSetups);
-    return { setups: detectedSetups, telemetry };
+    return {
+      setups: allSetups,
+      telemetry: this.generateTelemetrySummary(allSetups),
+    };
   }
 
-  /**
-   * Aggregates setups into comprehensive telemetry analytics including 3-pillar displacement distributions.
-   */
   private generateTelemetrySummary(setups: SweepReclaimSetup[]): SweepReclaimTelemetrySummary {
     const totalAnchors = setups.length;
     const sweptSetups = setups.filter((s) => s.sweep_index !== null);
@@ -2081,13 +866,7 @@ export class SweepReclaimEngine {
     let bearSumRr = 0;
 
     const anchorDistribution: Record<SweepReclaimAnchorType, number> = {
-      SWING_PIVOT: 0,
-      ASIAN_HIGH: 0,
-      ASIAN_LOW: 0,
-      LONDON_HIGH: 0,
-      LONDON_LOW: 0,
-      PDH: 0,
-      PDL: 0,
+      PM_VOLUMETRIC: 0,
     };
 
     for (const s of setups) {
@@ -2298,13 +1077,7 @@ export class SweepReclaimEngine {
       bearish_win_rate_pct: 0,
       bearish_avg_rr: 0,
       anchor_type_distribution: {
-        SWING_PIVOT: 0,
-        ASIAN_HIGH: 0,
-        ASIAN_LOW: 0,
-        LONDON_HIGH: 0,
-        LONDON_LOW: 0,
-        PDH: 0,
-        PDL: 0,
+        PM_VOLUMETRIC: 0,
       },
     };
   }

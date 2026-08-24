@@ -672,4 +672,14 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   1. **`Chart.tsx`:** Removed the flawed global median filter from the historical data loop and retained robust positive numerical validation (`isFinite && c > 0`). Bar-to-bar outlier filtering remains strictly on live streaming ticks (`useMarketData.ts`, `useBinanceWS.ts`, `LiveSeriesCanvasUpdater`).
   2. **`/api/backtest-trades` & `/api/trades`:** Updated PATCH handlers to return status `200 OK` with `{ success: true, message: "Trade is already CLOSED." }` when a trade is already closed, ensuring closing operations are idempotent.
 
-
+### 58. Historical Scanner Pre-Warmup Date Contamination & Multi-Run Common Date Drift (Resolved in V16.58)
+- **The Bug:**
+  1. When running a Sweep & Reclaim scan in Quant Lab for a selected date window (e.g. `2026-06-01` to `2026-07-01`), the results table and equity ledger displayed trades and setups from weeks prior (e.g. April and May).
+  2. When changing the start date from June 1 to May 1 while keeping the end date constant, the common period (June 1 to July 1) displayed different trades and inconsistent numbers across the two runs.
+- **The Causes:**
+  1. `sweep-reclaim-scanner/route.ts` fetched a 45-day historical pre-warmup buffer before `startMs` (`Math.max(0, startMs - 45 days)`), and `SweepReclaimEngine.scanHistoricalSetups(candles)` started creating setups from index 2 of the entire fetched array. All setups formed during the 45-day warmup period were included in the response payload and persisted in the database.
+  2. Because the setup lists in Run 1 (June start -> April fetch) and Run 2 (May start -> March fetch) both returned un-gated warmup setups, the array offsets, paginations, and telemetry totals for the common days did not align.
+- **The Fixes:**
+  1. **Strict Test Window Anchoring (`SweepReclaimEngine.ts`):** `scanHistoricalSetups(candles, startMs, endMs)` now accepts explicit `startMs` and `endMs` bounds. When scanning chronological candles, it only instantiates new setups if the anchor formation timestamp satisfies `c2.t >= startMs && c2.t <= endMs`. Warmup candles before `startMs` are strictly used to stabilize the 20-period Volume SMA and 14-period ATR without polluting the scan window.
+  2. **Calibrated 100-Bar Warmup Lookback (`route.ts`):** Replaced the redundant 45-day warmup buffer with a calibrated 100-bar lookback (`100 * tfMinutes * 60 * 1000`), guaranteeing stabilized Volume SMA and ATR indicators while eliminating rate limit bottlenecks.
+  3. **Scan Summary Banner & Explicit UTC Date Columns (`SweepReclaimWorkspace.tsx`):** Added a metadata banner displaying the exact scan window and added a dedicated `Date / Time (UTC)` column in the detected setups table, formatting timestamps cleanly as `YYYY-MM-DD HH:MM`.

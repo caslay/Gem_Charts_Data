@@ -199,8 +199,8 @@ export async function POST(req: Request) {
         const startMs = Date.parse(`${start_date}T00:00:00.000Z`);
         const endMs = Date.parse(`${end_date}T23:59:59.000Z`);
 
-        // Lookback buffer: 4 days (ensures stabilized ATR and swings at start Date)
-        const lookbackStartMs = startMs - 4 * 24 * 60 * 60 * 1000;
+        // Lookback buffer: 45 days (ensures stabilized ATR and swings at start Date)
+        const lookbackStartMs = startMs - 45 * 24 * 60 * 60 * 1000;
 
         // Fetch parallel timeframes sequentially with 100ms gaps to bypass burst rate-limiting firewalls
         const candles5m = await fetchPagedKlines(symbol, "5m", lookbackStartMs, endMs);
@@ -238,13 +238,14 @@ export async function POST(req: Request) {
 
         // Setup backtest state variables
         let current_balance = initial_capital;
-        let active_trade: any = null;
+        const active_trades: any[] = [];
         const trades_ledger: any[] = [];
         let lastStreamedDay = -1;
 
         // Extract settings
         const conditionsObj = strategy_config.conditions || {};
         const settings = Array.isArray(strategy_config.conditions) ? {} : conditionsObj;
+        const is_raw_signal_scan = settings.RAW_SIGNAL_SCAN === true;
         const direction = settings.direction || "LONG";
         const sl_logic = settings.sl_logic || "Structural Swing";
         const tp_logic = settings.tp_logic || "Nearest Order Book Magnet";
@@ -263,12 +264,13 @@ export async function POST(req: Request) {
               type: "progress",
               date: d.toISOString().slice(0, 10),
               equity: parseFloat(current_balance.toFixed(2)),
-              tradeCount: trades_ledger.length + (active_trade ? 1 : 0)
+              tradeCount: trades_ledger.length + active_trades.length
             });
           }
 
           // ── 1. If Position Active: Check Exits ──
-          if (active_trade) {
+          for (let idx = active_trades.length - 1; idx >= 0; idx--) {
+            const active_trade = active_trades[idx];
             let hitSL = false;
             let hitTP = false;
 
@@ -291,7 +293,7 @@ export async function POST(req: Request) {
                 active_trade.status = "CLOSED";
                 active_trade.exit_timestamp = new Date(candle.t).toISOString();
                 trades_ledger.push(active_trade);
-                active_trade = null;
+                active_trades.splice(idx, 1);
               } else if (hitTP) {
                 const pnl = (active_trade.take_profit - active_trade.entry_price) * active_trade.position_size;
                 current_balance += pnl;
@@ -301,7 +303,7 @@ export async function POST(req: Request) {
                 active_trade.status = "CLOSED";
                 active_trade.exit_timestamp = new Date(candle.t).toISOString();
                 trades_ledger.push(active_trade);
-                active_trade = null;
+                active_trades.splice(idx, 1);
               }
             } else { // SHORT Trade Exits
               if (candle.h >= active_trade.stop_loss) hitSL = true;
@@ -321,7 +323,7 @@ export async function POST(req: Request) {
                 active_trade.status = "CLOSED";
                 active_trade.exit_timestamp = new Date(candle.t).toISOString();
                 trades_ledger.push(active_trade);
-                active_trade = null;
+                active_trades.splice(idx, 1);
               } else if (hitTP) {
                 const pnl = (active_trade.entry_price - active_trade.take_profit) * active_trade.position_size;
                 current_balance += pnl;
@@ -331,13 +333,13 @@ export async function POST(req: Request) {
                 active_trade.status = "CLOSED";
                 active_trade.exit_timestamp = new Date(candle.t).toISOString();
                 trades_ledger.push(active_trade);
-                active_trade = null;
+                active_trades.splice(idx, 1);
               }
             }
           }
 
-          // ── 2. If No Position Active: Evaluate Setup Entries ──
-          if (!active_trade) {
+          // ── 2. If No Position Active (or Raw Signal Scan): Evaluate Setup Entries ──
+          if (active_trades.length === 0 || is_raw_signal_scan) {
             // Build zero look-ahead-bias timeframe slices up to current candle boundary
             const boundaryMs = candle.t + (timeframe === "1h" ? 3600000 : timeframe === "15m" ? 900000 : 300000);
             
@@ -384,12 +386,9 @@ export async function POST(req: Request) {
                 }
               }
 
-              // In the rare case SL cannot be determined, calculate 2 * ATR
+              // In the rare case SL cannot be determined, SKIP the trade (No silent fallback)
               if (stop_loss === null) {
-                const activeArr = timeframe === "1h" ? visible1h : timeframe === "15m" ? visible15m : visible5m;
-                const trs = activeArr.slice(-14).map(c => c.h - c.l);
-                const atr = trs.reduce((sum, tr) => sum + tr, 0) / trs.length;
-                stop_loss = direction === "LONG" ? entry_price - 2 * atr : entry_price + 2 * atr;
+                continue;
               }
 
               stop_loss = parseFloat(stop_loss.toFixed(4));
@@ -406,10 +405,9 @@ export async function POST(req: Request) {
                 take_profit = getBestMagnet(magnets, entry_price, stop_loss, direction);
               }
 
-              // Fallback to strict 1:2 RR
+              // Fallback to strict 1:2 RR -> REMOVED. Skip if no TP found.
               if (take_profit === null || isNaN(take_profit)) {
-                const risk = Math.abs(entry_price - stop_loss);
-                take_profit = direction === "LONG" ? entry_price + 2 * risk : entry_price - 2 * risk;
+                continue;
               }
 
               take_profit = parseFloat(take_profit.toFixed(4));
@@ -441,7 +439,7 @@ export async function POST(req: Request) {
                 const maxAllowedRiskUsd = current_balance * (max_risk_limit_pct / 100);
 
                 if (proposedTotalRiskUsd <= maxAllowedRiskUsd) {
-                  active_trade = {
+                  const new_trade = {
                     id: crypto.randomUUID(),
                     timestamp: new Date(candle.t).toISOString(),
                     direction,
@@ -463,14 +461,15 @@ export async function POST(req: Request) {
                       premium_discount_status: data.ipda_metrics.current_pricing || "UNKNOWN"
                     }
                   };
+                  active_trades.push(new_trade);
                 }
               }
             }
           }
         }
 
-        // Close any remaining active position at the very last candle close to avoid open float
-        if (active_trade) {
+        // Close any remaining active positions at the very last candle close to avoid open float
+        for (const active_trade of active_trades) {
           const finalCandle = activeCandles[activeCandles.length - 1];
           const pnl = active_trade.direction === "LONG"
             ? (finalCandle.c - active_trade.entry_price) * active_trade.position_size
@@ -483,8 +482,8 @@ export async function POST(req: Request) {
           active_trade.status = "CLOSED";
           active_trade.exit_timestamp = new Date(finalCandle.t).toISOString();
           trades_ledger.push(active_trade);
-          active_trade = null;
         }
+        active_trades.length = 0;
 
         sendChunk({ type: "status", message: "Saving execution run metadata and trades into the database..." });
 

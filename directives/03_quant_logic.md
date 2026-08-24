@@ -56,3 +56,21 @@ A Market Structure Shift (MSS) event is classified as:
 - **Execution Constraints:**
   1. Primary setups MUST align with the **HTF Bearish Retest** (shorting the HTF Supply Zone for $1,868 SSL / $1,850 Demand).
   2. Long counter-trend SMT trades inside HTF Bearish trends MUST NOT target macro BSL or PDH. They are capped at the HTF Bearish Supply entry boundary ($1,888.00) with mandatory breakeven locks.
+
+## 6. PM Volumetric Breaker Block Architecture (Sweep & Reclaim)
+The Sweep & Reclaim strategy operates 100% on the **Perfect Movement (PM) Volumetric Marker** geometry. Legacy structural anchor scanning is deprecated.
+
+### 6.1 State Machine Rules
+- **Phase 1: PM Formation (The Anchor)**
+  - Detect a 3-candle PM sequence.
+  - **Bearish PM:** C1 Bullish, C2 Bearish (Highest High, `volume >= 1.5x` SMA), C3 Lower High.
+  - **Bullish PM:** C1 Bearish, C2 Bullish (Lowest Low, `volume >= 1.5x` SMA), C3 Higher Low.
+  - The C2 extreme forms the sweep trigger line. The C1 extreme forms the Breaker Block.
+- **Phase 2: Sweep (Close)**
+  - Price must explicitly **close** past Candle 2's extreme to trigger a valid Sweep.
+- **Phase 3: Reclaim (Close)**
+  - Price must explicitly **close** past Candle 1's extreme to trigger a Reclaim.
+  - A strict **50-candle TTL** limits the time between Sweep and Reclaim. If Reclaim does not occur within 50 candles, the setup is invalidated.
+- **Phase 4: Execution (Retest)**
+  - A limit order is mapped strictly to the Breaker Block (Candle 1's extreme).
+  - Stop Loss is tethered to the extreme price hit during the Phase 2 Sweep.
