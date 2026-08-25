@@ -146,7 +146,7 @@ export function useAutomatedStrategyExecution(
     fetchAccountEquity();
   }, [fetchAccountEquity]);
 
-  // ── 2. On-Mount In-Memory & Database Re-hydration (Namespace Isolated) ──
+  // ── 2. On-Mount In-Memory & Database Re-hydration & Synchronization ──
   useEffect(() => {
     let isMounted = true;
 
@@ -158,43 +158,17 @@ export function useAutomatedStrategyExecution(
           (t) => t.status === 'OPEN' || t.status === 'STAGE_1_FILLED' || t.status === 'STAGE_2_FILLED'
         );
 
-        if (openLocalTrades.length > 0 && engineRef.current && isMounted) {
-          const rehydrated = engineRef.current.rehydrateOpenPositions(openLocalTrades as any);
-          if (rehydrated.length > 0) {
-            setActivePositions([...engineRef.current.getActivePositions()]);
-            setPendingOrders([...engineRef.current.getPendingLimitOrders()]);
-            setClosedTrades([...engineRef.current.getClosedPositions()]);
-          }
-        }
+        if (engineRef.current && isMounted) {
+          // Bi-directional reconciliation: purge closed/deleted positions from in-memory engine
+          engineRef.current.reconcileWithOpenTrades(localTrades);
 
-        // 2. Non-blocking background sync from cloud database if available
-        const res = await fetch('/api/trades', { credentials: 'same-origin' });
-        if (!res.ok) return;
-        const data = await res.json();
-        const trades = data.trades || [];
-
-        // STRICT ISOLATION: Only rehydrate trades belonging to Sweep & Reclaim
-        const openTrades = trades.filter((t: any) => {
-          if (t.status !== 'OPEN' && t.status !== 'STAGE_1_FILLED' && t.status !== 'STAGE_2_FILLED') {
-            return false;
+          if (openLocalTrades.length > 0) {
+            engineRef.current.rehydrateOpenPositions(openLocalTrades as any);
           }
-          const strat = (t.strategy_name || '').toLowerCase();
-          return (
-            strat.includes('sweep & reclaim') ||
-            strat.includes('s&r') ||
-            strat.includes('3-pillar') ||
-            strat.includes('failed signal reversal') ||
-            strat.includes('auto 2% compounded')
-          );
-        });
 
-        if (openTrades.length > 0 && engineRef.current && isMounted) {
-          const rehydrated = engineRef.current.rehydrateOpenPositions(openTrades);
-          if (rehydrated.length > 0) {
-            setActivePositions([...engineRef.current.getActivePositions()]);
-            setPendingOrders([...engineRef.current.getPendingLimitOrders()]);
-            setClosedTrades([...engineRef.current.getClosedPositions()]);
-          }
+          setActivePositions([...engineRef.current.getActivePositions()]);
+          setPendingOrders([...engineRef.current.getPendingLimitOrders()]);
+          setClosedTrades([...engineRef.current.getClosedPositions()]);
         }
       } catch (err) {
         console.warn('[useAutomatedStrategyExecution] On-mount DB re-hydration warning (offline safe):', err);
@@ -204,6 +178,36 @@ export function useAutomatedStrategyExecution(
     rehydrateSessionAndDb();
     return () => {
       isMounted = false;
+    };
+  }, []);
+
+  // ── 2.1. Sync with External Journal Changes (Close / Delete / Purge / Archive) ────
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleTradesRefresh = () => {
+      if (!engineRef.current) return;
+      const allLiveTrades = useSessionJournalStore.getState().getTradesByMode('LIVE');
+      const openLocalTrades = allLiveTrades.filter(
+        (t) => t.status === 'OPEN' || t.status === 'STAGE_1_FILLED' || t.status === 'STAGE_2_FILLED'
+      );
+
+      // Reconcile engine in-memory active positions with session journal
+      engineRef.current.reconcileWithOpenTrades(allLiveTrades);
+
+      // If there are open trades in session journal not yet in engine, rehydrate them
+      if (openLocalTrades.length > 0) {
+        engineRef.current.rehydrateOpenPositions(openLocalTrades as any);
+      }
+
+      setActivePositions([...engineRef.current.getActivePositions()]);
+      setPendingOrders([...engineRef.current.getPendingLimitOrders()]);
+      setClosedTrades([...engineRef.current.getClosedPositions()]);
+    };
+
+    window.addEventListener('trades-refresh', handleTradesRefresh);
+    return () => {
+      window.removeEventListener('trades-refresh', handleTradesRefresh);
     };
   }, []);
 
@@ -250,6 +254,17 @@ export function useAutomatedStrategyExecution(
           opened_at: new Date(pos.openTime || Date.now()).toISOString(),
           ipda_metrics: {
             timeframe: pos.timeframe,
+            anchor_name: pos.anchorName,
+            origin_anchor_level: pos.originAnchorLevel,
+            origin_zone_id: pos.originZoneId,
+            setup_id: pos.setupId || pos.originZoneId,
+            sweep_price: pos.sweepPrice,
+            reclaim_price: pos.reclaimPrice,
+            vol_expansion: pos.volExpansion,
+            delta_dominance: pos.deltaDominance,
+            body_ratio: pos.bodyRatio,
+            three_pillars_passed: pos.threePillarsPassed,
+            displacement_candles: pos.displacementCandles,
             fvg_ce: pos.fvgCeLevel,
             dol_target: pos.dynamicDolTarget,
             stage1_target: pos.stage1Target,
@@ -259,39 +274,9 @@ export function useAutomatedStrategyExecution(
           },
         });
 
-        // Fire-and-forget non-blocking background sync to cloud DB
-        fetch('/api/trades', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify({
-            symbol: pos.symbol,
-            direction: pos.direction,
-            strategy_name: pos.strategyName,
-            ai_narrative_summary: `[Auto 2% Compounded 3-Stage Harvest] ${event.message}`,
-            entry_price: pos.entryPrice,
-            stop_loss: pos.initialStopLoss,
-            take_profit: pos.stage3Target,
-            status: 'OPEN',
-            position_size: pos.contractSize,
-            risk_amount_usd: pos.riskUsd,
-            risk_percent: pos.riskPct,
-            opened_at: new Date(pos.openTime || Date.now()).toISOString(),
-            ipda_metrics: journalTrade.ipda_metrics,
-          }),
-        })
-          .then(async (res) => {
-            if (res.ok) {
-              const data = await res.json();
-              const dbId = data.trade_id || data.trade?.id;
-              if (dbId && engineRef.current) {
-                engineRef.current.linkDbTradeId(pos.id, dbId);
-              }
-            }
-          })
-          .catch((err) => {
-            console.debug('[useAutomatedStrategyExecution] Background cloud DB sync skipped (in-memory preserved):', err);
-          });
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('trades-refresh'));
+        }
       }
 
       // ── B. Instant Local Session Stage Updates: updateTrade on Stage 1 / 2 ──
@@ -304,20 +289,8 @@ export function useAutomatedStrategyExecution(
           ai_narrative_summary: `[${pos.status}] ${event.message}`,
         });
 
-        // Fire-and-forget background cloud sync
-        if (pos.dbTradeId) {
-          fetch('/api/trades', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({
-              trade_id: pos.dbTradeId,
-              status: pos.status,
-              stop_loss: pos.activeStopLoss,
-              realized_pnl: pos.realizedUsd,
-              ai_narrative_summary: `[${pos.status}] ${event.message}`,
-            }),
-          }).catch(() => {});
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('trades-refresh'));
         }
       }
 
@@ -340,24 +313,8 @@ export function useAutomatedStrategyExecution(
           });
         }
 
-        // Fire-and-forget background cloud sync
-        if (pos.dbTradeId) {
-          fetch('/api/trades', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({
-              trade_id: pos.dbTradeId,
-              status: 'CLOSED',
-              exit_price: pos.exitPrice,
-              realized_pnl: pos.realizedUsd,
-              outcome: pos.realizedR > 0 ? 'WIN' : pos.realizedR === 0 ? 'BE_SCRATCH' : 'LOSS',
-              closed_at: new Date(pos.closeTime || Date.now()).toISOString(),
-              ai_narrative_summary: `[CLOSED: ${pos.exitReason}] Final Realized P&L: ${pos.realizedR > 0 ? '+' : ''}${pos.realizedR.toFixed(
-                2
-              )}R ($${pos.realizedUsd.toFixed(2)})`,
-            }),
-          }).catch(() => {});
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('trades-refresh'));
         }
       }
     });
@@ -624,13 +581,19 @@ export function useAutomatedStrategyExecution(
     const activeDir = activePos?.direction ?? (pendingOrd?.direction ?? null);
     const activeDirType = activeDir === 'LONG' ? 'BULLISH' : activeDir === 'SHORT' ? 'BEARISH' : null;
 
+    const activeSetupId = activePos?.setupId || activePos?.originZoneId || activePos?.strategyId;
+    const pendingSetupId = pendingOrd?.setupId || pendingOrd?.originZoneId || pendingOrd?.strategyId;
+
     const matchById =
-      (activePos && (activePos as any).setupId
-        ? scannedSetups.find((s) => s.id === (activePos as any).setupId)
-        : null) ??
-      (pendingOrd && (pendingOrd as any).setupId
-        ? scannedSetups.find((s) => s.id === (pendingOrd as any).setupId)
-        : null);
+      (activeSetupId ? scannedSetups.find((s) => s.id === activeSetupId) : null) ??
+      (pendingSetupId ? scannedSetups.find((s) => s.id === pendingSetupId) : null);
+
+    const matchByAnchorLevel = (activePos?.originAnchorLevel || pendingOrd?.originAnchorLevel)
+      ? [...scannedSetups].reverse().find((s) =>
+          Math.abs(s.anchor_level - (activePos?.originAnchorLevel ?? pendingOrd?.originAnchorLevel ?? 0)) < 0.50 &&
+          (activeDirType ? s.type === activeDirType : true)
+        ) ?? null
+      : null;
 
     const matchByDirAndReclaim = activeDirType
       ? [...scannedSetups].reverse().find(
@@ -642,6 +605,7 @@ export function useAutomatedStrategyExecution(
 
     const latestActiveSetup =
       matchById ??
+      matchByAnchorLevel ??
       matchByDirAndReclaim ??
       matchByReclaimAny ??
       (scannedSetups.length > 0 ? scannedSetups[scannedSetups.length - 1] : null);
@@ -683,9 +647,6 @@ export function useAutomatedStrategyExecution(
     const riskPct = activePos?.riskPct ?? pendingOrd?.riskPct ?? latestActiveSetup?.risk_pct ?? (engineConfig.liveSettings?.compoundingRiskPct ?? 2.0);
 
     // ── Derive stage targets from riskUsd when active position targets look wrong ──
-    // If the active position's stage1Target deviates from the expected 1.0R by more
-    // than 5x (i.e. stale pre-bug targets from a corrupted position), fall back to
-    // recomputing from the live entryPrice / riskUsd / stageMultiples.
     const posTarget1 = activePos?.stage1Target ?? pendingOrd?.stage1Target ?? null;
     const posTarget2 = activePos?.stage2Target ?? pendingOrd?.stage2Target ?? null;
     const posTarget3 = activePos?.stage3Target ?? pendingOrd?.dynamicDolTarget ?? pendingOrd?.stage3Target ?? null;
@@ -712,15 +673,62 @@ export function useAutomatedStrategyExecution(
       : latestActiveSetup?.stage3_target ??
         (isBull ? entryPrice + s3Multiple * riskUsd : entryPrice - s3Multiple * riskUsd);
 
+    const displacementCandles =
+      activePos?.displacementCandles ??
+      pendingOrd?.displacementCandles ??
+      latestActiveSetup?.displacement_candles;
+
+    const sweepPrice =
+      activePos?.sweepPrice ??
+      pendingOrd?.sweepPrice ??
+      latestActiveSetup?.sweep_price ??
+      null;
+
+    const reclaimPrice =
+      activePos?.reclaimPrice ??
+      pendingOrd?.reclaimPrice ??
+      latestActiveSetup?.reclaim_close_price ??
+      null;
+
+    const volExpansion =
+      activePos?.volExpansion ??
+      pendingOrd?.volExpansion ??
+      latestActiveSetup?.reclaim_volume_expansion ??
+      (isPositionOpen ? 2.0 : 1.0);
+
+    const deltaDominance =
+      activePos?.deltaDominance ??
+      pendingOrd?.deltaDominance ??
+      latestActiveSetup?.reclaim_delta_dominance_pct ??
+      (isPositionOpen ? 60.0 : 50.0);
+
+    const bodyRatio =
+      activePos?.bodyRatio ??
+      pendingOrd?.bodyRatio ??
+      latestActiveSetup?.reclaim_body_ratio ??
+      (isPositionOpen ? 65.0 : 50.0);
+
+    const threePillarsPassed =
+      activePos?.threePillarsPassed ??
+      pendingOrd?.threePillarsPassed ??
+      latestActiveSetup?.three_pillar_displacement_passed ??
+      (isPositionOpen ? true : false);
+
+    const anchorName =
+      activePos?.anchorName ||
+      pendingOrd?.anchorName ||
+      latestActiveSetup?.anchor_name ||
+      (isBull ? 'Bullish Anchor' : 'Bearish Anchor');
+
     return {
       id: activePos?.id ?? pendingOrd?.id ?? latestActiveSetup?.id ?? 'LIVE_SR',
       type: isBull ? 'BULLISH' : 'BEARISH',
       phase,
-      anchorName: latestActiveSetup?.anchor_name || (isBull ? 'Bullish Anchor' : 'Bearish Anchor'),
+      anchorName,
       anchorLevel,
-      sweepPrice: latestActiveSetup?.sweep_price ?? null,
+      sweepPrice,
       sweepObMt: latestActiveSetup?.sweep_ob_mt ?? null,
-      reclaimPrice: latestActiveSetup?.reclaim_close_price ?? null,
+      reclaimPrice,
       fvgTop: latestActiveSetup?.reclaim_fvg_top ?? null,
       fvgBottom: latestActiveSetup?.reclaim_fvg_bottom ?? null,
       fvgCe: activePos?.fvgCeLevel ?? pendingOrd?.fvgCeLevel ?? latestActiveSetup?.reclaim_fvg_ce ?? null,
@@ -729,12 +737,10 @@ export function useAutomatedStrategyExecution(
       target1,
       target2,
       target3,
-      volExpansion: latestActiveSetup?.reclaim_volume_expansion ?? 1.0,
-      deltaDominance: latestActiveSetup?.reclaim_delta_dominance_pct ?? 50.0,
-      bodyRatio: latestActiveSetup?.reclaim_body_ratio ?? 50.0,
-      // FIX: Default to FALSE — ANCHOR_ONLY setups have null three_pillar_displacement_passed.
-      // Defaulting to true was causing the badge to show 'Confirmed' for unconfirmed setups.
-      threePillarsPassed: latestActiveSetup?.three_pillar_displacement_passed ?? false,
+      volExpansion,
+      deltaDominance,
+      bodyRatio,
+      threePillarsPassed,
       isValuationAligned: latestActiveSetup?.is_valuation_aligned ?? true,
       realizedR: activePos?.realizedR ?? 0,
       unrealizedR: activePos?.unrealizedR ?? 0,
@@ -746,7 +752,7 @@ export function useAutomatedStrategyExecution(
       isPositionOpen,
       riskUsd,
       riskPct,
-      displacementCandles: latestActiveSetup?.displacement_candles,
+      displacementCandles,
       anchorTime: latestActiveSetup?.anchor_time,
       sweepTime: latestActiveSetup?.sweep_time ?? undefined,
       reclaimTime: latestActiveSetup?.reclaim_time ?? undefined,
@@ -778,3 +784,5 @@ export function useAutomatedStrategyExecution(
     refetchEquity: fetchAccountEquity,
   };
 }
+
+

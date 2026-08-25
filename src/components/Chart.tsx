@@ -959,6 +959,27 @@ export default function Chart({
           anchorLabelEl.setAttribute('transform', 'translate(10, -1000)');
         }
       }
+    } else {
+      // HIDE ALL S&R SVG LINES AND LABELS WHEN SROVERLAY IS NULL
+      const hideLineAndLabel = (idPrefix: string) => {
+        const lineEl = document.getElementById(`svg-sr-line-${idPrefix}`);
+        const labelEl = document.getElementById(`svg-sr-label-${idPrefix}`);
+        if (lineEl) {
+          lineEl.setAttribute('y1', '-1000');
+          lineEl.setAttribute('y2', '-1000');
+        }
+        if (labelEl) {
+          labelEl.setAttribute('transform', `translate(10, -1000)`);
+        }
+      };
+      
+      hideLineAndLabel('anchor');
+      hideLineAndLabel('reclaim');
+      hideLineAndLabel('entry');
+      hideLineAndLabel('sl');
+      hideLineAndLabel('tp1');
+      hideLineAndLabel('tp2');
+      hideLineAndLabel('tp3');
     }
   }, [openTrades, srOverlay]);
 
@@ -2386,13 +2407,22 @@ export default function Chart({
               {srOverlay.displacementCandles && srOverlay.displacementCandles.length > 0 ? (
                 srOverlay.displacementCandles.map((dc, idx) => {
                   const d = new Date(dc.time > 1e11 ? dc.time : dc.time * 1000);
-                  const dateStr = d.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+                  const dateStr = d.toLocaleString('en-US', {
+                    timeZone: 'Africa/Cairo',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false,
+                  }).replace(',', '') + ' (Cairo)';
                   const isBull = dc.close >= dc.open;
                   return (
                     <div key={idx} className="p-2 bg-black/50 border border-white/5 rounded-lg flex flex-col gap-1">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-sky-300 text-[10px]">{dc.label}</span>
-                        <span className="text-[8.5px] text-muted">{dateStr}</span>
+                        <span className="text-[8.5px] text-muted font-mono">{dateStr}</span>
                       </div>
                       <div className="grid grid-cols-5 gap-1 text-[9px]">
                         <div><span className="text-muted">O: </span><span className="text-foreground">${dc.open.toFixed(2)}</span></div>
@@ -2410,7 +2440,7 @@ export default function Chart({
                 <div className="p-2.5 bg-black/40 border border-white/5 rounded-lg text-[9.5px] text-muted text-center flex flex-col gap-1">
                   <div>Displacement leg confirmed at anchor shelf <span className="text-sky-300 font-bold">${srOverlay.anchorLevel.toFixed(2)}</span>.</div>
                   <div className="text-[8.5px] text-muted/80">
-                    Sweep Extreme: ${srOverlay.sweepPrice?.toFixed(2) ?? 'N/A'} ➔ Reclaim Close: ${srOverlay.reclaimPrice?.toFixed(2) ?? 'N/A'}
+                    Sweep Extreme: {srOverlay.sweepPrice !== null && srOverlay.sweepPrice !== undefined ? `$${srOverlay.sweepPrice.toFixed(2)}` : 'Awaiting Retest'} ➔ Reclaim Close: {srOverlay.reclaimPrice !== null && srOverlay.reclaimPrice !== undefined ? `$${srOverlay.reclaimPrice.toFixed(2)}` : 'Confirmed at Shelf'}
                   </div>
                 </div>
               )}

@@ -158,26 +158,12 @@ export default function BacktestPage() {
 
   const fetchBacktestTrades = useCallback(async () => {
     try {
-      // 1. Sync immediately from fast in-memory session journal store
       const localTrades = useSessionJournalStore.getState().getTradesByMode('BACKTEST');
       const localAccount = useSessionJournalStore.getState().backtestAccount;
-      if (localTrades.length > 0) {
-        setBacktestTrades(localTrades as unknown as TradeRecord[]);
-        setBacktestAccount(localAccount as any);
-      }
-
-      // 2. Background cloud DB sync fallback
-      const res = await fetch('/api/backtest-trades');
-      if (res.ok) {
-        const json = await res.json();
-        const combined = json.trades || localTrades;
-        setBacktestTrades(combined);
-        if (json.account) {
-          setBacktestAccount(json.account);
-        }
-      }
+      setBacktestTrades((localTrades as unknown as TradeRecord[]) || []);
+      setBacktestAccount((localAccount as any) || null);
     } catch (err) {
-      console.debug('[Backtest] Cloud DB fetch skipped (in-memory journal preserved):', err);
+      console.debug('[Backtest] Fetch trades error:', err);
     } finally {
       setIsLoadingTrades(false);
     }
@@ -296,10 +282,8 @@ export default function BacktestPage() {
 
     triggered.forEach(async (order) => {
       try {
-        const res = await fetch('/api/backtest-trades', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
+        const res = { ok: true };
+        useSessionJournalStore.getState().addTrade({
             symbol: 'ETHUSDC',
             direction: order.direction,
             entry_price: order.entryPrice,
@@ -307,9 +291,12 @@ export default function BacktestPage() {
             take_profit: order.takeProfit,
             risk_percent: order.riskPct,
             strategy_name: `Manual Replay ${order.orderType} Order`,
-            current_price: order.entryPrice,
-            ipda_metrics: engine.enrichedPayload,
-          }),
+            status: "OPEN",
+            mode: "BACKTEST",
+            position_size: 1.0,
+            risk_amount_usd: 10000 * (order.riskPct / 100),
+            opened_at: new Date(engine.currentIndex > 0 ? (engine.visibleArrays?.candles_5m?.[engine.visibleArrays.candles_5m.length - 1]?.t || Date.now()) : Date.now()).toISOString(),
+            ipda_metrics: engine.enrichedPayload as any
         });
 
         if (res.ok) {
@@ -319,8 +306,6 @@ export default function BacktestPage() {
           }
           window.dispatchEvent(new Event('backtest-trades-refresh'));
           fetchBacktestTrades();
-        } else {
-          console.error('[Manual Trading] Failed to execute pending backtest order:', res.statusText);
         }
       } catch (e) {
         console.error('[Manual Trading] Error executing pending backtest order:', e);
@@ -384,16 +369,14 @@ export default function BacktestPage() {
         closingBacktestTradesRef.current.add(trade.id);
 
         try {
-          const res = await fetch('/api/backtest-trades', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              trade_id: trade.id,
-              status: 'CLOSED',
-              exit_price: exitPrice,
-              closed_at: new Date(lastCandle.t).toISOString(),
-            }),
-          });
+          const isProfit = direction === 'LONG' ? exitPrice >= entryPrice : exitPrice <= entryPrice;
+          const res = { ok: true };
+          useSessionJournalStore.getState().closeTrade(
+            trade.id,
+            exitPrice,
+            isProfit ? 'TARGET_HIT' : 'STOPPED_OUT',
+            new Date(lastCandle.t).toISOString()
+          );
 
           if (res.ok) {
             if (typeof window !== 'undefined') {
@@ -403,10 +386,6 @@ export default function BacktestPage() {
             }
             window.dispatchEvent(new Event('backtest-trades-refresh'));
             fetchBacktestTrades();
-          } else {
-            console.error('[Manual Trading] Failed to auto-close backtest trade:', res.statusText);
-            // Unlock on failure to allow retry
-            closingBacktestTradesRef.current.delete(trade.id);
           }
         } catch (e) {
           console.error('[Manual Trading] Error auto-closing backtest trade:', e);
@@ -473,22 +452,7 @@ export default function BacktestPage() {
         fetchBacktestTrades();
         setIsManualTradingActive(false);
 
-        // 2. Fire-and-forget background cloud sync
-        fetch('/api/backtest-trades', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            symbol: 'ETHUSDC',
-            direction: manualDirection,
-            entry_price: manualEntryPrice,
-            stop_loss: manualStopLoss,
-            take_profit: manualTakeProfit,
-            risk_percent: manualRiskPct,
-            strategy_name: 'Manual Replay Market Order',
-            current_price: manualEntryPrice,
-            ipda_metrics: engine.enrichedPayload,
-          }),
-        }).catch(() => {});
+
       } catch (e) {
         console.error('[Manual Trading] Submit error:', e);
       } finally {
@@ -541,26 +505,30 @@ export default function BacktestPage() {
       : `${setup.confluence} | TP2: $${setup.target2.toFixed(2)}`;
 
     try {
-      const res = await fetch('/api/backtest-trades', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          symbol: 'ETHUSDC',
+      const res = { ok: true };
+      const newTrade = useSessionJournalStore.getState().addTrade({
+          symbol: "ETHUSDC",
           direction,
           entry_price: entryPrice,
           exit_price: exitPrice,
           stop_loss: setup.stopLoss,
           take_profit: setup.target1,
           strategy_name: `Quant Setup (${setup.id})`,
-          notes: summaryText,
-          status: isCompleted ? 'CLOSED' : 'OPEN',
-          outcome: isCompleted ? (isWin ? 'WIN' : 'LOSS') : undefined,
-          pnl: realizedPnl,
+          ai_narrative_summary: summaryText,
+          status: isCompleted ? "CLOSED" : "OPEN",
+          exit_reason: isCompleted ? (isWin ? "WIN" : "LOSS") : undefined,
           realized_pnl: realizedPnl,
-          created_at: openTimeStr,
           opened_at: openTimeStr,
           closed_at: closeTimeStr,
-        }),
+          mode: "BACKTEST",
+          position_size: 1.0,
+          risk_amount_usd: 10000 * 0.01,
+          risk_percent: 1.0,
+          ipda_metrics: {
+            timeframe: "5m",
+            setup_id: setup.id,
+            confluence: setup.confluence,
+          }
       });
 
       if (res.ok) {
@@ -570,9 +538,6 @@ export default function BacktestPage() {
           window.dispatchEvent(new Event('backtest-trades-refresh'));
         }
         fetchBacktestTrades();
-      } else {
-        const err = await res.json();
-        alert(`Failed to execute backtest setup: ${err.error || res.statusText}`);
       }
     } catch (err) {
       console.error('[Backtest] Failed to execute setup:', err);
@@ -582,14 +547,10 @@ export default function BacktestPage() {
 
   const handleUpdateBacktestTradeLevels = async (tradeId: string, tp: number | null, sl: number | null) => {
     try {
-      const res = await fetch('/api/backtest-trades', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          trade_id: tradeId,
-          take_profit: tp,
-          stop_loss: sl,
-        }),
+      const res = { ok: true };
+      useSessionJournalStore.getState().updateTrade(tradeId, {
+        take_profit: tp ?? undefined,
+        stop_loss: sl ?? undefined,
       });
 
       if (res.ok) {
@@ -599,9 +560,6 @@ export default function BacktestPage() {
         }
         window.dispatchEvent(new Event('backtest-trades-refresh'));
         fetchBacktestTrades();
-      } else {
-        const json = await res.json();
-        console.error('[Manual Trading] Failed to update backtest trade levels:', json.error);
       }
     } catch (e) {
       console.error('[Manual Trading] Error updating backtest trade levels:', e);
@@ -1535,3 +1493,4 @@ export default function BacktestPage() {
     </main>
   );
 }
+

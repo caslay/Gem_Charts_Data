@@ -1,5 +1,4 @@
 import { auth } from "@/auth";
-import { sql } from "@vercel/postgres";
 import { JournalTable, type TradeRecord } from "@/components/JournalTable";
 import Link from "next/link";
 import { Lock } from "lucide-react";
@@ -33,57 +32,12 @@ export default async function JournalPage() {
     );
   }
 
-  // Fetch logged trades & account details server-side (initial data seed)
-  let initialTrades: TradeRecord[] = [];
-  let initialAccount = {
+  const initialTrades: TradeRecord[] = [];
+  const initialAccount = {
     current_balance: "10000.0000",
     initial_capital: "10000.0000",
     max_risk_limit_pct: "3.00"
   };
-
-  const userEmail = session.user.email || "default_user";
-
-  try {
-    // Ensure tables are verified/created and retrieve account
-    await sql`
-      CREATE TABLE IF NOT EXISTS trading_account (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id VARCHAR(255) NOT NULL UNIQUE,
-        current_balance DECIMAL(18, 4) NOT NULL,
-        initial_capital DECIMAL(18, 4) NOT NULL,
-        max_risk_limit_pct DECIMAL(5, 2) NOT NULL DEFAULT 3.00,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `;
-
-    let accountRes = await sql`
-      SELECT * FROM trading_account WHERE user_id = ${userEmail} LIMIT 1
-    `;
-    if (accountRes.rows.length === 0) {
-      accountRes = await sql`
-        INSERT INTO trading_account (user_id, current_balance, initial_capital, max_risk_limit_pct)
-        VALUES (${userEmail}, 10000.0000, 10000.0000, 3.00)
-        RETURNING *
-      `;
-      console.log(`[JOURNAL PAGE] Seeded new trading account for user: ${userEmail} with $10,000.`);
-    }
-
-    initialAccount = {
-      current_balance: accountRes.rows[0].current_balance.toString(),
-      initial_capital: accountRes.rows[0].initial_capital.toString(),
-      max_risk_limit_pct: accountRes.rows[0].max_risk_limit_pct.toString(),
-    };
-
-    // Fetch logged trades
-    const { rows } = await sql`
-      SELECT * FROM paper_trades
-      ORDER BY created_at DESC
-    `;
-    initialTrades = rows as unknown as TradeRecord[];
-  } catch (err) {
-    console.warn("[JOURNAL PAGE] Initial DB fetch failed:", err);
-  }
 
   return (
     <main className="min-h-[calc(100vh-64px)] w-full bg-background selection:bg-accent/30 font-sans p-4 md:p-8 overflow-y-auto relative transition-colors duration-300">

@@ -23,21 +23,13 @@ export class PivotEngine {
   }
 
   public processCandles(candles: Candle[]) {
-    // We do NOT clear this.pivots here if they were pre-seeded by seedConfirmedPivots,
-    // but typically we would re-initialize. Instead of re-initializing to empty,
-    // we just use what is already there (which might be seeded pivots).
-    // Let's filter out any pivots that are within the current candles range 
-    // so we don't duplicate them, or we just keep them and prevent adding duplicates.
-    // The simplest way is just not to clear if we want to retain seeded pivots, 
-    // but the original code was: `this.pivots = [];`
-    
-    // To support seeding, we will only clear if there are NO seeded pivots, OR 
-    // we can just keep the seeded ones and deduplicate.
-    
-    // For now, if we already have pivots, we keep them. We will use a Set of existing timestamps.
-    const existingTimestamps = new Set(this.pivots.map(p => `${p.level}_${p.timestamp}`));
-
     if (candles.length < 2) return;
+
+    const firstCandleTime = candles[0].t ?? (candles[0] as any).timestamp ?? 0;
+    // Keep only historical seeded pivots that occurred strictly before the current candles window
+    this.pivots = this.pivots.filter(p => p.timestamp < firstCandleTime);
+
+    const existingTimestamps = new Set(this.pivots.map(p => `${p.level}_${p.timestamp}`));
 
     // Process each hierarchical level independently
     for (const lvl of this.levels) {

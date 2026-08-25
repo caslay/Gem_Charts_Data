@@ -27,6 +27,7 @@ import {
   IS_ORDER_BLOCK_STRATEGY_PAUSED
 } from '@/lib/quantEngine/strategyExecutionConfig';
 import type { SmartAlert } from '@/hooks/useLiveAlerts';
+import { useSessionJournalStore, type SessionTradeStatus } from '@/lib/quantEngine/sessionJournalStore';
 
 export const IS_OB_STRATEGY_PAUSED = IS_ORDER_BLOCK_STRATEGY_PAUSED;
 
@@ -144,37 +145,65 @@ export function useLiveOrderBlockExecution(
 
     async function rehydrateFromDatabase() {
       try {
-        const res = await fetch('/api/trades', { credentials: 'same-origin' });
-        if (!res.ok) return;
-
-        const data = await res.json();
-        const trades = data.trades || [];
-        const openTrades = trades.filter((t: any) =>
-          t.status === 'OPEN' && (
-            t.strategy_name?.includes('OB Live') ||
-            t.strategy_name?.includes('Auto OB Execution') ||
-            t.strategy_name?.startsWith('Phase 7') ||
-            t.strategy_name?.startsWith('Phase 6')
+        const localTrades = useSessionJournalStore.getState().getTradesByMode("LIVE");
+        const openTrades = localTrades.filter((t: any) =>
+          (t.status === "OPEN" || t.status === "STAGE_1_FILLED" || t.status === "STAGE_2_FILLED") && (
+            t.strategy_name?.includes("OB Live") ||
+            t.strategy_name?.includes("Auto OB Execution") ||
+            t.strategy_name?.startsWith("Phase 7") ||
+            t.strategy_name?.startsWith("Phase 6")
           )
         );
 
-        if (openTrades.length > 0 && engineRef.current && isMounted) {
-          const rehydrated = engineRef.current.rehydrateOpenPositions(openTrades);
-          if (rehydrated.length > 0) {
-            setActivePositions([...engineRef.current.getActivePositions()]);
-            setTestingStates([...engineRef.current.getInZoneTestingStates()]);
-            setLastEventMessage(`🔄 Re-hydrated ${rehydrated.length} active trade(s) from persistent database ledger.`);
-            setLastEventTime(Date.now());
+        if (engineRef.current && isMounted) {
+          engineRef.current.reconcileWithOpenTrades(localTrades);
+          if (openTrades.length > 0) {
+            engineRef.current.rehydrateOpenPositions(openTrades as any);
           }
+          setActivePositions([...engineRef.current.getActivePositions()]);
+          setTestingStates([...engineRef.current.getInZoneTestingStates()]);
+          setLastEventMessage(`🔄 Re-hydrated and reconciled ${openTrades.length} active trade(s) from local session journal.`);
+          setLastEventTime(Date.now());
         }
       } catch (err) {
-        console.warn('[useLiveOrderBlockExecution] On-mount DB re-hydration error:', err);
+        console.warn("[useLiveOrderBlockExecution] On-mount local re-hydration error:", err);
       }
     }
 
     rehydrateFromDatabase();
     return () => {
       isMounted = false;
+    };
+  }, []);
+
+  // ── Sync with External Journal Changes (Close / Delete / Purge / Archive) ────
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleTradesRefresh = () => {
+      if (!engineRef.current || IS_OB_STRATEGY_PAUSED) return;
+      const localTrades = useSessionJournalStore.getState().getTradesByMode("LIVE");
+      const openTrades = localTrades.filter((t: any) =>
+        (t.status === "OPEN" || t.status === "STAGE_1_FILLED" || t.status === "STAGE_2_FILLED") && (
+          t.strategy_name?.includes("OB Live") ||
+          t.strategy_name?.includes("Auto OB Execution") ||
+          t.strategy_name?.startsWith("Phase 7") ||
+          t.strategy_name?.startsWith("Phase 6")
+        )
+      );
+
+      engineRef.current.reconcileWithOpenTrades(localTrades);
+      if (openTrades.length > 0) {
+        engineRef.current.rehydrateOpenPositions(openTrades as any);
+      }
+
+      setActivePositions([...engineRef.current.getActivePositions()]);
+      setTestingStates([...engineRef.current.getInZoneTestingStates()]);
+    };
+
+    window.addEventListener('trades-refresh', handleTradesRefresh);
+    return () => {
+      window.removeEventListener('trades-refresh', handleTradesRefresh);
     };
   }, []);
 
@@ -200,10 +229,12 @@ export function useLiveOrderBlockExecution(
       }
 
       // ── A. Atomic Trade Entry: POST /api/trades with Rollback Guard ──
+      // ── A. Atomic Trade Entry: Local Store ──
       if (event.type === 'ORDER_OPENED' && pos) {
         try {
           const strategyName = `Auto OB Execution (${pos.timeframe.toUpperCase()} ${pos.orderBlock.quality_tier})`;
-          const payload = {
+          const journalTrade = useSessionJournalStore.getState().addTrade({
+            id: pos.id,
             symbol: pos.symbol,
             direction: pos.direction,
             strategy_name: strategyName,
@@ -212,8 +243,10 @@ export function useLiveOrderBlockExecution(
             stop_loss: pos.initialStopLoss,
             take_profit: pos.tp3Price,
             status: 'OPEN',
+            mode: 'LIVE',
             position_size: pos.allocatedAmount,
             risk_amount_usd: engineConfig.fixedRiskUsd,
+            risk_percent: 1.0,
             opened_at: new Date(pos.openTime || Date.now()).toISOString(),
             ipda_metrics: {
               timeframe: pos.timeframe,
@@ -226,44 +259,19 @@ export function useLiveOrderBlockExecution(
               tp2_target: pos.tp2Price,
               tp3_target: pos.tp3Price
             }
-          };
-
-          const res = await fetch('/api/trades', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify(payload)
           });
 
-          if (!res.ok) {
-            const errorJson = await res.json().catch(() => ({}));
-            const errorMsg = errorJson.error || errorJson.message || `HTTP ${res.status}`;
-            console.warn('[useLiveOrderBlockExecution] DB Trade creation vetoed/failed, triggering rollback:', errorMsg);
-            dispatchAlert?.('SMT_TRAP', `🛡️ [PORTFOLIO GUARD] OB Order placement vetoed: ${errorMsg}`, undefined, 'AUTONOMOUS_OB');
-            // Atomic rollback to eliminate ghost positions
-            engineRef.current.rollbackPosition(pos.id, errorMsg);
-            setActivePositions([...engineRef.current.getActivePositions()]);
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new Event('trades-refresh'));
-            }
-            return;
-          }
-
-          const resData = await res.json();
-          if (resData.trade_id) {
-            engineRef.current.setDbTradeId(pos.id, resData.trade_id);
-            setActivePositions([...engineRef.current.getActivePositions()]);
-            // Dispatch verified entry alert after DB confirmation
-            dispatchAlert?.('AUTO_ORDER_ROUTED', event.message, '/audio/sweep_alert.mp3', 'AUTONOMOUS_OB');
-          }
+          engineRef.current.setDbTradeId(pos.id, pos.id);
+          setActivePositions([...engineRef.current.getActivePositions()]);
+          dispatchAlert?.('AUTO_ORDER_ROUTED', event.message, '/audio/sweep_alert.mp3', 'AUTONOMOUS_OB');
 
           // Trigger global journal refresh
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new Event('trades-refresh'));
           }
         } catch (err) {
-          console.warn('[useLiveOrderBlockExecution] Network failure during trade creation, rolling back:', err);
-          engineRef.current.rollbackPosition(pos.id, 'Network failure during trade entry persistence');
+          console.warn('[useLiveOrderBlockExecution] Local trade creation failed, rolling back:', err);
+          engineRef.current.rollbackPosition(pos.id, 'Local failure during trade entry persistence');
           setActivePositions([...engineRef.current.getActivePositions()]);
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new Event('trades-refresh'));
@@ -271,102 +279,47 @@ export function useLiveOrderBlockExecution(
         }
       }
 
-      // ── B. Progressive Lifecycle Scale-Out: PATCH /api/trades on Stage 1 / 2 ──
+      // ── B. Progressive Lifecycle Scale-Out: Local Store ──
       if ((event.type === 'STAGE_1_HARVEST' || event.type === 'STAGE_2_HARVEST') && pos) {
-        if (pos.dbTradeId) {
           try {
-            const patchPayload = {
-              trade_id: pos.dbTradeId,
-              status: 'OPEN',
+            useSessionJournalStore.getState().updateTrade(pos.id, {
+              status: pos.status as unknown as SessionTradeStatus,
               stop_loss: pos.activeStopLoss,
-              realized_pnl: (pos.realizedR * engineConfig.fixedRiskUsd).toFixed(2),
+              realized_pnl: pos.realizedR * engineConfig.fixedRiskUsd,
+              realized_r: pos.realizedR,
               ai_narrative_summary: `[Auto OB Scale-Out] ${event.message}`
-            };
-
-            await fetch('/api/trades', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'same-origin',
-              body: JSON.stringify(patchPayload)
             });
-
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new Event('trades-refresh'));
             }
           } catch (err) {
-            console.warn('[useLiveOrderBlockExecution] Stage harvest PATCH failed:', err);
+            console.warn('[useLiveOrderBlockExecution] Stage harvest update failed:', err);
           }
-        }
       }
 
-      // ── C. Final Trade Closure: PATCH /api/trades ──
+      // ── C. Final Trade Closure: Local Store ──
       if (event.type === 'POSITION_CLOSED' && pos) {
-        if (pos.dbTradeId) {
           try {
             const exitPrice = pos.exitReason === 'FULL_TP3_WIN' ? pos.tp3Price : pos.activeStopLoss;
-            const patchPayload = {
-              trade_id: pos.dbTradeId,
-              status: 'CLOSED',
-              exit_price: exitPrice,
-              realized_pnl: (pos.realizedR * engineConfig.fixedRiskUsd).toFixed(2),
-              closed_at: new Date(pos.closeTime || Date.now()).toISOString(),
+            useSessionJournalStore.getState().closeTrade(
+              pos.id,
+              exitPrice,
+              pos.exitReason || 'CLOSED',
+              new Date(pos.closeTime || Date.now()).toISOString()
+            );
+
+            // Update pnl
+            useSessionJournalStore.getState().updateTrade(pos.id, {
+              realized_pnl: pos.realizedR * engineConfig.fixedRiskUsd,
               ai_narrative_summary: `[Auto OB Trade Closed] ${event.message}`
-            };
-
-            await fetch('/api/trades', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'same-origin',
-              body: JSON.stringify(patchPayload)
             });
 
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new Event('trades-refresh'));
             }
           } catch (err) {
-            console.warn('[useLiveOrderBlockExecution] Final close PATCH failed:', err);
+            console.warn('[useLiveOrderBlockExecution] Final close update failed:', err);
           }
-        } else {
-          // Fallback creation for closed trade without initial dbTradeId
-          try {
-            const payload = {
-              symbol: pos.symbol,
-              direction: pos.direction,
-              strategy_name: `Auto OB Execution (${pos.timeframe.toUpperCase()} ${pos.orderBlock.quality_tier})`,
-              ai_narrative_summary: `[Phase 7 MTF Live 3-Stage Position] ${event.message}`,
-              entry_price: pos.entryPrice,
-              stop_loss: pos.initialStopLoss,
-              take_profit: pos.tp3Price,
-              status: 'CLOSED',
-              pnl: (pos.realizedR * engineConfig.fixedRiskUsd).toFixed(2),
-              rr: pos.realizedR.toFixed(2),
-              exit_reason: pos.exitReason,
-              closed_at: new Date(pos.closeTime || Date.now()).toISOString(),
-              ipda_metrics: {
-                timeframe: pos.timeframe,
-                structural_weight: pos.orderBlock.structural_weight,
-                htf_alignment: pos.orderBlock.htf_alignment_status,
-                gates: pos.orderBlock.gates,
-                quality_tier: pos.orderBlock.quality_tier,
-                stage_exit: pos.exitReason,
-                realized_rr: pos.realizedR
-              }
-            };
-
-            await fetch('/api/trades', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'same-origin',
-              body: JSON.stringify(payload)
-            });
-
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new Event('trades-refresh'));
-            }
-          } catch (err) {
-            console.warn('[useLiveOrderBlockExecution] Failed to auto-journal closed trade fallback:', err);
-          }
-        }
       }
     });
 
@@ -547,3 +500,10 @@ export function useLiveOrderBlockExecution(
     setEnabledTimeframes: setEnabledOBTimeframes
   };
 }
+
+
+
+
+
+
+

@@ -1083,6 +1083,59 @@ export class LiveOrderBlockExecutionEngine {
   }
 
   /**
+   * Bi-directional Synchronization: Reconciles in-memory open positions against the authoritative session journal store.
+   * Purges any positions that have been closed, deleted, or archived.
+   */
+  public reconcileWithOpenTrades(sessionTrades: any[]): { removedCount: number; activeCount: number } {
+    const openTradeIds = new Set<string>();
+    const closedTradeIds = new Set<string>();
+
+    if (Array.isArray(sessionTrades)) {
+      for (const t of sessionTrades) {
+        if (!t) continue;
+        if (t.status === 'OPEN' || t.status === 'STAGE_1_FILLED' || t.status === 'STAGE_2_FILLED' || t.status === 'PAUSED') {
+          openTradeIds.add(t.id);
+        } else if (t.status === 'CLOSED') {
+          closedTradeIds.add(t.id);
+        }
+      }
+    }
+
+    let removedCount = 0;
+    for (const [key, pos] of this.openPositions.entries()) {
+      const isKnownOpen = openTradeIds.has(pos.id) || (pos.dbTradeId ? openTradeIds.has(pos.dbTradeId) : false);
+      const isExplicitlyClosed = closedTradeIds.has(pos.id) || (pos.dbTradeId ? closedTradeIds.has(pos.dbTradeId) : false);
+
+      if (isExplicitlyClosed || !isKnownOpen) {
+        this.openPositions.delete(key);
+        this.consumedZoneIds.delete(pos.orderBlockId);
+        if (pos.orderBlock) {
+          pos.orderBlock.is_consumed = false;
+        }
+        removedCount++;
+      }
+    }
+
+    if (removedCount > 0) {
+      this.emitEvent(
+        'POSITION_CLOSED',
+        undefined as any,
+        `🔄 [RECONCILED] Purged ${removedCount} closed/stale live OB position(s).`
+      );
+    }
+
+    return { removedCount, activeCount: this.openPositions.size };
+  }
+
+  /**
+   * Hard reset: purges all live positions from memory.
+   */
+  public purgeAllPositions(): void {
+    this.openPositions.clear();
+    this.consumedZoneIds.clear();
+  }
+
+  /**
    * Rehydrates open active trades from the persistent database ledger on mount / refresh.
    */
   public rehydrateOpenPositions(dbTrades: any[]): LivePosition[] {

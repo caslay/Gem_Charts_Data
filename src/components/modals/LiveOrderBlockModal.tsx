@@ -103,16 +103,16 @@ function LiveOrderBlockModalContent({
       if (list.includes('DAILY')) result.push('PDH', 'PDL');
       return result;
     })(),
-    lookbackMajor: 15,
-    lookbackInternal: 5,
-    maxBarsAnchorToSweep: 30,
-    maxBarsSweepToReclaim: 12,
-    maxBarsToRetest: 24,
+    lookbackMajor: srSettings?.lookbackMajor ?? 15,
+    lookbackInternal: srSettings?.lookbackInternal ?? 5,
+    maxBarsAnchorToSweep: srSettings?.maxBarsAnchorToSweep ?? 40,
+    maxBarsSweepToReclaim: srSettings?.maxBarsSweepToReclaim ?? 16,
+    maxBarsToRetest: srSettings?.maxBarsToRetest ?? 30,
     volumeSmaPeriod: srSettings?.volumeSmaPeriod ?? 20,
     volumeExpansionThreshold: srSettings?.volumeExpansionThreshold ?? 1.50,
     deltaDominanceThreshold: srSettings?.deltaDominanceThreshold ?? 55.0,
     bodyRatioThreshold: srSettings?.bodyRatioThreshold ?? 0.55,
-    requireThreePillarDisplacement: true,
+    requireThreePillarDisplacement: srSettings?.requireThreePillarDisplacement ?? true,
     enforceDiscountPremiumGate: srSettings?.enforceDiscountPremiumGate ?? true,
     stage1Multiple: srSettings?.stage1Multiple ?? 1.0,
     stage2Multiple: srSettings?.stage2Multiple ?? 1.5,
@@ -120,8 +120,8 @@ function LiveOrderBlockModalContent({
     entryMode: srSettings?.entryMode || 'SWEEP_OB_MT',
     enableStructuralTrail: srSettings?.enableStructuralTrail ?? true,
     enableProfitRatchet: srSettings?.enableProfitRatchet ?? true,
-    minSweepDepthAtrMultiplier: 0.10,
-    slBufferAtrMultiplier: 0.15,
+    minSweepDepthAtrMultiplier: srSettings?.minSweepDepthAtrMultiplier ?? 0.10,
+    slBufferAtrMultiplier: srSettings?.slBufferAtrMultiplier ?? 0.15,
   };
 
   const handleApplySrLivePreset = (preset: ScannerPreset) => {
@@ -146,6 +146,14 @@ function LiveOrderBlockModalContent({
       enableStructuralTrail: cfg.enableStructuralTrail ?? true,
       enableProfitRatchet: cfg.enableProfitRatchet ?? true,
       anchorTypes: liveAnchors.length > 0 ? liveAnchors : ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'],
+      lookbackMajor: cfg.lookbackMajor,
+      lookbackInternal: cfg.lookbackInternal,
+      maxBarsAnchorToSweep: cfg.maxBarsAnchorToSweep,
+      maxBarsSweepToReclaim: cfg.maxBarsSweepToReclaim,
+      maxBarsToRetest: cfg.maxBarsToRetest,
+      requireThreePillarDisplacement: cfg.requireThreePillarDisplacement,
+      minSweepDepthAtrMultiplier: cfg.minSweepDepthAtrMultiplier,
+      slBufferAtrMultiplier: cfg.slBufferAtrMultiplier,
     });
   };
 

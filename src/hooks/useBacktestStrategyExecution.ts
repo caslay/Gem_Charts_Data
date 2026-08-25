@@ -765,25 +765,7 @@ export function useBacktestStrategyExecution({
           'REPLAY_STRATEGY'
         );
 
-        if (pos.dbTradeId) {
-          fetch('/api/backtest-trades', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              trade_id: pos.dbTradeId,
-              status: 'CLOSED',
-              exit_price: pos.exitPrice,
-              realized_pnl: pos.realizedUsd,
-              outcome: outcomeType,
-              closed_at: new Date(candleTime).toISOString(),
-            }),
-          })
-            .then(() => {
-              onTradesRefresh?.();
-              if (typeof window !== 'undefined') window.dispatchEvent(new Event('backtest-trades-refresh'));
-            })
-            .catch(() => {});
-        }
+        
         return;
       }
     }
@@ -887,3 +869,4 @@ export function useBacktestStrategyExecution({
     srOverlay,
   };
 }
+
