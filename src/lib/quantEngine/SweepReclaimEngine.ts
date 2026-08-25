@@ -2025,8 +2025,11 @@ export class SweepReclaimEngine {
       detectedSetups.push(baseSetup);
     }
 
-    if (bootstrap) {
-      detectedSetups = detectedSetups.filter(s => s.anchor_time >= bootstrap.warmupCutoffTs);
+    if (bootstrap && bootstrap.warmupCutoffTs) {
+      detectedSetups = detectedSetups.filter((s) => {
+        const triggerTime = s.reclaim_time ?? s.sweep_time ?? s.anchor_time;
+        return triggerTime >= bootstrap.warmupCutoffTs;
+      });
     }
     
     // Calculate Telemetry across detected setups

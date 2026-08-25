@@ -6,6 +6,7 @@ import type { MarketDataPayload, Candle } from '@/hooks/useMarketData';
 import type { LiveCandle } from '@/hooks/useBinanceWS';
 import type { MetricKey, OperatorKey, TemporalMode, CustomStrategy, StrategyCondition } from '@/components/modals/EquationBuilder';
 import { annotateCandlesWithVolumetricSignals, checkPerfectMovementSetup, PerfectMovementSettings } from '@/utils/generateChartMarkers';
+import { useSessionJournalStore } from '@/lib/quantEngine/sessionJournalStore';
 
 // ─── Metric Evaluation Engine ─────────────────────────────────────────────────
 
@@ -624,8 +625,8 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
   // ── Fetch active strategies from the API ────────────────────────────────
   const fetchStrategies = useCallback(async () => {
     try {
-      const res = await fetch('/api/strategies', { credentials: 'same-origin' });
-      if (res.ok) {
+      const res = await fetch('/api/strategies', { credentials: 'same-origin' }).catch(() => null);
+      if (res && res.ok) {
         const contentType = res.headers.get('content-type');
         if (contentType && !contentType.includes('application/json')) {
           return;
@@ -642,8 +643,8 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
         });
         setStrategies(filtered);
       }
-    } catch (err) {
-      console.error('[StrategyEvaluator] Failed to fetch strategies:', err);
+    } catch (error) {
+      console.debug('[useStrategyEvaluator] Offline/API error fetching strategies:', error);
     }
   }, [isBacktest]);
 
@@ -652,27 +653,20 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
 
   const refreshActiveTradeNames = useCallback(async () => {
     try {
-      const res = await fetch(tradesApiUrl);
-      if (res.ok) {
-        const contentType = res.headers.get('content-type');
-        if (contentType && !contentType.includes('application/json')) {
-          return;
-        }
-        const json = await res.json();
-        const tradesList = json.trades || [];
-        setTrades(tradesList);
+      const mode = isBacktest ? "BACKTEST" : "LIVE";
+      const tradesList = useSessionJournalStore.getState().getTradesByMode(mode);
+      setTrades(tradesList);
 
-        const activeNames = new Set<string>(
-          tradesList
-            .filter((t: any) => t.status === 'OPEN' || t.status === 'PAUSED')
-            .map((t: any) => t.strategy_name as string)
-        );
-        activeTradeNamesRef.current = activeNames;
-      }
-    } catch (err) {
-      console.error('[StrategyEvaluator] Failed to refresh active trade names:', err);
+      const activeNames = new Set<string>(
+        tradesList
+          .filter((t: any) => t.status === 'OPEN' || t.status === 'PAUSED')
+          .map((t: any) => t.strategy_name as string)
+      );
+      activeTradeNamesRef.current = activeNames;
+    } catch (e) {
+      console.error('[StrategyEvaluator] Failed to fetch active trades', e);
     }
-  }, [tradesApiUrl]);
+  }, [isBacktest]);
 
   // Fetch on mount + periodically refresh (ONLY in live mode to prevent backtest lag/refetch loops)
   useEffect(() => {
@@ -853,74 +847,39 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
         }
       }
 
-      fetch(tradesApiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const newTrade = useSessionJournalStore.getState().addTrade({
           symbol: data.ticker || 'ETHUSDC',
-          direction: direction,
+          direction: direction as "LONG" | "SHORT",
           strategy_name: strategy.name,
           ai_narrative_summary: `[AUTO EXECUTE] Triggered by Strategy: ${strategy.name}`,
           ipda_metrics: data.ipda_metrics || data,
-          sl_logic,
-          tp_logic,
-          current_price: livePrice,
-          entry_price,
-          risk_percent
-        })
-      }).then(async (res) => {
-        const json = await res.json();
-        if (!res.ok) {
-          console.warn(`[StrategyEvaluator] Trade execution declined:`, json.error || json);
-          
-          // Silently log the 403 directional guardrail lock/veto to the console without triggering generic UI warnings
-          if (res.status === 403) {
-            console.log("Execution vetoed by Global Lock");
-            return;
-          }
-
-          if (triggerSmartAlert) {
-            triggerSmartAlert(
-              'RISK_OVERRIDE',
-              `[SYSTEM: TRADE_FAILED → ${strategy.name}: ${json.error || 'Inefficient RR < 2.0'}]`,
-              '/audio/fvg_alert.mp3',
-              'RISK_MANAGEMENT'
-            );
-          }
-        } else {
-          // Mark strategy as having an active trade in the local cache immediately
-          activeTradeNamesRef.current.add(strategy.name);
-
-          // Instantly append new trade to local trades state to trigger immediate guardrail protection
-          setTrades(prevTrades => [
-            {
-              id: json.trade_id,
-              strategy_name: strategy.name,
-              status: 'OPEN',
-              direction: direction,
-              timestamp: json.timestamp || Date.now()
-            },
-            ...prevTrades
-          ]);
-
-          if (triggerSmartAlert) {
-            triggerSmartAlert(
-              'STRATEGY_MATCHED',
-              `[SYSTEM: JOURNAL_LOGGED → ${strategy.name} trade successfully posted to Journal @ $${json.execution_parameters?.entry_price || livePrice}]`,
-              '/audio/fvg_alert.mp3',
-              'STRATEGY_ARCHITECT'
-            );
-          }
-
-          // Trigger a refresh event for components displaying trades
-          if (typeof window !== 'undefined') {
-            const refreshEventName = isBacktest ? 'backtest-trades-refresh' : 'trades-refresh';
-            window.dispatchEvent(new CustomEvent(refreshEventName));
-          }
-        }
-      }).catch((err) => {
-        console.error(`[StrategyEvaluator] Trade execution connection error:`, err);
+          stop_loss: sl_logic,
+          take_profit: tp_logic,
+          entry_price: entry_price ?? livePrice ?? 0,
+          risk_percent: risk_percent,
+          status: "OPEN",
+          mode: isBacktest ? "BACKTEST" : "LIVE",
+          position_size: 1.0,
+          risk_amount_usd: 10000 * (risk_percent / 100),
+          opened_at: new Date().toISOString()
       });
+      
+      activeTradeNamesRef.current.add(strategy.name);
+      refreshActiveTradeNames();
+
+      if (triggerSmartAlert) {
+        triggerSmartAlert(
+          'STRATEGY_MATCHED',
+          `[SYSTEM: JOURNAL_LOGGED   ${strategy.name} trade successfully posted to Journal @ $${entry_price ?? livePrice ?? 0}]`,
+          '/audio/fvg_alert.mp3',
+          'STRATEGY_ARCHITECT'
+        );
+      }
+
+      if (typeof window !== 'undefined') {
+        const refreshEventName = isBacktest ? 'backtest-trades-refresh' : 'trades-refresh';
+        window.dispatchEvent(new CustomEvent(refreshEventName));
+      }
     }
   }, [data, liveCandle, livePrice, strategies, triggerSmartAlert, isBacktest, tradesApiUrl]);
 
@@ -932,3 +891,5 @@ export function useStrategyEvaluator(config?: StrategyEvaluatorConfig) {
     refetchTrades: refreshActiveTradeNames
   };
 }
+
+

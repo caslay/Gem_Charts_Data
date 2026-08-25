@@ -11,41 +11,43 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { Candle } from '../fvgEngine';
+import { Candle } from "../fvgEngine";
 import {
   SweepReclaimEngine,
   SweepReclaimSetup,
   SweepReclaimScanConfig,
   SweepReclaimAnchorType,
   resolveRetestEntryPrice,
-} from './SweepReclaimEngine';
+  DisplacementCandleAudit,
+} from "./SweepReclaimEngine";
 import {
   SweepReclaimLiveSettings,
   DEFAULT_SR_LIVE_SETTINGS,
-  SupportedOBTimeframe
-} from './strategyExecutionConfig';
+  SupportedOBTimeframe,
+} from "./strategyExecutionConfig";
 
 export type PositionStageStatus =
-  | 'PENDING_LIMIT_ENTRY'
-  | 'OPEN'
-  | 'STAGE_1_FILLED'
-  | 'STAGE_2_FILLED'
-  | 'STAGE_3_RUNNER'
-  | 'CLOSED';
+  | "PENDING_LIMIT_ENTRY"
+  | "OPEN"
+  | "STAGE_1_FILLED"
+  | "STAGE_2_FILLED"
+  | "STAGE_3_RUNNER"
+  | "CLOSED";
 
 export type TrailingStopSource =
-  | 'INITIAL'
-  | 'FVG_CE'
-  | 'BREAKEVEN'
-  | 'PROFIT_RATCHET_FLOOR'
-  | 'SWING_PIVOT';
+  "INITIAL" | "FVG_CE" | "BREAKEVEN" | "PROFIT_RATCHET_FLOOR" | "SWING_PIVOT";
 
 export type TradeExitReason =
-  | 'STOPPED_OUT'
-  | 'STAGE_1_SCRATCH'
-  | 'STAGE_2_WIN'
-  | 'FULL_TP3_WIN'
-  | 'MANUAL_EXIT'
+  | "STOPPED_OUT"
+  | "STAGE_1_SCRATCH"
+  | "STAGE_2_WIN"
+  | "STAGE_2_PROFIT_PROTECTION"
+  | "FULL_TP3_WIN"
+  | "MANUAL_CLOSE"
+  | "MANUAL_EXIT"
+  | "INVALIDATED_EXPANDED"
+  | "INVALIDATED_OPPOSING_SWEEP"
+  | "INVALIDATED_TIMEOUT"
   | null;
 
 export interface StrategyExecutionPosition {
@@ -55,7 +57,7 @@ export interface StrategyExecutionPosition {
   strategyName: string;
   symbol: string;
   timeframe: string;
-  direction: 'LONG' | 'SHORT';
+  direction: "LONG" | "SHORT";
   status: PositionStageStatus;
 
   // Price & Risk Levels
@@ -79,7 +81,7 @@ export interface StrategyExecutionPosition {
   equityAtEntry: number;
   riskPct: number;
   contractSize: number;
-  allocatedAmount: number;     // e.g. 1.0 (100% position)
+  allocatedAmount: number; // e.g. 1.0 (100% position)
   remainingAllocation: number; // 1.0 -> 0.6 -> 0.2 -> 0.0
 
   // Realized and Floating Performance
@@ -105,9 +107,18 @@ export interface StrategyExecutionPosition {
   exitPrice: number | null;
   exitReason: TradeExitReason;
 
-  // Metadata
+  // Setup Audit & Origin Metadata
+  setupId?: string;
+  anchorName?: string;
   originAnchorLevel?: number;
   originZoneId?: string;
+  sweepPrice?: number | null;
+  reclaimPrice?: number | null;
+  volExpansion?: number;
+  deltaDominance?: number;
+  bodyRatio?: number;
+  threePillarsPassed?: boolean;
+  displacementCandles?: DisplacementCandleAudit[];
   isRehydrated?: boolean;
 }
 
@@ -116,35 +127,35 @@ export interface AutomatedExecutionConfig {
   timeframe: string;
   autoExecute: boolean;
   compoundingRiskPct: number; // default: 2.0% ($1.0R = Equity * 0.02)
-  maxOpenPositions: number;   // default: 1 (Strict Single-Position Cap)
-  cooldownMs: number;         // default: 60000 (60s cooldown post close)
-  minLotSize: number;         // default: 0.001 ETH
-  maxLotSize: number;         // default: 100.0 ETH
-  lotPrecision: number;       // default: 3 decimals (0.001 step)
-  tickSize: number;           // default: 0.01 USD
+  maxOpenPositions: number; // default: 1 (Strict Single-Position Cap)
+  cooldownMs: number; // default: 60000 (60s cooldown post close)
+  minLotSize: number; // default: 0.001 ETH
+  maxLotSize: number; // default: 100.0 ETH
+  lotPrecision: number; // default: 3 decimals (0.001 step)
+  tickSize: number; // default: 0.01 USD
 
   // 3-Stage Harvest R-Multiples
-  stage1Multiple: number;     // default: 1.0R (40% tranche)
-  stage2Multiple: number;     // default: 1.5R (40% tranche)
-  stage3Multiple: number;     // default: 3.0R (20% DOL runner)
+  stage1Multiple: number; // default: 1.0R (40% tranche)
+  stage2Multiple: number; // default: 1.5R (40% tranche)
+  stage3Multiple: number; // default: 3.0R (20% DOL runner)
 
   // Position Allocations
-  stage1Ratio: number;        // default: 0.40 (40%)
-  stage2Ratio: number;        // default: 0.40 (40%)
-  stage3Ratio: number;        // default: 0.20 (20%)
+  stage1Ratio: number; // default: 0.40 (40%)
+  stage2Ratio: number; // default: 0.40 (40%)
+  stage3Ratio: number; // default: 0.20 (20%)
 
   // Trailing Stop Ratchet Toggles
   enableStructuralTrail: boolean; // Trail to FVG CE after Stage 1
-  enableProfitRatchet: boolean;   // Ratchet SL to +1.0R floor after Stage 2
-  slBufferAtrMultiplier: number;  // default: 0.15 ATR
+  enableProfitRatchet: boolean; // Ratchet SL to +1.0R floor after Stage 2
+  slBufferAtrMultiplier: number; // default: 0.15 ATR
 
   // Dynamic Live Settings
   liveSettings?: SweepReclaimLiveSettings;
 }
 
 export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
-  symbol: 'ETHUSDC',
-  timeframe: '15m',
+  symbol: "ETHUSDC",
+  timeframe: "15m",
   autoExecute: true,
   compoundingRiskPct: 2.0,
   maxOpenPositions: 1,
@@ -158,9 +169,9 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   stage2Multiple: 1.5,
   stage3Multiple: 3.0,
 
-  stage1Ratio: 0.40,
-  stage2Ratio: 0.40,
-  stage3Ratio: 0.20,
+  stage1Ratio: 0.4,
+  stage2Ratio: 0.4,
+  stage3Ratio: 0.2,
 
   enableStructuralTrail: true,
   enableProfitRatchet: true,
@@ -169,16 +180,17 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
 };
 
 export type ExecutionEventType =
-  | 'LIMIT_ORDER_PLACED'
-  | 'ORDER_FILLED'
-  | 'STAGE_1_HARVEST'
-  | 'STAGE_2_HARVEST'
-  | 'STAGE_3_RUNNER'
-  | 'POSITION_CLOSED'
-  | 'COOLDOWN_ACTIVE'
-  | 'DIRECTIONAL_VETO'
-  | 'REHYDRATED'
-  | 'ROLLBACK';
+  | "LIMIT_ORDER_PLACED"
+  | "ORDER_FILLED"
+  | "STAGE_1_HARVEST"
+  | "STAGE_2_HARVEST"
+  | "STAGE_3_RUNNER"
+  | "POSITION_CLOSED"
+  | "COOLDOWN_ACTIVE"
+  | "DIRECTIONAL_VETO"
+  | "REHYDRATED"
+  | "RECONCILED"
+  | "ROLLBACK";
 
 export interface ExecutionEvent {
   type: ExecutionEventType;
@@ -237,7 +249,11 @@ export class AutomatedStrategyExecutionEngine {
     };
   }
 
-  private emit(type: ExecutionEventType, message: string, position?: StrategyExecutionPosition): void {
+  private emit(
+    type: ExecutionEventType,
+    message: string,
+    position?: StrategyExecutionPosition,
+  ): void {
     const event: ExecutionEvent = {
       type,
       position,
@@ -248,7 +264,10 @@ export class AutomatedStrategyExecutionEngine {
       try {
         listener(event);
       } catch (err) {
-        console.error('[AutomatedStrategyExecutionEngine] Listener error:', err);
+        console.error(
+          "[AutomatedStrategyExecutionEngine] Listener error:",
+          err,
+        );
       }
     }
   }
@@ -268,7 +287,7 @@ export class AutomatedStrategyExecutionEngine {
     equity: number,
     entryPrice: number,
     stopLossPrice: number,
-    overrideRiskPct?: number
+    overrideRiskPct?: number,
   ): {
     riskUsd: number;
     distance: number;
@@ -286,7 +305,7 @@ export class AutomatedStrategyExecutionEngine {
         contractSize: 0,
         riskPct,
         isValid: false,
-        error: 'Invalid portfolio equity (must be > 0).',
+        error: "Invalid portfolio equity (must be > 0).",
       };
     }
 
@@ -298,12 +317,16 @@ export class AutomatedStrategyExecutionEngine {
         contractSize: 0,
         riskPct,
         isValid: false,
-        error: 'Invalid Stop Loss distance: Entry price equals Stop Loss (zero distance error).',
+        error:
+          "Invalid Stop Loss distance: Entry price equals Stop Loss (zero distance error).",
       };
     }
 
     // Anti-Micro-Friction Clamp: 0.15% minimum stop loss distance floor
-    const minStopLossDistance = Math.max(calculatedRawDistance, entryPrice * 0.0015);
+    const minStopLossDistance = Math.max(
+      calculatedRawDistance,
+      entryPrice * 0.0015,
+    );
     const distance = minStopLossDistance;
 
     const riskUsd = parseFloat((equity * (riskPct / 100)).toFixed(4));
@@ -345,17 +368,30 @@ export class AutomatedStrategyExecutionEngine {
     strategyName: string;
     symbol: string;
     timeframe: string;
-    direction: 'LONG' | 'SHORT';
+    direction: "LONG" | "SHORT";
     limitEntryPrice: number;
     stopLossPrice: number;
     fvgCeLevel?: number | null;
     dynamicDolTarget?: number | null;
+    setupId?: string;
+    anchorName?: string;
     originZoneId?: string;
     originAnchorLevel?: number;
+    sweepPrice?: number | null;
+    reclaimPrice?: number | null;
+    volExpansion?: number;
+    deltaDominance?: number;
+    bodyRatio?: number;
+    threePillarsPassed?: boolean;
+    displacementCandles?: DisplacementCandleAudit[];
     currentMarketPrice?: number;
     activeEquity?: number;
     overrideRiskPct?: number;
-  }): { success: boolean; message: string; position?: StrategyExecutionPosition } {
+  }): {
+    success: boolean;
+    message: string;
+    position?: StrategyExecutionPosition;
+  } {
     const {
       strategyId,
       strategyName,
@@ -366,8 +402,17 @@ export class AutomatedStrategyExecutionEngine {
       stopLossPrice,
       fvgCeLevel,
       dynamicDolTarget,
+      setupId,
+      anchorName,
       originZoneId,
       originAnchorLevel,
+      sweepPrice,
+      reclaimPrice,
+      volExpansion,
+      deltaDominance,
+      bodyRatio,
+      threePillarsPassed,
+      displacementCandles,
       currentMarketPrice,
       activeEquity,
       overrideRiskPct,
@@ -375,7 +420,10 @@ export class AutomatedStrategyExecutionEngine {
 
     // ── Guardrail 1: Auto-Execute Flag ──
     if (!this.config.autoExecute) {
-      return { success: false, message: 'Automated execution is currently disabled in configuration.' };
+      return {
+        success: false,
+        message: "Automated execution is currently disabled in configuration.",
+      };
     }
 
     // ── Guardrail 2: Concurrency Cap (maxOpenPositions: 1 on ACTIVE positions) ──
@@ -387,37 +435,55 @@ export class AutomatedStrategyExecutionEngine {
     }
 
     // ── Guardrail 3: Directional Conflict Veto (No opposing positions) ──
-    const opposingActive = this.activePositions.find((p) => p.direction !== direction);
-    const opposingPending = this.pendingLimitOrders.find((p) => p.direction !== direction);
+    const opposingActive = this.activePositions.find(
+      (p) => p.direction !== direction,
+    );
+    const opposingPending = this.pendingLimitOrders.find(
+      (p) => p.direction !== direction,
+    );
     if (opposingActive || opposingPending) {
       const msg = `[DIRECTIONAL_LOCK] Cannot submit ${direction} order while an opposing ${
         opposingActive ? opposingActive.direction : opposingPending?.direction
       } position is active.`;
-      this.emit('DIRECTIONAL_VETO', msg);
+      this.emit("DIRECTIONAL_VETO", msg);
       return { success: false, message: msg };
     }
 
     // ── Guardrail 4: Mandatory Post-Trade Cooldown ──
     const now = Date.now();
     const timeSinceLastClose = now - this.lastTradeClosedTimestamp;
-    if (this.lastTradeClosedTimestamp > 0 && timeSinceLastClose < this.config.cooldownMs) {
-      const remainingSec = Math.ceil((this.config.cooldownMs - timeSinceLastClose) / 1000);
+    if (
+      this.lastTradeClosedTimestamp > 0 &&
+      timeSinceLastClose < this.config.cooldownMs
+    ) {
+      const remainingSec = Math.ceil(
+        (this.config.cooldownMs - timeSinceLastClose) / 1000,
+      );
       const msg = `[COOLDOWN_ACTIVE] Post-trade cooldown in effect (${remainingSec}s remaining).`;
-      this.emit('COOLDOWN_ACTIVE', msg);
+      this.emit("COOLDOWN_ACTIVE", msg);
       return { success: false, message: msg };
     }
 
     // ── Guardrail 5: One-Active-Position-Per-Structural-Wave Concurrency Lock ──
-    const targetAnchorLevel = originAnchorLevel !== undefined ? originAnchorLevel : limitEntryPrice;
+    const targetAnchorLevel =
+      originAnchorLevel !== undefined ? originAnchorLevel : limitEntryPrice;
     const hasActiveForZone =
       this.activePositions.some((p) => {
         if (originZoneId && p.originZoneId === originZoneId) return true;
-        if (p.originAnchorLevel !== undefined && Math.abs(p.originAnchorLevel - targetAnchorLevel) < 0.50) return true;
+        if (
+          p.originAnchorLevel !== undefined &&
+          Math.abs(p.originAnchorLevel - targetAnchorLevel) < 0.5
+        )
+          return true;
         return false;
       }) ||
       this.pendingLimitOrders.some((p) => {
         if (originZoneId && p.originZoneId === originZoneId) return true;
-        if (p.originAnchorLevel !== undefined && Math.abs(p.originAnchorLevel - targetAnchorLevel) < 0.50) return true;
+        if (
+          p.originAnchorLevel !== undefined &&
+          Math.abs(p.originAnchorLevel - targetAnchorLevel) < 0.5
+        )
+          return true;
         return false;
       });
 
@@ -436,39 +502,83 @@ export class AutomatedStrategyExecutionEngine {
     }
 
     // ── Anti-Micro-Friction Stop Loss Clamp (0.15% Minimum Price Buffer) ──
-    const isLong = direction === 'LONG';
+    const isLong = direction === "LONG";
     const calculatedRawDistance = Math.abs(limitEntryPrice - stopLossPrice);
-    const minStopLossDistance = Math.max(calculatedRawDistance, limitEntryPrice * 0.0015);
+    const minStopLossDistance = Math.max(
+      calculatedRawDistance,
+      limitEntryPrice * 0.0015,
+    );
     const clampedStopLoss = isLong
       ? parseFloat((limitEntryPrice - minStopLossDistance).toFixed(4))
       : parseFloat((limitEntryPrice + minStopLossDistance).toFixed(4));
 
     // ── Compute Dynamic 2% Compounding Risk & Contract Sizing ──
-    const equity = activeEquity && activeEquity > 0 ? activeEquity : this.currentAccountEquity;
-    const sizing = this.calculateCompoundedPositionSize(equity, limitEntryPrice, clampedStopLoss, overrideRiskPct);
+    const equity =
+      activeEquity && activeEquity > 0
+        ? activeEquity
+        : this.currentAccountEquity;
+    const sizing = this.calculateCompoundedPositionSize(
+      equity,
+      limitEntryPrice,
+      clampedStopLoss,
+      overrideRiskPct,
+    );
 
     if (!sizing.isValid) {
-      return { success: false, message: sizing.error || 'Position sizing calculation failed.' };
+      return {
+        success: false,
+        message: sizing.error || "Position sizing calculation failed.",
+      };
     }
 
     // ── Derive 3-Stage Harvest Targets ──
     const riskDistance = sizing.distance;
 
     const stage1Target = isLong
-      ? parseFloat((limitEntryPrice + riskDistance * this.config.stage1Multiple).toFixed(4))
-      : parseFloat((limitEntryPrice - riskDistance * this.config.stage1Multiple).toFixed(4));
+      ? parseFloat(
+          (limitEntryPrice + riskDistance * this.config.stage1Multiple).toFixed(
+            4,
+          ),
+        )
+      : parseFloat(
+          (limitEntryPrice - riskDistance * this.config.stage1Multiple).toFixed(
+            4,
+          ),
+        );
 
     const stage2Target = isLong
-      ? parseFloat((limitEntryPrice + riskDistance * this.config.stage2Multiple).toFixed(4))
-      : parseFloat((limitEntryPrice - riskDistance * this.config.stage2Multiple).toFixed(4));
+      ? parseFloat(
+          (limitEntryPrice + riskDistance * this.config.stage2Multiple).toFixed(
+            4,
+          ),
+        )
+      : parseFloat(
+          (limitEntryPrice - riskDistance * this.config.stage2Multiple).toFixed(
+            4,
+          ),
+        );
 
     let stage3Target: number;
-    if (dynamicDolTarget && ((isLong && dynamicDolTarget > stage2Target) || (!isLong && dynamicDolTarget < stage2Target))) {
+    if (
+      dynamicDolTarget &&
+      ((isLong && dynamicDolTarget > stage2Target) ||
+        (!isLong && dynamicDolTarget < stage2Target))
+    ) {
       stage3Target = parseFloat(dynamicDolTarget.toFixed(4));
     } else {
       stage3Target = isLong
-        ? parseFloat((limitEntryPrice + riskDistance * this.config.stage3Multiple).toFixed(4))
-        : parseFloat((limitEntryPrice - riskDistance * this.config.stage3Multiple).toFixed(4));
+        ? parseFloat(
+            (
+              limitEntryPrice +
+              riskDistance * this.config.stage3Multiple
+            ).toFixed(4),
+          )
+        : parseFloat(
+            (
+              limitEntryPrice -
+              riskDistance * this.config.stage3Multiple
+            ).toFixed(4),
+          );
     }
 
     const posId = `POS_${direction}_${Date.now()}_${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
@@ -481,14 +591,14 @@ export class AutomatedStrategyExecutionEngine {
       symbol,
       timeframe,
       direction,
-      status: 'PENDING_LIMIT_ENTRY',
+      status: "PENDING_LIMIT_ENTRY",
 
       limitEntryPrice,
       entryPrice: limitEntryPrice,
       initialStopLoss: clampedStopLoss,
       activeStopLoss: clampedStopLoss,
       activeRatchetFloor: null,
-      trailingSlSource: 'INITIAL',
+      trailingSlSource: "INITIAL",
 
       stage1Target,
       stage2Target,
@@ -524,20 +634,51 @@ export class AutomatedStrategyExecutionEngine {
       exitPrice: null,
       exitReason: null,
 
+      setupId: setupId || strategyId,
+      anchorName,
       originAnchorLevel,
       originZoneId,
+      sweepPrice: sweepPrice ?? null,
+      reclaimPrice: reclaimPrice ?? null,
+      volExpansion,
+      deltaDominance,
+      bodyRatio,
+      threePillarsPassed,
+      displacementCandles,
     };
 
     if (originZoneId) {
       this.consumedZoneIds.add(originZoneId);
     }
 
-    // Check if limit entry can be filled immediately against current market price
+    // ── Guardrail 7: Price Sanity & Invalidated Setups (Stop Loss / TP1 Breached) ──
     const currentPrice = currentMarketPrice ?? limitEntryPrice;
-    const canFillNow = isLong ? currentPrice <= limitEntryPrice : currentPrice >= limitEntryPrice;
+    const isStopLossBreached = isLong
+      ? currentPrice <= clampedStopLoss
+      : currentPrice >= clampedStopLoss;
+    const isTarget1Breached = isLong
+      ? currentPrice >= stage1Target
+      : currentPrice <= stage1Target;
+
+    if (isStopLossBreached) {
+      const msg = `[EXECUTION_VETO] Current market price ($${currentPrice.toFixed(2)}) has already breached the Stop Loss ($${clampedStopLoss.toFixed(2)}). Setup invalidated.`;
+      this.emit("DIRECTIONAL_VETO", msg);
+      return { success: false, message: msg };
+    }
+
+    if (isTarget1Breached) {
+      const msg = `[EXECUTION_VETO] Current market price ($${currentPrice.toFixed(2)}) has already reached Target 1 ($${stage1Target.toFixed(2)}). Setup invalidated.`;
+      this.emit("DIRECTIONAL_VETO", msg);
+      return { success: false, message: msg };
+    }
+
+    // Check if limit entry can be filled immediately against current market price
+    const canFillNow = isLong
+      ? currentPrice <= limitEntryPrice
+      : currentPrice >= limitEntryPrice;
 
     if (canFillNow) {
-      newPosition.status = 'OPEN';
+      newPosition.status = "OPEN";
       newPosition.entryPrice = currentPrice;
       newPosition.openTime = now;
       this.activePositions.push(newPosition);
@@ -546,16 +687,16 @@ export class AutomatedStrategyExecutionEngine {
       this.pendingLimitOrders = [];
 
       const msg = `🚀 [ORDER_FILLED] ${direction} position opened on ${symbol} (${timeframe}) @ $${currentPrice.toFixed(
-        2
+        2,
       )} | Size: ${newPosition.contractSize} contracts ($${newPosition.riskUsd.toFixed(2)} Risk, 2.0% Compounded).`;
-      this.emit('ORDER_FILLED', msg, newPosition);
+      this.emit("ORDER_FILLED", msg, newPosition);
       return { success: true, position: newPosition, message: msg };
     } else {
       this.pendingLimitOrders.push(newPosition);
       const msg = `⏳ [LIMIT_ORDER_PLACED] Resting Limit ${direction} placed @ $${limitEntryPrice.toFixed(
-        2
+        2,
       )} on ${symbol} (${timeframe}) | Risk: $${newPosition.riskUsd.toFixed(2)} (2% Compounded).`;
-      this.emit('LIMIT_ORDER_PLACED', msg, newPosition);
+      this.emit("LIMIT_ORDER_PLACED", msg, newPosition);
       return { success: true, position: newPosition, message: msg };
     }
   }
@@ -568,7 +709,10 @@ export class AutomatedStrategyExecutionEngine {
    * Processes incoming live ticks and candle updates.
    * Evaluates resting limit order fills, Take Profit harvest tranches, and trailing ratchets.
    */
-  public processMarketTick(livePrice: number, currentCandle?: Candle | null): void {
+  public processMarketTick(
+    livePrice: number,
+    currentCandle?: Candle | null,
+  ): void {
     if (!livePrice || isNaN(livePrice) || livePrice <= 0) return;
     const now = Date.now();
 
@@ -576,11 +720,13 @@ export class AutomatedStrategyExecutionEngine {
     if (this.activePositions.length === 0) {
       for (let i = 0; i < this.pendingLimitOrders.length; i++) {
         const order = this.pendingLimitOrders[i];
-        const isLong = order.direction === 'LONG';
-        const isTouched = isLong ? livePrice <= order.limitEntryPrice : livePrice >= order.limitEntryPrice;
+        const isLong = order.direction === "LONG";
+        const isTouched = isLong
+          ? livePrice <= order.limitEntryPrice
+          : livePrice >= order.limitEntryPrice;
 
         if (isTouched) {
-          order.status = 'OPEN';
+          order.status = "OPEN";
           order.entryPrice = order.limitEntryPrice;
           order.openTime = now;
           this.activePositions.push(order);
@@ -589,9 +735,9 @@ export class AutomatedStrategyExecutionEngine {
           this.pendingLimitOrders = [];
 
           const msg = `🚀 [ORDER_FILLED] Limit ${order.direction} triggered on ${order.symbol} @ $${order.entryPrice.toFixed(
-            2
+            2,
           )} | Size: ${order.contractSize} ($${order.riskUsd.toFixed(2)} Risk, 2% Compounded).`;
-          this.emit('ORDER_FILLED', msg, order);
+          this.emit("ORDER_FILLED", msg, order);
           break;
         }
       }
@@ -600,14 +746,20 @@ export class AutomatedStrategyExecutionEngine {
     // ── Step B: Evaluate Active Positions Lifecycle & 3-Stage Harvest ──
     for (let i = this.activePositions.length - 1; i >= 0; i--) {
       const pos = this.activePositions[i];
-      const isLong = pos.direction === 'LONG';
+      const isLong = pos.direction === "LONG";
       const riskPerContract = pos.riskPerContract;
 
       // Update current Floating R-multiple and MFE / MAE
-      const currentDelta = isLong ? livePrice - pos.entryPrice : pos.entryPrice - livePrice;
+      const currentDelta = isLong
+        ? livePrice - pos.entryPrice
+        : pos.entryPrice - livePrice;
       const floatingR = currentDelta / riskPerContract;
-      pos.unrealizedR = parseFloat((floatingR * pos.remainingAllocation).toFixed(4));
-      pos.unrealizedUsd = parseFloat((pos.unrealizedR * pos.riskUsd).toFixed(2));
+      pos.unrealizedR = parseFloat(
+        (floatingR * pos.remainingAllocation).toFixed(4),
+      );
+      pos.unrealizedUsd = parseFloat(
+        (pos.unrealizedR * pos.riskUsd).toFixed(2),
+      );
 
       if (floatingR > pos.mfeR) {
         pos.mfeR = parseFloat(floatingR.toFixed(4));
@@ -617,57 +769,73 @@ export class AutomatedStrategyExecutionEngine {
       }
 
       // ── B.1: Check Stop Loss Violation ──
-      const isStopped = isLong ? livePrice <= pos.activeStopLoss : livePrice >= pos.activeStopLoss;
+      const isStopped = isLong
+        ? livePrice <= pos.activeStopLoss
+        : livePrice >= pos.activeStopLoss;
       if (isStopped) {
-        this.closePosition(i, pos.activeStopLoss, 'STOPPED_OUT', now);
+        this.closePosition(i, pos.activeStopLoss, "STOPPED_OUT", now);
         continue;
       }
 
       // ── B.2: Tranche 1 Harvest (40% @ 1.0R Target) ──
       if (!pos.isStage1Filled) {
-        const isStage1Hit = isLong ? livePrice >= pos.stage1Target : livePrice <= pos.stage1Target;
+        const isStage1Hit = isLong
+          ? livePrice >= pos.stage1Target
+          : livePrice <= pos.stage1Target;
         if (isStage1Hit) {
           pos.isStage1Filled = true;
           pos.stage1HitTime = now;
-          pos.status = 'STAGE_1_FILLED';
+          pos.status = "STAGE_1_FILLED";
 
           // Lock 40% position at 1.0R (+0.40R realized)
           const trancheR = this.config.stage1Ratio * this.config.stage1Multiple;
           pos.realizedR = parseFloat((pos.realizedR + trancheR).toFixed(4));
-          pos.realizedUsd = parseFloat((pos.realizedR * pos.riskUsd).toFixed(2));
-          pos.remainingAllocation = parseFloat((pos.remainingAllocation - this.config.stage1Ratio).toFixed(2)); // 0.60 remaining
+          pos.realizedUsd = parseFloat(
+            (pos.realizedR * pos.riskUsd).toFixed(2),
+          );
+          pos.remainingAllocation = parseFloat(
+            (pos.remainingAllocation - this.config.stage1Ratio).toFixed(2),
+          ); // 0.60 remaining
 
           // Advance SL to Displacement FVG 50% CE or Breakeven (capping runner risk so net P&L >= 0.0R)
           if (this.config.enableStructuralTrail && pos.fvgCeLevel) {
             pos.activeStopLoss = pos.fvgCeLevel;
-            pos.trailingSlSource = 'FVG_CE';
+            pos.trailingSlSource = "FVG_CE";
           } else {
             pos.activeStopLoss = pos.entryPrice;
-            pos.trailingSlSource = 'BREAKEVEN';
+            pos.trailingSlSource = "BREAKEVEN";
           }
 
           const msg = `🎯 [STAGE_1_HARVEST] Tranche 1 (40% @ ${pos.stage1Target.toFixed(2)}) filled on ${
             pos.symbol
-          }! Locked +${trancheR.toFixed(2)}R ($${(trancheR * pos.riskUsd).toFixed(
-            2
+          }! Locked +${trancheR.toFixed(2)}R ($${(
+            trancheR * pos.riskUsd
+          ).toFixed(
+            2,
           )}). SL advanced to ${pos.trailingSlSource} ($${pos.activeStopLoss.toFixed(2)}).`;
-          this.emit('STAGE_1_HARVEST', msg, pos);
+          this.emit("STAGE_1_HARVEST", msg, pos);
         }
       }
 
       // ── B.3: Tranche 2 Harvest (40% @ 1.5R Target + +1.0R Ratchet Floor) ──
       if (pos.isStage1Filled && !pos.isStage2Filled) {
-        const isStage2Hit = isLong ? livePrice >= pos.stage2Target : livePrice <= pos.stage2Target;
+        const isStage2Hit = isLong
+          ? livePrice >= pos.stage2Target
+          : livePrice <= pos.stage2Target;
         if (isStage2Hit) {
           pos.isStage2Filled = true;
           pos.stage2HitTime = now;
-          pos.status = 'STAGE_2_FILLED';
+          pos.status = "STAGE_2_FILLED";
 
           // Lock 40% position at 1.5R (+0.60R realized, total +1.0R)
           const trancheR = this.config.stage2Ratio * this.config.stage2Multiple;
           pos.realizedR = parseFloat((pos.realizedR + trancheR).toFixed(4));
-          pos.realizedUsd = parseFloat((pos.realizedR * pos.riskUsd).toFixed(2));
-          pos.remainingAllocation = parseFloat((pos.remainingAllocation - this.config.stage2Ratio).toFixed(2)); // 0.20 remaining
+          pos.realizedUsd = parseFloat(
+            (pos.realizedR * pos.riskUsd).toFixed(2),
+          );
+          pos.remainingAllocation = parseFloat(
+            (pos.remainingAllocation - this.config.stage2Ratio).toFixed(2),
+          ); // 0.20 remaining
 
           // Immediately Ratchet Active SL to Guaranteed +1.0R Structural Profit Floor
           if (this.config.enableProfitRatchet) {
@@ -677,22 +845,24 @@ export class AutomatedStrategyExecutionEngine {
 
             pos.activeStopLoss = oneRPrice;
             pos.activeRatchetFloor = oneRPrice;
-            pos.trailingSlSource = 'PROFIT_RATCHET_FLOOR';
+            pos.trailingSlSource = "PROFIT_RATCHET_FLOOR";
           }
 
           const msg = `💎 [STAGE_2_HARVEST] Tranche 2 (40% @ ${pos.stage2Target.toFixed(2)}) filled on ${
             pos.symbol
           }! Total Realized: +${pos.realizedR.toFixed(2)}R ($${pos.realizedUsd.toFixed(
-            2
+            2,
           )}). SL ratcheted to +1.0R Profit Floor ($${pos.activeStopLoss.toFixed(2)}).`;
-          this.emit('STAGE_2_HARVEST', msg, pos);
+          this.emit("STAGE_2_HARVEST", msg, pos);
         }
       }
 
       // ── B.4: Tranche 3 DOL Runner (20% @ Macro DOL) ──
       if (pos.isStage2Filled && !pos.isStage3Filled) {
-        pos.status = 'STAGE_3_RUNNER';
-        const isStage3Hit = isLong ? livePrice >= pos.stage3Target : livePrice <= pos.stage3Target;
+        pos.status = "STAGE_3_RUNNER";
+        const isStage3Hit = isLong
+          ? livePrice >= pos.stage3Target
+          : livePrice <= pos.stage3Target;
         if (isStage3Hit) {
           pos.isStage3Filled = true;
           pos.stage3HitTime = now;
@@ -700,10 +870,12 @@ export class AutomatedStrategyExecutionEngine {
           // Lock 20% position at Stage 3 Multiple / DOL
           const trancheR = this.config.stage3Ratio * this.config.stage3Multiple;
           pos.realizedR = parseFloat((pos.realizedR + trancheR).toFixed(4));
-          pos.realizedUsd = parseFloat((pos.realizedR * pos.riskUsd).toFixed(2));
+          pos.realizedUsd = parseFloat(
+            (pos.realizedR * pos.riskUsd).toFixed(2),
+          );
           pos.remainingAllocation = 0.0;
 
-          this.closePosition(i, pos.stage3Target, 'FULL_TP3_WIN', now);
+          this.closePosition(i, pos.stage3Target, "FULL_TP3_WIN", now);
           continue;
         }
       }
@@ -713,17 +885,22 @@ export class AutomatedStrategyExecutionEngine {
   /**
    * Internal helper to close an active position and trigger post-trade cooldown.
    */
-  private closePosition(index: number, exitPrice: number, reason: TradeExitReason, timestamp: number): void {
+  private closePosition(
+    index: number,
+    exitPrice: number,
+    reason: TradeExitReason,
+    timestamp: number,
+  ): void {
     const pos = this.activePositions[index];
     if (!pos) return;
 
-    pos.status = 'CLOSED';
+    pos.status = "CLOSED";
     pos.closeTime = timestamp;
     pos.exitPrice = parseFloat(exitPrice.toFixed(4));
     pos.exitReason = reason;
 
     // Calculate final realized R and USD if not already fully realized via targets
-    if (reason === 'STOPPED_OUT') {
+    if (reason === "STOPPED_OUT") {
       if (!pos.isStage1Filled && !pos.isStage2Filled) {
         // Full stop out at initial SL (-1.0R)
         pos.realizedR = -1.0;
@@ -731,14 +908,14 @@ export class AutomatedStrategyExecutionEngine {
       } else if (pos.isStage1Filled && !pos.isStage2Filled) {
         // Stopped out after Stage 1 (Break-even / scratch)
         // 40% locked at +1.0R (+0.40R). Remaining 60% stopped out at FVG CE / BE.
-        pos.exitReason = 'STAGE_1_SCRATCH';
+        pos.exitReason = "STAGE_1_SCRATCH";
       } else if (pos.isStage2Filled) {
         // Stopped out after Stage 2 (+1.0R ratchet floor exit)
         // 40% @ 1.0R (+0.40R) + 40% @ 1.5R (+0.60R) + 20% @ +1.0R floor (+0.20R) = +1.20R net!
         const runnerFloorR = this.config.stage3Ratio * 1.0;
         pos.realizedR = parseFloat((pos.realizedR + runnerFloorR).toFixed(4));
         pos.realizedUsd = parseFloat((pos.realizedR * pos.riskUsd).toFixed(2));
-        pos.exitReason = 'STAGE_2_WIN';
+        pos.exitReason = "STAGE_2_WIN";
       }
     }
 
@@ -750,14 +927,14 @@ export class AutomatedStrategyExecutionEngine {
     this.closedPositionsHistory.unshift(pos);
     this.lastTradeClosedTimestamp = timestamp;
 
-    const emoji = pos.realizedR > 0 ? '🏆' : pos.realizedR === 0 ? '🛡️' : '🛑';
+    const emoji = pos.realizedR > 0 ? "🏆" : pos.realizedR === 0 ? "🛡️" : "🛑";
     const msg = `${emoji} [POSITION_CLOSED] ${pos.direction} on ${pos.symbol} closed @ $${exitPrice.toFixed(2)} (${
       pos.exitReason
-    }). Final P&L: ${pos.realizedR > 0 ? '+' : ''}${pos.realizedR.toFixed(2)}R ($${pos.realizedUsd > 0 ? '+' : ''}$${pos.realizedUsd.toFixed(
-      2
+    }). Final P&L: ${pos.realizedR > 0 ? "+" : ""}${pos.realizedR.toFixed(2)}R ($${pos.realizedUsd > 0 ? "+" : ""}$${pos.realizedUsd.toFixed(
+      2,
     )}). Cooldown activated.`;
 
-    this.emit('POSITION_CLOSED', msg, pos);
+    this.emit("POSITION_CLOSED", msg, pos);
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -768,7 +945,9 @@ export class AutomatedStrategyExecutionEngine {
    * Links a persistent database trade ID (UUID) from /api/trades to an active position.
    */
   public linkDbTradeId(posId: string, dbTradeId: string): void {
-    const pos = this.activePositions.find((p) => p.id === posId) || this.pendingLimitOrders.find((p) => p.id === posId);
+    const pos =
+      this.activePositions.find((p) => p.id === posId) ||
+      this.pendingLimitOrders.find((p) => p.id === posId);
     if (pos) {
       pos.dbTradeId = dbTradeId;
     }
@@ -778,29 +957,134 @@ export class AutomatedStrategyExecutionEngine {
    * Performs an atomic in-memory rollback if database order placement or network fails.
    */
   public rollbackPosition(posId: string, errorReason?: string): boolean {
-    const activeIdx = this.activePositions.findIndex((p) => p.id === posId || p.dbTradeId === posId);
+    const activeIdx = this.activePositions.findIndex(
+      (p) => p.id === posId || p.dbTradeId === posId,
+    );
     if (activeIdx !== -1) {
       const pos = this.activePositions[activeIdx];
       this.activePositions.splice(activeIdx, 1);
       if (pos.originZoneId) {
         this.consumedZoneIds.delete(pos.originZoneId);
       }
-      this.emit('ROLLBACK', `⚠️ [ORDER ROLLBACK] Position ${posId} purged from memory due to persistence failure: ${errorReason || 'Unknown error'}`, pos);
+      this.emit(
+        "ROLLBACK",
+        `⚠️ [ORDER ROLLBACK] Position ${posId} purged from memory due to persistence failure: ${errorReason || "Unknown error"}`,
+        pos,
+      );
       return true;
     }
 
-    const pendingIdx = this.pendingLimitOrders.findIndex((p) => p.id === posId || p.dbTradeId === posId);
+    const pendingIdx = this.pendingLimitOrders.findIndex(
+      (p) => p.id === posId || p.dbTradeId === posId,
+    );
     if (pendingIdx !== -1) {
       const pos = this.pendingLimitOrders[pendingIdx];
       this.pendingLimitOrders.splice(pendingIdx, 1);
       if (pos.originZoneId) {
         this.consumedZoneIds.delete(pos.originZoneId);
       }
-      this.emit('ROLLBACK', `⚠️ [ORDER ROLLBACK] Pending limit order ${posId} purged from memory: ${errorReason || 'Unknown error'}`, pos);
+      this.emit(
+        "ROLLBACK",
+        `⚠️ [ORDER ROLLBACK] Pending limit order ${posId} purged from memory: ${errorReason || "Unknown error"}`,
+        pos,
+      );
       return true;
     }
 
     return false;
+  }
+
+  /**
+   * Bi-directional Synchronization: Reconciles in-memory active positions and pending limit orders
+   * against the authoritative session journal store.
+   * Purges any active positions or pending limit orders that have been closed, deleted, or archived.
+   */
+  public reconcileWithOpenTrades(sessionTrades: any[]): {
+    removedCount: number;
+    activeCount: number;
+  } {
+    const openTradeIds = new Set<string>();
+    const closedTradeIds = new Set<string>();
+
+    if (Array.isArray(sessionTrades)) {
+      for (const t of sessionTrades) {
+        if (!t) continue;
+        if (
+          t.status === "OPEN" ||
+          t.status === "STAGE_1_FILLED" ||
+          t.status === "STAGE_2_FILLED" ||
+          t.status === "PENDING_LIMIT_ENTRY" ||
+          t.status === "PAUSED"
+        ) {
+          openTradeIds.add(t.id);
+        } else if (t.status === "CLOSED") {
+          closedTradeIds.add(t.id);
+        }
+      }
+    }
+
+    let removedCount = 0;
+
+    // 1. Reconcile Active Positions
+    for (let i = this.activePositions.length - 1; i >= 0; i--) {
+      const pos = this.activePositions[i];
+      const isKnownOpen =
+        openTradeIds.has(pos.id) ||
+        (pos.dbTradeId ? openTradeIds.has(pos.dbTradeId) : false);
+      const isExplicitlyClosed =
+        closedTradeIds.has(pos.id) ||
+        (pos.dbTradeId ? closedTradeIds.has(pos.dbTradeId) : false);
+
+      // If the trade is explicitly closed in journal or is no longer in open list
+      if (isExplicitlyClosed || !isKnownOpen) {
+        if (pos.originZoneId) {
+          this.consumedZoneIds.delete(pos.originZoneId);
+        }
+        this.activePositions.splice(i, 1);
+        removedCount++;
+      }
+    }
+
+    // 2. Reconcile Pending Limit Orders
+    for (let i = this.pendingLimitOrders.length - 1; i >= 0; i--) {
+      const ord = this.pendingLimitOrders[i];
+      const isKnownOpen =
+        openTradeIds.has(ord.id) ||
+        (ord.dbTradeId ? openTradeIds.has(ord.dbTradeId) : false);
+      const isExplicitlyClosed =
+        closedTradeIds.has(ord.id) ||
+        (ord.dbTradeId ? closedTradeIds.has(ord.dbTradeId) : false);
+
+      if (isExplicitlyClosed || !isKnownOpen) {
+        if (ord.originZoneId) {
+          this.consumedZoneIds.delete(ord.originZoneId);
+        }
+        this.pendingLimitOrders.splice(i, 1);
+        removedCount++;
+      }
+    }
+
+    if (removedCount > 0) {
+      this.emit(
+        "RECONCILED",
+        `🔄 Reconciled with session journal: purged ${removedCount} closed/stale position(s).`,
+      );
+    }
+
+    return { removedCount, activeCount: this.activePositions.length };
+  }
+
+  /**
+   * Hard reset: purges all active positions, pending orders, and consumed zones from memory.
+   */
+  public purgeAllActivePositions(): void {
+    this.activePositions = [];
+    this.pendingLimitOrders = [];
+    this.consumedZoneIds.clear();
+    this.emit(
+      "RECONCILED",
+      "🧹 Purged all active positions and pending limit orders from engine memory.",
+    );
   }
 
   /**
@@ -811,51 +1095,74 @@ export class AutomatedStrategyExecutionEngine {
     const rehydrated: StrategyExecutionPosition[] = [];
 
     for (const trade of dbTrades) {
-      if (trade.status !== 'OPEN' && trade.status !== 'STAGE_1_FILLED' && trade.status !== 'STAGE_2_FILLED') {
+      if (
+        trade.status !== "OPEN" &&
+        trade.status !== "STAGE_1_FILLED" &&
+        trade.status !== "STAGE_2_FILLED"
+      ) {
         continue;
       }
 
       // Namespace Isolation: Only adopt trades belonging to Sweep & Reclaim
-      const stratName = (trade.strategy_name || '').toLowerCase();
+      const stratName = (trade.strategy_name || "").toLowerCase();
       const isSrStrategy =
-        stratName.includes('sweep & reclaim') ||
-        stratName.includes('s&r') ||
-        stratName.includes('3-pillar') ||
-        stratName.includes('failed signal reversal') ||
-        stratName.includes('auto 2% compounded');
+        stratName.includes("sweep & reclaim") ||
+        stratName.includes("s&r") ||
+        stratName.includes("3-pillar") ||
+        stratName.includes("failed signal reversal") ||
+        stratName.includes("auto 2% compounded");
 
       if (!isSrStrategy) {
         continue; // Strictly ignore Order Block or other strategy trades
       }
 
       // Check if already active
-      if (this.activePositions.some((p) => p.dbTradeId === trade.id || p.id === trade.id)) {
+      if (
+        this.activePositions.some(
+          (p) => p.dbTradeId === trade.id || p.id === trade.id,
+        )
+      ) {
         continue;
       }
 
-      const direction = trade.direction as 'LONG' | 'SHORT';
+      const direction = trade.direction as "LONG" | "SHORT";
       const entryPrice = parseFloat(trade.entry_price);
       const stopLoss = parseFloat(trade.stop_loss);
       const ipda = trade.ipda_metrics || {};
 
       const riskUsd = parseFloat(trade.risk_amount_usd || 200.0);
       const distance = Math.abs(entryPrice - stopLoss);
-      const contractSize = parseFloat(trade.position_size || (riskUsd / (distance || 1)).toFixed(3));
+      const contractSize = parseFloat(
+        trade.position_size || (riskUsd / (distance || 1)).toFixed(3),
+      );
 
-      const stage1Target = ipda.stage1_target ?? (direction === 'LONG' ? entryPrice + distance * 1.0 : entryPrice - distance * 1.0);
-      const stage2Target = ipda.stage2_target ?? (direction === 'LONG' ? entryPrice + distance * 1.5 : entryPrice - distance * 1.5);
-      const stage3Target = ipda.stage3_target ?? (direction === 'LONG' ? entryPrice + distance * 3.0 : entryPrice - distance * 3.0);
+      const stage1Target =
+        ipda.stage1_target ??
+        (direction === "LONG"
+          ? entryPrice + distance * 1.0
+          : entryPrice - distance * 1.0);
+      const stage2Target =
+        ipda.stage2_target ??
+        (direction === "LONG"
+          ? entryPrice + distance * 1.5
+          : entryPrice - distance * 1.5);
+      const stage3Target =
+        ipda.stage3_target ??
+        (direction === "LONG"
+          ? entryPrice + distance * 3.0
+          : entryPrice - distance * 3.0);
 
-      const isStage1Filled = trade.status === 'STAGE_1_FILLED' || trade.status === 'STAGE_2_FILLED';
-      const isStage2Filled = trade.status === 'STAGE_2_FILLED';
+      const isStage1Filled =
+        trade.status === "STAGE_1_FILLED" || trade.status === "STAGE_2_FILLED";
+      const isStage2Filled = trade.status === "STAGE_2_FILLED";
 
       const pos: StrategyExecutionPosition = {
         id: `REHYDRATED_${trade.id.slice(0, 8)}`,
         dbTradeId: trade.id,
-        strategyId: trade.strategy_name || 'Automated Strategy',
-        strategyName: trade.strategy_name || 'Automated Strategy',
-        symbol: trade.symbol || 'ETHUSDC',
-        timeframe: ipda.timeframe || '15m',
+        strategyId: trade.strategy_name || "Automated Strategy",
+        strategyName: trade.strategy_name || "Automated Strategy",
+        symbol: trade.symbol || "ETHUSDC",
+        timeframe: ipda.timeframe || "15m",
         direction,
         status: trade.status as PositionStageStatus,
 
@@ -863,8 +1170,16 @@ export class AutomatedStrategyExecutionEngine {
         entryPrice,
         initialStopLoss: stopLoss,
         activeStopLoss: stopLoss,
-        activeRatchetFloor: isStage2Filled ? (direction === 'LONG' ? entryPrice + distance : entryPrice - distance) : null,
-        trailingSlSource: isStage2Filled ? 'PROFIT_RATCHET_FLOOR' : isStage1Filled ? 'BREAKEVEN' : 'INITIAL',
+        activeRatchetFloor: isStage2Filled
+          ? direction === "LONG"
+            ? entryPrice + distance
+            : entryPrice - distance
+          : null,
+        trailingSlSource: isStage2Filled
+          ? "PROFIT_RATCHET_FLOOR"
+          : isStage1Filled
+            ? "BREAKEVEN"
+            : "INITIAL",
 
         stage1Target: parseFloat(stage1Target.toFixed(4)),
         stage2Target: parseFloat(stage2Target.toFixed(4)),
@@ -878,10 +1193,14 @@ export class AutomatedStrategyExecutionEngine {
         riskPct: 2.0,
         contractSize,
         allocatedAmount: 1.0,
-        remainingAllocation: isStage2Filled ? 0.20 : isStage1Filled ? 0.60 : 1.0,
+        remainingAllocation: isStage2Filled ? 0.2 : isStage1Filled ? 0.6 : 1.0,
 
-        realizedR: isStage2Filled ? 1.0 : isStage1Filled ? 0.40 : 0.0,
-        realizedUsd: isStage2Filled ? riskUsd * 1.0 : isStage1Filled ? riskUsd * 0.40 : 0.0,
+        realizedR: isStage2Filled ? 1.0 : isStage1Filled ? 0.4 : 0.0,
+        realizedUsd: isStage2Filled
+          ? riskUsd * 1.0
+          : isStage1Filled
+            ? riskUsd * 0.4
+            : 0.0,
         unrealizedR: 0,
         unrealizedUsd: 0,
         mfeR: 0,
@@ -894,11 +1213,27 @@ export class AutomatedStrategyExecutionEngine {
         stage2HitTime: isStage2Filled ? Date.now() : null,
         stage3HitTime: null,
 
-        pendingTime: new Date(trade.opened_at || trade.created_at || Date.now()).getTime(),
-        openTime: new Date(trade.opened_at || trade.created_at || Date.now()).getTime(),
+        pendingTime: new Date(
+          trade.opened_at || trade.created_at || Date.now(),
+        ).getTime(),
+        openTime: new Date(
+          trade.opened_at || trade.created_at || Date.now(),
+        ).getTime(),
         closeTime: null,
         exitPrice: null,
         exitReason: null,
+
+        setupId: ipda.setup_id || ipda.origin_zone_id || trade.id,
+        anchorName: ipda.anchor_name,
+        originAnchorLevel: ipda.anchor_level ?? ipda.origin_anchor_level,
+        originZoneId: ipda.origin_zone_id || ipda.setup_id,
+        sweepPrice: ipda.sweep_price ?? null,
+        reclaimPrice: ipda.reclaim_price ?? null,
+        volExpansion: ipda.vol_expansion ?? undefined,
+        deltaDominance: ipda.delta_dominance ?? undefined,
+        bodyRatio: ipda.body_ratio ?? undefined,
+        threePillarsPassed: ipda.three_pillars_passed ?? undefined,
+        displacementCandles: ipda.displacement_candles ?? undefined,
 
         isRehydrated: true,
       };
@@ -908,28 +1243,42 @@ export class AutomatedStrategyExecutionEngine {
     }
 
     if (rehydrated.length > 0) {
-      this.emit('REHYDRATED', `🔄 Re-hydrated ${rehydrated.length} active position(s) from database.`);
+      this.emit(
+        "REHYDRATED",
+        `🔄 Re-hydrated ${rehydrated.length} active position(s) from database.`,
+      );
     }
 
     return rehydrated;
   }
 
   // ── Manual Emergency Controls ──
-  public emergencyClosePosition(posId: string, currentMarketPrice: number): boolean {
-    const idx = this.activePositions.findIndex((p) => p.id === posId || p.dbTradeId === posId);
+  public emergencyClosePosition(
+    posId: string,
+    currentMarketPrice: number,
+  ): boolean {
+    const idx = this.activePositions.findIndex(
+      (p) => p.id === posId || p.dbTradeId === posId,
+    );
     if (idx !== -1) {
-      this.closePosition(idx, currentMarketPrice, 'MANUAL_EXIT', Date.now());
+      this.closePosition(idx, currentMarketPrice, "MANUAL_EXIT", Date.now());
       return true;
     }
     return false;
   }
 
   public moveStopToBreakeven(posId: string): boolean {
-    const pos = this.activePositions.find((p) => p.id === posId || p.dbTradeId === posId);
-    if (pos && pos.status !== 'CLOSED') {
+    const pos = this.activePositions.find(
+      (p) => p.id === posId || p.dbTradeId === posId,
+    );
+    if (pos && pos.status !== "CLOSED") {
       pos.activeStopLoss = pos.entryPrice;
-      pos.trailingSlSource = 'BREAKEVEN';
-      this.emit('STAGE_1_HARVEST', `🛡️ [MANUAL_BE] Stop loss moved to Break-even ($${pos.entryPrice.toFixed(2)}).`, pos);
+      pos.trailingSlSource = "BREAKEVEN";
+      this.emit(
+        "STAGE_1_HARVEST",
+        `🛡️ [MANUAL_BE] Stop loss moved to Break-even ($${pos.entryPrice.toFixed(2)}).`,
+        pos,
+      );
       return true;
     }
     return false;
@@ -964,39 +1313,46 @@ export class AutomatedStrategyExecutionEngine {
    * Runs SweepReclaimEngine detection across enabled timeframes and auto-routes confirmed setups.
    */
   public onMultiTimeframeCandles(
-    multiTfCandles: { '5m'?: Candle[]; '15m'?: Candle[]; '1h'?: Candle[] },
+    multiTfCandles: { "5m"?: Candle[]; "15m"?: Candle[]; "1h"?: Candle[] },
     macroContext?: {
-      macroDailyBias?: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
-      dolDirection?: 'BULLISH' | 'BEARISH' | 'BALANCED';
+      macroDailyBias?: "BULLISH" | "BEARISH" | "NEUTRAL";
+      dolDirection?: "BULLISH" | "BEARISH" | "BALANCED";
       localDealingRange?: any;
-    }
+    },
   ): {
     scannedSetups: SweepReclaimSetup[];
     executedSetups: SweepReclaimSetup[];
   } {
     const settings = this.config.liveSettings || DEFAULT_SR_LIVE_SETTINGS;
-    const enabledTfs = settings.enabledTimeframes && settings.enabledTimeframes.length > 0
-      ? settings.enabledTimeframes
-      : ['5m', '15m', '1h'];
+    const enabledTfs =
+      settings.enabledTimeframes && settings.enabledTimeframes.length > 0
+        ? settings.enabledTimeframes
+        : ["5m", "15m", "1h"];
 
     const scanned: SweepReclaimSetup[] = [];
     const executed: SweepReclaimSetup[] = [];
 
     // Map UI anchor categories to underlying SweepReclaimAnchorType array
     const mappedAnchorTypes: SweepReclaimAnchorType[] = [];
-    const activeAnchors = settings.anchorTypes || ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'];
-    if (activeAnchors.includes('SWING_PIVOT')) mappedAnchorTypes.push('SWING_PIVOT');
-    if (activeAnchors.includes('ASIAN')) {
-      mappedAnchorTypes.push('ASIAN_HIGH');
-      mappedAnchorTypes.push('ASIAN_LOW');
+    const activeAnchors = settings.anchorTypes || [
+      "SWING_PIVOT",
+      "ASIAN",
+      "LONDON",
+      "DAILY",
+    ];
+    if (activeAnchors.includes("SWING_PIVOT"))
+      mappedAnchorTypes.push("SWING_PIVOT");
+    if (activeAnchors.includes("ASIAN")) {
+      mappedAnchorTypes.push("ASIAN_HIGH");
+      mappedAnchorTypes.push("ASIAN_LOW");
     }
-    if (activeAnchors.includes('LONDON')) {
-      mappedAnchorTypes.push('LONDON_HIGH');
-      mappedAnchorTypes.push('LONDON_LOW');
+    if (activeAnchors.includes("LONDON")) {
+      mappedAnchorTypes.push("LONDON_HIGH");
+      mappedAnchorTypes.push("LONDON_LOW");
     }
-    if (activeAnchors.includes('DAILY')) {
-      mappedAnchorTypes.push('PDH');
-      mappedAnchorTypes.push('PDL');
+    if (activeAnchors.includes("DAILY")) {
+      mappedAnchorTypes.push("PDH");
+      mappedAnchorTypes.push("PDL");
     }
 
     for (const tf of enabledTfs) {
@@ -1009,22 +1365,43 @@ export class AutomatedStrategyExecutionEngine {
       const scanConfig: SweepReclaimScanConfig = {
         symbol: this.config.symbol,
         timeframe: tf,
-        anchorTypes: mappedAnchorTypes.length > 0 ? mappedAnchorTypes : undefined,
-        minSweepDepthAtrMultiplier: 0.10,
-        maxBarsAnchorToSweep: 40,
-        maxBarsSweepToReclaim: 16,
-        maxBarsToRetest: 30,
-        slBufferAtrMultiplier: this.config.slBufferAtrMultiplier ?? 0.15,
-        entryMode: settings.entryMode ?? 'SWEEP_OB_MT',
-        stage1Multiple: settings.stage2Multiple ? settings.stage2Multiple * 0.67 : this.config.stage1Multiple ?? 1.0,
-        stage2Multiple: settings.stage2Multiple ?? this.config.stage2Multiple ?? 1.5,
-        stage3Multiple: settings.stage3Multiple ?? this.config.stage3Multiple ?? 3.0,
-        enableStructuralTrail: settings.enableStructuralTrail ?? this.config.enableStructuralTrail,
-        enableProfitRatchet: settings.enableProfitRatchet ?? this.config.enableProfitRatchet,
-        volumeExpansionThreshold: settings.volumeExpansionThreshold ?? 1.50,
+        anchorTypes:
+          mappedAnchorTypes.length > 0 ? mappedAnchorTypes : undefined,
+
+        // Quant Lab Structural Alignment Parameters
+        lookbackMajor: settings.lookbackMajor ?? 15,
+        lookbackInternal: settings.lookbackInternal ?? 5,
+        maxBarsAnchorToSweep: settings.maxBarsAnchorToSweep ?? 40,
+        maxBarsSweepToReclaim: settings.maxBarsSweepToReclaim ?? 16,
+        maxBarsToRetest: settings.maxBarsToRetest ?? 30,
+        minSweepDepthAtrMultiplier: settings.minSweepDepthAtrMultiplier ?? 0.1,
+        slBufferAtrMultiplier:
+          settings.slBufferAtrMultiplier ??
+          this.config.slBufferAtrMultiplier ??
+          0.15,
+
+        // Target Multiples & Execution
+        entryMode: settings.entryMode ?? "SWEEP_OB_MT",
+        stage1Multiple:
+          settings.stage1Multiple ?? this.config.stage1Multiple ?? 1.0,
+        stage2Multiple:
+          settings.stage2Multiple ?? this.config.stage2Multiple ?? 1.5,
+        stage3Multiple:
+          settings.stage3Multiple ?? this.config.stage3Multiple ?? 3.0,
+        enableStructuralTrail:
+          settings.enableStructuralTrail ?? this.config.enableStructuralTrail,
+        enableProfitRatchet:
+          settings.enableProfitRatchet ?? this.config.enableProfitRatchet,
+
+        // 3-Pillar Displacement Gatekeeper Thresholds
+        volumeSmaPeriod: settings.volumeSmaPeriod ?? 20,
+        volumeExpansionThreshold: settings.volumeExpansionThreshold ?? 1.5,
         deltaDominanceThreshold: settings.deltaDominanceThreshold ?? 60.0,
-        bodyRatioThreshold: settings.bodyRatioThreshold ?? 0.60,
-        requireThreePillarDisplacement: true,
+        bodyRatioThreshold: settings.bodyRatioThreshold ?? 0.6,
+        requireThreePillarDisplacement:
+          settings.requireThreePillarDisplacement ?? true,
+
+        // Valuation Gating
         enforceDiscountPremiumGate: settings.enforceDiscountPremiumGate ?? true,
       };
 
@@ -1047,18 +1424,24 @@ export class AutomatedStrategyExecutionEngine {
             s.three_pillar_displacement_passed &&
             (!settings.enforceDiscountPremiumGate || s.is_valuation_aligned);
 
-          if (isConfirmed && this.config.autoExecute && !this.processedSetupIds.has(s.id)) {
+          if (
+            isConfirmed &&
+            this.config.autoExecute &&
+            !this.processedSetupIds.has(s.id)
+          ) {
             // One-Active-Position-Per-Structural-Wave Concurrency Lock
             const isZoneAlreadyActive =
               this.activePositions.some(
                 (p) =>
                   p.originZoneId === s.id ||
-                  (p.originAnchorLevel !== undefined && Math.abs(p.originAnchorLevel - s.anchor_level) < 0.50)
+                  (p.originAnchorLevel !== undefined &&
+                    Math.abs(p.originAnchorLevel - s.anchor_level) < 0.5),
               ) ||
               this.pendingLimitOrders.some(
                 (p) =>
                   p.originZoneId === s.id ||
-                  (p.originAnchorLevel !== undefined && Math.abs(p.originAnchorLevel - s.anchor_level) < 0.50)
+                  (p.originAnchorLevel !== undefined &&
+                    Math.abs(p.originAnchorLevel - s.anchor_level) < 0.5),
               );
 
             if (isZoneAlreadyActive) {
@@ -1067,40 +1450,74 @@ export class AutomatedStrategyExecutionEngine {
 
             // Determine limit entry price based on entryMode
             let entryPrice = s.entry_price;
-            if (!entryPrice || isNaN(entryPrice) || (settings.entryMode && settings.entryMode !== s.entry_mode)) {
+            if (
+              !entryPrice ||
+              isNaN(entryPrice) ||
+              (settings.entryMode && settings.entryMode !== s.entry_mode)
+            ) {
               entryPrice = resolveRetestEntryPrice({
-                mode: settings.entryMode ?? 'SWEEP_OB_MT',
-                isBullish: s.type === 'BULLISH',
+                mode: settings.entryMode ?? "SWEEP_OB_MT",
+                isBullish: s.type === "BULLISH",
                 anchorLevel: s.anchor_level,
-                sweepCandle: s.sweep_price !== null ? {
-                  high: s.sweep_ob_proximal !== undefined && s.sweep_ob_proximal !== null && s.type === 'BULLISH'
-                    ? s.sweep_ob_proximal
-                    : (s.type === 'BULLISH' ? Math.max(s.anchor_level, (s.sweep_ob_mt ?? s.sweep_price) * 2 - s.sweep_price) : s.sweep_price),
-                  low: s.sweep_ob_proximal !== undefined && s.sweep_ob_proximal !== null && s.type === 'BEARISH'
-                    ? s.sweep_ob_proximal
-                    : (s.type === 'BULLISH' ? s.sweep_price : Math.min(s.anchor_level, (s.sweep_ob_mt ?? s.sweep_price) * 2 - s.sweep_price)),
-                  mt: s.sweep_ob_mt ?? undefined,
-                } : null,
-                fvg: s.reclaim_fvg_created && s.reclaim_fvg_top !== null && s.reclaim_fvg_bottom !== null ? {
-                  top: s.reclaim_fvg_top,
-                  bottom: s.reclaim_fvg_bottom,
-                  ce: s.reclaim_fvg_ce ?? undefined,
-                } : null,
-                displacementExtremes: s.displacement_impulse_high && s.displacement_impulse_low ? {
-                  impulseHigh: s.displacement_impulse_high,
-                  impulseLow: s.displacement_impulse_low,
-                } : null,
+                sweepCandle:
+                  s.sweep_price !== null
+                    ? {
+                        high:
+                          s.sweep_ob_proximal !== undefined &&
+                          s.sweep_ob_proximal !== null &&
+                          s.type === "BULLISH"
+                            ? s.sweep_ob_proximal
+                            : s.type === "BULLISH"
+                              ? Math.max(
+                                  s.anchor_level,
+                                  (s.sweep_ob_mt ?? s.sweep_price) * 2 -
+                                    s.sweep_price,
+                                )
+                              : s.sweep_price,
+                        low:
+                          s.sweep_ob_proximal !== undefined &&
+                          s.sweep_ob_proximal !== null &&
+                          s.type === "BEARISH"
+                            ? s.sweep_ob_proximal
+                            : s.type === "BULLISH"
+                              ? s.sweep_price
+                              : Math.min(
+                                  s.anchor_level,
+                                  (s.sweep_ob_mt ?? s.sweep_price) * 2 -
+                                    s.sweep_price,
+                                ),
+                        mt: s.sweep_ob_mt ?? undefined,
+                      }
+                    : null,
+                fvg:
+                  s.reclaim_fvg_created &&
+                  s.reclaim_fvg_top !== null &&
+                  s.reclaim_fvg_bottom !== null
+                    ? {
+                        top: s.reclaim_fvg_top,
+                        bottom: s.reclaim_fvg_bottom,
+                        ce: s.reclaim_fvg_ce ?? undefined,
+                      }
+                    : null,
+                displacementExtremes:
+                  s.displacement_impulse_high && s.displacement_impulse_low
+                    ? {
+                        impulseHigh: s.displacement_impulse_high,
+                        impulseLow: s.displacement_impulse_low,
+                      }
+                    : null,
               });
             }
 
             // Price Sanity Guard: Ensure entry level is within 5% of current market price
-            const priceDistancePct = Math.abs(entryPrice - latestPrice) / latestPrice;
+            const priceDistancePct =
+              Math.abs(entryPrice - latestPrice) / latestPrice;
             if (priceDistancePct > 0.05) {
               // Temporary distance mismatch: do NOT permanently blacklist
               continue;
             }
 
-            const direction = s.type === 'BULLISH' ? 'LONG' : 'SHORT';
+            const direction = s.type === "BULLISH" ? "LONG" : "SHORT";
             const strategyName = `Sweep & Reclaim (${tf.toUpperCase()} ${s.anchor_name || s.anchor_type})`;
 
             const submitRes = this.submitStrategyOrder({
@@ -1114,8 +1531,17 @@ export class AutomatedStrategyExecutionEngine {
               currentMarketPrice: latestPrice,
               fvgCeLevel: s.reclaim_fvg_ce,
               dynamicDolTarget: s.stage3_target,
+              setupId: s.id,
+              anchorName: s.anchor_name,
               originZoneId: s.id,
               originAnchorLevel: s.anchor_level,
+              sweepPrice: s.sweep_price,
+              reclaimPrice: s.reclaim_close_price,
+              volExpansion: s.reclaim_volume_expansion ?? undefined,
+              deltaDominance: s.reclaim_delta_dominance_pct ?? undefined,
+              bodyRatio: s.reclaim_body_ratio ?? undefined,
+              threePillarsPassed: s.three_pillar_displacement_passed,
+              displacementCandles: s.displacement_candles,
               overrideRiskPct: settings.compoundingRiskPct,
             });
 
@@ -1126,7 +1552,10 @@ export class AutomatedStrategyExecutionEngine {
           }
         }
       } catch (err) {
-        console.warn(`[AutomatedStrategyExecutionEngine] Error scanning ${tf} candles for S&R:`, err);
+        console.warn(
+          `[AutomatedStrategyExecutionEngine] Error scanning ${tf} candles for S&R:`,
+          err,
+        );
       }
     }
 

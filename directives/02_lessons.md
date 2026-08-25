@@ -670,6 +670,50 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   2. `/api/backtest-trades` and `/api/trades` returned `400 Bad Request` if a trade being closed was already in `CLOSED` state, which broke client auto-close retry loops.
 - **The Fixes:**
   1. **`Chart.tsx`:** Removed the flawed global median filter from the historical data loop and retained robust positive numerical validation (`isFinite && c > 0`). Bar-to-bar outlier filtering remains strictly on live streaming ticks (`useMarketData.ts`, `useBinanceWS.ts`, `LiveSeriesCanvasUpdater`).
-  2. **`/api/backtest-trades` & `/api/trades`:** Updated PATCH handlers to return status `200 OK` with `{ success: true, message: "Trade is already CLOSED." }` when a trade is already closed, ensuring closing operations are idempotent.
+### 58. Closed-Trade In-Memory Singleton Desynchronization & Ghost Chart Overlay Trap (Resolved in V16.50)
+- **The Bug:** After manually closing or purging a trade in the Trading Journal (`/journal`), the live chart continued to display the trade as `OPEN` in the S&R 3-Pillar HUD (`Live Position OPEN (LONG) | +2.07R`), and permanently rendered `🛑 S&R SL`, `🏆 TP1`, `💎 TP2`, and `🚀 TP3` lines on the chart screen as if the trade were still active or unopened.
+- **The Causes:**
+  1. **One-Way In-Memory Singleton Sync:** `AutomatedStrategyExecutionEngine` and `LiveOrderBlockExecutionEngine` run as persistent module-scoped singletons (`sharedStrategyEngineInstance`). When a trade was opened, the engine added it to `this.activePositions` and mirrored it into `useSessionJournalStore`. When the user closed or purged the trade in `/journal`, `useSessionJournalStore` updated `localStorage` and dispatched `'trades-refresh'`, but the execution engines never listened to this event. `this.activePositions` retained the closed position in memory, continuously updating its floating P&L and feeding `srOverlay.isPositionOpen = true` and `srOverlay.phase = 'OPEN'` to `Chart.tsx`.
+  2. **Empty-Array State Guard in `src/app/page.tsx` & `src/app/backtest/page.tsx`:** `fetchOpenTrades` and `fetchBacktestTrades` were wrapped in `if (localOpenTrades.length > 0) { setOpenTrades(localOpenTrades); }`. When all open trades were closed, `localOpenTrades.length === 0`, so `setOpenTrades([])` was never called, leaving the previous trade state stuck in React memory and continuing to paint generic `ENTRY`, `TP`, and `SL` lines.
+- **The Fixes:**
+### 59. Displacement Audit Metadata Loss & Zoom-Dependent Setup Bleed (Resolved in V16.58)
+- **The Bug:** In the Institutional Setup Audit popover (`Chart.tsx`), active Sweep & Reclaim trades displayed `$N/A` for `Sweep Extreme` and `Reclaim Close`, failed to render the 3-candle displacement leg coordinates, and reverted 3-pillar metrics to `1.00x / 50.0% / 50.0%` with false `✗ Pillars Failed`. The real metrics only appeared if the user manually zoomed out far enough to load older historical bars.
+- **The Causes:**
+  1. **Transient Audit Stripping:** `submitStrategyOrder()` in `AutomatedStrategyExecutionEngine.ts` only stored entry/SL/TP prices and failed to attach the setup's `displacement_candles`, `sweep_price`, `reclaim_close_price`, `vol_expansion`, `delta_dominance`, `body_ratio`, and `three_pillars_passed` onto the active in-memory `StrategyExecutionPosition`.
+  2. **Lookback Buffer Dependence:** Because `StrategyExecutionPosition` was an "empty shell", `useAutomatedStrategyExecution.ts` had to dynamically re-scan historical candles to reconstruct the setup. When zoomed in, the origin displacement candles (e.g. 17:30 UTC) fell outside the loaded candle buffer.
+  3. **Broken Lookup Key & Fallback Bleed:** `srOverlay` searched for `(activePos as any).setupId` (which was `undefined` since the engine stored `originZoneId`), causing `matchById` to fail and fall back to `scannedSetups[scannedSetups.length - 1]`—an unconfirmed `ANCHOR_ONLY` pivot that had no sweep or reclaim yet.
+- **The Fixes:**
+  1. **Immutable Position Audit Snapshot:** Extended `StrategyExecutionPosition` and `submitStrategyOrder()` to capture and lock `displacement_candles`, `sweep_price`, `reclaim_price`, `vol_expansion`, `delta_dominance`, `body_ratio`, and `three_pillars_passed` directly on the position at order execution time.
+  2. **Journal Metric Persistence (`ipda_metrics`):** Saved the full audit block inside `useSessionJournalStore`'s `ipda_metrics` and updated `rehydrateOpenPositions()` to seamlessly restore all klines and metrics upon page mount.
+  3. **Direct Position-First Resolution:** Updated `srOverlay` `useMemo` in `useAutomatedStrategyExecution.ts` to prioritize the position's own preserved audit snapshot over transient candle scans, and fixed the ID search keys.
+  4. **Cairo Timezone Alignment:** Updated `Chart.tsx` displacement kline cards to render timestamps in institutional Cairo time (`Africa/Cairo`) matching the Quant Lab and Session Journal.
+
+
+
+### 50. The Auto-Executor Phantom "Take Profit" Loop & Inverted Stop Losses (Resolved in V16.60)
+- **The Bug:** Long trades generated by the SweepReclaimEngine were executing in the journal with positive PnL (e.g., +.96) and "CLOSED" status, despite instantly stopping out. Analysis showed that the trades were executing with a Stop Loss price mathematically HIGHER than the entry price.
+- **The Cause:** 
+  1. The AutomatedStrategyExecutionEngine calculated the clampedStopLoss and R-multiple targets strictly based on the structural limitEntryPrice.
+  2. If the active market price gapped down significantly, canFillNow = currentPrice <= limitEntryPrice would evaluate to true, instantly executing the Limit Order as a Market Order at currentPrice.
+  3. However, if the market price dropped so far that it was already BELOW the calculated clampedStopLoss, the engine still executed the trade (newPosition.entryPrice = currentPrice), creating a corrupted trade where entryPrice < stopLoss.
+  4. On the next tick, processMarketTick correctly evaluated livePrice <= stopLoss and triggered an immediate STOPPED_OUT event. But because the system exited at a Stop Loss that was structurally higher than the entry price, it recorded a phantom positive PnL.
+- **The Fix:**
+  1. **Price Sanity Veto Guardrail:** Injected a pre-flight check in submitStrategyOrder: const isStopLossBreached = isLong ? currentPrice <= clampedStopLoss : currentPrice >= clampedStopLoss. If breached, the engine immediately vetoes execution (DIRECTIONAL_VETO), correctly preventing setups from being blindly traded when their structural anchor is already blown out.
+
+### 60. Splicing-Dependent Backtest Drift & The Resilient 3-Tier Midnight Ledger (Resolved in V16.60)
+- **The Bug:** In Quant Lab backtests, shifting the start date (e.g. comparing Aug 1–Aug 28 vs Aug 20–Aug 28) produced different trade counts and differing trade outcomes for the exact same overlapping period (Aug 20–Aug 28). If the cloud database (Neon) encountered an offline state or HTTP 402 Quota Exceeded error, the engine performed a cold start with a naive 45-bar warmup, causing massive mathematical drift, missing PDH/PDL anchors on Day 0, and destabilized ATR/Volume SMAs.
+- **The Causes:**
+  1. **Naive Warmup Depth:** A 45-bar warmup (11.25 hours on 15m) lacked the historical depth needed to detect previous daily anchors (PDH/PDL require previous day), multi-week swing pivots, and stabilized ATR/SMA values.
+  2. **Transient Cloud Failure Vulnerability:** When Neon PostgreSQL was unavailable or quota-limited, the system returned an unseeded fallback without persisting structural snapshots into local storage.
+  3. **Index Out-of-Bounds in Seeded Pivots:** Seeded pivots from warmup datasets had index numbers referencing the warmup array rather than the evaluation array, causing downstream pivot loops to skip all seeded anchors.
+- **The Fixes:**
+  1. **Standardized 45-Day Institutional Lookback (`STANDARDIZED_WARMUP_LOOKBACK_MS`):** Standardized warmup depth to 45 days (4,320 bars on 15m / 12,960 bars on 5m) ensuring 100% complete daily profiles, swing pivot hierarchies, and indicator convergence.
+  2. **3-Tier Resilient Resolution Architecture (`structuralBootstrap.ts`):**
+     - **Tier 1 (Cloud DB):** Neon PostgreSQL `quant_lab_daily_structural_snapshots`. Traps 402/500 errors silently.
+     - **Tier 2 (Local Storage):** Server-side filesystem cache (`.cache/structural_snapshots/`) + client-side IndexedDB (`quant_structural_snapshots_db`). Sub-millisecond synchronous resolution.
+     - **Tier 3 (Self-Healing Deterministic Warmup):** Standardized 45-day lookback calculation, auto-generating and caching the snapshot so subsequent runs resolve in 0ms.
+  3. **PivotEngine Dynamic Timestamp Re-Mapping (`PivotEngine.ts`):** Automatically filters seeded pivots strictly to timestamps before the active candle array and re-indexes in-window pivots to valid continuous array indices.
+  4. **Strict Post-Scan Bounding (`SweepReclaimEngine.ts`, `OrderBlockEngine.ts`):** Bounded detected setups by `triggerTime >= warmupCutoffTs`, ensuring warmup data never bleeds into backtest result lists or telemetry.
+  5. **40-Test Parity Verification (`scripts/audit_quant_lab_parity.ts`):** Audited across 20 distinct start dates for Sweep & Reclaim and 20 distinct start dates for Order Block & Breaker engines. Verified 100.00% exact mathematical parity (0.000% drift across 40/40 runs).
 
 

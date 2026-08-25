@@ -593,6 +593,22 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
   const [selectedTradeIds, setSelectedTradeIds] = useState<string[]>([]);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isBulkArchiving, setIsBulkArchiving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleImportJson = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const json = JSON.parse(ev.target?.result as string);
+        useSessionJournalStore.getState().importSessionJson(json);
+      } catch (err) {
+        alert('Failed to parse JSON file.');
+      }
+    };
+    reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   // Filter trades based on Strategy Origin / Source
   const filteredTrades = useMemo(() => {
@@ -673,26 +689,26 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
     try {
       // 1. Sync from local in-memory session journal first
       const localTrades = useSessionJournalStore.getState().getTradesByMode(isBacktest ? 'BACKTEST' : 'LIVE');
-      if (localTrades.length > 0) {
-        setTrades(localTrades as unknown as TradeRecord[]);
-      }
+      setTrades(localTrades as unknown as TradeRecord[]);
 
-      // 2. Non-blocking background sync from cloud DB
-      const res = await fetch(tradesApiUrl);
-      if (res.ok) {
-        const json = await res.json();
-        const combined = json.trades && json.trades.length > 0 ? json.trades : localTrades;
-        setTrades(combined || []);
-        if (json.account) {
-          setAccount(json.account);
-        }
+      // 2. Sync account details from session store
+      const localAccount = isBacktest
+        ? useSessionJournalStore.getState().backtestAccount
+        : useSessionJournalStore.getState().account;
+      if (localAccount) {
+        setAccount(localAccount as any);
       }
     } catch (err) {
-      console.debug("[JOURNAL] Cloud sync skipped (in-memory journal preserved):", err);
+      console.debug("[JOURNAL] Local sync error:", err);
     } finally {
       setIsRefreshing(false);
     }
-  }, [tradesApiUrl, isBacktest]);
+  }, [isBacktest]);
+
+  // Initial on-mount hydration from local session journal store
+  useEffect(() => {
+    refreshTrades();
+  }, [refreshTrades]);
 
   // Listen to server-side and local scan triggers to automatically update journal state
   useEffect(() => {
@@ -718,15 +734,8 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
       prev.map(t => (t.id === trade.id ? { ...t, status: nextStatus } : t))
     );
 
-    // 2. Fire-and-forget background cloud sync
-    fetch(tradesApiUrl, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ trade_id: trade.id, status: nextStatus })
-    }).catch(() => {});
-
     setActionLoadingId(null);
-  }, [tradesApiUrl]);
+  }, []);
 
   // ── 3. PATCH: Manually close active trade ──────────────────────────────
   const handleClosePosition = useCallback(async (tradeId: string, exitPrice?: number | null) => {
@@ -745,20 +754,8 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
       prev.map(t => (t.id === tradeId ? { ...t, status: "CLOSED" as const, exit_price: resolvedExit, closed_at: closedAt } : t))
     );
 
-    // 2. Fire-and-forget background cloud sync
-    fetch(tradesApiUrl, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        trade_id: tradeId, 
-        status: "CLOSED",
-        exit_price: resolvedExit,
-        closed_at: closedAt
-      })
-    }).catch(() => {});
-
     setActionLoadingId(null);
-  }, [tradesApiUrl, isBacktest, backtestCandleTime, trades]);
+  }, [isBacktest, backtestCandleTime, trades]);
 
   // ── 4. DELETE: Surgical hard row deletion ──────────────────────────────
   const handleDeleteTrade = useCallback(async (tradeId: string) => {
@@ -769,10 +766,7 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
     setTrades(prev => prev.filter(t => t.id !== tradeId));
     setDeleteConfirmId(null);
 
-    // 2. Fire-and-forget background cloud sync
-    fetch(`${tradesApiUrl}?trade_id=${tradeId}`, {
-      method: "DELETE"
-    }).catch(() => {});
+    
 
     setActionLoadingId(null);
   }, [tradesApiUrl]);
@@ -968,6 +962,17 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* 1-Click Import JSON */}
+          <input type="file" accept=".json" ref={fileInputRef} onChange={handleImportJson} className="hidden" />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title="Import previously exported session JSON"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 font-mono text-[9px] font-bold uppercase tracking-wider transition-all rounded-lg shadow-sm cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5 rotate-180" />
+            <span>Import JSON</span>
+          </button>
           {/* 1-Click Export JSON */}
           <button
             type="button"
@@ -1122,3 +1127,6 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
     </div>
   );
 });
+
+
+

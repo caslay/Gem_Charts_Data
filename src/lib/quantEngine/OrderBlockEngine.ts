@@ -481,8 +481,10 @@ export class OrderBlockEngine {
       filteredBlocks = filteredBlocks.filter(b => b.quality_tier === 'A_PLUS' || b.quality_tier === 'A');
     }
 
-    if (bootstrap) {
-      filteredBlocks = filteredBlocks.filter(b => b.origin_time >= bootstrap.warmupCutoffTs);
+    if (bootstrap && bootstrap.warmupCutoffTs) {
+      filteredBlocks = filteredBlocks.filter(
+        (b) => b.origin_time >= bootstrap.warmupCutoffTs || (b.mitigation_time !== null && b.mitigation_time >= bootstrap.warmupCutoffTs)
+      );
     }
 
     const telemetry = this.calculateTelemetry(filteredBlocks, detectedBlocks);

@@ -61,6 +61,16 @@ export interface SweepReclaimLiveSettings {
   enableMomentumOverride: boolean; // default: true (runaway market protection)
   sessionGates: LiveSessionKillzone[]; // default: ['ASIAN', 'LONDON', 'NY']
   directionalLock: LiveDirectionalLock; // default: 'DUAL'
+
+  // Quant Lab Structural Alignment Parameters
+  lookbackMajor: number; // default: 15
+  lookbackInternal: number; // default: 5
+  maxBarsAnchorToSweep: number; // default: 40
+  maxBarsSweepToReclaim: number; // default: 16
+  maxBarsToRetest: number; // default: 30
+  requireThreePillarDisplacement: boolean; // default: true
+  minSweepDepthAtrMultiplier: number; // default: 0.10
+  slBufferAtrMultiplier: number; // default: 0.15
 }
 
 export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
@@ -85,6 +95,14 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   enableMomentumOverride: true,
   sessionGates: ['ASIAN', 'LONDON', 'NY'],
   directionalLock: 'DUAL',
+  lookbackMajor: 15,
+  lookbackInternal: 5,
+  maxBarsAnchorToSweep: 40,
+  maxBarsSweepToReclaim: 16,
+  maxBarsToRetest: 30,
+  requireThreePillarDisplacement: true,
+  minSweepDepthAtrMultiplier: 0.10,
+  slBufferAtrMultiplier: 0.15,
 };
 
 // Master Reversible Pause Switch for Order Block & Breaker Pipeline

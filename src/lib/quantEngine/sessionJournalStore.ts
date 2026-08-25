@@ -76,6 +76,7 @@ interface SessionJournalState {
   // Export Utilities
   exportSessionJson: (mode?: SessionExecutionMode | 'ALL') => void;
   exportSessionCsv: (mode?: SessionExecutionMode | 'ALL') => void;
+  importSessionJson: (importedData: any) => void;
 }
 
 const DEFAULT_ACCOUNT: SessionAccount = {
@@ -388,6 +389,24 @@ export const useSessionJournalStore = create<SessionJournalState>()(
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       },
+
+      importSessionJson: (importedData) => {
+        set((state) => {
+          let updatedTrades = [...state.trades];
+          if (importedData.trades && Array.isArray(importedData.trades)) {
+            // merge trades
+            const existingIds = new Set(updatedTrades.map(t => t.id));
+            const incoming = importedData.trades.filter((t: any) => !existingIds.has(t.id));
+            updatedTrades = [...updatedTrades, ...incoming];
+          }
+          
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('trades-refresh'));
+            window.dispatchEvent(new Event('backtest-trades-refresh'));
+          }
+          return { trades: updatedTrades };
+        });
+      },
     }),
     {
       name: 'flow_state_session_journal_v1',
@@ -395,3 +414,4 @@ export const useSessionJournalStore = create<SessionJournalState>()(
     }
   )
 );
+
