@@ -198,21 +198,21 @@ export async function POST(req: Request) {
           ? rawAnchorTypes
           : ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL'];
 
-        const lookback_major = Number(body.lookbackMajor ?? body.lookback_major ?? 15);
+        const lookback_major = Number(body.lookbackMajor ?? body.lookback_major ?? 10);
         const lookback_internal = Number(body.lookbackInternal ?? body.lookback_internal ?? 5);
-        const max_bars_anchor_to_sweep = Number(body.maxBarsAnchorToSweep ?? body.max_bars_anchor_to_sweep ?? 30);
-        const max_bars_sweep_to_reclaim = Number(body.maxBarsSweepToReclaim ?? body.max_bars_sweep_to_reclaim ?? 12);
-        const max_bars_to_retest = Number(body.maxBarsToRetest ?? body.max_bars_to_retest ?? 24);
+        const max_bars_anchor_to_sweep = Number(body.maxBarsAnchorToSweep ?? body.max_bars_anchor_to_sweep ?? 25);
+        const max_bars_sweep_to_reclaim = Number(body.maxBarsSweepToReclaim ?? body.max_bars_sweep_to_reclaim ?? 10);
+        const max_bars_to_retest = Number(body.maxBarsToRetest ?? body.max_bars_to_retest ?? 20);
         const volume_sma_period = Number(body.volumeSmaPeriod ?? body.volume_sma_period ?? 20);
-        const volume_expansion_threshold = Number(body.volumeExpansionThreshold ?? body.volume_expansion_threshold ?? 1.50);
-        const delta_dominance_threshold = Number(body.deltaDominanceThreshold ?? body.delta_dominance_threshold ?? 55.0);
-        const body_ratio_threshold = Number(body.bodyRatioThreshold ?? body.body_ratio_threshold ?? body.minBodyRatio ?? body.min_body_ratio ?? 0.55);
+        const volume_expansion_threshold = Number(body.volumeExpansionThreshold ?? body.volume_expansion_threshold ?? 1.35);
+        const delta_dominance_threshold = Number(body.deltaDominanceThreshold ?? body.delta_dominance_threshold ?? 52.0);
+        const body_ratio_threshold = Number(body.bodyRatioThreshold ?? body.body_ratio_threshold ?? body.minBodyRatio ?? body.min_body_ratio ?? 0.50);
         const require_three_pillar_displacement = (body.requireThreePillarDisplacement ?? body.require_three_pillar_displacement) !== false;
         const enforce_discount_premium_gate = (body.enforceDiscountPremiumGate ?? body.enforce_discount_premium_gate) !== undefined ? Boolean(body.enforceDiscountPremiumGate ?? body.enforce_discount_premium_gate) : true;
         const stage1_multiple = Number(body.stage1Multiple ?? body.stage1_multiple ?? 1.0);
-        const stage2_multiple = Number(body.stage2Multiple ?? body.stage2_multiple ?? 1.5);
+        const stage2_multiple = Number(body.stage2Multiple ?? body.stage2_multiple ?? 1.4);
         const stage3_multiple = Number(body.stage3Multiple ?? body.stage3_multiple ?? 3.0);
-        const rawEntryMode = String(body.entryMode ?? body.entry_mode ?? "SWEEP_OB_MT").toUpperCase();
+        const rawEntryMode = String(body.entryMode ?? body.entry_mode ?? "FVG_PROXIMAL").toUpperCase();
         const validEntryModes: SweepReclaimEntryMode[] = [
           'SHELF_LEVEL',
           'RECLAIM_LEVEL',
@@ -225,11 +225,11 @@ export async function POST(req: Request) {
         ];
         const entry_mode: SweepReclaimEntryMode = validEntryModes.includes(rawEntryMode as SweepReclaimEntryMode)
           ? (rawEntryMode as SweepReclaimEntryMode)
-          : "SWEEP_OB_MT";
+          : "FVG_PROXIMAL";
         const enable_structural_trail = (body.enableStructuralTrail ?? body.enable_structural_trail) !== false;
         const enable_profit_ratchet = (body.enableProfitRatchet ?? body.enable_profit_ratchet) !== false;
         const min_sweep_depth_atr = Number(body.minSweepDepthAtrMultiplier ?? body.min_sweep_depth_atr ?? 0.10);
-        const sl_buffer_atr = Number(body.slBufferAtrMultiplier ?? body.sl_buffer_atr ?? 0.15);
+        const sl_buffer_atr = Number(body.slBufferAtrMultiplier ?? body.sl_buffer_atr ?? 0.12);
 
         if (!start_date || !end_date) {
           sendChunk({ type: "error", error: "Missing required date range parameters: start_date and end_date are required." });

@@ -1041,15 +1041,15 @@ Timestamp: ${new Date().toISOString()}`;
                           <span className="text-[10px] text-muted">Date</span>
                           <span className="text-[10px] font-mono text-foreground">
                             {selectedSetup.openTime
-                              ? new Date(selectedSetup.openTime).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                              ? new Date(selectedSetup.openTime).toLocaleDateString("en-GB", { timeZone: "Africa/Cairo", day: "2-digit", month: "short", year: "numeric" })
                               : <span className="text-muted italic">Session detected</span>}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-muted">Time</span>
+                          <span className="text-[10px] text-muted">Time (Cairo)</span>
                           <span className="text-[10px] font-mono text-foreground">
                             {selectedSetup.openTime
-                              ? new Date(selectedSetup.openTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+                              ? new Date(selectedSetup.openTime).toLocaleTimeString("en-GB", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
                               : <span className="text-muted italic">—</span>}
                           </span>
                         </div>
@@ -1080,15 +1080,15 @@ Timestamp: ${new Date().toISOString()}`;
                           <span className="text-[10px] text-muted">Date</span>
                           <span className="text-[10px] font-mono text-foreground">
                             {selectedSetup.closeTime
-                              ? new Date(selectedSetup.closeTime).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+                              ? new Date(selectedSetup.closeTime).toLocaleDateString("en-GB", { timeZone: "Africa/Cairo", day: "2-digit", month: "short", year: "numeric" })
                               : <span className="text-muted italic">Session detected</span>}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-muted">Time</span>
+                          <span className="text-[10px] text-muted">Time (Cairo)</span>
                           <span className="text-[10px] font-mono text-foreground">
                             {selectedSetup.closeTime
-                              ? new Date(selectedSetup.closeTime).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
+                              ? new Date(selectedSetup.closeTime).toLocaleTimeString("en-GB", { timeZone: "Africa/Cairo", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })
                               : <span className="text-muted italic">—</span>}
                           </span>
                         </div>

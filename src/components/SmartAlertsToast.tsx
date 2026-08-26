@@ -202,7 +202,7 @@ function ToastItem({ alert, dismissAlert }: { alert: SmartAlert, dismissAlert: (
         <div className="flex items-center justify-between gap-2">
           {badge}
           <span className="text-[9px] text-zinc-500 font-mono shrink-0">
-            {new Date(alert.timestamp).toLocaleTimeString()}
+            {new Date(alert.timestamp).toLocaleTimeString('en-GB', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} (Cairo)
           </span>
         </div>
         <div className="text-xs font-medium tracking-wide leading-snug break-words">

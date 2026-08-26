@@ -15,6 +15,33 @@
 import { SweepReclaimSetup } from './SweepReclaimEngine';
 import { InstitutionalOrderBlock } from './OrderBlockEngine';
 
+// ── Cairo Timezone Formatting Utility ─────────────────────────────────────────
+
+/**
+ * Formats a timestamp or Date into standardized Cairo time (YYYY-MM-DD HH:mm).
+ */
+export function formatCairoDateTime(timestamp: number | string | Date | undefined | null): string {
+  if (!timestamp) return '—';
+  const d = typeof timestamp === 'number' || typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
+  if (isNaN(d.getTime())) return '—';
+
+  try {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Africa/Cairo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    return formatter.format(d).replace(',', '');
+  } catch {
+    // Fallback if timezone is unavailable
+    return new Date(d.getTime() + 3 * 3600 * 1000).toISOString().replace('T', ' ').slice(0, 16);
+  }
+}
+
 // ── Standardized Trade Interface ─────────────────────────────────────────────
 
 export interface StandardizedExecutedTrade {
@@ -149,7 +176,7 @@ export function adaptSweepReclaimSetupsToTrades(
     executedTrades.push({
       id: s.id,
       timestamp,
-      dateStr: new Date(timestamp).toISOString().replace('T', ' ').slice(0, 16),
+      dateStr: formatCairoDateTime(timestamp),
       symbol: s.symbol || 'ETHUSDC',
       direction: s.type,
       entryPrice: s.entry_price,
@@ -211,7 +238,7 @@ export function adaptOrderBlocksToTrades(
       executedTrades.push({
         id: ob.id,
         timestamp,
-        dateStr: new Date(timestamp).toISOString().replace('T', ' ').slice(0, 16),
+        dateStr: formatCairoDateTime(timestamp),
         symbol: ob.symbol || 'ETHUSDC',
         direction: ob.type,
         entryPrice: ob.simulated_entry_price || ob.mean_threshold,
@@ -248,7 +275,7 @@ export function adaptOrderBlocksToTrades(
       executedTrades.push({
         id: `${ob.id}_BRK`,
         timestamp: breakerTimestamp,
-        dateStr: new Date(breakerTimestamp).toISOString().replace('T', ' ').slice(0, 16),
+        dateStr: formatCairoDateTime(breakerTimestamp),
         symbol: ob.symbol || 'ETHUSDC',
         direction: breakerDirection,
         entryPrice: ob.breaker_entry_price || ob.mean_threshold,
@@ -296,7 +323,7 @@ export function calculateCompoundingMetrics(
       tradeIndex: 0,
       tradeId: 'START',
       timestamp: Date.now(),
-      dateStr: new Date().toISOString().replace('T', ' ').slice(0, 16),
+      dateStr: formatCairoDateTime(Date.now()),
       equity: initialCapital,
       peakEquity: initialCapital,
       drawdownPct: 0,
@@ -408,7 +435,7 @@ export function calculateCompoundingMetrics(
     tradeIndex: 0,
     tradeId: 'START',
     timestamp: startTimestamp,
-    dateStr: new Date(startTimestamp).toISOString().replace('T', ' ').slice(0, 16),
+    dateStr: formatCairoDateTime(startTimestamp),
     equity: runningEquity,
     peakEquity,
     drawdownPct: 0,

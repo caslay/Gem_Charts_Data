@@ -824,7 +824,7 @@ export default function CapitalGrowthLedger({
                     <thead>
                       <tr className="border-b border-slate-800 text-slate-500 uppercase">
                         <th className="py-2.5 px-2">#</th>
-                        <th className="py-2.5 px-2">Date / Time (UTC)</th>
+                        <th className="py-2.5 px-2">Date / Time (Cairo)</th>
                         <th className="py-2.5 px-2">Trade ID / Setup</th>
                         <th className="py-2.5 px-2">Direction</th>
                         <th className="py-2.5 px-2">Entry / SL</th>

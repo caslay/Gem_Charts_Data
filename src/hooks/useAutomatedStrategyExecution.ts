@@ -331,9 +331,9 @@ export function useAutomatedStrategyExecution(
     if (typeof document !== 'undefined' && document.hidden) return;
 
     const payload = marketData.data_payload || {};
-    const candles5m = payload.candles_5m || [];
-    const candles15m = payload.candles_15m || [];
-    const candles1h = payload.candles_1h || [];
+    const candles5m = (payload.candles_5m || []).filter((c: Candle) => c.isClosed !== false);
+    const candles15m = (payload.candles_15m || []).filter((c: Candle) => c.isClosed !== false);
+    const candles1h = (payload.candles_1h || []).filter((c: Candle) => c.isClosed !== false);
 
     const key = `${candles5m?.[candles5m.length - 1]?.t}_${candles15m?.[candles15m.length - 1]?.t}_${candles1h?.[candles1h.length - 1]?.t}_${candles5m.length}_${candles15m.length}_${candles1h.length}`;
     if (lastProcessedSrCandleRef.current === key) return;

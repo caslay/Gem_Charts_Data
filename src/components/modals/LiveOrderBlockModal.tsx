@@ -617,7 +617,7 @@ function LiveOrderBlockModalContent({
                 <div className="bg-card/50 border border-card-border rounded-xl p-3 text-[10px] text-foreground flex items-center justify-between">
                   <span className="truncate">{lastEventMessage}</span>
                   <span className="text-[9px] text-muted shrink-0 ml-3">
-                    {new Date(lastEventTime).toLocaleTimeString()}
+                    {new Date(lastEventTime).toLocaleTimeString('en-GB', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} (Cairo)
                   </span>
                 </div>
               )}
@@ -795,7 +795,7 @@ function LiveOrderBlockModalContent({
 
                         {/* Footer Info */}
                         <div className="text-[8px] text-muted border-t border-card-border/40 pt-1.5 flex items-center justify-between">
-                          <span>Origin: {new Date(zone.origin_time).toLocaleTimeString()}</span>
+                          <span>Origin: {new Date(zone.origin_time).toLocaleTimeString('en-GB', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', hour12: false })} (Cairo)</span>
                           {zone.htf_veto_reason ? (
                             <span className="text-rose-400 truncate max-w-[200px]" title={zone.htf_veto_reason}>
                               {zone.htf_veto_reason}

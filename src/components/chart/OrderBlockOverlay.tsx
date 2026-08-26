@@ -324,6 +324,7 @@ function ZoneInspectorPopover({ zone, theme, onClose }: ZoneInspectorPopoverProp
     : 'bg-rose-500/20 text-rose-300 border-rose-500/40';
 
   const formattedOriginTime = new Date(zone.origin_time).toLocaleString('en-US', {
+    timeZone: 'Africa/Cairo',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
