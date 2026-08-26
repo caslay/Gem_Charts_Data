@@ -263,7 +263,7 @@ export default function AutomatedExecutionHUD({
         <div className="px-3 py-2 rounded-lg bg-slate-950/90 border border-slate-800 text-[10px] text-slate-300 flex items-center justify-between">
           <span className="truncate max-w-[85%]">{lastEvent.message}</span>
           <span className="text-[9px] text-slate-500">
-            {new Date(lastEvent.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            {new Date(lastEvent.timestamp).toLocaleTimeString('en-GB', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} (Cairo)
           </span>
         </div>
       )}

@@ -146,7 +146,7 @@ export function NavigationHeader() {
             <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-background/50 border border-card-border rounded-full shrink-0">
               <span className={`w-1.5 h-1.5 rounded-full ${wsStatus === 'OPEN' ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-500'}`} />
               <span className="font-mono text-[9px] font-black text-muted uppercase leading-none tracking-wider">
-                {cairoTime ? `${cairoTime} UTC+3` : '--:-- UTC+3'}
+                {cairoTime ? `${cairoTime} Cairo` : '--:-- Cairo'}
               </span>
             </div>
 

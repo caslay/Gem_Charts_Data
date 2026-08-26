@@ -501,8 +501,24 @@ export class AutomatedStrategyExecutionEngine {
       };
     }
 
-    // ── Anti-Micro-Friction Stop Loss Clamp (0.15% Minimum Price Buffer) ──
+    // ── Guardrail 7: Resting Side Market Price Gate ──
     const isLong = direction === "LONG";
+    if (currentMarketPrice !== undefined && currentMarketPrice > 0) {
+      if (isLong && currentMarketPrice <= limitEntryPrice) {
+        return {
+          success: false,
+          message: `[RESTING_SIDE_VETO] Cannot place LONG limit order @ $${limitEntryPrice} when market price is already @ $${currentMarketPrice}.`,
+        };
+      }
+      if (!isLong && currentMarketPrice >= limitEntryPrice) {
+        return {
+          success: false,
+          message: `[RESTING_SIDE_VETO] Cannot place SHORT limit order @ $${limitEntryPrice} when market price is already @ $${currentMarketPrice}.`,
+        };
+      }
+    }
+
+    // ── Anti-Micro-Friction Stop Loss Clamp (0.15% Minimum Price Buffer) ──
     const calculatedRawDistance = Math.abs(limitEntryPrice - stopLossPrice);
     const minStopLossDistance = Math.max(
       calculatedRawDistance,
@@ -672,33 +688,27 @@ export class AutomatedStrategyExecutionEngine {
       return { success: false, message: msg };
     }
 
-    // Check if limit entry can be filled immediately against current market price
-    const canFillNow = isLong
-      ? currentPrice <= limitEntryPrice
-      : currentPrice >= limitEntryPrice;
-
-    if (canFillNow) {
-      newPosition.status = "OPEN";
-      newPosition.entryPrice = currentPrice;
-      newPosition.openTime = now;
-      this.activePositions.push(newPosition);
-
-      // ATOMIC QUEUE FLUSH: Purge all competing pending limit orders immediately
-      this.pendingLimitOrders = [];
-
-      const msg = `🚀 [ORDER_FILLED] ${direction} position opened on ${symbol} (${timeframe}) @ $${currentPrice.toFixed(
-        2,
-      )} | Size: ${newPosition.contractSize} contracts ($${newPosition.riskUsd.toFixed(2)} Risk, 2.0% Compounded).`;
-      this.emit("ORDER_FILLED", msg, newPosition);
-      return { success: true, position: newPosition, message: msg };
-    } else {
-      this.pendingLimitOrders.push(newPosition);
-      const msg = `⏳ [LIMIT_ORDER_PLACED] Resting Limit ${direction} placed @ $${limitEntryPrice.toFixed(
-        2,
-      )} on ${symbol} (${timeframe}) | Risk: $${newPosition.riskUsd.toFixed(2)} (2% Compounded).`;
-      this.emit("LIMIT_ORDER_PLACED", msg, newPosition);
-      return { success: true, position: newPosition, message: msg };
+    // Anchor Polarity Guardrail: For Longs, market must NOT be below the anchor level
+    if (originAnchorLevel !== undefined && originAnchorLevel !== null) {
+      if (isLong && currentPrice < originAnchorLevel) {
+        const msg = `[EXECUTION_VETO] Current market price ($${currentPrice.toFixed(2)}) is below the anchor level ($${originAnchorLevel.toFixed(2)}). Reclaim not established.`;
+        this.emit("DIRECTIONAL_VETO", msg);
+        return { success: false, message: msg };
+      }
+      if (!isLong && currentPrice > originAnchorLevel) {
+        const msg = `[EXECUTION_VETO] Current market price ($${currentPrice.toFixed(2)}) is above the anchor level ($${originAnchorLevel.toFixed(2)}). Reclaim not established.`;
+        this.emit("DIRECTIONAL_VETO", msg);
+        return { success: false, message: msg };
+      }
     }
+
+    // Always place fresh setups into the resting limit queue for true pullback retest execution
+    this.pendingLimitOrders.push(newPosition);
+    const msg = `⏳ [LIMIT_ORDER_PLACED] Resting Limit ${direction} placed @ $${limitEntryPrice.toFixed(
+      2,
+    )} on ${symbol} (${timeframe}) | Risk: $${newPosition.riskUsd.toFixed(2)} (2% Compounded).`;
+    this.emit("LIMIT_ORDER_PLACED", msg, newPosition);
+    return { success: true, position: newPosition, message: msg };
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -721,6 +731,21 @@ export class AutomatedStrategyExecutionEngine {
       for (let i = 0; i < this.pendingLimitOrders.length; i++) {
         const order = this.pendingLimitOrders[i];
         const isLong = order.direction === "LONG";
+
+        // Check if pending order has been invalidated by SL breach or missed TP1 expansion
+        const isStopLossBreached = isLong
+          ? livePrice <= order.activeStopLoss
+          : livePrice >= order.activeStopLoss;
+        const isTarget1Reached = isLong
+          ? livePrice >= order.stage1Target
+          : livePrice <= order.stage1Target;
+
+        if (isStopLossBreached || isTarget1Reached) {
+          this.pendingLimitOrders.splice(i, 1);
+          i--;
+          continue;
+        }
+
         const isTouched = isLong
           ? livePrice <= order.limitEntryPrice
           : livePrice >= order.limitEntryPrice;
@@ -1019,6 +1044,10 @@ export class AutomatedStrategyExecutionEngine {
           openTradeIds.add(t.id);
         } else if (t.status === "CLOSED") {
           closedTradeIds.add(t.id);
+          if (t.setupId) this.processedSetupIds.add(t.setupId);
+          if (t.strategyId) this.processedSetupIds.add(t.strategyId);
+          if (t.originZoneId) this.processedSetupIds.add(t.originZoneId);
+          if (t.metadata?.setupId) this.processedSetupIds.add(t.metadata.setupId);
         }
       }
     }
@@ -1356,10 +1385,13 @@ export class AutomatedStrategyExecutionEngine {
     }
 
     for (const tf of enabledTfs) {
-      const candles = multiTfCandles[tf as keyof typeof multiTfCandles];
-      if (!candles || candles.length < 25) continue;
+      const rawCandles = multiTfCandles[tf as keyof typeof multiTfCandles];
+      if (!rawCandles || rawCandles.length < 25) continue;
 
-      const latestCandle = candles[candles.length - 1];
+      const candles = rawCandles.filter((c) => c.isClosed !== false);
+      if (candles.length < 25) continue;
+
+      const latestCandle = rawCandles[rawCandles.length - 1];
       const latestPrice = latestCandle.c ?? (latestCandle as any).close;
 
       const scanConfig: SweepReclaimScanConfig = {
@@ -1368,24 +1400,24 @@ export class AutomatedStrategyExecutionEngine {
         anchorTypes:
           mappedAnchorTypes.length > 0 ? mappedAnchorTypes : undefined,
 
-        // Quant Lab Structural Alignment Parameters
-        lookbackMajor: settings.lookbackMajor ?? 15,
+        // Quant Lab Structural Alignment Parameters (5m Winner Default)
+        lookbackMajor: settings.lookbackMajor ?? 10,
         lookbackInternal: settings.lookbackInternal ?? 5,
-        maxBarsAnchorToSweep: settings.maxBarsAnchorToSweep ?? 40,
-        maxBarsSweepToReclaim: settings.maxBarsSweepToReclaim ?? 16,
-        maxBarsToRetest: settings.maxBarsToRetest ?? 30,
-        minSweepDepthAtrMultiplier: settings.minSweepDepthAtrMultiplier ?? 0.1,
+        maxBarsAnchorToSweep: settings.maxBarsAnchorToSweep ?? 25,
+        maxBarsSweepToReclaim: settings.maxBarsSweepToReclaim ?? 10,
+        maxBarsToRetest: settings.maxBarsToRetest ?? 20,
+        minSweepDepthAtrMultiplier: settings.minSweepDepthAtrMultiplier ?? 0.10,
         slBufferAtrMultiplier:
           settings.slBufferAtrMultiplier ??
           this.config.slBufferAtrMultiplier ??
-          0.15,
+          0.12,
 
         // Target Multiples & Execution
-        entryMode: settings.entryMode ?? "SWEEP_OB_MT",
+        entryMode: settings.entryMode ?? "FVG_PROXIMAL",
         stage1Multiple:
           settings.stage1Multiple ?? this.config.stage1Multiple ?? 1.0,
         stage2Multiple:
-          settings.stage2Multiple ?? this.config.stage2Multiple ?? 1.5,
+          settings.stage2Multiple ?? this.config.stage2Multiple ?? 1.4,
         stage3Multiple:
           settings.stage3Multiple ?? this.config.stage3Multiple ?? 3.0,
         enableStructuralTrail:
@@ -1395,9 +1427,9 @@ export class AutomatedStrategyExecutionEngine {
 
         // 3-Pillar Displacement Gatekeeper Thresholds
         volumeSmaPeriod: settings.volumeSmaPeriod ?? 20,
-        volumeExpansionThreshold: settings.volumeExpansionThreshold ?? 1.5,
-        deltaDominanceThreshold: settings.deltaDominanceThreshold ?? 60.0,
-        bodyRatioThreshold: settings.bodyRatioThreshold ?? 0.6,
+        volumeExpansionThreshold: settings.volumeExpansionThreshold ?? 1.35,
+        deltaDominanceThreshold: settings.deltaDominanceThreshold ?? 52.0,
+        bodyRatioThreshold: settings.bodyRatioThreshold ?? 0.50,
         requireThreePillarDisplacement:
           settings.requireThreePillarDisplacement ?? true,
 
@@ -1415,6 +1447,56 @@ export class AutomatedStrategyExecutionEngine {
 
           // If a position is already active, enforce strict single-position concurrency lock
           if (this.activePositions.length > 0) {
+            continue;
+          }
+
+          // 1. Strict Freshness Gate: Reclaim must be within the active maxBarsToRetest window from latest candle
+          const latestIndex = candles.length - 1;
+          const barsSinceReclaim = s.reclaim_index !== null ? latestIndex - s.reclaim_index : Infinity;
+          const maxRetestBars = settings.maxBarsToRetest ?? 20;
+          if (s.reclaim_index === null || barsSinceReclaim > maxRetestBars) {
+            continue; // Stale historical candidate: do not arm for live execution
+          }
+
+          // 2. Wall-Clock TTL Guard (if real-time elapsed exceeds maxBarsToRetest duration)
+          const tfMinutes = tf === "1h" ? 60 : tf === "15m" ? 15 : 5;
+          const maxTtlMs = maxRetestBars * tfMinutes * 60 * 1000;
+          if (s.reclaim_time && Date.now() - s.reclaim_time > maxTtlMs) {
+            continue; // TTL expired
+          }
+
+          // 3. Anchor Boundary Verification: Price must be currently on the valid reclaimed side of the anchor
+          const isBullish = s.type === "BULLISH";
+          if (isBullish && latestPrice < s.anchor_level) {
+            continue; // Long setup invalid if price is trading below anchor
+          }
+          if (!isBullish && latestPrice > s.anchor_level) {
+            continue; // Short setup invalid if price is trading above anchor
+          }
+
+          // 4. Missed Expansion Check: Do not arm if price already reached or exceeded TP1
+          if (isBullish && latestPrice >= s.stage1_target) {
+            continue;
+          }
+          if (!isBullish && latestPrice <= s.stage1_target) {
+            continue;
+          }
+
+          // 5. CRITICAL HISTORICAL RESOLUTION & ZERO-LEAK GUARD:
+          // If the setup has ALREADY been retested, simulated, stopped out, closed, or completed in historical candles,
+          // it is a PAST resolved event and must NEVER be re-opened as a live pending order on browser/NPM restart!
+          if (
+            s.is_retested === true ||
+            s.simulated_outcome !== null ||
+            s.retest_time !== null ||
+            s.status === 'COMPLETED' ||
+            s.status === 'STOPPED_OUT' ||
+            s.status === 'INVALIDATED' ||
+            s.lifecycle_status === 'COMPLETED' ||
+            s.lifecycle_status === 'INVALIDATED' ||
+            s.lifecycle_status === 'STOPPED_OUT'
+          ) {
+            this.processedSetupIds.add(s.id);
             continue;
           }
 
@@ -1456,7 +1538,7 @@ export class AutomatedStrategyExecutionEngine {
               (settings.entryMode && settings.entryMode !== s.entry_mode)
             ) {
               entryPrice = resolveRetestEntryPrice({
-                mode: settings.entryMode ?? "SWEEP_OB_MT",
+                mode: settings.entryMode ?? "FVG_PROXIMAL",
                 isBullish: s.type === "BULLISH",
                 anchorLevel: s.anchor_level,
                 sweepCandle:
@@ -1507,6 +1589,18 @@ export class AutomatedStrategyExecutionEngine {
                       }
                     : null,
               });
+            }
+
+            // 6. Limit Resting Side Check:
+            // For a Short limit entry, market price must currently be resting BELOW the limit price (waiting to rally up into entry).
+            // If market price is already ABOVE limit price, price has already traded past the entry zone.
+            // For a Long limit entry, market price must currently be resting ABOVE the limit price (waiting to pullback down into entry).
+            // If market price is already BELOW limit price, price has already traded past the entry zone.
+            if (isBullish && latestPrice <= entryPrice) {
+              continue;
+            }
+            if (!isBullish && latestPrice >= entryPrice) {
+              continue;
             }
 
             // Price Sanity Guard: Ensure entry level is within 5% of current market price

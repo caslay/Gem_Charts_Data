@@ -281,7 +281,7 @@ export default function LiveOrderBlockExecutionHUD() {
             <div className="bg-slate-900/80 border border-slate-800 rounded p-2 text-[9px] text-slate-300 flex items-center justify-between">
               <span className="truncate">{lastEventMessage}</span>
               <span className="text-[8px] text-slate-500 shrink-0 ml-2">
-                {new Date(lastEventTime).toLocaleTimeString()}
+                {new Date(lastEventTime).toLocaleTimeString('en-GB', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} (Cairo)
               </span>
             </div>
           )}

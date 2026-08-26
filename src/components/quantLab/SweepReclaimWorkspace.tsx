@@ -40,7 +40,7 @@ import {
   getEntryModeLabel,
   getEntryModeDescription,
 } from "@/lib/quantEngine/SweepReclaimEngine";
-import { adaptSweepReclaimSetupsToTrades } from "@/lib/quantEngine/equityCalculator";
+import { adaptSweepReclaimSetupsToTrades, formatCairoDateTime } from "@/lib/quantEngine/equityCalculator";
 import CapitalGrowthLedger from "@/components/quantLab/CapitalGrowthLedger";
 import ScannerPresetControlDeck from "@/components/quantLab/ScannerPresetControlDeck";
 import { ScannerPreset, SweepReclaimPresetConfig } from "@/lib/quantEngine/scannerPresets";
@@ -75,7 +75,7 @@ export default function SweepReclaimWorkspace({
   // Scan Configuration Form State
   const [scanName, setScanName] = useState("Deep Sweep & Reclaim Scan");
   const [symbol, setSymbol] = useState("ETHUSDC");
-  const [timeframe, setTimeframe] = useState<"5m" | "15m" | "1h" | "4h">("15m");
+  const [timeframe, setTimeframe] = useState<"5m" | "15m" | "1h" | "4h">("5m");
   const [startDate, setStartDate] = useState("2026-03-01");
   const [endDate, setEndDate] = useState("2026-06-01");
 
@@ -89,27 +89,27 @@ export default function SweepReclaimWorkspace({
 
   // Volumetric & Displacement Gating (3-Pillar Gatekeeper)
   const [volumeSmaPeriod, setVolumeSmaPeriod] = useState(20);
-  const [volumeExpansionThreshold, setVolumeExpansionThreshold] = useState(1.50);
-  const [deltaDominanceThreshold, setDeltaDominanceThreshold] = useState(55.0);
-  const [bodyRatioThreshold, setBodyRatioThreshold] = useState(0.55);
+  const [volumeExpansionThreshold, setVolumeExpansionThreshold] = useState(1.35);
+  const [deltaDominanceThreshold, setDeltaDominanceThreshold] = useState(52.0);
+  const [bodyRatioThreshold, setBodyRatioThreshold] = useState(0.50);
   const [enforceDiscountPremiumGate, setEnforceDiscountPremiumGate] = useState(true);
 
   // 3-Stage Harvest & Risk Controls
-  const [entryMode, setEntryMode] = useState<SweepReclaimEntryMode>("SWEEP_OB_MT");
+  const [entryMode, setEntryMode] = useState<SweepReclaimEntryMode>("FVG_PROXIMAL");
   const [stage1Multiple, setStage1Multiple] = useState(1.0);
-  const [stage2Multiple, setStage2Multiple] = useState(1.5);
+  const [stage2Multiple, setStage2Multiple] = useState(1.4);
   const [stage3Multiple, setStage3Multiple] = useState(3.0);
   const [enableStructuralTrail, setEnableStructuralTrail] = useState(true);
   const [enableProfitRatchet, setEnableProfitRatchet] = useState(true);
 
   // Structural Pivot Lookbacks
-  const [lookbackMajor, setLookbackMajor] = useState(15);
+  const [lookbackMajor, setLookbackMajor] = useState(10);
   const [lookbackInternal, setLookbackInternal] = useState(5);
-  const [maxBarsAnchorToSweep, setMaxBarsAnchorToSweep] = useState(30);
-  const [maxBarsSweepToReclaim, setMaxBarsSweepToReclaim] = useState(12);
-  const [maxBarsToRetest, setMaxBarsToRetest] = useState(24);
+  const [maxBarsAnchorToSweep, setMaxBarsAnchorToSweep] = useState(25);
+  const [maxBarsSweepToReclaim, setMaxBarsSweepToReclaim] = useState(10);
+  const [maxBarsToRetest, setMaxBarsToRetest] = useState(20);
   const [minSweepDepthAtr, setMinSweepDepthAtr] = useState(0.10);
-  const [slBufferAtr, setSlBufferAtr] = useState(0.15);
+  const [slBufferAtr, setSlBufferAtr] = useState(0.12);
 
   // Table Filter States
   const [filterDirection, setFilterDirection] = useState<string>("ALL");
@@ -657,8 +657,10 @@ export default function SweepReclaimWorkspace({
                 onChange={(e) => setStage2Multiple(parseFloat(e.target.value))}
                 className="text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500/50 outline-none rounded text-white"
               >
-                <option value={1.3}>1.3R (40% Position)</option>
+                <option value={1.3}>1.3R (Fast Scalp)</option>
+                <option value={1.4}>1.4R (Quant Champion Target)</option>
                 <option value={1.5}>1.5R (Institutional Standard)</option>
+                <option value={1.6}>1.6R (Refined Sniper Target)</option>
                 <option value={1.8}>1.8R (Extended)</option>
                 <option value={2.0}>2.0R (Full Macro)</option>
               </select>
@@ -1168,7 +1170,10 @@ export default function SweepReclaimWorkspace({
                           </span>
                           <div className="flex flex-col">
                             <span className="font-bold text-white text-[11px]">{setup.type}</span>
-                            <span className="text-[9px] text-slate-500 truncate max-w-[120px]">{setup.id}</span>
+                            <span className="text-[9px] text-cyan-400 font-mono">
+                              {formatCairoDateTime(setup.retest_time || setup.reclaim_time || setup.anchor_time)} (Cairo)
+                            </span>
+                            <span className="text-[8px] text-slate-500 truncate max-w-[120px]">{setup.id}</span>
                           </div>
                         </div>
                       </td>
@@ -1360,8 +1365,8 @@ export default function SweepReclaimWorkspace({
                     <span className="text-white font-bold">${inspectedSetup.anchor_level.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Anchor Time:</span>
-                    <span className="text-slate-300">{new Date(inspectedSetup.anchor_time).toLocaleString("en-US", { timeZone: "Africa/Cairo", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                    <span className="text-slate-500">Anchor Time (Cairo):</span>
+                    <span className="text-slate-300">{formatCairoDateTime(inspectedSetup.anchor_time)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Color Locked:</span>
@@ -1389,6 +1394,10 @@ export default function SweepReclaimWorkspace({
                     <span className="text-white font-bold">
                       {inspectedSetup.sweep_price ? `$${inspectedSetup.sweep_price.toFixed(2)}` : "None"}
                     </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Sweep Time (Cairo):</span>
+                    <span className="text-slate-300">{formatCairoDateTime(inspectedSetup.sweep_time)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Purge Depth:</span>
@@ -1422,6 +1431,10 @@ export default function SweepReclaimWorkspace({
                     </span>
                   </div>
                   <div className="flex justify-between">
+                    <span className="text-slate-500">Reclaim Time (Cairo):</span>
+                    <span className="text-slate-300">{formatCairoDateTime(inspectedSetup.reclaim_time)}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-slate-500">Taker Delta Dominance:</span>
                     <span className="text-cyan-300 font-bold">{inspectedSetup.reclaim_delta_dominance_pct}%</span>
                   </div>
@@ -1453,6 +1466,10 @@ export default function SweepReclaimWorkspace({
                   <div className="flex justify-between">
                     <span className="text-slate-500">Entry Price ({getEntryModeLabel(inspectedSetup.entry_mode)}):</span>
                     <span className="text-emerald-400 font-bold">${inspectedSetup.entry_price.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Execution Time (Cairo):</span>
+                    <span className="text-slate-300">{formatCairoDateTime(inspectedSetup.retest_time || inspectedSetup.reclaim_time)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Stop Loss:</span>

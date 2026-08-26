@@ -324,27 +324,27 @@ export interface SweepReclaimTelemetrySummary {
 
 export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   symbol: 'ETHUSDC',
-  timeframe: '15m',
+  timeframe: '5m',
   anchorTypes: ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL'],
-  lookbackMajor: 15,
+  lookbackMajor: 10,
   lookbackInternal: 5,
-  maxBarsAnchorToSweep: 30,
-  maxBarsSweepToReclaim: 12,
-  maxBarsToRetest: 24,
+  maxBarsAnchorToSweep: 25,
+  maxBarsSweepToReclaim: 10,
+  maxBarsToRetest: 20,
   volumeSmaPeriod: 20,
-  volumeExpansionThreshold: 1.50,
-  deltaDominanceThreshold: 55.0,
-  bodyRatioThreshold: 0.55,
+  volumeExpansionThreshold: 1.35,
+  deltaDominanceThreshold: 52.0,
+  bodyRatioThreshold: 0.50,
   requireThreePillarDisplacement: true,
   enforceDiscountPremiumGate: true,
   stage1Multiple: 1.0,
-  stage2Multiple: 1.5,
+  stage2Multiple: 1.4,
   stage3Multiple: 3.0,
-  entryMode: 'SWEEP_OB_MT',
+  entryMode: 'FVG_PROXIMAL',
   enableStructuralTrail: true,
   enableProfitRatchet: true,
   minSweepDepthAtrMultiplier: 0.10,
-  slBufferAtrMultiplier: 0.15,
+  slBufferAtrMultiplier: 0.12,
 };
 
 // ── Centralized Retest Price Resolver ────────────────────────────────────────
@@ -775,12 +775,14 @@ export class SweepReclaimEngine {
    * Scans a full historical candle series through the 4-phase Sweep & Reclaim state machine.
    */
   public scanHistoricalSetups(
-    candles: Candle[], 
+    rawCandles: Candle[], 
     bootstrap?: import('./types').StructuralBootstrapContext
   ): {
     setups: SweepReclaimSetup[];
     telemetry: SweepReclaimTelemetrySummary;
   } {
+    // Enforce strict completed-bar evaluation: ignore forming unclosed candles
+    const candles = rawCandles.filter((c) => c.isClosed !== false);
     const n = candles.length;
     if (n < 20) {
       return { setups: [], telemetry: this.createEmptyTelemetry() };
@@ -810,16 +812,16 @@ export class SweepReclaimEngine {
       }
     }
 
-    const volumeExpansionThreshold = this.config.volumeExpansionThreshold ?? 1.50;
-    const deltaDominanceThreshold = this.config.deltaDominanceThreshold ?? 55.0;
-    const bodyRatioThreshold = this.config.minBodyRatio ?? this.config.bodyRatioThreshold ?? 0.55;
+    const volumeExpansionThreshold = this.config.volumeExpansionThreshold ?? 1.35;
+    const deltaDominanceThreshold = this.config.deltaDominanceThreshold ?? 52.0;
+    const bodyRatioThreshold = this.config.minBodyRatio ?? this.config.bodyRatioThreshold ?? 0.50;
     const requireThreePillar = this.config.requireThreePillarDisplacement !== false;
     const enforceDiscountPremium = !!this.config.enforceDiscountPremiumGate;
 
     const stage1Multiple = this.config.stage1Multiple ?? 1.0;
-    const stage2Multiple = this.config.stage2Multiple ?? 1.5;
+    const stage2Multiple = this.config.stage2Multiple ?? 1.4;
     const stage3Multiple = this.config.stage3Multiple ?? 3.0;
-    const entryMode = this.config.entryMode ?? 'SWEEP_OB_MT';
+    const entryMode = this.config.entryMode ?? 'FVG_PROXIMAL';
 
     // ── Phase 1, 2, 3: Extract and Evaluate All Candidate Setups Across History ──
     const allCandidateSetups: SweepReclaimSetup[] = [];
