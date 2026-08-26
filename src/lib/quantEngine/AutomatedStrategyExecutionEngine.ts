@@ -1489,12 +1489,9 @@ export class AutomatedStrategyExecutionEngine {
             s.is_retested === true ||
             s.simulated_outcome !== null ||
             s.retest_time !== null ||
-            s.status === 'COMPLETED' ||
-            s.status === 'STOPPED_OUT' ||
-            s.status === 'INVALIDATED' ||
-            s.lifecycle_status === 'COMPLETED' ||
-            s.lifecycle_status === 'INVALIDATED' ||
-            s.lifecycle_status === 'STOPPED_OUT'
+            s.status === 'RETESTED' ||
+            s.status === 'INVALIDATED_AT_RETEST' ||
+            s.status === 'EXPIRED'
           ) {
             this.processedSetupIds.add(s.id);
             continue;
