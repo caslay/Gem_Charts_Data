@@ -1483,15 +1483,20 @@ export class AutomatedStrategyExecutionEngine {
           }
 
           // 5. CRITICAL HISTORICAL RESOLUTION & ZERO-LEAK GUARD:
-          // If the setup has ALREADY been retested, simulated, stopped out, closed, or completed in historical candles,
-          // it is a PAST resolved event and must NEVER be re-opened as a live pending order on browser/NPM restart!
+          // For historical setups (older than the latest candle), if the setup has ALREADY been retested,
+          // simulated, stopped out, closed, or completed in past candles, it is a past event and must
+          // NEVER be re-opened as a live pending order on cold-start / reboot.
+          // Freshly closed setups on the current candle (reclaim_index === latestIndex) MUST be allowed
+          // to arm for live real-time execution even if the historical backtest marked an immediate fill artifact.
+          const isFreshCandleClose = s.reclaim_index === latestIndex;
           if (
-            s.is_retested === true ||
-            s.simulated_outcome !== null ||
-            s.retest_time !== null ||
-            s.status === 'RETESTED' ||
-            s.status === 'INVALIDATED_AT_RETEST' ||
-            s.status === 'EXPIRED'
+            !isFreshCandleClose &&
+            (s.is_retested === true ||
+              s.simulated_outcome !== null ||
+              s.retest_time !== null ||
+              s.status === 'RETESTED' ||
+              s.status === 'INVALIDATED_AT_RETEST' ||
+              s.status === 'EXPIRED')
           ) {
             this.processedSetupIds.add(s.id);
             continue;

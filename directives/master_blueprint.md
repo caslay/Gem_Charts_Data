@@ -1,8 +1,29 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.82
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.83
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-28 (V16.82 — Quant Lab Compounding Graph Zoom, Pan & Smart Tooltip Offset)
+> **Last Updated:** 2026-08-28 (V16.83 — Fresh Candle-Close Staging Doctrine & Dual-Section Quant Lab Parity Reconciliation)
+
+## 🆕 V16.83 Changelog — Fresh Candle-Close Staging Doctrine & Dual-Section Quant Lab Parity Reconciliation (2026-08-28)
+
+### Summary
+Resolved the Gate 5 historical simulation false-positive in `AutomatedStrategyExecutionEngine.ts` and corrected entry price geometry mapping in `scripts/reconcile-session.ts`. Freshly closed 3-pillar reclaim setups on the latest candle (`reclaim_index === latestIndex`) are now immediately armed for live execution on incoming market ticks without being discarded by backtest immediate-fill artifacts. Enhanced the 1:1 Quant Lab Reconciliation engine with dual-section reporting that separates active live monitored sessions from pre-daemon historical baselines.
+
+### Key Architectural Deliverables
+1. **Fresh Candle-Close Staging Doctrine (`AutomatedStrategyExecutionEngine.ts`):**
+   - Differentiated fresh candle closes (`s.reclaim_index === latestIndex`) from historical candidate scans (`s.reclaim_index < latestIndex`).
+   - Bypassed Gate 5 historical simulation discard (`s.is_retested === true`) for freshly closed bars, allowing immediate limit order placement for live ticks while preserving 100% cold-start historical leak protection.
+2. **Deterministic 1:1 Quant Lab Geometry Mapping (`scripts/reconcile-session.ts`):**
+   - Corrected entry price resolution to query `qlSetup.entry_price` (and `retest_price` / `anchor_level`), eliminating price drift in parity audits.
+3. **Dual-Section Session Reconciliation Suite:**
+   - Implemented dynamic boot-time window slicing: **Section 1: Live Monitored Session Parity Matrix** (evaluating setups formed while daemon was active) and **Section 2: Pre-Daemon Historical Baseline** (documenting pre-boot morning setups).
+   - Upgraded parity score telemetry to reflect true active monitoring fidelity.
+
+### Files Modified
+- **`src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`** [MODIFY]
+- **`scripts/reconcile-session.ts`** [MODIFY]
+- **`docs/daemon_walkthrough.md`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
 
 ## 🆕 V16.82 Changelog — Quant Lab Compounding Graph Zoom, Pan & Smart Tooltip Offset (2026-08-28)
 

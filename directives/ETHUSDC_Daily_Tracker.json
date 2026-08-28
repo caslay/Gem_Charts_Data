@@ -672,5 +672,30 @@
       "dolReached": false,
       "notes": "Triggered at 22:45 UTC. Max peak $1,919.37. Stopped out at $1,912.00 at 03:00 UTC on Aug 9."
     }
+  ],
+  "trades": [
+    {
+      "trade_id": "POS_SHORT_1787928600547_0DZL4",
+      "date": "2026-08-28",
+      "session": "INTERNAL Swing High ($2503.37)",
+      "pair": "ETHUSDC",
+      "direction": "SHORT",
+      "timeframe": "5m",
+      "strategy": "Sweep & Reclaim (5M INTERNAL Swing High ($2503.37))",
+      "entry_price": 2503.37,
+      "stop_loss": 2527.165,
+      "take_profit_1": 2479.575,
+      "take_profit_2": 2467.6775,
+      "take_profit_3": 2431.985,
+      "exit_price": 2431.985,
+      "outcome": "WIN",
+      "realized_pnl_usd": 480,
+      "realized_r": 1.6,
+      "status": "CLOSED",
+      "open_time": "2026-08-28T14:50:12.098Z",
+      "close_time": "2026-08-28T16:24:14.553Z",
+      "execution_source": "LOCAL_HEADLESS_DAEMON",
+      "notes": "[Auto 5m S&R] Exit: FULL_TP3_WIN | Realized R: 1.60R"
+    }
   ]
 }
