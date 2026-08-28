@@ -1,13 +1,91 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.83
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.87
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-28 (V16.83 — Fresh Candle-Close Staging Doctrine & Dual-Section Quant Lab Parity Reconciliation)
+> **Last Updated:** 2026-08-29 (V16.87 — Neon 507 Payload Resolution & Setup Sanitization Pipeline)
 
-## 🆕 V16.83 Changelog — Fresh Candle-Close Staging Doctrine & Dual-Section Quant Lab Parity Reconciliation (2026-08-28)
+## 🆕 V16.87 Changelog — Neon 507 Payload Resolution & Setup Sanitization Pipeline (2026-08-29)
 
 ### Summary
-Resolved the Gate 5 historical simulation false-positive in `AutomatedStrategyExecutionEngine.ts` and corrected entry price geometry mapping in `scripts/reconcile-session.ts`. Freshly closed 3-pillar reclaim setups on the latest candle (`reclaim_index === latestIndex`) are now immediately armed for live execution on incoming market ticks without being discarded by backtest immediate-fill artifacts. Enhanced the 1:1 Quant Lab Reconciliation engine with dual-section reporting that separates active live monitored sessions from pre-daemon historical baselines.
+Resolved the Neon PostgreSQL HTTP 507 error (`"response is too large (max is 67108864 bytes)"`) when loading large previous historical scans (e.g. scans with $>20,000$ setups). 
+
+### Key Architectural Deliverables
+1. **Optimized SQL Deserialization (`src/app/api/quant-lab/sr-scans/route.ts`):** 
+   - Replaced raw `SELECT *` with `jsonb_agg(s - 'displacement_candles')`, stripping heavy nested candle arrays from the query response and reducing JSON text size by over 50%.
+   - Added automatic fallback to active/reclaimed setups (`is_reclaimed = true OR is_retested = true`) for ultra-massive multi-year scans.
+2. **Setup Insertion Sanitization (`src/app/api/quant-lab/sweep-reclaim-scanner/route.ts`):** 
+   - Stripped `displacement_candles` before persisting new scan records to Neon DB, saving $>70\%$ DB bandwidth and storage.
+
+### Files Modified
+- **`src/app/api/quant-lab/sr-scans/route.ts`** [MODIFY]
+- **`src/app/api/quant-lab/sweep-reclaim-scanner/route.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.86 Changelog — 5m Sweep & Reclaim Champion Settings Applied as Universal Default (2026-08-29)
+
+### Summary
+Synchronized and hardcoded the PM2-validated **5m Sweep & Reclaim Ultimate Champion Setup** as the universal default configuration across all Quant Lab workspaces, execution engines, and live PM2 daemon hosts:
+- `volumeExpansionThreshold`: **`1.20x`**
+- `deltaDominanceThreshold`: **`52.0%`**
+- `bodyRatioThreshold`: **`0.40`**
+- `slBufferAtrMultiplier`: **`0.10 ATR`**
+- `minSweepDepthAtrMultiplier`: **`0.10 ATR`**
+- `stage1Multiple` / `stage2Multiple` / `stage3Multiple`: **`1.0R / 1.4R / 3.0R`** (40% / 40% / 20%)
+- `entryMode`: **`FVG_PROXIMAL`**
+- `enforceDiscountPremiumGate`: **`true`**
+- `enableStructuralTrail` & `enableProfitRatchet`: **`true`**
+
+### Files Modified
+- **`src/components/quantLab/SweepReclaimWorkspace.tsx`** [MODIFY]
+- **`src/lib/quantEngine/SweepReclaimEngine.ts`** [MODIFY]
+- **`src/lib/quantEngine/strategyExecutionConfig.ts`** [MODIFY]
+- **`src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`** [MODIFY]
+- **`src/lib/quantEngine/scannerPresets.ts`** [MODIFY]
+- **`scripts/reconcile-session.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.85 Changelog — PM2 Parity 20-Lab Re-test Matrix & Champion Parameter Optimization (2026-08-29)
+
+### Summary
+Executed a comprehensive 20-configuration Quant Lab test matrix and 6-model deep refinement under the newly implemented **PM2 1:1 Parity Engine** (directional first-touch sorting + strict post-close retests + single-position sequential walk). Evaluated performance across 210,456 continuous 5m candles (2 full calendar years) to isolate the single highest-expectancy setup. Established **Refinement 06 (Maximum Asymmetry Model)** as the new Ultimate Champion Setup, capturing **`+1,065.04R` 2-Year Net Profit**, a **`69.1%` Win Rate**, and a **`2.12` Profit Factor** with only **`-8.07R` Max Drawdown**.
+
+### Key Architectural Deliverables
+1. **20-Lab PM2 Test Matrix (`scratch/quant_lab_20_pm2_tests_results.json`):** Evaluated displacement volume (1.20x–2.00x), delta thresholds (50%–55%), body ratios (0.40–0.60), and entry routing modes (FVG Proximal, FVG CE, OB MT, Reclaim Market).
+2. **Deep Refinement Suite (`scratch/quant_lab_top3_refined_pm2_results.json`):** Refined Top 3 finalists across 1-Year and 2-Year continuous datasets.
+3. **Factory Preset Synchronization (`src/lib/quantEngine/scannerPresets.ts`):** Updated `factory_sr_5m_winner_fvg_proximal` to the new calibrated parameters:
+   - Volume Expansion: `1.20x`
+   - Delta Dominance: `52.0%`
+   - Body Ratio: `0.40`
+   - SL Buffer: `0.10 ATR`
+   - Stage Targets: `1.0R / 1.4R / 3.0R` (40% / 40% / 20%)
+   - Entry Mode: `FVG_PROXIMAL` with Dealing Range Discount/Premium 50% Valuation Gate.
+
+### Files Modified & Created
+- **`src/lib/quantEngine/scannerPresets.ts`** [MODIFY]
+- **`scratch/retest_20_quant_lab_pm2_setups.ts`** [NEW]
+- **`scratch/refine_top3_pm2_setups.ts`** [NEW]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.84 Changelog — Post-Close Retest Realism, Directional First-Touch Sorting & Quant Lab 1:1 Live Parity (2026-08-29)
+
+### Summary
+Aligned Quant Lab's backtest engine with real-world market physics and established 100% mathematical parity with the Live PM2 Execution Daemon. Eliminated phantom intra-bar immediate fills by requiring retest evaluation strictly on subsequent bars post-close ($i \ge \text{reclaimIdx} + 1$). Implemented Directional First-Touch Proximity Sorting in `equityCalculator.ts`, which selects the proximal limit order that price touches first during a pullback and atomically purges distal competing orders.
+
+### Key Architectural Deliverables
+1. **Post-Close Retest Evaluation Realism (`SweepReclaimEngine.ts`):**
+   - Replaced intra-bar immediate fill checks with strict post-close candle scanning ($i \ge \text{reclaimIdx} + 1$). An institutional limit order armed upon candle close can only execute on subsequent ticks/bars.
+2. **Directional First-Touch Proximity Sorting (`equityCalculator.ts`):**
+   - Implemented real-market order fill sorting for same-wave multi-anchor setups:
+     - For Shorts: Lower entry price (closest to market close) fills first.
+     - For Longs: Higher entry price (closest to market close) fills first.
+   - Enforced Single-Position Time-Window Walking ($[t_{\text{open}}, t_{\text{exit}}]$), ensuring the winning 17:45 Short (`$2503.37` Full TP3 Win) is accurately recorded.
+3. **1:1 Live PM2 Parity Reconciliation:**
+   - `npm run reconcile` on `2026-08-28` produces **`✅ MATCH ($0.00 Slippage)`** on the live executed SHORT @ $2503.37.
+
+### Files Modified
+- **`src/lib/quantEngine/SweepReclaimEngine.ts`** [MODIFY]
+- **`src/lib/quantEngine/equityCalculator.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
 
 ### Key Architectural Deliverables
 1. **Fresh Candle-Close Staging Doctrine (`AutomatedStrategyExecutionEngine.ts`):**

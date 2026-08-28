@@ -137,43 +137,129 @@ export interface CompoundingMetricsSummary {
 
 // ── Sweep & Reclaim Trade Adapter ─────────────────────────────────────────────
 
+// ── Sweep & Reclaim Trade Adapter ─────────────────────────────────────────────
+
+export interface AdaptSweepReclaimOptions {
+  enforceSinglePositionWalk?: boolean; // default true: 1:1 match with Live Daemon maxOpenPositions: 1
+}
+
+function getAnchorPriority(anchorType?: string, anchorSwingGrade?: string): number {
+  if (anchorType === 'DAILY' || anchorType === 'PDH' || anchorType === 'PDL') return 100;
+  if (anchorType === 'LONDON_HIGH' || anchorType === 'LONDON_LOW' || anchorType === 'LONDON') return 90;
+  if (anchorType === 'ASIAN_HIGH' || anchorType === 'ASIAN_LOW' || anchorType === 'ASIAN') return 80;
+  if (anchorSwingGrade === 'MAJOR') return 70;
+  if (anchorSwingGrade === 'INTERNAL') return 50;
+  return 30; // INNER
+}
+
 export function adaptSweepReclaimSetupsToTrades(
-  setups: SweepReclaimSetup[]
+  setups: SweepReclaimSetup[],
+  options: AdaptSweepReclaimOptions = { enforceSinglePositionWalk: true }
 ): StandardizedExecutedTrade[] {
   if (!setups || setups.length === 0) return [];
 
-  const executedTrades: StandardizedExecutedTrade[] = [];
+  const nonExecutionOutcomes = [
+    'NO_RETEST',
+    'PENDING',
+    'EXPIRED',
+    'SWEPT_NO_RECLAIM',
+    'ANCHOR_ONLY',
+    'INVALIDATED',
+    'INVALIDATED_AT_RETEST',
+  ];
 
-  for (const s of setups) {
-    // A setup is strictly an executed trade if it was actually entered / retested
+  // 1. Extract strictly valid executed/retested setups
+  const executedSetups = setups.filter((s) => {
     const isRetested = s.is_retested === true || s.status === 'RETESTED';
-
-    // Must have a valid execution outcome (excluding unentered phases and rejections)
-    const nonExecutionOutcomes = [
-      'NO_RETEST',
-      'PENDING',
-      'EXPIRED',
-      'SWEPT_NO_RECLAIM',
-      'ANCHOR_ONLY',
-      'INVALIDATED',
-      'INVALIDATED_AT_RETEST',
-    ];
-
     const isNonExecution =
       !s.simulated_outcome ||
       nonExecutionOutcomes.includes(s.simulated_outcome as string);
+    return isRetested && !isNonExecution;
+  });
 
-    if (!isRetested || isNonExecution) {
-      continue;
+  if (executedSetups.length === 0) return [];
+
+  let candidateSetups = executedSetups;
+
+  // 2. Multi-Anchor Wave Deduplication & Single-Position Walking (Matches Live Daemon maxOpenPositions: 1)
+  if (options.enforceSinglePositionWalk !== false) {
+    // 2A. Cluster setups triggered on the exact same displacement wave (same reclaim/sweep time)
+    const waveMap = new Map<string, SweepReclaimSetup[]>();
+    for (const s of candidateSetups) {
+      const waveKey = `${s.reclaim_time || s.sweep_time || s.anchor_time}_${s.type}`;
+      if (!waveMap.has(waveKey)) {
+        waveMap.set(waveKey, []);
+      }
+      waveMap.get(waveKey)!.push(s);
     }
 
+    const waveDeduplicated: SweepReclaimSetup[] = [];
+    for (const [_, cluster] of waveMap.entries()) {
+      if (cluster.length === 1) {
+        waveDeduplicated.push(cluster[0]);
+      } else {
+        // Real-world Market Physics: When multiple limit orders rest on the same wave,
+        // - For Shorts: Lower entry price is closer to market and is touched/filled FIRST as price rallies.
+        // - For Longs: Higher entry price is closer to market and is touched/filled FIRST as price dips.
+        // The instant the first limit order fills, the Atomic Queue Flush purges all other orders on that wave.
+        cluster.sort((a, b) => {
+          if (a.type === 'BEARISH') {
+            if (Math.abs(a.entry_price - b.entry_price) > 0.01) {
+              return a.entry_price - b.entry_price; // Lowest entry price touched first
+            }
+          } else {
+            if (Math.abs(a.entry_price - b.entry_price) > 0.01) {
+              return b.entry_price - a.entry_price; // Highest entry price touched first
+            }
+          }
+
+          // Tie-breaker: Anchor tier ranking
+          const pA = getAnchorPriority(a.anchor_type, a.anchor_swing_grade);
+          const pB = getAnchorPriority(b.anchor_type, b.anchor_swing_grade);
+          if (pB !== pA) return pB - pA;
+
+          const depthA = a.sweep_depth_pct ?? 0;
+          const depthB = b.sweep_depth_pct ?? 0;
+          return depthB - depthA;
+        });
+        // Select the single Champion Setup for this displacement wave
+        waveDeduplicated.push(cluster[0]);
+      }
+    }
+
+    // Sort chronologically by retest entry time
+    waveDeduplicated.sort((a, b) => {
+      const timeA = a.retest_time || a.reclaim_time || a.sweep_time || a.anchor_time || 0;
+      const timeB = b.retest_time || b.reclaim_time || b.sweep_time || b.anchor_time || 0;
+      return timeA - timeB;
+    });
+
+    // 2B. Sequential Single-Position Lifecycle Walk (ensure non-overlapping [openTime, exitTime])
+    const sequentialSetups: SweepReclaimSetup[] = [];
+    let lastExitTimestamp = 0;
+
+    for (const s of waveDeduplicated) {
+      const openTime = s.retest_time || s.reclaim_time || s.sweep_time || s.anchor_time || 0;
+      const exitTime = s.exit_time || (openTime + 15 * 60 * 1000);
+
+      if (openTime >= lastExitTimestamp) {
+        sequentialSetups.push(s);
+        lastExitTimestamp = exitTime;
+      }
+    }
+
+    candidateSetups = sequentialSetups;
+  }
+
+  // 3. Map into Standardized Executed Trade Objects
+  const executedTrades: StandardizedExecutedTrade[] = candidateSetups.map((s) => {
     const timestamp = s.retest_time || s.reclaim_time || s.sweep_time || s.anchor_time || Date.now();
     const realizedR = typeof s.realized_rr === 'number' ? s.realized_rr : 0;
     const isWin = realizedR > 0;
     const isLoss = realizedR < 0;
     const isScratch = realizedR === 0;
 
-    executedTrades.push({
+    return {
       id: s.id,
       timestamp,
       dateStr: formatCairoDateTime(timestamp),
@@ -190,14 +276,15 @@ export function adaptSweepReclaimSetupsToTrades(
       label: s.anchor_name ? `S&R (${s.anchor_name})` : `S&R (${s.anchor_type || 'Pivot'})`,
       metadata: {
         anchorType: s.anchor_type,
+        anchorSwingGrade: s.anchor_swing_grade,
         entryMode: s.entry_mode,
         isStage1Filled: s.is_stage1_filled,
         isStage2Filled: s.is_stage2_filled,
         isStage3Filled: s.is_stage3_filled,
         stageExitType: s.stage_exit_type,
-      }
-    });
-  }
+      },
+    };
+  });
 
   // Sort strictly ascending by execution timestamp
   return executedTrades.sort((a, b) => a.timestamp - b.timestamp);

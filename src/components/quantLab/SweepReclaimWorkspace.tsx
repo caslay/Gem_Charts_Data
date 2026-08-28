@@ -92,9 +92,9 @@ export default function SweepReclaimWorkspace({
 
   // Volumetric & Displacement Gating (3-Pillar Gatekeeper)
   const [volumeSmaPeriod, setVolumeSmaPeriod] = useState(20);
-  const [volumeExpansionThreshold, setVolumeExpansionThreshold] = useState(1.35);
+  const [volumeExpansionThreshold, setVolumeExpansionThreshold] = useState(1.20);
   const [deltaDominanceThreshold, setDeltaDominanceThreshold] = useState(52.0);
-  const [bodyRatioThreshold, setBodyRatioThreshold] = useState(0.50);
+  const [bodyRatioThreshold, setBodyRatioThreshold] = useState(0.40);
   const [enforceDiscountPremiumGate, setEnforceDiscountPremiumGate] = useState(true);
 
   // 3-Stage Harvest & Risk Controls
@@ -112,7 +112,7 @@ export default function SweepReclaimWorkspace({
   const [maxBarsSweepToReclaim, setMaxBarsSweepToReclaim] = useState(10);
   const [maxBarsToRetest, setMaxBarsToRetest] = useState(20);
   const [minSweepDepthAtr, setMinSweepDepthAtr] = useState(0.10);
-  const [slBufferAtr, setSlBufferAtr] = useState(0.12);
+  const [slBufferAtr, setSlBufferAtr] = useState(0.10);
 
   // Table Filter States
   const [filterDirection, setFilterDirection] = useState<string>("ALL");

@@ -329,9 +329,14 @@ export async function POST(req: Request) {
           winRate: telemetry.retest_win_rate_pct
         });
 
-        // Persist to Neon PostgreSQL
+        // Persist to Neon PostgreSQL (Sanitize setups to omit heavy raw candle audit objects)
         const scanId = crypto.randomUUID();
         try {
+          const sanitizedSetups = setups.map((s) => {
+            const { displacement_candles, ...rest } = s;
+            return rest;
+          });
+
           await sql`
             INSERT INTO quant_lab_sr_scans (
               id, scan_name, symbol, timeframe, start_date, end_date,
@@ -353,7 +358,7 @@ export async function POST(req: Request) {
               ${telemetry.avg_realized_rr},
               ${telemetry.profit_factor},
               ${JSON.stringify(telemetry)},
-              ${JSON.stringify(setups)}
+              ${JSON.stringify(sanitizedSetups)}
             );
           `;
         } catch (dbErr) {
