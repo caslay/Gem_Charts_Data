@@ -257,7 +257,7 @@ Timestamp: ${new Date().toISOString()}`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-[fade-in_0.15s_ease-out]">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-[fade-in_0.15s_ease-out]">
       <div className="relative w-full max-w-[90vw] max-h-[92vh] flex flex-col bg-card/95 border border-card-border shadow-2xl rounded-2xl overflow-hidden font-sans text-foreground">
 
         {/* ── Modal Header ────────────────────────────────────────────────────── */}

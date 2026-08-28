@@ -121,7 +121,7 @@ export default function SelfCorrectionModal({ isOpen, onClose, onSuccess }: Self
   const selectedSetup = entries.find(e => e.id === selectedId);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-[fade-in_0.2s_ease-out]">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-[fade-in_0.2s_ease-out]">
       <div className="relative w-full max-w-xl bg-card border border-card-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-card-border bg-card-header">

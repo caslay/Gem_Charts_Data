@@ -26,13 +26,13 @@ const DEFAULT_SERVER_STATUS: ArmedExecutionStatus = {
 interface LiveCockpitStatusBadgeProps {
   onClick?: () => void;
   className?: string;
-  variant?: 'compact' | 'full';
+  variant?: 'compact' | 'full' | 'responsive';
 }
 
 export default function LiveCockpitStatusBadge({
   onClick,
   className = '',
-  variant = 'compact',
+  variant = 'responsive',
 }: LiveCockpitStatusBadgeProps) {
   const [mounted, setMounted] = useState(false);
   const [status, setStatus] = useState<ArmedExecutionStatus>(DEFAULT_SERVER_STATUS);
@@ -93,53 +93,56 @@ export default function LiveCockpitStatusBadge({
     <button
       type="button"
       onClick={onClick}
-      className={`font-mono text-[10px] font-bold uppercase transition-all duration-200 cursor-pointer flex items-center gap-2 rounded-full px-3 py-1.5 border shrink-0 group ${
+      className={`font-mono text-[10px] font-bold uppercase transition-all duration-200 cursor-pointer flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 sm:px-3 py-1 sm:py-1.5 border shrink-0 group ${
         isArmed
-          ? 'bg-emerald-950/80 border-emerald-500/80 text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.25)] hover:border-emerald-400 hover:shadow-[0_0_16px_rgba(16,185,129,0.4)]'
-          : 'bg-slate-900/90 border-slate-700 text-slate-300 hover:border-slate-500 hover:text-white shadow-sm'
+          ? 'bg-emerald-500/10 dark:bg-emerald-950/80 border-emerald-500/50 dark:border-emerald-500/80 text-emerald-700 dark:text-emerald-200 shadow-[0_0_12px_rgba(16,185,129,0.15)] dark:shadow-[0_0_12px_rgba(16,185,129,0.25)] hover:border-emerald-500'
+          : 'bg-card dark:bg-slate-900/90 border-card-border dark:border-slate-700 text-muted dark:text-slate-300 hover:border-accent hover:text-foreground shadow-sm'
       } ${className}`}
       title={`Live Strategy: ${activeStatus.name} (${isArmed ? 'ARMED & EXECUTING' : 'STANDBY MODE'})`}
     >
       {/* Animated Glowing Pip */}
       <span className="relative flex h-2 w-2">
         {isArmed && (
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 dark:bg-emerald-400 opacity-75" />
         )}
         <span
           className={`relative inline-flex rounded-full h-2 w-2 ${
             isArmed
-              ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]'
-              : 'bg-amber-400 shadow-[0_0_6px_#f59e0b]'
+              ? 'bg-emerald-500 dark:bg-emerald-400 shadow-[0_0_8px_#34d399]'
+              : 'bg-amber-500 dark:bg-amber-400 shadow-[0_0_6px_#f59e0b]'
           }`}
         />
       </span>
 
       {/* Label & Active Target */}
       <div className="flex items-center gap-1.5">
-        <span className={isArmed ? 'text-emerald-400 font-black' : 'text-amber-400 font-black'}>
-          {isArmed ? 'ARMED:' : 'STANDBY:'}
+        <span className={isArmed ? 'text-emerald-600 dark:text-emerald-400 font-black' : 'text-amber-600 dark:text-amber-400 font-black'}>
+          {isArmed ? 'ARMED' : 'STANDBY'}
+          {variant !== 'compact' && <span className={variant === 'responsive' ? 'hidden lg:inline' : 'inline'}>:</span>}
         </span>
-        <span className="truncate max-w-[130px] sm:max-w-[170px] text-white">
-          {cleanName}
-        </span>
+        {variant !== 'compact' && (
+          <span className={`truncate max-w-[120px] sm:max-w-[170px] text-foreground dark:text-white font-bold ${variant === 'responsive' ? 'hidden lg:inline' : ''}`}>
+            {cleanName}
+          </span>
+        )}
       </div>
 
       {/* Strategy Category Pill */}
-      {variant === 'full' && (
+      {(variant === 'full' || variant === 'responsive') && (
         <span
           className={`text-[8px] px-1.5 py-0.2 rounded font-black ${
             isSR
-              ? 'bg-cyan-950 text-cyan-300 border border-cyan-500/30'
+              ? 'bg-cyan-500/15 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30'
               : isCustom
-              ? 'bg-purple-950 text-purple-300 border border-purple-500/30'
-              : 'bg-emerald-950 text-emerald-300 border border-emerald-500/30'
+              ? 'bg-purple-500/15 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-500/30'
+              : 'bg-emerald-500/15 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
           }`}
         >
           {isSR ? 'S&R' : isCustom ? 'CUSTOM' : 'OB'}
         </span>
       )}
 
-      <Sliders className="w-3 h-3 opacity-60 group-hover:opacity-100 group-hover:rotate-45 transition-all text-slate-400" />
+      <Sliders className="w-3 h-3 opacity-60 group-hover:opacity-100 group-hover:rotate-45 transition-all text-muted dark:text-slate-400" />
     </button>
   );
 }

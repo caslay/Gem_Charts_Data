@@ -16,7 +16,10 @@ import {
   AlertCircle,
   Clock,
   ExternalLink,
+  ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Shield,
   Zap,
   TrendingUp,
@@ -119,7 +122,7 @@ export default function SweepReclaimWorkspace({
   const [searchQuery, setSearchQuery] = useState("");
 
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 12;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Inspector Modal State
   const [inspectedSetup, setInspectedSetup] = useState<SweepReclaimSetup | null>(null);
@@ -325,9 +328,9 @@ export default function SweepReclaimWorkspace({
   const paginatedSetups = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return filteredSetups.slice(start, start + itemsPerPage);
-  }, [filteredSetups, currentPage]);
+  }, [filteredSetups, currentPage, itemsPerPage]);
 
-  const totalPages = Math.ceil(filteredSetups.length / itemsPerPage);
+  const totalPages = Math.max(1, Math.ceil(filteredSetups.length / itemsPerPage));
   const telemetry = selectedScan?.telemetry_summary;
 
   const executedSrTrades = useMemo(() => {
@@ -1286,25 +1289,93 @@ export default function SweepReclaimWorkspace({
           </div>
 
           {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-800/50 text-xs font-mono text-slate-400">
-              <span>
-                Page {currentPage} of {totalPages} ({filteredSetups.length} Setups)
-              </span>
-              <div className="flex items-center gap-1.5">
+          {filteredSetups.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between pt-4 mt-4 border-t border-slate-800/80 gap-3 text-xs font-mono text-slate-400">
+              {/* Left: Summary & Rows Per Page */}
+              <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+                <span>
+                  Showing <span className="font-bold text-slate-100">{(currentPage - 1) * itemsPerPage + 1}</span>–<span className="font-bold text-slate-100">{Math.min(currentPage * itemsPerPage, filteredSetups.length)}</span> of <span className="font-bold text-slate-100">{filteredSetups.length}</span> setups
+                </span>
+
+                {/* Rows per page selector */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] uppercase tracking-wider text-slate-500">Rows:</span>
+                  <select
+                    value={itemsPerPage}
+                    onChange={(e) => {
+                      const nextLimit = Number(e.target.value);
+                      setItemsPerPage(nextLimit);
+                      setCurrentPage(1);
+                    }}
+                    className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded px-2 py-0.5 focus:outline-none focus:border-cyan-500 cursor-pointer transition shadow-sm"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Right: Full Navigation Cluster */}
+              <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end">
+                {/* Jump to First Page */}
                 <button
+                  type="button"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage(1)}
+                  className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                  title="First Page (Jump to Start)"
+                >
+                  <ChevronsLeft className="w-3.5 h-3.5" />
+                </button>
+
+                {/* Previous Page */}
+                <button
+                  type="button"
                   disabled={currentPage <= 1}
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition text-white"
+                  className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                  title="Previous Page"
                 >
-                  Prev
+                  <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
+
+                {/* Select Page Dropdown */}
+                <div className="flex items-center">
+                  <select
+                    value={currentPage}
+                    onChange={(e) => setCurrentPage(Number(e.target.value))}
+                    className="bg-slate-900 border border-slate-800 text-slate-100 font-bold text-xs rounded px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer transition shadow-sm"
+                  >
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                      <option key={pageNum} value={pageNum}>
+                        Page {pageNum} of {totalPages}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Next Page */}
                 <button
+                  type="button"
                   disabled={currentPage >= totalPages}
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition text-white"
+                  className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                  title="Next Page"
                 >
-                  Next
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+
+                {/* Jump to Last Page */}
+                <button
+                  type="button"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage(totalPages)}
+                  className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                  title="Last Page (Jump to End)"
+                >
+                  <ChevronsRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>

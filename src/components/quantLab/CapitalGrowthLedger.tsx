@@ -12,16 +12,21 @@ import {
   ChevronUp,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   ArrowUpRight,
   ArrowDownRight,
   Sliders,
   Sparkles,
   Layers,
   HelpCircle,
-  RefreshCw,
   Zap,
   Crosshair,
-  BarChart2
+  BarChart2,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  MoveHorizontal
 } from "lucide-react";
 import {
   StandardizedExecutedTrade,
@@ -56,7 +61,7 @@ export default function CapitalGrowthLedger({
   const [compoundingMode, setCompoundingMode] = useState<"DYNAMIC_COMPOUNDING" | "FIXED_FRACTIONAL">("DYNAMIC_COMPOUNDING");
   const [isLedgerExpanded, setIsLedgerExpanded] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const itemsPerPage = 12;
+  const [itemsPerPage, setItemsPerPage] = useState<number>(10);
 
   // Fetch global account capital fallback on mount if user hasn't modified local capital
   useEffect(() => {
@@ -95,29 +100,113 @@ export default function CapitalGrowthLedger({
     });
   }, [trades, initialCapital, riskPerTradePct, compoundingMode]);
 
-  // ── 3. SVG Path Derivation for Responsive Vector Chart ───────────────────────
+  // ── 3. SVG Path Derivation & Interactive Zoom/Pan State ──────────────────
   const chartWidth = 900;
   const chartHeight = 260;
   const chartPadding = { top: 25, right: 30, bottom: 35, left: 65 };
 
+  // Zoom Window: { start: number, count: number } or null for 100% full view
+  const [zoomWindow, setZoomWindow] = useState<{ start: number; count: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [dragStartWindow, setDragStartWindow] = useState<{ start: number; count: number } | null>(null);
+
+  // Compute sliced visible points for current zoom level
+  const visiblePoints = useMemo(() => {
+    const allPoints = metrics.equityCurvePoints;
+    if (!zoomWindow || allPoints.length <= 1) return allPoints;
+    const start = Math.max(0, Math.min(allPoints.length - 1, zoomWindow.start));
+    const end = Math.min(allPoints.length, start + zoomWindow.count);
+    const slice = allPoints.slice(start, end);
+    return slice.length > 0 ? slice : allPoints;
+  }, [metrics.equityCurvePoints, zoomWindow]);
+
   const svgData = useMemo(() => {
     return generateSvgEquityPaths(
-      metrics.equityCurvePoints,
+      visiblePoints,
       chartWidth,
       chartHeight,
       chartPadding
     );
-  }, [metrics.equityCurvePoints]);
+  }, [visiblePoints]);
 
   // ── 4. Interactive Crosshair & Hover Tooltip State ──────────────────────────
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
 
+  // Quick Zoom Preset Handlers
+  const handleSetPresetZoom = useCallback((count: number) => {
+    const totalPoints = metrics.equityCurvePoints.length;
+    if (count >= totalPoints) {
+      setZoomWindow(null);
+    } else {
+      setZoomWindow({
+        start: Math.max(0, totalPoints - count),
+        count,
+      });
+    }
+  }, [metrics.equityCurvePoints.length]);
+
+  const handleZoomIn = useCallback(() => {
+    const totalPoints = metrics.equityCurvePoints.length;
+    const currentCount = zoomWindow ? zoomWindow.count : totalPoints;
+    const currentStart = zoomWindow ? zoomWindow.start : 0;
+    const newCount = Math.max(15, Math.round(currentCount * 0.7));
+    if (newCount < totalPoints) {
+      const center = currentStart + Math.round(currentCount / 2);
+      const newStart = Math.max(0, Math.min(totalPoints - newCount, center - Math.round(newCount / 2)));
+      setZoomWindow({ start: newStart, count: newCount });
+    }
+  }, [metrics.equityCurvePoints.length, zoomWindow]);
+
+  const handleZoomOut = useCallback(() => {
+    const totalPoints = metrics.equityCurvePoints.length;
+    if (!zoomWindow) return;
+    const newCount = Math.min(totalPoints, Math.round(zoomWindow.count * 1.4));
+    if (newCount >= totalPoints) {
+      setZoomWindow(null);
+    } else {
+      const center = zoomWindow.start + Math.round(zoomWindow.count / 2);
+      const newStart = Math.max(0, Math.min(totalPoints - newCount, center - Math.round(newCount / 2)));
+      setZoomWindow({ start: newStart, count: newCount });
+    }
+  }, [metrics.equityCurvePoints.length, zoomWindow]);
+
+  const handleResetZoom = useCallback(() => {
+    setZoomWindow(null);
+  }, []);
+
+  // Mouse Drag to Pan
+  const handleMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    if (!zoomWindow) return;
+    setIsDragging(true);
+    setDragStartX(e.clientX);
+    setDragStartWindow({ ...zoomWindow });
+  }, [zoomWindow]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    setDragStartWindow(null);
+  }, []);
+
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
       if (!svgRef.current || svgData.points.length === 0) return;
       const rect = svgRef.current.getBoundingClientRect();
+
+      // Pan dragging mode
+      if (isDragging && dragStartWindow) {
+        const dx = e.clientX - dragStartX;
+        const pointsPerPx = dragStartWindow.count / rect.width;
+        const shift = Math.round(-dx * pointsPerPx);
+        const totalPoints = metrics.equityCurvePoints.length;
+        let newStart = dragStartWindow.start + shift;
+        newStart = Math.max(0, Math.min(totalPoints - dragStartWindow.count, newStart));
+        setZoomWindow({ start: newStart, count: dragStartWindow.count });
+        return;
+      }
+
       const mouseX = e.clientX - rect.left;
       const scaleX = chartWidth / rect.width;
       const virtualX = mouseX * scaleX;
@@ -139,17 +228,44 @@ export default function CapitalGrowthLedger({
         y: (svgData.points[closestIdx].y / chartHeight) * rect.height,
       });
     },
-    [svgData.points]
+    [svgData.points, isDragging, dragStartWindow, dragStartX, metrics.equityCurvePoints.length]
   );
 
+  const handleWheel = useCallback((e: React.WheelEvent<SVGSVGElement>) => {
+    const totalPoints = metrics.equityCurvePoints.length;
+    if (totalPoints <= 15) return;
+    e.preventDefault();
+
+    const currentCount = zoomWindow ? zoomWindow.count : totalPoints;
+    const currentStart = zoomWindow ? zoomWindow.start : 0;
+
+    const zoomFactor = e.deltaY < 0 ? 0.8 : 1.25;
+    let newCount = Math.round(currentCount * zoomFactor);
+    newCount = Math.max(15, Math.min(totalPoints, newCount));
+
+    if (newCount >= totalPoints) {
+      setZoomWindow(null);
+      return;
+    }
+
+    const rect = svgRef.current?.getBoundingClientRect();
+    const mouseRatio = rect ? Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) : 0.5;
+    const centerIndex = currentStart + Math.round(currentCount * mouseRatio);
+    let newStart = Math.round(centerIndex - newCount * mouseRatio);
+    newStart = Math.max(0, Math.min(totalPoints - newCount, newStart));
+
+    setZoomWindow({ start: newStart, count: newCount });
+  }, [metrics.equityCurvePoints.length, zoomWindow]);
+
   const handleMouseLeave = useCallback(() => {
+    setIsDragging(false);
     setHoverIndex(null);
     setHoverPos(null);
   }, []);
 
   const activeHoverPoint: SequentialEquityPoint | null =
-    hoverIndex !== null && metrics.equityCurvePoints[hoverIndex]
-      ? metrics.equityCurvePoints[hoverIndex]
+    hoverIndex !== null && visiblePoints[hoverIndex]
+      ? visiblePoints[hoverIndex]
       : null;
 
   // ── 5. Paginated Trade Ledger ───────────────────────────────────────────────
@@ -158,10 +274,11 @@ export default function CapitalGrowthLedger({
     const tradeOnlyPoints = metrics.equityCurvePoints.filter((p) => p.tradeIndex > 0);
     const start = (currentPage - 1) * itemsPerPage;
     return tradeOnlyPoints.slice(start, start + itemsPerPage);
-  }, [metrics.equityCurvePoints, currentPage]);
+  }, [metrics.equityCurvePoints, currentPage, itemsPerPage]);
 
-  const totalTradePages = Math.ceil(
-    Math.max(1, metrics.equityCurvePoints.length - 1) / itemsPerPage
+  const totalTradePages = Math.max(
+    1,
+    Math.ceil(Math.max(0, metrics.equityCurvePoints.length - 1) / itemsPerPage)
   );
 
   // Formatting helpers
@@ -467,29 +584,137 @@ export default function CapitalGrowthLedger({
       {/* 4. INTERACTIVE SVG DYNAMIC EQUITY CURVE & HOVER CROSSHAIR           */}
       {/* ─────────────────────────────────────────────────────────────────── */}
       <div className="border border-slate-800/80 bg-slate-950 rounded-xl p-4 relative overflow-hidden flex flex-col">
-        {/* Chart Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 mb-2 border-b border-slate-800/60 gap-2">
-          <div className="flex items-center gap-2 text-xs">
+        {/* Chart Header Bar with Zoom Toolbar */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between pb-3 mb-2 border-b border-slate-800/60 gap-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
             <BarChart2 className="w-4 h-4 text-emerald-400" />
             <span className="font-bold text-slate-200 uppercase">Chronological Compounding Trajectory</span>
             <span className="text-[9px] text-slate-500 font-mono">
               ({metrics.equityCurvePoints.length - 1} Executed Events)
             </span>
+
+            {/* If zoomed in, show current window tag */}
+            {zoomWindow && (
+              <span className="px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-cyan-400 text-[9px] font-bold animate-in fade-in duration-100">
+                Viewing #{zoomWindow.start + 1}–#{Math.min(metrics.equityCurvePoints.length - 1, zoomWindow.start + zoomWindow.count)} ({zoomWindow.count} events)
+              </span>
+            )}
           </div>
 
-          <div className="flex items-center gap-4 text-[10px] text-slate-400">
-            <span className="flex items-center gap-1.5">
-              <span className="w-3 h-0.5 bg-emerald-400" />
-              <span>Realized Equity</span>
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-3 h-0.5 bg-slate-500 border-b border-dashed border-slate-400" />
-              <span>Peak Watermark</span>
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-3 h-0.5 bg-cyan-500/60 border-b border-dashed" />
-              <span>Base Capital ($10k)</span>
-            </span>
+          {/* Right Controls: Legend & Zoom Presets */}
+          <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400">
+            {/* Legend */}
+            <div className="hidden lg:flex items-center gap-3 text-[9px]">
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-0.5 bg-emerald-400" />
+                <span>Realized Equity</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2.5 h-0.5 bg-slate-500 border-b border-dashed border-slate-400" />
+                <span>Peak Watermark</span>
+              </span>
+            </div>
+
+            {/* Quick Zoom Presets & Controls */}
+            {metrics.equityCurvePoints.length > 20 && (
+              <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-800 p-0.5 rounded-lg shadow-sm">
+                <span className="text-[8px] uppercase tracking-wider text-slate-500 px-1 font-bold">Zoom:</span>
+                
+                <button
+                  type="button"
+                  onClick={() => handleSetPresetZoom(metrics.equityCurvePoints.length)}
+                  className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition cursor-pointer ${
+                    !zoomWindow ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                  title="View All Trades (100% Full View)"
+                >
+                  All
+                </button>
+
+                {metrics.equityCurvePoints.length > 500 && (
+                  <button
+                    type="button"
+                    onClick={() => handleSetPresetZoom(500)}
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition cursor-pointer ${
+                      zoomWindow?.count === 500 ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    500
+                  </button>
+                )}
+
+                {metrics.equityCurvePoints.length > 250 && (
+                  <button
+                    type="button"
+                    onClick={() => handleSetPresetZoom(250)}
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition cursor-pointer ${
+                      zoomWindow?.count === 250 ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    250
+                  </button>
+                )}
+
+                {metrics.equityCurvePoints.length > 100 && (
+                  <button
+                    type="button"
+                    onClick={() => handleSetPresetZoom(100)}
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition cursor-pointer ${
+                      zoomWindow?.count === 100 ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    100
+                  </button>
+                )}
+
+                {metrics.equityCurvePoints.length > 50 && (
+                  <button
+                    type="button"
+                    onClick={() => handleSetPresetZoom(50)}
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition cursor-pointer ${
+                      zoomWindow?.count === 50 ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    }`}
+                  >
+                    50
+                  </button>
+                )}
+
+                <div className="w-px h-3 bg-slate-800 my-auto" />
+
+                {/* Zoom In Button */}
+                <button
+                  type="button"
+                  onClick={handleZoomIn}
+                  className="p-1 text-slate-400 hover:text-cyan-400 hover:bg-slate-800 rounded transition cursor-pointer"
+                  title="Zoom In (or scroll up with mouse wheel)"
+                >
+                  <ZoomIn className="w-3 h-3" />
+                </button>
+
+                {/* Zoom Out Button */}
+                <button
+                  type="button"
+                  onClick={handleZoomOut}
+                  disabled={!zoomWindow}
+                  className="p-1 text-slate-400 hover:text-cyan-400 hover:bg-slate-800 rounded transition cursor-pointer disabled:opacity-30 disabled:hover:text-slate-400 disabled:cursor-not-allowed"
+                  title="Zoom Out (or scroll down with mouse wheel)"
+                >
+                  <ZoomOut className="w-3 h-3" />
+                </button>
+
+                {/* Reset Zoom Button */}
+                {zoomWindow && (
+                  <button
+                    type="button"
+                    onClick={handleResetZoom}
+                    className="p-1 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded transition cursor-pointer"
+                    title="Reset Zoom to 100%"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -507,7 +732,12 @@ export default function CapitalGrowthLedger({
             <svg
               ref={svgRef}
               viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-              className="w-full h-auto max-h-72 cursor-crosshair overflow-visible"
+              className={`w-full h-auto max-h-72 select-none overflow-visible ${
+                zoomWindow ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-crosshair'
+              }`}
+              onWheel={handleWheel}
+              onMouseDown={handleMouseDown}
+              onMouseUp={handleMouseUp}
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
             >
@@ -614,19 +844,25 @@ export default function CapitalGrowthLedger({
                 strokeLinejoin="round"
               />
 
-              {/* Data Points Markers */}
+              {/* Data Points Markers with Adaptive Density (Avoids caterpillar overlap) */}
               {svgData.points.map((p, idx) => {
-                if (idx === 0) return null; // skip start dummy point
+                if (idx === 0 && !zoomWindow) return null; // skip start dummy point if full view
                 const isHovered = hoverIndex === idx;
                 const isWin = p.point.realizedR > 0;
                 const isLoss = p.point.realizedR < 0;
+
+                // When there are more than 120 visible points, suppress non-hovered dots
+                // to maintain a crisp, uncluttered vector trajectory
+                if (svgData.points.length > 120 && !isHovered) {
+                  return null;
+                }
 
                 return (
                   <circle
                     key={p.point.tradeId || idx}
                     cx={p.x}
                     cy={p.y}
-                    r={isHovered ? 5 : 2.5}
+                    r={isHovered ? 5.5 : svgData.points.length > 60 ? 2 : 3}
                     fill={isHovered ? "#ffffff" : isWin ? "#10b981" : isLoss ? "#f43f5e" : "#94a3b8"}
                     stroke={isHovered ? (isWin ? "#10b981" : "#f43f5e") : "#090d16"}
                     strokeWidth={isHovered ? 2.5 : 1}
@@ -683,24 +919,26 @@ export default function CapitalGrowthLedger({
               )}
             </svg>
 
-            {/* Hover Floating Tooltip Card */}
+            {/* Smart Adaptive Tooltip Card (Positioned to side with clearance, never covering dot) */}
             {activeHoverPoint && hoverPos && (
               <div
-                className="absolute z-20 pointer-events-none p-3 rounded-lg bg-slate-950/95 border border-slate-700/80 shadow-2xl text-[10px] font-mono transition-all duration-75 min-w-[210px]"
+                className="absolute z-20 pointer-events-none p-3 rounded-xl bg-slate-950/95 border border-slate-700/90 shadow-[0_10px_35px_rgba(0,0,0,0.8)] text-[10px] font-mono transition-all duration-75 min-w-[220px] max-w-[260px] backdrop-blur-xl"
                 style={{
-                  left: `${Math.min(
-                    Math.max(10, hoverPos.x - 105),
-                    (svgRef.current?.getBoundingClientRect().width || 600) - 230
-                  )}px`,
-                  top: `${Math.max(10, hoverPos.y - 120)}px`,
+                  left: hoverPos.x > (svgRef.current?.getBoundingClientRect().width || 600) / 2
+                    ? `${Math.max(10, hoverPos.x - 245)}px`
+                    : `${hoverPos.x + 24}px`,
+                  top: `${Math.max(10, Math.min((svgRef.current?.getBoundingClientRect().height || 260) - 155, hoverPos.y - 70))}px`,
                 }}
               >
                 <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-1.5">
-                  <span className="text-slate-400 font-bold">
-                    {activeHoverPoint.tradeIndex === 0
-                      ? "STARTING BASE"
-                      : `TRADE #${activeHoverPoint.tradeIndex}`}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                    <span className="text-slate-300 font-bold">
+                      {activeHoverPoint.tradeIndex === 0
+                        ? "STARTING BASE"
+                        : `TRADE #${activeHoverPoint.tradeIndex}`}
+                    </span>
+                  </div>
                   <span
                     className={`px-1.5 py-0.2 rounded text-[8px] font-bold ${
                       activeHoverPoint.realizedR > 0
@@ -710,7 +948,7 @@ export default function CapitalGrowthLedger({
                         : "bg-slate-900 text-slate-400"
                     }`}
                   >
-                    {activeHoverPoint.outcome}
+                    {activeHoverPoint.outcome.replace(/_/g, " ")}
                   </span>
                 </div>
 
@@ -724,7 +962,7 @@ export default function CapitalGrowthLedger({
                     <>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Setup:</span>
-                        <span className="font-bold text-white truncate max-w-[130px]">
+                        <span className="font-bold text-white truncate max-w-[130px]" title={activeHoverPoint.label}>
                           {activeHoverPoint.label}
                         </span>
                       </div>
@@ -770,9 +1008,39 @@ export default function CapitalGrowthLedger({
                         activeHoverPoint.drawdownPct > 0 ? "text-rose-400" : "text-slate-400"
                       }`}
                     >
-                      -{activeHoverPoint.drawdownPct}%
+                      {activeHoverPoint.drawdownPct > 0 ? `-${activeHoverPoint.drawdownPct}%` : "0%"}
                     </span>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Interactive Timeline Range Scrubber Slider when zoomed in */}
+            {zoomWindow && (
+              <div className="mt-2 pt-2 border-t border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[9px] font-mono text-slate-400 animate-in fade-in duration-150">
+                <div className="flex items-center gap-1.5 text-slate-400 shrink-0">
+                  <MoveHorizontal className="w-3 h-3 text-cyan-400" />
+                  <span>Timeline Pan Scrubber:</span>
+                </div>
+
+                <div className="flex-1 max-w-md mx-2">
+                  <input
+                    type="range"
+                    min={0}
+                    max={Math.max(1, metrics.equityCurvePoints.length - zoomWindow.count)}
+                    value={zoomWindow.start}
+                    onChange={(e) => {
+                      setZoomWindow({
+                        start: Number(e.target.value),
+                        count: zoomWindow.count,
+                      });
+                    }}
+                    className="w-full h-1.5 bg-slate-800 accent-cyan-400 rounded-lg cursor-ew-resize transition-all"
+                  />
+                </div>
+
+                <div className="text-slate-500 text-[8px] flex items-center gap-1 shrink-0">
+                  <span>Click-drag chart or use slider to pan</span>
                 </div>
               </div>
             )}
@@ -941,29 +1209,93 @@ export default function CapitalGrowthLedger({
                 </div>
 
                 {/* Table Pagination */}
-                {totalTradePages > 1 && (
-                  <div className="flex items-center justify-between border-t border-slate-800/60 pt-3 text-[10px] text-slate-400">
-                    <span>
-                      Page {currentPage} of {totalTradePages} ({metrics.totalExecutedTrades} total trades)
-                    </span>
+                {metrics.totalExecutedTrades > 0 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-800/80 pt-3.5 mt-1 gap-3 text-[10px] text-slate-400 font-mono">
+                    {/* Left: Summary & Rows Per Page */}
+                    <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+                      <span>
+                        Showing <span className="font-bold text-slate-100">{(currentPage - 1) * itemsPerPage + 1}</span>–<span className="font-bold text-slate-100">{Math.min(currentPage * itemsPerPage, metrics.totalExecutedTrades)}</span> of <span className="font-bold text-slate-100">{metrics.totalExecutedTrades}</span> trades
+                      </span>
 
-                    <div className="flex items-center gap-1.5">
+                      {/* Rows per page selector */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] uppercase tracking-wider text-slate-500">Rows:</span>
+                        <select
+                          value={itemsPerPage}
+                          onChange={(e) => {
+                            const nextLimit = Number(e.target.value);
+                            setItemsPerPage(nextLimit);
+                            setCurrentPage(1);
+                          }}
+                          className="bg-slate-900 border border-slate-800 text-slate-200 text-[10px] rounded px-2 py-0.5 focus:outline-none focus:border-cyan-500 cursor-pointer transition shadow-sm"
+                        >
+                          <option value={10}>10</option>
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Right: Full Navigation Cluster */}
+                    <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end">
+                      {/* Jump to First Page */}
+                      <button
+                        type="button"
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage(1)}
+                        className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                        title="First Page (Jump to Start)"
+                      >
+                        <ChevronsLeft className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Previous Page */}
                       <button
                         type="button"
                         disabled={currentPage === 1}
                         onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                        className="px-2 py-1 rounded bg-slate-900 border border-slate-800 disabled:opacity-30 hover:border-slate-700 text-slate-300 transition"
+                        className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                        title="Previous Page"
                       >
                         <ChevronLeft className="w-3.5 h-3.5" />
                       </button>
-                      <span className="px-2 font-bold text-white">{currentPage}</span>
+
+                      {/* Select Page Dropdown */}
+                      <div className="flex items-center">
+                        <select
+                          value={currentPage}
+                          onChange={(e) => setCurrentPage(Number(e.target.value))}
+                          className="bg-slate-900 border border-slate-800 text-slate-100 font-bold text-[10px] rounded px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer transition shadow-sm"
+                        >
+                          {Array.from({ length: totalTradePages }, (_, i) => i + 1).map((pageNum) => (
+                            <option key={pageNum} value={pageNum}>
+                              Page {pageNum} of {totalTradePages}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Next Page */}
                       <button
                         type="button"
                         disabled={currentPage === totalTradePages}
                         onClick={() => setCurrentPage((p) => Math.min(totalTradePages, p + 1))}
-                        className="px-2 py-1 rounded bg-slate-900 border border-slate-800 disabled:opacity-30 hover:border-slate-700 text-slate-300 transition"
+                        className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                        title="Next Page"
                       >
                         <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Jump to Last Page */}
+                      <button
+                        type="button"
+                        disabled={currentPage === totalTradePages}
+                        onClick={() => setCurrentPage(totalTradePages)}
+                        className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                        title="Last Page (Jump to End)"
+                      >
+                        <ChevronsRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>

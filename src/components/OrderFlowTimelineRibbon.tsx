@@ -240,7 +240,7 @@ export default function OrderFlowTimelineRibbon({
   const activeMeta = activeState ? getStateMetadata(activeState.state) : getStateMetadata('NEUTRAL');
 
   return (
-    <div className={`w-full bg-card/75 backdrop-blur-md border border-card-border rounded-xl px-3 py-2 select-none relative z-30 transition-all ${className}`}>
+    <div className={`w-full bg-card/75 backdrop-blur-md border border-card-border rounded-xl px-3 py-2 select-none relative z-10 transition-all ${className}`}>
       {/* Header bar */}
       <div className="flex items-center justify-between gap-2 mb-1.5 text-[11px] font-mono">
         <div className="flex items-center gap-2 min-w-0">

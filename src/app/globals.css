@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   /* Light Mode (Zinc-50, Slate-950 text, Indigo accents) */
   --background: #fafafa;
@@ -361,29 +363,62 @@ button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(
    ═══════════════════════════════════════════════════════════ */
 
 /* Typography & Headings — Light */
-:root h1, :root h2, :root h3, :root h4, :root h5, :root h6,
-html:not(.dark) h1, html:not(.dark) h2, html:not(.dark) h3,
-html:not(.dark) h4, html:not(.dark) h5, html:not(.dark) h6,
-html:not(.dark) .text-title,
-html:not(.dark) .text-zinc-100,
-html:not(.dark) .text-slate-900,
-html:not(.dark) .text-slate-100 {
+:root h1:not([role="tooltip"] *):not(.custom-tooltip *),
+:root h2:not([role="tooltip"] *):not(.custom-tooltip *),
+:root h3:not([role="tooltip"] *):not(.custom-tooltip *),
+:root h4:not([role="tooltip"] *):not(.custom-tooltip *),
+:root h5:not([role="tooltip"] *):not(.custom-tooltip *),
+:root h6:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) h1:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) h2:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) h3:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) h4:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) h5:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) h6:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) .text-title:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) .text-zinc-100:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) .text-slate-900:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) .text-slate-100:not([role="tooltip"] *):not(.custom-tooltip *) {
   color: var(--text-title) !important;
 }
 
 /* Labels & Low-Contrast Text — Light */
-html:not(.dark) .text-muted,
-html:not(.dark) .text-slate-500,
-html:not(.dark) .text-zinc-500,
-html:not(.dark) .text-slate-600,
-html:not(.dark) .text-zinc-400 {
+html:not(.dark) .text-muted:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) .text-slate-500:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) .text-zinc-500:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) .text-slate-600:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) .text-zinc-400:not([role="tooltip"] *):not(.custom-tooltip *) {
   color: var(--text-label) !important;
 }
 
 /* Value Metrics & Normal Text — Light */
-html:not(.dark) .text-foreground,
-html:not(.dark) .text-slate-200 {
+html:not(.dark) .text-foreground:not([role="tooltip"] *):not(.custom-tooltip *),
+html:not(.dark) .text-slate-200:not([role="tooltip"] *):not(.custom-tooltip *) {
   color: var(--text-value) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GLOBAL TOOLTIP & HOVER POPOVER CONTRAST ISOLATION
+   ═══════════════════════════════════════════════════════════ */
+[role="tooltip"],
+.custom-tooltip {
+  background-color: rgba(15, 23, 42, 0.96) !important;
+  border-color: rgba(51, 65, 85, 0.8) !important;
+  color: #f8fafc !important;
+}
+[role="tooltip"] span,
+[role="tooltip"] p,
+[role="tooltip"] div,
+.custom-tooltip span,
+.custom-tooltip p,
+.custom-tooltip div {
+  color: #f8fafc !important;
+}
+[role="tooltip"] kbd,
+.custom-tooltip kbd {
+  color: #ffffff !important;
+  background-color: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
 }
 
 /* Bullish (Green) Highlights — Light */
