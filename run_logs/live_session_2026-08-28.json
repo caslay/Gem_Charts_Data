@@ -1,0 +1,27 @@
+{
+  "sessionId": "session_ethusdc_2026-08-28_1787909910196",
+  "dateStr": "2026-08-28",
+  "symbol": "ETHUSDC",
+  "bootTime": 1787909910196,
+  "bootTimeIso": "2026-08-28T09:38:30.196Z",
+  "initialEquity": 10000,
+  "currentEquity": 10000,
+  "totalRealizedR": 0,
+  "totalTrades": 0,
+  "winningTrades": 0,
+  "losingTrades": 0,
+  "events": [
+    {
+      "id": "evt_1787909910197_qaf87",
+      "type": "BOOT",
+      "timestamp": 1787909910197,
+      "timeIso": "2026-08-28T09:38:30.197Z",
+      "message": "Headless daemon booting for ETHUSDC",
+      "metadata": {
+        "isDryRun": false,
+        "initialEquity": 10000
+      }
+    }
+  ],
+  "completedTrades": []
+}
