@@ -332,9 +332,9 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   maxBarsSweepToReclaim: 10,
   maxBarsToRetest: 20,
   volumeSmaPeriod: 20,
-  volumeExpansionThreshold: 1.35,
+  volumeExpansionThreshold: 1.20,
   deltaDominanceThreshold: 52.0,
-  bodyRatioThreshold: 0.50,
+  bodyRatioThreshold: 0.40,
   requireThreePillarDisplacement: true,
   enforceDiscountPremiumGate: true,
   stage1Multiple: 1.0,
@@ -344,7 +344,7 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   enableStructuralTrail: true,
   enableProfitRatchet: true,
   minSweepDepthAtrMultiplier: 0.10,
-  slBufferAtrMultiplier: 0.12,
+  slBufferAtrMultiplier: 0.10,
 };
 
 // ── Centralized Retest Price Resolver ────────────────────────────────────────
@@ -1673,89 +1673,41 @@ export class SweepReclaimEngine {
       let retestTime: number | null = null;
       let bodyDefenseValid = false;
 
-      // 1. Immediate Touch Check on Reclaim Candle itself
-      // (The displacement/reclaim candle itself NEVER triggers MISSED_EXPANSION invalidation)
-      const rc = candles[reclaimIdx];
-      const rcLow = rc.l ?? (rc as any).low;
-      const rcHigh = rc.h ?? (rc as any).high;
-      const rcClose = rc.c ?? (rc as any).close;
+      // 1. Search subsequent candles strictly AFTER the reclaim candle has closed
+      // (An institutional limit order placed upon candle close can only execute on subsequent ticks/bars)
+      for (let i = reclaimIdx + 1; i <= effectiveMaxRetestIdx; i++) {
+        const c = candles[i];
+        const low = c.l ?? (c as any).low;
+        const high = c.h ?? (c as any).high;
+        const close = c.c ?? (c as any).close;
 
-      if (isBullish) {
-        const defenseFloor = Math.min(anchorLevel, executionEntry);
-        if (rcLow <= executionEntry && rcClose >= defenseFloor) {
-          retestFound = true;
-          retestIdx = reclaimIdx;
-          retestPrice = executionEntry;
-          retestTime = rc.t;
-          bodyDefenseValid = true;
-          baseSetup.is_immediate_fill = true;
-        }
-      } else {
-        const defenseCeiling = Math.max(anchorLevel, executionEntry);
-        if (rcHigh >= executionEntry && rcClose <= defenseCeiling) {
-          retestFound = true;
-          retestIdx = reclaimIdx;
-          retestPrice = executionEntry;
-          retestTime = rc.t;
-          bodyDefenseValid = true;
-          baseSetup.is_immediate_fill = true;
-        }
-      }
+        if (isBullish) {
+          if (low <= executionEntry) {
+            retestFound = true;
+            retestIdx = i;
+            retestPrice = executionEntry;
+            retestTime = c.t;
+            bodyDefenseValid = true;
+            break;
+          }
 
-      // 2. Search subsequent candles strictly AFTER the reclaim candle has closed
-      if (!retestFound) {
-        for (let i = reclaimIdx + 1; i <= effectiveMaxRetestIdx; i++) {
-          const c = candles[i];
-          const low = c.l ?? (c as any).low;
-          const high = c.h ?? (c as any).high;
-          const close = c.c ?? (c as any).close;
+          // Only check for target clearance strictly AFTER reclaim candle has closed
+          if (high >= target1) {
+            break;
+          }
+        } else {
+          if (high >= executionEntry) {
+            retestFound = true;
+            retestIdx = i;
+            retestPrice = executionEntry;
+            retestTime = c.t;
+            bodyDefenseValid = true;
+            break;
+          }
 
-          if (isBullish) {
-            if (low <= executionEntry) {
-              const defenseFloor = Math.min(anchorLevel, executionEntry);
-              if (close >= defenseFloor) {
-                retestFound = true;
-                retestIdx = i;
-                retestPrice = executionEntry;
-                retestTime = c.t;
-                bodyDefenseValid = true;
-                break;
-              } else {
-                baseSetup.phase = 'RETEST';
-                baseSetup.status = 'INVALIDATED_AT_RETEST';
-                baseSetup.simulated_outcome = 'INVALIDATED';
-                baseSetup.stage_exit_type = 'INVALIDATED';
-                break;
-              }
-            }
-
-            // Only check for target clearance strictly AFTER reclaim candle has closed
-            if (high >= target1) {
-              break;
-            }
-          } else {
-            if (high >= executionEntry) {
-              const defenseCeiling = Math.max(anchorLevel, executionEntry);
-              if (close <= defenseCeiling) {
-                retestFound = true;
-                retestIdx = i;
-                retestPrice = executionEntry;
-                retestTime = c.t;
-                bodyDefenseValid = true;
-                break;
-              } else {
-                baseSetup.phase = 'RETEST';
-                baseSetup.status = 'INVALIDATED_AT_RETEST';
-                baseSetup.simulated_outcome = 'INVALIDATED';
-                baseSetup.stage_exit_type = 'INVALIDATED';
-                break;
-              }
-            }
-
-            // Only check for target clearance strictly AFTER reclaim candle has closed
-            if (low <= target1) {
-              break;
-            }
+          // Only check for target clearance strictly AFTER reclaim candle has closed
+          if (low <= target1) {
+            break;
           }
         }
       }

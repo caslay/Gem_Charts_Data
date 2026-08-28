@@ -155,7 +155,7 @@ export interface AutomatedExecutionConfig {
 
 export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   symbol: "ETHUSDC",
-  timeframe: "15m",
+  timeframe: "5m",
   autoExecute: true,
   compoundingRiskPct: 2.0,
   maxOpenPositions: 1,
@@ -166,7 +166,7 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   tickSize: 0.01,
 
   stage1Multiple: 1.0,
-  stage2Multiple: 1.5,
+  stage2Multiple: 1.4,
   stage3Multiple: 3.0,
 
   stage1Ratio: 0.4,
@@ -175,7 +175,7 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
 
   enableStructuralTrail: true,
   enableProfitRatchet: true,
-  slBufferAtrMultiplier: 0.15,
+  slBufferAtrMultiplier: 0.10,
   liveSettings: DEFAULT_SR_LIVE_SETTINGS,
 };
 

@@ -79,9 +79,9 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   anchorTypes: ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'],
   entryMode: 'FVG_PROXIMAL',
   volumeSmaPeriod: 20,
-  volumeExpansionThreshold: 1.35,
+  volumeExpansionThreshold: 1.20,
   deltaDominanceThreshold: 52.0,
-  bodyRatioThreshold: 0.50,
+  bodyRatioThreshold: 0.40,
   enforceDiscountPremiumGate: true,
   enableStructuralTrail: true,
   enableProfitRatchet: true,
@@ -102,7 +102,7 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   maxBarsToRetest: 20,
   requireThreePillarDisplacement: true,
   minSweepDepthAtrMultiplier: 0.10,
-  slBufferAtrMultiplier: 0.12,
+  slBufferAtrMultiplier: 0.10,
 };
 
 // Master Reversible Pause Switch for Order Block & Breaker Pipeline
