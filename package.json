@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "dev:api": ".\\.venv\\Scripts\\python.exe -m uvicorn api.index:app --reload --port 8000"
+    "dev:api": ".\\.venv\\Scripts\\python.exe -m uvicorn api.index:app --reload --port 8000",
+    "daemon": "tsx scripts/headless-daemon.ts",
+    "daemon:dry": "tsx scripts/headless-daemon.ts --dry-run",
+    "reconcile": "tsx scripts/reconcile-session.ts"
   },
   "dependencies": {
     "@auth/core": "^0.41.2",
@@ -32,10 +35,13 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "postcss": "^8",
     "tailwindcss": "^4.2.4",
-    "typescript": "^5"
+    "tsx": "^4.23.12",
+    "typescript": "^5",
+    "ws": "^8.21.3"
   }
 }

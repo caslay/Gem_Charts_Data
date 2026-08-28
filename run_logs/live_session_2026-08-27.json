@@ -1,0 +1,122 @@
+{
+  "sessionId": "session_ethusdc_2026-08-27_1787849699150",
+  "dateStr": "2026-08-27",
+  "symbol": "ETHUSDC",
+  "bootTime": 1787849699150,
+  "bootTimeIso": "2026-08-27T16:54:59.150Z",
+  "initialEquity": 10000,
+  "currentEquity": 10000,
+  "totalRealizedR": 0,
+  "totalTrades": 0,
+  "winningTrades": 0,
+  "losingTrades": 0,
+  "events": [
+    {
+      "id": "evt_1787849699151_k7wzi",
+      "type": "BOOT",
+      "timestamp": 1787849699151,
+      "timeIso": "2026-08-27T16:54:59.151Z",
+      "message": "Headless daemon booting for ETHUSDC",
+      "metadata": {
+        "isDryRun": true,
+        "initialEquity": 10000
+      }
+    },
+    {
+      "id": "evt_1787849809814_ha0xm",
+      "type": "BOOT",
+      "timestamp": 1787849809814,
+      "timeIso": "2026-08-27T16:56:49.814Z",
+      "message": "Headless daemon booting for ETHUSDC",
+      "metadata": {
+        "isDryRun": true,
+        "initialEquity": 10000
+      }
+    },
+    {
+      "id": "evt_1787849946840_s0rx8",
+      "type": "BOOT",
+      "timestamp": 1787849946840,
+      "timeIso": "2026-08-27T16:59:06.840Z",
+      "message": "Headless daemon booting for ETHUSDC",
+      "metadata": {
+        "isDryRun": false,
+        "initialEquity": 10000
+      }
+    },
+    {
+      "id": "evt_1787851023463_f4oms",
+      "type": "HEARTBEAT",
+      "timestamp": 1787851023463,
+      "timeIso": "2026-08-27T17:17:03.463Z",
+      "message": "Daemon stopped cleanly."
+    },
+    {
+      "id": "evt_1787851072786_9gjbu",
+      "type": "BOOT",
+      "timestamp": 1787851072786,
+      "timeIso": "2026-08-27T17:17:52.786Z",
+      "message": "Headless daemon booting for ETHUSDC",
+      "metadata": {
+        "isDryRun": false,
+        "initialEquity": 10000
+      }
+    },
+    {
+      "id": "evt_1787851075334_e6dgq",
+      "type": "BOOT",
+      "timestamp": 1787851075334,
+      "timeIso": "2026-08-27T17:17:55.334Z",
+      "message": "Headless daemon booting for ETHUSDC",
+      "metadata": {
+        "isDryRun": false,
+        "initialEquity": 10000
+      }
+    },
+    {
+      "id": "evt_1787851170215_yasaa",
+      "type": "BOOT",
+      "timestamp": 1787851170215,
+      "timeIso": "2026-08-27T17:19:30.215Z",
+      "message": "Headless daemon booting for ETHUSDC",
+      "metadata": {
+        "isDryRun": false,
+        "initialEquity": 10000
+      }
+    },
+    {
+      "id": "evt_1787851175508_nmis5",
+      "type": "BOOT",
+      "timestamp": 1787851175508,
+      "timeIso": "2026-08-27T17:19:35.508Z",
+      "message": "Headless daemon booting for ETHUSDC",
+      "metadata": {
+        "isDryRun": false,
+        "initialEquity": 10000
+      }
+    },
+    {
+      "id": "evt_1787851229729_vwf0y",
+      "type": "BOOT",
+      "timestamp": 1787851229729,
+      "timeIso": "2026-08-27T17:20:29.729Z",
+      "message": "Headless daemon booting for ETHUSDC",
+      "metadata": {
+        "isDryRun": false,
+        "initialEquity": 10000
+      }
+    },
+    {
+      "id": "evt_1787851256750_gjj25",
+      "type": "BOOT",
+      "timestamp": 1787851256750,
+      "timeIso": "2026-08-27T17:20:56.750Z",
+      "message": "Headless daemon booting for ETHUSDC",
+      "metadata": {
+        "isDryRun": false,
+        "initialEquity": 10000
+      }
+    }
+  ],
+  "completedTrades": []
+}
