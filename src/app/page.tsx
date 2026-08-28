@@ -6,7 +6,7 @@ import Chart from '@/components/Chart';
 import Sidebar from '@/components/Sidebar';
 import SmartAlertsToast from '@/components/SmartAlertsToast';
 import SettingsModal from '@/components/modals/SettingsModal';
-import { Loader2, Menu, Settings, Shield, ChevronLeft } from 'lucide-react';
+import { Loader2, Menu, Settings, Shield, ChevronLeft, Volume2 } from 'lucide-react';
 import { useStrategyEvaluator } from '@/hooks/useStrategyEvaluator';
 import TimeframeSwitcher, { Timeframe } from '@/components/TimeframeSwitcher';
 import { LiveTicker } from '@/components/LiveTicker';
@@ -15,7 +15,6 @@ import ManualOrderPanel from '@/components/ManualOrderPanel';
 import OrderFlowTimelineRibbon from '@/components/OrderFlowTimelineRibbon';
 import OrderFlowTimelineModal from '@/components/modals/OrderFlowTimelineModal';
 import LiveOrderBlockModal from '@/components/modals/LiveOrderBlockModal';
-import LiveCockpitStatusBadge from '@/components/LiveCockpitStatusBadge';
 import { useAutomatedStrategyExecution } from '@/hooks/useAutomatedStrategyExecution';
 import { useSessionJournalStore } from '@/lib/quantEngine/sessionJournalStore';
 import { calculateATR } from '@/lib/riskEngine';
@@ -333,62 +332,84 @@ export default function Home() {
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-accent/10 blur-[120px] pointer-events-none" />
         <div className="absolute bottom-[-10%] right-[10%] w-[40%] h-[40%] rounded-full bg-purple-900/10 blur-[120px] pointer-events-none" />
 
-        {/* ── Header ─────────────────────────────────────────────────────── */}
-        <div className="py-3.5 md:py-4 mb-3 border-b border-card-border flex items-center justify-between px-4 lg:px-6 relative z-40 bg-card/45 backdrop-blur-xl gap-4 transition-colors">
+        {/* ── Subheader / Live Asset & Execution Controls ────────────────── */}
+        <div className="py-2.5 sm:py-3 md:py-3.5 mb-3 border-b border-card-border flex items-center justify-between px-3 sm:px-4 lg:px-6 relative z-40 bg-card/45 backdrop-blur-xl gap-2 sm:gap-4 transition-colors">
 
           {/* Focal Price & Asset Display */}
-          <div className="flex items-baseline gap-3.5 select-none">
-            <span className="font-mono text-1xl md:text-1xl font-black text-foreground tracking-wider uppercase">
+          <div className="flex items-baseline gap-2.5 sm:gap-3.5 select-none shrink-0">
+            <span className="font-mono text-sm sm:text-base md:text-lg font-black text-foreground tracking-wider uppercase">
               ETHUSDC.P
             </span>
             <LiveTicker variant="large" />
           </div>
 
           {/* Toolbar & Live Execution HUD Controls */}
-          <div className="flex items-center gap-2.5 shrink-0">
-            {/* Persistent Cockpit Execution Status Badge */}
-            <LiveCockpitStatusBadge onClick={() => setIsLiveOBModalOpen(true)} variant="compact" />
-
-            {/* Alert Sounds & Command Center Button */}
-            <button
-              onClick={() => {
-                setCommandCenterTab('strategy');
-                setIsSoundSettingsOpen(true);
-              }}
-              className="bg-slate-950/80 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white px-3 py-1.5 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm"
-              title="Open Command Center"
-            >
-              <Settings size={12} />
-              <span className="hidden xl:inline">[ COMMAND CENTER ]</span>
-            </button>
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {/* Timeframe Switcher */}
+            <TimeframeSwitcher selectedInterval={selectedInterval} onChange={setSelectedInterval} />
 
             {/* Manual Trading Toggle Button */}
-            <button
-              onClick={() => setIsManualTradingActive((prev) => !prev)}
-              className={`border px-3.5 py-1.5 font-mono text-[10px] font-black uppercase tracking-widest transition-all duration-200 rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm ${
-                isManualTradingActive
-                  ? 'bg-purple-400 border-purple-300 text-slate-950 shadow-[0_0_12px_rgba(192,132,252,0.45)]'
-                  : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700'
-              }`}
-            >
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
+            <div className="relative group flex items-center">
+              <button
+                onClick={() => setIsManualTradingActive((prev) => !prev)}
+                className={`border px-2.5 sm:px-3 py-1 font-mono text-[9px] sm:text-[10px] font-black uppercase tracking-wider transition-all duration-200 rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm ${
                   isManualTradingActive
-                    ? 'bg-slate-950 shadow-[0_0_4px_rgba(0,0,0,0.5)]'
-                    : 'bg-slate-600'
+                    ? 'bg-purple-500/20 border-purple-500/50 text-purple-700 dark:text-purple-300 shadow-[0_0_12px_rgba(192,132,252,0.3)]'
+                    : 'bg-card border-card-border text-muted hover:text-foreground hover:border-accent/40 hover:bg-card/80'
                 }`}
-              />
-              <Shield size={12} className={isManualTradingActive ? 'text-slate-950' : 'text-slate-500'} />
-              <span>[ MANUAL TRADING ]</span>
-            </button>
+                aria-label="Toggle Manual Order Panel"
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                    isManualTradingActive
+                      ? 'bg-purple-600 dark:bg-purple-400 shadow-[0_0_4px_rgba(168,85,247,0.5)]'
+                      : 'bg-muted-foreground/50'
+                  }`}
+                />
+                <Shield size={12} className={`shrink-0 ${isManualTradingActive ? 'text-purple-600 dark:text-purple-300' : 'text-muted'}`} />
+                <span className="hidden sm:inline">MANUAL</span>
+              </button>
 
-            <TimeframeSwitcher selectedInterval={selectedInterval} onChange={setSelectedInterval} />
+              <div
+                role="tooltip"
+                className="hidden [@media(hover:hover)_and_(pointer:fine)]:group-hover:flex custom-tooltip absolute top-full mt-2 left-1/2 -translate-x-1/2 z-50 flex-col items-center pointer-events-none animate-in fade-in zoom-in-95 duration-150"
+              >
+                <div className="w-2 h-2 bg-slate-900 dark:bg-slate-950 border-t border-l border-slate-700 dark:border-slate-800 rotate-45 -mb-1 shadow-sm" />
+                <div className="bg-slate-900/95 dark:bg-slate-950/95 border border-slate-700/90 dark:border-slate-800/90 rounded-md px-2 py-0.5 shadow-xl text-[9px] font-mono font-bold text-slate-100 dark:text-slate-300 whitespace-nowrap">
+                  {isManualTradingActive ? 'Close Manual Order Panel' : 'Open Manual Order Panel'}
+                </div>
+              </div>
+            </div>
+
+            {/* Audio & Signal Alerts Modal Trigger */}
+            <div className="relative group flex items-center">
+              <button
+                onClick={() => {
+                  setCommandCenterTab('audio');
+                  setIsSoundSettingsOpen(true);
+                }}
+                className="p-1.5 bg-card border border-card-border hover:border-accent/40 text-muted hover:text-foreground rounded-full transition-all cursor-pointer flex items-center justify-center shadow-sm hover:bg-card/80"
+                aria-label="Audio & Signal Alerts Configuration"
+              >
+                <Volume2 size={13} className="group-hover:scale-110 transition-transform" />
+              </button>
+
+              <div
+                role="tooltip"
+                className="hidden [@media(hover:hover)_and_(pointer:fine)]:group-hover:flex custom-tooltip absolute top-full mt-2 left-1/2 -translate-x-1/2 z-50 flex-col items-center pointer-events-none animate-in fade-in zoom-in-95 duration-150"
+              >
+                <div className="w-2 h-2 bg-slate-900 dark:bg-slate-950 border-t border-l border-slate-700 dark:border-slate-800 rotate-45 -mb-1 shadow-sm" />
+                <div className="bg-slate-900/95 dark:bg-slate-950/95 border border-slate-700/90 dark:border-slate-800/90 rounded-md px-2 py-0.5 shadow-xl text-[9px] font-mono font-bold text-slate-100 dark:text-slate-300 whitespace-nowrap">
+                  Audio & Signal Alerts
+                </div>
+              </div>
+            </div>
 
             {/* Hamburger — visible only on <lg screens */}
             <button
               id="btn-open-sidebar"
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden p-2 bg-slate-950/80 border border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-all rounded-full"
+              className="lg:hidden p-1.5 bg-card border border-card-border text-muted hover:text-foreground hover:border-accent/40 transition-all rounded-full cursor-pointer flex items-center justify-center hover:bg-card/80"
               aria-label="Open sidebar"
             >
               <Menu className="w-4 h-4" />
@@ -400,7 +421,7 @@ export default function Home() {
         <DashboardMetrics masterBias={masterBias} pricing={pricing} targetStatus={targetStatus} isLive={true} />
 
         {/* ── Order Flow State Tracker & Chronological Timeline Ribbon ─────────── */}
-        <div className="px-4 lg:px-6 mb-2 relative z-20">
+        <div className="px-4 lg:px-6 mb-2 relative z-10">
           <OrderFlowTimelineRibbon
             timeline={data?.ipda_metrics?.order_flow_engine?.state_timeline}
             onOpenModal={() => setIsOrderFlowModalOpen(true)}

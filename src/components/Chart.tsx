@@ -2182,7 +2182,7 @@ export default function Chart({
 
       {/* Active Sweep & Reclaim Replay HUD Badge */}
       {srOverlay && (
-        <div className="absolute top-12 left-4 z-20 pointer-events-auto select-none bg-card/90 backdrop-blur-md border border-card-border/80 px-3 py-2 rounded-xl shadow-2xl flex flex-col gap-1 max-w-[280px] animate-[fade-in_0.2s_ease-out]">
+        <div className="absolute top-12 left-14 z-20 pointer-events-auto select-none bg-card/90 backdrop-blur-md border border-card-border/80 px-3 py-2 rounded-xl shadow-2xl flex flex-col gap-1 max-w-[280px] animate-[fade-in_0.2s_ease-out]">
           <div className="flex items-center justify-between gap-2 border-b border-card-border/40 pb-1">
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full animate-ping bg-accent" />
@@ -2265,21 +2265,21 @@ export default function Chart({
       {/* Interactive Setup & Displacement Origin Audit Popover */}
       {isAuditPopoverOpen && srOverlay && (
         <div
-          className="absolute top-14 left-14 z-50 max-w-lg w-[480px] bg-[#0c0e17]/95 backdrop-blur-2xl border border-sky-500/40 rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.8)] p-4 text-xs font-sans text-foreground animate-in fade-in zoom-in-95 duration-150 pointer-events-auto select-none"
+          className="absolute top-14 left-14 z-50 max-w-lg w-[480px] bg-card/98 backdrop-blur-2xl border border-sky-500/40 rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] p-4 text-xs font-sans text-foreground animate-in fade-in zoom-in-95 duration-150 pointer-events-auto select-none"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/10 pb-2.5 mb-3">
+          <div className="flex items-center justify-between border-b border-card-border pb-2.5 mb-3">
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 rounded-full bg-sky-400 animate-pulse" />
-              <span className="font-mono text-xs font-black uppercase tracking-wider text-sky-400">
+              <span className="font-mono text-xs font-black uppercase tracking-wider text-sky-500 dark:text-sky-400">
                 Institutional Setup Audit
               </span>
               <span
                 className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
                   srOverlay.isPositionOpen || srOverlay.phase === 'OPEN'
-                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                    : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                    ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                    : 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30'
                 }`}
               >
                 {srOverlay.isPositionOpen || srOverlay.phase === 'OPEN' ? 'Position Active' : 'Pending Retest Limit'}
@@ -2287,7 +2287,7 @@ export default function Chart({
             </div>
             <button
               onClick={() => setIsAuditPopoverOpen(false)}
-              className="w-6 h-6 rounded-md hover:bg-white/10 flex items-center justify-center text-muted hover:text-white transition-colors cursor-pointer"
+              className="w-6 h-6 rounded-md hover:bg-card-border/20 flex items-center justify-center text-muted hover:text-foreground transition-colors cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -2295,19 +2295,19 @@ export default function Chart({
 
           {/* Core Geometry Grid */}
           <div className="grid grid-cols-2 gap-2 mb-3">
-            <div className="bg-[#121524]/80 border border-white/5 p-2.5 rounded-xl">
+            <div className="bg-card-border/10 border border-card-border/40 p-2.5 rounded-xl">
               <span className="text-[9px] font-bold text-muted uppercase font-mono block mb-1">
                 Execution Geometry
               </span>
               <div className="flex items-baseline justify-between font-mono text-[11px]">
                 <span className="text-muted">Direction:</span>
-                <span className={`font-bold ${srOverlay.type === 'BULLISH' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                <span className={`font-bold ${srOverlay.type === 'BULLISH' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                   {srOverlay.type === 'BULLISH' ? 'LONG 🐂' : 'SHORT 🐻'}
                 </span>
               </div>
               <div className="flex items-baseline justify-between font-mono text-[11px] mt-0.5">
                 <span className="text-muted">Planned Entry:</span>
-                <span className="font-bold text-sky-400">${srOverlay.entryPrice.toFixed(2)}</span>
+                <span className="font-bold text-sky-500 dark:text-sky-400">${srOverlay.entryPrice.toFixed(2)}</span>
               </div>
               <div className="flex items-baseline justify-between font-mono text-[11px] mt-0.5">
                 <span className="text-muted">Anchor Shelf:</span>
@@ -2315,13 +2315,13 @@ export default function Chart({
               </div>
             </div>
 
-            <div className="bg-[#121524]/80 border border-white/5 p-2.5 rounded-xl">
+            <div className="bg-card-border/10 border border-card-border/40 p-2.5 rounded-xl">
               <span className="text-[9px] font-bold text-muted uppercase font-mono block mb-1">
                 Risk Parameters
               </span>
               <div className="flex items-baseline justify-between font-mono text-[11px]">
                 <span className="text-muted">Initial Stop Loss:</span>
-                <span className="font-bold text-rose-400">${srOverlay.stopLoss.toFixed(2)}</span>
+                <span className="font-bold text-rose-600 dark:text-rose-400">${srOverlay.stopLoss.toFixed(2)}</span>
               </div>
               <div className="flex items-baseline justify-between font-mono text-[11px] mt-0.5">
                 <span className="text-muted">Risk Distance:</span>
@@ -2329,63 +2329,63 @@ export default function Chart({
               </div>
               <div className="flex items-baseline justify-between font-mono text-[11px] mt-0.5">
                 <span className="text-muted">Risk Capital:</span>
-                <span className="text-amber-400 font-bold">${(srOverlay.riskUsd ?? Math.abs(srOverlay.entryPrice - srOverlay.stopLoss)).toFixed(2)} ({(srOverlay.riskPct ?? 1.0).toFixed(2)}%)</span>
+                <span className="text-amber-600 dark:text-amber-400 font-bold">${(srOverlay.riskUsd ?? Math.abs(srOverlay.entryPrice - srOverlay.stopLoss)).toFixed(2)} ({(srOverlay.riskPct ?? 1.0).toFixed(2)}%)</span>
               </div>
             </div>
           </div>
 
           {/* Projected Profit Target Continuum */}
-          <div className="bg-[#121524]/80 border border-white/5 p-2.5 rounded-xl mb-3">
+          <div className="bg-card-border/10 border border-card-border/40 p-2.5 rounded-xl mb-3">
             <span className="text-[9px] font-bold text-muted uppercase font-mono block mb-1.5">
               Projected 3-Stage Harvest Continuum
             </span>
             <div className="grid grid-cols-3 gap-2 font-mono text-[10px]">
               <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                <div className="text-emerald-400 font-bold text-[10.5px]">TP1 (40% @ 1.0R)</div>
-                <div className="text-white font-bold text-xs mt-0.5">${srOverlay.target1.toFixed(2)}</div>
+                <div className="text-emerald-600 dark:text-emerald-400 font-bold text-[10.5px]">TP1 (40% @ 1.0R)</div>
+                <div className="text-foreground font-bold text-xs mt-0.5">${srOverlay.target1.toFixed(2)}</div>
                 <div className="text-[8.5px] text-muted mt-0.5">Trails SL to BE / FVG CE</div>
               </div>
               <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                <div className="text-emerald-400 font-bold text-[10.5px]">TP2 (40% @ 1.5R)</div>
-                <div className="text-white font-bold text-xs mt-0.5">${srOverlay.target2.toFixed(2)}</div>
+                <div className="text-emerald-600 dark:text-emerald-400 font-bold text-[10.5px]">TP2 (40% @ 1.5R)</div>
+                <div className="text-foreground font-bold text-xs mt-0.5">${srOverlay.target2.toFixed(2)}</div>
                 <div className="text-[8.5px] text-muted mt-0.5">Ratchets SL to +1.0R Floor</div>
               </div>
               <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                <div className="text-emerald-400 font-bold text-[10.5px]">TP3 (20% Runner)</div>
-                <div className="text-white font-bold text-xs mt-0.5">${srOverlay.target3.toFixed(2)}</div>
+                <div className="text-emerald-600 dark:text-emerald-400 font-bold text-[10.5px]">TP3 (20% Runner)</div>
+                <div className="text-foreground font-bold text-xs mt-0.5">${srOverlay.target3.toFixed(2)}</div>
                 <div className="text-[8.5px] text-muted mt-0.5">Macro DOL Target</div>
               </div>
             </div>
           </div>
 
           {/* 3-Pillar Volumetric Conviction */}
-          <div className="bg-[#121524]/80 border border-white/5 p-2.5 rounded-xl mb-3">
+          <div className="bg-card-border/10 border border-card-border/40 p-2.5 rounded-xl mb-3">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[9px] font-bold text-muted uppercase font-mono">
                 3-Pillar Volumetric Conviction
               </span>
               {srOverlay.threePillarsPassed ? (
-                <span className="text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                <span className="text-[9px] font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
                   ✓ 3-Pillars Confirmed
                 </span>
               ) : (
-                <span className="text-[9px] font-mono font-bold text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
+                <span className="text-[9px] font-mono font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
                   ✗ Pillars Failed
                 </span>
               )}
             </div>
             <div className="grid grid-cols-3 gap-2 font-mono text-[10px]">
-              <div className="p-1.5 bg-black/40 border border-white/5 rounded-lg text-center">
+              <div className="p-1.5 bg-card border border-card-border rounded-lg text-center">
                 <span className="text-muted text-[8.5px] block">P1 Volume Exp</span>
                 <span className="font-bold text-foreground text-xs">{srOverlay.volExpansion.toFixed(2)}x</span>
                 <span className="text-[8px] text-muted block">vs 20-SMA</span>
               </div>
-              <div className="p-1.5 bg-black/40 border border-white/5 rounded-lg text-center">
+              <div className="p-1.5 bg-card border border-card-border rounded-lg text-center">
                 <span className="text-muted text-[8.5px] block">P2 Taker Delta</span>
                 <span className="font-bold text-foreground text-xs">{srOverlay.deltaDominance.toFixed(1)}%</span>
                 <span className="text-[8px] text-muted block">{srOverlay.type === 'BULLISH' ? 'Taker Buy' : 'Taker Sell'}</span>
               </div>
-              <div className="p-1.5 bg-black/40 border border-white/5 rounded-lg text-center">
+              <div className="p-1.5 bg-card border border-card-border rounded-lg text-center">
                 <span className="text-muted text-[8.5px] block">P3 Body Ratio</span>
                 <span className="font-bold text-foreground text-xs">{srOverlay.bodyRatio.toFixed(1)}%</span>
                 <span className="text-[8px] text-muted block">Conviction</span>
@@ -2394,7 +2394,7 @@ export default function Chart({
           </div>
 
           {/* Displacement Origin Audit (3 Candles) */}
-          <div className="bg-[#121524]/80 border border-white/5 p-2.5 rounded-xl">
+          <div className="bg-card-border/10 border border-card-border/40 p-2.5 rounded-xl">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[9px] font-bold text-muted uppercase font-mono">
                 Displacement Origin Audit (3-Candle Impulse Leg)
@@ -2419,16 +2419,16 @@ export default function Chart({
                   }).replace(',', '') + ' (Cairo)';
                   const isBull = dc.close >= dc.open;
                   return (
-                    <div key={idx} className="p-2 bg-black/50 border border-white/5 rounded-lg flex flex-col gap-1">
+                    <div key={idx} className="p-2 bg-card border border-card-border rounded-lg flex flex-col gap-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-sky-300 text-[10px]">{dc.label}</span>
+                        <span className="font-bold text-sky-500 dark:text-sky-300 text-[10px]">{dc.label}</span>
                         <span className="text-[8.5px] text-muted font-mono">{dateStr}</span>
                       </div>
                       <div className="grid grid-cols-5 gap-1 text-[9px]">
                         <div><span className="text-muted">O: </span><span className="text-foreground">${dc.open.toFixed(2)}</span></div>
-                        <div><span className="text-muted">H: </span><span className="text-emerald-400">${dc.high.toFixed(2)}</span></div>
-                        <div><span className="text-muted">L: </span><span className="text-rose-400">${dc.low.toFixed(2)}</span></div>
-                        <div><span className="text-muted">C: </span><span className={isBull ? 'text-emerald-400' : 'text-rose-400'}>${dc.close.toFixed(2)}</span></div>
+                        <div><span className="text-muted">H: </span><span className="text-emerald-600 dark:text-emerald-400">${dc.high.toFixed(2)}</span></div>
+                        <div><span className="text-muted">L: </span><span className="text-rose-600 dark:text-rose-400">${dc.low.toFixed(2)}</span></div>
+                        <div><span className="text-muted">C: </span><span className={isBull ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}>${dc.close.toFixed(2)}</span></div>
                         {dc.volume !== undefined && (
                           <div><span className="text-muted">V: </span><span className="text-foreground">{dc.volume.toFixed(1)}</span></div>
                         )}
@@ -2500,7 +2500,7 @@ export default function Chart({
         {countdownText && (
           <div
             ref={countdownRef}
-            className="absolute right-[56px] -translate-y-1/2 pointer-events-none flex items-center justify-center bg-[#141416]/95 border border-[#4a4457]/50 text-[10px] text-muted font-mono font-bold tracking-wider px-1.5 py-[2px] rounded-sm shadow-md transition-none"
+            className="absolute right-[56px] -translate-y-1/2 pointer-events-none flex items-center justify-center bg-card/95 border border-card-border text-[10px] text-muted font-mono font-bold tracking-wider px-1.5 py-[2px] rounded-sm shadow-md transition-none"
             style={{ top: '-100px' }}
           >
             {countdownText}
@@ -2509,7 +2509,7 @@ export default function Chart({
         {alertLabelPositions.map((pos) => (
           <div
             key={pos.id}
-            className={`absolute right-[56px] pointer-events-auto flex items-center gap-1.5 bg-[#141416]/95 border px-1.5 py-0.5 rounded-sm shadow-xl transition-all duration-150 ${pos.status === 'triggered' ? 'opacity-65 hover:bg-[#141416]/90' : 'hover:bg-[#1c1c1f]'
+            className={`absolute right-[56px] pointer-events-auto flex items-center gap-1.5 bg-card/95 border px-1.5 py-0.5 rounded-sm shadow-xl transition-all duration-150 ${pos.status === 'triggered' ? 'opacity-65 hover:bg-card/90' : 'hover:bg-card-border/20'
               }`}
             style={{
               top: `${pos.y - 11}px`, // Vertically centered on the price line
@@ -2525,7 +2525,7 @@ export default function Chart({
             </span>
 
             {/* High precision monospace price value */}
-            <span className="text-[9px] font-mono text-white/80 font-semibold select-none">
+            <span className="text-[9px] font-mono text-foreground font-semibold select-none">
               {pos.price.toFixed(2)}
             </span>
 
@@ -2537,7 +2537,7 @@ export default function Chart({
                 setSettingsModalTab('price');
                 setIsSettingsModalOpen(true);
               }}
-              className="p-0.5 text-white/50 hover:text-white transition-colors cursor-pointer rounded-sm hover:bg-white/10"
+              className="p-0.5 text-muted hover:text-foreground transition-colors cursor-pointer rounded-sm hover:bg-card-border/20"
               title="Alert Settings"
             >
               <svg
@@ -2545,10 +2545,10 @@ export default function Chart({
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2.5"
+                strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="w-2.5 h-2.5"
+                className="w-3 h-3"
               >
                 <circle cx="12" cy="12" r="3"></circle>
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -2586,34 +2586,34 @@ export default function Chart({
 
       {/* Top Left HUD - Candle Info */}
       {hudCandle && (
-        <div className="absolute top-4 left-4 bg-[#0e0e0f]/95 border border-[#4a4457]/40 px-3 py-1 rounded-none shadow-xl pointer-events-none z-10 flex flex-wrap items-center gap-x-4 gap-y-1 select-none font-mono text-[11px]">
+        <div className="absolute top-4 left-14 bg-card/95 border border-card-border px-3 py-1 rounded-lg shadow-xl backdrop-blur-md pointer-events-none z-10 flex flex-wrap items-center gap-x-4 gap-y-1 select-none font-mono text-[11px]">
           <div className="flex items-center gap-1">
-            <span className="text-white/40">O</span>
-            <span className="text-[#e5e2e3] font-medium">{hudCandle.open.toFixed(2)}</span>
+            <span className="text-muted">O</span>
+            <span className="text-foreground font-semibold">{hudCandle.open.toFixed(2)}</span>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-white/40">H</span>
-            <span className="text-[#50ffaf] font-medium">{hudCandle.high.toFixed(2)}</span>
+            <span className="text-muted">H</span>
+            <span className="text-emerald-600 dark:text-[#50ffaf] font-semibold">{hudCandle.high.toFixed(2)}</span>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-white/40">L</span>
-            <span className="text-[#ffb4ab] font-medium">{hudCandle.low.toFixed(2)}</span>
+            <span className="text-muted">L</span>
+            <span className="text-rose-600 dark:text-[#ffb4ab] font-semibold">{hudCandle.low.toFixed(2)}</span>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-white/40">C</span>
-            <span className={hudCandle.close >= hudCandle.open ? 'text-[#50ffaf] font-medium' : 'text-[#ffb4ab] font-medium'}>
+            <span className="text-muted">C</span>
+            <span className={hudCandle.close >= hudCandle.open ? 'text-emerald-600 dark:text-[#50ffaf] font-semibold' : 'text-rose-600 dark:text-[#ffb4ab] font-semibold'}>
               {hudCandle.close.toFixed(2)}
             </span>
           </div>
           <div className="flex items-center gap-1">
-            <span className="text-white/40">V</span>
-            <span className="text-[#e5e2e3] font-medium">
+            <span className="text-muted">V</span>
+            <span className="text-foreground font-semibold">
               {hudCandle.volume.toLocaleString(undefined, { maximumFractionDigits: 2 })}
             </span>
           </div>
           {hudCandle.open > 0 && (
-            <div className="flex items-center gap-1 pl-2 border-l border-[#4a4457]/30">
-              <span className={`font-semibold ${hudCandle.close >= hudCandle.open ? 'text-[#50ffaf]' : 'text-[#ffb4ab]'}`}>
+            <div className="flex items-center gap-1 pl-2 border-l border-card-border">
+              <span className={`font-semibold ${hudCandle.close >= hudCandle.open ? 'text-emerald-600 dark:text-[#50ffaf]' : 'text-rose-600 dark:text-[#ffb4ab]'}`}>
                 {hudCandle.close >= hudCandle.open ? '+' : ''}{(((hudCandle.close - hudCandle.open) / hudCandle.open) * 100).toFixed(2)}%
               </span>
             </div>
@@ -2621,9 +2621,9 @@ export default function Chart({
 
           {/* V8.7: BTC Live Price Indicator */}
           {marketContextData?.correlation_data?.btc_live_price && (
-            <div className="flex items-center gap-1 pl-2 border-l border-[#4a4457]/30">
-              <span className="text-white/40">BTC</span>
-              <span className="text-[#e5e2e3] font-semibold">
+            <div className="flex items-center gap-1 pl-2 border-l border-card-border">
+              <span className="text-muted">BTC</span>
+              <span className="text-foreground font-semibold">
                 ${marketContextData.correlation_data.btc_live_price.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
               </span>
             </div>
@@ -2631,11 +2631,11 @@ export default function Chart({
 
           {/* V8.7: Correlation Pulse Indicator */}
           {smtContext && (
-            <div className="flex items-center gap-1.5 pl-2 border-l border-[#4a4457]/30">
-              <span className="text-white/40">PULSE</span>
+            <div className="flex items-center gap-1.5 pl-2 border-l border-card-border">
+              <span className="text-muted">PULSE</span>
               <div className="flex items-center gap-1">
-                <span className={`w-1.5 h-1.5 rounded-full ${hasMicroDivergence ? 'bg-amber-500 animate-pulse shadow-[0_0_8px_#f59e0b]' : 'bg-[#50ffaf] shadow-[0_0_6px_#50ffaf]'}`}></span>
-                <span className={`font-mono text-[9px] uppercase tracking-wider ${hasMicroDivergence ? 'text-amber-400 font-bold' : 'text-[#50ffaf]/80'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${hasMicroDivergence ? 'bg-amber-500 animate-pulse shadow-[0_0_8px_#f59e0b]' : 'bg-emerald-500 dark:bg-[#50ffaf] shadow-[0_0_6px_#50ffaf]'}`}></span>
+                <span className={`font-mono text-[9px] uppercase tracking-wider ${hasMicroDivergence ? 'text-amber-500 dark:text-amber-400 font-bold' : 'text-emerald-600 dark:text-[#50ffaf]/80'}`}>
                   {hasMicroDivergence ? 'SMT_DIV' : 'SYNCED'}
                 </span>
               </div>
@@ -2643,7 +2643,7 @@ export default function Chart({
           )}
 
           {/* Magnet Snapping Control Pill & Target Dropdown */}
-          <div className="relative flex items-center gap-1 pl-2 border-l border-[#4a4457]/30 pointer-events-auto">
+          <div className="relative flex items-center gap-1 pl-2 border-l border-card-border pointer-events-auto">
             <button
               onClick={() => {
                 const next = !isSnapEnabled;
@@ -2656,7 +2656,7 @@ export default function Chart({
               }}
               className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-black uppercase transition-all flex items-center gap-1 cursor-pointer ${
                 isSnapEnabled
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
+                  ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.2)]'
                   : 'bg-card-border/20 text-muted hover:text-foreground border border-card-border/40'
               }`}
               title="Toggle Magnet Snapping (HotKey: 'S')"
@@ -2673,7 +2673,7 @@ export default function Chart({
             </button>
 
             {isSnapDropdownOpen && (
-              <div className="absolute top-7 left-0 z-50 bg-[#141416] border border-[#4a4457]/50 rounded-lg p-1 shadow-2xl flex flex-col gap-0.5 min-w-[130px] font-mono text-[9px]">
+              <div className="absolute top-7 left-0 z-50 bg-card/98 border border-card-border backdrop-blur-xl rounded-lg p-1 shadow-2xl flex flex-col gap-0.5 min-w-[130px] font-mono text-[9px]">
                 {(['CLOSE', 'HIGH', 'LOW', 'OPEN', 'NEAREST'] as const).map((t) => (
                   <button
                     key={t}
@@ -2694,7 +2694,7 @@ export default function Chart({
                     }}
                     className={`px-2 py-1 text-left rounded font-bold transition-all cursor-pointer ${
                       snapTarget === t && isSnapEnabled
-                        ? 'bg-emerald-500/20 text-emerald-400 font-black'
+                        ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-black'
                         : 'text-muted hover:text-foreground hover:bg-card-border/20'
                     }`}
                   >
@@ -2707,9 +2707,9 @@ export default function Chart({
 
           {/* Snapped Price Display */}
           {isSnapEnabled && snappedPrice !== null && (
-            <div className="flex items-center gap-1 pl-2 border-l border-[#4a4457]/30">
-              <span className="text-emerald-400 font-bold">SNAPPED:</span>
-              <span className="text-emerald-300 font-mono font-black">${snappedPrice.toFixed(2)}</span>
+            <div className="flex items-center gap-1 pl-2 border-l border-card-border">
+              <span className="text-emerald-600 dark:text-emerald-400 font-bold">SNAPPED:</span>
+              <span className="text-emerald-700 dark:text-emerald-300 font-mono font-black">${snappedPrice.toFixed(2)}</span>
             </div>
           )}
         </div>
@@ -2717,19 +2717,19 @@ export default function Chart({
 
       {/* Floating Magnet Notification Toast */}
       {snapNotification && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 bg-[#141416]/98 border border-emerald-500/50 text-emerald-400 text-xs font-mono font-black uppercase tracking-wider rounded-lg shadow-2xl animate-[fadeIn_0.15s_ease-out]">
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-30 px-3.5 py-1.5 bg-card/98 border border-emerald-500/50 text-emerald-600 dark:text-emerald-400 text-xs font-mono font-black uppercase tracking-wider rounded-lg shadow-2xl backdrop-blur-xl animate-[fadeIn_0.15s_ease-out]">
           🧲 {snapNotification}
         </div>
       )}
 
       {/* Institutional alert placement HUD */}
       {(isHoveringPriceScale || isHotkeyAlertModeActive) && (
-        <div className="absolute top-[48px] left-4 bg-[#0e0e0f]/95 border border-[#4a4457]/50 px-2.5 py-1.5 rounded-none shadow-xl pointer-events-none z-10 flex items-center gap-2 select-none animate-[pulse_1.5s_infinite]">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-          <span className="text-[10px] font-mono font-bold tracking-wider text-amber-400">
+        <div className="absolute top-[48px] left-14 bg-card/95 border border-amber-500/40 px-2.5 py-1.5 rounded-lg shadow-xl pointer-events-none z-10 flex items-center gap-2 select-none animate-[pulse_1.5s_infinite] backdrop-blur-md">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+          <span className="text-[10px] font-mono font-bold tracking-wider text-amber-600 dark:text-amber-400">
             STATUS: ALERT_PLACEMENT_ACTIVE
           </span>
-          <span className="text-[9px] font-mono text-white/50">
+          <span className="text-[9px] font-mono text-muted">
             [CLICK TO DROP / ESC TO ABORT]
           </span>
         </div>

@@ -1,8 +1,211 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.72
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.82
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-28 (V16.72 — Master Quantitative Encyclopedia & Compounding Capital Study)
+> **Last Updated:** 2026-08-28 (V16.82 — Quant Lab Compounding Graph Zoom, Pan & Smart Tooltip Offset)
+
+## 🆕 V16.82 Changelog — Quant Lab Compounding Graph Zoom, Pan & Smart Tooltip Offset (2026-08-28)
+
+### Summary
+Resolved overlapping data dots on dense trade trajectories (e.g. 935 events) and eliminated tooltip overlap on hovered points in Quant Lab's Chronological Compounding Trajectory chart. Implemented interactive Zoom Presets (`All`, `500`, `250`, `100`, `50`), Canvas Mouse Wheel Zoom, Click-and-Drag Timeline Pan, Range Scrubber Slider, Adaptive Dot Density (auto-suppresses background clutter when points > 120 while keeping vector stroke pristine), and Smart Adaptive Tooltip Offset (positions tooltip to left or right with 24px clearance so the hovered trade point and trajectory remain 100% unobstructed).
+
+### Key Architectural Deliverables
+1. **Interactive Trajectory Zoom & Pan Suite (`CapitalGrowthLedger.tsx`):**
+   - Implemented dynamic `zoomWindow` state `{ start, count }` with real-time sliced `visiblePoints` calculations.
+   - Added Quick Range Presets: `[All]`, `[500]`, `[250]`, `[100]`, `[50]`, along with Zoom In (`ZoomIn`), Zoom Out (`ZoomOut`), and Reset (`RotateCcw`).
+   - Integrated Mouse Wheel Zooming (`onWheel`) centered dynamically on mouse cursor position.
+   - Implemented Canvas Click-and-Drag Pan (`cursor-grab` / `cursor-grabbing`) and a timeline range scrubber slider (`<input type="range">`).
+2. **Adaptive Dot Density (Anti-Caterpillar Fix):**
+   - Automatically suppresses static non-hovered dots when visible events > 120, maintaining a pristine, un-cluttered equity vector stroke.
+   - When zoomed in (&le; 120 events), renders crisp, spaced Win (green), Loss (rose), and Scratch dots with active hover pulse markers.
+3. **Smart Collision-Free Tooltip Positioning:**
+   - Detects cursor horizontal quadrant and positions the floating telemetry card to the opposite side (Left when `x > width / 2`, Right when `x <= width / 2`) with a guaranteed 24px clearance gutter.
+   - Clamps vertical alignment so the active trade point, crosshair, and surrounding curve are never obscured.
+
+### Files Modified
+- **`src/components/quantLab/CapitalGrowthLedger.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.81 Changelog — Quant Lab Trade Ledger Pagination Jump Controls & Rows-Per-Page Selector (2026-08-28)
+
+### Summary
+Enhanced the Chronological Trade Execution Ledger and Sweep-Reclaim Setup workspaces in Quant Lab with advanced pagination capabilities: Jump to Start (`<<`), Jump to End (`>>`), a direct Page Select dropdown (`<select>`), and an interactive Rows-Per-Page selector (`10`, `25`, `50`, `100`).
+
+### Key Architectural Deliverables
+1. **Quant Lab Ledger Pagination Suite (`CapitalGrowthLedger.tsx`):**
+   - Implemented dynamic `itemsPerPage` state (`10`, `25`, `50`, `100`) replacing fixed limit.
+   - Added Jump to Start (`<<` / `ChevronsLeft`), Previous (`<` / `ChevronLeft`), Direct `<select>` Page Selector, Next (`>` / `ChevronRight`), and Jump to End (`>>` / `ChevronsRight`).
+   - Integrated live trade range telemetry summary (`Showing X–Y of N trades`).
+2. **Sweep-Reclaim Workspace Alignment (`SweepReclaimWorkspace.tsx`):**
+   - Synchronized the same full-featured pagination suite across setup detection tables in Quant Lab.
+
+### Files Modified
+- **`src/components/quantLab/CapitalGrowthLedger.tsx`** [MODIFY]
+- **`src/components/quantLab/SweepReclaimWorkspace.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.80 Changelog — Tooltip Contrast Isolation & Drawing Toolbar Pointer-Hover Safeguards (2026-08-28)
+
+### Summary
+Resolved Light Theme tooltip contrast degradation and simultaneous multi-tooltip rendering in the drawing toolbar. Excluded tooltips (`[role="tooltip"]`, `.custom-tooltip`) from global Light Theme `!important` text overrides (preventing `var(--text-title)` from turning tooltip text dark black on dark slate bubbles), and added fine pointer mouse-hover safeguards (`hidden [@media(hover:hover)_and_(pointer:fine)]:group-hover:flex`) to the chart drawing toolbar.
+
+### Key Architectural Deliverables
+1. **Tooltip Contrast Isolation Cascade (`globals.css`):**
+   - Excluded `[role="tooltip"] *` and `.custom-tooltip *` from `:root` / `html:not(.dark)` global typography overrides (`.text-slate-100`, `.text-zinc-100`, `.text-title`, `.text-muted`, `.text-foreground`).
+   - Added dedicated global tooltip styling enforcing crisp `#f8fafc` text, translucent obsidian backdrop, and clean `<kbd>` styling across both Light and Dark themes.
+2. **Drawing Toolbar Hover Precision (`DrawingToolbar.tsx`):**
+   - Replaced fragile `opacity-0` with strict `hidden [@media(hover:hover)_and_(pointer:fine)]:group-hover:flex` and `role="tooltip"` across all 9 drawing palette actions.
+   - Eliminated the bug where all tooltips were rendered simultaneously along the vertical rail.
+3. **Subheader and Navigation Header Alignment (`NavigationHeader.tsx`, `page.tsx`):**
+   - Added `custom-tooltip` classes across top navigation and subheader tooltips (e.g. `MANUAL` order panel, `Audio & Signal Alerts`, `Potential Trades`).
+
+### Files Modified
+- **`src/app/globals.css`** [MODIFY]
+- **`src/components/drawings/DrawingToolbar.tsx`** [MODIFY]
+- **`src/components/NavigationHeader.tsx`** [MODIFY]
+- **`src/app/page.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.79 Changelog — Tailwind v4 Custom Dark Variant & Deep-Obsidian Glassmorphism Polish (2026-08-28)
+
+### Summary
+Resolved Dark Theme reactivity in Tailwind CSS v4 by configuring `@custom-variant dark (&:where(.dark, .dark *));` in `globals.css`, ensuring `next-themes` `<html class="dark">` state properly triggers all `dark:` utility classes. Polished the Central Navigation Dock and Chart Drawing Toolbar with Deep-Obsidian Glassmorphism in Dark Mode and crisp contrast in Light Mode.
+
+### Key Architectural Deliverables
+1. **Tailwind CSS v4 Dark Variant Binding (`globals.css`):**
+   - Configured `@custom-variant dark (&:where(.dark, .dark *));` directly under `@import "tailwindcss";` to enable class-based dark mode switching via `next-themes`.
+2. **Deep-Obsidian Central Navigation Dock (`NavigationHeader.tsx`):**
+   - In Dark Mode, renders as a deep-obsidian glassmorphic dock (`bg-slate-950/85 border-slate-800/80 backdrop-blur-md`) with cyan glow highlights (`bg-slate-900 text-cyan-400 border-cyan-500/80 shadow-[0_0_12px_rgba(6,182,212,0.35)]`).
+   - In Light Mode, renders as a crisp light pill (`bg-slate-200/80 border-slate-300/80`) with indigo active highlights (`bg-white text-indigo-600 border-indigo-500/80 shadow-[0_0_12px_rgba(79,70,229,0.2)]`).
+3. **Deep-Obsidian Chart Drawing Palette (`DrawingToolbar.tsx`):**
+   - In Dark Mode, renders with sleek obsidian glassmorphism (`bg-slate-950/90 border-slate-800/80 backdrop-blur-xl shadow-2xl`) and electric cyan active tools (`bg-cyan-500 text-slate-950 shadow-[0_0_12px_rgba(6,182,212,0.4)]`).
+   - In Light Mode, renders with crisp floating white glassmorphism (`bg-white/95 border-slate-200/90 shadow-xl`) and indigo active tools (`bg-indigo-600 text-white`).
+
+### Files Modified
+- **`src/app/globals.css`** [MODIFY]
+- **`src/components/NavigationHeader.tsx`** [MODIFY]
+- **`src/components/drawings/DrawingToolbar.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.78 Changelog — Mobile Sidebar Drawer Z-Index Stacking & Backdrop Hierarchy (2026-08-28)
+
+### Summary
+Fixed the mobile burger menu sidebar z-index bug where the mobile `<aside>` telemetry drawer was rendering at `z-20` (behind its own `z-30` backdrop blur and underneath the `z-40` subheader / `z-50` top bar). Corrected the z-index hierarchy so the mobile sidebar drawer and modals display properly on top of all headers.
+
+### Key Architectural Deliverables
+1. **Mobile Sidebar Stacking Fix (`Sidebar.tsx`):**
+   - Elevated the mobile overlay backdrop from `z-30` &rarr; `fixed inset-0 z-[60] bg-background/80 backdrop-blur-md`.
+   - Elevated the mobile `<aside>` drawer sheet from `z-20` &rarr; `fixed top-0 right-0 z-[70] h-full w-80 max-w-[90vw] bg-card/95 border-l border-card-border shadow-2xl lg:z-auto lg:static lg:shadow-none`.
+   - Elevated the internal JSON logs slide-out drawer from `z-50` &rarr; `z-[80]`.
+2. **Global Modal Stacking Alignment (`PotentialTradesModal.tsx`, `BacktestPotentialTradesModal.tsx`, `SelfCorrectionModal.tsx`):**
+   - Elevated modal backdrops from `z-50` &rarr; `z-[200]`, guaranteeing they render cleanly over both the top navigation dock and the mobile drawer.
+
+### Files Modified
+- **`src/components/Sidebar.tsx`** [MODIFY]
+- **`src/components/modals/PotentialTradesModal.tsx`** [MODIFY]
+- **`src/components/modals/BacktestPotentialTradesModal.tsx`** [MODIFY]
+- **`src/components/modals/SelfCorrectionModal.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.77 Changelog — Drawing Toolbar Tooltip Contrast & Native Title Elimination (2026-08-28)
+
+### Summary
+Fixed dark text rendering inside drawing toolbar tooltips by explicitly applying `text-white` typography tokens across tooltip labels and `<kbd>` hotkey tags. Removed native HTML `title` attributes across drawing toolbar buttons to prevent dual tooltip glitching and native OS tooltip interference.
+
+### Key Architectural Deliverables
+1. **Explicit White Typography on Dark Slate Tooltips (`DrawingToolbar.tsx`):**
+   - Wrapped tool label text in `<span className="text-white">` and hotkey pills in `<kbd className="px-1.5 py-0.5 bg-white/20 border border-white/25 text-white">`, ensuring high-contrast white text against the dark slate tooltip backdrop in both light and dark themes.
+2. **Native Title Attribute Elimination (`DrawingToolbar.tsx`):**
+   - Removed native `title="..."` attributes from all toolbar buttons, eliminating browser OS tooltip collisions with custom floating tooltips.
+3. **Custom Tooltips on All Toolbar Actions (`DrawingToolbar.tsx`):**
+   - Added uniform, floating dark-slate tooltips to Color Palette, Undo, Redo, Visibility Toggle, and Clear All actions.
+
+### Files Modified
+- **`src/components/drawings/DrawingToolbar.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.76 Changelog — Chart Drawing Toolbar Light Theme Contrast & Zero-Overlap Rail Architecture (2026-08-28)
+
+### Summary
+Fixed overlapping collision between the Drawing Toolbar and the top-left HUD elements (S&R 3-Pillar Setup Card, OHLC candle info bar, and Alert Placement status) and polished drawing tools contrast and aesthetics for light/dark themes.
+
+### Key Architectural Deliverables
+1. **Zero-Overlap Left Rail Layout (`DrawingToolbar.tsx` & `Chart.tsx`):**
+   - Docked the Drawing Toolbar to the far top-left rail (`top-4 left-2.5 z-30`).
+   - Padded all top-left HUD elements (`hudCandle`, `srOverlay`, `alert placement HUD`) with `left-14`, creating a clean, permanent vertical gutter that prevents drawing tool buttons from occluding active strategy cards or candle metrics.
+2. **Light Theme Contrast & Aesthetic Refinement (`DrawingToolbar.tsx`):**
+   - Main dock container styled with crisp, high-contrast `bg-white/95 dark:bg-slate-950/90 border border-slate-200/90 dark:border-slate-800/80 shadow-[0_4px_24px_rgba(0,0,0,0.08)]`.
+   - Tool buttons: High-contrast `text-slate-600 hover:text-slate-950 hover:bg-slate-100` (inactive) and `bg-indigo-600 text-white shadow-[0_0_12px_rgba(79,70,229,0.35)]` (active in light mode), and `dark:bg-cyan-500 dark:text-slate-950` (active in dark mode).
+   - Color picker preset swatch with dual ring indicators, refined undo/redo buttons, and crisp deletion confirm modal.
+
+### Files Modified
+- **`src/components/drawings/DrawingToolbar.tsx`** [MODIFY]
+- **`src/components/Chart.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.75 Changelog — Light/Dark Theme Adaptation for Navigation & Chart Overlays (2026-08-28)
+
+### Summary
+Replaced hardcoded dark background and text classes across the navigation header, Live HUD subheader, drawing toolbar, and chart HUD overlays with adaptive Tailwind CSS semantic theme tokens (`bg-card`, `border-card-border`, `text-foreground`, `text-muted`, `bg-accent`), delivering a cohesive, high-contrast visual experience in both Light and Dark themes.
+
+### Key Architectural Deliverables
+1. **Adaptive Navigation Dock & Mobile Drawer (`NavigationHeader.tsx`):** Converted hardcoded `bg-slate-950` containers and dark links to `bg-slate-200/80 dark:bg-slate-950/85` and `bg-white dark:bg-slate-900` with high-contrast text and active glow borders. Mobile drawer sheet styled with `bg-card dark:bg-slate-950` and semantic borders.
+2. **Theme-Adaptive Live Strategy Badge (`LiveCockpitStatusBadge.tsx`):** Armed and Standby badge states now render with light-appropriate translucent emerald/slate backgrounds and legible foreground typography (`text-emerald-700 dark:text-emerald-200`).
+3. **Subheader Action Buttons & Dropdowns (`src/app/page.tsx`, `TimeframeSwitcher.tsx`):** Replaced dark buttons for Manual Trading, Audio Alerts, and Timeframe dropdowns with `bg-card border-card-border` and active accent states.
+4. **Drawing Toolbar Theme Adaptation (`DrawingToolbar.tsx`):** Converted obsidian dock (`bg-[#0e0e0f]/90`) and popovers to `bg-card/95 border-card-border` with proper muted/foreground icon states and contrast.
+5. **Chart HUD & Overlays (`Chart.tsx`):** Replaced hardcoded `#0e0e0f` and `#141416` backgrounds on the OHLC candle info bar, magnet snapping menu, active alert price axis badges, and institutional setup audit popover with glassmorphic `bg-card/95 border-card-border`.
+
+### Files Modified
+- **`src/components/NavigationHeader.tsx`** [MODIFY]
+- **`src/components/LiveCockpitStatusBadge.tsx`** [MODIFY]
+- **`src/components/TimeframeSwitcher.tsx`** [MODIFY]
+- **`src/components/drawings/DrawingToolbar.tsx`** [MODIFY]
+- **`src/components/Chart.tsx`** [MODIFY]
+- **`src/app/page.tsx`** [MODIFY]
+- **`src/app/backtest/page.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.74 Changelog — Header & Subheader Rearrangement, S&R Deduplication & Responsive Controls (2026-08-28)
+
+### Summary
+Streamlined the visual layout between the Global Main Header (`NavigationHeader.tsx`) and the Live HUD Subheader (`src/app/page.tsx`). Eliminated the duplicated S&R execution badge, converted the Potential Trades button into an icon-only button with hover tooltip, and replaced bulky text buttons on the subheader with a streamlined Audio/Alerts icon button and responsive Manual Trading toggle.
+
+### Key Architectural Deliverables
+1. **S&R Badge Deduplication & Responsive Tiering (`LiveCockpitStatusBadge.tsx`):** Centralized the authoritative `LiveCockpitStatusBadge` in the Global Main Header and removed the duplicate from the Live HUD subheader. Configured `variant="responsive"` to render full strategy titles on desktop ($\ge 1024\text{px}$) and seamlessly collapse to a compact `ARMED` pill on tablet/mobile.
+2. **Potential Trades Icon Refinement (`NavigationHeader.tsx`):** Converted Potential Trades from a text-containing button into an icon-only circular/pill button (`BarChart2`) with a dark-brutalist hover tooltip, matching the AI Reset and Matrix Metrics utilities.
+3. **Streamlined Live HUD Subheader (`src/app/page.tsx`):**
+   - Left: `ETHUSDC.P` asset ticker + `LiveTicker` price display.
+   - Right: Timeframe Switcher (`5m`, `15m`, `1h`, `4h`), responsive Manual Trading toggle (icon + dot + `MANUAL` text on `sm:`, icon + dot on mobile), Audio / Signal Alerts icon button (`Volume2` with tooltip), and mobile sidebar trigger.
+   - Replaced the bulky `[ COMMAND CENTER ]` text button with the Audio Alerts trigger to prevent confusion with the `/settings` navigation link.
+4. **Single-Line Zero-Wrap Assurance:** Tested and guaranteed zero horizontal wrapping or layout displacement across all breakpoints (320px mobile to 4K desktop).
+5. **Dropdown Menu Stacking Isolation:** Elevated the Live HUD subheader and Backtest subheader to `relative z-40` while adjusting the timeline ribbon wrapper to `relative z-10`, ensuring dropdown menus (`TimeframeSwitcher`, strategy presets) expand across lower dashboard elements without occlusion, while remaining cleanly underneath the global header (`z-50`).
+
+### Files Modified
+- **`src/components/LiveCockpitStatusBadge.tsx`** [MODIFY]
+- **`src/components/NavigationHeader.tsx`** [MODIFY]
+- **`src/components/OrderFlowTimelineRibbon.tsx`** [MODIFY]
+- **`src/app/page.tsx`** [MODIFY]
+- **`src/app/backtest/page.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.73 Changelog — Responsive Icon Dock Top Bar & Mobile Navigation Deck (2026-08-28)
+
+### Summary
+Redesigned the top navigation header and application routing deck to eliminate viewport breakage on resize, tablet, and mobile screens. Consolidated all 7 primary application modules into a unified, dark-brutalist icon dock with touch-safe hover tooltips, smart responsive telemetry tiering, and an interactive slide-out mobile drawer sheet.
+
+### Key Architectural Deliverables
+1. **Unified Central Icon Dock (`NavigationHeader.tsx`):** Consolidated all 7 page routes (`/` Live HUD, `/backtest` Backtest, `/quant-lab` Quant Lab, `/compounding` Compounding, `/quant-sandbox` UI Sandbox, `/journal` Journal, `/settings` Settings) into a sleek, dark-brutalist rounded pill dock with cyan active glow states and pulsing micro-dot indicators.
+2. **Touch-Safe Hover Tooltips:** Implemented responsive CSS tooltips via `@media (hover: hover) and (pointer: fine)` showing page titles and category tags on pointer devices without sticky ghost tooltips on mobile tap.
+3. **Interactive Mobile Slide-Out Drawer Sheet (< 640px):** Added a dedicated hamburger toggle and slide-out sheet displaying all primary navigation modules with full labels, Cairo time clock, active session indicator, Matrix drawer trigger, and AI memory reset button.
+4. **Smart Telemetry Tiering:** Dynamically tiered right-side actions across viewports: large desktop (full telemetry + text buttons), tablet (icon-compressed buttons), mobile (core quick-actions in top bar with secondary telemetry organized in the mobile drawer).
+5. **Z-Index Stacking Context Resolution:** Established a strict global z-index hierarchy (`z-50` for global `NavigationHeader`, `z-[70]` for mobile drawer, `z-20` for page subheaders/toolbars in `page.tsx`, `backtest/page.tsx`, and `quant-sandbox/page.tsx`), preventing secondary headers and tickers from occluding hovering tooltips.
+
+### Files Modified
+- **`src/components/NavigationHeader.tsx`** [MODIFY]
+- **`src/app/page.tsx`** [MODIFY]
+- **`src/app/backtest/page.tsx`** [MODIFY]
+- **`src/app/quant-sandbox/page.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
 
 ## 🆕 V16.72 Changelog — Master Quantitative Encyclopedia & Compounding Capital Study (2026-08-28)
 

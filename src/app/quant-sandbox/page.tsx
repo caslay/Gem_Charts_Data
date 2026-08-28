@@ -485,7 +485,7 @@ BSL Target: $3,520.00 (850 ETH)`;
       {/* ──────────────────────────────────────────────────────────────────────────
           TOP PLAYGROUND CONTROLS HEADER (FIXED TOOLBAR)
          ────────────────────────────────────────────────────────────────────────── */}
-      <div className={`sticky top-0 z-50 ${currentTheme.toolbarBg} backdrop-blur-md px-3 lg:px-6 py-2.5 shadow-md`}>
+      <div className={`relative z-20 ${currentTheme.toolbarBg} backdrop-blur-md px-3 lg:px-6 py-2.5 shadow-md`}>
         <div className="w-full flex flex-wrap items-center justify-between gap-3">
           {/* Title & Badge */}
           <div className="flex items-center gap-3">

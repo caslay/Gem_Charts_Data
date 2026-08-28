@@ -768,7 +768,7 @@ const Sidebar = memo(function Sidebar({
       {/* Mobile overlay backdrop */}
       <div
         onClick={onClose}
-        className={`fixed inset-0 z-30 bg-background/60 backdrop-blur-sm transition-opacity duration-300 lg:hidden ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        className={`fixed inset-0 z-[60] bg-background/80 backdrop-blur-md transition-opacity duration-300 lg:hidden ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
       />
 
       {/* Vertically Centered Desktop Sidebar Toggle Tab Handle */}
@@ -796,11 +796,11 @@ const Sidebar = memo(function Sidebar({
       {/* Sidebar panel */}
       <aside
         className={`
-          fixed top-0 right-0 z-20 h-full w-80 max-w-[90vw]
-          bg-card/95 border-l border-card-border flex flex-col lg:relative shadow-2xl
+          fixed top-0 right-0 z-[70] h-full w-80 max-w-[90vw]
+          bg-card/95 border-l border-card-border flex flex-col shadow-2xl
           transition-all duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : 'translate-x-full'}
-          lg:static lg:translate-x-0 lg:flex lg:shrink-0
+          lg:z-auto lg:static lg:translate-x-0 lg:flex lg:shrink-0 lg:shadow-none
           ${isCollapsed ? 'lg:w-0 lg:border-l-0 lg:overflow-hidden lg:pointer-events-none' : 'lg:w-80 lg:opacity-100'}
         `}
       >
@@ -1370,7 +1370,7 @@ const Sidebar = memo(function Sidebar({
           {/* ── JSON LOGS SLIDE-OUT DRAWER ─────────────────────────────────── */}
           <div
             className={`
-              absolute top-0 bottom-0 z-50 w-80 bg-card border-r border-card-border shadow-2xl flex flex-col
+              absolute top-0 bottom-0 z-[80] w-80 max-w-full bg-card border-r border-card-border shadow-2xl flex flex-col
               transition-all duration-300 ease-in-out select-none
               ${isJsonDrawerOpen ? 'right-0 pointer-events-auto' : 'translate-x-full right-0 pointer-events-none opacity-0'}
             `}

@@ -56,15 +56,15 @@ export default function DrawingToolbar({
 
   return (
     <div
-      className="absolute top-16 left-3 z-30 flex items-start gap-1 select-none pointer-events-auto font-mono text-[11px]"
+      className="absolute top-4 left-2.5 z-30 flex items-start gap-1 select-none pointer-events-auto font-mono text-[11px]"
       onClick={(e) => e.stopPropagation()}
     >
       {/* Main Glassmorphic Dock */}
-      <div className="flex flex-col items-center bg-[#0e0e0f]/90 border border-[#4a4457]/40 backdrop-blur-xl p-1 rounded-xl shadow-2xl transition-all duration-200">
+      <div className="flex flex-col items-center bg-white/95 dark:bg-slate-950/90 border border-slate-200/90 dark:border-slate-800/80 backdrop-blur-xl p-1 rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.08)] dark:shadow-2xl transition-all duration-200">
         {/* Toggle Collapse */}
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-1 text-white/40 hover:text-white hover:bg-white/10 rounded transition-colors cursor-pointer mb-0.5"
+          className="p-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-500 dark:hover:text-slate-200 dark:hover:bg-slate-800/60 rounded transition-colors cursor-pointer mb-0.5"
           title={isCollapsed ? 'Expand Drawing Toolbar' : 'Collapse Toolbar'}
         >
           {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
@@ -83,16 +83,18 @@ export default function DrawingToolbar({
                     onClick={() => onSelectTool(tool.id)}
                     className={`relative p-2 rounded-lg flex items-center justify-center transition-all cursor-pointer group ${
                       isActive
-                        ? 'bg-accent text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]'
-                        : 'text-white/60 hover:text-white hover:bg-white/10'
+                        ? 'bg-indigo-600 text-white shadow-[0_0_12px_rgba(79,70,229,0.35)] dark:bg-cyan-500 dark:text-slate-950 dark:shadow-[0_0_12px_rgba(6,182,212,0.4)]'
+                        : 'text-slate-600 hover:text-slate-950 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60'
                     }`}
-                    title={`${tool.label} (${tool.hotkey})`}
                   >
                     <Icon className="w-4 h-4" />
                     {/* Tooltip on hover */}
-                    <div className="absolute left-full ml-2 px-2 py-1 bg-[#141416] border border-[#4a4457]/80 rounded text-[10px] text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity shadow-xl z-50 flex items-center gap-1.5 font-bold">
-                      <span>{tool.label}</span>
-                      <kbd className="px-1 py-0.2 bg-white/10 border border-white/20 rounded text-[9px] text-white/80">
+                    <div
+                      role="tooltip"
+                      className="hidden [@media(hover:hover)_and_(pointer:fine)]:group-hover:flex custom-tooltip absolute left-full ml-2.5 px-2.5 py-1 bg-slate-900/95 dark:bg-slate-950/95 border border-slate-700/90 dark:border-slate-800/90 rounded-md text-[10px] text-white whitespace-nowrap pointer-events-none shadow-xl z-50 items-center gap-1.5 font-bold font-mono"
+                    >
+                      <span className="text-white">{tool.label}</span>
+                      <kbd className="px-1.5 py-0.5 bg-white/20 dark:bg-white/15 border border-white/25 rounded text-[9px] text-white font-mono font-bold leading-none">
                         {tool.hotkey}
                       </kbd>
                     </div>
@@ -101,25 +103,31 @@ export default function DrawingToolbar({
               })}
             </div>
 
-            <div className="w-5 h-[1px] bg-[#4a4457]/40 my-1.5" />
+            <div className="w-5 h-[1px] bg-slate-200 dark:bg-slate-800 my-1.5" />
 
             {/* Quick Color Palette Button */}
             <div className="relative">
               <button
                 onClick={() => setIsColorPickerOpen(!isColorPickerOpen)}
-                className="p-1.5 rounded-lg flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
-                title="Active Drawing Color"
+                className="relative p-1.5 rounded-lg flex items-center justify-center text-slate-600 hover:text-slate-950 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60 transition-colors cursor-pointer group"
               >
                 <div
-                  className="w-4 h-4 rounded-full border border-white/40 shadow-sm"
+                  className="w-4 h-4 rounded-full border-2 border-white dark:border-slate-800 shadow-sm ring-1 ring-slate-300 dark:ring-slate-700"
                   style={{ backgroundColor: activeColor }}
                 />
+                {/* Tooltip */}
+                <div
+                  role="tooltip"
+                  className="hidden [@media(hover:hover)_and_(pointer:fine)]:group-hover:flex custom-tooltip absolute left-full ml-2.5 px-2.5 py-1 bg-slate-900/95 dark:bg-slate-950/95 border border-slate-700/90 dark:border-slate-800/90 rounded-md text-[10px] text-white whitespace-nowrap pointer-events-none shadow-xl z-50 font-bold font-mono"
+                >
+                  Color Palette
+                </div>
               </button>
 
               {/* Color Picker Dropdown */}
               {isColorPickerOpen && (
-                <div className="absolute left-full top-0 ml-2 p-2 bg-[#141416]/98 border border-[#4a4457]/80 rounded-xl shadow-2xl z-50 flex flex-col gap-2 min-w-[170px] animate-[fadeIn_0.1s_ease-out]">
-                  <span className="text-[10px] text-white/50 font-bold uppercase tracking-wider">
+                <div className="absolute left-full top-0 ml-2 p-2.5 bg-white/98 dark:bg-slate-950/98 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl z-50 flex flex-col gap-2 min-w-[170px] backdrop-blur-xl animate-[fadeIn_0.1s_ease-out]">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
                     Palette Preset
                   </span>
                   <div className="grid grid-cols-5 gap-1.5">
@@ -131,7 +139,9 @@ export default function DrawingToolbar({
                           setIsColorPickerOpen(false);
                         }}
                         className={`w-5 h-5 rounded-md border transition-transform hover:scale-110 cursor-pointer ${
-                          activeColor === p.hex ? 'border-white ring-2 ring-white/40' : 'border-white/20'
+                          activeColor === p.hex
+                            ? 'border-slate-900 dark:border-white ring-2 ring-indigo-500/40 dark:ring-cyan-500/40'
+                            : 'border-slate-200 dark:border-slate-800'
                         }`}
                         style={{ backgroundColor: p.hex }}
                         title={p.name}
@@ -142,54 +152,82 @@ export default function DrawingToolbar({
               )}
             </div>
 
-            <div className="w-5 h-[1px] bg-[#4a4457]/40 my-1.5" />
+            <div className="w-5 h-[1px] bg-slate-200 dark:bg-slate-800 my-1.5" />
 
             {/* Undo / Redo */}
             <div className="flex flex-col gap-1">
               <button
                 onClick={onUndo}
-                className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
-                title="Undo (Ctrl+Z)"
+                className="relative p-1.5 rounded-lg text-slate-600 hover:text-slate-950 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60 transition-colors cursor-pointer group"
               >
                 <Undo2 className="w-3.5 h-3.5" />
+                <div
+                  role="tooltip"
+                  className="hidden [@media(hover:hover)_and_(pointer:fine)]:group-hover:flex custom-tooltip absolute left-full ml-2.5 px-2.5 py-1 bg-slate-900/95 dark:bg-slate-950/95 border border-slate-700/90 dark:border-slate-800/90 rounded-md text-[10px] text-white whitespace-nowrap pointer-events-none shadow-xl z-50 items-center gap-1.5 font-bold font-mono"
+                >
+                  <span>Undo</span>
+                  <kbd className="px-1.5 py-0.5 bg-white/20 dark:bg-white/15 border border-white/25 rounded text-[9px] text-white font-mono font-bold leading-none">
+                    Ctrl+Z
+                  </kbd>
+                </div>
               </button>
               <button
                 onClick={onRedo}
-                className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors cursor-pointer group"
-                title="Redo (Ctrl+Y)"
+                className="relative p-1.5 rounded-lg text-slate-600 hover:text-slate-950 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60 transition-colors cursor-pointer group"
               >
                 <Redo2 className="w-3.5 h-3.5" />
+                <div
+                  role="tooltip"
+                  className="hidden [@media(hover:hover)_and_(pointer:fine)]:group-hover:flex custom-tooltip absolute left-full ml-2.5 px-2.5 py-1 bg-slate-900/95 dark:bg-slate-950/95 border border-slate-700/90 dark:border-slate-800/90 rounded-md text-[10px] text-white whitespace-nowrap pointer-events-none shadow-xl z-50 items-center gap-1.5 font-bold font-mono"
+                >
+                  <span>Redo</span>
+                  <kbd className="px-1.5 py-0.5 bg-white/20 dark:bg-white/15 border border-white/25 rounded text-[9px] text-white font-mono font-bold leading-none">
+                    Ctrl+Y
+                  </kbd>
+                </div>
               </button>
             </div>
 
-            <div className="w-5 h-[1px] bg-[#4a4457]/40 my-1.5" />
+            <div className="w-5 h-[1px] bg-slate-200 dark:bg-slate-800 my-1.5" />
 
             {/* Visibility Toggle */}
-            <button
-              onClick={onToggleVisibility}
-              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                isGlobalVisible
-                  ? 'text-white/60 hover:text-white hover:bg-white/10'
-                  : 'text-amber-400/80 bg-amber-400/10 hover:bg-amber-400/20'
-              }`}
-              title={isGlobalVisible ? 'Hide All Drawings' : 'Show All Drawings'}
-            >
-              {isGlobalVisible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-            </button>
+            <div className="relative">
+              <button
+                onClick={onToggleVisibility}
+                className={`relative p-1.5 rounded-lg transition-colors cursor-pointer group ${
+                  isGlobalVisible
+                    ? 'text-slate-600 hover:text-slate-950 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800/60'
+                    : 'text-amber-600 bg-amber-500/10 hover:bg-amber-500/20 dark:text-amber-400'
+                }`}
+              >
+                {isGlobalVisible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                <div
+                  role="tooltip"
+                  className="hidden [@media(hover:hover)_and_(pointer:fine)]:group-hover:flex custom-tooltip absolute left-full ml-2.5 px-2.5 py-1 bg-slate-900/95 dark:bg-slate-950/95 border border-slate-700/90 dark:border-slate-800/90 rounded-md text-[10px] text-white whitespace-nowrap pointer-events-none shadow-xl z-50 font-bold font-mono"
+                >
+                  {isGlobalVisible ? 'Hide Drawings' : 'Show Drawings'}
+                </div>
+              </button>
+            </div>
 
             {/* Clear All Drawings */}
             <div className="relative">
               <button
                 onClick={() => setIsClearConfirmOpen(!isClearConfirmOpen)}
-                className="p-1.5 rounded-lg text-red-400/70 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
-                title="Clear All Drawings"
+                className="relative p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:text-rose-400/80 dark:hover:text-rose-300 dark:hover:bg-rose-500/10 transition-colors cursor-pointer group"
               >
                 <Trash2 className="w-3.5 h-3.5" />
+                <div
+                  role="tooltip"
+                  className="hidden [@media(hover:hover)_and_(pointer:fine)]:group-hover:flex custom-tooltip absolute left-full ml-2.5 px-2.5 py-1 bg-slate-900/95 dark:bg-slate-950/95 border border-slate-700/90 dark:border-slate-800/90 rounded-md text-[10px] text-white whitespace-nowrap pointer-events-none shadow-xl z-50 font-bold font-mono"
+                >
+                  Clear All
+                </div>
               </button>
 
               {isClearConfirmOpen && (
-                <div className="absolute left-full top-0 ml-2 p-2.5 bg-[#141416]/98 border border-red-500/50 rounded-xl shadow-2xl z-50 flex flex-col gap-2 min-w-[180px] animate-[fadeIn_0.1s_ease-out]">
-                  <span className="text-[10px] text-red-300 font-bold">
+                <div className="absolute left-full top-0 ml-2 p-2.5 bg-white/98 dark:bg-slate-950/98 border border-rose-500/30 rounded-xl shadow-2xl z-50 flex flex-col gap-2 min-w-[180px] backdrop-blur-xl animate-[fadeIn_0.1s_ease-out]">
+                  <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold">
                     Clear all {drawingCount} drawings?
                   </span>
                   <div className="flex items-center gap-2">
@@ -198,13 +236,13 @@ export default function DrawingToolbar({
                         onClearAll();
                         setIsClearConfirmOpen(false);
                       }}
-                      className="flex-1 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/40 rounded px-2 py-1 text-[10px] font-bold cursor-pointer transition-colors"
+                      className="flex-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-700 dark:text-rose-300 border border-rose-500/40 rounded px-2 py-1 text-[10px] font-bold cursor-pointer transition-colors"
                     >
                       Clear
                     </button>
                     <button
                       onClick={() => setIsClearConfirmOpen(false)}
-                      className="flex-1 bg-white/10 hover:bg-white/15 text-white/80 rounded px-2 py-1 text-[10px] font-bold cursor-pointer transition-colors"
+                      className="flex-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded px-2 py-1 text-[10px] font-bold cursor-pointer transition-colors"
                     >
                       Cancel
                     </button>

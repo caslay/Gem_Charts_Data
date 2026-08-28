@@ -741,10 +741,10 @@ export default function BacktestPage() {
           {/* Potential Trades Modal Trigger */}
           <button
             onClick={() => setIsPotentialTradesOpen(true)}
-            className="bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 px-3.5 py-2 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm"
+            className="bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-700 dark:text-purple-300 px-3.5 py-2 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm"
             title="Open Replay Potential Trades Modal"
           >
-            <Zap className="w-3.5 h-3.5 text-purple-400" />
+            <Zap className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
             <span>[ POTENTIAL TRADES ]</span>
           </button>
 
@@ -754,7 +754,7 @@ export default function BacktestPage() {
               onClick={() => setIsStrategyDropdownOpen(!isStrategyDropdownOpen)}
               className={`border px-3.5 py-2 font-mono text-[10px] font-black uppercase tracking-widest transition-all rounded-full cursor-pointer flex items-center gap-1.5 shadow-sm ${
                 backtestSr.isAutoExecuteEnabled
-                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/25 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
+                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/25 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
                   : 'bg-card border-card-border text-slate-500 dark:text-zinc-400 hover:text-foreground hover:border-accent'
               }`}
               title="Select Replay Quantitative Strategy & Preset"
