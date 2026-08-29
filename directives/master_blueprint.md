@@ -1,8 +1,30 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.89
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.90
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-29 (V16.89 — UI Sandbox & Compounding Matrix Clean Architecture Retirement)
+> **Last Updated:** 2026-08-29 (V16.90 — Automated Production Branch Synchronization & Exclusion Pipeline)
+
+## 🆕 V16.90 Changelog — Automated Production Branch Synchronization & Exclusion Pipeline (2026-08-29)
+
+### Summary
+Implemented **Method A (Automated GitHub Action & Local Isolated Worktree Sync Pipeline)** to ensure the `main` production branch contains strictly clean, production-only application and trading engine code while keeping `dev` 100% untouched with all research datasets, offline backtests, directives, and logs.
+
+### Key Architectural Deliverables
+1. **Declarative Exclusion Manifest (`.prodignore`):** Centralized all non-production paths (offline backtest JSONs in `scratch/`, `learning/`, `temp_docx/`, `package/`, `run_logs/`, `indicators/`, `graphify-out/`, `.cache/`, `.agents/`, `.venv/`, `directives/`, `docs/`, and legacy archives/txt dumps).
+2. **Automated GitHub Actions CI/CD Pipeline (`.github/workflows/production-sync.yml`):**
+   - Automatically sanitizes and syncs `dev` to `main` upon push or via `workflow_dispatch`.
+   - Runs `npm ci` and verifies full Next.js production build (`npm run build`) in CI before committing to `main`.
+3. **Isolated Local Production Sync Runner (`scripts/sync-prod.ts` & `npm run sync:prod`):**
+   - Uses temporary git worktrees (`.git/temp_prod_worktree`) to prune and verify production builds locally without mutating the developer's working directory or modifying `dev`.
+   - Supports `--dry-run` and `--push` CLI flags.
+4. **Clean Code Guard Pass:** Zero error swallowing, single-responsibility functions, and strict type safety across all sync tooling.
+
+### Files Created & Modified
+- **`.prodignore`** [NEW]
+- **`.github/workflows/production-sync.yml`** [NEW]
+- **`scripts/sync-prod.ts`** [NEW]
+- **`package.json`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
 
 ## 🆕 V16.89 Changelog — UI Sandbox & Compounding Matrix Clean Architecture Retirement (2026-08-29)
 
