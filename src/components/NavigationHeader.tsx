@@ -9,8 +9,6 @@ import {
   Activity,
   History,
   FlaskConical,
-  TrendingUp,
-  Sparkles,
   BookOpen,
   Settings,
   RotateCcw,
@@ -46,8 +44,6 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/', label: 'Live HUD', tag: 'Cockpit', icon: Activity },
   { href: '/backtest', label: 'Backtest', tag: 'Engine', icon: History },
   { href: '/quant-lab', label: 'Quant Lab', tag: 'Scanners', icon: FlaskConical },
-  { href: '/compounding', label: 'Compounding', tag: 'Growth', icon: TrendingUp },
-  { href: '/quant-sandbox', label: 'UI Sandbox', tag: 'Design', icon: Sparkles },
   { href: '/journal', label: 'Journal', tag: 'Logs', icon: BookOpen },
   { href: '/settings', label: 'Settings', tag: 'Config', icon: Settings },
 ];
