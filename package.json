@@ -10,7 +10,9 @@
     "dev:api": ".\\.venv\\Scripts\\python.exe -m uvicorn api.index:app --reload --port 8000",
     "daemon": "tsx scripts/headless-daemon.ts",
     "daemon:dry": "tsx scripts/headless-daemon.ts --dry-run",
-    "reconcile": "tsx scripts/reconcile-session.ts"
+    "reconcile": "tsx scripts/reconcile-session.ts",
+    "sync:prod": "tsx scripts/sync-prod.ts",
+    "sync:prod:dry": "tsx scripts/sync-prod.ts --dry-run"
   },
   "dependencies": {
     "@auth/core": "^0.41.2",

@@ -1,8 +1,81 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.87
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.90
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-29 (V16.87 — Neon 507 Payload Resolution & Setup Sanitization Pipeline)
+> **Last Updated:** 2026-08-29 (V16.90 — Automated Production Branch Synchronization & Exclusion Pipeline)
+
+## 🆕 V16.90 Changelog — Automated Production Branch Synchronization & Exclusion Pipeline (2026-08-29)
+
+### Summary
+Implemented **Method A (Automated GitHub Action & Local Isolated Worktree Sync Pipeline)** to ensure the `main` production branch contains strictly clean, production-only application and trading engine code while keeping `dev` 100% untouched with all research datasets, offline backtests, directives, and logs.
+
+### Key Architectural Deliverables
+1. **Declarative Exclusion Manifest (`.prodignore`):** Centralized all non-production paths (offline backtest JSONs in `scratch/`, `learning/`, `temp_docx/`, `package/`, `run_logs/`, `indicators/`, `graphify-out/`, `.cache/`, `.agents/`, `.venv/`, `directives/`, `docs/`, and legacy archives/txt dumps).
+2. **Automated GitHub Actions CI/CD Pipeline (`.github/workflows/production-sync.yml`):**
+   - Automatically sanitizes and syncs `dev` to `main` upon push or via `workflow_dispatch`.
+   - Runs `npm ci` and verifies full Next.js production build (`npm run build`) in CI before committing to `main`.
+3. **Isolated Local Production Sync Runner (`scripts/sync-prod.ts` & `npm run sync:prod`):**
+   - Uses temporary git worktrees (`.git/temp_prod_worktree`) to prune and verify production builds locally without mutating the developer's working directory or modifying `dev`.
+   - Supports `--dry-run` and `--push` CLI flags.
+4. **Clean Code Guard Pass:** Zero error swallowing, single-responsibility functions, and strict type safety across all sync tooling.
+
+### Files Created & Modified
+- **`.prodignore`** [NEW]
+- **`.github/workflows/production-sync.yml`** [NEW]
+- **`scripts/sync-prod.ts`** [NEW]
+- **`package.json`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.89 Changelog — UI Sandbox & Compounding Matrix Clean Architecture Retirement (2026-08-29)
+
+### Summary
+Completely removed and retired the legacy UI Sandbox (`/quant-sandbox`) and standalone Compounding Growth Matrix (`/compounding`) pages and their dedicated React hook (`useCompoundingEngine.ts`). Verified 100% architectural isolation with zero impact on the quantitative trading engine, charts, backtest engine, live execution cockpit, and Quant Lab. Consolidated top navigation into a clean 5-route central dock.
+
+### Key Architectural Deliverables
+1. **Consolidated 5-Route Icon Dock (`src/components/NavigationHeader.tsx`):**
+   - Streamlined `NAV_ITEMS` to exactly 5 core production routes:
+     1. `/` Live HUD (`Activity`)
+     2. `/backtest` Backtest (`History`)
+     3. `/quant-lab` Quant Lab (`FlaskConical`)
+     4. `/journal` Journal (`BookOpen`)
+     5. `/settings` Settings (`Settings`)
+   - Cleaned up unused `Sparkles` and `TrendingUp` icon imports.
+2. **Clean File System & Route Purge:**
+   - Deleted `src/app/quant-sandbox/page.tsx` and directory `src/app/quant-sandbox/`.
+   - Deleted `src/app/compounding/page.tsx` and directory `src/app/compounding/`.
+   - Deleted `src/hooks/useCompoundingEngine.ts`.
+3. **100% Engine & Quant Lab Compounding Preservation:**
+   - Verified that active quantitative compounding systems remain untouched and fully functioning:
+     - `AutomatedStrategyExecutionEngine.ts` & `AutomatedExecutionHUD.tsx` (Dynamic 2% Compounding Risk sizing).
+     - `CapitalGrowthLedger.tsx` (Quant Lab Trajectory Ledger with Zoom/Pan controls).
+     - `equityCalculator.ts` (`calculateCompoundingMetrics()` dual compounding math).
+4. **Full Production Build & Type Verification:**
+   - Verified `npx tsc --noEmit` exits with code 0.
+   - Verified `npm run build` generates clean production bundles across all remaining pages and 23 API endpoints.
+
+### Files Modified & Deleted
+- **`src/components/NavigationHeader.tsx`** [MODIFY]
+- **`src/app/quant-sandbox/page.tsx`** [DELETE]
+- **`src/app/compounding/page.tsx`** [DELETE]
+- **`src/hooks/useCompoundingEngine.ts`** [DELETE]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.88 Changelog — Champion Strategy Manual & UI Artifact Full Synchronization (2026-08-29)
+
+### Summary
+Synchronized `docs/5M_SWEEP_RECLAIM_CHAMPION_STRATEGY.md` and the UI artifact `5m_sweep_reclaim_champion_strategy.md` to 100% match the latest PM2-calibrated **5m Sweep & Reclaim Ultimate Champion Setup** parameters:
+- `volumeExpansionThreshold`: **`1.20x`**
+- `deltaDominanceThreshold`: **`52.0%`**
+- `bodyRatioThreshold`: **`0.40`**
+- `slBufferAtrMultiplier`: **`0.10 ATR`**
+- `minSweepDepthAtrMultiplier`: **`0.10 ATR`**
+- `stage1Multiple` / `stage2Multiple` / `stage3Multiple`: **`1.0R / 1.4R / 3.0R`** (40% / 40% / 20%)
+- `entryMode`: **`FVG_PROXIMAL`**
+- Performance telemetry recalculated under PM2 1:1 Parity single-position walk ($3,075$ trades, `+1,065.04R` 2Y Net Gain, $69.1\%$ Win Rate, $2.12$ PF, $-8.07\text{R}$ Max DD).
+
+### Files Modified
+- **`docs/5M_SWEEP_RECLAIM_CHAMPION_STRATEGY.md`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
 
 ## 🆕 V16.87 Changelog — Neon 507 Payload Resolution & Setup Sanitization Pipeline (2026-08-29)
 

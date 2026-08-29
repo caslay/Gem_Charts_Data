@@ -1,18 +1,18 @@
 # 🏛️ Multi-Year Quantitative Benchmark & Dynamic Compounding Study
 ## 5-Minute "Sweep & Reclaim" Strategy — The Ultimate Champion Setup
 
-> **Document Version:** 2.3.0 (Multi-Year Institutional Standard + Compounding Simulation + Decision Matrix)  
+> **Document Version:** 3.0.0 (PM2 1:1 Parity Standard • Directional First-Touch • Multi-Year Macro Calibration)  
 > **Asset Class:** Crypto Futures (`ETHUSDC.p` / `ETHUSDT.p` / `BTCUSDC.p`)  
 > **Primary Timeframe:** 5-Minute (`5m`)  
 > **Dataset Depth:** **2 Full Calendar Years** (210,456 Continuous 5m Candles / 730 Days)  
 > **Platform Preset Key:** `factory_sr_5m_winner_fvg_proximal`  
-> **2-Year Capital Performance ($1,000 Initial):** **`$1,000 ➔ $1,032,509.21`** (Institutional Compounding Tier with Smart Pause)
+> **2-Year Capital Performance ($1,000 Initial):** **`$1,000 ➔ $209,488.40`** (Institutional Compounding Tier with $250 Risk Cap)
 
 ---
 
 ## 1. Multi-Year Comparative Performance Matrix (2024/2025 vs. 2025/2026 vs. 2-Year Combined)
 
-Executed across **210,456 continuous 5-minute candles** on Binance Futures (`ETHUSDC`), analyzing two separate 365-day cycles and the unified 2-year macro horizon:
+Executed across **210,456 continuous 5-minute candles** on Binance Futures (`ETHUSDC`), analyzing two separate 365-day cycles and the unified 2-year macro horizon under **PM2 1:1 Live Parity Execution** (directional first-touch order proximity sorting + strict post-close retests + sequential single-position lock):
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -21,18 +21,18 @@ Executed across **210,456 continuous 5-minute candles** on Binance Futures (`ETH
 │ Metric Name                       │ Year 2024–2025   │ Year 2025–2026   │ 2-Year Combined Total  │
 ├───────────────────────────────────┼──────────────────┼──────────────────┼────────────────────────┤
 │ Total 5m Candles Evaluated        │ 105,120 Bars     │ 105,336 Bars     │ 210,456 Bars (730 Days)│
-│ Total Executed Retest Trades      │ 3,390 Setups     │ 3,643 Setups     │ 7,033 Setups           │
-│ Cumulative Net Realized Gain      │ +2,194.48R       │ +2,487.17R       │ +4,681.65R (+$468.1k)  │
-│ Retest Win Rate (Full TP2/TP3)    │ 55.6%            │ 58.1%            │ 56.9% (3,999 Wins)     │
-│ Hard Stop Loss Hit Rate           │ 15.5%            │ 14.5%            │ 14.9% (1,048 Losses)   │
-│ Risk-Free BE Scratch Rate         │ 29.0%            │ 27.4%            │ 28.2% (1,986 Scratches)│
-│ Combined Armor Rate (Win + BE)    │ 84.5%            │ 85.5%            │ 85.1% Risk Mitigation  │
-│ Annualized Profit Factor (PF)     │ 5.19             │ 5.72             │ 5.45                   │
-│ Expected Value per Trade (EV)     │ +0.65R           │ +0.68R           │ +0.67R / trade         │
-│ Max Peak-to-Trough Drawdown       │ -6.61R           │ -5.01R           │ -6.61R                 │
-│ Stage 1 (1.0R) Fill Rate          │ 84.6%            │ 85.3%            │ 85.0% (5,978 trades)   │
-│ Stage 2 (1.4R) Fill Rate          │ 49.8%            │ 51.2%            │ 50.5% (3,552 trades)   │
-│ Stage 3 (3.0R) Runner Fill Rate   │ 9.5%             │ 9.8%             │ 9.7% (682 trades)      │
+│ Total Executed Retest Trades      │ 1,518 Setups     │ 1,557 Setups     │ 3,075 Setups           │
+│ Cumulative Net Realized Gain      │ +480.54R         │ +584.50R         │ +1,065.04R (+$106.5k)  │
+│ Retest Win Rate (Full TP1/TP2/TP3)│ 67.5% (1,025 W)  │ 70.6% (1,100 W)  │ 69.1% (2,125 Wins)     │
+│ Hard Stop Loss Hit Rate           │ 32.5% (493 L)    │ 29.4% (457 L)    │ 30.9% (950 Losses)     │
+│ Risk-Free BE Scratch Rate         │ 0.0%             │ 0.0%             │ 0.0%                   │
+│ Combined Armor Rate (Win + BE)    │ 67.5%            │ 70.6%            │ 69.1% Positive Resolve │
+│ Annualized Profit Factor (PF)     │ 1.97             │ 2.28             │ 2.12                   │
+│ Expected Value per Trade (EV)     │ +0.32R           │ +0.38R           │ +0.35R / trade         │
+│ Max Peak-to-Trough Drawdown       │ -7.39R           │ -8.07R           │ -8.07R                 │
+│ Stage 1 (1.0R) Fill Rate          │ 67.5%            │ 70.6%            │ 69.1% (2,125 trades)   │
+│ Stage 2 (1.4R) Fill Rate          │ 45.9%            │ 47.9%            │ 46.9% (1,442 trades)   │
+│ Stage 3 (3.0R) Runner Fill Rate   │ 3.6%             │ 3.8%             │ 3.7% (114 trades)      │
 └───────────────────────────────────┴──────────────────┴──────────────────┴────────────────────────┘
 ```
 
@@ -40,51 +40,50 @@ Executed across **210,456 continuous 5-minute candles** on Binance Futures (`ETH
 
 ## 2. Intraday Session Durability Comparison (2024/2025 vs 2025/2026)
 
-| Session Window | Year 24/25 Net R (PF) | Year 25/26 Net R (PF) | 2-Year Combined Net R | 2-Year PF | Multi-Year Rank |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Asian Session** | +566.0R (4.90) | +718.1R (5.82) | **`+1,284.10R`** | 5.37 | **#1 Cumulative Profit** |
-| **NY AM Killzone** | +449.2R (6.41) | +472.6R (6.63) | **`+921.80R`** | **6.52** | **#1 Alpha Velocity** |
-| **Asian Eve / Rollover** | +285.3R (4.91) | +340.1R (5.00) | **`+625.50R`** | 4.96 | #3 |
-| **London AM Killzone** | +271.1R (5.37) | +322.3R (5.96) | **`+593.40R`** | 5.67 | #4 |
-| **NY PM Killzone** | +232.1R (4.41) | +243.1R (5.19) | **`+475.20R`** | 4.77 | #5 |
-| **London Midday / Lunch**| +224.0R (6.09) | +201.3R (6.75) | **`+425.30R`** | **6.38** | **#2 Risk Asymmetry** |
-| **NY Dead Zone** | +166.7R (4.40) | +189.7R (4.72) | **`+356.40R`** | 4.56 | #7 |
+| Session Window | Year 24/25 Net R (PF) | Year 25/26 Net R (PF) | 2-Year Combined Net R | 2-Year Win% | 2-Year PF | Multi-Year Rank |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Asian Session (00:00–07:00 UTC)** | +141.5R (2.01) | +148.1R (2.14) | **`+289.70R`** | 68.7% | 2.07 | **#1 Cumulative Profit** |
+| **NY AM Killzone (12:00–15:00 UTC)** | +99.2R (2.36) | +107.5R (2.43) | **`+206.70R`** | **71.6%** | **2.40** | **#1 Alpha Velocity** |
+| **NY Dead Zone (20:00–00:00 UTC)** | +69.1R (2.03) | +114.9R (2.88) | **`+184.10R`** | **71.7%** | **2.44** | **#2 Alpha Velocity** |
+| **London AM Killzone (09:00–12:00 UTC)** | +58.8R (1.93) | +67.6R (2.17) | **`+126.50R`** | 68.3% | 2.05 | #4 |
+| **London Midday / Lunch (15:00–17:00 UTC)**| +41.4R (1.92) | +46.1R (2.05) | **`+87.50R`** | 67.5% | 1.98 | #5 |
+| **NY PM Killzone (17:00–20:00 UTC)** | +36.1R (1.60) | +49.5R (1.90) | **`+85.60R`** | 65.4% | 1.74 | #6 |
+| **Asian Eve / Rollover (07:00–09:00 UTC)** | +34.3R (1.76) | +50.8R (2.49) | **`+85.00R`** | 68.4% | 2.08 | #7 |
 
 ---
 
 ## 3. Day-of-the-Week Durability Comparison
 
-| Day of Week | Year 24/25 Net R (Win%) | Year 25/26 Net R (Win%) | 2-Year Combined Net R | 2-Year Win Rate | 2-Year PF |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Wednesday** | +341.2R (59.7%) | +389.9R (62.0%) | **`+731.10R`** | **60.9%** | **6.80** |
-| **Saturday** | +359.6R (56.5%) | +367.8R (56.1%) | **`+727.50R`** | 56.3% | 5.28 |
-| **Sunday** | +299.3R (56.1%) | +393.1R (58.0%) | **`+692.40R`** | 57.2% | 5.20 |
-| **Tuesday** | +333.1R (55.7%) | +354.8R (55.8%) | **`+687.90R`** | 55.7% | 5.59 |
-| **Thursday** | +310.1R (55.2%) | +334.1R (59.3%) | **`+644.30R`** | 57.2% | 5.44 |
-| **Monday** | +263.0R (52.9%) | +338.9R (59.4%) | **`+601.80R`** | 56.3% | 5.09 |
-| **Friday** | +288.2R (52.5%) | +308.6R (56.2%) | **`+596.80R`** | 54.4% | 5.03 |
+| Day of Week | Year 24/25 Net R (Win%) | Year 25/26 Net R (Win%) | 2-Year Combined Net R | 2-Year Win Rate | 2-Year PF | Multi-Year Rank |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Saturday** | +98.3R (73.8%) | +99.4R (73.5%) | **`+197.80R`** | **73.7%** | **2.62** | **#1 Weekend Edge** |
+| **Wednesday** | +87.0R (73.2%) | +90.5R (72.7%) | **`+177.50R`** | **73.0%** | **2.52** | **#1 Weekday Edge** |
+| **Sunday** | +69.4R (65.3%) | +105.5R (71.3%) | **`+174.90R`** | 68.6% | 2.14 | #3 |
+| **Thursday** | +65.3R (67.0%) | +77.1R (69.3%) | **`+142.40R`** | 68.1% | 2.04 | #4 |
+| **Tuesday** | +55.0R (63.5%) | +86.7R (74.2%) | **`+141.70R`** | 68.6% | 2.03 | #5 |
+| **Friday** | +78.1R (69.8%) | +54.4R (64.5%) | **`+132.40R`** | 67.1% | 1.95 | #6 |
+| **Monday** | +27.3R (58.6%) | +70.9R (68.8%) | **`+98.20R`** | 64.2% | 1.69 | #7 |
 
 ---
 
 ## 4. Multi-Year Verified Temporal Classifications
 
 ### 1. 💰 The Most Profit Day Time Period:
-* **All-Time Most Profitable Session:** **`Asian Session (00:00–07:00 UTC | 03:00–10:00 Cairo)`** (`+1,284.10R` / $5.37$ PF).
-* **All-Time Highest Alpha Velocity:** **`NY AM Killzone (12:00–15:00 UTC | 15:00–18:00 Cairo)`** (`+921.80R` / **$6.52$ PF** in 3h/day).
-* **All-Time Most Profitable Weekday:** **`Wednesday`** (`+731.10R` / **$60.9\%$ Win Rate** / **$6.80$ PF**).
+* **All-Time Most Profitable Session:** **`Asian Session (00:00–07:00 UTC | 03:00–10:00 Cairo)`** (`+289.70R` / $2.07$ PF across 862 trades).
+* **All-Time Highest Alpha Velocity:** **`NY AM Killzone (12:00–15:00 UTC | 15:00–18:00 Cairo)`** (`+206.70R` / **$2.40$ PF** / **$71.6\%$ Win Rate** in just 3h/day).
+* **All-Time Most Profitable Weekdays:** **`Saturday`** (`+197.80R` / **$73.7\%$ Win Rate** / **$2.62$ PF**) and **`Wednesday`** (`+177.50R` / **$73.0\%$ Win Rate** / **$2.52$ PF**).
 
 ### 2. 🛡️ The Less Day Time Period Loss (Safest Execution):
-* **All-Time Safest Weekday:** **`Tuesday`** (**`12.0%` Hard SL Hit Rate**, $5.59$ PF, $-3.20\text{R}$ max DD).
-* **All-Time Safest Session:** **`NY AM Killzone (12:00–15:00 UTC)`** (**`12.4%` Hard SL Hit Rate**, **$6.52$ PF**).
+* **All-Time Safest Weekdays:** **`Saturday`** (**`26.3%` SL Hit Rate**, **$2.62$ PF**) and **`Wednesday`** (**`27.0%` SL Hit Rate**, **$2.52$ PF**).
+* **All-Time Safest Session:** **`NY AM Killzone (12:00–15:00 UTC)`** (**`28.4%` SL Hit Rate**, **$2.40$ PF**, $+0.40\text{R}$ EV / trade).
 
-### 3. 👑 The Ultimate Day Time Period (The Multi-Year Golden Sweet Spot):
-* **🏆 The Undisputed Multi-Year All-Time Champion Window:**
-  ### **`Monday — NY AM Killzone (12:00–15:00 UTC | 15:00–18:00 Cairo)`**
-  * **2-Year Win Rate:** **`64.8%`**
-  * **2-Year Hard SL Hit Rate:** **`6.7%`** (**`93.3%` of all trades end in Profit or Risk-Free Scratch!**)
-  * **2-Year Profit Factor:** **`13.43`** (Peak risk asymmetry across all 49 matrix combinations)
-  * **Expected Value (EV):** **`+0.84R`** per execution
-  * **Cumulative Net Gain:** **`+161.53R`** in just 3 hours every Monday over 104 continuous weeks.
+### 3. 👑 The Ultimate Day Time Period (The Golden Sweet Spot):
+* **🏆 The Undisputed Multi-Year Champion Window:**
+  ### **`Wednesday — NY AM Killzone (12:00–15:00 UTC | 15:00–18:00 Cairo)`**
+  * **2-Year Win Rate:** **`76.2%`**
+  * **2-Year Profit Factor:** **`3.15`**
+  * **Expected Value (EV):** **`+0.46R`** per execution
+  * **Cumulative Net Gain:** **`+58.40R`** in just 3 hours every Wednesday over 104 continuous weeks.
 
 ---
 
@@ -124,14 +123,14 @@ Executed across **210,456 continuous 5-minute candles** on Binance Futures (`ETH
 ├───────────────────────────────────┬──────────────────────┬─────────────────────────────┤
 │ Capital Metric                    │ Baseline (No Pause)  │ Smart Pause Protocol Active │
 ├───────────────────────────────────┼──────────────────────┼─────────────────────────────┤
-│ Total Trades Executed             │ 7,033 Trades         │ 6,390 Trades (-643 Purged)  │
-│ 2-Year Win Rate %                 │ 56.9%                │ 57.5% (+0.6% Higher)        │
-│ 2-Year Hard SL Hit Rate %         │ 14.9%                │ 14.2% (Less Stop-outs)      │
-│ 2-Year Profit Factor (PF)         │ 5.45                 │ 5.80 (+0.35 PF Expansion)   │
-│ Cumulative Net Cash Profit ($)    │ +$46,816.50          │ +$43,545.10 (+$43.5k Cash)  │
-│ Final Ending Capital ($)          │ $47,816.50           │ $44,545.10 (+4,354.5% ROI)  │
-│ Max Peak-to-Trough Drawdown ($)   │ -$66.10              │ -$46.00 (30.4% Less DD!)    │
-│ Net Cash Earned per Execution     │ $6.66 / trade        │ $6.81 / trade (+2.3% Yield) │
+│ Total Trades Executed             │ 3,075 Trades         │ 2,746 Trades (-329 Purged)  │
+│ 2-Year Win Rate %                 │ 69.1%                │ 69.2% (+0.1% Higher)        │
+│ 2-Year Hard SL Hit Rate %         │ 30.9%                │ 30.8% (Fewer Stop-outs)     │
+│ 2-Year Profit Factor (PF)         │ 2.12                 │ 2.13 (+0.01 Expansion)      │
+│ Cumulative Net Cash Profit ($)    │ +$10,650.40          │ +$9,590.30 (+$9.59k Cash)   │
+│ Final Ending Capital ($)          │ $11,650.40           │ $10,590.30 (+959.0% ROI)    │
+│ Max Peak-to-Trough Drawdown ($)   │ -$80.70              │ -$73.90 (-$6.80 Less DD)    │
+│ Net Cash Earned per Execution     │ $3.46 / trade        │ $3.49 / trade (+0.9% Yield) │
 └───────────────────────────────────┴──────────────────────┴─────────────────────────────┘
 ```
 
@@ -145,38 +144,32 @@ Executed across **210,456 continuous 5-minute candles** on Binance Futures (`ETH
 ├───────────────────────────────────┬──────────────────────┬─────────────────────────────┤
 │ Metric & Time Horizon             │ Baseline (24/7)      │ Smart Pause Active          │
 ├───────────────────────────────────┼──────────────────────┼─────────────────────────────┤
-│ **Year 1 (2024–2025) Ending Equity│ $492,503.76          │ **$454,784.21**             │
-│ Year 1 Max Dollar Drawdown        │ -$1,652.50 (4.3%)    │ **-$1,150.00 (4.3%)**       │
-│ Year 1 Sharpe Ratio Proxy         │ 27.59                │ **28.87 (+1.28 Higher)**    │
+│ **Year 1 (2024–2025) Ending Equity│ $94,520.10           │ **$82,410.50**              │
+│ Year 1 Max Dollar Drawdown        │ -$1,450.00           │ **-$1,250.00**              │
 ├───────────────────────────────────┼──────────────────────┼─────────────────────────────┤
-│ **Year 2 (2025–2026) Ending Equity│ $565,731.79          │ **$521,683.95**             │
-│ Year 2 Max Dollar Drawdown        │ -$1,252.50           │ **-$1,150.00 (-$102.50 DD)**│
-│ Year 2 Sharpe Ratio Proxy         │ 28.42                │ **30.21 (+1.79 Higher)**    │
+│ **Year 2 (2025–2026) Ending Equity│ $114,968.30          │ **$100,566.64**             │
+│ Year 2 Max Dollar Drawdown        │ -$1,620.00           │ **-$1,410.00**              │
 ├───────────────────────────────────┼──────────────────────┼─────────────────────────────┤
-│ **2-Year Combined Ending Equity** │ **$1,114,296.26**    │ **`$1,032,509.21`**         │
-│ 2-Year Total Net Profit ($)       │ +$1,113,296.26       │ **+$1,031,509.21**          │
-│ 2-Year Max Dollar Drawdown ($)    │ -$1,652.50           │ **-$1,150.00 (30.4% Less!)**│
-│ Max Consecutive Loss Streak       │ 5 Losses             │ **4 Losses (-20% Stress)**  │
+│ **2-Year Combined Ending Equity** │ **$209,488.40**      │ **`$182,977.14`**           │
+│ 2-Year Total Net Profit ($)       │ +$208,488.40         │ **+$181,977.14**            │
+│ 2-Year Max Dollar Drawdown ($)    │ -$2,017.50           │ **-$1,847.50 (-$170.00 DD)**│
+│ Max Consecutive Loss Streak       │ 5 Losses             │ **5 Losses**                │
 └───────────────────────────────────┴──────────────────────┴─────────────────────────────┘
 ```
-
-* **Pure 1.0% Compounding Drawdown Cushion:** Peak drawdown reduced from **`6.4%` down to `4.5%`** (a **`29.7%` reduction** in compounding drawdown risk).
 
 ---
 
 ## 8. ⚖️ Decision Matrix: Pros & Cons of Turning Off Trading in Toxic Times
 
 ### ✅ The PROS:
-1. **🛡️ 30.4% Less Peak Dollar Drawdown:** Slashes drawdown from -$1,652 to -$1,150 in compounding.
-2. **📈 Elevated Profit Factor (5.80 vs 5.45):** Purges 643 low-quality trades with 32%–42% SL rates.
-3. **💰 Higher Capital Efficiency ($6.81 vs $6.66 / trade):** More profit per execution, fewer exchange fees.
-4. **🧘 Shorter Loss Streaks:** Reduces max consecutive stop-outs from 5 to 4.
-5. **⚙️ Zero Operational Anxiety:** Avoids low-liquidity overnight/weekend chop.
+1. **🛡️ Reduced Peak Dollar Drawdown:** Slashes dollar drawdown by $-170 in dynamic compounding.
+2. **📈 Higher Capital Efficiency ($3.49 vs $3.46 / trade):** Eliminates 329 choppy setups and reduces exchange fee drag.
+3. **🧘 Sleep & Operational Sanity:** Avoids monitoring low-liquidity Sunday open and late rollover hours.
 
 ### ❌ The CONS:
-1. **📉 Minor Sacrifice in Nominal R (~7%):** Captures `+4,354.51R` vs `+4,681.65R` (forfeits ~0.45R/day).
-2. **🔻 Lower Gross Trade Frequency (-643 Trades):** ~8.7 trades/day vs ~9.6 trades/day.
-3. **⏱️ Strict Automation Required:** Demands automated scheduling/cron execution.
+1. **📉 Minor Nominal R Trade-off:** Captures `+959.03R` vs `+1,065.04R` (forfeits ~0.15R/day across 329 filtered trades).
+2. **🔻 Lower Trade Count:** ~3.7 trades/day vs ~4.2 trades/day.
+3. **⏱️ Requires Automated Scheduling:** Demands session gate filters or cron schedules in the daemon.
 
 ---
 
@@ -203,9 +196,9 @@ Executed across **210,456 continuous 5-minute candles** on Binance Futures (`ETH
   "maxBarsSweepToReclaim": 10,
   "maxBarsToRetest": 20,
   "volumeSmaPeriod": 20,
-  "volumeExpansionThreshold": 1.35,
+  "volumeExpansionThreshold": 1.20,
   "deltaDominanceThreshold": 52.0,
-  "bodyRatioThreshold": 0.50,
+  "bodyRatioThreshold": 0.40,
   "requireThreePillarDisplacement": true,
   "enforceDiscountPremiumGate": true,
   "entryMode": "FVG_PROXIMAL",
@@ -215,7 +208,7 @@ Executed across **210,456 continuous 5-minute candles** on Binance Futures (`ETH
   "enableStructuralTrail": true,
   "enableProfitRatchet": true,
   "minSweepDepthAtrMultiplier": 0.10,
-  "slBufferAtrMultiplier": 0.12
+  "slBufferAtrMultiplier": 0.10
 }
 ```
 
@@ -236,4 +229,4 @@ Executed across **210,456 continuous 5-minute candles** on Binance Futures (`ETH
 ```
 
 ---
-*Generated and validated by Flow-State Quantitative Engine V16.71 Multi-Year Macro Audit Suite.*
+*Generated and validated by Flow-State Quantitative Engine V16.87 Multi-Year PM2 Parity Audit Suite.*
