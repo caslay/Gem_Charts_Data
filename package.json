@@ -12,7 +12,8 @@
     "daemon:dry": "tsx scripts/headless-daemon.ts --dry-run",
     "reconcile": "tsx scripts/reconcile-session.ts",
     "sync:prod": "tsx scripts/sync-prod.ts",
-    "sync:prod:dry": "tsx scripts/sync-prod.ts --dry-run"
+    "sync:prod:dry": "tsx scripts/sync-prod.ts --dry-run",
+    "test:telegram": "tsx scripts/test-telegram.ts"
   },
   "dependencies": {
     "@auth/core": "^0.41.2",

@@ -1,8 +1,40 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.90
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.91
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-29 (V16.90 — Automated Production Branch Synchronization & Exclusion Pipeline)
+> **Last Updated:** 2026-08-29 (V16.91 — Telegram Bot Real-Time Trade Notifications & State Deduplication Engine)
+
+## 🆕 V16.91 Changelog — Telegram Bot Real-Time Trade Notifications & State Deduplication Engine (2026-08-29)
+
+### Summary
+Implemented a real-time Telegram Bot Notification service (`TelegramNotifier`) directly wired into the Flow-State Headless Execution Daemon (`scripts/headless-daemon.ts`) and PM2 ecosystem (`ecosystem.config.js`). Features rich HTML-formatted trade alerts with emojis, price levels, and R-multiples for all trade lifecycle stages, accompanied by a strict **Dual-Layer Deduplication Engine** (in-memory Set + persistent JSON registry on disk) ensuring **strictly one notification per trade state transition**.
+
+### Key Architectural Deliverables
+1. **Production Telegram Notification Service (`src/lib/notifications/telegramNotifier.ts`):**
+   - Dispatches rich HTML-formatted trade alerts for:
+     - ⏳ `LIMIT_ORDER_PLACED` (Resting Limit Order entry, SL, TP1, TP2, TP3, USD Risk, Compounding 2%, Setup Anchor).
+     - 🚀 `ORDER_FILLED` (Execution fill price, contract size, active SL, multi-stage targets).
+     - 🎯 `STAGE_1_HARVEST` (40% tranche locked @ 1.0R, SL advanced to Breakeven / FVG CE 🛡️).
+     - 💰 `STAGE_2_HARVEST` (40% tranche locked @ 1.4R/1.5R, SL ratcheted to +1.0R Profit Floor 💎).
+     - 🏁 `POSITION_CLOSED` (Full Stop Out, Breakeven Scratch, Profit Floor Win, Full TP3 Runner Win).
+2. **Dual-Layer Deduplication Engine (Strict "Once Per Update" Guarantee):**
+   - Deterministic event fingerprinting: `evt_${tradeId}_${stageStatus}`.
+   - Synchronous in-memory lookup via `Set<string>`.
+   - Atomic disk persistence to `run_logs/telegram_notified_events.json` preventing duplicate alerts across daemon reboots, network reconnects, and sub-second WebSocket ticks.
+3. **Headless Daemon & PM2 Integration (`scripts/headless-daemon.ts` & `ecosystem.config.js`):**
+   - Automatically initializes `TelegramNotifier` and hooks into the 24/7 background `engine.subscribe` event bus.
+   - Injects `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and `TELEGRAM_ENABLED` through PM2 environment variables.
+4. **Diagnostic Verification Tooling (`scripts/test-telegram.ts` & `npm run test:telegram`):**
+   - Fast CLI test tool to verify credentials, delivery, and deduplication blocking in 1 second.
+
+### Files Created & Modified
+- **`src/lib/notifications/telegramNotifier.ts`** [NEW]
+- **`scripts/test-telegram.ts`** [NEW]
+- **`scripts/headless-daemon.ts`** [MODIFY]
+- **`ecosystem.config.js`** [MODIFY]
+- **`package.json`** [MODIFY]
+- **`docs/daemon_walkthrough.md`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
 
 ## 🆕 V16.90 Changelog — Automated Production Branch Synchronization & Exclusion Pipeline (2026-08-29)
 

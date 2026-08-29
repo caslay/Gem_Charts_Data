@@ -18,6 +18,9 @@ module.exports = {
       max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production',
+        TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '8681842826:AAE_ya3wQ_IABtCXHofLDppNjOAyRDTdcVs',
+        TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || '1553743624',
+        TELEGRAM_ENABLED: 'true',
       },
     },
   ],

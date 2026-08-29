@@ -11,6 +11,7 @@
  * 2. All research datasets, scratch scripts, directives, and logs stay in 'dev'.
  * 3. Production 'main' contains strictly core Next.js application & engine code.
  * 4. Production build integrity is verified prior to committing.
+ * 5. Commits to 'main' cleanly extend origin/main without forcing non-fast-forwards.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -98,7 +99,7 @@ function verifyProductionBuild(worktreePath: string) {
       env: { ...process.env, NODE_ENV: 'production' },
     });
     console.log('✅ [SYNC] Production build verification succeeded (0 errors).');
-  } catch (error: any) {
+  } catch {
     throw new Error('Production build verification failed in worktree.');
   }
 }
@@ -125,12 +126,17 @@ export function runProductionSync() {
   }
 
   try {
-    console.log('🌿 [SYNC] Creating isolated worktree for production branch...');
-    executeGitCommand('git fetch origin main:main || true', rootPath);
+    console.log('🌿 [SYNC] Fetching latest remote branches...');
+    executeGitCommand('git fetch origin main:main || git fetch origin main', rootPath);
+
+    console.log('🌿 [SYNC] Creating isolated worktree for main...');
     executeGitCommand(`git worktree add --force "${worktreePath}" main`, rootPath);
 
-    console.log(`🔄 [SYNC] Resetting worktree to match latest '${currentBranch}' state...`);
-    executeGitCommand(`git reset --hard ${currentBranch}`, worktreePath);
+    console.log('🔄 [SYNC] Resetting worktree to origin/main baseline...');
+    executeGitCommand('git reset --hard origin/main', worktreePath);
+
+    console.log(`📥 [SYNC] Pulling latest file state from '${currentBranch}' into production worktree...`);
+    executeGitCommand(`git checkout ${currentBranch} -- .`, worktreePath);
 
     console.log('✂️ [SYNC] Applying .prodignore exclusion rules...');
     pruneWorktreeEntries(worktreePath, patterns);
@@ -149,20 +155,20 @@ export function runProductionSync() {
     }
 
     if (options.isDryRun) {
-      console.log('\n🔍 [DRY-RUN] Files that would be committed to main:');
+      console.log('\n🔍 [DRY-RUN] Files that will be committed/deleted on main:');
       console.log(changedFiles);
-      console.log('\n✅ [DRY-RUN] Dry run completed successfully without writing to git.');
+      console.log('\n✅ [DRY-RUN] Dry run completed successfully without committing to git.');
       return;
     }
 
     const devCommitHash = executeGitCommand('git rev-parse --short HEAD', rootPath);
-    const commitMessage = `chore(prod): sync core engine from dev (${devCommitHash}) [skip ci]`;
+    const commitMessage = `chore(prod): sanitize and sync production core from dev (${devCommitHash}) [skip ci]`;
 
     console.log(`💾 [SYNC] Committing sanitized production tree: "${commitMessage}"...`);
     executeGitCommand(`git commit -m "${commitMessage}"`, worktreePath);
 
     if (options.shouldPush) {
-      console.log('🚀 [SYNC] Pushing sanitized main branch to remote origin...');
+      console.log('🚀 [SYNC] Pushing sanitized main branch to origin/main...');
       executeGitCommand('git push origin main', worktreePath);
       console.log('✅ [SYNC] Successfully pushed main to origin.');
     }

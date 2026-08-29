@@ -50,51 +50,45 @@ jobs:
 
       - name: Prepare Clean Production Tree
         run: |
-          # Fetch all remote branches
-          git fetch origin main:main || git checkout -b main
+          # Fetch origin/main
+          git fetch origin main:main || git checkout -b main origin/main
 
-          # Ensure main branch is checked out
+          # Checkout main branch and reset to latest remote origin/main
           git checkout main
+          git reset --hard origin/main
 
-          # Reset main to match the latest dev branch state
-          git reset --hard dev
+          # Pull entire file tree from dev onto main
+          git checkout dev -- .
 
           # Read .prodignore and remove excluded files/directories
           if [ -f .prodignore ]; then
             echo "Applying .prodignore exclusion rules..."
             while IFS= read -r pattern || [ -n "$pattern" ]; do
-              # Trim leading/trailing whitespace
               trimmed=$(echo "$pattern" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-              
-              # Skip empty lines and comments
               if [ -z "$trimmed" ] || [[ "$trimmed" =~ ^# ]]; then
                 continue
               fi
-
               echo "Pruning pattern from production: $trimmed"
-              # Remove matched files or directories using git rm if tracked
               git rm -rf --ignore-unmatch "$trimmed" 2>/dev/null || rm -rf "$trimmed"
             done < .prodignore
           fi
 
-          # Stage any unstaged file removals
+          # Stage all deletions and updates
           git add -A
 
       - name: Verify Production Tree Build Integrity
         run: |
-          # Verify the clean production tree builds with 0 errors
           rm -rf .next
           npm run build
 
       - name: Commit & Push to main
         if: ${{ github.event.inputs.dry_run != 'true' }}
         run: |
-          # Check if there are changes to commit on main
-          if git diff-index --quiet HEAD --; then
+          if git diff --cached --quiet; then
             echo "Production branch is already in sync with dev."
           else
             DEV_COMMIT=$(git rev-parse --short dev)
-            git commit -m "chore(prod): sync core engine from dev ($DEV_COMMIT) [skip ci]"
+            git commit -m "chore(prod): sanitize and sync production core from dev ($DEV_COMMIT) [skip ci]"
             git push origin main
             echo "Successfully deployed sanitized production tree to main."
           fi
