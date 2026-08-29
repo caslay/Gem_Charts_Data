@@ -18,6 +18,7 @@ import { DEFAULT_SR_LIVE_SETTINGS } from '../src/lib/quantEngine/strategyExecuti
 import { bootstrapHistoricalBuffers, computeMacroContext } from './lib/restBootstrap';
 import { NodeWsClient, CandleClosedPayload, MarketTickPayload } from './lib/nodeWsClient';
 import { DaemonLedger } from './lib/daemonLedger';
+import { TelegramNotifier } from '../src/lib/notifications/telegramNotifier';
 
 // Parse CLI Arguments
 const args = process.argv.slice(2);
@@ -26,12 +27,15 @@ const symbolArg = args.find((a) => a.startsWith('--symbol='))?.split('=')[1] || 
 const equityArg = parseFloat(args.find((a) => a.startsWith('--equity='))?.split('=')[1] || '10000.0');
 
 async function main() {
+  const telegram = new TelegramNotifier();
+
   console.log(`\n===============================================================`);
   console.log(` ⚡ FLOW-STATE QUANT ENGINE — LOCAL HEADLESS DAEMON (VPS HOST) `);
   console.log(`===============================================================`);
   console.log(` Asset:           ${symbolArg.toUpperCase()} (Binance Futures)`);
   console.log(` Starting Equity: $${equityArg.toFixed(2)} USD (2% Compounded Risk)`);
   console.log(` Strategy:        5M Sweep & Reclaim Champion (3-Stage Harvest)`);
+  console.log(` Telegram Alerts: ${telegram.isEnabled() ? '✅ ACTIVE (Chat: ' + telegram.getConfig().chatId + ')' : '⚪ DISABLED'}`);
   console.log(` Mode:            ${isDryRun ? 'DRY-RUN (30s Diagnostic Validation)' : '24/7 LIVE BACKGROUND EXECUTION'}`);
   console.log(` Local Time:      ${new Date().toLocaleString()} (UTC: ${new Date().toISOString()})`);
   console.log(`===============================================================\n`);
@@ -135,6 +139,11 @@ async function main() {
         ledger.logEvent('POSITION_CLOSED', event.message, { position: pos });
         break;
     }
+
+    // Dispatch real-time deduplicated notification to Telegram
+    telegram.handleExecutionEvent(event).catch((err) => {
+      console.warn('[TELEGRAM_DISPATCH_ERROR]', err?.message || err);
+    });
   });
 
   // 6. Connect Node.js WebSocket Client
