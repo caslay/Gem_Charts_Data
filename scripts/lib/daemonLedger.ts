@@ -157,6 +157,32 @@ export class DaemonLedger {
   }
 
   /**
+   * Scans the session log events to retrieve any active in-flight position
+   * or pending limit order that has not been closed.
+   */
+  public getActiveInFlightPositions(): StrategyExecutionPosition[] {
+    const activeMap = new Map<string, StrategyExecutionPosition>();
+
+    for (const evt of this.sessionLog.events) {
+      if (
+        (evt.type === 'LIMIT_ORDER_PLACED' ||
+          evt.type === 'ORDER_FILLED' ||
+          evt.type === 'STAGE_1_HARVEST' ||
+          evt.type === 'STAGE_2_HARVEST') &&
+        evt.position?.id
+      ) {
+        activeMap.set(evt.position.id, evt.position as StrategyExecutionPosition);
+      } else if (evt.type === 'POSITION_CLOSED' && evt.position?.id) {
+        activeMap.delete(evt.position.id);
+      } else if (evt.type === 'LIMIT_ORDER_CANCELLED' && evt.position?.id) {
+        activeMap.delete(evt.position.id);
+      }
+    }
+
+    return Array.from(activeMap.values());
+  }
+
+  /**
    * Appends completed trade to directives/ETHUSDC_Daily_Tracker.json.
    */
   private appendToDailyTracker(pos: StrategyExecutionPosition): void {

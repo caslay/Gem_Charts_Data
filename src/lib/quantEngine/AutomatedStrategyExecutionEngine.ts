@@ -41,6 +41,7 @@ export type TradeExitReason =
   | "STOPPED_OUT"
   | "STAGE_1_SCRATCH"
   | "STAGE_2_WIN"
+  | "FULL_TP2_WIN"
   | "STAGE_2_PROFIT_PROTECTION"
   | "FULL_TP3_WIN"
   | "MANUAL_CLOSE"
@@ -68,12 +69,18 @@ export interface StrategyExecutionPosition {
   activeRatchetFloor: number | null;
   trailingSlSource: TrailingStopSource;
 
-  // 3-Stage Targets
+  // Multi-Stage Targets & Ratios
   stage1Target: number;
   stage2Target: number;
   stage3Target: number;
   dynamicDolTarget: number | null;
   fvgCeLevel: number | null;
+  stage1Ratio?: number;
+  stage2Ratio?: number;
+  stage3Ratio?: number;
+  stage1Multiple?: number;
+  stage2Multiple?: number;
+  stage3Multiple?: number;
 
   // Multiples & Risk Parameters
   riskUsd: number;
@@ -82,7 +89,7 @@ export interface StrategyExecutionPosition {
   riskPct: number;
   contractSize: number;
   allocatedAmount: number; // e.g. 1.0 (100% position)
-  remainingAllocation: number; // 1.0 -> 0.6 -> 0.2 -> 0.0
+  remainingAllocation: number; // 1.0 -> 0.5 -> 0.0
 
   // Realized and Floating Performance
   realizedR: number;
@@ -169,9 +176,9 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   stage2Multiple: 1.4,
   stage3Multiple: 3.0,
 
-  stage1Ratio: 0.4,
-  stage2Ratio: 0.4,
-  stage3Ratio: 0.2,
+  stage1Ratio: 0.5,
+  stage2Ratio: 0.5,
+  stage3Ratio: 0.0,
 
   enableStructuralTrail: true,
   enableProfitRatchet: true,
@@ -621,6 +628,12 @@ export class AutomatedStrategyExecutionEngine {
       stage3Target,
       dynamicDolTarget: dynamicDolTarget ?? null,
       fvgCeLevel: fvgCeLevel ?? null,
+      stage1Ratio: this.config.stage1Ratio,
+      stage2Ratio: this.config.stage2Ratio,
+      stage3Ratio: this.config.stage3Ratio,
+      stage1Multiple: this.config.stage1Multiple,
+      stage2Multiple: this.config.stage2Multiple,
+      stage3Multiple: this.config.stage3Multiple,
 
       riskUsd: sizing.riskUsd,
       riskPerContract: riskDistance,
@@ -802,7 +815,7 @@ export class AutomatedStrategyExecutionEngine {
         continue;
       }
 
-      // ── B.2: Tranche 1 Harvest (40% @ 1.0R Target) ──
+      // ── B.2: Tranche 1 Harvest (e.g. 50% @ 1.0R Target) ──
       if (!pos.isStage1Filled) {
         const isStage1Hit = isLong
           ? livePrice >= pos.stage1Target
@@ -812,15 +825,16 @@ export class AutomatedStrategyExecutionEngine {
           pos.stage1HitTime = now;
           pos.status = "STAGE_1_FILLED";
 
-          // Lock 40% position at 1.0R (+0.40R realized)
-          const trancheR = this.config.stage1Ratio * this.config.stage1Multiple;
+          const stage1Ratio = pos.stage1Ratio ?? this.config.stage1Ratio;
+          const stage1Multiple = pos.stage1Multiple ?? this.config.stage1Multiple;
+          const trancheR = stage1Ratio * stage1Multiple;
           pos.realizedR = parseFloat((pos.realizedR + trancheR).toFixed(4));
           pos.realizedUsd = parseFloat(
             (pos.realizedR * pos.riskUsd).toFixed(2),
           );
           pos.remainingAllocation = parseFloat(
-            (pos.remainingAllocation - this.config.stage1Ratio).toFixed(2),
-          ); // 0.60 remaining
+            Math.max(0, pos.remainingAllocation - stage1Ratio).toFixed(2),
+          );
 
           // Advance SL to Displacement FVG 50% CE or Breakeven (capping runner risk so net P&L >= 0.0R)
           if (this.config.enableStructuralTrail && pos.fvgCeLevel) {
@@ -831,7 +845,8 @@ export class AutomatedStrategyExecutionEngine {
             pos.trailingSlSource = "BREAKEVEN";
           }
 
-          const msg = `🎯 [STAGE_1_HARVEST] Tranche 1 (40% @ ${pos.stage1Target.toFixed(2)}) filled on ${
+          const pctLabel = (stage1Ratio * 100).toFixed(0);
+          const msg = `🎯 [STAGE_1_HARVEST] Tranche 1 (${pctLabel}% @ ${pos.stage1Target.toFixed(2)}) filled on ${
             pos.symbol
           }! Locked +${trancheR.toFixed(2)}R ($${(
             trancheR * pos.riskUsd
@@ -842,7 +857,7 @@ export class AutomatedStrategyExecutionEngine {
         }
       }
 
-      // ── B.3: Tranche 2 Harvest (40% @ 1.5R Target + +1.0R Ratchet Floor) ──
+      // ── B.3: Tranche 2 Harvest (e.g. 50% @ 1.4R Target) ──
       if (pos.isStage1Filled && !pos.isStage2Filled) {
         const isStage2Hit = isLong
           ? livePrice >= pos.stage2Target
@@ -852,15 +867,31 @@ export class AutomatedStrategyExecutionEngine {
           pos.stage2HitTime = now;
           pos.status = "STAGE_2_FILLED";
 
-          // Lock 40% position at 1.5R (+0.60R realized, total +1.0R)
-          const trancheR = this.config.stage2Ratio * this.config.stage2Multiple;
+          const stage2Ratio = pos.stage2Ratio ?? this.config.stage2Ratio;
+          const stage2Multiple = pos.stage2Multiple ?? this.config.stage2Multiple;
+          const stage3Ratio = pos.stage3Ratio ?? this.config.stage3Ratio;
+          const trancheR = stage2Ratio * stage2Multiple;
           pos.realizedR = parseFloat((pos.realizedR + trancheR).toFixed(4));
           pos.realizedUsd = parseFloat(
             (pos.realizedR * pos.riskUsd).toFixed(2),
           );
           pos.remainingAllocation = parseFloat(
-            (pos.remainingAllocation - this.config.stage2Ratio).toFixed(2),
-          ); // 0.20 remaining
+            Math.max(0, pos.remainingAllocation - stage2Ratio).toFixed(2),
+          );
+
+          const pctLabel = (stage2Ratio * 100).toFixed(0);
+
+          if (stage3Ratio === 0 || pos.remainingAllocation <= 0) {
+            // 2-STAGE COMPLETE HARVEST: 100% position closed at TP2!
+            const msg = `🏆 [STAGE_2_HARVEST] Tranche 2 (${pctLabel}% @ ${pos.stage2Target.toFixed(2)}) filled on ${
+              pos.symbol
+            }! 100% Position Closed with Maximum Edge! Total Realized: +${pos.realizedR.toFixed(2)}R ($${pos.realizedUsd.toFixed(
+              2,
+            )}).`;
+            this.emit("STAGE_2_HARVEST", msg, pos);
+            this.closePosition(i, pos.stage2Target, "FULL_TP2_WIN", now);
+            continue;
+          }
 
           // Immediately Ratchet Active SL to Guaranteed +1.0R Structural Profit Floor
           if (this.config.enableProfitRatchet) {
@@ -873,7 +904,7 @@ export class AutomatedStrategyExecutionEngine {
             pos.trailingSlSource = "PROFIT_RATCHET_FLOOR";
           }
 
-          const msg = `💎 [STAGE_2_HARVEST] Tranche 2 (40% @ ${pos.stage2Target.toFixed(2)}) filled on ${
+          const msg = `💎 [STAGE_2_HARVEST] Tranche 2 (${pctLabel}% @ ${pos.stage2Target.toFixed(2)}) filled on ${
             pos.symbol
           }! Total Realized: +${pos.realizedR.toFixed(2)}R ($${pos.realizedUsd.toFixed(
             2,
@@ -883,7 +914,8 @@ export class AutomatedStrategyExecutionEngine {
       }
 
       // ── B.4: Tranche 3 DOL Runner (20% @ Macro DOL) ──
-      if (pos.isStage2Filled && !pos.isStage3Filled) {
+      const stage3Ratio = pos.stage3Ratio ?? this.config.stage3Ratio;
+      if (stage3Ratio > 0 && pos.isStage2Filled && !pos.isStage3Filled) {
         pos.status = "STAGE_3_RUNNER";
         const isStage3Hit = isLong
           ? livePrice >= pos.stage3Target
@@ -892,8 +924,8 @@ export class AutomatedStrategyExecutionEngine {
           pos.isStage3Filled = true;
           pos.stage3HitTime = now;
 
-          // Lock 20% position at Stage 3 Multiple / DOL
-          const trancheR = this.config.stage3Ratio * this.config.stage3Multiple;
+          const stage3Multiple = pos.stage3Multiple ?? this.config.stage3Multiple;
+          const trancheR = stage3Ratio * stage3Multiple;
           pos.realizedR = parseFloat((pos.realizedR + trancheR).toFixed(4));
           pos.realizedUsd = parseFloat(
             (pos.realizedR * pos.riskUsd).toFixed(2),
@@ -1279,6 +1311,39 @@ export class AutomatedStrategyExecutionEngine {
     }
 
     return rehydrated;
+  }
+
+  /**
+   * Directly rehydrates full StrategyExecutionPosition objects (e.g. from DaemonLedger session file).
+   */
+  public rehydratePositionsDirect(positions: StrategyExecutionPosition[]): void {
+    for (const pos of positions) {
+      if (pos.status === 'PENDING_LIMIT_ENTRY') {
+        if (!this.pendingLimitOrders.some(p => p.id === pos.id)) {
+          this.pendingLimitOrders.push(pos);
+          if (pos.originZoneId) this.consumedZoneIds.add(pos.originZoneId);
+          if (pos.setupId) this.processedSetupIds.add(pos.setupId);
+        }
+      } else if (
+        pos.status === 'OPEN' ||
+        pos.status === 'STAGE_1_FILLED' ||
+        pos.status === 'STAGE_2_FILLED' ||
+        pos.status === 'STAGE_3_RUNNER'
+      ) {
+        if (!this.activePositions.some(p => p.id === pos.id)) {
+          // Ensure 2-stage configuration is populated
+          pos.stage1Ratio = pos.stage1Ratio ?? this.config.stage1Ratio;
+          pos.stage2Ratio = pos.stage2Ratio ?? this.config.stage2Ratio;
+          pos.stage3Ratio = pos.stage3Ratio ?? this.config.stage3Ratio;
+          pos.stage1Multiple = pos.stage1Multiple ?? this.config.stage1Multiple;
+          pos.stage2Multiple = pos.stage2Multiple ?? this.config.stage2Multiple;
+          pos.stage3Multiple = pos.stage3Multiple ?? this.config.stage3Multiple;
+          this.activePositions.push(pos);
+          if (pos.originZoneId) this.consumedZoneIds.add(pos.originZoneId);
+          if (pos.setupId) this.processedSetupIds.add(pos.setupId);
+        }
+      }
+    }
   }
 
   // ── Manual Emergency Controls ──

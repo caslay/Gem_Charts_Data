@@ -53,8 +53,11 @@ export interface SweepReclaimLiveSettings {
   enableProfitRatchet: boolean; // default: true
   enableTp1AutoBreakeven: boolean; // default: true (close partial at TP1, move SL to breakeven 0.0R)
   stage1Multiple: number; // default: 1.0
-  stage2Multiple: number; // default: 1.5
+  stage2Multiple: number; // default: 1.4
   stage3Multiple: number; // default: 3.0
+  stage1Ratio?: number; // default: 0.50 (50% TP1)
+  stage2Ratio?: number; // default: 0.50 (50% TP2)
+  stage3Ratio?: number; // default: 0.00 (0% TP3 - 2-Stage complete exit)
   routeRunnerToHtfDol: boolean; // default: true (route TP3 runner to resting HTF liquidity pools)
   executionTiming: LiveExecutionTiming; // default: 'INSTANT'
   olsSensitivity: LiveOlsSensitivity; // default: 'RELAXED'
@@ -63,14 +66,14 @@ export interface SweepReclaimLiveSettings {
   directionalLock: LiveDirectionalLock; // default: 'DUAL'
 
   // Quant Lab Structural Alignment Parameters
-  lookbackMajor: number; // default: 15
+  lookbackMajor: number; // default: 10
   lookbackInternal: number; // default: 5
-  maxBarsAnchorToSweep: number; // default: 40
-  maxBarsSweepToReclaim: number; // default: 16
-  maxBarsToRetest: number; // default: 30
+  maxBarsAnchorToSweep: number; // default: 25
+  maxBarsSweepToReclaim: number; // default: 10
+  maxBarsToRetest: number; // default: 20
   requireThreePillarDisplacement: boolean; // default: true
   minSweepDepthAtrMultiplier: number; // default: 0.10
-  slBufferAtrMultiplier: number; // default: 0.15
+  slBufferAtrMultiplier: number; // default: 0.10
 }
 
 export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
@@ -89,6 +92,9 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   stage1Multiple: 1.0,
   stage2Multiple: 1.4,
   stage3Multiple: 3.0,
+  stage1Ratio: 0.50,
+  stage2Ratio: 0.50,
+  stage3Ratio: 0.00,
   routeRunnerToHtfDol: true,
   executionTiming: 'INSTANT',
   olsSensitivity: 'RELAXED',

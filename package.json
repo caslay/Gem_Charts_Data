@@ -13,7 +13,8 @@
     "reconcile": "tsx scripts/reconcile-session.ts",
     "sync:prod": "tsx scripts/sync-prod.ts",
     "sync:prod:dry": "tsx scripts/sync-prod.ts --dry-run",
-    "test:telegram": "tsx scripts/test-telegram.ts"
+    "test:telegram": "tsx scripts/test-telegram.ts",
+    "test:telegram:commands": "tsx scripts/test-telegram-commands.ts"
   },
   "dependencies": {
     "@auth/core": "^0.41.2",
