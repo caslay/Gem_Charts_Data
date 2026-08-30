@@ -1,4 +1,4 @@
-﻿/**
+/**
  * telegramNotifier.ts
  * ─────────────────────────────────────────────────────────────────────────────
  * Flow-State Quant Engine — Production Telegram Bot Notification Service
@@ -168,10 +168,22 @@ export class TelegramNotifier {
       .replace('T', ' ')
       .substring(0, 19) + ' UTC';
 
+    const stage1Ratio = pos?.stage1Ratio ?? 0.50;
+    const stage2Ratio = pos?.stage2Ratio ?? 0.50;
+    const stage3Ratio = pos?.stage3Ratio ?? 0.00;
+    const isTwoStage = stage3Ratio === 0;
+
     switch (event.type) {
       case 'LIMIT_ORDER_PLACED': {
         if (!pos) return null;
         const dirEmoji = pos.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
+        const targetBlocks = isTwoStage
+          ? `🎯 <b>TP1 (1.0R):</b> <code>$${pos.stage1Target.toFixed(2)}</code> (${(stage1Ratio * 100).toFixed(0)}%)\n` +
+            `💰 <b>TP2 (1.4R):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${(stage2Ratio * 100).toFixed(0)}% Full Exit)\n`
+          : `🎯 <b>TP1 (1.0R):</b> <code>$${pos.stage1Target.toFixed(2)}</code> (${(stage1Ratio * 100).toFixed(0)}%)\n` +
+            `💰 <b>TP2 (1.4R):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${(stage2Ratio * 100).toFixed(0)}%)\n` +
+            `🚀 <b>TP3 (DOL):</b> <code>$${pos.stage3Target.toFixed(2)}</code> (${(stage3Ratio * 100).toFixed(0)}% Runner)\n`;
+
         return (
           `⏳ <b>[PENDING LIMIT ORDER PLACED]</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -180,9 +192,7 @@ export class TelegramNotifier {
           `🎯 <b>Limit Entry:</b> <code>$${pos.limitEntryPrice.toFixed(2)}</code>\n` +
           `🛑 <b>Stop Loss:</b> <code>$${pos.initialStopLoss.toFixed(2)}</code>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
-          `🎯 <b>TP1 (1.0R):</b> <code>$${pos.stage1Target.toFixed(2)}</code> (40%)\n` +
-          `💰 <b>TP2 (1.4R):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (40%)\n` +
-          `🚀 <b>TP3 (DOL):</b> <code>$${pos.stage3Target.toFixed(2)}</code> (20% Runner)\n` +
+          targetBlocks +
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `💵 <b>Risk USD:</b> <code>$${pos.riskUsd.toFixed(2)}</code> (2.0% Compounded)\n` +
           `📐 <b>Size:</b> <code>${pos.contractSize} contracts</code>\n` +
@@ -194,6 +204,13 @@ export class TelegramNotifier {
       case 'ORDER_FILLED': {
         if (!pos) return null;
         const dirEmoji = pos.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
+        const targetBlocks = isTwoStage
+          ? `🎯 <b>TP1 Target:</b> <code>$${pos.stage1Target.toFixed(2)}</code> (${(stage1Ratio * 100).toFixed(0)}%)\n` +
+            `💰 <b>TP2 Target:</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${(stage2Ratio * 100).toFixed(0)}% Full Exit)\n`
+          : `🎯 <b>TP1 Target:</b> <code>$${pos.stage1Target.toFixed(2)}</code> (${(stage1Ratio * 100).toFixed(0)}%)\n` +
+            `💰 <b>TP2 Target:</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${(stage2Ratio * 100).toFixed(0)}%)\n` +
+            `🚀 <b>TP3 Runner:</b> <code>$${pos.stage3Target.toFixed(2)}</code> (${(stage3Ratio * 100).toFixed(0)}%)\n`;
+
         return (
           `🚀 <b>[ORDER OPENED / FILLED]</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -204,21 +221,20 @@ export class TelegramNotifier {
           `📐 <b>Contract Size:</b> <code>${pos.contractSize} contracts</code>\n` +
           `💵 <b>Initial Risk:</b> <code>$${pos.riskUsd.toFixed(2)}</code>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
-          `🎯 <b>TP1 Target:</b> <code>$${pos.stage1Target.toFixed(2)}</code>\n` +
-          `💰 <b>TP2 Target:</b> <code>$${pos.stage2Target.toFixed(2)}</code>\n` +
-          `🚀 <b>TP3 Runner:</b> <code>$${pos.stage3Target.toFixed(2)}</code>\n` +
+          targetBlocks +
           `⏰ <b>Time:</b> <code>${nowIso}</code>`
         );
       }
 
       case 'STAGE_1_HARVEST': {
         if (!pos) return null;
+        const lockedR = stage1Ratio * (pos.stage1Multiple ?? 1.0);
         return (
           `🎯 <b>[TP1 FILLED — STAGE 1 HARVEST]</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `📊 <b>Pair:</b> <code>${pos.symbol}</code> (${pos.timeframe || '5m'})\n` +
-          `📦 <b>Tranche:</b> <code>40% Position Filled @ $${pos.stage1Target.toFixed(2)}</code>\n` +
-          `🔒 <b>Locked Realized:</b> <b>+0.40R (+$${(0.4 * pos.riskUsd).toFixed(2)} USD)</b>\n` +
+          `📦 <b>Tranche:</b> <code>${(stage1Ratio * 100).toFixed(0)}% Position Filled @ $${pos.stage1Target.toFixed(2)}</code>\n` +
+          `🔒 <b>Locked Realized:</b> <b>+${lockedR.toFixed(2)}R (+$${(lockedR * pos.riskUsd).toFixed(2)} USD)</b>\n` +
           `📦 <b>Remaining Allocation:</b> <code>${(pos.remainingAllocation * 100).toFixed(0)}%</code>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `🛡️ <b>Trailing Stop Loss:</b> Advanced to <b>${pos.trailingSlSource}</b> (<code>$${pos.activeStopLoss.toFixed(2)}</code>)\n` +
@@ -229,11 +245,22 @@ export class TelegramNotifier {
 
       case 'STAGE_2_HARVEST': {
         if (!pos) return null;
+        if (isTwoStage) {
+          return (
+            `💰 <b>[TP2 FILLED — FULL 2-STAGE HARVEST]</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `📊 <b>Pair:</b> <code>${pos.symbol}</code> (${pos.timeframe || '5m'})\n` +
+            `📦 <b>Tranche:</b> <code>${(stage2Ratio * 100).toFixed(0)}% Position Filled @ $${pos.stage2Target.toFixed(2)}</code>\n` +
+            `🔒 <b>Total Realized:</b> <b>+${pos.realizedR.toFixed(2)}R (+$${pos.realizedUsd.toFixed(2)} USD)</b>\n` +
+            `🏆 <b>Status:</b> <b>100% Position Closed with Maximum Alpha (+1.20R)</b>\n` +
+            `⏰ <b>Time:</b> <code>${nowIso}</code>`
+          );
+        }
         return (
           `💰 <b>[TP2 FILLED — STAGE 2 HARVEST]</b>\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `📊 <b>Pair:</b> <code>${pos.symbol}</code> (${pos.timeframe || '5m'})\n` +
-          `📦 <b>Tranche:</b> <code>40% Position Filled @ $${pos.stage2Target.toFixed(2)}</code>\n` +
+          `📦 <b>Tranche:</b> <code>${(stage2Ratio * 100).toFixed(0)}% Position Filled @ $${pos.stage2Target.toFixed(2)}</code>\n` +
           `🔒 <b>Total Realized:</b> <b>+${pos.realizedR.toFixed(2)}R (+$${pos.realizedUsd.toFixed(2)} USD)</b>\n` +
           `📦 <b>Remaining Runner:</b> <code>${(pos.remainingAllocation * 100).toFixed(0)}%</code> (Targeting DOL: <code>$${pos.stage3Target.toFixed(2)}</code>)\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -250,7 +277,9 @@ export class TelegramNotifier {
         const usdSign = realizedUsd >= 0 ? '+' : '';
 
         let outcomeHeader = '🏁 <b>[POSITION CLOSED]</b>';
-        if (pos.exitReason === 'FULL_TP3_WIN') {
+        if (pos.exitReason === 'FULL_TP2_WIN') {
+          outcomeHeader = '🏆 <b>[FULL TP2 WIN — 100% POSITION CLOSED]</b>';
+        } else if (pos.exitReason === 'FULL_TP3_WIN') {
           outcomeHeader = '🏆 <b>[FULL TP3 WIN — RUNNER COMPLETED]</b>';
         } else if (pos.exitReason === 'STAGE_2_WIN') {
           outcomeHeader = '💰 <b>[POSITION CLOSED — PROFIT FLOOR WIN]</b>';
@@ -316,18 +345,26 @@ export class TelegramNotifier {
   /**
    * Low-level raw HTML message sender via Telegram HTTP Bot API.
    */
-  public async sendRawMessage(htmlText: string): Promise<boolean> {
-    if (!this.config.enabled || !this.config.botToken || !this.config.chatId) {
+  public async sendRawMessage(
+    htmlText: string,
+    options?: { replyMarkup?: any; targetChatId?: string }
+  ): Promise<boolean> {
+    const chatId = options?.targetChatId || this.config.chatId;
+    if (!this.config.enabled || !this.config.botToken || !chatId) {
       return false;
     }
 
     const url = `https://api.telegram.org/bot${this.config.botToken}/sendMessage`;
-    const payload = {
-      chat_id: this.config.chatId,
+    const payload: any = {
+      chat_id: chatId,
       text: htmlText,
       parse_mode: 'HTML',
       disable_web_page_preview: true,
     };
+
+    if (options?.replyMarkup) {
+      payload.reply_markup = options.replyMarkup;
+    }
 
     try {
       const res = await fetch(url, {

@@ -563,19 +563,15 @@ export default function BacktestSidebar({
                     </div>
                   </div>
 
-                  {/* 3-Stage Harvest Targets */}
+                  {/* 2-Stage Dynamic Harvest Targets */}
                   <div className="bg-background/40 p-2 border border-card-border rounded-lg space-y-1 text-[9px] font-mono">
                     <div className="flex justify-between items-center">
-                      <span className="text-muted">TP1 (40% @ 1.0R):</span>
+                      <span className="text-muted">TP1 (50% @ 1.0R):</span>
                       <span className="font-bold text-emerald-400">${srOverlay.target1.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-muted">TP2 (40% @ 1.5R):</span>
+                      <span className="text-muted">TP2 (50% @ 1.4R):</span>
                       <span className="font-bold text-emerald-400">${srOverlay.target2.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-muted">TP3 Runner (20% @ 3.0R):</span>
-                      <span className="font-bold text-emerald-400">${srOverlay.target3.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>

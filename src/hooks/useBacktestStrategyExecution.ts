@@ -581,13 +581,20 @@ export function useBacktestStrategyExecution({
 
       let positionUpdated = false;
 
-      // 1. Tranche 1 Harvest (40% @ 1.0R)
+      const w1 = config.stage1Ratio ?? 0.50;
+      const w2 = config.stage2Ratio ?? 0.50;
+      const w3 = config.stage3Ratio ?? 0.00;
+      const stage1Mult = config.stage1Multiple ?? 1.0;
+      const stage2Mult = config.stage2Multiple ?? 1.4;
+      const stage3Mult = config.stage3Multiple ?? 3.0;
+
+      // 1. Tranche 1 Harvest (e.g. 50% @ 1.0R)
       if (!pos.isStage1Filled) {
         const hitStage1 = isLong ? high >= pos.stage1Target : low <= pos.stage1Target;
         if (hitStage1) {
           pos.isStage1Filled = true;
           pos.status = 'STAGE_1_FILLED';
-          const trancheR = 0.40 * 1.0;
+          const trancheR = w1 * stage1Mult;
           pos.realizedR = parseFloat((pos.realizedR + trancheR).toFixed(2));
           pos.realizedUsd = parseFloat((pos.realizedR * pos.riskUsd).toFixed(2));
 
@@ -602,10 +609,11 @@ export function useBacktestStrategyExecution({
           activePositionRef.current = { ...pos };
           setActivePosition({ ...pos });
 
+          const pctLabel = (w1 * 100).toFixed(0);
           triggerSmartAlert?.(
             'STAGE_FILL',
-            `🎯 [STAGE 1 HARVEST] 40% scaled @ 1.0R ($${pos.stage1Target.toFixed(2)})! Locked +0.40R ($${(
-              0.4 * pos.riskUsd
+            `🎯 [STAGE 1 HARVEST] ${pctLabel}% scaled @ ${stage1Mult.toFixed(1)}R ($${pos.stage1Target.toFixed(2)})! Locked +${trancheR.toFixed(2)}R ($${(
+              trancheR * pos.riskUsd
             ).toFixed(2)}). SL advanced to ${pos.fvgCeLevel ? 'FVG CE' : 'Breakeven'} ($${pos.activeStopLoss.toFixed(2)}).`,
             '/audio/objective_update.wav',
             'REPLAY_STRATEGY'
@@ -617,21 +625,58 @@ export function useBacktestStrategyExecution({
             stop_loss: pos.activeStopLoss,
             realized_pnl: pos.realizedUsd,
             realized_r: pos.realizedR,
-            ai_narrative_summary: `[STAGE_1_FILLED] Scaled 40% @ 1.0R ($${pos.stage1Target.toFixed(2)})`,
+            ai_narrative_summary: `[STAGE_1_FILLED] Scaled ${pctLabel}% @ ${stage1Mult.toFixed(1)}R ($${pos.stage1Target.toFixed(2)})`,
           });
           onTradesRefresh?.();
         }
       }
 
-      // 2. Tranche 2 Harvest (40% @ 1.5R with +1.0R Ratchet Floor)
+      // 2. Tranche 2 Harvest (e.g. 50% @ 1.4R)
       if (pos.isStage1Filled && !pos.isStage2Filled) {
         const hitStage2 = isLong ? high >= pos.stage2Target : low <= pos.stage2Target;
         if (hitStage2) {
           pos.isStage2Filled = true;
-          pos.status = 'STAGE_2_FILLED';
-          const trancheR = 0.40 * 1.5;
+          const trancheR = w2 * stage2Mult;
           pos.realizedR = parseFloat((pos.realizedR + trancheR).toFixed(2));
           pos.realizedUsd = parseFloat((pos.realizedR * pos.riskUsd).toFixed(2));
+          const pctLabel = (w2 * 100).toFixed(0);
+
+          if (w3 === 0) {
+            // 2-STAGE COMPLETE HARVEST
+            pos.status = 'CLOSED';
+            pos.closeTime = candleTime;
+            pos.exitPrice = pos.stage2Target;
+            pos.exitReason = 'FULL_TP2_WIN';
+
+            if (pos.setupId) closedSetupIdsRef.current.add(pos.setupId);
+            if (currentSetup?.id) closedSetupIdsRef.current.add(currentSetup.id);
+
+            activePositionRef.current = null;
+            setActivePosition(null);
+            activeSetupRef.current = null;
+            setActiveSetup(null);
+            setClosedReplayPositions((prev) => [pos, ...prev]);
+
+            triggerSmartAlert?.(
+              'WIN_CLOSE',
+              `🏆 [FULL TP2 WIN] ${pctLabel}% scaled @ ${stage2Mult.toFixed(1)}R ($${pos.stage2Target.toFixed(2)})! Total Realized: +${pos.realizedR.toFixed(
+                2
+              )}R ($${pos.realizedUsd.toFixed(2)}). 100% Position Closed!`,
+              '/audio/victory.wav',
+              'REPLAY_STRATEGY'
+            );
+
+            useSessionJournalStore.getState().closeTrade(
+              pos.id,
+              pos.stage2Target,
+              'FULL_TP2_WIN',
+              new Date(candleTime).toISOString()
+            );
+            onTradesRefresh?.();
+            return;
+          }
+
+          pos.status = 'STAGE_2_FILLED';
 
           // Ratchet SL to guaranteed +1.0R profit floor
           if (config.enableProfitRatchet) {
@@ -647,7 +692,7 @@ export function useBacktestStrategyExecution({
 
           triggerSmartAlert?.(
             'STAGE_FILL',
-            `💎 [STAGE 2 HARVEST] 40% scaled @ 1.5R ($${pos.stage2Target.toFixed(2)})! Total Realized: +${pos.realizedR.toFixed(
+            `💎 [STAGE 2 HARVEST] ${pctLabel}% scaled @ ${stage2Mult.toFixed(1)}R ($${pos.stage2Target.toFixed(2)})! Total Realized: +${pos.realizedR.toFixed(
               2
             )}R ($${pos.realizedUsd.toFixed(2)}). SL ratcheted to +1.0R Floor ($${pos.activeStopLoss.toFixed(2)}).`,
             '/audio/objective_update.wav',
@@ -660,14 +705,14 @@ export function useBacktestStrategyExecution({
             stop_loss: pos.activeStopLoss,
             realized_pnl: pos.realizedUsd,
             realized_r: pos.realizedR,
-            ai_narrative_summary: `[STAGE_2_FILLED] Scaled 40% @ 1.5R ($${pos.stage2Target.toFixed(2)})`,
+            ai_narrative_summary: `[STAGE_2_FILLED] Scaled ${pctLabel}% @ ${stage2Mult.toFixed(1)}R ($${pos.stage2Target.toFixed(2)})`,
           });
           onTradesRefresh?.();
         }
       }
 
-      // 3. Tranche 3 DOL Runner Full TP Exit (20% @ 3.0R)
-      if (pos.isStage2Filled && !pos.isStage3Filled) {
+      // 3. Tranche 3 DOL Runner Full TP Exit (e.g. 20% @ 3.0R)
+      if (w3 > 0 && pos.isStage2Filled && !pos.isStage3Filled) {
         const hitStage3 = isLong ? high >= pos.stage3Target : low <= pos.stage3Target;
         if (hitStage3) {
           pos.isStage3Filled = true;
@@ -675,7 +720,7 @@ export function useBacktestStrategyExecution({
           pos.closeTime = candleTime;
           pos.exitPrice = pos.stage3Target;
           pos.exitReason = 'FULL_TP3_WIN';
-          const runnerR = 0.20 * (config.stage3Multiple ?? 3.0);
+          const runnerR = w3 * stage3Mult;
           pos.realizedR = parseFloat((pos.realizedR + runnerR).toFixed(2));
           pos.realizedUsd = parseFloat((pos.realizedR * pos.riskUsd).toFixed(2));
           pos.unrealizedR = 0;

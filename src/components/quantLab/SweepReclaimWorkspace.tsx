@@ -668,7 +668,7 @@ export default function SweepReclaimWorkspace({
                 <option value={2.0}>2.0R (Full Macro)</option>
               </select>
               <span className="text-[9px] text-slate-500 font-mono">
-                Tranche 1: 40% @ 1.0R | Tranche 3: 20% DOL
+                Tranche 1: 50% @ 1.0R | Tranche 2: 50% @ {stage2Multiple}R
               </span>
             </div>
           </div>
@@ -909,31 +909,24 @@ export default function SweepReclaimWorkspace({
               <h3 className="text-xs uppercase font-bold text-slate-300 mb-3 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
                   <Award className="w-3.5 h-3.5 text-purple-400" />
-                  <span>3-Stage Harvest Tranche Distributions</span>
+                  <span>2-Stage Dynamic Harvest Model</span>
                 </span>
-                <span className="text-[10px] text-purple-400">Position Scaling 40 / 40 / 20</span>
+                <span className="text-[10px] text-purple-400">Position Scaling 50% / 50%</span>
               </h3>
 
-              <div className="grid grid-cols-3 gap-2 text-center mb-3">
+              <div className="grid grid-cols-2 gap-2 text-center mb-3">
                 {/* Stage 1 */}
                 <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Stage 1 (40% @ 1.0R)</span>
+                  <span className="text-[8px] uppercase text-slate-500 block">Stage 1 (50% @ 1.0R)</span>
                   <span className="text-base font-bold text-cyan-300">{telemetry.stage1_fill_count ?? 0}</span>
                   <span className="text-[9px] text-slate-400 block">{telemetry.stage1_fill_pct ?? 0}% Fills</span>
                 </div>
 
                 {/* Stage 2 */}
                 <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Stage 2 (40% @ 1.5R)</span>
+                  <span className="text-[8px] uppercase text-slate-500 block">Stage 2 (50% @ {stage2Multiple}R)</span>
                   <span className="text-base font-bold text-purple-300">{telemetry.stage2_fill_count ?? 0}</span>
                   <span className="text-[9px] text-slate-400 block">{telemetry.stage2_fill_pct ?? 0}% Fills</span>
-                </div>
-
-                {/* Stage 3 */}
-                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Stage 3 (20% DOL)</span>
-                  <span className="text-base font-bold text-emerald-300">{telemetry.stage3_fill_count ?? 0}</span>
-                  <span className="text-[9px] text-slate-400 block">{telemetry.stage3_fill_pct ?? 0}% Fills</span>
                 </div>
               </div>
 
@@ -1565,23 +1558,17 @@ export default function SweepReclaimWorkspace({
               <span className="text-[10px] uppercase font-bold text-slate-400 block mb-2">
                 Tranche Target Ladder
               </span>
-              <div className="grid grid-cols-3 gap-3 text-center text-xs">
+              <div className="grid grid-cols-2 gap-3 text-center text-xs">
                 <div className={`p-2 rounded border ${inspectedSetup.is_stage1_filled ? "bg-cyan-950/40 border-cyan-500/40 text-cyan-300" : "bg-slate-900 border-slate-800 text-slate-500"}`}>
-                  <span className="text-[9px] block">Stage 1 (40% @ 1.0R)</span>
+                  <span className="text-[9px] block">Stage 1 (50% @ 1.0R)</span>
                   <strong className="block mt-0.5">${inspectedSetup.stage1_target.toFixed(2)}</strong>
                   <span className="text-[8px]">{inspectedSetup.is_stage1_filled ? "FILLED ✓" : "UNREACHED"}</span>
                 </div>
 
                 <div className={`p-2 rounded border ${inspectedSetup.is_stage2_filled ? "bg-purple-950/40 border-purple-500/40 text-purple-300" : "bg-slate-900 border-slate-800 text-slate-500"}`}>
-                  <span className="text-[9px] block">Stage 2 (40% @ {inspectedSetup.stage2_multiple}R)</span>
+                  <span className="text-[9px] block">Stage 2 (50% @ {inspectedSetup.stage2_multiple}R)</span>
                   <strong className="block mt-0.5">${inspectedSetup.stage2_target.toFixed(2)}</strong>
                   <span className="text-[8px]">{inspectedSetup.is_stage2_filled ? "FILLED ✓" : "UNREACHED"}</span>
-                </div>
-
-                <div className={`p-2 rounded border ${inspectedSetup.is_stage3_filled ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-300" : "bg-slate-900 border-slate-800 text-slate-500"}`}>
-                  <span className="text-[9px] block">Stage 3 (20% DOL)</span>
-                  <strong className="block mt-0.5">${inspectedSetup.stage3_target.toFixed(2)}</strong>
-                  <span className="text-[8px]">{inspectedSetup.is_stage3_filled ? "FILLED ✓" : "UNREACHED"}</span>
                 </div>
               </div>
             </div>

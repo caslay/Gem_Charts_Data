@@ -119,6 +119,14 @@ export class NodeWsClient {
     };
   }
 
+  public getStatus(): WSConnectionStatus {
+    return this.status;
+  }
+
+  public getActiveCandle(interval: '5m' | '15m' | '1h'): Candle | undefined {
+    return this.activeCandles[interval];
+  }
+
   private setStatus(newStatus: WSConnectionStatus): void {
     this.status = newStatus;
     for (const listener of this.statusListeners) {

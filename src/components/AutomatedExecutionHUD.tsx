@@ -152,47 +152,77 @@ export default function AutomatedExecutionHUD({
                   </div>
                 </div>
 
-                {/* 3-Stage Harvest Tranche Ladder Visualizer */}
-                <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
-                  {/* Tranche 1 */}
-                  <div
-                    className={`p-2 rounded border ${
-                      pos.isStage1Filled
-                        ? 'bg-cyan-950/40 border-cyan-500/40 text-cyan-300'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-400'
-                    }`}
-                  >
-                    <span className="text-[8px] uppercase block text-slate-500">Stage 1 (40% @ 1.0R)</span>
-                    <strong className="block mt-0.5">${pos.stage1Target.toFixed(2)}</strong>
-                    <span className="text-[8px]">{pos.isStage1Filled ? 'FILLED ✓ (+0.40R)' : 'UNREACHED'}</span>
-                  </div>
+                {/* Harvest Tranche Ladder Visualizer */}
+                {pos.stage3Ratio === 0 ? (
+                  <div className="grid grid-cols-2 gap-2 text-center text-[10px]">
+                    {/* Tranche 1 */}
+                    <div
+                      className={`p-2 rounded border ${
+                        pos.isStage1Filled
+                          ? 'bg-cyan-950/40 border-cyan-500/40 text-cyan-300'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      <span className="text-[8px] uppercase block text-slate-500">Stage 1 (50% @ 1.0R)</span>
+                      <strong className="block mt-0.5">${pos.stage1Target.toFixed(2)}</strong>
+                      <span className="text-[8px]">{pos.isStage1Filled ? 'FILLED ✓ (+0.50R)' : 'UNREACHED'}</span>
+                    </div>
 
-                  {/* Tranche 2 */}
-                  <div
-                    className={`p-2 rounded border ${
-                      pos.isStage2Filled
-                        ? 'bg-purple-950/40 border-purple-500/40 text-purple-300'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-400'
-                    }`}
-                  >
-                    <span className="text-[8px] uppercase block text-slate-500">Stage 2 (40% @ 1.5R)</span>
-                    <strong className="block mt-0.5">${pos.stage2Target.toFixed(2)}</strong>
-                    <span className="text-[8px]">{pos.isStage2Filled ? 'FILLED ✓ (+0.60R)' : 'UNREACHED'}</span>
+                    {/* Tranche 2 */}
+                    <div
+                      className={`p-2 rounded border ${
+                        pos.isStage2Filled
+                          ? 'bg-purple-950/40 border-purple-500/40 text-purple-300'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      <span className="text-[8px] uppercase block text-slate-500">Stage 2 (50% @ 1.4R)</span>
+                      <strong className="block mt-0.5">${pos.stage2Target.toFixed(2)}</strong>
+                      <span className="text-[8px]">{pos.isStage2Filled ? 'FILLED ✓ (+1.20R TOTAL)' : 'UNREACHED'}</span>
+                    </div>
                   </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
+                    {/* Tranche 1 */}
+                    <div
+                      className={`p-2 rounded border ${
+                        pos.isStage1Filled
+                          ? 'bg-cyan-950/40 border-cyan-500/40 text-cyan-300'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      <span className="text-[8px] uppercase block text-slate-500">Stage 1 (40% @ 1.0R)</span>
+                      <strong className="block mt-0.5">${pos.stage1Target.toFixed(2)}</strong>
+                      <span className="text-[8px]">{pos.isStage1Filled ? 'FILLED ✓ (+0.40R)' : 'UNREACHED'}</span>
+                    </div>
 
-                  {/* Tranche 3 */}
-                  <div
-                    className={`p-2 rounded border ${
-                      pos.isStage3Filled
-                        ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
-                        : 'bg-slate-900/60 border-slate-800 text-slate-400'
-                    }`}
-                  >
-                    <span className="text-[8px] uppercase block text-slate-500">Stage 3 (20% DOL)</span>
-                    <strong className="block mt-0.5">${pos.stage3Target.toFixed(2)}</strong>
-                    <span className="text-[8px]">{pos.isStage3Filled ? 'FILLED ✓ (+0.60R)' : 'ACTIVE RUNNER'}</span>
+                    {/* Tranche 2 */}
+                    <div
+                      className={`p-2 rounded border ${
+                        pos.isStage2Filled
+                          ? 'bg-purple-950/40 border-purple-500/40 text-purple-300'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      <span className="text-[8px] uppercase block text-slate-500">Stage 2 (40% @ 1.4R)</span>
+                      <strong className="block mt-0.5">${pos.stage2Target.toFixed(2)}</strong>
+                      <span className="text-[8px]">{pos.isStage2Filled ? 'FILLED ✓ (+0.56R)' : 'UNREACHED'}</span>
+                    </div>
+
+                    {/* Tranche 3 */}
+                    <div
+                      className={`p-2 rounded border ${
+                        pos.isStage3Filled
+                          ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
+                          : 'bg-slate-900/60 border-slate-800 text-slate-400'
+                      }`}
+                    >
+                      <span className="text-[8px] uppercase block text-slate-500">Stage 3 (20% DOL)</span>
+                      <strong className="block mt-0.5">${pos.stage3Target.toFixed(2)}</strong>
+                      <span className="text-[8px]">{pos.isStage3Filled ? 'FILLED ✓ (+0.60R)' : 'ACTIVE RUNNER'}</span>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Trailing Stop Ratchet Banner & Actions */}
                 <div className="flex items-center justify-between pt-2 border-t border-slate-800/60 text-[10px]">

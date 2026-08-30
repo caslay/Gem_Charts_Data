@@ -19,6 +19,7 @@ import { bootstrapHistoricalBuffers, computeMacroContext } from './lib/restBoots
 import { NodeWsClient, CandleClosedPayload, MarketTickPayload } from './lib/nodeWsClient';
 import { DaemonLedger } from './lib/daemonLedger';
 import { TelegramNotifier } from '../src/lib/notifications/telegramNotifier';
+import { TelegramBotService } from '../src/lib/notifications/telegramBotService';
 
 // Parse CLI Arguments
 const args = process.argv.slice(2);
@@ -34,7 +35,7 @@ async function main() {
   console.log(`===============================================================`);
   console.log(` Asset:           ${symbolArg.toUpperCase()} (Binance Futures)`);
   console.log(` Starting Equity: $${equityArg.toFixed(2)} USD (2% Compounded Risk)`);
-  console.log(` Strategy:        5M Sweep & Reclaim Champion (3-Stage Harvest)`);
+  console.log(` Strategy:        5M Sweep & Reclaim Champion (2-Stage Dynamic Harvest: 50% TP1 @ 1.0R / 50% TP2 @ 1.4R)`);
   console.log(` Telegram Alerts: ${telegram.isEnabled() ? '✅ ACTIVE (Chat: ' + telegram.getConfig().chatId + ')' : '⚪ DISABLED'}`);
   console.log(` Mode:            ${isDryRun ? 'DRY-RUN (30s Diagnostic Validation)' : '24/7 LIVE BACKGROUND EXECUTION'}`);
   console.log(` Local Time:      ${new Date().toLocaleString()} (UTC: ${new Date().toISOString()})`);
@@ -66,6 +67,14 @@ async function main() {
     compoundingRiskPct: 2.0,
     maxOpenPositions: 1,
     autoExecute: true,
+    stage1Ratio: 0.50,
+    stage2Ratio: 0.50,
+    stage3Ratio: 0.00,
+    stage1Multiple: 1.0,
+    stage2Multiple: 1.4,
+    stage3Multiple: 3.0,
+    enableStructuralTrail: true,
+    enableProfitRatchet: false,
     liveSettings: {
       ...DEFAULT_SR_LIVE_SETTINGS,
       enabledTimeframes: ['5m'],
@@ -73,8 +82,11 @@ async function main() {
       stage1Multiple: 1.0,
       stage2Multiple: 1.4,
       stage3Multiple: 3.0,
+      stage1Ratio: 0.50,
+      stage2Ratio: 0.50,
+      stage3Ratio: 0.00,
       enableStructuralTrail: true,
-      enableProfitRatchet: true,
+      enableProfitRatchet: false,
       requireThreePillarDisplacement: true,
       enforceDiscountPremiumGate: true,
     },
@@ -86,6 +98,20 @@ async function main() {
     `[DAEMON] 🔍 Historical scan completed: ${initialScan.scannedSetups.length} setups in history indexed. Cold-start guard active.`
   );
 
+  // 4b. Rehydrate any active in-flight positions from today's session ledger
+  const inFlightPositions = ledger.getActiveInFlightPositions();
+  if (inFlightPositions.length > 0) {
+    engine.rehydratePositionsDirect(inFlightPositions);
+    console.log(
+      `[DAEMON] 🔄 Successfully restored ${inFlightPositions.length} active in-flight position(s) from persistence ledger:`
+    );
+    for (const p of inFlightPositions) {
+      console.log(
+        `   ➔ Restored Position [${p.id}]: ${p.direction} ${p.symbol} @ $${p.entryPrice.toFixed(2)} | SL: $${p.activeStopLoss.toFixed(2)} | TP1: $${p.stage1Target.toFixed(2)} | TP2: $${p.stage2Target.toFixed(2)} | Status: ${p.status}`
+      );
+    }
+  }
+
   // 5. Subscribe to Execution Engine Events
   engine.subscribe((event) => {
     const pos = event.position;
@@ -96,7 +122,7 @@ async function main() {
         console.log(`\n📌 [${now}] [LIMIT_ORDER_PLACED] ${event.message}`);
         if (pos) {
           console.log(
-            `   ➔ Setup: ${pos.anchorName} | Limit: $${pos.limitEntryPrice.toFixed(2)} | SL: $${pos.initialStopLoss.toFixed(2)} | TP1: $${pos.stage1Target.toFixed(2)}`
+            `   ➔ Setup: ${pos.anchorName} | Limit: $${pos.limitEntryPrice.toFixed(2)} | SL: $${pos.initialStopLoss.toFixed(2)} | TP1: $${pos.stage1Target.toFixed(2)} | TP2: $${pos.stage2Target.toFixed(2)}`
           );
         }
         ledger.logEvent('LIMIT_ORDER_PLACED', event.message, { position: pos });
@@ -115,7 +141,7 @@ async function main() {
       case 'STAGE_1_HARVEST':
         console.log(`\n🎯 [${now}] [STAGE_1_HARVEST] ${event.message}`);
         if (pos) {
-          console.log(`   ➔ Locked: +0.40R | Stop Loss advanced to Breakeven ($${pos.activeStopLoss.toFixed(2)})`);
+          console.log(`   ➔ Locked: +0.50R | Stop Loss advanced to Breakeven ($${pos.activeStopLoss.toFixed(2)})`);
         }
         ledger.logEvent('STAGE_1_HARVEST', event.message, { position: pos });
         break;
@@ -123,7 +149,7 @@ async function main() {
       case 'STAGE_2_HARVEST':
         console.log(`\n💰 [${now}] [STAGE_2_HARVEST] ${event.message}`);
         if (pos) {
-          console.log(`   ➔ Locked: +0.60R | Stop Loss ratcheted to Profit Floor ($${pos.activeStopLoss.toFixed(2)})`);
+          console.log(`   ➔ Locked: +0.70R | Total Realized: +${pos.realizedR.toFixed(2)}R | 100% Position Closed!`);
         }
         ledger.logEvent('STAGE_2_HARVEST', event.message, { position: pos });
         break;
@@ -159,6 +185,7 @@ async function main() {
   let tickCount = 0;
   let lastPriceLogTime = 0;
   let currentMacroContext = bootstrapData.macroContext;
+  let latestScannedSetups = initialScan.scannedSetups || [];
 
   // Real-Time Trade Ticks Dispatcher
   wsClient.onMarketTick((tick: MarketTickPayload) => {
@@ -191,10 +218,28 @@ async function main() {
 
     // Trigger strategy candidate scan
     const scanResult = engine.onMultiTimeframeCandles(buffers, currentMacroContext);
+    latestScannedSetups = scanResult.scannedSetups || [];
     if (scanResult.scannedSetups.length > 0) {
       console.log(`   ➔ Scanned ${scanResult.scannedSetups.length} valid structural setups.`);
     }
   });
+
+  // 6.5. Start Interactive Telegram Bot Command Center (Two-Way Commands)
+  const botService = new TelegramBotService(
+    {
+      engine,
+      ledger,
+      wsClient,
+      symbol: symbolArg,
+      equity: equityArg,
+      isDryRun,
+      bootTimestamp: Date.now(),
+      getMacroContext: () => currentMacroContext,
+      getLatestSetups: () => latestScannedSetups,
+    },
+    telegram
+  );
+  botService.startPolling();
 
   // Connect WebSocket
   await wsClient.connect();
@@ -212,6 +257,7 @@ async function main() {
       console.log(` 5m Ring Buffer Bars:    ${wsClient.getRingBuffers()['5m'].length}`);
       console.log(` Session Log Saved:      ${ledger.getRunLogPath()}`);
       console.log(`===============================================================\n`);
+      botService.stop();
       wsClient.stop();
       process.exit(0);
     }, 30000);
@@ -221,6 +267,7 @@ async function main() {
   const shutdown = () => {
     console.log(`\n\n[DAEMON] 🛑 Stopping Flow-State Headless Daemon...`);
     ledger.logEvent('HEARTBEAT', `Daemon stopped cleanly.`);
+    botService.stop();
     wsClient.stop();
     console.log(`[DAEMON] Session saved to: ${ledger.getRunLogPath()}`);
     process.exit(0);

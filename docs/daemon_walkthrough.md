@@ -106,23 +106,38 @@ If you just want to run a quick 30-second live test in the terminal without PM2:
 
 ---
 
-## 📲 Telegram Bot Real-Time Notifications
+## 📲 Telegram Bot Real-Time Notifications & Interactive Commands
 
-The headless daemon automatically sends real-time trade notifications directly to your Telegram:
+The headless daemon automatically sends real-time trade notifications and hosts an interactive **Two-Way Command Center** directly in your Telegram chat:
 
+### ⚡ Automatic Real-Time Push Alerts:
 | Event | Notification Content |
 | :--- | :--- |
 | ⏳ **Pending Limit Placed** | Pair, Direction, Limit Entry, Stop Loss, TP1/TP2/TP3, 2% Compounded Risk ($USD), Setup Anchor |
 | 🚀 **Order Opened / Filled** | Direction, Fill Price, Contract Size (ETH), USD Risk, Active Stop Loss, Multi-Stage Targets |
-| 🎯 **TP1 Hit (Stage 1)** | 40% Tranche Locked (+0.40R realized), Stop Loss moved to **Breakeven / FVG CE** 🛡️ |
-| 💰 **TP2 Hit (Stage 2)** | 40% Tranche Locked (+0.60R realized, +1.0R total), Stop Loss ratcheted to **+1.0R Profit Floor** 💎 |
-| 🏁 **Trade Closed / SL Hit** | Full Stop Out (-1.0R), Breakeven Scratch (+0.40R), Profit Floor (+1.20R), or Full TP3 Win (+1.60R+) |
+| 🎯 **TP1 Hit (Stage 1)** | Tranche Locked (+0.40R realized), Stop Loss moved to **Breakeven / FVG CE** 🛡️ |
+| 💰 **TP2 Hit (Stage 2)** | Tranche Locked (+0.60R realized, +1.0R total), Stop Loss ratcheted to **+1.0R Profit Floor** 💎 |
+| 🏁 **Trade Closed / SL Hit** | Full Stop Out (-1.0R), Breakeven Scratch, Profit Floor Win, or Full TP3 Win |
 
-### 🧪 Test Telegram Connectivity in 1 Second:
+---
+
+### 🎛️ Interactive Two-Way Bot Commands (1-Tap Buttons)
+
+You can query the engine in real time anytime by tapping the buttons below your chat or typing:
+
+| Command | Action |
+| :--- | :--- |
+| **`/status`** | Live engine health, ETH price, uptime, WebSocket status, and Macro Bias (PDH/PDL/Asian) |
+| **`/trade`** | Inspect currently active open position, floating P&L ($ & R), SL source, or resting limit order |
+| **`/today`** | Today's realized P&L ($ & R), total trades, win rate, capital, and completed trades list |
+| **`/setups`** | Monitored structural liquidity zones & candidate sweep levels |
+| **`/reconcile`** | Instant 1:1 Quant Lab parity audit verification |
+| **`/help`** | Command reference and custom reply keyboard |
+
+### 🧪 Test Commands in 1 Second:
 ```powershell
-npm run test:telegram
+npm run test:telegram:commands
 ```
-*Dispatches a diagnostic message and verifies the strict deduplication mechanism.*
 
 ---
 
@@ -132,15 +147,17 @@ npm run test:telegram
 Gem_Charts_Data/
 ├── ecosystem.config.js               # PM2 process configuration (includes Telegram env vars)
 ├── scripts/
-│   ├── headless-daemon.ts            # Master 24/7 background execution host
+│   ├── headless-daemon.ts            # Master 24/7 background execution host (with interactive bot listener)
 │   ├── test-telegram.ts              # Telegram bot connectivity & deduplication test tool
+│   ├── test-telegram-commands.ts     # Interactive commands simulation test tool
 │   ├── reconcile-session.ts          # 1:1 Quant Lab parity matching engine
 │   └── lib/
 │       ├── restBootstrap.ts          # Cold-start 500-bar historical fetcher & macro context
 │       ├── nodeWsClient.ts           # Sub-second WebSocket multi-stream driver (5m/15m/1h + aggTrade)
 │       └── daemonLedger.ts           # Atomic session logger & ETHUSDC_Daily_Tracker.json syncer
 ├── src/lib/notifications/
-│   └── telegramNotifier.ts           # Production Telegram service with strict deduplication & HTML formatting
+│   ├── telegramNotifier.ts           # Production Telegram service with strict deduplication & HTML formatting
+│   └── telegramBotService.ts        # Two-way interactive command listener (Long-Polling)
 └── run_logs/
     ├── live_session_*.json           # Real-time event and tick log
     ├── telegram_notified_events.json # Persistent deduplication registry

@@ -2068,7 +2068,7 @@ export default function Chart({
                     </>
                   )}
 
-                  {/* Stage 1 Target (40% @ 1.0R) - Unmounts when Stage 1 is Filled */}
+                  {/* Stage 1 Target (50% @ 1.0R) - Unmounts when Stage 1 is Filled */}
                   {srOverlay.target1 > 0 && !srOverlay.isStage1Filled && (
                     <>
                       <line
@@ -2084,13 +2084,13 @@ export default function Chart({
                       <g id="svg-sr-label-tp1" transform="translate(10, -1000)">
                         <rect x="5" y="-9" width="205" height="18" fill="#06281e" rx="3" stroke="#34d399" strokeWidth="1" />
                         <text x="12" y="4" fill="#34d399" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
-                          {`🏆 TP1 (40% @ 1.0R): $${srOverlay.target1.toFixed(2)}`}
+                          {`🏆 TP1 (50% @ 1.0R): $${srOverlay.target1.toFixed(2)}`}
                         </text>
                       </g>
                     </>
                   )}
 
-                  {/* Stage 2 Target (40% @ 1.5R) - Unmounts when Stage 2 is Filled */}
+                  {/* Stage 2 Target (50% @ 1.4R) - Unmounts when Stage 2 is Filled */}
                   {srOverlay.target2 > 0 && !srOverlay.isStage2Filled && (
                     <>
                       <line
@@ -2106,7 +2106,7 @@ export default function Chart({
                       <g id="svg-sr-label-tp2" transform="translate(10, -1000)">
                         <rect x="5" y="-9" width="205" height="18" fill="#042018" rx="3" stroke="#10b981" strokeWidth="1" />
                         <text x="12" y="4" fill="#10b981" fontSize="9.5" fontFamily="monospace" fontWeight="bold">
-                          {`💎 TP2 (40% @ 1.5R): $${srOverlay.target2.toFixed(2)}`}
+                          {`💎 TP2 (50% @ 1.4R): $${srOverlay.target2.toFixed(2)}`}
                         </text>
                       </g>
                     </>
@@ -2337,23 +2337,18 @@ export default function Chart({
           {/* Projected Profit Target Continuum */}
           <div className="bg-card-border/10 border border-card-border/40 p-2.5 rounded-xl mb-3">
             <span className="text-[9px] font-bold text-muted uppercase font-mono block mb-1.5">
-              Projected 3-Stage Harvest Continuum
+              Projected 2-Stage Dynamic Harvest Continuum
             </span>
-            <div className="grid grid-cols-3 gap-2 font-mono text-[10px]">
+            <div className="grid grid-cols-2 gap-2 font-mono text-[10px]">
               <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                <div className="text-emerald-600 dark:text-emerald-400 font-bold text-[10.5px]">TP1 (40% @ 1.0R)</div>
+                <div className="text-emerald-600 dark:text-emerald-400 font-bold text-[10.5px]">TP1 (50% @ 1.0R)</div>
                 <div className="text-foreground font-bold text-xs mt-0.5">${srOverlay.target1.toFixed(2)}</div>
                 <div className="text-[8.5px] text-muted mt-0.5">Trails SL to BE / FVG CE</div>
               </div>
               <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                <div className="text-emerald-600 dark:text-emerald-400 font-bold text-[10.5px]">TP2 (40% @ 1.5R)</div>
+                <div className="text-emerald-600 dark:text-emerald-400 font-bold text-[10.5px]">TP2 (50% @ 1.4R)</div>
                 <div className="text-foreground font-bold text-xs mt-0.5">${srOverlay.target2.toFixed(2)}</div>
-                <div className="text-[8.5px] text-muted mt-0.5">Ratchets SL to +1.0R Floor</div>
-              </div>
-              <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                <div className="text-emerald-600 dark:text-emerald-400 font-bold text-[10.5px]">TP3 (20% Runner)</div>
-                <div className="text-foreground font-bold text-xs mt-0.5">${srOverlay.target3.toFixed(2)}</div>
-                <div className="text-[8.5px] text-muted mt-0.5">Macro DOL Target</div>
+                <div className="text-[8.5px] text-muted mt-0.5">100% Full Position Close</div>
               </div>
             </div>
           </div>

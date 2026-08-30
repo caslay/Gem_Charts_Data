@@ -61,6 +61,9 @@ export interface SweepReclaimPresetConfig {
   stage1Multiple: number;
   stage2Multiple: number;
   stage3Multiple: number;
+  stage1Ratio?: number;
+  stage2Ratio?: number;
+  stage3Ratio?: number;
   entryMode: SweepReclaimEntryMode;
   enableStructuralTrail: boolean;
   enableProfitRatchet: boolean;
@@ -73,10 +76,17 @@ export interface OrderBlockPresetConfig {
   timeframe: '5m' | '15m' | '1h' | '4h';
   minTier: 'ALL' | 'A_PLUS_ONLY' | 'A_AND_A_PLUS';
   strictTierAPlus: boolean;
+  minVolumeExpansion?: number;
+  minTakerDelta?: number;
+  minDisplacementPips?: number;
+  requireFvgConfluence?: boolean;
+  requireOlsValidation?: boolean;
+  olsSensitivity?: 'AGGRESSIVE' | 'MODERATE' | 'CONSERVATIVE';
+  enforceDiscountPremiumGate?: boolean;
   maxBarsToMitigation: number;
   enableBreakerSim: boolean;
   maxBreakerRetestBars: number;
-  enableDynamicMgmt: boolean;
+  enableDynamicMgmt?: boolean;
   tp1Multiple: number;
   tp2Multiple: number;
   positionScalingMode: 'THREE_STAGE_HARVEST' | 'TWO_STAGE_DYNAMIC' | 'SINGLE_STAGE';
@@ -116,8 +126,8 @@ export interface ScannerPreset {
 export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
   {
     id: 'factory_sr_5m_winner_fvg_proximal',
-    name: '5m Sweep & Reclaim Max Profit Champion (FVG Proximal)',
-    description: 'The #1 PM2-Validated Maximum Profit Champion for 5m ETH. Enters at FVG Proximal Edge with 1.20x Vol, 52% Delta, 0.40 Body, 1.0R/1.4R/3.0R scaling (+1,065.04R 2Y Net Gain, 69.1% Win Rate, 2.12 PF).',
+    name: '5m Sweep & Reclaim 2-Stage Max Alpha Champion (FVG Proximal)',
+    description: 'The #1 PM2-Validated 2-Stage Alpha Champion for 5m ETH. Enters at FVG Proximal Edge with 1.20x Vol, 52% Delta, 0.40 Body, 50% TP1 @ 1.0R / 50% TP2 @ 1.4R complete harvest (+1,141.95R 2Y Net Gain, 69.1% Win Rate, 2.20 PF, -7.60R Max DD).',
     strategyType: 'SWEEP_RECLAIM',
     symbol: 'ETHUSDC',
     timeframe: '5m',
@@ -143,9 +153,12 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
       stage1Multiple: 1.0,
       stage2Multiple: 1.4,
       stage3Multiple: 3.0,
+      stage1Ratio: 0.50,
+      stage2Ratio: 0.50,
+      stage3Ratio: 0.00,
       entryMode: 'FVG_PROXIMAL',
       enableStructuralTrail: true,
-      enableProfitRatchet: true,
+      enableProfitRatchet: false,
       minSweepDepthAtrMultiplier: 0.10,
       slBufferAtrMultiplier: 0.10,
     } as SweepReclaimPresetConfig,

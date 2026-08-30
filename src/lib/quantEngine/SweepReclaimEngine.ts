@@ -63,6 +63,7 @@ export type SweepReclaimTradeOutcome =
 
 export type SweepReclaimStageExitType =
   | 'FULL_TP3_WIN'
+  | 'FULL_TP2_WIN'
   | 'STAGE_2_WIN'
   | 'STAGE_1_SCRATCH'
   | 'STOPPED_OUT'
@@ -240,6 +241,9 @@ export interface SweepReclaimScanConfig {
   stage1Multiple?: number;                    // Stage 1 Tranche target R (default: 1.0)
   stage2Multiple?: number;                    // Stage 2 Tranche target R (default: 1.5)
   stage3Multiple?: number;                    // Stage 3 Tranche target R / DOL runner (default: 3.0)
+  stage1Ratio?: number;                       // Tranche 1 volume weight (default: 0.50)
+  stage2Ratio?: number;                       // Tranche 2 volume weight (default: 0.50)
+  stage3Ratio?: number;                       // Tranche 3 volume weight (default: 0.00)
   entryMode?: SweepReclaimEntryMode;          // (default: 'SWEEP_OB_MT')
   enableStructuralTrail?: boolean;            // Trail SL to FVG CE after Stage 1 (default: true)
   enableProfitRatchet?: boolean;              // Ratchet SL to +1.0R floor after Stage 2 (default: true)
@@ -340,6 +344,9 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   stage1Multiple: 1.0,
   stage2Multiple: 1.4,
   stage3Multiple: 3.0,
+  stage1Ratio: 0.50,
+  stage2Ratio: 0.50,
+  stage3Ratio: 0.00,
   entryMode: 'FVG_PROXIMAL',
   enableStructuralTrail: true,
   enableProfitRatchet: true,
@@ -388,9 +395,9 @@ export function resolveRetestEntryPrice(params: RetestPriceResolverParams): numb
 
     case 'FVG_PROXIMAL':
       if (fvg && Number.isFinite(fvg.top) && Number.isFinite(fvg.bottom) && fvg.top > fvg.bottom) {
-        // Bullish (BISI): retracement downward → hits LOWER gap boundary first = Candle 1 High = fvg.bottom
-        // Bearish (SIBI): retracement upward  → hits UPPER gap boundary first = Candle 1 Low  = fvg.top
-        const proximal = isBullish ? fvg.bottom : fvg.top;
+        // Bullish (BISI): price retracing downward from above hits UPPER gap boundary first = Candle 3 Low  = fvg.top
+        // Bearish (SIBI): price retracing upward from below hits LOWER gap boundary first   = Candle 3 High = fvg.bottom
+        const proximal = isBullish ? fvg.top : fvg.bottom;
         return parseFloat(proximal.toFixed(4));
       }
       return parseFloat(anchorLevel.toFixed(4));
@@ -406,9 +413,9 @@ export function resolveRetestEntryPrice(params: RetestPriceResolverParams): numb
 
     case 'FVG_DISTAL':
       if (fvg && Number.isFinite(fvg.top) && Number.isFinite(fvg.bottom) && fvg.top > fvg.bottom) {
-        // Bullish (BISI): deepest boundary before gap mitigation/invalidation = Candle 3 Low = fvg.top
-        // Bearish (SIBI): deepest boundary before gap mitigation/invalidation = Candle 3 High = fvg.bottom
-        const distal = isBullish ? fvg.top : fvg.bottom;
+        // Bullish (BISI): deepest boundary before gap mitigation = Candle 1 High = fvg.bottom
+        // Bearish (SIBI): deepest boundary before gap mitigation = Candle 1 Low  = fvg.top
+        const distal = isBullish ? fvg.bottom : fvg.top;
         return parseFloat(distal.toFixed(4));
       }
       return parseFloat(anchorLevel.toFixed(4));
@@ -1722,7 +1729,6 @@ export class SweepReclaimEngine {
         continue;
       }
 
-      // Mark setup as RETESTED
       baseSetup.phase = 'RETEST';
       baseSetup.status = 'RETESTED';
       baseSetup.is_retested = true;
@@ -1732,7 +1738,6 @@ export class SweepReclaimEngine {
       baseSetup.retest_price = retestPrice;
       baseSetup.bars_reclaim_to_retest = retestIdx - reclaimIdx;
 
-      // ─── 3-Stage Harvest Trade Execution State Machine ─────────────────────
       let positionOpen = true;
       let activeStopLoss = stopLoss;
       let maxFavorablePrice = executionEntry;
@@ -1746,10 +1751,9 @@ export class SweepReclaimEngine {
 
       const enableStructuralTrail = this.config.enableStructuralTrail !== false;
       const enableProfitRatchet = this.config.enableProfitRatchet !== false;
-
-      const w1 = 0.40;
-      const w2 = 0.40;
-      const w3 = 0.20;
+      const w1 = typeof this.config.stage1Ratio === 'number' ? this.config.stage1Ratio : 0.50;
+      const w2 = typeof this.config.stage2Ratio === 'number' ? this.config.stage2Ratio : 0.50;
+      const w3 = typeof this.config.stage3Ratio === 'number' ? this.config.stage3Ratio : 0.00;
 
       for (let i = retestIdx; i < n; i++) {
         if (!positionOpen) break;
@@ -1765,11 +1769,10 @@ export class SweepReclaimEngine {
           const initialBarSL = activeStopLoss;
           const hitStage1 = high >= target1;
           const hitStage2 = high >= target2;
-          const hitStage3 = high >= target3;
+          const hitStage3 = target3 !== null && high >= target3;
 
           let stageFilledThisBar = false;
 
-          // ── Tranche 1: 40% at 1.0R ────────────────────────────────────────
           if (hitStage1 && !baseSetup.is_stage1_filled) {
             baseSetup.is_stage1_filled = true;
             baseSetup.stage1_hit_time = c.t;
@@ -1790,14 +1793,22 @@ export class SweepReclaimEngine {
             }
           }
 
-          // ── Tranche 2: 40% at 1.5R ────────────────────────────────────────
           if (hitStage2 && baseSetup.is_stage1_filled && !baseSetup.is_stage2_filled) {
             baseSetup.is_stage2_filled = true;
             baseSetup.stage2_hit_time = c.t;
             baseSetup.stage2_hit_index = i;
             stageFilledThisBar = true;
 
-            if (enableProfitRatchet) {
+            if (w3 === 0) {
+              realizedRr = w1 * stage1Multiple + w2 * stage2Multiple;
+              outcome = 'FULL_TP2_WIN';
+              stageExit = 'FULL_TP2_WIN';
+              exitIdx = i;
+              exitPrice = target2;
+              exitTime = c.t;
+              positionOpen = false;
+              break;
+            } else if (enableProfitRatchet) {
               const ratchetLevel = executionEntry + 1.0 * riskUsd;
               activeStopLoss = Math.max(activeStopLoss, ratchetLevel);
               baseSetup.active_trailing_sl = parseFloat(activeStopLoss.toFixed(4));
@@ -1806,8 +1817,7 @@ export class SweepReclaimEngine {
             }
           }
 
-          // ── Tranche 3: 20% at Macro DOL Target ─────────────────────────────
-          if (hitStage3 && baseSetup.is_stage2_filled && !baseSetup.is_stage3_filled) {
+          if (w3 > 0 && hitStage3 && baseSetup.is_stage2_filled && !baseSetup.is_stage3_filled) {
             baseSetup.is_stage3_filled = true;
             baseSetup.stage3_hit_time = c.t;
             baseSetup.stage3_hit_index = i;
@@ -1822,7 +1832,6 @@ export class SweepReclaimEngine {
             break;
           }
 
-          // Stop Loss / Ratchet Violation Check
           const checkSL = stageFilledThisBar ? activeStopLoss : initialBarSL;
           if (low <= checkSL) {
             exitIdx = i;
@@ -1830,7 +1839,7 @@ export class SweepReclaimEngine {
             exitTime = c.t;
             positionOpen = false;
 
-            if (baseSetup.is_stage2_filled) {
+            if (baseSetup.is_stage2_filled && w3 > 0) {
               const runnerR = (checkSL - executionEntry) / riskUsd;
               realizedRr = w1 * stage1Multiple + w2 * stage2Multiple + w3 * runnerR;
               outcome = 'FULL_TP2_WIN';
@@ -1855,18 +1864,16 @@ export class SweepReclaimEngine {
             break;
           }
         } else {
-          // Bearish Simulation
           if (low < maxFavorablePrice) maxFavorablePrice = low;
           if (high > maxAdversePrice) maxAdversePrice = high;
 
           const initialBarSL = activeStopLoss;
           const hitStage1 = low <= target1;
           const hitStage2 = low <= target2;
-          const hitStage3 = low <= target3;
+          const hitStage3 = target3 !== null && low <= target3;
 
           let stageFilledThisBar = false;
 
-          // ── Tranche 1: 40% at 1.0R ────────────────────────────────────────
           if (hitStage1 && !baseSetup.is_stage1_filled) {
             baseSetup.is_stage1_filled = true;
             baseSetup.stage1_hit_time = c.t;
@@ -1887,14 +1894,22 @@ export class SweepReclaimEngine {
             }
           }
 
-          // ── Tranche 2: 40% at 1.5R ────────────────────────────────────────
           if (hitStage2 && baseSetup.is_stage1_filled && !baseSetup.is_stage2_filled) {
             baseSetup.is_stage2_filled = true;
             baseSetup.stage2_hit_time = c.t;
             baseSetup.stage2_hit_index = i;
             stageFilledThisBar = true;
 
-            if (enableProfitRatchet) {
+            if (w3 === 0) {
+              realizedRr = w1 * stage1Multiple + w2 * stage2Multiple;
+              outcome = 'FULL_TP2_WIN';
+              stageExit = 'FULL_TP2_WIN';
+              exitIdx = i;
+              exitPrice = target2;
+              exitTime = c.t;
+              positionOpen = false;
+              break;
+            } else if (enableProfitRatchet) {
               const ratchetLevel = executionEntry - 1.0 * riskUsd;
               activeStopLoss = Math.min(activeStopLoss, ratchetLevel);
               baseSetup.active_trailing_sl = parseFloat(activeStopLoss.toFixed(4));
@@ -1903,8 +1918,8 @@ export class SweepReclaimEngine {
             }
           }
 
-          // ── Tranche 3: 20% at Macro DOL Target ─────────────────────────────
-          if (hitStage3 && baseSetup.is_stage2_filled && !baseSetup.is_stage3_filled) {
+          // ── Tranche 3: Stage 3 Target (e.g. 20% at Macro DOL Target) ────────
+          if (w3 > 0 && hitStage3 && baseSetup.is_stage2_filled && !baseSetup.is_stage3_filled) {
             baseSetup.is_stage3_filled = true;
             baseSetup.stage3_hit_time = c.t;
             baseSetup.stage3_hit_index = i;
