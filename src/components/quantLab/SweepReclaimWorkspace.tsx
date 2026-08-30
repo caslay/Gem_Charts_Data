@@ -32,7 +32,10 @@ import {
   Check,
   Target,
   BarChart3,
-  Percent
+  Percent,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal
 } from "lucide-react";
 import {
   SweepReclaimSetup,
@@ -105,7 +108,7 @@ export default function SweepReclaimWorkspace({
   const [enableStructuralTrail, setEnableStructuralTrail] = useState(true);
   const [enableProfitRatchet, setEnableProfitRatchet] = useState(true);
 
-  // Structural Pivot Lookbacks
+  // Structural Pivot Lookbacks & Advanced Geometry
   const [lookbackMajor, setLookbackMajor] = useState(10);
   const [lookbackInternal, setLookbackInternal] = useState(5);
   const [maxBarsAnchorToSweep, setMaxBarsAnchorToSweep] = useState(25);
@@ -113,6 +116,7 @@ export default function SweepReclaimWorkspace({
   const [maxBarsToRetest, setMaxBarsToRetest] = useState(20);
   const [minSweepDepthAtr, setMinSweepDepthAtr] = useState(0.10);
   const [slBufferAtr, setSlBufferAtr] = useState(0.10);
+  const [showAdvancedControls, setShowAdvancedControls] = useState(false);
 
   // Table Filter States
   const [filterDirection, setFilterDirection] = useState<string>("ALL");
@@ -342,55 +346,56 @@ export default function SweepReclaimWorkspace({
       {/* ─────────────────────────────────────────────────────────────────── */}
       {/* 1. CONFIGURATION CONTROLS PANEL                                     */}
       {/* ─────────────────────────────────────────────────────────────────── */}
-      <section className="border border-slate-800/50 bg-slate-900/30 backdrop-blur-sm rounded-lg p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800/50 pb-4 mb-5 gap-3">
-          <h2 className="text-xs uppercase tracking-widest text-slate-300 font-mono font-bold flex items-center gap-2">
-            <Sliders className="w-4 h-4 text-cyan-400" />
+      <section className="border border-card-border dark:border-slate-800/50 bg-card/75 dark:bg-slate-900/30 backdrop-blur-sm rounded-xl p-5 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-card-border/60 dark:border-slate-800/50 pb-4 mb-5 gap-3">
+          <h2 className="text-xs uppercase tracking-widest text-foreground dark:text-slate-300 font-mono font-bold flex items-center gap-2">
+            <Sliders className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />
             <span>Sweep & Reclaim Scanner Configuration</span>
           </h2>
 
           {/* Quick Lookback Preset Buttons */}
           <div className="flex items-center gap-1.5 font-mono text-[10px]">
-            <span className="text-slate-500 text-[9px] uppercase mr-1">Lookback:</span>
+            <span className="text-muted dark:text-slate-500 text-[9px] uppercase mr-1">Lookback:</span>
             <button
               onClick={() => setQuickDateRange(30)}
-              className="px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-700 text-slate-300 transition"
+              className="px-2 py-1 rounded bg-card dark:bg-slate-800/60 border border-card-border dark:border-transparent hover:bg-muted/15 hover:dark:bg-slate-700 text-foreground dark:text-slate-300 transition shadow-xs"
             >
               30D
             </button>
             <button
               onClick={() => setQuickDateRange(60)}
-              className="px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-700 text-slate-300 transition"
+              className="px-2 py-1 rounded bg-card dark:bg-slate-800/60 border border-card-border dark:border-transparent hover:bg-muted/15 hover:dark:bg-slate-700 text-foreground dark:text-slate-300 transition shadow-xs"
             >
               60D
             </button>
             <button
               onClick={() => setQuickDateRange(90)}
-              className="px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-700 text-slate-300 transition"
+              className="px-2 py-1 rounded bg-card dark:bg-slate-800/60 border border-card-border dark:border-transparent hover:bg-muted/15 hover:dark:bg-slate-700 text-foreground dark:text-slate-300 transition shadow-xs"
             >
               90D
             </button>
             <button
               onClick={() => setQuickDateRange(180)}
-              className="px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-700 text-slate-300 transition"
+              className="px-2 py-1 rounded bg-card dark:bg-slate-800/60 border border-card-border dark:border-transparent hover:bg-muted/15 hover:dark:bg-slate-700 text-foreground dark:text-slate-300 transition shadow-xs"
             >
               180D
             </button>
             <button
               onClick={() => setQuickDateRange(365)}
-              className="px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-700 text-slate-300 transition"
+              className="px-2 py-1 rounded bg-card dark:bg-slate-800/60 border border-card-border dark:border-transparent hover:bg-muted/15 hover:dark:bg-slate-700 text-foreground dark:text-slate-300 transition shadow-xs"
             >
               1Y
             </button>
           </div>
         </div>
 
-        {/* Local-First Scanner Preset Control Deck */}
+        {/* Local-First Scanner Preset Control Deck (Isolated Sandbox Mode) */}
         <div className="mb-5">
           <ScannerPresetControlDeck
             strategyType="SWEEP_RECLAIM"
             currentConfig={currentSweepReclaimConfig}
             onApplyPreset={handleApplyPreset}
+            mode="backtest_sandbox"
           />
         </div>
 
@@ -398,7 +403,7 @@ export default function SweepReclaimWorkspace({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
           {/* Scan Name */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] uppercase font-mono font-semibold text-slate-400">
+            <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400">
               Scan Run Name
             </label>
             <input
@@ -406,20 +411,20 @@ export default function SweepReclaimWorkspace({
               disabled={isScanning}
               value={scanName}
               onChange={(e) => setScanName(e.target.value)}
-              className="text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500/50 outline-none rounded text-white"
+              className="text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-cyan-500 text-foreground dark:text-white outline-none rounded-lg shadow-xs transition"
             />
           </div>
 
           {/* Symbol */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] uppercase font-mono font-semibold text-slate-400">
+            <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400">
               Asset Symbol
             </label>
             <select
               disabled={isScanning}
               value={symbol}
               onChange={(e) => setSymbol(e.target.value)}
-              className="text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500/50 outline-none rounded text-white"
+              className="text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-cyan-500 text-foreground dark:text-white outline-none rounded-lg shadow-xs transition cursor-pointer"
             >
               <option value="ETHUSDC">ETHUSDC (Binance Futures)</option>
               <option value="BTCUSDC">BTCUSDC (Binance Futures)</option>
@@ -429,14 +434,14 @@ export default function SweepReclaimWorkspace({
 
           {/* Timeframe */}
           <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] uppercase font-mono font-semibold text-slate-400">
+            <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400">
               Execution Timeframe
             </label>
             <select
               disabled={isScanning}
               value={timeframe}
               onChange={(e) => setTimeframe(e.target.value as any)}
-              className="text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500/50 outline-none rounded text-white"
+              className="text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-cyan-500 text-foreground dark:text-white outline-none rounded-lg shadow-xs transition cursor-pointer"
             >
               <option value="5m">5m (Intraday Micro)</option>
               <option value="15m">15m (Primary Institutional)</option>
@@ -448,8 +453,8 @@ export default function SweepReclaimWorkspace({
           {/* Date Range Start / End */}
           <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center gap-1">
-                <Calendar className="w-3 h-3 text-cyan-400" />
+              <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400 flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-cyan-500 dark:text-cyan-400" />
                 <span>Start Date</span>
               </label>
               <input
@@ -457,12 +462,12 @@ export default function SweepReclaimWorkspace({
                 disabled={isScanning}
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="text-xs font-mono px-2 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500/50 outline-none rounded text-white"
+                className="text-xs font-mono px-2 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-cyan-500 text-foreground dark:text-white outline-none rounded-lg shadow-xs transition"
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center gap-1">
-                <Calendar className="w-3 h-3 text-cyan-400" />
+              <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400 flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-cyan-500 dark:text-cyan-400" />
                 <span>End Date</span>
               </label>
               <input
@@ -470,16 +475,16 @@ export default function SweepReclaimWorkspace({
                 disabled={isScanning}
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="text-xs font-mono px-2 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500/50 outline-none rounded text-white"
+                className="text-xs font-mono px-2 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-cyan-500 text-foreground dark:text-white outline-none rounded-lg shadow-xs transition"
               />
             </div>
           </div>
         </div>
 
         {/* Anchor Selection & Multi-Timeframe Toggles */}
-        <div className="border-t border-slate-800/40 pt-4 mb-4">
-          <label className="text-[10px] uppercase font-mono font-bold text-slate-400 mb-2.5 block flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5 text-cyan-400" />
+        <div className="border-t border-card-border/60 dark:border-slate-800/40 pt-4 mb-4">
+          <label className="text-[10px] uppercase font-mono font-bold text-muted dark:text-slate-400 mb-2.5 block flex items-center gap-1.5">
+            <Layers className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-400" />
             <span>Multi-Timeframe Liquidity Anchor Sources:</span>
           </label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -487,9 +492,9 @@ export default function SweepReclaimWorkspace({
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("SWING_PIVOT")}
-              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${enabledAnchors.SWING_PIVOT
+              className={`px-3 py-2 rounded-lg text-xs font-mono font-black border flex items-center justify-between transition cursor-pointer ${enabledAnchors.SWING_PIVOT
                   ? "bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]"
-                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
+                  : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-400 hover:text-foreground hover:dark:text-slate-200 shadow-xs"
                 }`}
             >
               <span>Major Pivots</span>
@@ -500,9 +505,9 @@ export default function SweepReclaimWorkspace({
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("ASIAN")}
-              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${enabledAnchors.ASIAN
+              className={`px-3 py-2 rounded-lg text-xs font-mono font-black border flex items-center justify-between transition cursor-pointer ${enabledAnchors.ASIAN
                   ? "bg-amber-400 border-amber-300 text-slate-950 shadow-[0_0_10px_rgba(251,191,36,0.4)]"
-                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
+                  : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-400 hover:text-foreground hover:dark:text-slate-200 shadow-xs"
                 }`}
             >
               <span>Asian Session (H/L)</span>
@@ -513,9 +518,9 @@ export default function SweepReclaimWorkspace({
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("LONDON")}
-              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${enabledAnchors.LONDON
+              className={`px-3 py-2 rounded-lg text-xs font-mono font-black border flex items-center justify-between transition cursor-pointer ${enabledAnchors.LONDON
                   ? "bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.4)]"
-                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
+                  : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-400 hover:text-foreground hover:dark:text-slate-200 shadow-xs"
                 }`}
             >
               <span>London Session (H/L)</span>
@@ -526,9 +531,9 @@ export default function SweepReclaimWorkspace({
               type="button"
               disabled={isScanning}
               onClick={() => toggleAnchorGroup("DAILY")}
-              className={`px-3 py-2 rounded text-xs font-mono font-black border flex items-center justify-between transition ${enabledAnchors.DAILY
+              className={`px-3 py-2 rounded-lg text-xs font-mono font-black border flex items-center justify-between transition cursor-pointer ${enabledAnchors.DAILY
                   ? "bg-purple-400 border-purple-300 text-slate-950 shadow-[0_0_10px_rgba(192,132,252,0.4)]"
-                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
+                  : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-400 hover:text-foreground hover:dark:text-slate-200 shadow-xs"
                 }`}
             >
               <span>Previous Day (PDH/PDL)</span>
@@ -538,13 +543,13 @@ export default function SweepReclaimWorkspace({
         </div>
 
         {/* 3-Pillar Displacement Gatekeeper & 3-Stage Harvest Parameters */}
-        <div className="border-t border-slate-800/40 pt-4 mb-5">
+        <div className="border-t border-card-border/60 dark:border-slate-800/40 pt-4 mb-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
             {/* Pillar 1: Volume Ratio vs SMA */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center justify-between">
+              <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400 flex items-center justify-between">
                 <span>P1: Volume Ratio</span>
-                <span className="text-cyan-400 font-bold">{volumeExpansionThreshold.toFixed(2)}x</span>
+                <span className="text-cyan-600 dark:text-cyan-400 font-bold">{volumeExpansionThreshold.toFixed(2)}x</span>
               </label>
               <input
                 type="range"
@@ -554,18 +559,18 @@ export default function SweepReclaimWorkspace({
                 disabled={isScanning}
                 value={volumeExpansionThreshold}
                 onChange={(e) => setVolumeExpansionThreshold(parseFloat(e.target.value))}
-                className="w-full accent-cyan-400"
+                className="w-full accent-cyan-500"
               />
-              <span className="text-[9px] text-slate-500 font-mono">
+              <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
                 Min volume vs {volumeSmaPeriod}-period SMA
               </span>
             </div>
 
             {/* Pillar 2: Taker Delta Dominance Threshold */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center justify-between">
+              <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400 flex items-center justify-between">
                 <span>P2: Delta Dominance</span>
-                <span className="text-cyan-400 font-bold">{deltaDominanceThreshold.toFixed(1)}%</span>
+                <span className="text-cyan-600 dark:text-cyan-400 font-bold">{deltaDominanceThreshold.toFixed(1)}%</span>
               </label>
               <input
                 type="range"
@@ -575,18 +580,18 @@ export default function SweepReclaimWorkspace({
                 disabled={isScanning}
                 value={deltaDominanceThreshold}
                 onChange={(e) => setDeltaDominanceThreshold(parseFloat(e.target.value))}
-                className="w-full accent-cyan-400"
+                className="w-full accent-cyan-500"
               />
-              <span className="text-[9px] text-slate-500 font-mono">
+              <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
                 Min directional taker delta %
               </span>
             </div>
 
             {/* Pillar 3: Candle Body-to-Range Ratio */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center justify-between">
+              <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400 flex items-center justify-between">
                 <span>P3: Body-to-Range</span>
-                <span className="text-cyan-400 font-bold">{(bodyRatioThreshold * 100).toFixed(0)}%</span>
+                <span className="text-cyan-600 dark:text-cyan-400 font-bold">{(bodyRatioThreshold * 100).toFixed(0)}%</span>
               </label>
               <input
                 type="range"
@@ -596,18 +601,18 @@ export default function SweepReclaimWorkspace({
                 disabled={isScanning}
                 value={bodyRatioThreshold}
                 onChange={(e) => setBodyRatioThreshold(parseFloat(e.target.value))}
-                className="w-full accent-cyan-400"
+                className="w-full accent-cyan-500"
               />
-              <span className="text-[9px] text-slate-500 font-mono">
+              <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
                 Min body ratio |c - o| / (h - l)
               </span>
             </div>
 
             {/* Volume SMA Period */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400 flex items-center justify-between">
+              <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400 flex items-center justify-between">
                 <span>Volume SMA Period</span>
-                <span className="text-cyan-400 font-bold">{volumeSmaPeriod} bars</span>
+                <span className="text-cyan-600 dark:text-cyan-400 font-bold">{volumeSmaPeriod} bars</span>
               </label>
               <input
                 type="range"
@@ -617,23 +622,23 @@ export default function SweepReclaimWorkspace({
                 disabled={isScanning}
                 value={volumeSmaPeriod}
                 onChange={(e) => setVolumeSmaPeriod(parseInt(e.target.value, 10))}
-                className="w-full accent-cyan-400"
+                className="w-full accent-cyan-500"
               />
-              <span className="text-[9px] text-slate-500 font-mono">
+              <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
                 Baseline SMA lookback window
               </span>
             </div>
 
             {/* Entry Mode */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400">
+              <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400">
                 Retest Entry Model
               </label>
               <select
                 disabled={isScanning}
                 value={entryMode}
                 onChange={(e) => setEntryMode(e.target.value as SweepReclaimEntryMode)}
-                className="text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500/50 outline-none rounded text-white"
+                className="text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-cyan-500 text-foreground dark:text-white outline-none rounded-lg shadow-xs transition cursor-pointer"
               >
                 <option value="SWEEP_OB_MT">Sweep OB 50% Mean Threshold (MT)</option>
                 <option value="OB_PROXIMAL">Sweep OB Proximal Boundary</option>
@@ -644,21 +649,21 @@ export default function SweepReclaimWorkspace({
                 <option value="SHELF_LEVEL">Reclaimed Anchor Shelf Level</option>
                 <option value="RECLAIM_LEVEL">Reclaimed Horizontal Level (Explicit)</option>
               </select>
-              <span className="text-[9px] text-slate-500 font-mono">
+              <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
                 {getEntryModeDescription(entryMode)}
               </span>
             </div>
 
             {/* Stage 2 Multiple Target */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] uppercase font-mono font-semibold text-slate-400">
+              <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400">
                 Stage 2 Tranche Target
               </label>
               <select
                 disabled={isScanning}
                 value={stage2Multiple}
                 onChange={(e) => setStage2Multiple(parseFloat(e.target.value))}
-                className="text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500/50 outline-none rounded text-white"
+                className="text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-cyan-500 text-foreground dark:text-white outline-none rounded-lg shadow-xs transition cursor-pointer"
               >
                 <option value={1.3}>1.3R (Fast Scalp)</option>
                 <option value={1.4}>1.4R (Quant Champion Target)</option>
@@ -667,23 +672,217 @@ export default function SweepReclaimWorkspace({
                 <option value={1.8}>1.8R (Extended)</option>
                 <option value={2.0}>2.0R (Full Macro)</option>
               </select>
-              <span className="text-[9px] text-slate-500 font-mono">
+              <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
                 Tranche 1: 50% @ 1.0R | Tranche 2: 50% @ {stage2Multiple}R
               </span>
             </div>
           </div>
         </div>
 
+        {/* Advanced Institutional Geometry & ATR Controls Accordion Drawer */}
+        <div className="border-t border-card-border/60 dark:border-slate-800/40 pt-3 mb-4">
+          <button
+            type="button"
+            onClick={() => setShowAdvancedControls(!showAdvancedControls)}
+            className="flex items-center justify-between w-full py-2 px-3 rounded-lg bg-card dark:bg-slate-900/60 hover:bg-muted/10 hover:dark:bg-slate-900 border border-card-border dark:border-slate-800 text-foreground dark:text-slate-300 text-xs font-mono transition cursor-pointer shadow-xs"
+          >
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-400" />
+              <span className="font-bold uppercase tracking-wider text-[10px]">
+                Advanced Institutional Geometry, ATR & Timing Controls
+              </span>
+              <span className="text-[9px] text-muted dark:text-slate-500 font-normal">
+                (Major/Internal Lookbacks, Anchor → Sweep → Reclaim Limits, ATR Buffers)
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 text-cyan-600 dark:text-cyan-400 text-[10px] font-bold">
+              <span>{showAdvancedControls ? "Hide Parameters" : "Customize Geometry"}</span>
+              {showAdvancedControls ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </div>
+          </button>
+
+          {showAdvancedControls && (
+            <div className="mt-3 p-4 rounded-lg bg-card/90 dark:bg-slate-950/90 border border-card-border dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-fadeIn">
+              {/* Lookback Major Pivots */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400 flex items-center justify-between">
+                  <span>Major Pivot Lookback</span>
+                  <span className="text-cyan-600 dark:text-cyan-400 font-bold">{lookbackMajor} bars</span>
+                </label>
+                <input
+                  type="range"
+                  min="5"
+                  max="30"
+                  step="1"
+                  disabled={isScanning}
+                  value={lookbackMajor}
+                  onChange={(e) => setLookbackMajor(parseInt(e.target.value, 10))}
+                  className="w-full accent-cyan-500"
+                />
+                <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
+                  Lookback window for Major Highs/Lows
+                </span>
+              </div>
+
+              {/* Lookback Internal Pivots */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400 flex items-center justify-between">
+                  <span>Internal Pivot Lookback</span>
+                  <span className="text-cyan-600 dark:text-cyan-400 font-bold">{lookbackInternal} bars</span>
+                </label>
+                <input
+                  type="range"
+                  min="3"
+                  max="15"
+                  step="1"
+                  disabled={isScanning}
+                  value={lookbackInternal}
+                  onChange={(e) => setLookbackInternal(parseInt(e.target.value, 10))}
+                  className="w-full accent-cyan-500"
+                />
+                <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
+                  Lookback window for Internal Fractal Swings
+                </span>
+              </div>
+
+              {/* Max Bars Anchor to Sweep */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400 flex items-center justify-between">
+                  <span>Max Anchor-to-Sweep</span>
+                  <span className="text-cyan-600 dark:text-cyan-400 font-bold">{maxBarsAnchorToSweep} bars</span>
+                </label>
+                <input
+                  type="range"
+                  min="10"
+                  max="60"
+                  step="1"
+                  disabled={isScanning}
+                  value={maxBarsAnchorToSweep}
+                  onChange={(e) => setMaxBarsAnchorToSweep(parseInt(e.target.value, 10))}
+                  className="w-full accent-cyan-500"
+                />
+                <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
+                  Max elapsed bars before liquidity expires
+                </span>
+              </div>
+
+              {/* Max Bars Sweep to Reclaim */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400 flex items-center justify-between">
+                  <span>Max Sweep-to-Reclaim</span>
+                  <span className="text-cyan-600 dark:text-cyan-400 font-bold">{maxBarsSweepToReclaim} bars</span>
+                </label>
+                <input
+                  type="range"
+                  min="4"
+                  max="30"
+                  step="1"
+                  disabled={isScanning}
+                  value={maxBarsSweepToReclaim}
+                  onChange={(e) => setMaxBarsSweepToReclaim(parseInt(e.target.value, 10))}
+                  className="w-full accent-cyan-500"
+                />
+                <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
+                  Max bars between sweep wick and reclaim close
+                </span>
+              </div>
+
+              {/* Max Bars to Retest */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400 flex items-center justify-between">
+                  <span>Max Retest Window</span>
+                  <span className="text-cyan-600 dark:text-cyan-400 font-bold">{maxBarsToRetest} bars</span>
+                </label>
+                <input
+                  type="range"
+                  min="5"
+                  max="40"
+                  step="1"
+                  disabled={isScanning}
+                  value={maxBarsToRetest}
+                  onChange={(e) => setMaxBarsToRetest(parseInt(e.target.value, 10))}
+                  className="w-full accent-cyan-500"
+                />
+                <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
+                  Max waiting bars for limit entry fill
+                </span>
+              </div>
+
+              {/* Min Sweep Depth ATR Multiplier */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400 flex items-center justify-between">
+                  <span>Min Sweep Depth (ATR)</span>
+                  <span className="text-cyan-600 dark:text-cyan-400 font-bold">{minSweepDepthAtr.toFixed(2)}x ATR</span>
+                </label>
+                <input
+                  type="range"
+                  min="0.05"
+                  max="0.30"
+                  step="0.01"
+                  disabled={isScanning}
+                  value={minSweepDepthAtr}
+                  onChange={(e) => setMinSweepDepthAtr(parseFloat(e.target.value))}
+                  className="w-full accent-cyan-500"
+                />
+                <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
+                  Minimum wick breach beyond anchor level
+                </span>
+              </div>
+
+              {/* SL Buffer ATR Multiplier */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400 flex items-center justify-between">
+                  <span>Stop Loss Buffer (ATR)</span>
+                  <span className="text-cyan-600 dark:text-cyan-400 font-bold">{slBufferAtr.toFixed(2)}x ATR</span>
+                </label>
+                <input
+                  type="range"
+                  min="0.05"
+                  max="0.30"
+                  step="0.01"
+                  disabled={isScanning}
+                  value={slBufferAtr}
+                  onChange={(e) => setSlBufferAtr(parseFloat(e.target.value))}
+                  className="w-full accent-cyan-500"
+                />
+                <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
+                  Structural SL offset beyond sweep extreme
+                </span>
+              </div>
+
+              {/* Stage 1 Target Multiple */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-400">
+                  Stage 1 Target Multiple
+                </label>
+                <select
+                  disabled={isScanning}
+                  value={stage1Multiple}
+                  onChange={(e) => setStage1Multiple(parseFloat(e.target.value))}
+                  className="text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-cyan-500 text-foreground dark:text-white outline-none rounded-lg shadow-xs transition cursor-pointer"
+                >
+                  <option value={0.75}>0.75R (Ultra-Fast Auto-BE)</option>
+                  <option value={1.0}>1.0R (Institutional Standard)</option>
+                  <option value={1.25}>1.25R (Extended Stage 1)</option>
+                </select>
+                <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
+                  Tranche 1 harvest trigger & BE transition
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Execution & Trigger Button */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-3 border-t border-slate-800/40">
-          <div className="flex flex-wrap items-center gap-4 text-slate-400 text-xs font-mono">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-3 border-t border-card-border/60 dark:border-slate-800/40">
+          <div className="flex flex-wrap items-center gap-4 text-muted dark:text-slate-400 text-xs font-mono">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 disabled={isScanning}
                 checked={enableStructuralTrail}
                 onChange={(e) => setEnableStructuralTrail(e.target.checked)}
-                className="rounded accent-cyan-400"
+                className="rounded accent-cyan-500"
               />
               <span>Structural Trailing SL (FVG CE)</span>
             </label>
@@ -694,7 +893,7 @@ export default function SweepReclaimWorkspace({
                 disabled={isScanning}
                 checked={enableProfitRatchet}
                 onChange={(e) => setEnableProfitRatchet(e.target.checked)}
-                className="rounded accent-cyan-400"
+                className="rounded accent-cyan-500"
               />
               <span>+1.0R Profit Ratchet Floor</span>
             </label>
@@ -705,7 +904,7 @@ export default function SweepReclaimWorkspace({
                 disabled={isScanning}
                 checked={enforceDiscountPremiumGate}
                 onChange={(e) => setEnforceDiscountPremiumGate(e.target.checked)}
-                className="rounded accent-cyan-400"
+                className="rounded accent-cyan-500"
               />
               <span>Discount/Premium Valuation Gate</span>
             </label>
@@ -715,17 +914,17 @@ export default function SweepReclaimWorkspace({
             <button
               onClick={handleStartScan}
               disabled={isScanning || resolvedAnchorTypes.length === 0}
-              className="w-full sm:w-auto px-6 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-mono font-bold text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-cyan-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-solid w-full sm:w-auto px-6 py-2.5 rounded-lg bg-gradient-to-r from-cyan-400 via-cyan-500 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 font-mono font-black text-xs flex items-center justify-center gap-2 transition shadow-[0_0_20px_rgba(6,182,212,0.4)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {isScanning ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                  <span>EXECUTING QUANT SCAN...</span>
+                  <span className="text-slate-950 font-black tracking-wider">EXECUTING QUANT SCAN...</span>
                 </>
               ) : (
                 <>
-                  <Play className="w-4 h-4 text-slate-950 fill-current" />
-                  <span>RUN SWEEP & RECLAIM SCAN</span>
+                  <Play className="w-4 h-4 text-slate-950 fill-slate-950" />
+                  <span className="text-slate-950 font-black tracking-wider">RUN SWEEP & RECLAIM SCAN</span>
                 </>
               )}
             </button>
@@ -734,16 +933,16 @@ export default function SweepReclaimWorkspace({
 
         {/* Live SSE Scanning Progress HUD */}
         {isScanning && (
-          <div className="mt-5 p-4 rounded-lg bg-cyan-950/30 border border-cyan-500/30 font-mono">
-            <div className="flex items-center justify-between text-xs text-cyan-300 font-bold mb-2">
+          <div className="mt-5 p-4 rounded-xl bg-cyan-500/10 dark:bg-cyan-950/30 border border-cyan-500/30 font-mono">
+            <div className="flex items-center justify-between text-xs text-cyan-600 dark:text-cyan-300 font-bold mb-2">
               <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                <span className="w-2 h-2 rounded-full bg-cyan-500 dark:bg-cyan-400 animate-pulse" />
                 <span>{progress?.phase || "RUNNING SCAN"}</span>
               </span>
               <span>{progress?.candlesFetched ? `${progress.candlesFetched} Candles Loaded` : ""}</span>
             </div>
-            <p className="text-[11px] text-slate-300 mb-2">{progress?.message || statusMsg}</p>
-            <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <p className="text-[11px] text-foreground/80 dark:text-slate-300 mb-2">{progress?.message || statusMsg}</p>
+            <div className="w-full h-1.5 bg-muted/20 dark:bg-slate-800 rounded-full overflow-hidden">
               <div className="h-full bg-gradient-to-r from-cyan-400 to-blue-500 animate-pulse w-full" />
             </div>
           </div>
@@ -758,79 +957,79 @@ export default function SweepReclaimWorkspace({
           {/* Top Metric Cards Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {/* Total Anchors */}
-            <div className="p-3.5 rounded-lg border border-slate-800/60 bg-slate-900/40 backdrop-blur-sm">
-              <span className="text-[9px] uppercase font-mono text-slate-500 block mb-1">
+            <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+              <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
                 Anchors Detected
               </span>
-              <span className="text-lg font-mono font-bold text-white">
+              <span className="text-lg font-mono font-bold text-foreground dark:text-white">
                 {telemetry.total_anchors_detected ?? 0}
               </span>
-              <span className="text-[9px] font-mono text-cyan-400/80 block mt-0.5">
+              <span className="text-[9px] font-mono text-cyan-600 dark:text-cyan-400/80 block mt-0.5">
                 {telemetry.total_sweeps_detected ?? 0} Swept ({telemetry.sweep_rate_pct ?? 0}%)
               </span>
             </div>
 
             {/* Reclaim Rate */}
-            <div className="p-3.5 rounded-lg border border-slate-800/60 bg-slate-900/40 backdrop-blur-sm">
-              <span className="text-[9px] uppercase font-mono text-slate-500 block mb-1">
+            <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+              <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
                 Reclaim Rate
               </span>
-              <span className="text-lg font-mono font-bold text-emerald-400">
+              <span className="text-lg font-mono font-bold text-emerald-600 dark:text-emerald-400">
                 {telemetry.reclaim_rate_pct ?? 0}%
               </span>
-              <span className="text-[9px] font-mono text-slate-400 block mt-0.5">
+              <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
                 {telemetry.total_reclaims_confirmed ?? 0} Reclaims
               </span>
             </div>
 
             {/* Retest Win Rate */}
-            <div className="p-3.5 rounded-lg border border-slate-800/60 bg-slate-900/40 backdrop-blur-sm">
-              <span className="text-[9px] uppercase font-mono text-slate-500 block mb-1">
+            <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+              <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
                 Retest Win Rate
               </span>
-              <span className="text-lg font-mono font-bold text-cyan-400">
+              <span className="text-lg font-mono font-bold text-cyan-600 dark:text-cyan-400">
                 {telemetry.retest_win_rate_pct ?? 0}%
               </span>
-              <span className="text-[9px] font-mono text-slate-400 block mt-0.5">
+              <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
                 {telemetry.total_winning_trades ?? 0}W / {telemetry.total_losing_trades ?? 0}L ({telemetry.total_retests_executed ?? 0} Retests)
               </span>
             </div>
 
             {/* Realized R:R */}
-            <div className="p-3.5 rounded-lg border border-slate-800/60 bg-slate-900/40 backdrop-blur-sm">
-              <span className="text-[9px] uppercase font-mono text-slate-500 block mb-1">
+            <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+              <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
                 Avg Realized R:R
               </span>
-              <span className={`text-lg font-mono font-bold ${(telemetry.avg_realized_rr ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+              <span className={`text-lg font-mono font-bold ${(telemetry.avg_realized_rr ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
                 {(telemetry.avg_realized_rr ?? 0) > 0 ? "+" : ""}{telemetry.avg_realized_rr ?? 0}R
               </span>
-              <span className="text-[9px] font-mono text-slate-400 block mt-0.5">
+              <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
                 Win: +{telemetry.avg_winning_rr ?? 0}R
               </span>
             </div>
 
             {/* Profit Factor */}
-            <div className="p-3.5 rounded-lg border border-slate-800/60 bg-slate-900/40 backdrop-blur-sm">
-              <span className="text-[9px] uppercase font-mono text-slate-500 block mb-1">
+            <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+              <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
                 Profit Factor
               </span>
-              <span className="text-lg font-mono font-bold text-purple-400">
+              <span className="text-lg font-mono font-bold text-purple-600 dark:text-purple-400">
                 {(telemetry.profit_factor ?? 0) >= 99 ? "99.9+" : (telemetry.profit_factor ?? 0).toFixed(2)}
               </span>
-              <span className="text-[9px] font-mono text-slate-400 block mt-0.5">
+              <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
                 Gross Win / Loss Ratio
               </span>
             </div>
 
             {/* Expected Value E[R] */}
-            <div className="p-3.5 rounded-lg border border-slate-800/60 bg-slate-900/40 backdrop-blur-sm">
-              <span className="text-[9px] uppercase font-mono text-slate-500 block mb-1">
+            <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+              <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
                 Expected Value E[R]
               </span>
-              <span className={`text-lg font-mono font-bold ${(telemetry.expected_value_r ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+              <span className={`text-lg font-mono font-bold ${(telemetry.expected_value_r ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
                 {(telemetry.expected_value_r ?? 0) > 0 ? "+" : ""}{telemetry.expected_value_r ?? 0}R
               </span>
-              <span className="text-[9px] font-mono text-slate-400 block mt-0.5">
+              <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
                 Per Retest Trade
               </span>
             </div>
@@ -839,23 +1038,23 @@ export default function SweepReclaimWorkspace({
           {/* 3-Stage Harvest Distribution & Funnel Visuals */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
             {/* 4-Phase Conversion Funnel */}
-            <div className="lg:col-span-6 p-4 rounded-lg border border-slate-800/60 bg-slate-900/30 font-mono">
-              <h3 className="text-xs uppercase font-bold text-slate-300 mb-3 flex items-center justify-between">
+            <div className="lg:col-span-6 p-4 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/30 font-mono shadow-xs">
+              <h3 className="text-xs uppercase font-bold text-foreground dark:text-slate-300 mb-3 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
-                  <Repeat className="w-3.5 h-3.5 text-cyan-400" />
+                  <Repeat className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-400" />
                   <span>4-Phase Conversion Funnel</span>
                 </span>
-                <span className="text-[10px] text-slate-500">Zero Look-Ahead Parity</span>
+                <span className="text-[10px] text-muted dark:text-slate-500">Zero Look-Ahead Parity</span>
               </h3>
 
               <div className="flex flex-col gap-2.5 text-xs">
                 {/* Phase 1: Anchors */}
                 <div>
                   <div className="flex justify-between text-[11px] mb-1">
-                    <span className="text-slate-400 font-semibold">1. Anchor Shelves</span>
-                    <span className="text-white font-bold">{telemetry.total_anchors_detected ?? 0} (100%)</span>
+                    <span className="text-muted dark:text-slate-400 font-semibold">1. Anchor Shelves</span>
+                    <span className="text-foreground dark:text-white font-bold">{telemetry.total_anchors_detected ?? 0} (100%)</span>
                   </div>
-                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="w-full h-1.5 bg-muted/20 dark:bg-slate-800 rounded-full overflow-hidden">
                     <div className="h-full bg-slate-400 w-full" />
                   </div>
                 </div>
@@ -863,10 +1062,10 @@ export default function SweepReclaimWorkspace({
                 {/* Phase 2: Sweeps */}
                 <div>
                   <div className="flex justify-between text-[11px] mb-1">
-                    <span className="text-slate-400 font-semibold">2. Liquidity Sweeps</span>
-                    <span className="text-amber-400 font-bold">{telemetry.total_sweeps_detected ?? 0} ({telemetry.sweep_rate_pct ?? 0}%)</span>
+                    <span className="text-muted dark:text-slate-400 font-semibold">2. Liquidity Sweeps</span>
+                    <span className="text-amber-500 dark:text-amber-400 font-bold">{telemetry.total_sweeps_detected ?? 0} ({telemetry.sweep_rate_pct ?? 0}%)</span>
                   </div>
-                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="w-full h-1.5 bg-muted/20 dark:bg-slate-800 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-amber-400 rounded-full"
                       style={{ width: `${Math.min(100, telemetry.sweep_rate_pct ?? 0)}%` }}
@@ -877,10 +1076,10 @@ export default function SweepReclaimWorkspace({
                 {/* Phase 3: Volumetric Reclaims */}
                 <div>
                   <div className="flex justify-between text-[11px] mb-1">
-                    <span className="text-slate-400 font-semibold">3. Volumetric Reclaims</span>
-                    <span className="text-emerald-400 font-bold">{telemetry.total_reclaims_confirmed ?? 0} ({telemetry.reclaim_rate_pct ?? 0}%)</span>
+                    <span className="text-muted dark:text-slate-400 font-semibold">3. Volumetric Reclaims</span>
+                    <span className="text-emerald-500 dark:text-emerald-400 font-bold">{telemetry.total_reclaims_confirmed ?? 0} ({telemetry.reclaim_rate_pct ?? 0}%)</span>
                   </div>
-                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="w-full h-1.5 bg-muted/20 dark:bg-slate-800 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-emerald-400 rounded-full"
                       style={{ width: `${Math.min(100, telemetry.reclaim_rate_pct ?? 0)}%` }}
@@ -891,10 +1090,10 @@ export default function SweepReclaimWorkspace({
                 {/* Phase 4: Retests Executed */}
                 <div>
                   <div className="flex justify-between text-[11px] mb-1">
-                    <span className="text-slate-400 font-semibold">4. Retest Executions</span>
-                    <span className="text-cyan-400 font-bold">{telemetry.total_retests_executed ?? 0} ({telemetry.retest_rate_pct ?? 0}%)</span>
+                    <span className="text-muted dark:text-slate-400 font-semibold">4. Retest Executions</span>
+                    <span className="text-cyan-500 dark:text-cyan-400 font-bold">{telemetry.total_retests_executed ?? 0} ({telemetry.retest_rate_pct ?? 0}%)</span>
                   </div>
-                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="w-full h-1.5 bg-muted/20 dark:bg-slate-800 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-cyan-400 rounded-full"
                       style={{ width: `${Math.min(100, telemetry.retest_rate_pct ?? 0)}%` }}
@@ -905,91 +1104,91 @@ export default function SweepReclaimWorkspace({
             </div>
 
             {/* 3-Stage Harvest Tranche Distributions */}
-            <div className="lg:col-span-6 p-4 rounded-lg border border-slate-800/60 bg-slate-900/30 font-mono">
-              <h3 className="text-xs uppercase font-bold text-slate-300 mb-3 flex items-center justify-between">
+            <div className="lg:col-span-6 p-4 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/30 font-mono shadow-xs">
+              <h3 className="text-xs uppercase font-bold text-foreground dark:text-slate-300 mb-3 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
-                  <Award className="w-3.5 h-3.5 text-purple-400" />
+                  <Award className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
                   <span>2-Stage Dynamic Harvest Model</span>
                 </span>
-                <span className="text-[10px] text-purple-400">Position Scaling 50% / 50%</span>
+                <span className="text-[10px] text-purple-600 dark:text-purple-400">Position Scaling 50% / 50%</span>
               </h3>
 
               <div className="grid grid-cols-2 gap-2 text-center mb-3">
                 {/* Stage 1 */}
-                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Stage 1 (50% @ 1.0R)</span>
-                  <span className="text-base font-bold text-cyan-300">{telemetry.stage1_fill_count ?? 0}</span>
-                  <span className="text-[9px] text-slate-400 block">{telemetry.stage1_fill_pct ?? 0}% Fills</span>
+                <div className="p-2.5 rounded-lg bg-card dark:bg-slate-950/60 border border-card-border dark:border-slate-800">
+                  <span className="text-[8px] uppercase text-muted dark:text-slate-500 block">Stage 1 (50% @ 1.0R)</span>
+                  <span className="text-base font-bold text-cyan-600 dark:text-cyan-300">{telemetry.stage1_fill_count ?? 0}</span>
+                  <span className="text-[9px] text-muted dark:text-slate-400 block">{telemetry.stage1_fill_pct ?? 0}% Fills</span>
                 </div>
 
                 {/* Stage 2 */}
-                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Stage 2 (50% @ {stage2Multiple}R)</span>
-                  <span className="text-base font-bold text-purple-300">{telemetry.stage2_fill_count ?? 0}</span>
-                  <span className="text-[9px] text-slate-400 block">{telemetry.stage2_fill_pct ?? 0}% Fills</span>
+                <div className="p-2.5 rounded-lg bg-card dark:bg-slate-950/60 border border-card-border dark:border-slate-800">
+                  <span className="text-[8px] uppercase text-muted dark:text-slate-500 block">Stage 2 (50% @ {stage2Multiple}R)</span>
+                  <span className="text-base font-bold text-purple-600 dark:text-purple-300">{telemetry.stage2_fill_count ?? 0}</span>
+                  <span className="text-[9px] text-muted dark:text-slate-400 block">{telemetry.stage2_fill_pct ?? 0}% Fills</span>
                 </div>
               </div>
 
               {/* Scratches vs Full Wins */}
-              <div className="flex items-center justify-between text-[10px] pt-2 border-t border-slate-800/40 text-slate-400">
-                <span>BE Scratches: <strong className="text-white">{telemetry.total_be_scratches ?? 0}</strong></span>
-                <span>Structural Scratches: <strong className="text-white">{telemetry.total_structural_scratches ?? 0}</strong></span>
-                <span>Full TP Wins: <strong className="text-emerald-400">{(telemetry.full_tp2_wins ?? 0) + (telemetry.full_tp3_wins ?? 0)}</strong></span>
-                <span>Stopped: <strong className="text-rose-400">{telemetry.stopped_out_count ?? 0}</strong></span>
+              <div className="flex items-center justify-between text-[10px] pt-2 border-t border-card-border/60 dark:border-slate-800/40 text-muted dark:text-slate-400">
+                <span>BE Scratches: <strong className="text-foreground dark:text-white">{telemetry.total_be_scratches ?? 0}</strong></span>
+                <span>Structural Scratches: <strong className="text-foreground dark:text-white">{telemetry.total_structural_scratches ?? 0}</strong></span>
+                <span>Full TP Wins: <strong className="text-emerald-600 dark:text-emerald-400">{(telemetry.full_tp2_wins ?? 0) + (telemetry.full_tp3_wins ?? 0)}</strong></span>
+                <span>Stopped: <strong className="text-rose-600 dark:text-rose-400">{telemetry.stopped_out_count ?? 0}</strong></span>
               </div>
             </div>
 
             {/* 3-Pillar Volumetric Displacement Gatekeeper & Liquidity Metrics */}
-            <div className="lg:col-span-12 p-4 rounded-lg border border-slate-800/60 bg-slate-900/30 font-mono">
-              <h3 className="text-xs uppercase font-bold text-slate-300 mb-3 flex items-center justify-between">
+            <div className="lg:col-span-12 p-4 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/30 font-mono shadow-xs">
+              <h3 className="text-xs uppercase font-bold text-foreground dark:text-slate-300 mb-3 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                  <Shield className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-400" />
                   <span>3-Pillar Institutional Displacement & Valuation Telemetry</span>
                 </span>
-                <span className="text-[10px] text-cyan-400">Volumetric Conviction Standard</span>
+                <span className="text-[10px] text-cyan-600 dark:text-cyan-400 font-bold">Volumetric Conviction Standard</span>
               </h3>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-center">
                 {/* Pillar 1 */}
-                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Pillar 1: Vol &ge; {volumeExpansionThreshold.toFixed(2)}x</span>
-                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar1_volume_passed_count ?? telemetry.pillar1_pass_count ?? 0}</span>
-                  <span className="text-[9px] text-slate-400 block">{telemetry.pillar1_pass_pct ?? 0}% Passed</span>
+                <div className="p-2.5 rounded-lg bg-card dark:bg-slate-950/60 border border-card-border dark:border-slate-800">
+                  <span className="text-[8px] uppercase text-muted dark:text-slate-500 block">Pillar 1: Vol &ge; {volumeExpansionThreshold.toFixed(2)}x</span>
+                  <span className="text-sm font-bold text-cyan-600 dark:text-cyan-300">{telemetry.pillar1_volume_passed_count ?? telemetry.pillar1_pass_count ?? 0}</span>
+                  <span className="text-[9px] text-muted dark:text-slate-400 block">{telemetry.pillar1_pass_pct ?? 0}% Passed</span>
                 </div>
 
                 {/* Pillar 2 */}
-                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Pillar 2: Delta &ge; {deltaDominanceThreshold.toFixed(0)}%</span>
-                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar2_delta_passed_count ?? telemetry.pillar2_pass_count ?? 0}</span>
-                  <span className="text-[9px] text-slate-400 block">{telemetry.pillar2_pass_pct ?? 0}% Passed</span>
+                <div className="p-2.5 rounded-lg bg-card dark:bg-slate-950/60 border border-card-border dark:border-slate-800">
+                  <span className="text-[8px] uppercase text-muted dark:text-slate-500 block">Pillar 2: Delta &ge; {deltaDominanceThreshold.toFixed(0)}%</span>
+                  <span className="text-sm font-bold text-cyan-600 dark:text-cyan-300">{telemetry.pillar2_delta_passed_count ?? telemetry.pillar2_pass_count ?? 0}</span>
+                  <span className="text-[9px] text-muted dark:text-slate-400 block">{telemetry.pillar2_pass_pct ?? 0}% Passed</span>
                 </div>
 
                 {/* Pillar 3 */}
-                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Pillar 3: Body &ge; {(bodyRatioThreshold * 100).toFixed(0)}%</span>
-                  <span className="text-sm font-bold text-cyan-300">{telemetry.pillar3_body_passed_count ?? telemetry.pillar3_pass_count ?? 0}</span>
-                  <span className="text-[9px] text-slate-400 block">{telemetry.pillar3_pass_pct ?? 0}% Passed</span>
+                <div className="p-2.5 rounded-lg bg-card dark:bg-slate-950/60 border border-card-border dark:border-slate-800">
+                  <span className="text-[8px] uppercase text-muted dark:text-slate-500 block">Pillar 3: Body &ge; {(bodyRatioThreshold * 100).toFixed(0)}%</span>
+                  <span className="text-sm font-bold text-cyan-600 dark:text-cyan-300">{telemetry.pillar3_body_passed_count ?? telemetry.pillar3_pass_count ?? 0}</span>
+                  <span className="text-[9px] text-muted dark:text-slate-400 block">{telemetry.pillar3_pass_pct ?? 0}% Passed</span>
                 </div>
 
                 {/* All 3 Pillars */}
-                <div className="p-2.5 rounded bg-cyan-950/30 border border-cyan-500/40">
-                  <span className="text-[8px] uppercase text-cyan-400 block font-bold">3-Pillars All Pass</span>
-                  <span className="text-sm font-bold text-cyan-300">{telemetry.three_pillar_all_passed_count ?? telemetry.three_pillar_all_pass_count ?? 0}</span>
-                  <span className="text-[9px] text-cyan-400/80 block">{telemetry.three_pillar_all_pass_pct ?? 0}% Confirmed</span>
+                <div className="p-2.5 rounded-lg bg-cyan-500/10 dark:bg-cyan-950/30 border border-cyan-500/40">
+                  <span className="text-[8px] uppercase text-cyan-600 dark:text-cyan-400 block font-bold">3-Pillars All Pass</span>
+                  <span className="text-sm font-bold text-cyan-600 dark:text-cyan-300">{telemetry.three_pillar_all_passed_count ?? telemetry.three_pillar_all_pass_count ?? 0}</span>
+                  <span className="text-[9px] text-cyan-600/80 dark:text-cyan-400/80 block">{telemetry.three_pillar_all_pass_pct ?? 0}% Confirmed</span>
                 </div>
 
                 {/* Wick Rejection */}
-                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Wick Rejection Sweeps</span>
-                  <span className="text-sm font-bold text-amber-300">{telemetry.wick_rejection_sweep_count ?? 0}</span>
-                  <span className="text-[9px] text-slate-400 block">{telemetry.wick_rejection_sweep_pct ?? 0}% Sweeps</span>
+                <div className="p-2.5 rounded-lg bg-card dark:bg-slate-950/60 border border-card-border dark:border-slate-800">
+                  <span className="text-[8px] uppercase text-muted dark:text-slate-500 block">Wick Rejection Sweeps</span>
+                  <span className="text-sm font-bold text-amber-500 dark:text-amber-300">{telemetry.wick_rejection_sweep_count ?? 0}</span>
+                  <span className="text-[9px] text-muted dark:text-slate-400 block">{telemetry.wick_rejection_sweep_pct ?? 0}% Sweeps</span>
                 </div>
 
                 {/* Valuation Aligned */}
-                <div className="p-2.5 rounded bg-slate-950/60 border border-slate-800">
-                  <span className="text-[8px] uppercase text-slate-500 block">Discount/Premium Aligned</span>
-                  <span className="text-sm font-bold text-purple-300">{telemetry.discount_premium_aligned_count ?? 0}</span>
-                  <span className="text-[9px] text-slate-400 block">{telemetry.discount_premium_aligned_pct ?? 0}% Aligned</span>
+                <div className="p-2.5 rounded-lg bg-card dark:bg-slate-950/60 border border-card-border dark:border-slate-800">
+                  <span className="text-[8px] uppercase text-muted dark:text-slate-500 block">Discount/Premium Aligned</span>
+                  <span className="text-sm font-bold text-purple-600 dark:text-purple-300">{telemetry.discount_premium_aligned_count ?? 0}</span>
+                  <span className="text-[9px] text-muted dark:text-slate-400 block">{telemetry.discount_premium_aligned_pct ?? 0}% Aligned</span>
                 </div>
               </div>
             </div>
@@ -1014,12 +1213,12 @@ export default function SweepReclaimWorkspace({
       {/* 3. FILTERABLE DATA TABLE & EXPORT CONTROLS                          */}
       {/* ─────────────────────────────────────────────────────────────────── */}
       {selectedScan && (
-        <section className="border border-slate-800/50 bg-slate-900/30 backdrop-blur-sm rounded-lg p-5">
+        <section className="border border-card-border dark:border-slate-800/50 bg-card/75 dark:bg-slate-900/30 backdrop-blur-sm rounded-xl p-5 shadow-xs">
           {/* Table Header Controls */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 mb-4 border-b border-slate-800/50 gap-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 mb-4 border-b border-card-border/60 dark:border-slate-800/50 gap-4">
             <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-xs uppercase tracking-widest text-slate-300 font-mono font-bold flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-cyan-400" />
+              <h2 className="text-xs uppercase tracking-widest text-foreground dark:text-slate-300 font-mono font-bold flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />
                 <span>Detected Setups Ledger ({filteredSetups.length})</span>
               </h2>
 
@@ -1030,7 +1229,7 @@ export default function SweepReclaimWorkspace({
                   setFilterDirection(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="text-[11px] font-mono px-2.5 py-1.5 rounded bg-slate-950 border border-slate-800 text-slate-300 focus:border-cyan-500/50 outline-none"
+                className="text-[11px] font-mono px-2.5 py-1.5 rounded-lg bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 text-foreground dark:text-slate-300 focus:border-cyan-500 outline-none shadow-xs cursor-pointer"
               >
                 <option value="ALL">All Directions</option>
                 <option value="BULLISH">Bullish (SSL Sweeps)</option>
@@ -1044,7 +1243,7 @@ export default function SweepReclaimWorkspace({
                   setFilterAnchor(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="text-[11px] font-mono px-2.5 py-1.5 rounded bg-slate-950 border border-slate-800 text-slate-300 focus:border-cyan-500/50 outline-none"
+                className="text-[11px] font-mono px-2.5 py-1.5 rounded-lg bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 text-foreground dark:text-slate-300 focus:border-cyan-500 outline-none shadow-xs cursor-pointer"
               >
                 <option value="ALL">All Anchors</option>
                 <option value="SWING_PIVOT">Major Pivots</option>
@@ -1063,7 +1262,7 @@ export default function SweepReclaimWorkspace({
                   setFilterStatus(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="text-[11px] font-mono px-2.5 py-1.5 rounded bg-slate-950 border border-slate-800 text-slate-300 focus:border-cyan-500/50 outline-none"
+                className="text-[11px] font-mono px-2.5 py-1.5 rounded-lg bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 text-foreground dark:text-slate-300 focus:border-cyan-500 outline-none shadow-xs cursor-pointer"
               >
                 <option value="ALL">All Statuses</option>
                 <option value="RETESTED">Retested & Executed</option>
@@ -1079,7 +1278,7 @@ export default function SweepReclaimWorkspace({
                   setFilterOutcome(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="text-[11px] font-mono px-2.5 py-1.5 rounded bg-slate-950 border border-slate-800 text-slate-300 focus:border-cyan-500/50 outline-none"
+                className="text-[11px] font-mono px-2.5 py-1.5 rounded-lg bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 text-foreground dark:text-slate-300 focus:border-cyan-500 outline-none shadow-xs cursor-pointer"
               >
                 <option value="ALL">All Outcomes</option>
                 <option value="FULL_TP3_WIN">Full TP3 (DOL Runner)</option>
@@ -1093,7 +1292,7 @@ export default function SweepReclaimWorkspace({
             {/* Search & Export Buttons */}
             <div className="flex items-center gap-2">
               <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <Search className="w-3.5 h-3.5 text-muted dark:text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   placeholder="Search ID / Price / Anchor..."
@@ -1102,25 +1301,25 @@ export default function SweepReclaimWorkspace({
                     setSearchQuery(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className="text-xs font-mono pl-8 pr-3 py-1.5 rounded bg-slate-950 border border-slate-800 text-white placeholder:text-slate-600 focus:border-cyan-500/50 outline-none w-44"
+                  className="text-xs font-mono pl-8 pr-3 py-1.5 rounded-lg bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 text-foreground dark:text-white placeholder:text-muted dark:placeholder:text-slate-600 focus:border-cyan-500 outline-none w-44 shadow-xs"
                 />
               </div>
 
               <button
                 onClick={onExportJson}
-                className="px-2.5 py-1.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-mono text-[11px] flex items-center gap-1.5 transition"
+                className="px-2.5 py-1.5 rounded-lg bg-card dark:bg-slate-800/80 hover:bg-muted/15 hover:dark:bg-slate-700 border border-card-border dark:border-transparent text-foreground dark:text-slate-300 font-mono text-[11px] flex items-center gap-1.5 transition shadow-xs cursor-pointer"
                 title="Export JSON Dataset"
               >
-                <Download className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5 text-cyan-500" />
                 <span>JSON</span>
               </button>
 
               <button
                 onClick={onExportCsv}
-                className="px-2.5 py-1.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 font-mono text-[11px] flex items-center gap-1.5 transition"
+                className="px-2.5 py-1.5 rounded-lg bg-card dark:bg-slate-800/80 hover:bg-muted/15 hover:dark:bg-slate-700 border border-card-border dark:border-transparent text-foreground dark:text-slate-300 font-mono text-[11px] flex items-center gap-1.5 transition shadow-xs cursor-pointer"
                 title="Export CSV Dataset"
               >
-                <Download className="w-3.5 h-3.5" />
+                <Download className="w-3.5 h-3.5 text-cyan-500" />
                 <span>CSV</span>
               </button>
             </div>
@@ -1130,7 +1329,7 @@ export default function SweepReclaimWorkspace({
           <div className="overflow-x-auto">
             <table className="w-full text-left font-mono text-[11px]">
               <thead>
-                <tr className="border-b border-slate-800/80 text-slate-500 uppercase text-[9px] tracking-wider">
+                <tr className="border-b border-card-border/80 dark:border-slate-800/80 text-muted dark:text-slate-500 uppercase text-[9px] tracking-wider">
                   <th className="py-2.5 px-3">Setup / Direction</th>
                   <th className="py-2.5 px-3">Anchor Reference</th>
                   <th className="py-2.5 px-3">Sweep Depth</th>
@@ -1141,7 +1340,7 @@ export default function SweepReclaimWorkspace({
                   <th className="py-2.5 px-3 text-center">Inspect</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/40">
+              <tbody className="divide-y divide-card-border/40 dark:divide-slate-800/40">
                 {paginatedSetups.map((setup, idx) => {
                   const isBull = setup.type === "BULLISH";
                   const isWin = setup.simulated_outcome === "FULL_TP3_WIN" || setup.simulated_outcome === "FULL_TP2_WIN";
@@ -1150,7 +1349,7 @@ export default function SweepReclaimWorkspace({
                   return (
                     <tr
                       key={setup.id ? `${setup.id}_${idx}` : `sr_setup_${idx}`}
-                      className="hover:bg-slate-900/60 transition group cursor-pointer"
+                      className="hover:bg-muted/10 hover:dark:bg-slate-900/60 transition group cursor-pointer"
                       onClick={() => setInspectedSetup(setup)}
                     >
                       {/* Type & ID */}
@@ -1158,18 +1357,18 @@ export default function SweepReclaimWorkspace({
                         <div className="flex items-center gap-1.5">
                           <span
                             className={`p-1 rounded text-[9px] font-bold ${isBull
-                                ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                                : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
+                                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                                : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
                               }`}
                           >
                             {isBull ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                           </span>
                           <div className="flex flex-col">
-                            <span className="font-bold text-white text-[11px]">{setup.type}</span>
-                            <span className="text-[9px] text-cyan-400 font-mono">
+                            <span className="font-bold text-foreground dark:text-white text-[11px]">{setup.type}</span>
+                            <span className="text-[9px] text-cyan-600 dark:text-cyan-400 font-mono">
                               {formatCairoDateTime(setup.retest_time || setup.reclaim_time || setup.anchor_time)} (Cairo)
                             </span>
-                            <span className="text-[8px] text-slate-500 truncate max-w-[120px]">{setup.id}</span>
+                            <span className="text-[8px] text-muted dark:text-slate-500 truncate max-w-[120px]">{setup.id}</span>
                           </div>
                         </div>
                       </td>
@@ -1178,16 +1377,16 @@ export default function SweepReclaimWorkspace({
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         <div className="flex flex-col">
                           <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded w-fit ${(setup.anchor_type || "").includes("ASIAN")
-                              ? "bg-amber-950/60 text-amber-300 border border-amber-500/30"
+                              ? "bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/30"
                               : (setup.anchor_type || "").includes("LONDON")
-                                ? "bg-blue-950/60 text-blue-300 border border-blue-500/30"
+                                ? "bg-blue-500/15 text-blue-600 dark:text-blue-300 border border-blue-500/30"
                                 : (setup.anchor_type || "").includes("PD")
-                                  ? "bg-purple-950/60 text-purple-300 border border-purple-500/30"
-                                  : "bg-slate-800 text-slate-300"
+                                  ? "bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30"
+                                  : "bg-muted/15 text-foreground dark:bg-slate-800 dark:text-slate-300"
                             }`}>
                             {(setup.anchor_type || setup.anchor_swing_grade || "SWING PIVOT").replace(/_/g, " ")}
                           </span>
-                          <span className="text-white font-bold mt-0.5">${setup.anchor_level.toFixed(2)}</span>
+                          <span className="text-foreground dark:text-white font-bold mt-0.5">${setup.anchor_level.toFixed(2)}</span>
                         </div>
                       </td>
 
@@ -1195,13 +1394,13 @@ export default function SweepReclaimWorkspace({
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         {setup.sweep_price ? (
                           <div className="flex flex-col">
-                            <span className="text-slate-300 font-bold">${setup.sweep_price.toFixed(2)}</span>
-                            <span className="text-[9px] text-amber-400/90">
+                            <span className="text-foreground dark:text-slate-300 font-bold">${setup.sweep_price.toFixed(2)}</span>
+                            <span className="text-[9px] text-amber-600 dark:text-amber-400/90">
                               {setup.sweep_depth ? `-${setup.sweep_depth.toFixed(2)} (${setup.sweep_depth_pct}%)` : ""}
                             </span>
                           </div>
                         ) : (
-                          <span className="text-slate-600">—</span>
+                          <span className="text-muted dark:text-slate-600">—</span>
                         )}
                       </td>
 
@@ -1210,19 +1409,19 @@ export default function SweepReclaimWorkspace({
                         {setup.is_reclaimed ? (
                           <div className="flex flex-col gap-0.5">
                             <div className="flex items-center gap-1">
-                              <span className="text-[8px] px-1 rounded bg-cyan-950/50 text-cyan-300 border border-cyan-500/30 font-bold">
+                              <span className="text-[8px] px-1 rounded bg-cyan-500/10 dark:bg-cyan-950/50 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30 font-bold">
                                 Delta: {setup.reclaim_delta_dominance_pct}%
                               </span>
-                              <span className="text-[8px] px-1 rounded bg-slate-800 text-slate-300 font-bold">
+                              <span className="text-[8px] px-1 rounded bg-muted/15 dark:bg-slate-800 text-foreground dark:text-slate-300 font-bold">
                                 Body: {setup.reclaim_body_ratio}%
                               </span>
                             </div>
-                            <span className="text-[9px] text-slate-400">
+                            <span className="text-[9px] text-muted dark:text-slate-400">
                               Close: ${setup.reclaim_close_price?.toFixed(2)} {setup.reclaim_fvg_ce ? `(CE: $${setup.reclaim_fvg_ce.toFixed(2)})` : ""}
                             </span>
                           </div>
                         ) : (
-                          <span className="text-slate-600">No Reclaim</span>
+                          <span className="text-muted dark:text-slate-600">No Reclaim</span>
                         )}
                       </td>
 
@@ -1230,25 +1429,25 @@ export default function SweepReclaimWorkspace({
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         {setup.is_retested ? (
                           <div className="flex flex-col">
-                            <span className="text-emerald-400 font-bold">${setup.entry_price.toFixed(2)}</span>
-                            <span className="text-[9px] text-slate-500">
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">${setup.entry_price.toFixed(2)}</span>
+                            <span className="text-[9px] text-muted dark:text-slate-500">
                               SL: ${setup.stop_loss.toFixed(2)} (Risk: ${setup.risk_usd.toFixed(2)})
                             </span>
                           </div>
                         ) : (
-                          <span className="text-slate-600">No Retest</span>
+                          <span className="text-muted dark:text-slate-600">No Retest</span>
                         )}
                       </td>
 
                       {/* Outcome Badge */}
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${isWin
-                            ? "bg-emerald-950/80 text-emerald-300 border border-emerald-500/30"
+                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30"
                             : isScratch
-                              ? "bg-cyan-950/80 text-cyan-300 border border-cyan-500/30"
+                              ? "bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30"
                               : setup.simulated_outcome === "STOPPED_OUT"
-                                ? "bg-rose-950/80 text-rose-300 border border-rose-500/30"
-                                : "bg-slate-800 text-slate-400"
+                                ? "bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30"
+                                : "bg-muted/15 text-muted dark:bg-slate-800 dark:text-slate-400"
                           }`}>
                           {setup.simulated_outcome.replace(/_/g, " ")}
                         </span>
@@ -1256,7 +1455,7 @@ export default function SweepReclaimWorkspace({
 
                       {/* Realized R:R */}
                       <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                        <span className={`font-bold ${setup.realized_rr > 0 ? "text-emerald-400" : setup.realized_rr < 0 ? "text-rose-400" : "text-slate-400"}`}>
+                        <span className={`font-bold ${setup.realized_rr > 0 ? "text-emerald-600 dark:text-emerald-400" : setup.realized_rr < 0 ? "text-rose-600 dark:text-rose-400" : "text-muted dark:text-slate-400"}`}>
                           {setup.realized_rr > 0 ? "+" : ""}{setup.realized_rr}R
                         </span>
                       </td>
@@ -1268,7 +1467,7 @@ export default function SweepReclaimWorkspace({
                             e.stopPropagation();
                             setInspectedSetup(setup);
                           }}
-                          className="p-1 rounded bg-slate-800/80 hover:bg-cyan-500/20 text-slate-400 hover:text-cyan-400 transition"
+                          className="p-1 rounded bg-card dark:bg-slate-800/80 hover:bg-cyan-500/20 border border-card-border dark:border-transparent text-muted hover:text-cyan-600 dark:text-slate-400 dark:hover:text-cyan-400 transition shadow-xs cursor-pointer"
                           title="Inspect Setup Lifecycle"
                         >
                           <ChevronRight className="w-3.5 h-3.5" />
@@ -1283,16 +1482,16 @@ export default function SweepReclaimWorkspace({
 
           {/* Pagination Controls */}
           {filteredSetups.length > 0 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between pt-4 mt-4 border-t border-slate-800/80 gap-3 text-xs font-mono text-slate-400">
+            <div className="flex flex-col sm:flex-row items-center justify-between pt-4 mt-4 border-t border-card-border/80 dark:border-slate-800/80 gap-3 text-xs font-mono text-muted dark:text-slate-400">
               {/* Left: Summary & Rows Per Page */}
               <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
                 <span>
-                  Showing <span className="font-bold text-slate-100">{(currentPage - 1) * itemsPerPage + 1}</span>–<span className="font-bold text-slate-100">{Math.min(currentPage * itemsPerPage, filteredSetups.length)}</span> of <span className="font-bold text-slate-100">{filteredSetups.length}</span> setups
+                  Showing <span className="font-bold text-foreground dark:text-slate-100">{(currentPage - 1) * itemsPerPage + 1}</span>–<span className="font-bold text-foreground dark:text-slate-100">{Math.min(currentPage * itemsPerPage, filteredSetups.length)}</span> of <span className="font-bold text-foreground dark:text-slate-100">{filteredSetups.length}</span> setups
                 </span>
 
                 {/* Rows per page selector */}
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] uppercase tracking-wider text-slate-500">Rows:</span>
+                  <span className="text-[10px] uppercase tracking-wider text-muted dark:text-slate-500">Rows:</span>
                   <select
                     value={itemsPerPage}
                     onChange={(e) => {
@@ -1300,7 +1499,7 @@ export default function SweepReclaimWorkspace({
                       setItemsPerPage(nextLimit);
                       setCurrentPage(1);
                     }}
-                    className="bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded px-2 py-0.5 focus:outline-none focus:border-cyan-500 cursor-pointer transition shadow-sm"
+                    className="bg-card dark:bg-slate-900 border border-card-border dark:border-slate-800 text-foreground dark:text-slate-200 text-xs rounded-lg px-2 py-0.5 focus:outline-none focus:border-cyan-500 cursor-pointer transition shadow-xs"
                   >
                     <option value={10}>10</option>
                     <option value={25}>25</option>
@@ -1317,7 +1516,7 @@ export default function SweepReclaimWorkspace({
                   type="button"
                   disabled={currentPage <= 1}
                   onClick={() => setCurrentPage(1)}
-                  className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                  className="p-1.5 rounded-lg bg-card dark:bg-slate-900 border border-card-border dark:border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 text-foreground dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-xs"
                   title="First Page (Jump to Start)"
                 >
                   <ChevronsLeft className="w-3.5 h-3.5" />
@@ -1328,7 +1527,7 @@ export default function SweepReclaimWorkspace({
                   type="button"
                   disabled={currentPage <= 1}
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                  className="p-1.5 rounded-lg bg-card dark:bg-slate-900 border border-card-border dark:border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 text-foreground dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-xs"
                   title="Previous Page"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
@@ -1339,7 +1538,7 @@ export default function SweepReclaimWorkspace({
                   <select
                     value={currentPage}
                     onChange={(e) => setCurrentPage(Number(e.target.value))}
-                    className="bg-slate-900 border border-slate-800 text-slate-100 font-bold text-xs rounded px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer transition shadow-sm"
+                    className="bg-card dark:bg-slate-900 border border-card-border dark:border-slate-800 text-foreground dark:text-slate-100 font-bold text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer transition shadow-xs"
                   >
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
                       <option key={pageNum} value={pageNum}>
@@ -1354,7 +1553,7 @@ export default function SweepReclaimWorkspace({
                   type="button"
                   disabled={currentPage >= totalPages}
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                  className="p-1.5 rounded-lg bg-card dark:bg-slate-900 border border-card-border dark:border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 text-foreground dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-xs"
                   title="Next Page"
                 >
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -1365,7 +1564,7 @@ export default function SweepReclaimWorkspace({
                   type="button"
                   disabled={currentPage >= totalPages}
                   onClick={() => setCurrentPage(totalPages)}
-                  className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                  className="p-1.5 rounded-lg bg-card dark:bg-slate-900 border border-card-border dark:border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 text-foreground dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-xs"
                   title="Last Page (Jump to End)"
                 >
                   <ChevronsRight className="w-3.5 h-3.5" />
@@ -1380,33 +1579,33 @@ export default function SweepReclaimWorkspace({
       {/* 4. SETUP INSPECTOR MODAL (4-Phase Lifecycle Deep Dive)             */}
       {/* ─────────────────────────────────────────────────────────────────── */}
       {inspectedSetup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-2xl w-full p-6 shadow-2xl font-mono relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 dark:bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-card dark:bg-slate-900 border border-card-border dark:border-slate-800 rounded-xl max-w-2xl w-full p-6 shadow-2xl font-mono relative max-h-[90vh] overflow-y-auto text-foreground dark:text-slate-100">
             {/* Header */}
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-5">
+            <div className="flex items-center justify-between pb-4 border-b border-card-border/60 dark:border-slate-800 mb-5">
               <div className="flex items-center gap-2.5">
                 <span
                   className={`p-1.5 rounded-md font-bold text-xs ${inspectedSetup.type === "BULLISH"
-                      ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                      : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+                      ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                      : "bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30"
                     }`}
                 >
                   {inspectedSetup.type === "BULLISH" ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
                 </span>
                 <div>
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-foreground dark:text-white flex items-center gap-2">
                     <span>{inspectedSetup.anchor_name || `${inspectedSetup.anchor_swing_grade || "MAJOR"} Pivot ($${inspectedSetup.anchor_level.toFixed(2)})`}</span>
-                    <span className="text-xs px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30">
+                    <span className="text-xs px-2 py-0.5 rounded bg-cyan-500/10 dark:bg-cyan-950 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30 font-bold">
                       {inspectedSetup.simulated_outcome.replace(/_/g, " ")}
                     </span>
                   </h3>
-                  <span className="text-[10px] text-slate-500">{inspectedSetup.id}</span>
+                  <span className="text-[10px] text-muted dark:text-slate-500">{inspectedSetup.id}</span>
                 </div>
               </div>
 
               <button
                 onClick={() => setInspectedSetup(null)}
-                className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                className="p-1 rounded-md text-muted hover:text-foreground dark:text-slate-400 dark:hover:text-white hover:bg-muted/10 transition"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1415,26 +1614,26 @@ export default function SweepReclaimWorkspace({
             {/* 4-Phase Progress Timeline Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
               {/* Phase 1: Anchor */}
-              <div className="p-3.5 rounded-lg bg-slate-950/60 border border-slate-800">
+              <div className="p-3.5 rounded-lg bg-background dark:bg-slate-950/60 border border-card-border dark:border-slate-800 shadow-xs">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="text-[10px] uppercase font-bold text-muted dark:text-slate-400 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-400" />
                     <span>Phase 1: Anchor Reference</span>
                   </span>
-                  <span className="text-[9px] text-cyan-400 font-bold">{inspectedSetup.anchor_type || inspectedSetup.anchor_swing_grade || "SWING_PIVOT"}</span>
+                  <span className="text-[9px] text-cyan-600 dark:text-cyan-400 font-bold">{inspectedSetup.anchor_type || inspectedSetup.anchor_swing_grade || "SWING_PIVOT"}</span>
                 </div>
                 <div className="flex flex-col gap-1 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Anchor Price:</span>
-                    <span className="text-white font-bold">${inspectedSetup.anchor_level.toFixed(2)}</span>
+                    <span className="text-muted dark:text-slate-500">Anchor Price:</span>
+                    <span className="text-foreground dark:text-white font-bold">${inspectedSetup.anchor_level.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Anchor Time (Cairo):</span>
-                    <span className="text-slate-300">{formatCairoDateTime(inspectedSetup.anchor_time)}</span>
+                    <span className="text-muted dark:text-slate-500">Anchor Time (Cairo):</span>
+                    <span className="text-foreground/80 dark:text-slate-300">{formatCairoDateTime(inspectedSetup.anchor_time)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Color Locked:</span>
-                    <span className={inspectedSetup.anchor_color_validated ? "text-emerald-400" : "text-slate-400"}>
+                    <span className="text-muted dark:text-slate-500">Color Locked:</span>
+                    <span className={inspectedSetup.anchor_color_validated ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-muted dark:text-slate-400"}>
                       {inspectedSetup.anchor_color_validated ? "PASSED" : "N/A"}
                     </span>
                   </div>
@@ -1442,73 +1641,73 @@ export default function SweepReclaimWorkspace({
               </div>
 
               {/* Phase 2: Sweep */}
-              <div className="p-3.5 rounded-lg bg-slate-950/60 border border-slate-800">
+              <div className="p-3.5 rounded-lg bg-background dark:bg-slate-950/60 border border-card-border dark:border-slate-800 shadow-xs">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="text-[10px] uppercase font-bold text-muted dark:text-slate-400 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
                     <span>Phase 2: Liquidity Purge</span>
                   </span>
-                  <span className="text-[9px] text-amber-400 font-bold">
+                  <span className="text-[9px] text-amber-600 dark:text-amber-400 font-bold">
                     {inspectedSetup.bars_anchor_to_sweep} Bars Post-Anchor
                   </span>
                 </div>
                 <div className="flex flex-col gap-1 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Sweep Extreme:</span>
-                    <span className="text-white font-bold">
+                    <span className="text-muted dark:text-slate-500">Sweep Extreme:</span>
+                    <span className="text-foreground dark:text-white font-bold">
                       {inspectedSetup.sweep_price ? `$${inspectedSetup.sweep_price.toFixed(2)}` : "None"}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Sweep Time (Cairo):</span>
-                    <span className="text-slate-300">{formatCairoDateTime(inspectedSetup.sweep_time)}</span>
+                    <span className="text-muted dark:text-slate-500">Sweep Time (Cairo):</span>
+                    <span className="text-foreground/80 dark:text-slate-300">{formatCairoDateTime(inspectedSetup.sweep_time)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Purge Depth:</span>
-                    <span className="text-amber-400">
+                    <span className="text-muted dark:text-slate-500">Purge Depth:</span>
+                    <span className="text-amber-600 dark:text-amber-400 font-bold">
                       {inspectedSetup.sweep_depth ? `$${inspectedSetup.sweep_depth.toFixed(2)} (${inspectedSetup.sweep_depth_pct}%)` : "—"}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Volume Ratio:</span>
-                    <span className="text-slate-300">{inspectedSetup.sweep_volume_ratio ?? 1}x SMA</span>
+                    <span className="text-muted dark:text-slate-500">Volume Ratio:</span>
+                    <span className="text-foreground/80 dark:text-slate-300">{inspectedSetup.sweep_volume_ratio ?? 1}x SMA</span>
                   </div>
                 </div>
               </div>
 
               {/* Phase 3: Volumetric Reclaim */}
-              <div className="p-3.5 rounded-lg bg-slate-950/60 border border-slate-800">
+              <div className="p-3.5 rounded-lg bg-background dark:bg-slate-950/60 border border-card-border dark:border-slate-800 shadow-xs">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-[10px] uppercase font-bold text-muted dark:text-slate-400 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
                     <span>Phase 3: Volumetric Reclaim</span>
                   </span>
-                  <span className="text-[9px] text-emerald-400 font-bold">
+                  <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold">
                     {inspectedSetup.is_reclaimed ? "CONFIRMED" : "FAILED"}
                   </span>
                 </div>
                 <div className="flex flex-col gap-1 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Close Price:</span>
-                    <span className="text-white font-bold">
+                    <span className="text-muted dark:text-slate-500">Close Price:</span>
+                    <span className="text-foreground dark:text-white font-bold">
                       {inspectedSetup.reclaim_close_price ? `$${inspectedSetup.reclaim_close_price.toFixed(2)}` : "—"}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Reclaim Time (Cairo):</span>
-                    <span className="text-slate-300">{formatCairoDateTime(inspectedSetup.reclaim_time)}</span>
+                    <span className="text-muted dark:text-slate-500">Reclaim Time (Cairo):</span>
+                    <span className="text-foreground/80 dark:text-slate-300">{formatCairoDateTime(inspectedSetup.reclaim_time)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Taker Delta Dominance:</span>
-                    <span className="text-cyan-300 font-bold">{inspectedSetup.reclaim_delta_dominance_pct}%</span>
+                    <span className="text-muted dark:text-slate-500">Taker Delta Dominance:</span>
+                    <span className="text-cyan-600 dark:text-cyan-300 font-bold">{inspectedSetup.reclaim_delta_dominance_pct}%</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Candle Body Ratio:</span>
-                    <span className="text-white font-bold">{inspectedSetup.reclaim_body_ratio}%</span>
+                    <span className="text-muted dark:text-slate-500">Candle Body Ratio:</span>
+                    <span className="text-foreground dark:text-white font-bold">{inspectedSetup.reclaim_body_ratio}%</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Displacement FVG CE:</span>
-                    <span className="text-purple-300 font-bold">
+                    <span className="text-muted dark:text-slate-500">Displacement FVG CE:</span>
+                    <span className="text-purple-600 dark:text-purple-300 font-bold">
                       {inspectedSetup.reclaim_fvg_ce ? `$${inspectedSetup.reclaim_fvg_ce.toFixed(2)}` : "None"}
                     </span>
                   </div>
@@ -1516,56 +1715,56 @@ export default function SweepReclaimWorkspace({
               </div>
 
               {/* Phase 4: 3-Stage Harvest Execution */}
-              <div className="p-3.5 rounded-lg bg-slate-950/60 border border-slate-800">
+              <div className="p-3.5 rounded-lg bg-background dark:bg-slate-950/60 border border-card-border dark:border-slate-800 shadow-xs">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="text-[10px] uppercase font-bold text-muted dark:text-slate-400 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
                     <span>Phase 4: 3-Stage Harvest</span>
                   </span>
-                  <span className="text-[9px] text-purple-400 font-bold">
+                  <span className="text-[9px] text-purple-600 dark:text-purple-400 font-bold">
                     {inspectedSetup.is_retested ? "EXECUTED" : "UNTESTED"}
                   </span>
                 </div>
                 <div className="flex flex-col gap-1 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Entry Price ({getEntryModeLabel(inspectedSetup.entry_mode)}):</span>
-                    <span className="text-emerald-400 font-bold">${inspectedSetup.entry_price.toFixed(2)}</span>
+                    <span className="text-muted dark:text-slate-500">Entry Price ({getEntryModeLabel(inspectedSetup.entry_mode)}):</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-bold">${inspectedSetup.entry_price.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Execution Time (Cairo):</span>
-                    <span className="text-slate-300">{formatCairoDateTime(inspectedSetup.retest_time || inspectedSetup.reclaim_time)}</span>
+                    <span className="text-muted dark:text-slate-500">Execution Time (Cairo):</span>
+                    <span className="text-foreground/80 dark:text-slate-300">{formatCairoDateTime(inspectedSetup.retest_time || inspectedSetup.reclaim_time)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Stop Loss:</span>
-                    <span className="text-rose-400 font-bold">${inspectedSetup.stop_loss.toFixed(2)}</span>
+                    <span className="text-muted dark:text-slate-500">Stop Loss:</span>
+                    <span className="text-rose-600 dark:text-rose-400 font-bold">${inspectedSetup.stop_loss.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Realized R:R:</span>
-                    <span className={`font-bold ${inspectedSetup.realized_rr > 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                    <span className="text-muted dark:text-slate-500">Realized R:R:</span>
+                    <span className={`font-bold ${inspectedSetup.realized_rr > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
                       {inspectedSetup.realized_rr > 0 ? "+" : ""}{inspectedSetup.realized_rr}R
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Trailing Stop Source:</span>
-                    <span className="text-cyan-300">{inspectedSetup.trailing_sl_source}</span>
+                    <span className="text-muted dark:text-slate-500">Trailing Stop Source:</span>
+                    <span className="text-cyan-600 dark:text-cyan-300">{inspectedSetup.trailing_sl_source}</span>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Tranche Scaling Targets Progress */}
-            <div className="p-3.5 rounded-lg bg-slate-950/70 border border-slate-800 mb-5">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block mb-2">
+            <div className="p-3.5 rounded-lg bg-background dark:bg-slate-950/70 border border-card-border dark:border-slate-800 mb-5 shadow-xs">
+              <span className="text-[10px] uppercase font-bold text-muted dark:text-slate-400 block mb-2">
                 Tranche Target Ladder
               </span>
               <div className="grid grid-cols-2 gap-3 text-center text-xs">
-                <div className={`p-2 rounded border ${inspectedSetup.is_stage1_filled ? "bg-cyan-950/40 border-cyan-500/40 text-cyan-300" : "bg-slate-900 border-slate-800 text-slate-500"}`}>
+                <div className={`p-2 rounded-lg border ${inspectedSetup.is_stage1_filled ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-600 dark:text-cyan-300" : "bg-card dark:bg-slate-900 border-card-border dark:border-slate-800 text-muted"}`}>
                   <span className="text-[9px] block">Stage 1 (50% @ 1.0R)</span>
                   <strong className="block mt-0.5">${inspectedSetup.stage1_target.toFixed(2)}</strong>
                   <span className="text-[8px]">{inspectedSetup.is_stage1_filled ? "FILLED ✓" : "UNREACHED"}</span>
                 </div>
 
-                <div className={`p-2 rounded border ${inspectedSetup.is_stage2_filled ? "bg-purple-950/40 border-purple-500/40 text-purple-300" : "bg-slate-900 border-slate-800 text-slate-500"}`}>
+                <div className={`p-2 rounded-lg border ${inspectedSetup.is_stage2_filled ? "bg-purple-500/10 border-purple-500/40 text-purple-600 dark:text-purple-300" : "bg-card dark:bg-slate-900 border-card-border dark:border-slate-800 text-muted"}`}>
                   <span className="text-[9px] block">Stage 2 (50% @ {inspectedSetup.stage2_multiple}R)</span>
                   <strong className="block mt-0.5">${inspectedSetup.stage2_target.toFixed(2)}</strong>
                   <span className="text-[8px]">{inspectedSetup.is_stage2_filled ? "FILLED ✓" : "UNREACHED"}</span>
@@ -1577,7 +1776,7 @@ export default function SweepReclaimWorkspace({
             <div className="flex justify-end">
               <button
                 onClick={() => setInspectedSetup(null)}
-                className="px-5 py-2 rounded bg-slate-800 hover:bg-slate-700 text-white font-mono text-xs transition"
+                className="px-5 py-2 rounded-lg bg-card dark:bg-slate-800 hover:bg-muted/15 hover:dark:bg-slate-700 border border-card-border dark:border-transparent text-foreground dark:text-white font-mono text-xs transition cursor-pointer shadow-xs"
               >
                 Close Inspector
               </button>

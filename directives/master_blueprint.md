@@ -1,8 +1,150 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V16.94
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.00
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-30 (V16.94 — Interactive Two-Way Telegram Bot Command Center & Custom Reply Keyboard)
+> **Last Updated:** 2026-08-30 (V17.00 — VPS Deployment & Institutional Go-Live Master Roadmap)
+
+## 🆕 V17.00 Changelog — VPS Deployment & Institutional Go-Live Master Roadmap (2026-08-30)
+
+### Summary
+Formulated and documented the definitive, start-to-finish VPS Deployment and Go-Live Master Roadmap at `docs/VPS_DEPLOYMENT_AND_GO_LIVE_ROADMAP.md`. Synthesizes the 2-Year continuous empirical study (210,456 candles, 4,196 trades) and the 240-event Macroeconomic News impact analysis into an institutional execution protocol starting from September 15, 2026. Locks in the Golden Launch window on **Wednesday, September 16, 2026 at 16:30–17:00 Cairo Time (`UTC+3`)** during the #1 All-Time Golden Hour (14:00 UTC, +91.92R, 3.19 PF) on the #1 Mid-Week Institutional Driver Day (Wednesday, +177.52R, 73.0% Win Rate, 2.52 PF).
+
+### Key Architectural Deliverables
+1. **Infrastructure & OS Hardening Guide (`docs/VPS_DEPLOYMENT_AND_GO_LIVE_ROADMAP.md`):**
+   - Ubuntu 24.04/22.04 LTS on AWS Lightsail / DigitalOcean / Hetzner.
+   - UFW firewall lockdown (Port 22 SSH only; UI accessed via local SSH port forwarding `3000:localhost:3000`).
+   - 2GB Swap Memory creation to prevent Next.js build Out-Of-Memory (OOM) exceptions.
+   - `chrony` millisecond NTP time synchronization for zero-drift Binance Futures exchange timestamp alignment.
+2. **Binance Futures API & Security Protocol:**
+   - Least-privilege API configuration (`Enable Reading`, `Enable Futures`, Disable Withdrawals & Spot Margin).
+   - Strict IP whitelisting bound to the VPS Static Public IP.
+   - Automated TypeScript connectivity, authentication, ping latency, and account balance verification script.
+3. **Real-Time Notification & Operational Telemetry:**
+   - 2-Stage Dynamic Harvest Telegram notification arming (50% TP1 @ 1.0R / 50% TP2 @ 1.4R).
+   - Pre-launch 24-Hour Paper Diagnostic protocol for order flow ring buffer seeding.
+   - Emergency killswitch commands, PM2 lifecycle management, and daily ledger reconciliation.
+
+### Files Added / Modified
+- **`docs/VPS_DEPLOYMENT_AND_GO_LIVE_ROADMAP.md`** [NEW]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.99 Changelog — Quant Lab Light & Dark Theme Parity & High-Contrast Design Tokens (2026-08-30)
+
+### Summary
+Executed a full UI/UX and design system overhaul across the entire Quant Lab suite to achieve complete **Light & Dark Theme Visual Parity**. Replaced all hardcoded dark backgrounds (`bg-slate-950`), un-scoped dark borders (`border-slate-800`), and low-contrast text with adaptive semantic tokens (`bg-background dark:bg-slate-950`, `bg-card dark:bg-slate-900/30`, `border-card-border dark:border-slate-800`, `text-foreground dark:text-white`, `text-muted dark:text-slate-500`). Preserved all pristine dark mode styling while providing rich contrast, readable telemetry cards, responsive table filters, and polished modals in light mode.
+
+### Key Architectural Deliverables
+1. **Global CSS Cascade Protection (`globals.css`):**
+   - Isolated `.btn-solid` and high-contrast gradients from unwanted `var(--btn-default)` or transparent text inheritance.
+2. **Scanner Preset Control Deck & Confirmation Modals (`ScannerPresetControlDeck.tsx`):**
+   - Theme-adaptive container, preset select dropdowns, parameter chips, Save Preset modal, and Deploy to PM2 confirmation modal.
+3. **Sweep & Reclaim Sidebar & Workspace (`SweepReclaimSidebarList.tsx`, `SweepReclaimWorkspace.tsx`):**
+   - Adaptive lookback pills, date pickers, asset/timeframe selects, anchor toggle badges, 3-pillar displacement sliders, and expandable institutional geometry drawer.
+   - 6 macro telemetry cards, 4-Phase Conversion Funnel progress bars, 2-Stage Dynamic Harvest performance metrics, 3-Pillar Gatekeeper grid, and Detected Setups ledger table with pagination.
+   - Multi-phase Setup Detail Inspector modal with tranche ladder cards and theme-adaptive backdrop.
+4. **Capital Growth Ledger & SVG Compounding Visualizer (`CapitalGrowthLedger.tsx`):**
+   - Adaptive capital input, preset pills, risk slider, model toggle, Approach A/B cards, 6-card metrics grid, SVG compounding curve with adaptive gridlines and crosshair tooltip, and chronological ledger table.
+5. **OB Scanner & Custom Strategy Workspaces (`src/app/quant-lab/page.tsx`):**
+   - Adaptive header tab bar, historical scan lists, OB Scanner configuration panel, SSE processing HUD, macro metrics grid, and 4-card comparative matrix.
+   - Interactive table filter bar (search, direction, tier, status, outcome pills), Order Blocks telemetry table (`thead`, `tbody`, badges), and paginator.
+   - Custom Strategy JSON dropzone, interactive editor textarea, backtest execution ledger table, and multi-gate OB Inspector modal.
+
+### Files Modified
+- **`src/app/globals.css`** [MODIFY]
+- **`src/components/quantLab/ScannerPresetControlDeck.tsx`** [MODIFY]
+- **`src/components/quantLab/SweepReclaimSidebarList.tsx`** [MODIFY]
+- **`src/components/quantLab/SweepReclaimWorkspace.tsx`** [MODIFY]
+- **`src/components/quantLab/CapitalGrowthLedger.tsx`** [MODIFY]
+- **`src/app/quant-lab/page.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.98 Changelog — Quant Lab Button Contrast & Typography Cascade Isolation (2026-08-30)
+
+### Summary
+Fixed low-contrast and unreadable button text on Quant Lab action buttons ("Deploy to Live PM2", "RUN SWEEP & RECLAIM SCAN", and "Run Deep OB Scan"). Isolated solid, gradient, and explicitly colored buttons from global CSS typography cascades (`var(--btn-default)` / `var(--btn-trans-text)` / `.lucide` text color overrides), ensuring pitch-black (`text-slate-950 font-black`) high-contrast text and solid matching icons against amber and cyan gradients.
+
+### Key Architectural Deliverables
+1. **Typography & Button Cascade Isolation (`globals.css`):**
+   - Excluded `.btn-solid`, `[class*="bg-gradient"]`, `[class*="from-"]`, `[class*="bg-amber"]`, `[class*="bg-cyan"]`, `[class*="bg-blue"]`, `[class*="bg-emerald"]`, `[class*="text-slate-950"]`, `[class*="text-white"]`, and `[class*="text-black"]` from generic outline button and dark/light interactive text overrides.
+   - Protected child Lucide SVG icons from forced `color: var(--btn-default) !important` inheritance when rendered within solid or gradient buttons.
+2. **Deploy to Live PM2 Action Enhancement (`ScannerPresetControlDeck.tsx`):**
+   - Added `.btn-solid` and high-contrast styling with `from-amber-400 via-amber-500 to-amber-600` background, bold `text-slate-950 font-black`, and filled `<Rocket className="fill-slate-950 text-slate-950" />` icon across preset deck and confirmation modal.
+3. **Run Sweep & Reclaim Scan Button Enhancement (`SweepReclaimWorkspace.tsx`):**
+   - Added `.btn-solid` and vibrant `from-cyan-400 via-cyan-500 to-blue-500` gradient with high-visibility `text-slate-950 font-black tracking-wider` and matching solid `<Play className="fill-slate-950 text-slate-950" />` icon.
+4. **Run Deep OB Scan Button Enhancement (`src/app/quant-lab/page.tsx`):**
+   - Synchronized `.btn-solid` and `text-slate-950 font-black` high-contrast styling on the Order Block scanner execution trigger.
+
+### Files Modified
+- **`src/app/globals.css`** [MODIFY]
+- **`src/components/quantLab/ScannerPresetControlDeck.tsx`** [MODIFY]
+- **`src/components/quantLab/SweepReclaimWorkspace.tsx`** [MODIFY]
+- **`src/app/quant-lab/page.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.97 Changelog — Flow-State Master S&R Execution Cockpit Modernization (2026-08-30)
+
+### Summary
+Transformed the live execution modal (`LiveOrderBlockModal.tsx`) into the dedicated **Flow-State Master S&R Execution Cockpit** (Option A). Cleanly purged all legacy Order Block/Breaker Block clutter. Connected Tab 1 (`Live Positions`) directly to real-time active S&R trades, pending resting limits, multi-stage targets (Stage 1 `+0.40R`, Stage 2 `1.4R` Champion, Stage 3 `3.0R` DOL Runner), and 1-click Breakeven controls. Connected Tab 2 (`Active Anchors`) to monitored session liquidity pools (Asian, London, PDH/PDL, Pivots) across the 4-phase lifecycle. Consolidated Tab 3 (`Engine Settings`) exclusively around Sweep & Reclaim parameters, compounding risk, and 8 Retest Entry Models.
+
+### Key Architectural Deliverables
+1. **Live S&R Positions & Orders HUD (`LiveOrderBlockModal.tsx`):**
+   - Directly wired to `useAutomatedStrategyExecution().activePositions` and `pendingOrders`.
+   - Real-time active position card with floating PnL ($ / R), trailing Stop Loss level, dynamic distances, and 1-click `[Snap SL to Breakeven]` and `[Emergency Market Flatten]`.
+   - Resting pending limit orders list with real-time timeout countdowns.
+   - Radar pulse standby state when flat with portfolio balance and compounding risk display.
+2. **Active Anchors Liquidity Matrix:**
+   - Real-time session anchor monitor across 4 phases (`ANCHOR ACTIVE` $\to$ `SWEEP` $\to$ `RECLAIM` $\to$ `RETEST`).
+   - 3-Pillar Displacement telemetry badges (Vol Ratio, Delta Dominance %, Body Ratio %).
+3. **Streamlined S&R Engine & Risk Settings:**
+   - 100% focused on Sweep & Reclaim (Presets, 1.0%/2.0%/3.0% Dynamic Compounding Risk, 8 Retest Entry Models, 3-Pillar Sliders).
+
+### Files Modified
+- **`src/components/modals/LiveOrderBlockModal.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.96 Changelog — Quant Lab Sandbox Preset Isolation, Explicit Live Deployment Handshake & Parameter Harmonization (2026-08-30)
+
+### Summary
+Resolved cross-context preset contamination between Quant Lab backtest exploration and the Live PM2 Execution Engine. Implemented strict **Dual-Context Sandbox Architecture**: presets selected or customized inside Quant Lab remain isolated to local backtesting state and cannot accidentally overwrite live background daemon settings. Added an explicit **"🚀 Deploy to Live PM2 Daemon"** action with confirmation modal, an **Expandable Advanced Institutional Geometry & ATR Controls Drawer** in Quant Lab, and harmonized granular Stage 2 targets (`1.3R`, `1.4R` Champion, `1.5R`, `1.6R`, `1.8R`, `2.0R`) across the Live Execution Modal.
+
+### Key Architectural Deliverables
+1. **Dual-Context Preset Isolation (`ScannerPresetControlDeck.tsx`):**
+   - Added `mode?: 'live_deployment' | 'backtest_sandbox'` prop.
+   - In `backtest_sandbox` mode (Quant Lab), selecting/modifying presets updates only in-memory backtest state without mutating live execution keys in `localStorage` or triggering live daemon reloads.
+2. **Explicit Live Deployment Handshake Action:**
+   - Rendered high-visibility `"🚀 Deploy to Live PM2"` action button in Quant Lab with a dedicated safety confirmation modal detailing exact strategy parameters before live arming.
+3. **Advanced Institutional Geometry & ATR Accordion Drawer (`SweepReclaimWorkspace.tsx`):**
+   - Added a clean collapsible drawer exposing Major/Internal lookbacks, Max Anchor-to-Sweep/Reclaim/Retest bar timers, Min Sweep Depth ATR, Stop Loss ATR Buffer, and Stage 1 Target multiples.
+4. **Parameter & Stage 2 Granular Target Harmonization (`LiveOrderBlockModal.tsx`):**
+   - Harmonized Stage 2 target buttons to include `1.3R`, `1.4R` (Quant Champion), `1.5R`, `1.6R`, `1.8R`, and `2.0R`.
+
+### Files Modified
+- **`src/components/quantLab/ScannerPresetControlDeck.tsx`** [MODIFY]
+- **`src/components/quantLab/SweepReclaimWorkspace.tsx`** [MODIFY]
+- **`src/components/modals/LiveOrderBlockModal.tsx`** [MODIFY]
+- **`src/app/quant-lab/page.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V16.95 Changelog — Real-Time Live Price & Dynamic Distance Tracking across Telegram Bot Commands (2026-08-30)
+
+### Summary
+Enhanced all Telegram interactive commands (`/status`, `/trade`, `/setups`, `/today`, `/reconcile`) and added dedicated `⚡ /price` 1-tap radar button to the persistent mobile reply keyboard to prominently display real-time Binance Futures tick price alongside **exact dynamic dollar distances** to entry levels, Stop Loss buffers, Take Profit targets, and monitored structural sweep anchors. Fixed Asian Range & Dealing Range property extraction so valid prices display seamlessly 24/7.
+
+### Key Architectural Deliverables
+1. **1-Tap Quick Action Keyboard Layout (`src/lib/notifications/telegramBotService.ts`):**
+   - Configured custom mobile grid with `[⚡ /price] [📊 /status]`, `[🎯 /trade] [💰 /today]`, and `[🏛️ /setups] [🔬 /reconcile]`.
+2. **Session Range & Asian Liquidity Resolver (`scripts/lib/restBootstrap.ts`):**
+   - Corrected nested session range extraction (`macro.asianSession.high/low`) with automatic buffer fallback if current UTC day session is actively forming.
+3. **Sub-Second Tick Price Caching (`scripts/lib/nodeWsClient.ts`):**
+   - Implemented `this.latestPrice` cache updated on every `aggTrade` and `kline` frame with `getLatestPrice(): number` multi-tier fallback.
+4. **Contextual Live Price Tracking across All Commands:**
+   - Real-time market tick price rendered with dynamic distance in $/%.
+
+### Files Modified
+- **`scripts/lib/nodeWsClient.ts`** [MODIFY]
+- **`src/lib/notifications/telegramBotService.ts`** [MODIFY]
+- **`scripts/test-telegram-commands.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
 
 ## 🆕 V16.94 Changelog — Interactive Two-Way Telegram Bot Command Center & Custom Reply Keyboard (2026-08-30)
 

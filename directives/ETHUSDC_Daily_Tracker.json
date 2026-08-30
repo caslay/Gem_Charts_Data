@@ -788,6 +788,29 @@
       "close_time": "2026-08-30T11:00:46.528Z",
       "execution_source": "LOCAL_HEADLESS_DAEMON",
       "notes": "[Auto 5m S&R] Exit: FULL_TP2_WIN | Realized R: 1.20R"
+    },
+    {
+      "trade_id": "POS_SHORT_1788090600781_P2G9I",
+      "date": "2026-08-30",
+      "session": "INNER Swing High ($2457.80)",
+      "pair": "ETHUSDC",
+      "direction": "SHORT",
+      "timeframe": "5m",
+      "strategy": "Sweep & Reclaim (5M INNER Swing High ($2457.80))",
+      "entry_price": 2457.8,
+      "stop_loss": 2461.4867,
+      "take_profit_1": 2454.1133,
+      "take_profit_2": 2452.6386,
+      "take_profit_3": 2446.7399,
+      "exit_price": 2461.4867,
+      "outcome": "LOSS",
+      "realized_pnl_usd": -300,
+      "realized_r": -1,
+      "status": "CLOSED",
+      "open_time": "2026-08-30T11:57:54.394Z",
+      "close_time": "2026-08-30T12:02:28.836Z",
+      "execution_source": "LOCAL_HEADLESS_DAEMON",
+      "notes": "[Auto 5m S&R] Exit: STOPPED_OUT | Realized R: -1.00R"
     }
   ]
 }

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * test-telegram-commands.ts
  * ─────────────────────────────────────────────────────────────────────────────
  * Diagnostic & Simulation Tool for Interactive Telegram Bot Commands
@@ -32,6 +32,12 @@ async function runInteractiveCommandTest() {
       equity: 10000,
       isDryRun: false,
       bootTimestamp: Date.now() - 7200000, // 2h uptime simulation
+      wsClient: {
+        getLatestPrice: () => 2458.78,
+        getStatus: () => 'OPEN',
+        getActiveCandle: () => ({ c: 2458.78 } as any),
+        getRingBuffers: () => ({ '5m': [{ c: 2458.78 }] as any, '15m': [], '1h': [] }),
+      } as any,
       getMacroContext: () => ({
         bias: 'BULLISH',
         pdh: 2538.08,

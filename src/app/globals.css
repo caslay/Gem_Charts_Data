@@ -347,13 +347,13 @@ aside .text-\[8px\], aside .text-\[9px\], aside .text-\[10px\], aside .text-zinc
 }
 
 /* Transparent/Outline Buttons */
-button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(.bg-background):not(.btn-solid),
+button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(.bg-background):not(.btn-solid):not([class*="bg-gradient"]):not([class*="from-"]):not([class*="bg-amber"]):not([class*="bg-cyan"]):not([class*="bg-blue"]):not([class*="bg-emerald"]):not([class*="bg-rose"]):not([class*="bg-indigo"]):not([class*="bg-purple"]):not([class*="bg-slate"]):not([class*="bg-zinc"]):not([class*="text-slate-950"]):not([class*="text-white"]):not([class*="text-black"]),
 .btn-trans {
   color: var(--btn-trans-text) !important;
   border-color: var(--btn-trans-border) !important;
   background-color: transparent !important;
 }
-button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(.bg-background):not(.btn-solid):hover:not(:disabled),
+button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(.bg-background):not(.btn-solid):not([class*="bg-gradient"]):not([class*="from-"]):not([class*="bg-amber"]):not([class*="bg-cyan"]):not([class*="bg-blue"]):not([class*="bg-emerald"]):not([class*="bg-rose"]):not([class*="bg-indigo"]):not([class*="bg-purple"]):not([class*="bg-slate"]):not([class*="bg-zinc"]):not([class*="text-slate-950"]):not([class*="text-white"]):not([class*="text-black"]):hover:not(:disabled),
 .btn-trans:hover:not(:disabled) {
   background-color: var(--btn-trans-bg-hover) !important;
 }
@@ -452,16 +452,16 @@ html:not(.dark) .bg-rose-500\/5 {
 }
 
 /* Default Interactive (links, buttons, icons) — Light */
-html:not(.dark) a:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not([href^="/"]):not([href=""]),
-html:not(.dark) button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(.bg-background),
+html:not(.dark) a:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not([href^="/"]):not([href=""]):not(.btn-solid):not([class*="bg-gradient"]):not([class*="from-"]):not([class*="text-slate-950"]):not([class*="text-white"]):not([class*="text-black"]),
+html:not(.dark) button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(.bg-background):not(.btn-solid):not([class*="bg-gradient"]):not([class*="from-"]):not([class*="bg-amber"]):not([class*="bg-cyan"]):not([class*="bg-blue"]):not([class*="bg-emerald"]):not([class*="bg-rose"]):not([class*="bg-indigo"]):not([class*="bg-purple"]):not([class*="bg-slate"]):not([class*="bg-zinc"]):not([class*="text-slate-950"]):not([class*="text-white"]):not([class*="text-black"]),
 html:not(.dark) .text-muted-link,
-html:not(.dark) .lucide:not(.text-accent) {
+html:not(.dark) .lucide:not(.text-accent):not(.text-slate-950):not(.text-white):not(.text-black):not(.btn-solid *):not([class*="bg-gradient"] *):not([class*="from-"] *):not([class*="bg-amber"] *):not([class*="bg-cyan"] *):not([class*="bg-blue"] *):not([class*="bg-emerald"] *):not([class*="bg-rose"] *):not([class*="text-slate-950"] *):not([class*="text-white"] *):not([role="tooltip"] *):not(.custom-tooltip *) {
   color: var(--btn-default) !important;
 }
 
 /* Hover State — Light */
-html:not(.dark) a:hover:not([href^="/"]),
-html:not(.dark) button:hover:not(:disabled),
+html:not(.dark) a:hover:not([href^="/"]):not(.btn-solid):not([class*="bg-gradient"]),
+html:not(.dark) button:not(.btn-solid):not([class*="bg-gradient"]):not([class*="from-"]):not([class*="bg-amber"]):not([class*="bg-cyan"]):not([class*="bg-blue"]):not([class*="bg-emerald"]):not([class*="bg-rose"]):not([class*="text-slate-950"]):not([class*="text-white"]):hover:not(:disabled),
 html:not(.dark) .hover\:text-foreground:hover,
 html:not(.dark) .hover\:text-white:hover {
   color: var(--btn-hover) !important;
@@ -546,16 +546,16 @@ html:not(.dark) .border-l-accent {
 }
 
 /* Default Interactive (links, buttons, icons) — Dark */
-.dark a:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not([href^="/"]):not([href=""]),
-.dark button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(.bg-background),
+.dark a:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not([href^="/"]):not([href=""]):not(.btn-solid):not([class*="bg-gradient"]):not([class*="from-"]):not([class*="text-slate-950"]):not([class*="text-white"]):not([class*="text-black"]),
+.dark button:not(.bg-accent):not(.bg-emerald-500):not(.bg-rose-500):not(.bg-card):not(.bg-background):not(.btn-solid):not([class*="bg-gradient"]):not([class*="from-"]):not([class*="bg-amber"]):not([class*="bg-cyan"]):not([class*="bg-blue"]):not([class*="bg-emerald"]):not([class*="bg-rose"]):not([class*="bg-indigo"]):not([class*="bg-purple"]):not([class*="bg-slate"]):not([class*="bg-zinc"]):not([class*="text-slate-950"]):not([class*="text-white"]):not([class*="text-black"]),
 .dark .text-muted-link,
-.dark .lucide:not(.text-accent) {
+.dark .lucide:not(.text-accent):not(.text-slate-950):not(.text-white):not(.text-black):not(.btn-solid *):not([class*="bg-gradient"] *):not([class*="from-"] *):not([class*="bg-amber"] *):not([class*="bg-cyan"] *):not([class*="bg-blue"] *):not([class*="bg-emerald"] *):not([class*="bg-rose"] *):not([class*="text-slate-950"] *):not([class*="text-white"] *):not([role="tooltip"] *):not(.custom-tooltip *) {
   color: var(--btn-default) !important;
 }
 
 /* Hover State — Dark */
-.dark a:hover:not([href^="/"]),
-.dark button:hover:not(:disabled),
+.dark a:hover:not([href^="/"]):not(.btn-solid):not([class*="bg-gradient"]),
+.dark button:not(.btn-solid):not([class*="bg-gradient"]):not([class*="from-"]):not([class*="bg-amber"]):not([class*="bg-cyan"]):not([class*="bg-blue"]):not([class*="bg-emerald"]):not([class*="bg-rose"]):not([class*="text-slate-950"]):not([class*="text-white"]):hover:not(:disabled),
 .dark .hover\:text-foreground:hover,
 .dark .hover\:text-white:hover {
   color: var(--btn-hover) !important;

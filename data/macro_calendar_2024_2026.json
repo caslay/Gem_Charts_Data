@@ -1,0 +1,2402 @@
+[
+  {
+    "id": "GDP_20240829_1230",
+    "date": "2024-08-29",
+    "time_utc": "12:30",
+    "timestamp_ms": 1724934600000,
+    "category": "GDP",
+    "event_name": "US GDP Prelim (Q2 2024)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20240830_1230",
+    "date": "2024-08-30",
+    "time_utc": "12:30",
+    "timestamp_ms": 1725021000000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Jul)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20240903_1400",
+    "date": "2024-09-03",
+    "time_utc": "14:00",
+    "timestamp_ms": 1725372000000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Aug)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20240905_1400",
+    "date": "2024-09-05",
+    "time_utc": "14:00",
+    "timestamp_ms": 1725544800000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Aug)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20240906_1230",
+    "date": "2024-09-06",
+    "time_utc": "12:30",
+    "timestamp_ms": 1725625800000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Aug)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20240911_1230",
+    "date": "2024-09-11",
+    "time_utc": "12:30",
+    "timestamp_ms": 1726057800000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Aug)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20240912_1230",
+    "date": "2024-09-12",
+    "time_utc": "12:30",
+    "timestamp_ms": 1726144200000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Aug)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20240917_1230",
+    "date": "2024-09-17",
+    "time_utc": "12:30",
+    "timestamp_ms": 1726576200000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Aug)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20240918_1800",
+    "date": "2024-09-18",
+    "time_utc": "18:00",
+    "timestamp_ms": 1726682400000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision (-50 bps cut)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20240918_1830",
+    "date": "2024-09-18",
+    "time_utc": "18:30",
+    "timestamp_ms": 1726684200000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20240926_1230",
+    "date": "2024-09-26",
+    "time_utc": "12:30",
+    "timestamp_ms": 1727353800000,
+    "category": "GDP",
+    "event_name": "US GDP Final (Q2 2024)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20240927_1230",
+    "date": "2024-09-27",
+    "time_utc": "12:30",
+    "timestamp_ms": 1727440200000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Aug)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20241001_1400",
+    "date": "2024-10-01",
+    "time_utc": "14:00",
+    "timestamp_ms": 1727791200000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Sep)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20241003_1400",
+    "date": "2024-10-03",
+    "time_utc": "14:00",
+    "timestamp_ms": 1727964000000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Sep)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20241004_1230",
+    "date": "2024-10-04",
+    "time_utc": "12:30",
+    "timestamp_ms": 1728045000000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Sep)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20241009_1800",
+    "date": "2024-10-09",
+    "time_utc": "18:00",
+    "timestamp_ms": 1728496800000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20241010_1230",
+    "date": "2024-10-10",
+    "time_utc": "12:30",
+    "timestamp_ms": 1728563400000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Sep)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20241011_1230",
+    "date": "2024-10-11",
+    "time_utc": "12:30",
+    "timestamp_ms": 1728649800000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Sep)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20241017_1230",
+    "date": "2024-10-17",
+    "time_utc": "12:30",
+    "timestamp_ms": 1729168200000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Sep)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20241030_1230",
+    "date": "2024-10-30",
+    "time_utc": "12:30",
+    "timestamp_ms": 1730291400000,
+    "category": "GDP",
+    "event_name": "US GDP Advance (Q3 2024)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20241031_1230",
+    "date": "2024-10-31",
+    "time_utc": "12:30",
+    "timestamp_ms": 1730377800000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Sep)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20241101_1230",
+    "date": "2024-11-01",
+    "time_utc": "12:30",
+    "timestamp_ms": 1730464200000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Oct)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20241101_1400",
+    "date": "2024-11-01",
+    "time_utc": "14:00",
+    "timestamp_ms": 1730469600000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Oct)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20241105_1500",
+    "date": "2024-11-05",
+    "time_utc": "15:00",
+    "timestamp_ms": 1730818800000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Oct)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20241107_1900",
+    "date": "2024-11-07",
+    "time_utc": "19:00",
+    "timestamp_ms": 1731006000000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision (-25 bps cut)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20241107_1930",
+    "date": "2024-11-07",
+    "time_utc": "19:30",
+    "timestamp_ms": 1731007800000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20241113_1330",
+    "date": "2024-11-13",
+    "time_utc": "13:30",
+    "timestamp_ms": 1731504600000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Oct)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20241114_1330",
+    "date": "2024-11-14",
+    "time_utc": "13:30",
+    "timestamp_ms": 1731591000000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Oct)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20241115_1330",
+    "date": "2024-11-15",
+    "time_utc": "13:30",
+    "timestamp_ms": 1731677400000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Oct)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20241126_1900",
+    "date": "2024-11-26",
+    "time_utc": "19:00",
+    "timestamp_ms": 1732647600000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20241127_1330",
+    "date": "2024-11-27",
+    "time_utc": "13:30",
+    "timestamp_ms": 1732714200000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Oct)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20241127_1330",
+    "date": "2024-11-27",
+    "time_utc": "13:30",
+    "timestamp_ms": 1732714200000,
+    "category": "GDP",
+    "event_name": "US GDP Prelim (Q3 2024)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20241202_1500",
+    "date": "2024-12-02",
+    "time_utc": "15:00",
+    "timestamp_ms": 1733151600000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Nov)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20241204_1500",
+    "date": "2024-12-04",
+    "time_utc": "15:00",
+    "timestamp_ms": 1733324400000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Nov)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20241206_1330",
+    "date": "2024-12-06",
+    "time_utc": "13:30",
+    "timestamp_ms": 1733491800000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Nov)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20241211_1330",
+    "date": "2024-12-11",
+    "time_utc": "13:30",
+    "timestamp_ms": 1733923800000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Nov)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20241212_1330",
+    "date": "2024-12-12",
+    "time_utc": "13:30",
+    "timestamp_ms": 1734010200000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Nov)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20241213_1330",
+    "date": "2024-12-13",
+    "time_utc": "13:30",
+    "timestamp_ms": 1734096600000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Nov)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20241218_1900",
+    "date": "2024-12-18",
+    "time_utc": "19:00",
+    "timestamp_ms": 1734548400000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision (-25 bps cut) & Economic Projections",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20241218_1930",
+    "date": "2024-12-18",
+    "time_utc": "19:30",
+    "timestamp_ms": 1734550200000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20241219_1330",
+    "date": "2024-12-19",
+    "time_utc": "13:30",
+    "timestamp_ms": 1734615000000,
+    "category": "GDP",
+    "event_name": "US GDP Final (Q3 2024)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20241220_1330",
+    "date": "2024-12-20",
+    "time_utc": "13:30",
+    "timestamp_ms": 1734701400000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Nov)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250103_1500",
+    "date": "2025-01-03",
+    "time_utc": "15:00",
+    "timestamp_ms": 1735916400000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Dec)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250107_1500",
+    "date": "2025-01-07",
+    "time_utc": "15:00",
+    "timestamp_ms": 1736262000000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Dec)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250108_1900",
+    "date": "2025-01-08",
+    "time_utc": "19:00",
+    "timestamp_ms": 1736362800000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20250110_1330",
+    "date": "2025-01-10",
+    "time_utc": "13:30",
+    "timestamp_ms": 1736515800000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Dec)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20250114_1330",
+    "date": "2025-01-14",
+    "time_utc": "13:30",
+    "timestamp_ms": 1736861400000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Dec)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20250115_1330",
+    "date": "2025-01-15",
+    "time_utc": "13:30",
+    "timestamp_ms": 1736947800000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Dec)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20250116_1330",
+    "date": "2025-01-16",
+    "time_utc": "13:30",
+    "timestamp_ms": 1737034200000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Dec)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250129_1900",
+    "date": "2025-01-29",
+    "time_utc": "19:00",
+    "timestamp_ms": 1738177200000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250129_1930",
+    "date": "2025-01-29",
+    "time_utc": "19:30",
+    "timestamp_ms": 1738179000000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20250130_1330",
+    "date": "2025-01-30",
+    "time_utc": "13:30",
+    "timestamp_ms": 1738243800000,
+    "category": "GDP",
+    "event_name": "US GDP Advance (Q4 2024)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20250131_1330",
+    "date": "2025-01-31",
+    "time_utc": "13:30",
+    "timestamp_ms": 1738330200000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Dec)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250203_1500",
+    "date": "2025-02-03",
+    "time_utc": "15:00",
+    "timestamp_ms": 1738594800000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Jan)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250205_1500",
+    "date": "2025-02-05",
+    "time_utc": "15:00",
+    "timestamp_ms": 1738767600000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Jan)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20250207_1330",
+    "date": "2025-02-07",
+    "time_utc": "13:30",
+    "timestamp_ms": 1738935000000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Jan)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20250212_1330",
+    "date": "2025-02-12",
+    "time_utc": "13:30",
+    "timestamp_ms": 1739367000000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Jan)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20250213_1330",
+    "date": "2025-02-13",
+    "time_utc": "13:30",
+    "timestamp_ms": 1739453400000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Jan)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20250214_1330",
+    "date": "2025-02-14",
+    "time_utc": "13:30",
+    "timestamp_ms": 1739539800000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Jan)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250219_1900",
+    "date": "2025-02-19",
+    "time_utc": "19:00",
+    "timestamp_ms": 1739991600000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20250227_1330",
+    "date": "2025-02-27",
+    "time_utc": "13:30",
+    "timestamp_ms": 1740663000000,
+    "category": "GDP",
+    "event_name": "US GDP Prelim (Q4 2024)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20250228_1330",
+    "date": "2025-02-28",
+    "time_utc": "13:30",
+    "timestamp_ms": 1740749400000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Jan)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250303_1500",
+    "date": "2025-03-03",
+    "time_utc": "15:00",
+    "timestamp_ms": 1741014000000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Feb)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250305_1500",
+    "date": "2025-03-05",
+    "time_utc": "15:00",
+    "timestamp_ms": 1741186800000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Feb)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20250307_1330",
+    "date": "2025-03-07",
+    "time_utc": "13:30",
+    "timestamp_ms": 1741354200000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Feb)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20250312_1230",
+    "date": "2025-03-12",
+    "time_utc": "12:30",
+    "timestamp_ms": 1741782600000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Feb)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20250313_1230",
+    "date": "2025-03-13",
+    "time_utc": "12:30",
+    "timestamp_ms": 1741869000000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Feb)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20250314_1230",
+    "date": "2025-03-14",
+    "time_utc": "12:30",
+    "timestamp_ms": 1741955400000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Feb)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250319_1800",
+    "date": "2025-03-19",
+    "time_utc": "18:00",
+    "timestamp_ms": 1742407200000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision & Economic Projections",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250319_1830",
+    "date": "2025-03-19",
+    "time_utc": "18:30",
+    "timestamp_ms": 1742409000000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20250327_1230",
+    "date": "2025-03-27",
+    "time_utc": "12:30",
+    "timestamp_ms": 1743078600000,
+    "category": "GDP",
+    "event_name": "US GDP Final (Q4 2024)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20250328_1230",
+    "date": "2025-03-28",
+    "time_utc": "12:30",
+    "timestamp_ms": 1743165000000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Feb)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250401_1400",
+    "date": "2025-04-01",
+    "time_utc": "14:00",
+    "timestamp_ms": 1743516000000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Mar)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250403_1400",
+    "date": "2025-04-03",
+    "time_utc": "14:00",
+    "timestamp_ms": 1743688800000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Mar)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20250404_1230",
+    "date": "2025-04-04",
+    "time_utc": "12:30",
+    "timestamp_ms": 1743769800000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Mar)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250409_1800",
+    "date": "2025-04-09",
+    "time_utc": "18:00",
+    "timestamp_ms": 1744221600000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20250410_1230",
+    "date": "2025-04-10",
+    "time_utc": "12:30",
+    "timestamp_ms": 1744288200000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Mar)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20250411_1230",
+    "date": "2025-04-11",
+    "time_utc": "12:30",
+    "timestamp_ms": 1744374600000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Mar)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20250416_1230",
+    "date": "2025-04-16",
+    "time_utc": "12:30",
+    "timestamp_ms": 1744806600000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Mar)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20250424_1230",
+    "date": "2025-04-24",
+    "time_utc": "12:30",
+    "timestamp_ms": 1745497800000,
+    "category": "GDP",
+    "event_name": "US GDP Advance (Q1 2025)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20250430_1230",
+    "date": "2025-04-30",
+    "time_utc": "12:30",
+    "timestamp_ms": 1746016200000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Mar)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250501_1400",
+    "date": "2025-05-01",
+    "time_utc": "14:00",
+    "timestamp_ms": 1746108000000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Apr)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20250502_1230",
+    "date": "2025-05-02",
+    "time_utc": "12:30",
+    "timestamp_ms": 1746189000000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Apr)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250505_1400",
+    "date": "2025-05-05",
+    "time_utc": "14:00",
+    "timestamp_ms": 1746453600000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Apr)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250507_1800",
+    "date": "2025-05-07",
+    "time_utc": "18:00",
+    "timestamp_ms": 1746640800000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250507_1830",
+    "date": "2025-05-07",
+    "time_utc": "18:30",
+    "timestamp_ms": 1746642600000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20250513_1230",
+    "date": "2025-05-13",
+    "time_utc": "12:30",
+    "timestamp_ms": 1747139400000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Apr)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20250514_1230",
+    "date": "2025-05-14",
+    "time_utc": "12:30",
+    "timestamp_ms": 1747225800000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Apr)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20250515_1230",
+    "date": "2025-05-15",
+    "time_utc": "12:30",
+    "timestamp_ms": 1747312200000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Apr)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250528_1800",
+    "date": "2025-05-28",
+    "time_utc": "18:00",
+    "timestamp_ms": 1748455200000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20250529_1230",
+    "date": "2025-05-29",
+    "time_utc": "12:30",
+    "timestamp_ms": 1748521800000,
+    "category": "GDP",
+    "event_name": "US GDP Prelim (Q1 2025)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20250530_1230",
+    "date": "2025-05-30",
+    "time_utc": "12:30",
+    "timestamp_ms": 1748608200000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Apr)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250602_1400",
+    "date": "2025-06-02",
+    "time_utc": "14:00",
+    "timestamp_ms": 1748872800000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (May)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250604_1400",
+    "date": "2025-06-04",
+    "time_utc": "14:00",
+    "timestamp_ms": 1749045600000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (May)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20250606_1230",
+    "date": "2025-06-06",
+    "time_utc": "12:30",
+    "timestamp_ms": 1749213000000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (May)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20250611_1230",
+    "date": "2025-06-11",
+    "time_utc": "12:30",
+    "timestamp_ms": 1749645000000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (May)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20250612_1230",
+    "date": "2025-06-12",
+    "time_utc": "12:30",
+    "timestamp_ms": 1749731400000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (May)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20250617_1230",
+    "date": "2025-06-17",
+    "time_utc": "12:30",
+    "timestamp_ms": 1750163400000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (May)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250618_1800",
+    "date": "2025-06-18",
+    "time_utc": "18:00",
+    "timestamp_ms": 1750269600000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision & Economic Projections",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250618_1830",
+    "date": "2025-06-18",
+    "time_utc": "18:30",
+    "timestamp_ms": 1750271400000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20250626_1230",
+    "date": "2025-06-26",
+    "time_utc": "12:30",
+    "timestamp_ms": 1750941000000,
+    "category": "GDP",
+    "event_name": "US GDP Final (Q1 2025)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20250627_1230",
+    "date": "2025-06-27",
+    "time_utc": "12:30",
+    "timestamp_ms": 1751027400000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (May)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250701_1400",
+    "date": "2025-07-01",
+    "time_utc": "14:00",
+    "timestamp_ms": 1751378400000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Jun)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20250703_1230",
+    "date": "2025-07-03",
+    "time_utc": "12:30",
+    "timestamp_ms": 1751545800000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Jun)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250703_1400",
+    "date": "2025-07-03",
+    "time_utc": "14:00",
+    "timestamp_ms": 1751551200000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Jun)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250709_1800",
+    "date": "2025-07-09",
+    "time_utc": "18:00",
+    "timestamp_ms": 1752084000000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20250711_1230",
+    "date": "2025-07-11",
+    "time_utc": "12:30",
+    "timestamp_ms": 1752237000000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Jun)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20250715_1230",
+    "date": "2025-07-15",
+    "time_utc": "12:30",
+    "timestamp_ms": 1752582600000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Jun)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20250716_1230",
+    "date": "2025-07-16",
+    "time_utc": "12:30",
+    "timestamp_ms": 1752669000000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Jun)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20250724_1230",
+    "date": "2025-07-24",
+    "time_utc": "12:30",
+    "timestamp_ms": 1753360200000,
+    "category": "GDP",
+    "event_name": "US GDP Advance (Q2 2025)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250730_1800",
+    "date": "2025-07-30",
+    "time_utc": "18:00",
+    "timestamp_ms": 1753898400000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250730_1830",
+    "date": "2025-07-30",
+    "time_utc": "18:30",
+    "timestamp_ms": 1753900200000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20250731_1230",
+    "date": "2025-07-31",
+    "time_utc": "12:30",
+    "timestamp_ms": 1753965000000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Jun)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20250801_1230",
+    "date": "2025-08-01",
+    "time_utc": "12:30",
+    "timestamp_ms": 1754051400000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Jul)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250801_1400",
+    "date": "2025-08-01",
+    "time_utc": "14:00",
+    "timestamp_ms": 1754056800000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Jul)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250805_1400",
+    "date": "2025-08-05",
+    "time_utc": "14:00",
+    "timestamp_ms": 1754402400000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Jul)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20250812_1230",
+    "date": "2025-08-12",
+    "time_utc": "12:30",
+    "timestamp_ms": 1755001800000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Jul)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20250813_1230",
+    "date": "2025-08-13",
+    "time_utc": "12:30",
+    "timestamp_ms": 1755088200000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Jul)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20250815_1230",
+    "date": "2025-08-15",
+    "time_utc": "12:30",
+    "timestamp_ms": 1755261000000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Jul)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250820_1800",
+    "date": "2025-08-20",
+    "time_utc": "18:00",
+    "timestamp_ms": 1755712800000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20250828_1230",
+    "date": "2025-08-28",
+    "time_utc": "12:30",
+    "timestamp_ms": 1756384200000,
+    "category": "GDP",
+    "event_name": "US GDP Prelim (Q2 2025)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20250829_1230",
+    "date": "2025-08-29",
+    "time_utc": "12:30",
+    "timestamp_ms": 1756470600000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Jul)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250902_1400",
+    "date": "2025-09-02",
+    "time_utc": "14:00",
+    "timestamp_ms": 1756821600000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Aug)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20250904_1400",
+    "date": "2025-09-04",
+    "time_utc": "14:00",
+    "timestamp_ms": 1756994400000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Aug)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20250905_1230",
+    "date": "2025-09-05",
+    "time_utc": "12:30",
+    "timestamp_ms": 1757075400000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Aug)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20250910_1230",
+    "date": "2025-09-10",
+    "time_utc": "12:30",
+    "timestamp_ms": 1757507400000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Aug)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20250911_1230",
+    "date": "2025-09-11",
+    "time_utc": "12:30",
+    "timestamp_ms": 1757593800000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Aug)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20250916_1230",
+    "date": "2025-09-16",
+    "time_utc": "12:30",
+    "timestamp_ms": 1758025800000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Aug)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250917_1800",
+    "date": "2025-09-17",
+    "time_utc": "18:00",
+    "timestamp_ms": 1758132000000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision & Economic Projections",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20250917_1830",
+    "date": "2025-09-17",
+    "time_utc": "18:30",
+    "timestamp_ms": 1758133800000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20250925_1230",
+    "date": "2025-09-25",
+    "time_utc": "12:30",
+    "timestamp_ms": 1758803400000,
+    "category": "GDP",
+    "event_name": "US GDP Final (Q2 2025)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20250926_1230",
+    "date": "2025-09-26",
+    "time_utc": "12:30",
+    "timestamp_ms": 1758889800000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Aug)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20251001_1400",
+    "date": "2025-10-01",
+    "time_utc": "14:00",
+    "timestamp_ms": 1759327200000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Sep)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20251003_1230",
+    "date": "2025-10-03",
+    "time_utc": "12:30",
+    "timestamp_ms": 1759494600000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Sep)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20251003_1400",
+    "date": "2025-10-03",
+    "time_utc": "14:00",
+    "timestamp_ms": 1759500000000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Sep)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20251008_1800",
+    "date": "2025-10-08",
+    "time_utc": "18:00",
+    "timestamp_ms": 1759946400000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20251014_1230",
+    "date": "2025-10-14",
+    "time_utc": "12:30",
+    "timestamp_ms": 1760445000000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Sep)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20251015_1230",
+    "date": "2025-10-15",
+    "time_utc": "12:30",
+    "timestamp_ms": 1760531400000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Sep)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20251016_1230",
+    "date": "2025-10-16",
+    "time_utc": "12:30",
+    "timestamp_ms": 1760617800000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Sep)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20251029_1800",
+    "date": "2025-10-29",
+    "time_utc": "18:00",
+    "timestamp_ms": 1761760800000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20251029_1830",
+    "date": "2025-10-29",
+    "time_utc": "18:30",
+    "timestamp_ms": 1761762600000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20251030_1230",
+    "date": "2025-10-30",
+    "time_utc": "12:30",
+    "timestamp_ms": 1761827400000,
+    "category": "GDP",
+    "event_name": "US GDP Advance (Q3 2025)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20251031_1230",
+    "date": "2025-10-31",
+    "time_utc": "12:30",
+    "timestamp_ms": 1761913800000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Sep)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20251103_1500",
+    "date": "2025-11-03",
+    "time_utc": "15:00",
+    "timestamp_ms": 1762182000000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Oct)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20251105_1500",
+    "date": "2025-11-05",
+    "time_utc": "15:00",
+    "timestamp_ms": 1762354800000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Oct)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20251107_1330",
+    "date": "2025-11-07",
+    "time_utc": "13:30",
+    "timestamp_ms": 1762522200000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Oct)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20251112_1330",
+    "date": "2025-11-12",
+    "time_utc": "13:30",
+    "timestamp_ms": 1762954200000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Oct)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20251113_1330",
+    "date": "2025-11-13",
+    "time_utc": "13:30",
+    "timestamp_ms": 1763040600000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Oct)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20251114_1330",
+    "date": "2025-11-14",
+    "time_utc": "13:30",
+    "timestamp_ms": 1763127000000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Oct)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20251119_1900",
+    "date": "2025-11-19",
+    "time_utc": "19:00",
+    "timestamp_ms": 1763578800000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20251126_1330",
+    "date": "2025-11-26",
+    "time_utc": "13:30",
+    "timestamp_ms": 1764163800000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Oct)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20251126_1330",
+    "date": "2025-11-26",
+    "time_utc": "13:30",
+    "timestamp_ms": 1764163800000,
+    "category": "GDP",
+    "event_name": "US GDP Prelim (Q3 2025)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20251201_1500",
+    "date": "2025-12-01",
+    "time_utc": "15:00",
+    "timestamp_ms": 1764601200000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Nov)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20251203_1500",
+    "date": "2025-12-03",
+    "time_utc": "15:00",
+    "timestamp_ms": 1764774000000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Nov)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20251205_1330",
+    "date": "2025-12-05",
+    "time_utc": "13:30",
+    "timestamp_ms": 1764941400000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Nov)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20251210_1330",
+    "date": "2025-12-10",
+    "time_utc": "13:30",
+    "timestamp_ms": 1765373400000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Nov)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20251210_1900",
+    "date": "2025-12-10",
+    "time_utc": "19:00",
+    "timestamp_ms": 1765393200000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision & Economic Projections",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20251210_1930",
+    "date": "2025-12-10",
+    "time_utc": "19:30",
+    "timestamp_ms": 1765395000000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20251211_1330",
+    "date": "2025-12-11",
+    "time_utc": "13:30",
+    "timestamp_ms": 1765459800000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Nov)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20251212_1330",
+    "date": "2025-12-12",
+    "time_utc": "13:30",
+    "timestamp_ms": 1765546200000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Nov)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20251218_1330",
+    "date": "2025-12-18",
+    "time_utc": "13:30",
+    "timestamp_ms": 1766064600000,
+    "category": "GDP",
+    "event_name": "US GDP Final (Q3 2025)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20251223_1330",
+    "date": "2025-12-23",
+    "time_utc": "13:30",
+    "timestamp_ms": 1766496600000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Nov)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20251230_1900",
+    "date": "2025-12-30",
+    "time_utc": "19:00",
+    "timestamp_ms": 1767121200000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260102_1500",
+    "date": "2026-01-02",
+    "time_utc": "15:00",
+    "timestamp_ms": 1767366000000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Dec)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260106_1500",
+    "date": "2026-01-06",
+    "time_utc": "15:00",
+    "timestamp_ms": 1767711600000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Dec)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20260109_1330",
+    "date": "2026-01-09",
+    "time_utc": "13:30",
+    "timestamp_ms": 1767965400000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Dec)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20260114_1330",
+    "date": "2026-01-14",
+    "time_utc": "13:30",
+    "timestamp_ms": 1768397400000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Dec)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20260115_1330",
+    "date": "2026-01-15",
+    "time_utc": "13:30",
+    "timestamp_ms": 1768483800000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Dec)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20260116_1330",
+    "date": "2026-01-16",
+    "time_utc": "13:30",
+    "timestamp_ms": 1768570200000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Dec)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260128_1900",
+    "date": "2026-01-28",
+    "time_utc": "19:00",
+    "timestamp_ms": 1769626800000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260128_1930",
+    "date": "2026-01-28",
+    "time_utc": "19:30",
+    "timestamp_ms": 1769628600000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20260129_1330",
+    "date": "2026-01-29",
+    "time_utc": "13:30",
+    "timestamp_ms": 1769693400000,
+    "category": "GDP",
+    "event_name": "US GDP Advance (Q4 2025)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20260130_1330",
+    "date": "2026-01-30",
+    "time_utc": "13:30",
+    "timestamp_ms": 1769779800000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Dec)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260202_1500",
+    "date": "2026-02-02",
+    "time_utc": "15:00",
+    "timestamp_ms": 1770044400000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Jan)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260204_1500",
+    "date": "2026-02-04",
+    "time_utc": "15:00",
+    "timestamp_ms": 1770217200000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Jan)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20260206_1330",
+    "date": "2026-02-06",
+    "time_utc": "13:30",
+    "timestamp_ms": 1770384600000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Jan)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20260211_1330",
+    "date": "2026-02-11",
+    "time_utc": "13:30",
+    "timestamp_ms": 1770816600000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Jan)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20260212_1330",
+    "date": "2026-02-12",
+    "time_utc": "13:30",
+    "timestamp_ms": 1770903000000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Jan)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20260213_1330",
+    "date": "2026-02-13",
+    "time_utc": "13:30",
+    "timestamp_ms": 1770989400000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Jan)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260218_1900",
+    "date": "2026-02-18",
+    "time_utc": "19:00",
+    "timestamp_ms": 1771441200000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20260226_1330",
+    "date": "2026-02-26",
+    "time_utc": "13:30",
+    "timestamp_ms": 1772112600000,
+    "category": "GDP",
+    "event_name": "US GDP Prelim (Q4 2025)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20260227_1330",
+    "date": "2026-02-27",
+    "time_utc": "13:30",
+    "timestamp_ms": 1772199000000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Jan)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260302_1500",
+    "date": "2026-03-02",
+    "time_utc": "15:00",
+    "timestamp_ms": 1772463600000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Feb)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260304_1500",
+    "date": "2026-03-04",
+    "time_utc": "15:00",
+    "timestamp_ms": 1772636400000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Feb)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20260306_1330",
+    "date": "2026-03-06",
+    "time_utc": "13:30",
+    "timestamp_ms": 1772803800000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Feb)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20260311_1230",
+    "date": "2026-03-11",
+    "time_utc": "12:30",
+    "timestamp_ms": 1773232200000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Feb)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20260312_1230",
+    "date": "2026-03-12",
+    "time_utc": "12:30",
+    "timestamp_ms": 1773318600000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Feb)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20260313_1230",
+    "date": "2026-03-13",
+    "time_utc": "12:30",
+    "timestamp_ms": 1773405000000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Feb)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260318_1800",
+    "date": "2026-03-18",
+    "time_utc": "18:00",
+    "timestamp_ms": 1773856800000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision & Economic Projections",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260318_1830",
+    "date": "2026-03-18",
+    "time_utc": "18:30",
+    "timestamp_ms": 1773858600000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20260326_1230",
+    "date": "2026-03-26",
+    "time_utc": "12:30",
+    "timestamp_ms": 1774528200000,
+    "category": "GDP",
+    "event_name": "US GDP Final (Q4 2025)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20260327_1230",
+    "date": "2026-03-27",
+    "time_utc": "12:30",
+    "timestamp_ms": 1774614600000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Feb)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260401_1400",
+    "date": "2026-04-01",
+    "time_utc": "14:00",
+    "timestamp_ms": 1775052000000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Mar)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20260403_1230",
+    "date": "2026-04-03",
+    "time_utc": "12:30",
+    "timestamp_ms": 1775219400000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Mar)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260403_1400",
+    "date": "2026-04-03",
+    "time_utc": "14:00",
+    "timestamp_ms": 1775224800000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Mar)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260408_1800",
+    "date": "2026-04-08",
+    "time_utc": "18:00",
+    "timestamp_ms": 1775671200000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20260414_1230",
+    "date": "2026-04-14",
+    "time_utc": "12:30",
+    "timestamp_ms": 1776169800000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Mar)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20260415_1230",
+    "date": "2026-04-15",
+    "time_utc": "12:30",
+    "timestamp_ms": 1776256200000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Mar)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20260416_1230",
+    "date": "2026-04-16",
+    "time_utc": "12:30",
+    "timestamp_ms": 1776342600000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Mar)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20260430_1230",
+    "date": "2026-04-30",
+    "time_utc": "12:30",
+    "timestamp_ms": 1777552200000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Mar)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20260430_1230",
+    "date": "2026-04-30",
+    "time_utc": "12:30",
+    "timestamp_ms": 1777552200000,
+    "category": "GDP",
+    "event_name": "US GDP Advance (Q1 2026)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260501_1400",
+    "date": "2026-05-01",
+    "time_utc": "14:00",
+    "timestamp_ms": 1777644000000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Apr)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260505_1400",
+    "date": "2026-05-05",
+    "time_utc": "14:00",
+    "timestamp_ms": 1777989600000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Apr)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260506_1800",
+    "date": "2026-05-06",
+    "time_utc": "18:00",
+    "timestamp_ms": 1778090400000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260506_1830",
+    "date": "2026-05-06",
+    "time_utc": "18:30",
+    "timestamp_ms": 1778092200000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20260508_1230",
+    "date": "2026-05-08",
+    "time_utc": "12:30",
+    "timestamp_ms": 1778243400000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Apr)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20260512_1230",
+    "date": "2026-05-12",
+    "time_utc": "12:30",
+    "timestamp_ms": 1778589000000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Apr)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20260513_1230",
+    "date": "2026-05-13",
+    "time_utc": "12:30",
+    "timestamp_ms": 1778675400000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Apr)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20260515_1230",
+    "date": "2026-05-15",
+    "time_utc": "12:30",
+    "timestamp_ms": 1778848200000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Apr)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260527_1800",
+    "date": "2026-05-27",
+    "time_utc": "18:00",
+    "timestamp_ms": 1779904800000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20260528_1230",
+    "date": "2026-05-28",
+    "time_utc": "12:30",
+    "timestamp_ms": 1779971400000,
+    "category": "GDP",
+    "event_name": "US GDP Prelim (Q1 2026)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20260529_1230",
+    "date": "2026-05-29",
+    "time_utc": "12:30",
+    "timestamp_ms": 1780057800000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Apr)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260601_1400",
+    "date": "2026-06-01",
+    "time_utc": "14:00",
+    "timestamp_ms": 1780322400000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (May)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260603_1400",
+    "date": "2026-06-03",
+    "time_utc": "14:00",
+    "timestamp_ms": 1780495200000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (May)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20260605_1230",
+    "date": "2026-06-05",
+    "time_utc": "12:30",
+    "timestamp_ms": 1780662600000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (May)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20260610_1230",
+    "date": "2026-06-10",
+    "time_utc": "12:30",
+    "timestamp_ms": 1781094600000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (May)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20260611_1230",
+    "date": "2026-06-11",
+    "time_utc": "12:30",
+    "timestamp_ms": 1781181000000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (May)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20260616_1230",
+    "date": "2026-06-16",
+    "time_utc": "12:30",
+    "timestamp_ms": 1781613000000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (May)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260617_1800",
+    "date": "2026-06-17",
+    "time_utc": "18:00",
+    "timestamp_ms": 1781719200000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision & Economic Projections",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260617_1830",
+    "date": "2026-06-17",
+    "time_utc": "18:30",
+    "timestamp_ms": 1781721000000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20260625_1230",
+    "date": "2026-06-25",
+    "time_utc": "12:30",
+    "timestamp_ms": 1782390600000,
+    "category": "GDP",
+    "event_name": "US GDP Final (Q1 2026)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20260626_1230",
+    "date": "2026-06-26",
+    "time_utc": "12:30",
+    "timestamp_ms": 1782477000000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (May)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260701_1400",
+    "date": "2026-07-01",
+    "time_utc": "14:00",
+    "timestamp_ms": 1782914400000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Jun)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20260702_1230",
+    "date": "2026-07-02",
+    "time_utc": "12:30",
+    "timestamp_ms": 1782995400000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Jun)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260706_1400",
+    "date": "2026-07-06",
+    "time_utc": "14:00",
+    "timestamp_ms": 1783346400000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Jun)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260708_1800",
+    "date": "2026-07-08",
+    "time_utc": "18:00",
+    "timestamp_ms": 1783533600000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20260714_1230",
+    "date": "2026-07-14",
+    "time_utc": "12:30",
+    "timestamp_ms": 1784032200000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Jun)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20260715_1230",
+    "date": "2026-07-15",
+    "time_utc": "12:30",
+    "timestamp_ms": 1784118600000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Jun)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20260716_1230",
+    "date": "2026-07-16",
+    "time_utc": "12:30",
+    "timestamp_ms": 1784205000000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Jun)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260729_1800",
+    "date": "2026-07-29",
+    "time_utc": "18:00",
+    "timestamp_ms": 1785348000000,
+    "category": "FOMC",
+    "event_name": "FOMC Rate Decision",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260729_1830",
+    "date": "2026-07-29",
+    "time_utc": "18:30",
+    "timestamp_ms": 1785349800000,
+    "category": "FOMC",
+    "event_name": "FOMC Press Conference (Jerome Powell)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "GDP_20260730_1230",
+    "date": "2026-07-30",
+    "time_utc": "12:30",
+    "timestamp_ms": 1785414600000,
+    "category": "GDP",
+    "event_name": "US GDP Advance (Q2 2026)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PCE_20260731_1230",
+    "date": "2026-07-31",
+    "time_utc": "12:30",
+    "timestamp_ms": 1785501000000,
+    "category": "PCE",
+    "event_name": "US Core PCE Price Index (Jun)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260803_1400",
+    "date": "2026-08-03",
+    "time_utc": "14:00",
+    "timestamp_ms": 1785765600000,
+    "category": "PMI",
+    "event_name": "US ISM Manufacturing PMI (Jul)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PMI_20260805_1400",
+    "date": "2026-08-05",
+    "time_utc": "14:00",
+    "timestamp_ms": 1785938400000,
+    "category": "PMI",
+    "event_name": "US ISM Services PMI (Jul)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "NFP_20260807_1230",
+    "date": "2026-08-07",
+    "time_utc": "12:30",
+    "timestamp_ms": 1786105800000,
+    "category": "NFP",
+    "event_name": "US Non-Farm Payrolls & Unemployment Rate (Jul)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "CPI_20260812_1230",
+    "date": "2026-08-12",
+    "time_utc": "12:30",
+    "timestamp_ms": 1786537800000,
+    "category": "CPI",
+    "event_name": "US CPI & Core CPI (Jul)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "PPI_20260813_1230",
+    "date": "2026-08-13",
+    "time_utc": "12:30",
+    "timestamp_ms": 1786624200000,
+    "category": "PPI",
+    "event_name": "US PPI & Core PPI (Jul)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "RETAIL_SALES_20260814_1230",
+    "date": "2026-08-14",
+    "time_utc": "12:30",
+    "timestamp_ms": 1786710600000,
+    "category": "RETAIL_SALES",
+    "event_name": "US Retail Sales (Jul)",
+    "impact": "HIGH",
+    "currency": "USD"
+  },
+  {
+    "id": "FOMC_20260819_1800",
+    "date": "2026-08-19",
+    "time_utc": "18:00",
+    "timestamp_ms": 1787162400000,
+    "category": "FOMC",
+    "event_name": "FOMC Meeting Minutes",
+    "impact": "HIGH",
+    "currency": "USD"
+  }
+]
