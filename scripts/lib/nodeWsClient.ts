@@ -57,8 +57,9 @@ export class NodeWsClient {
     '1h': [],
   };
 
-  // Active forming candles
+  // Active forming candles & real-time tick cache
   private activeCandles: Record<string, Candle> = {};
+  private latestPrice: number = 0;
 
   // Event Listeners
   private tickListeners: Array<(payload: MarketTickPayload) => void> = [];
@@ -125,6 +126,13 @@ export class NodeWsClient {
 
   public getActiveCandle(interval: '5m' | '15m' | '1h'): Candle | undefined {
     return this.activeCandles[interval];
+  }
+
+  public getLatestPrice(): number {
+    if (this.latestPrice > 0) return this.latestPrice;
+    const c5m = this.activeCandles['5m'] || this.buffers['5m'].slice(-1)[0];
+    if (c5m && c5m.c > 0) return c5m.c;
+    return 0;
   }
 
   private setStatus(newStatus: WSConnectionStatus): void {
@@ -219,6 +227,7 @@ export class NodeWsClient {
         const isBuyerMaker = data.m === true;
 
         if (!isNaN(price) && price > 0) {
+          this.latestPrice = price;
           const payload: MarketTickPayload = {
             symbol: this.symbol.toUpperCase(),
             price,
@@ -257,6 +266,9 @@ export class NodeWsClient {
         };
 
         this.activeCandles[interval] = candle;
+        if (candle.c > 0) {
+          this.latestPrice = candle.c;
+        }
 
         // If aggTrade is not active, emit tick from kline close price
         if (!this.enableAggTrade) {

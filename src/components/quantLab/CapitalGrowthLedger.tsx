@@ -290,46 +290,46 @@ export default function CapitalGrowthLedger({
   const isNetPositive = metrics.realizedNetPnlUsd >= 0;
 
   return (
-    <div className="border border-slate-800/80 bg-slate-950/70 backdrop-blur-md rounded-xl p-5 md:p-6 shadow-2xl flex flex-col gap-6 text-slate-100 font-mono transition-all">
+    <div className="border border-card-border dark:border-slate-800/80 bg-card/75 dark:bg-slate-950/70 backdrop-blur-md rounded-2xl p-5 md:p-6 shadow-xs flex flex-col gap-6 text-foreground dark:text-slate-100 font-mono transition-all">
       {/* ─────────────────────────────────────────────────────────────────── */}
       {/* 1. HEADER & DYNAMIC CONFIGURATION CONTROLS                          */}
       {/* ─────────────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between border-b border-slate-800/60 pb-5 gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between border-b border-card-border/60 dark:border-slate-800/60 pb-5 gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="p-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <span className="p-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
               <TrendingUp className="w-4 h-4" />
             </span>
-            <span className="text-[10px] uppercase tracking-[0.2em] text-emerald-400 font-bold">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400 font-bold">
               QUANT EQUITY LEDGER ENGINE
             </span>
           </div>
-          <h3 className="text-base font-bold text-white uppercase tracking-tight flex items-center gap-2">
+          <h3 className="text-base font-bold text-foreground dark:text-white uppercase tracking-tight flex items-center gap-2">
             <span>{title}</span>
           </h3>
-          <p className="text-[11px] text-slate-400 mt-0.5 max-w-2xl font-sans">
+          <p className="text-[11px] text-muted dark:text-slate-400 mt-0.5 max-w-2xl font-sans">
             {subtitle}
           </p>
         </div>
 
         {/* Dynamic Risk & Capital Controls */}
-        <div className="flex flex-wrap items-center gap-3 bg-slate-900/80 border border-slate-800/90 rounded-lg p-2.5">
+        <div className="flex flex-wrap items-center gap-3 bg-card dark:bg-slate-900/80 border border-card-border dark:border-slate-800/90 rounded-xl p-2.5 shadow-xs">
           {/* Initial Capital Input */}
           <div className="flex flex-col gap-1">
-            <label className="text-[9px] uppercase font-bold text-slate-400 flex items-center justify-between">
+            <label className="text-[9px] uppercase font-bold text-muted dark:text-slate-400 flex items-center justify-between">
               <span>Initial Capital</span>
-              <span className="text-emerald-400">${initialCapital.toLocaleString()}</span>
+              <span className="text-emerald-600 dark:text-emerald-400">${initialCapital.toLocaleString()}</span>
             </label>
             <div className="flex items-center gap-1.5">
               <div className="relative">
-                <span className="absolute left-2 top-1.5 text-slate-500 text-xs">$</span>
+                <span className="absolute left-2 top-1.5 text-muted dark:text-slate-500 text-xs">$</span>
                 <input
                   type="number"
                   min="100"
                   step="500"
                   value={initialCapital}
                   onChange={(e) => setInitialCapital(Math.max(100, parseFloat(e.target.value) || 0))}
-                  className="w-24 pl-5 pr-2 py-1 bg-slate-950 border border-slate-800 rounded text-xs text-white font-bold outline-none focus:border-emerald-500/50"
+                  className="w-24 pl-5 pr-2 py-1 bg-background dark:bg-slate-950 border border-card-border dark:border-slate-800 rounded-lg text-xs text-foreground dark:text-white font-bold outline-none focus:border-emerald-500 shadow-xs"
                 />
               </div>
 
@@ -340,10 +340,10 @@ export default function CapitalGrowthLedger({
                     key={cap}
                     type="button"
                     onClick={() => setInitialCapital(cap)}
-                    className={`px-1.5 py-1 rounded border transition ${
+                    className={`px-1.5 py-1 rounded-md border transition cursor-pointer ${
                       initialCapital === cap
-                        ? "bg-emerald-950/60 border-emerald-500/50 text-emerald-300 font-bold"
-                        : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                        ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-300 font-bold"
+                        : "bg-background dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground dark:hover:text-slate-300"
                     }`}
                   >
                     ${cap >= 1000 ? `${cap / 1000}k` : cap}
@@ -354,13 +354,13 @@ export default function CapitalGrowthLedger({
           </div>
 
           {/* Vertical Divider */}
-          <div className="h-9 w-[1px] bg-slate-800 hidden sm:block" />
+          <div className="h-9 w-[1px] bg-card-border dark:bg-slate-800 hidden sm:block" />
 
           {/* Risk Per Trade Slider & Number */}
           <div className="flex flex-col gap-1">
-            <label className="text-[9px] uppercase font-bold text-slate-400 flex items-center justify-between">
+            <label className="text-[9px] uppercase font-bold text-muted dark:text-slate-400 flex items-center justify-between">
               <span>Risk Per Trade</span>
-              <span className="text-cyan-400 font-bold">{riskPerTradePct.toFixed(1)}%</span>
+              <span className="text-cyan-600 dark:text-cyan-400 font-bold">{riskPerTradePct.toFixed(1)}%</span>
             </label>
             <div className="flex items-center gap-2">
               <input
@@ -370,7 +370,7 @@ export default function CapitalGrowthLedger({
                 step="0.1"
                 value={riskPerTradePct}
                 onChange={(e) => setRiskPerTradePct(parseFloat(e.target.value))}
-                className="w-20 sm:w-24 accent-cyan-400 cursor-pointer"
+                className="w-20 sm:w-24 accent-cyan-500 cursor-pointer"
               />
 
               {/* Risk Preset Pills */}
@@ -380,10 +380,10 @@ export default function CapitalGrowthLedger({
                     key={r}
                     type="button"
                     onClick={() => setRiskPerTradePct(r)}
-                    className={`px-1.5 py-1 rounded border transition ${
+                    className={`px-1.5 py-1 rounded-md border transition cursor-pointer ${
                       riskPerTradePct === r
-                        ? "bg-cyan-950/60 border-cyan-500/50 text-cyan-300 font-bold"
-                        : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                        ? "bg-cyan-500/15 border-cyan-500/40 text-cyan-600 dark:text-cyan-300 font-bold"
+                        : "bg-background dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground dark:hover:text-slate-300"
                     }`}
                   >
                     {r}%
@@ -394,11 +394,11 @@ export default function CapitalGrowthLedger({
           </div>
 
           {/* Vertical Divider */}
-          <div className="h-9 w-[1px] bg-slate-800 hidden md:block" />
+          <div className="h-9 w-[1px] bg-card-border dark:bg-slate-800 hidden md:block" />
 
           {/* Compounding Mode Toggle */}
           <div className="flex flex-col gap-1">
-            <label className="text-[9px] uppercase font-bold text-slate-400">
+            <label className="text-[9px] uppercase font-bold text-muted dark:text-slate-400">
               Model Mode
             </label>
             <button
@@ -410,14 +410,14 @@ export default function CapitalGrowthLedger({
                     : "DYNAMIC_COMPOUNDING"
                 )
               }
-              className={`px-2.5 py-1 rounded border text-[9px] font-bold transition flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded-md border text-[9px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
                 compoundingMode === "DYNAMIC_COMPOUNDING"
-                  ? "bg-purple-950/60 border-purple-500/50 text-purple-300"
-                  : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200"
+                  ? "bg-purple-500/15 border-purple-500/40 text-purple-600 dark:text-purple-300"
+                  : "bg-background dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-400 hover:text-foreground"
               }`}
               title="Dynamic Compounding recalculates risk size per trade based on running equity balance."
             >
-              <Zap className="w-3 h-3 text-purple-400" />
+              <Zap className="w-3 h-3 text-purple-500 dark:text-purple-400" />
               <span>{compoundingMode === "DYNAMIC_COMPOUNDING" ? "COMPOUNDING" : "FIXED INITIAL"}</span>
             </button>
           </div>
@@ -429,24 +429,24 @@ export default function CapitalGrowthLedger({
       {/* ─────────────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
         {/* Approach A: Theoretical Closed-Form Expectancy */}
-        <div className="p-3.5 rounded-lg border border-slate-800/80 bg-slate-900/30 flex flex-col justify-between">
+        <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/80 bg-card/75 dark:bg-slate-900/30 flex flex-col justify-between shadow-xs">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[9px] uppercase font-bold text-slate-400 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-[9px] uppercase font-bold text-muted dark:text-slate-400 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-400" />
               <span>Approach A: Theoretical Closed Expectancy</span>
             </span>
-            <span className="text-[9px] font-bold text-cyan-400/90 bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-500/20">
+            <span className="text-[9px] font-bold text-cyan-600 dark:text-cyan-400/90 bg-cyan-500/10 dark:bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-500/20">
               E[R] = {metrics.expectedValueR > 0 ? "+" : ""}{metrics.expectedValueR}R / trade
             </span>
           </div>
-          <p className="text-[10px] text-slate-400 mb-2 font-sans">
+          <p className="text-[10px] text-muted dark:text-slate-400 mb-2 font-sans">
             Mathematical expectation across {metrics.totalExecutedTrades} trades assuming uniform win distribution.
           </p>
-          <div className="flex items-center justify-between border-t border-slate-800/50 pt-2 text-xs">
-            <span className="text-slate-400">Projected Compounded Capital:</span>
-            <span className="font-bold text-cyan-300">
+          <div className="flex items-center justify-between border-t border-card-border/60 dark:border-slate-800/50 pt-2 text-xs">
+            <span className="text-muted dark:text-slate-400">Projected Compounded Capital:</span>
+            <span className="font-bold text-cyan-600 dark:text-cyan-300">
               {fmtUsd(metrics.theoreticalFinalEquity)}{" "}
-              <span className="text-[10px] text-cyan-400/80">
+              <span className="text-[10px] text-cyan-600/80 dark:text-cyan-400/80">
                 ({metrics.theoreticalNetRoiPct >= 0 ? "+" : ""}{metrics.theoreticalNetRoiPct}%)
               </span>
             </span>
@@ -454,26 +454,26 @@ export default function CapitalGrowthLedger({
         </div>
 
         {/* Approach B: Path-Dependent Sequential Walk */}
-        <div className="p-3.5 rounded-lg border border-slate-800/80 bg-slate-900/30 flex flex-col justify-between">
+        <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/80 bg-card/75 dark:bg-slate-900/30 flex flex-col justify-between shadow-xs">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[9px] uppercase font-bold text-slate-400 flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-[9px] uppercase font-bold text-muted dark:text-slate-400 flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
               <span>Approach B: Realized Chronological Walk</span>
             </span>
             <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${
               isNetPositive
-                ? "bg-emerald-950/40 border-emerald-500/20 text-emerald-400"
-                : "bg-rose-950/40 border-rose-500/20 text-rose-400"
+                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                : "bg-rose-500/10 border-rose-500/20 text-rose-600 dark:text-rose-400"
             }`}>
               Max DD: -{metrics.maxDrawdownPct}%
             </span>
           </div>
-          <p className="text-[10px] text-slate-400 mb-2 font-sans">
+          <p className="text-[10px] text-muted dark:text-slate-400 mb-2 font-sans">
             Exact path-dependent equity progression accounting for real-world trade sequences and drawdown.
           </p>
-          <div className="flex items-center justify-between border-t border-slate-800/50 pt-2 text-xs">
-            <span className="text-slate-400">Actual Realized Balance:</span>
-            <span className={`font-bold ${isNetPositive ? "text-emerald-400" : "text-rose-400"}`}>
+          <div className="flex items-center justify-between border-t border-card-border/60 dark:border-slate-800/50 pt-2 text-xs">
+            <span className="text-muted dark:text-slate-400">Actual Realized Balance:</span>
+            <span className={`font-bold ${isNetPositive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
               {fmtUsd(metrics.finalRealizedEquity)}{" "}
               <span className="text-[10px]">
                 ({metrics.realizedNetRoiPct >= 0 ? "+" : ""}{metrics.realizedNetRoiPct}%)
@@ -488,90 +488,90 @@ export default function CapitalGrowthLedger({
       {/* ─────────────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Metric 1: Final Compounded Equity */}
-        <div className="border border-slate-800/80 bg-slate-900/40 rounded-lg p-3 flex flex-col justify-between">
-          <span className="text-[8px] uppercase text-slate-500 font-bold block mb-1">
+        <div className="border border-card-border dark:border-slate-800/80 bg-card/75 dark:bg-slate-900/40 rounded-xl p-3 flex flex-col justify-between shadow-xs">
+          <span className="text-[8px] uppercase text-muted dark:text-slate-500 font-bold block mb-1">
             Compounded Balance
           </span>
           <div>
-            <span className={`text-base font-bold block ${isNetPositive ? "text-emerald-400" : "text-rose-400"}`}>
+            <span className={`text-base font-bold block ${isNetPositive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
               {fmtUsd(metrics.finalRealizedEquity)}
             </span>
-            <span className={`text-[9px] font-bold block mt-0.5 ${isNetPositive ? "text-emerald-500" : "text-rose-500"}`}>
+            <span className={`text-[9px] font-bold block mt-0.5 ${isNetPositive ? "text-emerald-600 dark:text-emerald-500" : "text-rose-600 dark:text-rose-500"}`}>
               {metrics.realizedNetPnlUsd >= 0 ? "+" : ""}{fmtUsd(metrics.realizedNetPnlUsd)} ({metrics.realizedNetRoiPct >= 0 ? "+" : ""}{metrics.realizedNetRoiPct}%)
             </span>
           </div>
         </div>
 
         {/* Metric 2: Max Peak-to-Trough Drawdown */}
-        <div className="border border-slate-800/80 bg-slate-900/40 rounded-lg p-3 flex flex-col justify-between">
-          <span className="text-[8px] uppercase text-slate-500 font-bold block mb-1">
+        <div className="border border-card-border dark:border-slate-800/80 bg-card/75 dark:bg-slate-900/40 rounded-xl p-3 flex flex-col justify-between shadow-xs">
+          <span className="text-[8px] uppercase text-muted dark:text-slate-500 font-bold block mb-1">
             Max Drawdown
           </span>
           <div>
-            <span className="text-base font-bold text-rose-400 block">
+            <span className="text-base font-bold text-rose-600 dark:text-rose-400 block">
               -{metrics.maxDrawdownPct}%
             </span>
-            <span className="text-[9px] text-slate-400 block mt-0.5">
+            <span className="text-[9px] text-muted dark:text-slate-400 block mt-0.5">
               -{fmtUsd(metrics.maxDrawdownUsd)} Peak-to-Trough
             </span>
           </div>
         </div>
 
         {/* Metric 3: Profit Factor & Average Realized R */}
-        <div className="border border-slate-800/80 bg-slate-900/40 rounded-lg p-3 flex flex-col justify-between">
-          <span className="text-[8px] uppercase text-slate-500 font-bold block mb-1">
+        <div className="border border-card-border dark:border-slate-800/80 bg-card/75 dark:bg-slate-900/40 rounded-xl p-3 flex flex-col justify-between shadow-xs">
+          <span className="text-[8px] uppercase text-muted dark:text-slate-500 font-bold block mb-1">
             Profit Factor
           </span>
           <div>
-            <span className="text-base font-bold text-purple-300 block">
+            <span className="text-base font-bold text-purple-600 dark:text-purple-300 block">
               {metrics.profitFactor >= 99 ? "99.9+" : metrics.profitFactor.toFixed(2)}
             </span>
-            <span className="text-[9px] text-slate-400 block mt-0.5">
+            <span className="text-[9px] text-muted dark:text-slate-400 block mt-0.5">
               Avg R: {fmtR(metrics.avgRealizedR)}
             </span>
           </div>
         </div>
 
         {/* Metric 4: Realized Win/Loss Asymmetry */}
-        <div className="border border-slate-800/80 bg-slate-900/40 rounded-lg p-3 flex flex-col justify-between">
-          <span className="text-[8px] uppercase text-slate-500 font-bold block mb-1">
+        <div className="border border-card-border dark:border-slate-800/80 bg-card/75 dark:bg-slate-900/40 rounded-xl p-3 flex flex-col justify-between shadow-xs">
+          <span className="text-[8px] uppercase text-muted dark:text-slate-500 font-bold block mb-1">
             Win/Loss Asymmetry
           </span>
           <div>
-            <span className="text-base font-bold text-cyan-300 block">
+            <span className="text-base font-bold text-cyan-600 dark:text-cyan-300 block">
               {metrics.realizedWinLossAsymmetryRatio.toFixed(2)}x
             </span>
-            <span className="text-[9px] text-slate-400 block mt-0.5">
+            <span className="text-[9px] text-muted dark:text-slate-400 block mt-0.5">
               +{metrics.avgWinningR}R Win / -{metrics.avgLosingR}R Loss
             </span>
           </div>
         </div>
 
         {/* Metric 5: Execution Efficiency */}
-        <div className="border border-slate-800/80 bg-slate-900/40 rounded-lg p-3 flex flex-col justify-between">
-          <span className="text-[8px] uppercase text-slate-500 font-bold block mb-1">
+        <div className="border border-card-border dark:border-slate-800/80 bg-card/75 dark:bg-slate-900/40 rounded-xl p-3 flex flex-col justify-between shadow-xs">
+          <span className="text-[8px] uppercase text-muted dark:text-slate-500 font-bold block mb-1">
             Execution Win Rate
           </span>
           <div>
-            <span className="text-base font-bold text-emerald-400 block">
+            <span className="text-base font-bold text-emerald-600 dark:text-emerald-400 block">
               {metrics.executionWinRatePct}%
             </span>
-            <span className="text-[9px] text-slate-400 block mt-0.5">
+            <span className="text-[9px] text-muted dark:text-slate-400 block mt-0.5">
               {metrics.winningTradesCount}W / {metrics.losingTradesCount}L / {metrics.scratchTradesCount}BE
             </span>
           </div>
         </div>
 
         {/* Metric 6: Streaks & Conversion Rate */}
-        <div className="border border-slate-800/80 bg-slate-900/40 rounded-lg p-3 flex flex-col justify-between">
-          <span className="text-[8px] uppercase text-slate-500 font-bold block mb-1">
+        <div className="border border-card-border dark:border-slate-800/80 bg-card/75 dark:bg-slate-900/40 rounded-xl p-3 flex flex-col justify-between shadow-xs">
+          <span className="text-[8px] uppercase text-muted dark:text-slate-500 font-bold block mb-1">
             Streak Telemetry
           </span>
           <div>
-            <span className="text-base font-bold text-white block">
-              {metrics.longestWinStreak}W <span className="text-xs text-slate-500 font-normal">max</span> / {metrics.longestLossStreak}L
+            <span className="text-base font-bold text-foreground dark:text-white block">
+              {metrics.longestWinStreak}W <span className="text-xs text-muted dark:text-slate-500 font-normal">max</span> / {metrics.longestLossStreak}L
             </span>
-            <span className="text-[9px] text-slate-400 block mt-0.5">
+            <span className="text-[9px] text-muted dark:text-slate-400 block mt-0.5">
               {totalMonitoredCount
                 ? `${metrics.totalExecutedTrades}/${totalMonitoredCount} ${monitoredLabel} (${((metrics.totalExecutedTrades / Math.max(1, totalMonitoredCount)) * 100).toFixed(0)}%)`
                 : `${metrics.totalExecutedTrades} Executed Setups`}
@@ -583,48 +583,48 @@ export default function CapitalGrowthLedger({
       {/* ─────────────────────────────────────────────────────────────────── */}
       {/* 4. INTERACTIVE SVG DYNAMIC EQUITY CURVE & HOVER CROSSHAIR           */}
       {/* ─────────────────────────────────────────────────────────────────── */}
-      <div className="border border-slate-800/80 bg-slate-950 rounded-xl p-4 relative overflow-hidden flex flex-col">
+      <div className="border border-card-border dark:border-slate-800/80 bg-background dark:bg-slate-950 rounded-2xl p-4 relative overflow-hidden flex flex-col shadow-xs">
         {/* Chart Header Bar with Zoom Toolbar */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between pb-3 mb-2 border-b border-slate-800/60 gap-3">
+        <div className="flex flex-col md:flex-row md:items-center justify-between pb-3 mb-2 border-b border-card-border/60 dark:border-slate-800/60 gap-3">
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <BarChart2 className="w-4 h-4 text-emerald-400" />
-            <span className="font-bold text-slate-200 uppercase">Chronological Compounding Trajectory</span>
-            <span className="text-[9px] text-slate-500 font-mono">
+            <BarChart2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <span className="font-bold text-foreground dark:text-slate-200 uppercase">Chronological Compounding Trajectory</span>
+            <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
               ({metrics.equityCurvePoints.length - 1} Executed Events)
             </span>
 
             {/* If zoomed in, show current window tag */}
             {zoomWindow && (
-              <span className="px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-cyan-400 text-[9px] font-bold animate-in fade-in duration-100">
+              <span className="px-1.5 py-0.5 rounded-md bg-cyan-500/10 dark:bg-cyan-950/80 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400 text-[9px] font-bold animate-in fade-in duration-100">
                 Viewing #{zoomWindow.start + 1}–#{Math.min(metrics.equityCurvePoints.length - 1, zoomWindow.start + zoomWindow.count)} ({zoomWindow.count} events)
               </span>
             )}
           </div>
 
           {/* Right Controls: Legend & Zoom Presets */}
-          <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400">
+          <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted dark:text-slate-400">
             {/* Legend */}
             <div className="hidden lg:flex items-center gap-3 text-[9px]">
               <span className="flex items-center gap-1">
-                <span className="w-2.5 h-0.5 bg-emerald-400" />
+                <span className="w-2.5 h-0.5 bg-emerald-500 dark:bg-emerald-400" />
                 <span>Realized Equity</span>
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2.5 h-0.5 bg-slate-500 border-b border-dashed border-slate-400" />
+                <span className="w-2.5 h-0.5 bg-slate-400 dark:bg-slate-500 border-b border-dashed border-slate-500" />
                 <span>Peak Watermark</span>
               </span>
             </div>
 
             {/* Quick Zoom Presets & Controls */}
             {metrics.equityCurvePoints.length > 20 && (
-              <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-800 p-0.5 rounded-lg shadow-sm">
-                <span className="text-[8px] uppercase tracking-wider text-slate-500 px-1 font-bold">Zoom:</span>
+              <div className="flex items-center gap-1 bg-card dark:bg-slate-900/90 border border-card-border dark:border-slate-800 p-0.5 rounded-lg shadow-xs">
+                <span className="text-[8px] uppercase tracking-wider text-muted dark:text-slate-500 px-1 font-bold">Zoom:</span>
                 
                 <button
                   type="button"
                   onClick={() => handleSetPresetZoom(metrics.equityCurvePoints.length)}
                   className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition cursor-pointer ${
-                    !zoomWindow ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    !zoomWindow ? 'bg-cyan-500 text-slate-950 shadow-xs' : 'text-muted dark:text-slate-400 hover:text-foreground dark:hover:text-white hover:bg-muted/15 dark:hover:bg-slate-800'
                   }`}
                   title="View All Trades (100% Full View)"
                 >
@@ -636,7 +636,7 @@ export default function CapitalGrowthLedger({
                     type="button"
                     onClick={() => handleSetPresetZoom(500)}
                     className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition cursor-pointer ${
-                      zoomWindow?.count === 500 ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                      zoomWindow?.count === 500 ? 'bg-cyan-500 text-slate-950 shadow-xs' : 'text-muted dark:text-slate-400 hover:text-foreground dark:hover:text-white hover:bg-muted/15 dark:hover:bg-slate-800'
                     }`}
                   >
                     500
@@ -648,7 +648,7 @@ export default function CapitalGrowthLedger({
                     type="button"
                     onClick={() => handleSetPresetZoom(250)}
                     className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition cursor-pointer ${
-                      zoomWindow?.count === 250 ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                      zoomWindow?.count === 250 ? 'bg-cyan-500 text-slate-950 shadow-xs' : 'text-muted dark:text-slate-400 hover:text-foreground dark:hover:text-white hover:bg-muted/15 dark:hover:bg-slate-800'
                     }`}
                   >
                     250
@@ -660,7 +660,7 @@ export default function CapitalGrowthLedger({
                     type="button"
                     onClick={() => handleSetPresetZoom(100)}
                     className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition cursor-pointer ${
-                      zoomWindow?.count === 100 ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                      zoomWindow?.count === 100 ? 'bg-cyan-500 text-slate-950 shadow-xs' : 'text-muted dark:text-slate-400 hover:text-foreground dark:hover:text-white hover:bg-muted/15 dark:hover:bg-slate-800'
                     }`}
                   >
                     100
@@ -672,20 +672,20 @@ export default function CapitalGrowthLedger({
                     type="button"
                     onClick={() => handleSetPresetZoom(50)}
                     className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition cursor-pointer ${
-                      zoomWindow?.count === 50 ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                      zoomWindow?.count === 50 ? 'bg-cyan-500 text-slate-950 shadow-xs' : 'text-muted dark:text-slate-400 hover:text-foreground dark:hover:text-white hover:bg-muted/15 dark:hover:bg-slate-800'
                     }`}
                   >
                     50
                   </button>
                 )}
 
-                <div className="w-px h-3 bg-slate-800 my-auto" />
+                <div className="w-px h-3 bg-card-border dark:bg-slate-800 my-auto" />
 
                 {/* Zoom In Button */}
                 <button
                   type="button"
                   onClick={handleZoomIn}
-                  className="p-1 text-slate-400 hover:text-cyan-400 hover:bg-slate-800 rounded transition cursor-pointer"
+                  className="p-1 text-muted dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-muted/15 dark:hover:bg-slate-800 rounded transition cursor-pointer"
                   title="Zoom In (or scroll up with mouse wheel)"
                 >
                   <ZoomIn className="w-3 h-3" />
@@ -696,7 +696,7 @@ export default function CapitalGrowthLedger({
                   type="button"
                   onClick={handleZoomOut}
                   disabled={!zoomWindow}
-                  className="p-1 text-slate-400 hover:text-cyan-400 hover:bg-slate-800 rounded transition cursor-pointer disabled:opacity-30 disabled:hover:text-slate-400 disabled:cursor-not-allowed"
+                  className="p-1 text-muted dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 hover:bg-muted/15 dark:hover:bg-slate-800 rounded transition cursor-pointer disabled:opacity-30 disabled:hover:text-muted disabled:cursor-not-allowed"
                   title="Zoom Out (or scroll down with mouse wheel)"
                 >
                   <ZoomOut className="w-3 h-3" />
@@ -707,7 +707,7 @@ export default function CapitalGrowthLedger({
                   <button
                     type="button"
                     onClick={handleResetZoom}
-                    className="p-1 text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 rounded transition cursor-pointer"
+                    className="p-1 text-rose-500 hover:text-rose-600 dark:text-rose-400 dark:hover:text-rose-300 hover:bg-rose-500/10 dark:hover:bg-rose-950/40 rounded transition cursor-pointer"
                     title="Reset Zoom to 100%"
                   >
                     <RotateCcw className="w-3 h-3" />
@@ -720,10 +720,10 @@ export default function CapitalGrowthLedger({
 
         {/* SVG Container */}
         {trades.length === 0 ? (
-          <div className="h-56 flex flex-col items-center justify-center text-slate-500 text-xs border border-dashed border-slate-800/60 rounded-lg">
-            <Activity className="w-6 h-6 mb-2 text-slate-600 animate-pulse" />
+          <div className="h-56 flex flex-col items-center justify-center text-muted dark:text-slate-500 text-xs border border-dashed border-card-border dark:border-slate-800/60 rounded-xl">
+            <Activity className="w-6 h-6 mb-2 text-muted/60 dark:text-slate-600 animate-pulse" />
             <span>No executed trades recorded in this scan dataset.</span>
-            <span className="text-[10px] text-slate-600 mt-1">
+            <span className="text-[10px] text-muted/60 dark:text-slate-600 mt-1">
               Trades execute when setups pass all quantitative gatekeepers and retest triggers.
             </span>
           </div>
@@ -758,7 +758,7 @@ export default function CapitalGrowthLedger({
 
                 {/* Grid Pattern */}
                 <pattern id="gridLines" width="40" height="30" patternUnits="userSpaceOnUse">
-                  <path d="M 40 0 L 0 0 0 30" fill="none" stroke="#1e293b" strokeWidth="0.5" strokeOpacity="0.4" />
+                  <path d="M 40 0 L 0 0 0 30" fill="none" stroke="currentColor" className="text-card-border/40 dark:text-slate-800/40" strokeWidth="0.5" />
                 </pattern>
               </defs>
 
@@ -798,7 +798,8 @@ export default function CapitalGrowthLedger({
               <text
                 x={chartPadding.left - 6}
                 y={chartPadding.top + 8}
-                fill="#64748b"
+                fill="currentColor"
+                className="text-muted dark:text-slate-400"
                 fontSize="8"
                 textAnchor="end"
                 fontFamily="monospace"
@@ -810,7 +811,8 @@ export default function CapitalGrowthLedger({
               <text
                 x={chartPadding.left - 6}
                 y={chartHeight - chartPadding.bottom}
-                fill="#64748b"
+                fill="currentColor"
+                className="text-muted dark:text-slate-400"
                 fontSize="8"
                 textAnchor="end"
                 fontFamily="monospace"
@@ -828,7 +830,7 @@ export default function CapitalGrowthLedger({
               <path
                 d={svgData.peakPathD}
                 fill="none"
-                stroke="#64748b"
+                stroke="#94a3b8"
                 strokeWidth="1.2"
                 strokeDasharray="4 4"
                 strokeOpacity="0.5"
@@ -922,7 +924,7 @@ export default function CapitalGrowthLedger({
             {/* Smart Adaptive Tooltip Card (Positioned to side with clearance, never covering dot) */}
             {activeHoverPoint && hoverPos && (
               <div
-                className="absolute z-20 pointer-events-none p-3 rounded-xl bg-slate-950/95 border border-slate-700/90 shadow-[0_10px_35px_rgba(0,0,0,0.8)] text-[10px] font-mono transition-all duration-75 min-w-[220px] max-w-[260px] backdrop-blur-xl"
+                className="absolute z-20 pointer-events-none p-3 rounded-xl bg-card/95 dark:bg-slate-950/95 border border-card-border dark:border-slate-700/90 shadow-2xl text-[10px] font-mono transition-all duration-75 min-w-[220px] max-w-[260px] backdrop-blur-xl text-foreground dark:text-slate-100"
                 style={{
                   left: hoverPos.x > (svgRef.current?.getBoundingClientRect().width || 600) / 2
                     ? `${Math.max(10, hoverPos.x - 245)}px`
@@ -930,10 +932,10 @@ export default function CapitalGrowthLedger({
                   top: `${Math.max(10, Math.min((svgRef.current?.getBoundingClientRect().height || 260) - 155, hoverPos.y - 70))}px`,
                 }}
               >
-                <div className="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-1.5">
+                <div className="flex items-center justify-between border-b border-card-border/60 dark:border-slate-800 pb-1.5 mb-1.5">
                   <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                    <span className="text-slate-300 font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
+                    <span className="text-foreground dark:text-slate-300 font-bold">
                       {activeHoverPoint.tradeIndex === 0
                         ? "STARTING BASE"
                         : `TRADE #${activeHoverPoint.tradeIndex}`}
@@ -942,49 +944,49 @@ export default function CapitalGrowthLedger({
                   <span
                     className={`px-1.5 py-0.2 rounded text-[8px] font-bold ${
                       activeHoverPoint.realizedR > 0
-                        ? "bg-emerald-950 text-emerald-400 border border-emerald-500/30"
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
                         : activeHoverPoint.realizedR < 0
-                        ? "bg-rose-950 text-rose-400 border border-rose-500/30"
-                        : "bg-slate-900 text-slate-400"
+                        ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
+                        : "bg-muted/15 text-muted"
                     }`}
                   >
                     {activeHoverPoint.outcome.replace(/_/g, " ")}
                   </span>
                 </div>
 
-                <div className="flex flex-col gap-1 text-slate-300">
+                <div className="flex flex-col gap-1 text-foreground/90 dark:text-slate-300">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Timestamp:</span>
-                    <span className="text-slate-300">{activeHoverPoint.dateStr}</span>
+                    <span className="text-muted dark:text-slate-500">Timestamp:</span>
+                    <span className="text-foreground dark:text-slate-300">{activeHoverPoint.dateStr}</span>
                   </div>
 
                   {activeHoverPoint.tradeIndex > 0 && (
                     <>
                       <div className="flex justify-between">
-                        <span className="text-slate-500">Setup:</span>
-                        <span className="font-bold text-white truncate max-w-[130px]" title={activeHoverPoint.label}>
+                        <span className="text-muted dark:text-slate-500">Setup:</span>
+                        <span className="font-bold text-foreground dark:text-white truncate max-w-[130px]" title={activeHoverPoint.label}>
                           {activeHoverPoint.label}
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-500">Realized R:</span>
+                        <span className="text-muted dark:text-slate-500">Realized R:</span>
                         <span
                           className={`font-bold ${
                             activeHoverPoint.realizedR > 0
-                              ? "text-emerald-400"
+                              ? "text-emerald-600 dark:text-emerald-400"
                               : activeHoverPoint.realizedR < 0
-                              ? "text-rose-400"
-                              : "text-slate-400"
+                              ? "text-rose-600 dark:text-rose-400"
+                              : "text-muted dark:text-slate-400"
                           }`}
                         >
                           {fmtR(activeHoverPoint.realizedR)}
                         </span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-500">Trade PnL:</span>
+                        <span className="text-muted dark:text-slate-500">Trade PnL:</span>
                         <span
                           className={`font-bold ${
-                            activeHoverPoint.pnlUsd >= 0 ? "text-emerald-400" : "text-rose-400"
+                            activeHoverPoint.pnlUsd >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
                           }`}
                         >
                           {activeHoverPoint.pnlUsd >= 0 ? "+" : ""}
@@ -994,18 +996,18 @@ export default function CapitalGrowthLedger({
                     </>
                   )}
 
-                  <div className="flex justify-between border-t border-slate-800/80 pt-1 mt-0.5">
-                    <span className="text-slate-400 font-bold">Running Balance:</span>
-                    <span className="font-bold text-emerald-300">
+                  <div className="flex justify-between border-t border-card-border/60 dark:border-slate-800/80 pt-1 mt-0.5">
+                    <span className="text-muted dark:text-slate-400 font-bold">Running Balance:</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-300">
                       {fmtUsd(activeHoverPoint.equity)}
                     </span>
                   </div>
 
                   <div className="flex justify-between text-[9px]">
-                    <span className="text-slate-500">Peak Drawdown:</span>
+                    <span className="text-muted dark:text-slate-500">Peak Drawdown:</span>
                     <span
                       className={`font-bold ${
-                        activeHoverPoint.drawdownPct > 0 ? "text-rose-400" : "text-slate-400"
+                        activeHoverPoint.drawdownPct > 0 ? "text-rose-600 dark:text-rose-400" : "text-muted dark:text-slate-400"
                       }`}
                     >
                       {activeHoverPoint.drawdownPct > 0 ? `-${activeHoverPoint.drawdownPct}%` : "0%"}
@@ -1017,9 +1019,9 @@ export default function CapitalGrowthLedger({
 
             {/* Interactive Timeline Range Scrubber Slider when zoomed in */}
             {zoomWindow && (
-              <div className="mt-2 pt-2 border-t border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[9px] font-mono text-slate-400 animate-in fade-in duration-150">
-                <div className="flex items-center gap-1.5 text-slate-400 shrink-0">
-                  <MoveHorizontal className="w-3 h-3 text-cyan-400" />
+              <div className="mt-2 pt-2 border-t border-card-border/60 dark:border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[9px] font-mono text-muted dark:text-slate-400 animate-in fade-in duration-150">
+                <div className="flex items-center gap-1.5 text-muted dark:text-slate-400 shrink-0">
+                  <MoveHorizontal className="w-3 h-3 text-cyan-500 dark:text-cyan-400" />
                   <span>Timeline Pan Scrubber:</span>
                 </div>
 
@@ -1035,11 +1037,11 @@ export default function CapitalGrowthLedger({
                         count: zoomWindow.count,
                       });
                     }}
-                    className="w-full h-1.5 bg-slate-800 accent-cyan-400 rounded-lg cursor-ew-resize transition-all"
+                    className="w-full h-1.5 bg-muted/20 dark:bg-slate-800 accent-cyan-500 rounded-lg cursor-ew-resize transition-all"
                   />
                 </div>
 
-                <div className="text-slate-500 text-[8px] flex items-center gap-1 shrink-0">
+                <div className="text-muted dark:text-slate-500 text-[8px] flex items-center gap-1 shrink-0">
                   <span>Click-drag chart or use slider to pan</span>
                 </div>
               </div>
@@ -1051,24 +1053,24 @@ export default function CapitalGrowthLedger({
       {/* ─────────────────────────────────────────────────────────────────── */}
       {/* 5. COLLAPSIBLE CHRONOLOGICAL EQUITY LEDGER TABLE                    */}
       {/* ─────────────────────────────────────────────────────────────────── */}
-      <div className="border border-slate-800/80 bg-slate-900/30 rounded-xl overflow-hidden">
+      <div className="border border-card-border dark:border-slate-800/80 bg-card/75 dark:bg-slate-900/30 rounded-2xl overflow-hidden shadow-xs">
         {/* Toggle Bar */}
         <button
           type="button"
           onClick={() => setIsLedgerExpanded(!isLedgerExpanded)}
-          className="w-full px-5 py-3.5 flex items-center justify-between bg-slate-900/60 hover:bg-slate-900 text-left transition font-mono"
+          className="w-full px-5 py-3.5 flex items-center justify-between bg-card/90 dark:bg-slate-900/60 hover:bg-muted/10 hover:dark:bg-slate-900 text-left transition font-mono cursor-pointer"
         >
           <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-cyan-400" />
-            <span className="text-xs uppercase font-bold text-slate-200">
+            <Layers className="w-4 h-4 text-cyan-500 dark:text-cyan-400" />
+            <span className="text-xs uppercase font-bold text-foreground dark:text-slate-200">
               Chronological Trade Execution Ledger
             </span>
-            <span className="text-[10px] text-slate-500">
+            <span className="text-[10px] text-muted dark:text-slate-500">
               ({metrics.totalExecutedTrades} executed events)
             </span>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-cyan-400 font-bold">
+          <div className="flex items-center gap-2 text-xs text-cyan-600 dark:text-cyan-400 font-bold">
             <span>{isLedgerExpanded ? "COLLAPSE LEDGER" : "EXPAND AUDIT TABLE"}</span>
             {isLedgerExpanded ? (
               <ChevronUp className="w-4 h-4" />
@@ -1080,17 +1082,17 @@ export default function CapitalGrowthLedger({
 
         {/* Expanded Table Content */}
         {isLedgerExpanded && (
-          <div className="p-4 border-t border-slate-800/60 flex flex-col gap-3">
+          <div className="p-4 border-t border-card-border/60 dark:border-slate-800/60 flex flex-col gap-3">
             {metrics.totalExecutedTrades === 0 ? (
-              <div className="py-8 text-center text-slate-500 text-xs font-mono">
+              <div className="py-8 text-center text-muted dark:text-slate-500 text-xs font-mono">
                 No trade executions in active dataset.
               </div>
             ) : (
               <>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left font-mono text-[10px] text-slate-300">
+                  <table className="w-full text-left font-mono text-[10px] text-foreground dark:text-slate-300">
                     <thead>
-                      <tr className="border-b border-slate-800 text-slate-500 uppercase">
+                      <tr className="border-b border-card-border/80 dark:border-slate-800 text-muted dark:text-slate-500 uppercase">
                         <th className="py-2.5 px-2">#</th>
                         <th className="py-2.5 px-2">Date / Time (Cairo)</th>
                         <th className="py-2.5 px-2">Trade ID / Setup</th>
@@ -1104,29 +1106,29 @@ export default function CapitalGrowthLedger({
                         <th className="py-2.5 px-2 text-right">Drawdown</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/40">
+                    <tbody className="divide-y divide-card-border/40 dark:divide-slate-800/40">
                       {paginatedTrades.map((pt) => {
                         const isWin = pt.realizedR > 0;
                         const isLoss = pt.realizedR < 0;
 
                         return (
-                          <tr key={pt.tradeId || pt.tradeIndex} className="hover:bg-slate-900/40 transition">
+                          <tr key={pt.tradeId || pt.tradeIndex} className="hover:bg-muted/10 hover:dark:bg-slate-900/40 transition">
                             {/* Index */}
-                            <td className="py-2.5 px-2 text-slate-500 font-bold">
+                            <td className="py-2.5 px-2 text-muted dark:text-slate-500 font-bold">
                               #{pt.tradeIndex}
                             </td>
 
                             {/* Timestamp */}
-                            <td className="py-2.5 px-2 text-slate-400">
+                            <td className="py-2.5 px-2 text-muted dark:text-slate-400">
                               {pt.dateStr}
                             </td>
 
                             {/* Label */}
                             <td className="py-2.5 px-2">
-                              <span className="font-bold text-white block truncate max-w-[140px]">
+                              <span className="font-bold text-foreground dark:text-white block truncate max-w-[140px]">
                                 {pt.label}
                               </span>
-                              <span className="text-[8px] text-slate-500 truncate block max-w-[140px]">
+                              <span className="text-[8px] text-muted dark:text-slate-500 truncate block max-w-[140px]">
                                 {pt.tradeId}
                               </span>
                             </td>
@@ -1136,8 +1138,8 @@ export default function CapitalGrowthLedger({
                               <span
                                 className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
                                   pt.direction === "BULLISH" || pt.direction === "LONG"
-                                    ? "bg-emerald-950/60 text-emerald-400 border border-emerald-500/30"
-                                    : "bg-rose-950/60 text-rose-400 border border-rose-500/30"
+                                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                                    : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
                                 }`}
                               >
                                 {pt.direction}
@@ -1145,7 +1147,7 @@ export default function CapitalGrowthLedger({
                             </td>
 
                             {/* Entry / SL */}
-                            <td className="py-2.5 px-2 text-slate-400 text-[9px]">
+                            <td className="py-2.5 px-2 text-muted dark:text-slate-400 text-[9px]">
                               ${pt.entryPrice.toFixed(1)} / ${pt.stopLossPrice.toFixed(1)}
                             </td>
 
@@ -1154,10 +1156,10 @@ export default function CapitalGrowthLedger({
                               <span
                                 className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
                                   isWin
-                                    ? "bg-emerald-950/40 text-emerald-400 border border-emerald-500/20"
+                                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
                                     : isLoss
-                                    ? "bg-rose-950/40 text-rose-400 border border-rose-500/20"
-                                    : "bg-slate-800 text-slate-400"
+                                    ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                                    : "bg-muted/15 text-muted dark:bg-slate-800 dark:text-slate-400"
                                 }`}
                               >
                                 {pt.outcome.replace(/_/g, " ")}
@@ -1167,21 +1169,21 @@ export default function CapitalGrowthLedger({
                             {/* Realized R */}
                             <td
                               className={`py-2.5 px-2 text-right font-bold ${
-                                isWin ? "text-emerald-400" : isLoss ? "text-rose-400" : "text-slate-400"
+                                isWin ? "text-emerald-600 dark:text-emerald-400" : isLoss ? "text-rose-600 dark:text-rose-400" : "text-muted dark:text-slate-400"
                               }`}
                             >
                               {fmtR(pt.realizedR)}
                             </td>
 
                             {/* Risk USD */}
-                            <td className="py-2.5 px-2 text-right text-slate-400">
+                            <td className="py-2.5 px-2 text-right text-muted dark:text-slate-400">
                               {fmtUsd(pt.riskUsd)}
                             </td>
 
                             {/* PnL USD */}
                             <td
                               className={`py-2.5 px-2 text-right font-bold ${
-                                isWin ? "text-emerald-400" : isLoss ? "text-rose-400" : "text-slate-400"
+                                isWin ? "text-emerald-600 dark:text-emerald-400" : isLoss ? "text-rose-600 dark:text-rose-400" : "text-muted dark:text-slate-400"
                               }`}
                             >
                               {pt.pnlUsd >= 0 ? "+" : ""}
@@ -1189,14 +1191,14 @@ export default function CapitalGrowthLedger({
                             </td>
 
                             {/* Running Equity */}
-                            <td className="py-2.5 px-2 text-right font-bold text-white">
+                            <td className="py-2.5 px-2 text-right font-bold text-foreground dark:text-white">
                               {fmtUsd(pt.equity)}
                             </td>
 
                             {/* Drawdown % */}
                             <td
                               className={`py-2.5 px-2 text-right ${
-                                pt.drawdownPct > 0 ? "text-rose-400 font-bold" : "text-slate-500"
+                                pt.drawdownPct > 0 ? "text-rose-600 dark:text-rose-400 font-bold" : "text-muted dark:text-slate-500"
                               }`}
                             >
                               {pt.drawdownPct > 0 ? `-${pt.drawdownPct}%` : "0.0%"}
@@ -1210,16 +1212,16 @@ export default function CapitalGrowthLedger({
 
                 {/* Table Pagination */}
                 {metrics.totalExecutedTrades > 0 && (
-                  <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-800/80 pt-3.5 mt-1 gap-3 text-[10px] text-slate-400 font-mono">
+                  <div className="flex flex-col sm:flex-row items-center justify-between border-t border-card-border/80 dark:border-slate-800/80 pt-3.5 mt-1 gap-3 text-[10px] text-muted dark:text-slate-400 font-mono">
                     {/* Left: Summary & Rows Per Page */}
                     <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
                       <span>
-                        Showing <span className="font-bold text-slate-100">{(currentPage - 1) * itemsPerPage + 1}</span>–<span className="font-bold text-slate-100">{Math.min(currentPage * itemsPerPage, metrics.totalExecutedTrades)}</span> of <span className="font-bold text-slate-100">{metrics.totalExecutedTrades}</span> trades
+                        Showing <span className="font-bold text-foreground dark:text-slate-100">{(currentPage - 1) * itemsPerPage + 1}</span>–<span className="font-bold text-foreground dark:text-slate-100">{Math.min(currentPage * itemsPerPage, metrics.totalExecutedTrades)}</span> of <span className="font-bold text-foreground dark:text-slate-100">{metrics.totalExecutedTrades}</span> trades
                       </span>
 
                       {/* Rows per page selector */}
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] uppercase tracking-wider text-slate-500">Rows:</span>
+                        <span className="text-[9px] uppercase tracking-wider text-muted dark:text-slate-500">Rows:</span>
                         <select
                           value={itemsPerPage}
                           onChange={(e) => {
@@ -1227,7 +1229,7 @@ export default function CapitalGrowthLedger({
                             setItemsPerPage(nextLimit);
                             setCurrentPage(1);
                           }}
-                          className="bg-slate-900 border border-slate-800 text-slate-200 text-[10px] rounded px-2 py-0.5 focus:outline-none focus:border-cyan-500 cursor-pointer transition shadow-sm"
+                          className="bg-card dark:bg-slate-900 border border-card-border dark:border-slate-800 text-foreground dark:text-slate-200 text-[10px] rounded-lg px-2 py-0.5 focus:outline-none focus:border-cyan-500 cursor-pointer transition shadow-xs"
                         >
                           <option value={10}>10</option>
                           <option value={25}>25</option>
@@ -1244,7 +1246,7 @@ export default function CapitalGrowthLedger({
                         type="button"
                         disabled={currentPage === 1}
                         onClick={() => setCurrentPage(1)}
-                        className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                        className="p-1.5 rounded-lg bg-card dark:bg-slate-900 border border-card-border dark:border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 text-foreground dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-xs"
                         title="First Page (Jump to Start)"
                       >
                         <ChevronsLeft className="w-3.5 h-3.5" />
@@ -1255,7 +1257,7 @@ export default function CapitalGrowthLedger({
                         type="button"
                         disabled={currentPage === 1}
                         onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                        className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                        className="p-1.5 rounded-lg bg-card dark:bg-slate-900 border border-card-border dark:border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 text-foreground dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-xs"
                         title="Previous Page"
                       >
                         <ChevronLeft className="w-3.5 h-3.5" />
@@ -1266,7 +1268,7 @@ export default function CapitalGrowthLedger({
                         <select
                           value={currentPage}
                           onChange={(e) => setCurrentPage(Number(e.target.value))}
-                          className="bg-slate-900 border border-slate-800 text-slate-100 font-bold text-[10px] rounded px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer transition shadow-sm"
+                          className="bg-card dark:bg-slate-900 border border-card-border dark:border-slate-800 text-foreground dark:text-slate-100 font-bold text-[10px] rounded-lg px-2 py-1 focus:outline-none focus:border-cyan-500 cursor-pointer transition shadow-xs"
                         >
                           {Array.from({ length: totalTradePages }, (_, i) => i + 1).map((pageNum) => (
                             <option key={pageNum} value={pageNum}>
@@ -1281,7 +1283,7 @@ export default function CapitalGrowthLedger({
                         type="button"
                         disabled={currentPage === totalTradePages}
                         onClick={() => setCurrentPage((p) => Math.min(totalTradePages, p + 1))}
-                        className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                        className="p-1.5 rounded-lg bg-card dark:bg-slate-900 border border-card-border dark:border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 text-foreground dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-xs"
                         title="Next Page"
                       >
                         <ChevronRight className="w-3.5 h-3.5" />
@@ -1292,7 +1294,7 @@ export default function CapitalGrowthLedger({
                         type="button"
                         disabled={currentPage === totalTradePages}
                         onClick={() => setCurrentPage(totalTradePages)}
-                        className="p-1.5 rounded bg-slate-900 border border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 disabled:hover:border-slate-800 text-slate-300 hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-sm"
+                        className="p-1.5 rounded-lg bg-card dark:bg-slate-900 border border-card-border dark:border-slate-800 hover:border-cyan-500/50 disabled:opacity-30 text-foreground dark:text-slate-300 hover:text-cyan-600 dark:hover:text-cyan-400 transition cursor-pointer disabled:cursor-not-allowed shadow-xs"
                         title="Last Page (Jump to End)"
                       >
                         <ChevronsRight className="w-3.5 h-3.5" />

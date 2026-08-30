@@ -1,4 +1,4 @@
-﻿/**
+/**
  * telegramBotService.ts
  * ─────────────────────────────────────────────────────────────────────────────
  * Flow-State Quant Engine — Interactive Two-Way Telegram Command Center
@@ -39,9 +39,9 @@ export interface TelegramBotServiceContext {
 
 export const MAIN_TELEGRAM_KEYBOARD = {
   keyboard: [
-    [{ text: '📊 /status' }, { text: '🎯 /trade' }],
-    [{ text: '💰 /today' }, { text: '🔬 /reconcile' }],
-    [{ text: '🏛️ /setups' }, { text: '❓ /help' }],
+    [{ text: '⚡ /price' }, { text: '📊 /status' }],
+    [{ text: '🎯 /trade' }, { text: '💰 /today' }],
+    [{ text: '🏛️ /setups' }, { text: '🔬 /reconcile' }],
   ],
   resize_keyboard: true,
   is_persistent: true,
@@ -194,6 +194,11 @@ export class TelegramBotService {
         await this.handleReconcileCommand();
         break;
 
+      case '/price':
+      case '/p':
+        await this.handlePriceCommand();
+        break;
+
       default:
         await this.notifier.sendRawMessage(
           `❓ <b>Unrecognized Command:</b> <code>${rawText}</code>\n\n` +
@@ -205,18 +210,77 @@ export class TelegramBotService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
+  // Helper: Live Market Price Retrieval
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  private getLivePrice(): { price: number; formatted: string } {
+    const { wsClient } = this.context;
+    let price = 0;
+    if (wsClient && typeof wsClient.getLatestPrice === 'function') {
+      price = wsClient.getLatestPrice();
+    }
+    if (!price || price <= 0) {
+      const c5m = wsClient?.getActiveCandle('5m') || wsClient?.getRingBuffers()['5m'].slice(-1)[0];
+      if (c5m && c5m.c > 0) price = c5m.c;
+    }
+    const formatted = price > 0 ? `$${price.toFixed(2)}` : 'Streaming...';
+    return { price, formatted };
+  }
+
+  private getMacroInfo() {
+    const { getMacroContext } = this.context;
+    const macro = getMacroContext ? getMacroContext() : null;
+
+    const bias = macro?.macroDailyBias || macro?.bias || 'BULLISH';
+    const pdhVal = macro?.pdh;
+    const pdlVal = macro?.pdl;
+    const pdhStr = (typeof pdhVal === 'number' && pdhVal > 0) ? `$${pdhVal.toFixed(2)}` : '---';
+    const pdlStr = (typeof pdlVal === 'number' && pdlVal > 0) ? `$${pdlVal.toFixed(2)}` : '---';
+
+    const asianHigh = macro?.asianSession?.high ?? macro?.asianHigh ?? null;
+    const asianLow = macro?.asianSession?.low ?? macro?.asianLow ?? null;
+    const asianStr =
+      asianHigh != null && asianLow != null && !isNaN(asianHigh) && !isNaN(asianLow)
+        ? `$${asianLow.toFixed(2)} ⟷ $${asianHigh.toFixed(2)}`
+        : '---';
+
+    const londonHigh = macro?.londonSession?.high ?? macro?.londonHigh ?? null;
+    const londonLow = macro?.londonSession?.low ?? macro?.londonLow ?? null;
+    const londonStr =
+      londonHigh != null && londonLow != null && !isNaN(londonHigh) && !isNaN(londonLow)
+        ? `$${londonLow.toFixed(2)} ⟷ $${londonHigh.toFixed(2)}`
+        : '---';
+
+    return {
+      bias,
+      pdhStr,
+      pdlStr,
+      asianStr,
+      londonStr,
+      asianHigh,
+      asianLow,
+      pdh: pdhVal,
+      pdl: pdlVal,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
   // Command Handlers
   // ─────────────────────────────────────────────────────────────────────────────
 
   private async handleHelpCommand(): Promise<void> {
+    const livePrice = this.getLivePrice();
     const msg =
       `⚡ <b>FLOW-STATE QUANT COMMAND CENTER</b> ⚡\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
+      `⚡ <b>Live Price:</b> <b>${livePrice.formatted}</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
       `<b>Available Interactive Commands:</b>\n\n` +
+      `⚡ <b>/price</b> — Instant 1-second live price & range check\n` +
       `📊 <b>/status</b> — Live engine health, price, uptime & macro bias\n` +
-      `🎯 <b>/trade</b> — Active open trade inspection & floating P&L\n` +
+      `🎯 <b>/trade</b> — Active open trade, live price, floating P&L & targets\n` +
       `💰 <b>/today</b> — Today's closed performance, realized R & capital\n` +
-      `🏛️ <b>/setups</b> — Monitored liquidity sweep anchors & zones\n` +
+      `🏛️ <b>/setups</b> — Monitored liquidity anchors with live price distance\n` +
       `🔬 <b>/reconcile</b> — 1:1 Quant Lab parity audit check\n` +
       `❓ <b>/help</b> — Show this command menu & quick buttons\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -225,8 +289,25 @@ export class TelegramBotService {
     await this.notifier.sendRawMessage(msg, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
   }
 
+  private async handlePriceCommand(): Promise<void> {
+    const { symbol } = this.context;
+    const livePrice = this.getLivePrice();
+    const macro = this.getMacroInfo();
+
+    const msg =
+      `⚡ <b>[LIVE PRICE RADAR]</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `📊 <b>Asset:</b> <code>${symbol.toUpperCase()}</code> (Binance Futures)\n` +
+      `⚡ <b>Live Market Price:</b> <b>${livePrice.formatted} USD</b>\n` +
+      `🧭 <b>Daily Bias:</b> <b>${macro.bias}</b>\n` +
+      `🏛️ <b>Dealing Range (PDH/PDL):</b> <code>${macro.pdlStr} ⟷ ${macro.pdhStr}</code>\n` +
+      `🌏 <b>Asian Session Range:</b> <code>${macro.asianStr}</code>`;
+
+    await this.notifier.sendRawMessage(msg, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
+  }
+
   private async handleStatusCommand(): Promise<void> {
-    const { engine, symbol, bootTimestamp, isDryRun, getMacroContext, wsClient } = this.context;
+    const { engine, symbol, bootTimestamp, isDryRun, wsClient } = this.context;
 
     const uptimeMs = Date.now() - bootTimestamp;
     const hours = Math.floor(uptimeMs / 3600000);
@@ -236,10 +317,8 @@ export class TelegramBotService {
 
     const activePositions = engine.getActivePositions();
     const pendingOrders = engine.getPendingLimitOrders();
-    const macro = getMacroContext ? getMacroContext() : null;
-
-    const lastCandle5m = wsClient?.getActiveCandle('5m') || wsClient?.getRingBuffers()['5m'].slice(-1)[0];
-    const livePrice = lastCandle5m?.c ? `$${lastCandle5m.c.toFixed(2)}` : 'Streaming...';
+    const macro = this.getMacroInfo();
+    const livePrice = this.getLivePrice();
 
     const msg =
       `⚡ <b>[FLOW-STATE ENGINE — LIVE STATUS]</b>\n` +
@@ -247,12 +326,12 @@ export class TelegramBotService {
       `🟢 <b>Daemon Status:</b> <code>ONLINE (PM2 Host)</code>\n` +
       `⏱️ <b>Uptime:</b> <code>${uptimeStr}</code>\n` +
       `📊 <b>Asset:</b> <code>${symbol.toUpperCase()}</code> (Binance Futures)\n` +
-      `⚡ <b>Live Price:</b> <b>${livePrice}</b>\n` +
+      `⚡ <b>Live Market Price:</b> <b>${livePrice.formatted} USD</b>\n` +
       `⚙️ <b>Mode:</b> <code>${isDryRun ? 'DRY-RUN' : '24/7 LIVE EXECUTION'}</code>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🧭 <b>Daily Macro Bias:</b> <b>${macro?.bias || 'BULLISH'}</b>\n` +
-      `🏛️ <b>PDH / PDL:</b> <code>$${macro?.pdh?.toFixed(2) || '---'} / $${macro?.pdl?.toFixed(2) || '---'}</code>\n` +
-      `🌏 <b>Asian Range:</b> <code>$${macro?.asianLow?.toFixed(2) || '---'} ⟷ $${macro?.asianHigh?.toFixed(2) || '---'}</code>\n` +
+      `🧭 <b>Daily Macro Bias:</b> <b>${macro.bias}</b>\n` +
+      `🏛️ <b>PDH / PDL:</b> <code>${macro.pdhStr} / ${macro.pdlStr}</code>\n` +
+      `🌏 <b>Asian Range:</b> <code>${macro.asianStr}</code>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `📦 <b>Active Trades:</b> <code>${activePositions.length}</code>\n` +
       `⏳ <b>Pending Limits:</b> <code>${pendingOrders.length}</code>\n` +
@@ -262,9 +341,10 @@ export class TelegramBotService {
   }
 
   private async handleTradeCommand(): Promise<void> {
-    const { engine } = this.context;
+    const { engine, symbol } = this.context;
     const activePositions = engine.getActivePositions();
     const pendingOrders = engine.getPendingLimitOrders();
+    const livePrice = this.getLivePrice();
 
     if (activePositions.length > 0) {
       const pos = activePositions[0];
@@ -274,19 +354,34 @@ export class TelegramBotService {
       const sign = floatingR >= 0 ? '+' : '';
       const usdSign = floatingUsd >= 0 ? '+' : '';
 
+      // Compute price delta from entry
+      let deltaStr = '';
+      if (livePrice.price > 0 && pos.entryPrice > 0) {
+        const diff = livePrice.price - pos.entryPrice;
+        const pct = (diff / pos.entryPrice) * 100;
+        const diffSign = diff >= 0 ? '+' : '';
+        deltaStr = ` (${diffSign}$${diff.toFixed(2)} / ${diffSign}${pct.toFixed(2)}%)`;
+      }
+
+      // Compute distance to SL and targets
+      const slDist = livePrice.price > 0 ? Math.abs(livePrice.price - pos.activeStopLoss).toFixed(2) : '---';
+      const tp1Dist = livePrice.price > 0 ? Math.abs(pos.stage1Target - livePrice.price).toFixed(2) : '---';
+      const tp2Dist = livePrice.price > 0 ? Math.abs(pos.stage2Target - livePrice.price).toFixed(2) : '---';
+
       const msg =
         `🎯 <b>[ACTIVE POSITION INSPECTION]</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `📊 <b>Pair:</b> <code>${pos.symbol}</code> (${pos.timeframe || '5m'})\n` +
         `🧭 <b>Direction:</b> <b>${dirEmoji}</b>\n` +
         `⚡ <b>Entry Fill:</b> <code>$${pos.entryPrice.toFixed(2)}</code>\n` +
+        `🔴 <b>Live Market Price:</b> <b>${livePrice.formatted}</b>${deltaStr}\n` +
         `📈 <b>Floating P&L:</b> <b>${sign}${floatingR.toFixed(2)}R (${usdSign}$${floatingUsd.toFixed(2)})</b>\n` +
         `📐 <b>Size:</b> <code>${pos.contractSize} contracts</code> ($${pos.riskUsd.toFixed(2)} Risk)\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
-        `🛡️ <b>Active Stop Loss:</b> <code>$${pos.activeStopLoss.toFixed(2)}</code> (<i>${pos.trailingSlSource}</i>)\n` +
-        `🎯 <b>TP1 (1.0R):</b> <code>$${pos.stage1Target.toFixed(2)}</code> (${pos.isStage1Filled ? '✅ FILLED' : '⏳ 40%'})\n` +
-        `💰 <b>TP2 (1.4R):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${pos.isStage2Filled ? '✅ FILLED' : '⏳ 40%'})\n` +
-        `🚀 <b>TP3 (DOL):</b> <code>$${pos.stage3Target.toFixed(2)}</code> (${pos.isStage3Filled ? '✅ FILLED' : '⏳ 20% Runner'})\n` +
+        `🛡️ <b>Active Stop Loss:</b> <code>$${pos.activeStopLoss.toFixed(2)}</code> (<i>${pos.trailingSlSource}</i>) [<code>$${slDist} buffer</code>]\n` +
+        `🎯 <b>TP1 (1.0R):</b> <code>$${pos.stage1Target.toFixed(2)}</code> (${pos.isStage1Filled ? '✅ FILLED' : `⏳ $${tp1Dist} away`})\n` +
+        `💰 <b>TP2 (1.4R):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${pos.isStage2Filled ? '✅ FILLED' : `⏳ $${tp2Dist} away`})\n` +
+        `🚀 <b>TP3 (DOL):</b> <code>$${pos.stage3Target.toFixed(2)}</code> (${pos.isStage3Filled ? '✅ FILLED' : '⏳ Runner'})\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `📦 <b>Remaining Allocation:</b> <code>${(pos.remainingAllocation * 100).toFixed(0)}%</code>\n` +
         `🏛️ <b>Setup:</b> <i>${pos.anchorName || '5m Sweep & Reclaim'}</i>`;
@@ -299,12 +394,20 @@ export class TelegramBotService {
       const ord = pendingOrders[0];
       const dirEmoji = ord.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
 
+      let distanceStr = '';
+      if (livePrice.price > 0 && ord.limitEntryPrice > 0) {
+        const diff = Math.abs(livePrice.price - ord.limitEntryPrice);
+        const isAbove = livePrice.price > ord.limitEntryPrice;
+        distanceStr = ` [<code>$${diff.toFixed(2)} ${isAbove ? 'above entry' : 'below entry'} ⏳</code>]`;
+      }
+
       const msg =
         `⏳ <b>[RESTING PENDING LIMIT ORDER]</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `📊 <b>Pair:</b> <code>${ord.symbol}</code> (${ord.timeframe || '5m'})\n` +
         `🧭 <b>Direction:</b> <b>${dirEmoji}</b>\n` +
         `🎯 <b>Limit Entry Price:</b> <code>$${ord.limitEntryPrice.toFixed(2)}</code>\n` +
+        `⚡ <b>Live Market Price:</b> <b>${livePrice.formatted}</b>${distanceStr}\n` +
         `🛑 <b>Stop Loss:</b> <code>$${ord.initialStopLoss.toFixed(2)}</code>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `🎯 <b>TP1 (1.0R):</b> <code>$${ord.stage1Target.toFixed(2)}</code>\n` +
@@ -321,15 +424,18 @@ export class TelegramBotService {
     const msg =
       `⚪ <b>[NO ACTIVE TRADES]</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `There are currently no open positions or resting pending limit orders.\n\n` +
+      `📊 <b>Asset:</b> <code>${symbol.toUpperCase()}</code> (5m)\n` +
+      `⚡ <b>Current Live Price:</b> <b>${livePrice.formatted} USD</b>\n` +
+      `📦 <b>Active Positions:</b> <code>0</code> | ⏳ <b>Pending Limits:</b> <code>0</code>\n\n` +
       `<i>The engine is actively scanning real-time order flow for high-confluence liquidity sweeps.</i>`;
 
     await this.notifier.sendRawMessage(msg, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
   }
 
   private async handleTodayCommand(): Promise<void> {
-    const { ledger } = this.context;
+    const { ledger, symbol } = this.context;
     const sessionLog = ledger.getSessionLog();
+    const livePrice = this.getLivePrice();
 
     const realizedR = sessionLog.totalRealizedR || 0;
     const sign = realizedR >= 0 ? '+' : '';
@@ -355,6 +461,7 @@ export class TelegramBotService {
       `💰 <b>[TODAY'S QUANT PERFORMANCE REPORT]</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `📅 <b>Session Date:</b> <code>${sessionLog.dateStr}</code>\n` +
+      `⚡ <b>Live Price:</b> <b>${livePrice.formatted} USD</b> (<code>${symbol.toUpperCase()}</code>)\n` +
       `💵 <b>Starting Equity:</b> <code>$${sessionLog.initialEquity.toFixed(2)} USD</code>\n` +
       `📈 <b>Current Equity:</b> <b>$${sessionLog.currentEquity.toFixed(2)} USD</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -370,10 +477,13 @@ export class TelegramBotService {
   private async handleSetupsCommand(): Promise<void> {
     const { getLatestSetups, symbol } = this.context;
     const setups = getLatestSetups ? getLatestSetups() : [];
+    const livePrice = this.getLivePrice();
 
     if (!setups || setups.length === 0) {
       const msg =
         `🏛️ <b>[MONITORED LIQUIDITY ZONES]</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `⚡ <b>Current Market Price:</b> <b>${livePrice.formatted} USD</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `<i>No active un-retested sweep setups currently on ${symbol.toUpperCase()}.</i>\n` +
         `The engine is indexing multi-timeframe candles on every 5m/15m/1h close.`;
@@ -385,18 +495,30 @@ export class TelegramBotService {
     let setupListStr = '';
     recent.forEach((s: any, idx: number) => {
       const dirEmoji = s.direction === 'LONG' ? '🟢' : '🔴';
+      const anchorLevel = s.anchor_level || s.originAnchorLevel || 0;
       const timeStr = s.reclaim_time
         ? new Date(s.reclaim_time).toISOString().substring(11, 16) + ' UTC'
         : '---';
-      setupListStr += `${idx + 1}. ${dirEmoji} <b>${s.anchor_type || 'SWING'}</b> @ <code>$${(s.anchor_level || s.originAnchorLevel || 0).toFixed(2)}</code> [${timeStr}]\n   ➔ Sweep: $${(s.sweep_price || 0).toFixed(2)} | Target: $${(s.stage1_target || 0).toFixed(2)}\n`;
+
+      let distanceStr = '';
+      if (livePrice.price > 0 && anchorLevel > 0) {
+        const diff = livePrice.price - anchorLevel;
+        const diffAbs = Math.abs(diff);
+        const positionRel = diff >= 0 ? 'above anchor' : 'below anchor';
+        distanceStr = `\n   📍 <b>Live Distance:</b> <code>$${diffAbs.toFixed(2)} ${positionRel}</code>`;
+      }
+
+      setupListStr += `${idx + 1}. ${dirEmoji} <b>${s.anchor_type || 'SWING'}</b> @ <code>$${anchorLevel.toFixed(2)}</code> [${timeStr}]${distanceStr}\n   ➔ Sweep: <code>$${(s.sweep_price || 0).toFixed(2)}</code> | Target: <code>$${(s.stage1_target || 0).toFixed(2)}</code>\n`;
     });
 
     const msg =
       `🏛️ <b>[MONITORED LIQUIDITY SETUPS (${setups.length} Total)]</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
+      `⚡ <b>Current Market Price:</b> <b>${livePrice.formatted} USD</b> (<code>${symbol.toUpperCase()}</code>)\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
       setupListStr +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `<i>Showing latest ${recent.length} structural candidates.</i>`;
+      `<i>Showing latest ${recent.length} structural candidates with real-time distance.</i>`;
 
     await this.notifier.sendRawMessage(msg, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
   }
@@ -405,11 +527,13 @@ export class TelegramBotService {
     const { ledger, symbol } = this.context;
     const todayStr = new Date().toISOString().split('T')[0];
     const sessionLog = ledger.getSessionLog();
+    const livePrice = this.getLivePrice();
 
     const msg =
       `🔬 <b>[QUANT LAB 1:1 RECONCILIATION]</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `📅 <b>Session Date:</b> <code>${todayStr}</code>\n` +
+      `⚡ <b>Live Price:</b> <b>${livePrice.formatted} USD</b> (<code>${symbol.toUpperCase()}</code>)\n` +
       `📊 <b>Live Recorded Trades:</b> <code>${sessionLog.totalTrades}</code>\n` +
       `🏆 <b>Live Realized R:</b> <b>+${(sessionLog.totalRealizedR || 0).toFixed(2)}R</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +

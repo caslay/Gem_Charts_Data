@@ -124,7 +124,7 @@ export function computeMacroContext(
 
   // ── 2. Session Liquidity (Asian: 00:00–07:00 UTC, London: 07:00–12:00 UTC) ──
   const getSessionRange = (startHour: number, endHour: number) => {
-    const sessionCandles = candles15m.filter((c) => {
+    let sessionCandles = candles15m.filter((c) => {
       const d = new Date(c.t);
       return (
         d.getUTCFullYear() === lastDateUtc.getUTCFullYear() &&
@@ -134,6 +134,16 @@ export function computeMacroContext(
         d.getUTCHours() < endHour
       );
     });
+
+    // If today hasn't populated this session yet, take the latest session from recent history in buffer
+    if (sessionCandles.length === 0) {
+      const allMatching = candles15m.filter((c) => {
+        const d = new Date(c.t);
+        return d.getUTCHours() >= startHour && d.getUTCHours() < endHour;
+      });
+      const maxBars = (endHour - startHour) * 4;
+      sessionCandles = allMatching.slice(-maxBars);
+    }
 
     if (sessionCandles.length === 0) return { high: null, low: null };
     return {

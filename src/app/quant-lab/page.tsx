@@ -1084,46 +1084,46 @@ export default function QuantLabPage() {
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-4 md:p-6 overflow-x-hidden">
+    <div className="min-h-screen bg-background dark:bg-slate-950 text-foreground dark:text-slate-100 font-sans p-4 md:p-6 overflow-x-hidden transition-colors duration-200">
       {/* Background ambient lighting */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-emerald-500/5 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute top-1/3 right-1/4 w-96 h-96 bg-purple-500/5 rounded-full blur-[120px] pointer-events-none" />
 
       {/* Header Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800/50 pb-5 mb-6 gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-card-border/60 dark:border-slate-800/50 pb-5 mb-6 gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="p-1 rounded bg-emerald-500/10 text-emerald-400">
+            <span className="p-1 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <LineChart className="w-5 h-5" />
             </span>
-            <span className="text-[10px] uppercase tracking-[0.2em] text-slate-400 font-semibold font-mono">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-muted dark:text-slate-400 font-semibold font-mono">
               Quantitative Architecture & Backtesting
             </span>
           </div>
-          <h1 className="text-2xl md:text-3xl font-black font-mono tracking-tight text-white uppercase">
-            Quant <span className="text-emerald-400">Lab</span>
+          <h1 className="text-2xl md:text-3xl font-black font-mono tracking-tight text-foreground dark:text-white uppercase">
+            Quant <span className="text-emerald-600 dark:text-emerald-400">Lab</span>
           </h1>
-          <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+          <p className="text-xs text-muted dark:text-slate-400 mt-1 max-w-2xl">
             Deep historical scanning, multi-gate institutional validation, and zero look-ahead bias telemetry engine for Order Blocks & Custom Strategies.
           </p>
         </div>
 
         {/* Mode Switcher Tabs + Status */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-slate-950/90 border border-slate-800 p-1 rounded-xl flex items-center gap-1 font-mono text-xs font-bold shadow-inner">
+          <div className="bg-card/90 dark:bg-slate-950/90 border border-card-border dark:border-slate-800 p-1 rounded-xl flex items-center gap-1 font-mono text-xs font-bold shadow-xs">
             {/* SWEEP & RECLAIM SCANNER TAB */}
             <button
               onClick={() => setActiveMainTab('SWEEP_RECLAIM_SCANNER')}
               className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 cursor-pointer ${
                 activeMainTab === 'SWEEP_RECLAIM_SCANNER'
                   ? 'bg-cyan-400 border border-cyan-300 text-slate-950 shadow-[0_0_14px_rgba(34,211,238,0.5)] font-black'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
+                  : 'text-muted dark:text-slate-400 hover:text-foreground hover:dark:text-slate-200 hover:bg-muted/15 dark:hover:bg-slate-800/40 border border-transparent'
               }`}
             >
               {activeMainTab === 'SWEEP_RECLAIM_SCANNER' ? (
                 <span className="w-2 h-2 rounded-full bg-slate-950 shadow-[0_0_6px_rgba(0,0,0,0.5)] shrink-0" />
               ) : (
-                <Repeat className="w-3.5 h-3.5" />
+                <Repeat className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
               )}
               <span>SWEEP & RECLAIM SCANNER</span>
             </button>
@@ -1134,13 +1134,13 @@ export default function QuantLabPage() {
               className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 cursor-pointer ${
                 activeMainTab === 'OB_SCANNER'
                   ? 'bg-emerald-400 border border-emerald-300 text-slate-950 shadow-[0_0_14px_rgba(52,211,153,0.5)] font-black'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
+                  : 'text-muted dark:text-slate-400 hover:text-foreground hover:dark:text-slate-200 hover:bg-muted/15 dark:hover:bg-slate-800/40 border border-transparent'
               }`}
             >
               {activeMainTab === 'OB_SCANNER' ? (
                 <span className="w-2 h-2 rounded-full bg-slate-950 shadow-[0_0_6px_rgba(0,0,0,0.5)] shrink-0" />
               ) : (
-                <Layers className="w-3.5 h-3.5" />
+                <Layers className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               )}
               <span>INSTITUTIONAL OB SCANNER</span>
             </button>
@@ -1151,13 +1151,13 @@ export default function QuantLabPage() {
               className={`px-3.5 py-2 rounded-lg flex items-center gap-2 transition-all duration-200 cursor-pointer ${
                 activeMainTab === 'STRATEGY_BACKTEST'
                   ? 'bg-purple-400 border border-purple-300 text-slate-950 shadow-[0_0_14px_rgba(192,132,252,0.5)] font-black'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40 border border-transparent'
+                  : 'text-muted dark:text-slate-400 hover:text-foreground hover:dark:text-slate-200 hover:bg-muted/15 dark:hover:bg-slate-800/40 border border-transparent'
               }`}
             >
               {activeMainTab === 'STRATEGY_BACKTEST' ? (
                 <span className="w-2 h-2 rounded-full bg-slate-950 shadow-[0_0_6px_rgba(0,0,0,0.5)] shrink-0" />
               ) : (
-                <FileCode className="w-3.5 h-3.5" />
+                <FileCode className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
               )}
               <span>STRATEGY BACKTEST</span>
             </button>
@@ -1167,9 +1167,9 @@ export default function QuantLabPage() {
             {/* Live Cockpit Execution Status Badge */}
             <LiveCockpitStatusBadge onClick={() => setIsLiveOBModalOpen(true)} variant="full" />
 
-            <div className="hidden lg:flex flex-col text-right font-mono pr-3 border-r border-slate-800/50">
-              <span className="text-[9px] text-slate-500 uppercase">Engine Node</span>
-              <span className="text-xs text-emerald-400 font-bold flex items-center gap-1.5 justify-end">
+            <div className="hidden lg:flex flex-col text-right font-mono pr-3 border-r border-card-border/60 dark:border-slate-800/50">
+              <span className="text-[9px] text-muted dark:text-slate-500 uppercase">Engine Node</span>
+              <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1.5 justify-end">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 ONLINE [V{SYSTEM_VERSION}]
               </span>
@@ -1177,7 +1177,7 @@ export default function QuantLabPage() {
 
             <button
               onClick={() => setIsSoundSettingsOpen(true)}
-              className="px-3 py-1.5 border border-purple-500/30 text-[10px] font-mono font-bold uppercase rounded-lg bg-purple-950/20 text-purple-400 hover:bg-purple-950/40 hover:border-purple-400/50 transition cursor-pointer"
+              className="px-3 py-1.5 border border-purple-500/30 text-[10px] font-mono font-bold uppercase rounded-lg bg-purple-500/10 dark:bg-purple-950/20 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 hover:dark:bg-purple-950/40 hover:border-purple-400/50 transition cursor-pointer shadow-xs"
             >
               Command Center
             </button>
@@ -1201,26 +1201,26 @@ export default function QuantLabPage() {
             />
           ) : activeMainTab === 'OB_SCANNER' ? (
             // Historical OB Scans List
-            <div className="border border-slate-800/50 bg-slate-900/30 backdrop-blur-sm rounded-lg p-5">
+            <div className="border border-card-border dark:border-slate-800/50 bg-card/75 dark:bg-slate-900/30 backdrop-blur-sm rounded-xl p-5 shadow-xs">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xs uppercase tracking-widest text-slate-400 font-mono font-bold flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-emerald-400" />
+                <h2 className="text-xs uppercase tracking-widest text-muted dark:text-slate-400 font-mono font-bold flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                   <span>Historical OB Scans</span>
                 </h2>
-                <span className="px-2 py-0.5 rounded text-[9px] bg-slate-800 text-slate-300 font-mono">
+                <span className="px-2 py-0.5 rounded text-[9px] bg-muted/15 text-foreground dark:bg-slate-800 dark:text-slate-300 font-mono">
                   {obScansList.length} SCANS
                 </span>
               </div>
 
               {loadingObScans ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-2 text-slate-500 font-mono text-xs">
-                  <RefreshCw className="w-5 h-5 animate-spin" />
+                <div className="flex flex-col items-center justify-center py-12 gap-2 text-muted dark:text-slate-500 font-mono text-xs">
+                  <RefreshCw className="w-5 h-5 animate-spin text-emerald-500" />
                   <span>Loading scan records...</span>
                 </div>
               ) : obScansList.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 border border-dashed border-slate-800 rounded-lg text-slate-500 font-mono text-[11px] text-center p-4">
+                <div className="flex flex-col items-center justify-center py-12 border border-dashed border-card-border dark:border-slate-800 rounded-xl text-muted dark:text-slate-500 font-mono text-[11px] text-center p-4">
                   <span>No Order Block scans recorded in database.</span>
-                  <span className="text-[9px] text-slate-600 mt-1">Configure multi-month lookback parameters and run a deep scan.</span>
+                  <span className="text-[9px] text-muted/80 dark:text-slate-600 mt-1">Configure multi-month lookback parameters and run a deep scan.</span>
                 </div>
               ) : (
                 <div className="flex flex-col gap-2.5 max-h-[560px] overflow-y-auto pr-1">
@@ -1233,19 +1233,19 @@ export default function QuantLabPage() {
                       <div
                         key={scan.id}
                         onClick={() => handleSelectObScan(scan)}
-                        className={`group cursor-pointer border rounded-lg p-3.5 transition text-left flex flex-col justify-between ${
+                        className={`group cursor-pointer border rounded-xl p-3.5 transition text-left flex flex-col justify-between shadow-xs ${
                           isSelected
-                            ? "border-emerald-500/60 bg-emerald-950/15 shadow-sm shadow-emerald-500/10"
-                            : "border-slate-800/60 bg-slate-900/40 hover:bg-slate-900/80 hover:border-slate-700"
+                            ? "border-emerald-500/60 bg-emerald-500/10 dark:bg-emerald-950/15 shadow-sm shadow-emerald-500/10"
+                            : "border-card-border/70 dark:border-slate-800/60 bg-card/60 dark:bg-slate-900/40 hover:bg-muted/10 hover:dark:bg-slate-900/80 hover:border-emerald-500/40"
                         }`}
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <h3 className="text-xs font-mono font-bold text-slate-200 uppercase tracking-tight group-hover:text-emerald-400 transition">
+                            <h3 className="text-xs font-mono font-bold text-foreground dark:text-slate-200 uppercase tracking-tight group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition">
                               {scan.scan_name}
                             </h3>
-                            <span className="text-[9px] text-slate-500 font-mono flex items-center gap-1.5 mt-0.5">
-                              <span className="text-emerald-400/90 font-bold">{scan.symbol}</span>
+                            <span className="text-[9px] text-muted dark:text-slate-500 font-mono flex items-center gap-1.5 mt-0.5">
+                              <span className="text-emerald-600 dark:text-emerald-400/90 font-bold">{scan.symbol}</span>
                               <span>•</span>
                               <span>{scan.timeframe} TF</span>
                               <span>•</span>
@@ -1254,29 +1254,29 @@ export default function QuantLabPage() {
                           </div>
                           <button
                             onClick={(e) => handleDeleteObScan(e, scan.id)}
-                            className="text-slate-600 hover:text-rose-400 p-1 rounded hover:bg-rose-950/20 transition opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            className="text-muted hover:text-rose-600 dark:text-slate-600 dark:hover:text-rose-400 p-1 rounded hover:bg-rose-500/10 dark:hover:bg-rose-950/20 transition opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer"
                             title="Delete Scan Record"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-4 gap-1.5 border-t border-slate-800/40 pt-2.5 mt-1 font-mono text-[9px] text-center">
+                        <div className="grid grid-cols-4 gap-1.5 border-t border-card-border/60 dark:border-slate-800/40 pt-2.5 mt-1 font-mono text-[9px] text-center">
                           <div className="flex flex-col">
-                            <span className="text-slate-500 uppercase text-[8px]">OBs</span>
-                            <span className="font-bold text-slate-200">{scan.total_detected}</span>
+                            <span className="text-muted dark:text-slate-500 uppercase text-[8px]">OBs</span>
+                            <span className="font-bold text-foreground dark:text-slate-200">{scan.total_detected}</span>
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-slate-500 uppercase text-[8px]">Valid %</span>
-                            <span className="font-bold text-emerald-400">{validationRate.toFixed(0)}%</span>
+                            <span className="text-muted dark:text-slate-500 uppercase text-[8px]">Valid %</span>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">{validationRate.toFixed(0)}%</span>
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-slate-500 uppercase text-[8px]">MT React</span>
-                            <span className="font-bold text-slate-300">{Number(scan.mt_reaction_rate_pct).toFixed(0)}%</span>
+                            <span className="text-muted dark:text-slate-500 uppercase text-[8px]">MT React</span>
+                            <span className="font-bold text-foreground/90 dark:text-slate-300">{Number(scan.mt_reaction_rate_pct).toFixed(0)}%</span>
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-slate-500 uppercase text-[8px]">Win Rate</span>
-                            <span className={`font-bold ${winRate >= 50 ? "text-emerald-400" : "text-rose-400"}`}>
+                            <span className="text-muted dark:text-slate-500 uppercase text-[8px]">Win Rate</span>
+                            <span className={`font-bold ${winRate >= 50 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
                               {winRate.toFixed(0)}%
                             </span>
                           </div>
@@ -1289,21 +1289,21 @@ export default function QuantLabPage() {
             </div>
           ) : (
             // Historical Strategy Runs List (Strategy Mode)
-            <div className="border border-slate-800/50 bg-slate-900/30 backdrop-blur-sm rounded-lg p-5">
-              <h2 className="text-xs uppercase tracking-widest text-slate-400 font-mono font-bold mb-4 flex items-center justify-between">
+            <div className="border border-card-border dark:border-slate-800/50 bg-card/75 dark:bg-slate-900/30 backdrop-blur-sm rounded-xl p-5 shadow-xs">
+              <h2 className="text-xs uppercase tracking-widest text-muted dark:text-slate-400 font-mono font-bold mb-4 flex items-center justify-between">
                 <span>Historical Strategy Runs</span>
-                <span className="px-2 py-0.5 rounded text-[9px] bg-slate-800 text-slate-300 font-normal">
+                <span className="px-2 py-0.5 rounded text-[9px] bg-muted/15 text-foreground dark:bg-slate-800 dark:text-slate-300 font-normal">
                   {runs.length} TOTAL
                 </span>
               </h2>
 
               {loadingRuns ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-2 text-slate-500 font-mono text-xs">
-                  <RefreshCw className="w-5 h-5 animate-spin" />
+                <div className="flex flex-col items-center justify-center py-12 gap-2 text-muted dark:text-slate-500 font-mono text-xs">
+                  <RefreshCw className="w-5 h-5 animate-spin text-purple-500" />
                   <span>Loading run ledger...</span>
                 </div>
               ) : runs.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 border border-dashed border-slate-800 rounded-lg text-slate-500 font-mono text-[11px] text-center p-4">
+                <div className="flex flex-col items-center justify-center py-12 border border-dashed border-card-border dark:border-slate-800 rounded-xl text-muted dark:text-slate-500 font-mono text-[11px] text-center p-4">
                   <span>No strategy runs recorded in database.</span>
                 </div>
               ) : (
@@ -1315,43 +1315,43 @@ export default function QuantLabPage() {
                       <div
                         key={run.id}
                         onClick={() => handleSelectRun(run)}
-                        className={`group cursor-pointer border rounded-lg p-3.5 transition text-left flex flex-col justify-between ${
+                        className={`group cursor-pointer border rounded-xl p-3.5 transition text-left flex flex-col justify-between shadow-xs ${
                           isSelected
-                            ? "border-emerald-500/50 bg-emerald-950/10"
-                            : "border-slate-800/40 bg-slate-900/20 hover:bg-slate-900/60"
+                            ? "border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-950/10"
+                            : "border-card-border/70 dark:border-slate-800/40 bg-card/60 dark:bg-slate-900/20 hover:bg-muted/10 hover:dark:bg-slate-900/60"
                         }`}
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <h3 className="text-xs font-mono font-bold text-slate-200 uppercase tracking-tight group-hover:text-white transition">
+                            <h3 className="text-xs font-mono font-bold text-foreground dark:text-slate-200 uppercase tracking-tight group-hover:text-emerald-600 dark:group-hover:text-white transition">
                               {run.name}
                             </h3>
-                            <span className="text-[9px] text-slate-500 font-mono">
+                            <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
                               {run.symbol} | {run.strategy_config?.conditions?.target_timeframe || "5m"}
                             </span>
                           </div>
                           <button
                             onClick={(e) => handleDeleteRun(e, run.id)}
-                            className="text-slate-600 hover:text-rose-400 p-1 rounded hover:bg-rose-950/20 transition opacity-0 group-hover:opacity-100 focus:opacity-100"
+                            className="text-muted hover:text-rose-600 dark:text-slate-600 dark:hover:text-rose-400 p-1 rounded hover:bg-rose-500/10 dark:hover:bg-rose-950/20 transition opacity-0 group-hover:opacity-100 focus:opacity-100 cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
 
-                        <div className="flex items-center justify-between border-t border-slate-800/30 pt-2.5 mt-1 font-mono text-[10px]">
+                        <div className="flex items-center justify-between border-t border-card-border/60 dark:border-slate-800/30 pt-2.5 mt-1 font-mono text-[10px]">
                           <div className="flex flex-col">
-                            <span className="text-slate-500 text-[8px] uppercase">Win Rate</span>
-                            <span className="font-bold text-slate-300">
+                            <span className="text-muted dark:text-slate-500 text-[8px] uppercase">Win Rate</span>
+                            <span className="font-bold text-foreground dark:text-slate-300">
                               {Number(run.win_rate_pct).toFixed(1)}%
                             </span>
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-slate-500 text-[8px] uppercase">Trades</span>
-                            <span className="font-bold text-slate-300">{run.total_trades}</span>
+                            <span className="text-muted dark:text-slate-500 text-[8px] uppercase">Trades</span>
+                            <span className="font-bold text-foreground dark:text-slate-300">{run.total_trades}</span>
                           </div>
                           <div className="flex flex-col text-right">
-                            <span className="text-slate-500 text-[8px] uppercase">Total PnL</span>
-                            <span className={`font-bold ${isPositive ? "text-emerald-400" : "text-rose-400"}`}>
+                            <span className="text-muted dark:text-slate-500 text-[8px] uppercase">Total PnL</span>
+                            <span className={`font-bold ${isPositive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
                               {isPositive ? "+" : ""}${Number(run.total_pnl).toFixed(2)}
                             </span>
                           </div>
@@ -1387,56 +1387,57 @@ export default function QuantLabPage() {
             // =================================================================
             <>
               {/* Scan Configuration Panel */}
-              <section className="border border-slate-800/50 bg-slate-900/30 backdrop-blur-sm rounded-lg p-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800/50 pb-4 mb-5 gap-3">
-                  <h2 className="text-xs uppercase tracking-widest text-slate-300 font-mono font-bold flex items-center gap-2">
-                    <Sliders className="w-4 h-4 text-emerald-400" />
+              <section className="border border-card-border dark:border-slate-800/50 bg-card/75 dark:bg-slate-900/30 backdrop-blur-sm rounded-xl p-5 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-card-border/60 dark:border-slate-800/50 pb-4 mb-5 gap-3">
+                  <h2 className="text-xs uppercase tracking-widest text-foreground dark:text-slate-300 font-mono font-bold flex items-center gap-2">
+                    <Sliders className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                     <span>Deep Historical OB Scanner Configuration</span>
                   </h2>
 
                   {/* Quick Lookback Preset Buttons */}
                   <div className="flex items-center gap-1.5 font-mono text-[10px]">
-                    <span className="text-slate-500 text-[9px] uppercase mr-1">Lookback:</span>
+                    <span className="text-muted dark:text-slate-500 text-[9px] uppercase mr-1">Lookback:</span>
                     <button
                       onClick={() => setQuickDateRange(30)}
-                      className="px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-700 text-slate-300 transition"
+                      className="px-2 py-1 rounded-md bg-card dark:bg-slate-800/60 hover:bg-muted/15 hover:dark:bg-slate-700 border border-card-border dark:border-transparent text-foreground dark:text-slate-300 transition cursor-pointer shadow-xs"
                     >
                       30D
                     </button>
                     <button
                       onClick={() => setQuickDateRange(60)}
-                      className="px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-700 text-slate-300 transition"
+                      className="px-2 py-1 rounded-md bg-card dark:bg-slate-800/60 hover:bg-muted/15 hover:dark:bg-slate-700 border border-card-border dark:border-transparent text-foreground dark:text-slate-300 transition cursor-pointer shadow-xs"
                     >
                       60D
                     </button>
                     <button
                       onClick={() => setQuickDateRange(90)}
-                      className="px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-700 text-slate-300 transition"
+                      className="px-2 py-1 rounded-md bg-card dark:bg-slate-800/60 hover:bg-muted/15 hover:dark:bg-slate-700 border border-card-border dark:border-transparent text-foreground dark:text-slate-300 transition cursor-pointer shadow-xs"
                     >
                       90D
                     </button>
                     <button
                       onClick={() => setQuickDateRange(180)}
-                      className="px-2 py-1 rounded bg-slate-800/60 hover:bg-slate-700 text-slate-300 transition"
+                      className="px-2 py-1 rounded-md bg-card dark:bg-slate-800/60 hover:bg-muted/15 hover:dark:bg-slate-700 border border-card-border dark:border-transparent text-foreground dark:text-slate-300 transition cursor-pointer shadow-xs"
                     >
                       180D
                     </button>
                   </div>
                 </div>
 
-                {/* Local-First Scanner Preset Control Deck */}
+                {/* Local-First Scanner Preset Control Deck (Isolated Sandbox Mode) */}
                 <div className="mb-5">
                   <ScannerPresetControlDeck
                     strategyType="ORDER_BLOCK"
                     currentConfig={currentObConfig}
                     onApplyPreset={handleApplyObPreset}
+                    mode="backtest_sandbox"
                   />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
                   {/* Scan Title */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500">
                       Scan Name
                     </label>
                     <input
@@ -1444,13 +1445,13 @@ export default function QuantLabPage() {
                       disabled={obScanning}
                       value={obScanName}
                       onChange={(e) => setObScanName(e.target.value)}
-                      className="w-full text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-emerald-500/50 outline-none rounded text-white"
+                      className="w-full text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-emerald-500 outline-none rounded-lg text-foreground dark:text-white shadow-xs"
                     />
                   </div>
 
                   {/* Symbol & Timeframe */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500">
                       Asset & Timeframe
                     </label>
                     <div className="grid grid-cols-2 gap-2">
@@ -1458,7 +1459,7 @@ export default function QuantLabPage() {
                         disabled={obScanning}
                         value={obSymbol}
                         onChange={(e) => setObSymbol(e.target.value)}
-                        className="text-xs font-mono px-2.5 py-2 bg-slate-950 border border-slate-800 focus:border-emerald-500/50 outline-none rounded text-white"
+                        className="text-xs font-mono px-2.5 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-emerald-500 outline-none rounded-lg text-foreground dark:text-white shadow-xs cursor-pointer"
                       >
                         <option value="ETHUSDC">ETHUSDC</option>
                         <option value="BTCUSDC">BTCUSDC</option>
@@ -1468,7 +1469,7 @@ export default function QuantLabPage() {
                         disabled={obScanning}
                         value={obTimeframe}
                         onChange={(e) => setObTimeframe(e.target.value as any)}
-                        className="text-xs font-mono px-2.5 py-2 bg-slate-950 border border-slate-800 focus:border-emerald-500/50 outline-none rounded text-emerald-400 font-bold"
+                        className="text-xs font-mono px-2.5 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-emerald-500 outline-none rounded-lg text-emerald-600 dark:text-emerald-400 font-bold shadow-xs cursor-pointer"
                       >
                         <option value="5m">5m TF</option>
                         <option value="15m">15m TF</option>
@@ -1480,7 +1481,7 @@ export default function QuantLabPage() {
 
                   {/* Start Date */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center gap-1">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
                       <span>Start Date</span>
                     </label>
@@ -1489,13 +1490,13 @@ export default function QuantLabPage() {
                       disabled={obScanning}
                       value={obStartDate}
                       onChange={(e) => setObStartDate(e.target.value)}
-                      className="w-full text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-emerald-500/50 outline-none rounded text-white"
+                      className="w-full text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-emerald-500 outline-none rounded-lg text-foreground dark:text-white shadow-xs"
                     />
                   </div>
 
                   {/* End Date */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center gap-1">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
                       <span>End Date</span>
                     </label>
@@ -1504,26 +1505,26 @@ export default function QuantLabPage() {
                       disabled={obScanning}
                       value={obEndDate}
                       onChange={(e) => setObEndDate(e.target.value)}
-                      className="w-full text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-emerald-500/50 outline-none rounded text-white"
+                      className="w-full text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-emerald-500 outline-none rounded-lg text-foreground dark:text-white shadow-xs"
                     />
                   </div>
                 </div>
 
                 {/* Advanced Quantitative Directives */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-slate-800/40 pt-4 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-card-border/60 dark:border-slate-800/40 pt-4 mb-4">
                   {/* Consecutive Candle Aggregation */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Consecutive Aggregation</span>
-                      <span className="text-[8px] text-emerald-400 font-bold">MACRO ZONES</span>
+                      <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-bold">MACRO ZONES</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => setObAggregateConsecutive(!obAggregateConsecutive)}
-                      className={`w-full py-2 px-3 rounded font-mono text-[10px] font-bold border transition ${
+                      className={`w-full py-2 px-3 rounded-lg font-mono text-[10px] font-bold border transition cursor-pointer shadow-xs ${
                         obAggregateConsecutive
-                          ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-400"
-                          : "bg-slate-950 border-slate-800 text-slate-500"
+                          ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                          : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground"
                       }`}
                     >
                       {obAggregateConsecutive ? "ENABLED (2+ BARS)" : "DISABLED (1 BAR)"}
@@ -1532,13 +1533,13 @@ export default function QuantLabPage() {
 
                   {/* Min Quality Tier Gate */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500">
                       Multi-Gate Filter Threshold
                     </label>
                     <select
                       value={obMinTier}
                       onChange={(e) => setObMinTier(e.target.value as any)}
-                      className="w-full text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-emerald-500/50 outline-none rounded text-white"
+                      className="w-full text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-emerald-500 outline-none rounded-lg text-foreground dark:text-white shadow-xs cursor-pointer"
                     >
                       <option value="ALL">ALL DETECTED (A+, A, B, UNVALIDATED)</option>
                       <option value="A_AND_A_PLUS">HIGH CONFLUENCE (A & A+ ONLY)</option>
@@ -1548,14 +1549,14 @@ export default function QuantLabPage() {
 
                   {/* Entry Mode */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Precision Entry Mode</span>
-                      <span className="text-[8px] text-cyan-400 font-bold">50% MT</span>
+                      <span className="text-[8px] text-cyan-600 dark:text-cyan-400 font-bold">50% MT</span>
                     </label>
                     <select
                       value={obEntryMode}
                       onChange={(e) => setObEntryMode(e.target.value as any)}
-                      className="w-full text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-emerald-500/50 outline-none rounded text-cyan-300 font-bold"
+                      className="w-full text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-emerald-500 outline-none rounded-lg text-cyan-600 dark:text-cyan-300 font-bold shadow-xs cursor-pointer"
                     >
                       <option value="BOUNDARY">OB Edge (Proximal Boundary)</option>
                       <option value="MEAN_THRESHOLD">Mean Threshold (50% Midpoint)</option>
@@ -1564,13 +1565,13 @@ export default function QuantLabPage() {
 
                   {/* Target Reward Ratio */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500">
                       TP2 Runner Target (R:R)
                     </label>
                     <select
                       value={obTargetRr}
                       onChange={(e) => setObTargetRr(Number(e.target.value))}
-                      className="w-full text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-emerald-500/50 outline-none rounded text-slate-300"
+                      className="w-full text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-emerald-500 outline-none rounded-lg text-foreground dark:text-slate-300 shadow-xs cursor-pointer"
                     >
                       <option value={1.5}>1:1.5 Target R:R</option>
                       <option value={2.0}>1:2.0 Target R:R</option>
@@ -1582,12 +1583,12 @@ export default function QuantLabPage() {
                 </div>
 
                 {/* Phase 2 & 3 Institutional Execution & Trade Management Gates */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-slate-800/40 pt-4 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-card-border/60 dark:border-slate-800/40 pt-4 mb-4">
                   {/* Freshness Window Limit */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>OB Freshness (Max Bars)</span>
-                      <span className="text-[8px] text-amber-400 font-bold">{obMaxBarsToMitigation}B</span>
+                      <span className="text-[8px] text-amber-600 dark:text-amber-400 font-bold">{obMaxBarsToMitigation}B</span>
                     </label>
                     <div className="grid grid-cols-4 gap-1 font-mono text-[10px]">
                       {[12, 24, 48, 96].map(bars => (
@@ -1595,10 +1596,10 @@ export default function QuantLabPage() {
                           key={bars}
                           type="button"
                           onClick={() => setObMaxBarsToMitigation(bars)}
-                          className={`py-1.5 rounded border font-bold transition ${
+                          className={`py-1.5 rounded-lg border font-bold transition cursor-pointer shadow-xs ${
                             obMaxBarsToMitigation === bars
-                              ? "bg-amber-950/40 border-amber-500/50 text-amber-300"
-                              : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                              ? "bg-amber-500/15 border-amber-500/50 text-amber-600 dark:text-amber-300"
+                              : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground"
                           }`}
                         >
                           {bars}B
@@ -1609,9 +1610,9 @@ export default function QuantLabPage() {
 
                   {/* Breaker Max Retest Bars (Phase 3) */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Breaker Expiry (Max Bars)</span>
-                      <span className="text-[8px] text-purple-400 font-bold">{obMaxBreakerRetestBars}B</span>
+                      <span className="text-[8px] text-purple-600 dark:text-purple-400 font-bold">{obMaxBreakerRetestBars}B</span>
                     </label>
                     <div className="grid grid-cols-4 gap-1 font-mono text-[10px]">
                       {[10, 20, 30, 50].map(bars => (
@@ -1619,10 +1620,10 @@ export default function QuantLabPage() {
                           key={bars}
                           type="button"
                           onClick={() => setObMaxBreakerRetestBars(bars)}
-                          className={`py-1.5 rounded border font-bold transition ${
+                          className={`py-1.5 rounded-lg border font-bold transition cursor-pointer shadow-xs ${
                             obMaxBreakerRetestBars === bars
-                              ? "bg-purple-950/40 border-purple-500/50 text-purple-300"
-                              : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                              ? "bg-purple-500/15 border-purple-500/50 text-purple-600 dark:text-purple-300"
+                              : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground"
                           }`}
                         >
                           {bars}B
@@ -1633,17 +1634,17 @@ export default function QuantLabPage() {
 
                   {/* Tier A+ Strict Execution Gate (Sweep Mandate) */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Tier A+ Sweep Mandate</span>
-                      <span className="text-[8px] text-emerald-400 font-bold">SWEEP GATE</span>
+                      <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-bold">SWEEP GATE</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => setObStrictTierAPlus(!obStrictTierAPlus)}
-                      className={`w-full py-1.5 px-2 rounded font-mono text-[10px] font-bold border transition ${
+                      className={`w-full py-1.5 px-2 rounded-lg font-mono text-[10px] font-bold border transition cursor-pointer shadow-xs ${
                         obStrictTierAPlus
-                          ? "bg-emerald-950/50 border-emerald-500/60 text-emerald-300"
-                          : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                          ? "bg-emerald-500/15 border-emerald-500/60 text-emerald-600 dark:text-emerald-300"
+                          : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground"
                       }`}
                     >
                       {obStrictTierAPlus ? "⭐ STRICT (GATE 1 REQUIRED)" : "STANDARD (ANY TIER)"}
@@ -1652,17 +1653,17 @@ export default function QuantLabPage() {
 
                   {/* Dynamic Trade Management (TP1 + BE Trail) */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Dynamic TP1 / BE Trail</span>
-                      <span className="text-[8px] text-cyan-400 font-bold">50% @ 1.0R</span>
+                      <span className="text-[8px] text-cyan-600 dark:text-cyan-400 font-bold">50% @ 1.0R</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => setObEnableDynamicMgmt(!obEnableDynamicMgmt)}
-                      className={`w-full py-1.5 px-2 rounded font-mono text-[10px] font-bold border transition ${
+                      className={`w-full py-1.5 px-2 rounded-lg font-mono text-[10px] font-bold border transition cursor-pointer shadow-xs ${
                         obEnableDynamicMgmt
-                          ? "bg-cyan-950/50 border-cyan-500/60 text-cyan-300"
-                          : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                          ? "bg-cyan-500/15 border-cyan-500/60 text-cyan-600 dark:text-cyan-300"
+                          : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground"
                       }`}
                     >
                       {obEnableDynamicMgmt ? "🛡️ ACTIVE (SCALE 50% & BE TRAIL)" : "OFF (ALL-OR-NOTHING)"}
@@ -1671,20 +1672,20 @@ export default function QuantLabPage() {
                 </div>
 
                 {/* Phase 4 Institutional Breaker Confirmation & DOL Gates */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-slate-800/40 pt-4 mb-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-card-border/60 dark:border-slate-800/40 pt-4 mb-5">
                   {/* Micro MSS + FVG Confirmation Gate */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>In-Zone Micro MSS Gate</span>
-                      <span className="text-[8px] text-purple-400 font-bold">REVERSAL SHIFT</span>
+                      <span className="text-[8px] text-purple-600 dark:text-purple-400 font-bold">REVERSAL SHIFT</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => setObRequireBreakerConfirmation(!obRequireBreakerConfirmation)}
-                      className={`w-full py-1.5 px-2 rounded font-mono text-[10px] font-bold border transition ${
+                      className={`w-full py-1.5 px-2 rounded-lg font-mono text-[10px] font-bold border transition cursor-pointer shadow-xs ${
                         obRequireBreakerConfirmation
-                          ? "bg-purple-950/50 border-purple-500/60 text-purple-300"
-                          : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                          ? "bg-purple-500/15 border-purple-500/60 text-purple-600 dark:text-purple-300"
+                          : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground"
                       }`}
                     >
                       {obRequireBreakerConfirmation ? "🎯 CONFIRMED (MSS + FVG REQUIRED)" : "BLIND (INSTANT TOUCH FILL)"}
@@ -1693,17 +1694,17 @@ export default function QuantLabPage() {
 
                   {/* Draw on Liquidity (DOL) Gatekeeper */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Draw on Liquidity (DOL)</span>
-                      <span className="text-[8px] text-emerald-400 font-bold">BSL/SSL TARGET</span>
+                      <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-bold">BSL/SSL TARGET</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => setObRequireBreakerDOL(!obRequireBreakerDOL)}
-                      className={`w-full py-1.5 px-2 rounded font-mono text-[10px] font-bold border transition ${
+                      className={`w-full py-1.5 px-2 rounded-lg font-mono text-[10px] font-bold border transition cursor-pointer shadow-xs ${
                         obRequireBreakerDOL
-                          ? "bg-emerald-950/50 border-emerald-500/60 text-emerald-300"
-                          : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                          ? "bg-emerald-500/15 border-emerald-500/60 text-emerald-600 dark:text-emerald-300"
+                          : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground"
                       }`}
                     >
                       {obRequireBreakerDOL ? "🧲 ACTIVE (MANDATE DOL TARGET)" : "OFF (STATIC R:R ONLY)"}
@@ -1712,17 +1713,17 @@ export default function QuantLabPage() {
 
                   {/* Volumetric Sponsorship Gate */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Volumetric Sponsorship</span>
-                      <span className="text-[8px] text-cyan-400 font-bold">DELTA & EXP</span>
+                      <span className="text-[8px] text-cyan-600 dark:text-cyan-400 font-bold">DELTA & EXP</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => setObRequireBreakerVolumetric(!obRequireBreakerVolumetric)}
-                      className={`w-full py-1.5 px-2 rounded font-mono text-[10px] font-bold border transition ${
+                      className={`w-full py-1.5 px-2 rounded-lg font-mono text-[10px] font-bold border transition cursor-pointer shadow-xs ${
                         obRequireBreakerVolumetric
-                          ? "bg-cyan-950/50 border-cyan-500/60 text-cyan-300"
-                          : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                          ? "bg-cyan-500/15 border-cyan-500/60 text-cyan-600 dark:text-cyan-300"
+                          : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground"
                       }`}
                     >
                       {obRequireBreakerVolumetric ? "⚡ ACTIVE (TAKER DELTA ≥1.15x)" : "OFF (PRICE ONLY)"}
@@ -1731,14 +1732,14 @@ export default function QuantLabPage() {
 
                   {/* Session Alignment Filter */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Session Alignment</span>
-                      <span className="text-[8px] text-amber-400 font-bold">ICT MACROS</span>
+                      <span className="text-[8px] text-amber-600 dark:text-amber-400 font-bold">ICT MACROS</span>
                     </label>
                     <select
                       value={obBreakerSessionFilter}
                       onChange={(e) => setObBreakerSessionFilter(e.target.value as any)}
-                      className="w-full text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-purple-500/50 outline-none rounded text-slate-300"
+                      className="w-full text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-purple-500 outline-none rounded-lg text-foreground dark:text-slate-300 shadow-xs cursor-pointer"
                     >
                       <option value="ALL">All Trading Hours</option>
                       <option value="NY_AND_LONDON">NY & London Sessions Only</option>
@@ -1749,20 +1750,20 @@ export default function QuantLabPage() {
                 </div>
 
                 {/* Phase 5 Structural Trailing Stop & Expectancy Expansion Controls */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-slate-800/40 pt-4 mb-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-card-border/60 dark:border-slate-800/40 pt-4 mb-5">
                   {/* Trailing Stop Mode (Breathing Room Model) */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Trailing Stop Mode</span>
-                      <span className="text-[8px] text-cyan-400 font-bold">STAGE 2 TRAIL</span>
+                      <span className="text-[8px] text-cyan-600 dark:text-cyan-400 font-bold">STAGE 2 TRAIL</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => setObTrailingStopMode(obTrailingStopMode === "STRUCTURAL_FVG_TRAIL" ? "STATIC_BREAKEVEN" : "STRUCTURAL_FVG_TRAIL")}
-                      className={`w-full py-1.5 px-2 rounded font-mono text-[10px] font-bold border transition ${
+                      className={`w-full py-1.5 px-2 rounded-lg font-mono text-[10px] font-bold border transition cursor-pointer shadow-xs ${
                         obTrailingStopMode === "STRUCTURAL_FVG_TRAIL"
-                          ? "bg-cyan-950/50 border-cyan-500/60 text-cyan-300"
-                          : "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-300"
+                          ? "bg-cyan-500/15 border-cyan-500/60 text-cyan-600 dark:text-cyan-300"
+                          : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-400 hover:text-foreground"
                       }`}
                     >
                       {obTrailingStopMode === "STRUCTURAL_FVG_TRAIL" ? "🌊 STRUCTURAL FVG (BREATHING ROOM)" : "🔒 STATIC BREAKEVEN (0.0R)"}
@@ -1771,17 +1772,17 @@ export default function QuantLabPage() {
 
                   {/* Dynamic DOL TP2 Scaling */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Dynamic DOL TP2 Scaling</span>
-                      <span className="text-[8px] text-emerald-400 font-bold">EXPANSION</span>
+                      <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-bold">EXPANSION</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => setObDynamicDolTp2Scaling(!obDynamicDolTp2Scaling)}
-                      className={`w-full py-1.5 px-2 rounded font-mono text-[10px] font-bold border transition ${
+                      className={`w-full py-1.5 px-2 rounded-lg font-mono text-[10px] font-bold border transition cursor-pointer shadow-xs ${
                         obDynamicDolTp2Scaling
-                          ? "bg-emerald-950/50 border-emerald-500/60 text-emerald-300"
-                          : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                          ? "bg-emerald-500/15 border-emerald-500/60 text-emerald-600 dark:text-emerald-300"
+                          : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground"
                       }`}
                     >
                       {obDynamicDolTp2Scaling ? "🚀 DOL SCALED TP2 (CAPTURE RUNNERS)" : "STATIC TP2 MULTIPLE"}
@@ -1790,17 +1791,17 @@ export default function QuantLabPage() {
 
                   {/* Adaptive Breaker Confirmation */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Adaptive Breaker Gate</span>
-                      <span className="text-[8px] text-purple-400 font-bold">FVG OR VOL EXP</span>
+                      <span className="text-[8px] text-purple-600 dark:text-purple-400 font-bold">FVG OR VOL EXP</span>
                     </label>
                     <button
                       type="button"
                       onClick={() => setObAdaptiveBreakerConfirmation(!obAdaptiveBreakerConfirmation)}
-                      className={`w-full py-1.5 px-2 rounded font-mono text-[10px] font-bold border transition ${
+                      className={`w-full py-1.5 px-2 rounded-lg font-mono text-[10px] font-bold border transition cursor-pointer shadow-xs ${
                         obAdaptiveBreakerConfirmation
-                          ? "bg-purple-950/50 border-purple-500/60 text-purple-300"
-                          : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                          ? "bg-purple-500/15 border-purple-500/60 text-purple-600 dark:text-purple-300"
+                          : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground"
                       }`}
                     >
                       {obAdaptiveBreakerConfirmation ? "⚡ ADAPTIVE (FVG OR VOL ≥1.25x)" : "STRICT (FVG MANDATED)"}
@@ -1809,9 +1810,9 @@ export default function QuantLabPage() {
 
                   {/* Trailing Buffer Offset */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Trail Buffer Offset</span>
-                      <span className="text-[8px] text-amber-400 font-bold">±${obTrailingBuffer}</span>
+                      <span className="text-[8px] text-amber-600 dark:text-amber-400 font-bold">±${obTrailingBuffer}</span>
                     </label>
                     <div className="grid grid-cols-4 gap-1 font-mono text-[10px]">
                       {[0.02, 0.05, 0.10, 0.20].map(buf => (
@@ -1819,10 +1820,10 @@ export default function QuantLabPage() {
                           key={buf}
                           type="button"
                           onClick={() => setObTrailingBuffer(buf)}
-                          className={`py-1.5 rounded border font-bold transition ${
+                          className={`py-1.5 rounded-lg border font-bold transition cursor-pointer shadow-xs ${
                             obTrailingBuffer === buf
-                              ? "bg-amber-950/40 border-amber-500/50 text-amber-300"
-                              : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                              ? "bg-amber-500/15 border-amber-500/50 text-amber-600 dark:text-amber-300"
+                              : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground"
                           }`}
                         >
                           {buf}
@@ -1833,17 +1834,17 @@ export default function QuantLabPage() {
                 </div>
 
                 {/* Phase 6 Multi-Stage Institutional Harvest & Position Runner Controls */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-slate-800/40 pt-4 mb-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 border-t border-card-border/60 dark:border-slate-800/40 pt-4 mb-5">
                   {/* Position Scaling Mode */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Scaling Architecture</span>
-                      <span className="text-[8px] text-cyan-400 font-bold">3-STAGE TRANCHES</span>
+                      <span className="text-[8px] text-cyan-600 dark:text-cyan-400 font-bold">3-STAGE TRANCHES</span>
                     </label>
                     <select
                       value={obPositionScalingMode}
                       onChange={(e) => setObPositionScalingMode(e.target.value as any)}
-                      className="w-full text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-cyan-500/50 outline-none rounded text-cyan-300"
+                      className="w-full text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-cyan-500 outline-none rounded-lg text-cyan-600 dark:text-cyan-300 shadow-xs cursor-pointer"
                     >
                       <option value="THREE_STAGE_HARVEST">🌾 3-Stage Harvest (40% / 40% / 20%)</option>
                       <option value="TWO_STAGE_DYNAMIC">⚖️ 2-Stage Dynamic (50% / 50%)</option>
@@ -1853,9 +1854,9 @@ export default function QuantLabPage() {
 
                   {/* Stage 2 Multiple */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Stage 2 TP2 Multiple</span>
-                      <span className="text-[8px] text-emerald-400 font-bold">{obTp2Multiple}R (+1.0R FLOOR)</span>
+                      <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-bold">{obTp2Multiple}R (+1.0R FLOOR)</span>
                     </label>
                     <div className="grid grid-cols-4 gap-1 font-mono text-[10px]">
                       {[1.3, 1.5, 1.8, 2.0].map(mult => (
@@ -1863,10 +1864,10 @@ export default function QuantLabPage() {
                           key={mult}
                           type="button"
                           onClick={() => setObTp2Multiple(mult)}
-                          className={`py-1.5 rounded border font-bold transition ${
+                          className={`py-1.5 rounded-lg border font-bold transition cursor-pointer shadow-xs ${
                             obTp2Multiple === mult
-                              ? "bg-emerald-950/40 border-emerald-500/50 text-emerald-300"
-                              : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                              ? "bg-emerald-500/15 border-emerald-500/50 text-emerald-600 dark:text-emerald-300"
+                              : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground"
                           }`}
                         >
                           {mult}R
@@ -1877,22 +1878,22 @@ export default function QuantLabPage() {
 
                   {/* Tranche Allocation Matrix */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Tranche Allocation</span>
-                      <span className="text-[8px] text-purple-400 font-bold">40% • 40% • 20%</span>
+                      <span className="text-[8px] text-purple-600 dark:text-purple-400 font-bold">40% • 40% • 20%</span>
                     </label>
-                    <div className="w-full py-1.5 px-2.5 rounded font-mono text-[10px] font-bold border border-slate-800 bg-slate-950 text-slate-400 flex items-center justify-between">
-                      <span className="text-cyan-300">TP1: 40%</span>
-                      <span className="text-emerald-300">TP2: 40%</span>
-                      <span className="text-purple-300">Runner: 20%</span>
+                    <div className="w-full py-1.5 px-2.5 rounded-lg font-mono text-[10px] font-bold border border-card-border dark:border-slate-800 bg-background dark:bg-slate-950 text-muted dark:text-slate-400 flex items-center justify-between shadow-xs">
+                      <span className="text-cyan-600 dark:text-cyan-300">TP1: 40%</span>
+                      <span className="text-emerald-600 dark:text-emerald-300">TP2: 40%</span>
+                      <span className="text-purple-600 dark:text-purple-300">Runner: 20%</span>
                     </div>
                   </div>
 
                   {/* Stage 3 Target R:R / DOL Multiple */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[9px] uppercase font-mono font-semibold text-slate-500 flex items-center justify-between">
+                    <label className="text-[9px] uppercase font-mono font-semibold text-muted dark:text-slate-500 flex items-center justify-between">
                       <span>Stage 3 Target R:R</span>
-                      <span className="text-[8px] text-amber-400 font-bold">{obTargetRr}R+ (DOL)</span>
+                      <span className="text-[8px] text-amber-600 dark:text-amber-400 font-bold">{obTargetRr}R+ (DOL)</span>
                     </label>
                     <div className="grid grid-cols-4 gap-1 font-mono text-[10px]">
                       {[2.0, 2.5, 3.0, 4.0].map(rr => (
@@ -1900,10 +1901,10 @@ export default function QuantLabPage() {
                           key={rr}
                           type="button"
                           onClick={() => setObTargetRr(rr)}
-                          className={`py-1.5 rounded border font-bold transition ${
+                          className={`py-1.5 rounded-lg border font-bold transition cursor-pointer shadow-xs ${
                             obTargetRr === rr
-                              ? "bg-amber-950/40 border-amber-500/50 text-amber-300"
-                              : "bg-slate-950 border-slate-800 text-slate-500 hover:text-slate-300"
+                              ? "bg-amber-500/15 border-amber-500/50 text-amber-600 dark:text-amber-300"
+                              : "bg-card dark:bg-slate-950 border-card-border dark:border-slate-800 text-muted dark:text-slate-500 hover:text-foreground"
                           }`}
                         >
                           {rr}R
@@ -1914,30 +1915,30 @@ export default function QuantLabPage() {
                 </div>
 
                 {/* Scan Trigger Action */}
-                <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-800/40 pt-4 gap-4">
+                <div className="flex flex-col sm:flex-row items-center justify-between border-t border-card-border/60 dark:border-slate-800/40 pt-4 gap-4">
                   <div className="font-mono text-left">
-                    <span className="text-[9px] text-slate-500 uppercase block">Zero Look-Ahead Rule</span>
-                    <span className="text-xs text-slate-400">Step-by-step chronological candle closure validation</span>
+                    <span className="text-[9px] text-muted dark:text-slate-500 uppercase block">Zero Look-Ahead Rule</span>
+                    <span className="text-xs text-muted dark:text-slate-400">Step-by-step chronological candle closure validation</span>
                   </div>
 
                   <button
                     onClick={runOrderBlockScan}
                     disabled={obScanning}
-                    className={`w-full sm:w-auto px-6 py-2.5 rounded font-mono font-bold uppercase text-xs flex items-center justify-center gap-2 transition tracking-wider ${
+                    className={`btn-solid w-full sm:w-auto px-6 py-2.5 rounded-lg font-mono font-black uppercase text-xs flex items-center justify-center gap-2 transition tracking-wider cursor-pointer ${
                       obScanning
-                        ? "bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed"
-                        : "bg-emerald-500 text-slate-950 font-black hover:bg-emerald-400 hover:shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                        ? "bg-muted/20 border border-card-border dark:border-slate-800 text-muted dark:text-slate-500 cursor-not-allowed"
+                        : "bg-emerald-500 text-slate-950 hover:bg-emerald-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.4)]"
                     }`}
                   >
                     {obScanning ? (
                       <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Running Ingestion & Scanning...</span>
+                        <RefreshCw className="w-4 h-4 animate-spin text-slate-400" />
+                        <span className="text-slate-400">Running Ingestion & Scanning...</span>
                       </>
                     ) : (
                       <>
-                        <Play className="w-4 h-4 fill-current" />
-                        <span>Run Deep OB Scan</span>
+                        <Play className="w-4 h-4 fill-slate-950 text-slate-950" />
+                        <span className="text-slate-950 font-black">Run Deep OB Scan</span>
                       </>
                     )}
                   </button>
@@ -1946,38 +1947,38 @@ export default function QuantLabPage() {
 
               {/* Active Scanner Processing HUD */}
               {(obScanning || obProgress || (obStatusMsg && !selectedObScan)) && (
-                <section className="border border-emerald-500/30 bg-emerald-950/10 backdrop-blur-sm rounded-lg p-5 font-mono text-left animate-in fade-in duration-200">
+                <section className="border border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-950/10 backdrop-blur-sm rounded-xl p-5 font-mono text-left animate-in fade-in duration-200 shadow-xs">
                   <div className="flex items-center justify-between mb-3 border-b border-emerald-500/20 pb-3">
-                    <span className="text-[10px] uppercase font-bold text-emerald-400 flex items-center gap-1.5">
-                      <Activity className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                    <span className="text-[10px] uppercase font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                      <Activity className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 animate-pulse" />
                       Historical Ingestion & Multi-Gate Engine Active
                     </span>
                     {obScanning && (
-                      <span className="text-[9px] text-emerald-400 font-bold animate-pulse uppercase">
+                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold animate-pulse uppercase">
                         Streaming SSE
                       </span>
                     )}
                   </div>
 
-                  <p className="text-xs text-slate-200 mb-3">{obStatusMsg}</p>
+                  <p className="text-xs text-foreground dark:text-slate-200 mb-3">{obStatusMsg}</p>
 
                   {obProgress && (
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 border border-emerald-500/20 bg-slate-950/60 rounded-lg p-3 text-center">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 border border-emerald-500/20 bg-card dark:bg-slate-950/60 rounded-lg p-3 text-center shadow-xs">
                       <div className="flex flex-col">
-                        <span className="text-[8px] text-slate-500 uppercase">Phase</span>
-                        <span className="text-xs font-bold text-emerald-400">{obProgress.phase}</span>
+                        <span className="text-[8px] text-muted dark:text-slate-500 uppercase">Phase</span>
+                        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{obProgress.phase}</span>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-[8px] text-slate-500 uppercase">Candles Loaded</span>
-                        <span className="text-xs font-bold text-slate-200">{obProgress.candlesFetched || "—"}</span>
+                        <span className="text-[8px] text-muted dark:text-slate-500 uppercase">Candles Loaded</span>
+                        <span className="text-xs font-bold text-foreground dark:text-slate-200">{obProgress.candlesFetched || "—"}</span>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-[8px] text-slate-500 uppercase">Detected Blocks</span>
-                        <span className="text-xs font-bold text-slate-200">{obProgress.detectedCount ?? "—"}</span>
+                        <span className="text-[8px] text-muted dark:text-slate-500 uppercase">Detected Blocks</span>
+                        <span className="text-xs font-bold text-foreground dark:text-slate-200">{obProgress.detectedCount ?? "—"}</span>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-[8px] text-slate-500 uppercase">Status</span>
-                        <span className="text-xs font-bold text-emerald-400">PROCESSING</span>
+                        <span className="text-[8px] text-muted dark:text-slate-500 uppercase">Status</span>
+                        <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">PROCESSING</span>
                       </div>
                     </div>
                   )}
@@ -1988,19 +1989,19 @@ export default function QuantLabPage() {
               {/* Selected Scan Telemetry Dashboard                             */}
               {/* ───────────────────────────────────────────────────────────── */}
               {selectedObScan && selectedObScan.telemetry_summary && (
-                <section className="border border-slate-800/50 bg-slate-900/30 backdrop-blur-sm rounded-lg p-6">
+                <section className="border border-card-border dark:border-slate-800/50 bg-card/75 dark:bg-slate-900/30 backdrop-blur-sm rounded-xl p-6 shadow-xs">
                   {/* Top Bar: Scan Metadata & Export Actions */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800/50 pb-5 mb-5 gap-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-card-border/60 dark:border-slate-800/50 pb-5 mb-5 gap-4">
                     <div className="text-left">
                       <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        <span className="text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs">
                           {selectedObScan.symbol} • {selectedObScan.timeframe}
                         </span>
-                        <span className="text-[10px] font-mono text-slate-500">
+                        <span className="text-[10px] font-mono text-muted dark:text-slate-500">
                           {selectedObScan.start_date.slice(0, 10)} to {selectedObScan.end_date.slice(0, 10)}
                         </span>
                       </div>
-                      <h3 className="text-base font-mono font-bold text-white uppercase mt-1">
+                      <h3 className="text-base font-mono font-bold text-foreground dark:text-white uppercase mt-1">
                         {selectedObScan.scan_name} Telemetry
                       </h3>
                     </div>
@@ -2008,7 +2009,7 @@ export default function QuantLabPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         onClick={handleExportValidatedObDataset}
-                        className="px-3.5 py-1.5 border border-emerald-500/30 text-[10px] font-mono font-bold uppercase rounded bg-emerald-950/20 text-emerald-400 hover:bg-emerald-950/40 hover:border-emerald-400/50 flex items-center gap-1.5 transition"
+                        className="px-3.5 py-1.5 border border-emerald-500/30 text-[10px] font-mono font-bold uppercase rounded-lg bg-emerald-500/10 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 hover:dark:bg-emerald-950/40 hover:border-emerald-400/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
                         title="Export High-Probability Dataset for Execution Strategies"
                       >
                         <Download className="w-3.5 h-3.5" />
@@ -2017,7 +2018,7 @@ export default function QuantLabPage() {
 
                       <button
                         onClick={handleExportObCsv}
-                        className="px-3.5 py-1.5 border border-slate-700 text-[10px] font-mono font-bold uppercase rounded bg-slate-900 text-slate-300 hover:border-slate-500 flex items-center gap-1.5 transition"
+                        className="px-3.5 py-1.5 border border-card-border dark:border-slate-700 text-[10px] font-mono font-bold uppercase rounded-lg bg-card dark:bg-slate-900 text-foreground dark:text-slate-300 hover:border-card-border/80 dark:hover:border-slate-500 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
                         title="Export Full CSV Telemetry Table"
                       >
                         <FileCode className="w-3.5 h-3.5" />
@@ -2029,61 +2030,61 @@ export default function QuantLabPage() {
                   {/* Macro Telemetry Metric Cards */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5 font-mono text-center">
                     {/* Total Detected */}
-                    <div className="border border-slate-800/40 bg-slate-950/60 rounded-lg p-3">
-                      <span className="text-[8px] text-slate-500 uppercase block mb-1">Total Detected</span>
-                      <span className="text-base font-bold text-white">{selectedObScan.total_detected}</span>
-                      <span className="text-[8px] text-slate-500 block mt-0.5">
+                    <div className="border border-card-border dark:border-slate-800/40 bg-card/60 dark:bg-slate-950/60 rounded-xl p-3 shadow-xs">
+                      <span className="text-[8px] text-muted dark:text-slate-500 uppercase block mb-1">Total Detected</span>
+                      <span className="text-base font-bold text-foreground dark:text-white">{selectedObScan.total_detected}</span>
+                      <span className="text-[8px] text-muted dark:text-slate-500 block mt-0.5">
                         {selectedObScan.telemetry_summary.aggregated_blocks_count} Aggregated ({selectedObScan.telemetry_summary.aggregation_rate_pct}%)
                       </span>
                     </div>
 
                     {/* Validation Rate */}
-                    <div className="border border-slate-800/40 bg-slate-950/60 rounded-lg p-3">
-                      <span className="text-[8px] text-slate-500 uppercase block mb-1">Validation Rate (A+/A)</span>
-                      <span className="text-base font-bold text-emerald-400">{Number(selectedObScan.validation_rate_pct).toFixed(1)}%</span>
-                      <span className="text-[8px] text-slate-500 block mt-0.5">
+                    <div className="border border-card-border dark:border-slate-800/40 bg-card/60 dark:bg-slate-950/60 rounded-xl p-3 shadow-xs">
+                      <span className="text-[8px] text-muted dark:text-slate-500 uppercase block mb-1">Validation Rate (A+/A)</span>
+                      <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">{Number(selectedObScan.validation_rate_pct).toFixed(1)}%</span>
+                      <span className="text-[8px] text-muted dark:text-slate-500 block mt-0.5">
                         {selectedObScan.telemetry_summary.tier_a_plus_count} A+ • {selectedObScan.telemetry_summary.tier_a_count} A
                       </span>
                     </div>
 
                     {/* Mean Threshold Reaction Rate */}
-                    <div className="border border-slate-800/40 bg-slate-950/60 rounded-lg p-3">
-                      <span className="text-[8px] text-slate-500 uppercase block mb-1">MT Reaction Rate</span>
-                      <span className="text-base font-bold text-cyan-400">{Number(selectedObScan.mt_reaction_rate_pct).toFixed(1)}%</span>
-                      <span className="text-[8px] text-slate-500 block mt-0.5">
+                    <div className="border border-card-border dark:border-slate-800/40 bg-card/60 dark:bg-slate-950/60 rounded-xl p-3 shadow-xs">
+                      <span className="text-[8px] text-muted dark:text-slate-500 uppercase block mb-1">MT Reaction Rate</span>
+                      <span className="text-base font-bold text-cyan-600 dark:text-cyan-400">{Number(selectedObScan.mt_reaction_rate_pct).toFixed(1)}%</span>
+                      <span className="text-[8px] text-muted dark:text-slate-500 block mt-0.5">
                         {selectedObScan.telemetry_summary.mitigated_respected_count} Respected MT
                       </span>
                     </div>
 
                     {/* Mitigation Win Rate */}
-                    <div className="border border-slate-800/40 bg-slate-950/60 rounded-lg p-3">
-                      <span className="text-[8px] text-slate-500 uppercase block mb-1">Mitigation Win Rate</span>
-                      <span className={`text-base font-bold ${Number(selectedObScan.mitigation_win_rate_pct) >= 50 ? "text-emerald-400" : "text-rose-400"}`}>
+                    <div className="border border-card-border dark:border-slate-800/40 bg-card/60 dark:bg-slate-950/60 rounded-xl p-3 shadow-xs">
+                      <span className="text-[8px] text-muted dark:text-slate-500 uppercase block mb-1">Mitigation Win Rate</span>
+                      <span className={`text-base font-bold ${Number(selectedObScan.mitigation_win_rate_pct) >= 50 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
                         {Number(selectedObScan.mitigation_win_rate_pct).toFixed(1)}%
                       </span>
-                      <span className="text-[8px] text-slate-500 block mt-0.5">
+                      <span className="text-[8px] text-muted dark:text-slate-500 block mt-0.5">
                         PF: {selectedObScan.telemetry_summary.overall_profit_factor ?? "—"} • {selectedObScan.telemetry_summary.mitigation_winning_trades}W/{selectedObScan.telemetry_summary.mitigation_losing_trades}L
                       </span>
                     </div>
 
                     {/* Average Realized R:R */}
-                    <div className="border border-slate-800/40 bg-slate-950/60 rounded-lg p-3">
-                      <span className="text-[8px] text-slate-500 uppercase block mb-1">Avg Realized R:R</span>
-                      <span className="text-base font-bold text-slate-200">
+                    <div className="border border-card-border dark:border-slate-800/40 bg-card/60 dark:bg-slate-950/60 rounded-xl p-3 shadow-xs">
+                      <span className="text-[8px] text-muted dark:text-slate-500 uppercase block mb-1">Avg Realized R:R</span>
+                      <span className="text-base font-bold text-foreground dark:text-slate-200">
                         {Number(selectedObScan.telemetry_summary.avg_realized_rr) > 0 ? "+" : ""}{Number(selectedObScan.telemetry_summary.avg_realized_rr).toFixed(2)}R
                       </span>
-                      <span className="text-[8px] text-slate-500 block mt-0.5">
+                      <span className="text-[8px] text-muted dark:text-slate-500 block mt-0.5">
                         MFE: +{selectedObScan.telemetry_summary.avg_max_favorable_excursion_r}R
                       </span>
                     </div>
 
                     {/* Breaker Transitions */}
-                    <div className="border border-slate-800/40 bg-slate-950/60 rounded-lg p-3">
-                      <span className="text-[8px] text-slate-500 uppercase block mb-1">Breaker Conversion</span>
-                      <span className="text-base font-bold text-purple-400">
+                    <div className="border border-card-border dark:border-slate-800/40 bg-card/60 dark:bg-slate-950/60 rounded-xl p-3 shadow-xs">
+                      <span className="text-[8px] text-muted dark:text-slate-500 uppercase block mb-1">Breaker Conversion</span>
+                      <span className="text-base font-bold text-purple-600 dark:text-purple-400">
                         {selectedObScan.telemetry_summary.breaker_converted_count}
                       </span>
-                      <span className="text-[8px] text-slate-500 block mt-0.5">
+                      <span className="text-[8px] text-muted dark:text-slate-500 block mt-0.5">
                         {selectedObScan.telemetry_summary.breaker_conversion_rate_pct}% of Invalids
                       </span>
                     </div>
@@ -2094,165 +2095,164 @@ export default function QuantLabPage() {
                   {/* ───────────────────────────────────────────────────────── */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-6 font-mono text-left">
                     {/* Matrix 1: Phase 6 Multi-Stage Harvest & Net Expectancy HUD */}
-                    <div className="border border-cyan-500/30 bg-gradient-to-br from-slate-950/90 to-cyan-950/20 rounded-lg p-3.5 flex flex-col justify-between shadow-sm shadow-cyan-500/5">
+                    <div className="border border-cyan-500/30 bg-gradient-to-br from-card to-cyan-500/5 dark:from-slate-950/90 dark:to-cyan-950/20 rounded-xl p-3.5 flex flex-col justify-between shadow-xs">
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-[9px] uppercase font-bold text-cyan-300 flex items-center gap-1">
-                            <Shield className="w-3.5 h-3.5 text-cyan-400" />
+                          <span className="text-[9px] uppercase font-bold text-cyan-600 dark:text-cyan-300 flex items-center gap-1">
+                            <Shield className="w-3.5 h-3.5 text-cyan-500" />
                             3-Stage Harvest & EV
                           </span>
-                          <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-cyan-500/20 text-cyan-300">
+                          <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-cyan-500/15 text-cyan-600 dark:text-cyan-300">
                             {selectedObScan.telemetry_summary.stage_1_fill_rate_pct ?? "0"}% S1 • {selectedObScan.telemetry_summary.stage_2_fill_rate_pct ?? "0"}% S2
                           </span>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-[10px] my-2">
-                          <div className="bg-slate-950/60 border border-slate-800/80 rounded p-2">
-                            <span className="text-[8px] text-slate-500 uppercase block">Tranche Fills</span>
-                            <span className="text-xs font-bold text-cyan-300 block">
+                          <div className="bg-background dark:bg-slate-950/60 border border-card-border dark:border-slate-800/80 rounded-lg p-2 shadow-xs">
+                            <span className="text-[8px] text-muted dark:text-slate-500 uppercase block">Tranche Fills</span>
+                            <span className="text-xs font-bold text-cyan-600 dark:text-cyan-300 block">
                               {selectedObScan.telemetry_summary.stage_3_fill_rate_pct ?? "0"}% S3 Runner
                             </span>
-                            <span className="text-[8px] text-slate-400">
+                            <span className="text-[8px] text-muted dark:text-slate-400">
                               S1: {selectedObScan.telemetry_summary.stage_1_fill_count ?? 0} • S2: {selectedObScan.telemetry_summary.stage_2_fill_count ?? 0} • S3: {selectedObScan.telemetry_summary.stage_3_fill_count ?? 0}
                             </span>
                           </div>
-                          <div className="bg-cyan-950/30 border border-cyan-500/40 rounded p-2">
-                            <span className="text-[8px] text-cyan-300 uppercase block">3-Stage Expectancy</span>
-                            <span className="text-xs font-bold text-emerald-400 block">
+                          <div className="bg-cyan-500/10 dark:bg-cyan-950/30 border border-cyan-500/40 rounded-lg p-2 shadow-xs">
+                            <span className="text-[8px] text-cyan-600 dark:text-cyan-300 uppercase block">3-Stage Expectancy</span>
+                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 block">
                               {selectedObScan.telemetry_summary.three_stage_ev_r > 0 ? "+" : ""}{selectedObScan.telemetry_summary.three_stage_ev_r ?? "0"}R EV
                             </span>
-                            <span className="text-[8px] text-cyan-400 font-bold">
+                            <span className="text-[8px] text-cyan-600 dark:text-cyan-400 font-bold">
                               2-Stg: {selectedObScan.telemetry_summary.two_stage_ev_r > 0 ? "+" : ""}{selectedObScan.telemetry_summary.two_stage_ev_r ?? 0}R • 1-Stg: {selectedObScan.telemetry_summary.single_stage_ev_r > 0 ? "+" : ""}{selectedObScan.telemetry_summary.single_stage_ev_r ?? 0}R
                             </span>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between border-t border-slate-800/40 pt-2 text-[9px]">
-                        <span className="text-slate-400">EV Expansion Delta:</span>
-                        <span className="font-bold text-emerald-400">
+                      <div className="flex items-center justify-between border-t border-card-border/60 dark:border-slate-800/40 pt-2 text-[9px]">
+                        <span className="text-muted dark:text-slate-400">EV Expansion Delta:</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
                           {selectedObScan.telemetry_summary.expectancy_expansion_delta_r >= 0 ? "+" : ""}{selectedObScan.telemetry_summary.expectancy_expansion_delta_r ?? 0}R vs 2-Stage • Adj WR: {selectedObScan.telemetry_summary.adjusted_win_rate_pct ?? 0}%
                         </span>
                       </div>
                     </div>
 
                     {/* Matrix 2: Tier A vs. Tier A+ Confluence Delta */}
-                    <div className="border border-emerald-500/20 bg-gradient-to-br from-slate-950/80 to-emerald-950/10 rounded-lg p-3.5 flex flex-col justify-between">
+                    <div className="border border-emerald-500/20 bg-gradient-to-br from-card to-emerald-500/5 dark:from-slate-950/80 dark:to-emerald-950/10 rounded-xl p-3.5 flex flex-col justify-between shadow-xs">
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-[9px] uppercase font-bold text-emerald-400 flex items-center gap-1">
-                            <Sparkles className="w-3 h-3 text-emerald-400" />
+                          <span className="text-[9px] uppercase font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-emerald-500" />
                             Tier A vs. Tier A+ Delta
                           </span>
-                          <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-emerald-500/20 text-emerald-300">
+                          <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-300">
                             SWEEP GATE
                           </span>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-[10px] my-2">
-                          <div className="bg-slate-950/60 border border-slate-800/80 rounded p-2">
-                            <span className="text-[8px] text-slate-500 uppercase block">Tier A (3 Gates)</span>
-                            <span className="text-xs font-bold text-slate-200 block">
+                          <div className="bg-background dark:bg-slate-950/60 border border-card-border dark:border-slate-800/80 rounded-lg p-2 shadow-xs">
+                            <span className="text-[8px] text-muted dark:text-slate-500 uppercase block">Tier A (3 Gates)</span>
+                            <span className="text-xs font-bold text-foreground dark:text-slate-200 block">
                               {selectedObScan.telemetry_summary.tier_a_win_rate_pct ?? "0"}% WR
                             </span>
-                            <span className="text-[8px] text-slate-400">
+                            <span className="text-[8px] text-muted dark:text-slate-400">
                               {selectedObScan.telemetry_summary.tier_a_avg_rr ?? "0"}R • PF: {selectedObScan.telemetry_summary.tier_a_profit_factor ?? "—"}
                             </span>
                           </div>
-                          <div className="bg-emerald-950/30 border border-emerald-500/30 rounded p-2">
-                            <span className="text-[8px] text-emerald-400 uppercase block">Tier A+ (4 Gates)</span>
-                            <span className="text-xs font-bold text-emerald-300 block">
+                          <div className="bg-emerald-500/10 dark:bg-emerald-950/30 border border-emerald-500/30 rounded-lg p-2 shadow-xs">
+                            <span className="text-[8px] text-emerald-600 dark:text-emerald-400 uppercase block">Tier A+ (4 Gates)</span>
+                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-300 block">
                               {selectedObScan.telemetry_summary.tier_a_plus_win_rate_pct ?? "0"}% WR
                             </span>
-                            <span className="text-[8px] text-emerald-400 font-bold">
+                            <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-bold">
                               {selectedObScan.telemetry_summary.tier_a_plus_avg_rr ?? "0"}R • PF: {selectedObScan.telemetry_summary.tier_a_plus_profit_factor ?? "—"}
                             </span>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between border-t border-slate-800/40 pt-2 text-[9px]">
-                        <span className="text-slate-400">Tier A+ Advantage:</span>
-                        <span className="font-bold text-emerald-400">
+                      <div className="flex items-center justify-between border-t border-card-border/60 dark:border-slate-800/40 pt-2 text-[9px]">
+                        <span className="text-muted dark:text-slate-400">Tier A+ Advantage:</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
                           {selectedObScan.telemetry_summary.tier_a_plus_win_rate_delta > 0 ? "+" : ""}{selectedObScan.telemetry_summary.tier_a_plus_win_rate_delta}% WR / {selectedObScan.telemetry_summary.tier_a_plus_rr_delta > 0 ? "+" : ""}{selectedObScan.telemetry_summary.tier_a_plus_rr_delta}R
                         </span>
                       </div>
                     </div>
 
                     {/* Matrix 3: Fresh vs. Stale Mitigation Comparison */}
-                    <div className="border border-amber-500/20 bg-gradient-to-br from-slate-950/80 to-amber-950/10 rounded-lg p-3.5 flex flex-col justify-between">
+                    <div className="border border-amber-500/20 bg-gradient-to-br from-card to-amber-500/5 dark:from-slate-950/80 dark:to-amber-950/10 rounded-xl p-3.5 flex flex-col justify-between shadow-xs">
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-[9px] uppercase font-bold text-amber-400 flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-amber-400" />
+                          <span className="text-[9px] uppercase font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-amber-500" />
                             Fresh vs. Stale Tests
                           </span>
-                          <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-amber-500/20 text-amber-300">
+                          <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-300">
                             ≤{selectedObScan.telemetry_summary.avg_bars_to_mitigation || 24}B
                           </span>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-[10px] my-2">
-                          <div className="bg-amber-950/20 border border-amber-500/30 rounded p-2">
-                            <span className="text-[8px] text-amber-400 uppercase block">Fresh Tests</span>
-                            <span className="text-xs font-bold text-amber-300 block">
+                          <div className="bg-amber-500/10 dark:bg-amber-950/20 border border-amber-500/30 rounded-lg p-2 shadow-xs">
+                            <span className="text-[8px] text-amber-600 dark:text-amber-400 uppercase block">Fresh Tests</span>
+                            <span className="text-xs font-bold text-amber-600 dark:text-amber-300 block">
                               {selectedObScan.telemetry_summary.fresh_win_rate_pct ?? "0"}% WR
                             </span>
-                            <span className="text-[8px] text-slate-400">
+                            <span className="text-[8px] text-muted dark:text-slate-400">
                               {selectedObScan.telemetry_summary.fresh_avg_realized_rr ?? "0"}R ({selectedObScan.telemetry_summary.fresh_mitigation_count} trades)
                             </span>
                           </div>
-                          <div className="bg-slate-950/60 border border-slate-800/80 rounded p-2">
-                            <span className="text-[8px] text-slate-500 uppercase block">Stale Tests</span>
-                            <span className="text-xs font-bold text-slate-400 block">
+                          <div className="bg-background dark:bg-slate-950/60 border border-card-border dark:border-slate-800/80 rounded-lg p-2 shadow-xs">
+                            <span className="text-[8px] text-muted dark:text-slate-500 uppercase block">Stale Tests</span>
+                            <span className="text-xs font-bold text-muted dark:text-slate-400 block">
                               {selectedObScan.telemetry_summary.stale_win_rate_pct ?? "0"}% WR
                             </span>
-                            <span className="text-[8px] text-slate-500">
+                            <span className="text-[8px] text-muted dark:text-slate-500">
                               {selectedObScan.telemetry_summary.stale_avg_realized_rr ?? "0"}R ({selectedObScan.telemetry_summary.stale_mitigation_count} trades)
                             </span>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between border-t border-slate-800/40 pt-2 text-[9px]">
-                        <span className="text-slate-400">Expired Stale:</span>
-                        <span className="font-bold text-amber-400">
+                      <div className="flex items-center justify-between border-t border-card-border/60 dark:border-slate-800/40 pt-2 text-[9px]">
+                        <span className="text-muted dark:text-slate-400">Expired Stale:</span>
+                        <span className="font-bold text-amber-600 dark:text-amber-400">
                           {selectedObScan.telemetry_summary.expired_stale_count ?? 0} Bypassed
                         </span>
                       </div>
                     </div>
 
-                    {/* Matrix 4: Inverted Breaker Block Engine */}
                     {/* Matrix 4: Phase 4 Confirmation-Gated Breaker Engine */}
-                    <div className="border border-purple-500/30 bg-gradient-to-br from-slate-950/80 to-purple-950/20 rounded-lg p-3.5 flex flex-col justify-between">
+                    <div className="border border-purple-500/30 bg-gradient-to-br from-card to-purple-500/5 dark:from-slate-950/80 dark:to-purple-950/20 rounded-xl p-3.5 flex flex-col justify-between shadow-xs">
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-[9px] uppercase font-bold text-purple-400 flex items-center gap-1">
-                            <Repeat className="w-3 h-3 text-purple-400" />
+                          <span className="text-[9px] uppercase font-bold text-purple-600 dark:text-purple-400 flex items-center gap-1">
+                            <Repeat className="w-3 h-3 text-purple-500" />
                             Confirmed vs Blind Breakers
                           </span>
-                          <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-purple-500/20 text-purple-300">
+                          <span className="px-1.5 py-0.2 rounded text-[8px] font-bold bg-purple-500/15 text-purple-600 dark:text-purple-300">
                             MICRO MSS + DOL
                           </span>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-[10px] my-2">
-                          <div className="bg-purple-950/30 border border-purple-500/40 rounded p-2">
-                            <span className="text-[8px] text-purple-300 uppercase block">Confirmed WR%</span>
-                            <span className="text-xs font-bold text-purple-300 block">
+                          <div className="bg-purple-500/10 dark:bg-purple-950/30 border border-purple-500/40 rounded-lg p-2 shadow-xs">
+                            <span className="text-[8px] text-purple-600 dark:text-purple-300 uppercase block">Confirmed WR%</span>
+                            <span className="text-xs font-bold text-purple-600 dark:text-purple-300 block">
                               {selectedObScan.telemetry_summary.confirmed_breaker_win_rate_pct ?? "0"}% WR
                             </span>
-                            <span className="text-[8px] text-purple-400 font-bold">
+                            <span className="text-[8px] text-purple-600 dark:text-purple-400 font-bold">
                               {selectedObScan.telemetry_summary.confirmed_breaker_avg_rr ?? "0"}R ({selectedObScan.telemetry_summary.confirmed_breaker_retest_count ?? 0} fills)
                             </span>
                           </div>
-                          <div className="bg-slate-950/60 border border-slate-800/80 rounded p-2">
-                            <span className="text-[8px] text-slate-500 uppercase block">Blind Limit WR%</span>
-                            <span className="text-xs font-bold text-slate-400 block">
+                          <div className="bg-background dark:bg-slate-950/60 border border-card-border dark:border-slate-800/80 rounded-lg p-2 shadow-xs">
+                            <span className="text-[8px] text-muted dark:text-slate-500 uppercase block">Blind Limit WR%</span>
+                            <span className="text-xs font-bold text-muted dark:text-slate-400 block">
                               {selectedObScan.telemetry_summary.blind_breaker_win_rate_pct ?? "0"}% WR
                             </span>
-                            <span className="text-[8px] text-slate-500">
+                            <span className="text-[8px] text-muted dark:text-slate-500">
                               {selectedObScan.telemetry_summary.blind_breaker_avg_rr ?? "0"}R ({selectedObScan.telemetry_summary.blind_breaker_retest_count ?? 0} fills)
                             </span>
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center justify-between border-t border-slate-800/40 pt-2 text-[9px]">
-                        <span className="text-slate-400">Confirmation Delta:</span>
-                        <span className="font-bold text-purple-300">
+                      <div className="flex items-center justify-between border-t border-card-border/60 dark:border-slate-800/40 pt-2 text-[9px]">
+                        <span className="text-muted dark:text-slate-400">Confirmation Delta:</span>
+                        <span className="font-bold text-purple-600 dark:text-purple-300">
                           {selectedObScan.telemetry_summary.breaker_confirmation_win_rate_delta > 0 ? "+" : ""}{selectedObScan.telemetry_summary.breaker_confirmation_win_rate_delta ?? 0}% WR ({selectedObScan.telemetry_summary.breaker_vetoed_count ?? 0} Vetoed)
                         </span>
                       </div>
@@ -2275,11 +2275,11 @@ export default function QuantLabPage() {
                   {/* ───────────────────────────────────────────────────────── */}
                   {/* Interactive Table Filter Bar                              */}
                   {/* ───────────────────────────────────────────────────────── */}
-                  <div className="border border-slate-800/60 bg-slate-950/50 rounded-lg p-3 mb-4">
+                  <div className="border border-card-border/70 dark:border-slate-800/60 bg-card/50 dark:bg-slate-950/50 rounded-xl p-3 mb-4 shadow-xs">
                     <div className="flex flex-wrap items-center justify-between gap-3 font-mono text-[10px]">
                       {/* Search */}
-                      <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded px-2.5 py-1 min-w-[180px]">
-                        <Search className="w-3 h-3 text-slate-500" />
+                      <div className="flex items-center gap-1.5 bg-background dark:bg-slate-900 border border-card-border dark:border-slate-800 rounded-lg px-2.5 py-1 min-w-[180px] shadow-xs">
+                        <Search className="w-3 h-3 text-muted dark:text-slate-500" />
                         <input
                           type="text"
                           placeholder="Search OB ID / Price / Sweep..."
@@ -2288,13 +2288,13 @@ export default function QuantLabPage() {
                             setObSearchQuery(e.target.value);
                             setObCurrentPage(1);
                           }}
-                          className="bg-transparent text-white outline-none text-[10px] w-full"
+                          className="bg-transparent text-foreground dark:text-white outline-none text-[10px] w-full"
                         />
                       </div>
 
                       {/* Direction Filter */}
                       <div className="flex items-center gap-1">
-                        <span className="text-slate-500 uppercase text-[9px] mr-1">Dir:</span>
+                        <span className="text-muted dark:text-slate-500 uppercase text-[9px] mr-1">Dir:</span>
                         {(["ALL", "BULLISH", "BEARISH"] as const).map(d => (
                           <button
                             key={d}
@@ -2302,14 +2302,14 @@ export default function QuantLabPage() {
                               setObFilterDirection(d);
                               setObCurrentPage(1);
                             }}
-                            className={`px-2 py-0.5 rounded text-[9px] font-bold transition ${
+                            className={`px-2 py-0.5 rounded-md text-[9px] font-bold transition cursor-pointer shadow-xs ${
                               obFilterDirection === d
                                 ? d === "BULLISH"
-                                  ? "bg-emerald-950/60 text-emerald-400 border border-emerald-500/40"
+                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40"
                                   : d === "BEARISH"
-                                  ? "bg-rose-950/60 text-rose-400 border border-rose-500/40"
-                                  : "bg-slate-800 text-white"
-                                : "text-slate-500 hover:text-slate-300"
+                                  ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/40"
+                                  : "bg-foreground text-background dark:bg-slate-800 dark:text-white"
+                                : "text-muted dark:text-slate-500 hover:text-foreground border border-transparent"
                             }`}
                           >
                             {d}
@@ -2319,7 +2319,7 @@ export default function QuantLabPage() {
 
                       {/* Tier Filter */}
                       <div className="flex items-center gap-1">
-                        <span className="text-slate-500 uppercase text-[9px] mr-1">Tier:</span>
+                        <span className="text-muted dark:text-slate-500 uppercase text-[9px] mr-1">Tier:</span>
                         {(["ALL", "A_PLUS", "A", "B", "UNVALIDATED"] as const).map(t => (
                           <button
                             key={t}
@@ -2327,14 +2327,14 @@ export default function QuantLabPage() {
                               setObFilterTier(t);
                               setObCurrentPage(1);
                             }}
-                            className={`px-2 py-0.5 rounded text-[9px] font-bold transition ${
+                            className={`px-2 py-0.5 rounded-md text-[9px] font-bold transition cursor-pointer shadow-xs ${
                               obFilterTier === t
                                 ? t === "A_PLUS"
-                                  ? "bg-emerald-950/60 text-emerald-400 border border-emerald-500/40"
+                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40"
                                   : t === "A"
-                                  ? "bg-cyan-950/60 text-cyan-400 border border-cyan-500/40"
-                                  : "bg-slate-800 text-white"
-                                : "text-slate-500 hover:text-slate-300"
+                                  ? "bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 border border-cyan-500/40"
+                                  : "bg-foreground text-background dark:bg-slate-800 dark:text-white"
+                                : "text-muted dark:text-slate-500 hover:text-foreground border border-transparent"
                             }`}
                           >
                             {t === "A_PLUS" ? "⭐ A+" : t}
@@ -2344,14 +2344,14 @@ export default function QuantLabPage() {
 
                       {/* Lifecycle Status Filter */}
                       <div className="flex items-center gap-1">
-                        <span className="text-slate-500 uppercase text-[9px] mr-1">Status:</span>
+                        <span className="text-muted dark:text-slate-500 uppercase text-[9px] mr-1">Status:</span>
                         <select
                           value={obFilterStatus}
                           onChange={(e) => {
                             setObFilterStatus(e.target.value as any);
                             setObCurrentPage(1);
                           }}
-                          className="bg-slate-900 border border-slate-800 text-slate-300 px-2 py-1 rounded text-[9px] outline-none"
+                          className="bg-card dark:bg-slate-900 border border-card-border dark:border-slate-800 text-foreground dark:text-slate-300 px-2 py-1 rounded-lg text-[9px] outline-none shadow-xs cursor-pointer"
                         >
                           <option value="ALL">ALL STATUSES</option>
                           <option value="UNTESTED">UNTESTED</option>
@@ -2366,7 +2366,7 @@ export default function QuantLabPage() {
 
                       {/* Outcome Filter */}
                       <div className="flex items-center gap-1">
-                        <span className="text-slate-500 uppercase text-[9px] mr-1">Trade:</span>
+                        <span className="text-muted dark:text-slate-500 uppercase text-[9px] mr-1">Trade:</span>
                         {[
                           { id: "ALL", label: "ALL" },
                           { id: "FULL_TP2_WIN", label: "FULL TP2" },
@@ -2380,16 +2380,16 @@ export default function QuantLabPage() {
                               setObFilterOutcome(o.id);
                               setObCurrentPage(1);
                             }}
-                            className={`px-2 py-0.5 rounded text-[9px] font-bold transition ${
+                            className={`px-2 py-0.5 rounded-md text-[9px] font-bold transition cursor-pointer shadow-xs ${
                               obFilterOutcome === o.id
                                 ? o.id === "FULL_TP2_WIN"
-                                  ? "bg-emerald-950/60 text-emerald-400 border border-emerald-500/40"
+                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/40"
                                   : o.id === "BE_SCRATCH_WIN"
-                                  ? "bg-cyan-950/60 text-cyan-300 border border-cyan-500/40"
+                                  ? "bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/40"
                                   : o.id === "STOPPED_OUT"
-                                  ? "bg-rose-950/60 text-rose-400 border border-rose-500/40"
-                                  : "bg-slate-800 text-white"
-                                : "text-slate-500 hover:text-slate-300"
+                                  ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/40"
+                                  : "bg-foreground text-background dark:bg-slate-800 dark:text-white"
+                                : "text-muted dark:text-slate-500 hover:text-foreground border border-transparent"
                             }`}
                           >
                             {o.label}
@@ -2403,16 +2403,16 @@ export default function QuantLabPage() {
                   {/* Order Blocks Telemetry Table                              */}
                   {/* ───────────────────────────────────────────────────────── */}
                   {filteredOrderBlocks.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 border border-dashed border-slate-800 rounded-lg text-slate-500 font-mono text-xs text-center">
+                    <div className="flex flex-col items-center justify-center py-12 border border-dashed border-card-border dark:border-slate-800 rounded-xl text-muted dark:text-slate-500 font-mono text-xs text-center p-4">
                       <span>No Order Blocks match the active filter criteria.</span>
-                      <span className="text-[10px] mt-1 text-slate-600">Try loosening your quality tier or lifecycle status filters.</span>
+                      <span className="text-[10px] mt-1 text-muted/80 dark:text-slate-600">Try loosening your quality tier or lifecycle status filters.</span>
                     </div>
                   ) : (
                     <div className="flex flex-col gap-4">
                       <div className="overflow-x-auto">
-                        <table className="w-full font-mono text-[10px] text-slate-300 text-left">
+                        <table className="w-full font-mono text-[10px] text-foreground dark:text-slate-300 text-left">
                           <thead>
-                            <tr className="border-b border-slate-800 text-slate-500 uppercase">
+                            <tr className="border-b border-card-border dark:border-slate-800 text-muted dark:text-slate-500 uppercase">
                               <th className="py-2.5 px-2">Formation</th>
                               <th className="py-2.5 px-2">Type</th>
                               <th className="py-2.5 px-2">Zone [Top - Bottom]</th>
@@ -2425,7 +2425,7 @@ export default function QuantLabPage() {
                               <th className="py-2.5 px-2 text-center">Inspect</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-800/40">
+                          <tbody className="divide-y divide-card-border/60 dark:divide-slate-800/40">
                             {paginatedOrderBlocks.map((ob) => {
                               const isBull = ob.type === "BULLISH";
 
@@ -2433,10 +2433,10 @@ export default function QuantLabPage() {
                                 <tr
                                   key={ob.id}
                                   onClick={() => setInspectedOb(ob)}
-                                  className="hover:bg-slate-900/40 cursor-pointer transition group"
+                                  className="hover:bg-muted/10 hover:dark:bg-slate-900/40 cursor-pointer transition group"
                                 >
                                   {/* Formation Timestamp */}
-                                  <td className="py-2.5 px-2 text-slate-400">
+                                  <td className="py-2.5 px-2 text-muted dark:text-slate-400">
                                     {new Date(ob.formation_time).toLocaleString("en-US", {
                                       month: "short",
                                       day: "numeric",
@@ -2451,8 +2451,8 @@ export default function QuantLabPage() {
                                     <span
                                       className={`px-1.5 py-0.5 rounded text-[8px] font-bold inline-flex items-center gap-1 ${
                                         isBull
-                                          ? "bg-emerald-950/40 text-emerald-400 border border-emerald-500/30"
-                                          : "bg-rose-950/40 text-rose-400 border border-rose-500/30"
+                                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                                          : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30"
                                       }`}
                                     >
                                       {isBull ? <ArrowUpRight className="w-2.5 h-2.5" /> : <ArrowDownRight className="w-2.5 h-2.5" />}
@@ -2461,15 +2461,15 @@ export default function QuantLabPage() {
                                   </td>
 
                                   {/* Zone Top - Bottom */}
-                                  <td className="py-2.5 px-2 text-white font-bold">
+                                  <td className="py-2.5 px-2 text-foreground dark:text-white font-bold">
                                     ${ob.top.toFixed(2)} - ${ob.bottom.toFixed(2)}
-                                    <span className="text-[8px] text-slate-500 font-normal block">
+                                    <span className="text-[8px] text-muted dark:text-slate-500 font-normal block">
                                       H: ${ob.range_height.toFixed(2)} ({ob.range_pct}%)
                                     </span>
                                   </td>
 
                                   {/* Mean Threshold */}
-                                  <td className="py-2.5 px-2 text-cyan-300 font-bold">
+                                  <td className="py-2.5 px-2 text-cyan-600 dark:text-cyan-300 font-bold">
                                     ${ob.mean_threshold.toFixed(2)}
                                   </td>
 
@@ -2478,8 +2478,8 @@ export default function QuantLabPage() {
                                     <span
                                       className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
                                         ob.candles_count >= 2
-                                          ? "bg-purple-950/40 text-purple-400 border border-purple-500/30"
-                                          : "text-slate-500"
+                                          ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30"
+                                          : "text-muted dark:text-slate-500"
                                       }`}
                                     >
                                       {ob.candles_count}B
@@ -2493,8 +2493,8 @@ export default function QuantLabPage() {
                                         title={`Gate 1 Sweep: ${ob.gates.sweep_type}`}
                                         className={`px-1 py-0.2 rounded text-[7px] font-bold ${
                                           ob.gates.gate1_liquidity_sweep
-                                            ? "bg-emerald-950/60 text-emerald-400 border border-emerald-500/30"
-                                            : "bg-slate-900 text-slate-600"
+                                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                                            : "bg-muted/20 text-muted/60 dark:bg-slate-900 dark:text-slate-600"
                                         }`}
                                       >
                                         G1:{ob.gates.gate1_liquidity_sweep ? "✓" : "✗"}
@@ -2503,8 +2503,8 @@ export default function QuantLabPage() {
                                         title={`Gate 2 FVG: ${ob.gates.fvg_found ? "YES" : "NO"}`}
                                         className={`px-1 py-0.2 rounded text-[7px] font-bold ${
                                           ob.gates.gate2_displacement_imbalance
-                                            ? "bg-emerald-950/60 text-emerald-400 border border-emerald-500/30"
-                                            : "bg-slate-900 text-slate-600"
+                                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                                            : "bg-muted/20 text-muted/60 dark:bg-slate-900 dark:text-slate-600"
                                         }`}
                                       >
                                         G2:{ob.gates.gate2_displacement_imbalance ? "✓" : "✗"}
@@ -2513,8 +2513,8 @@ export default function QuantLabPage() {
                                         title={`Gate 3 Break: ${ob.gates.structure_break_type}`}
                                         className={`px-1 py-0.2 rounded text-[7px] font-bold ${
                                           ob.gates.gate3_structure_break
-                                            ? "bg-emerald-950/60 text-emerald-400 border border-emerald-500/30"
-                                            : "bg-slate-900 text-slate-600"
+                                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                                            : "bg-muted/20 text-muted/60 dark:bg-slate-900 dark:text-slate-600"
                                         }`}
                                       >
                                         G3:{ob.gates.gate3_structure_break ? "✓" : "✗"}
@@ -2523,8 +2523,8 @@ export default function QuantLabPage() {
                                         title={`Gate 4 Dealing Range: ${ob.gates.dealing_range_location}`}
                                         className={`px-1 py-0.2 rounded text-[7px] font-bold ${
                                           ob.gates.gate4_dealing_range
-                                            ? "bg-emerald-950/60 text-emerald-400 border border-emerald-500/30"
-                                            : "bg-slate-900 text-slate-600"
+                                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                                            : "bg-muted/20 text-muted/60 dark:bg-slate-900 dark:text-slate-600"
                                         }`}
                                       >
                                         G4:{ob.gates.gate4_dealing_range ? "✓" : "✗"}
@@ -2537,12 +2537,12 @@ export default function QuantLabPage() {
                                     <span
                                       className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
                                         ob.quality_tier === "A_PLUS"
-                                          ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/40"
                                           : ob.quality_tier === "A"
-                                          ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                                          ? "bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/40"
                                           : ob.quality_tier === "B"
-                                          ? "bg-blue-500/20 text-blue-300 border border-blue-500/40"
-                                          : "bg-slate-800 text-slate-400"
+                                          ? "bg-blue-500/15 text-blue-600 dark:text-blue-300 border border-blue-500/40"
+                                          : "bg-muted/15 text-muted dark:bg-slate-800 dark:text-slate-400"
                                       }`}
                                     >
                                       {ob.quality_tier === "A_PLUS" ? "⭐ A+" : ob.quality_tier}
@@ -2555,18 +2555,18 @@ export default function QuantLabPage() {
                                       <span
                                         className={`px-1.5 py-0.5 rounded text-[8px] font-bold w-fit ${
                                           ob.lifecycle_status === "MITIGATED_RESPECTED"
-                                            ? "bg-emerald-950/50 text-emerald-400 border border-emerald-500/30"
+                                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
                                             : ob.lifecycle_status === "MEAN_THRESHOLD_VIOLATED"
-                                            ? "bg-amber-950/50 text-amber-400 border border-amber-500/30"
+                                            ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
                                             : ob.lifecycle_status === "ZONE_INVALIDATED"
-                                            ? "bg-rose-950/50 text-rose-400 border border-rose-500/30"
+                                            ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
                                             : ob.lifecycle_status === "ACTIVE_BREAKER"
-                                            ? "bg-purple-950/50 text-purple-300 border border-purple-500/30"
+                                            ? "bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30"
                                             : ob.lifecycle_status === "BREAKER_EXPIRED"
-                                            ? "bg-purple-950/30 text-purple-400/80 border border-purple-500/20"
+                                            ? "bg-purple-500/10 text-purple-600/80 dark:text-purple-400/80 border border-purple-500/20"
                                             : ob.lifecycle_status === "EXPIRED_STALE"
-                                            ? "bg-slate-800/80 text-amber-400/80 border border-amber-500/20"
-                                            : "bg-slate-800/80 text-slate-400"
+                                            ? "bg-amber-500/10 text-amber-600/80 dark:text-amber-400/80 border border-amber-500/20"
+                                            : "bg-muted/20 text-muted dark:bg-slate-800/80 dark:text-slate-400"
                                         }`}
                                       >
                                         {ob.lifecycle_status === "ZONE_INVALIDATED"
@@ -2580,10 +2580,10 @@ export default function QuantLabPage() {
                                       {ob.is_breaker && ob.breaker_trade_outcome !== "NO_RETEST" && (
                                         <span className={`text-[7px] font-bold px-1 rounded w-fit ${
                                           ob.breaker_trade_outcome === "WIN"
-                                            ? "bg-purple-950/80 text-purple-300 border border-purple-500/40"
+                                            ? "bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/40"
                                             : ob.breaker_trade_outcome === "LOSS"
-                                            ? "bg-rose-950/60 text-rose-400 border border-rose-500/30"
-                                            : "bg-slate-800 text-slate-400"
+                                            ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
+                                            : "bg-muted/20 text-muted dark:bg-slate-800 dark:text-slate-400"
                                         }`}>
                                           BRK: {ob.breaker_trade_outcome} ({ob.breaker_realized_rr > 0 ? "+" : ""}{ob.breaker_realized_rr}R)
                                         </span>
@@ -2594,23 +2594,23 @@ export default function QuantLabPage() {
                                   {/* Outcome / Realized R:R */}
                                   <td className="py-2.5 px-2 text-right">
                                     {ob.simulated_outcome === "FULL_TP2_WIN" || ob.simulated_outcome === "WIN" ? (
-                                      <span className="text-emerald-400 font-bold">
+                                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">
                                         FULL TP2 (+{ob.realized_rr}R)
                                       </span>
                                     ) : ob.simulated_outcome === "BE_SCRATCH_WIN" ? (
-                                      <span className="text-cyan-300 font-bold">
+                                      <span className="text-cyan-600 dark:text-cyan-300 font-bold">
                                         BE SCRATCH (+{ob.realized_rr}R)
                                       </span>
                                     ) : ob.simulated_outcome === "STOPPED_OUT" || ob.simulated_outcome === "LOSS" ? (
-                                      <span className="text-rose-400 font-bold">
+                                      <span className="text-rose-600 dark:text-rose-400 font-bold">
                                         STOPPED OUT (-1.0R)
                                       </span>
                                     ) : ob.simulated_outcome === "EXPIRED" ? (
-                                      <span className="text-amber-500/80 font-bold">
+                                      <span className="text-amber-600/80 dark:text-amber-500/80 font-bold">
                                         STALE EXPIRED
                                       </span>
                                     ) : (
-                                      <span className="text-slate-500">
+                                      <span className="text-muted dark:text-slate-500">
                                         {ob.simulated_outcome}
                                       </span>
                                     )}
@@ -2623,7 +2623,7 @@ export default function QuantLabPage() {
                                         e.stopPropagation();
                                         setInspectedOb(ob);
                                       }}
-                                      className="p-1 rounded bg-slate-800 hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-400 transition"
+                                      className="p-1 rounded-md bg-muted/15 dark:bg-slate-800 hover:bg-emerald-500/20 text-muted dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition cursor-pointer shadow-xs"
                                       title="Inspect Quantitative Breakdown"
                                     >
                                       <ChevronRight className="w-3.5 h-3.5" />
@@ -2638,8 +2638,8 @@ export default function QuantLabPage() {
 
                       {/* Pagination Controls */}
                       {totalObPages > 1 && (
-                        <div className="flex items-center justify-between border-t border-slate-800/40 pt-4 font-mono text-[10px]">
-                          <span className="text-slate-500">
+                        <div className="flex items-center justify-between border-t border-card-border/60 dark:border-slate-800/40 pt-4 font-mono text-[10px]">
+                          <span className="text-muted dark:text-slate-500">
                             Showing {(obCurrentPage - 1) * obsPerPage + 1} - {Math.min(obCurrentPage * obsPerPage, filteredOrderBlocks.length)} of {filteredOrderBlocks.length} filtered OBs
                           </span>
 
@@ -2647,17 +2647,17 @@ export default function QuantLabPage() {
                             <button
                               disabled={obCurrentPage === 1}
                               onClick={() => setObCurrentPage(prev => Math.max(1, prev - 1))}
-                              className="px-2 py-1 border border-slate-800 rounded bg-slate-900/50 hover:border-slate-600 disabled:opacity-30 text-slate-300"
+                              className="px-2 py-1 border border-card-border dark:border-slate-800 rounded-md bg-card dark:bg-slate-900/50 hover:border-card-border/80 dark:hover:border-slate-600 disabled:opacity-30 text-foreground dark:text-slate-300 transition cursor-pointer shadow-xs"
                             >
                               Prev
                             </button>
-                            <span className="px-2 text-slate-400 font-bold">
+                            <span className="px-2 text-foreground dark:text-slate-400 font-bold">
                               {obCurrentPage} / {totalObPages}
                             </span>
                             <button
                               disabled={obCurrentPage === totalObPages}
                               onClick={() => setObCurrentPage(prev => Math.min(totalObPages, prev + 1))}
-                              className="px-2 py-1 border border-slate-800 rounded bg-slate-900/50 hover:border-slate-600 disabled:opacity-30 text-slate-300"
+                              className="px-2 py-1 border border-card-border dark:border-slate-800 rounded-md bg-card dark:bg-slate-900/50 hover:border-card-border/80 dark:hover:border-slate-600 disabled:opacity-30 text-foreground dark:text-slate-300 transition cursor-pointer shadow-xs"
                             >
                               Next
                             </button>
@@ -2675,16 +2675,16 @@ export default function QuantLabPage() {
             // =================================================================
             <>
               {/* Backtest Controller Panel */}
-              <section className="border border-slate-800/50 bg-slate-900/30 backdrop-blur-sm rounded-lg p-6">
-                <h2 className="text-xs uppercase tracking-widest text-slate-400 font-mono font-bold mb-5 flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-emerald-400" />
+              <section className="border border-card-border dark:border-slate-800/50 bg-card/75 dark:bg-slate-900/30 backdrop-blur-sm rounded-xl p-6 shadow-xs">
+                <h2 className="text-xs uppercase tracking-widest text-muted dark:text-slate-400 font-mono font-bold mb-5 flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   <span>Custom Strategy Configuration</span>
                 </h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                   {/* Strategy Name */}
                   <div className="flex flex-col gap-2">
-                    <label className="text-[10px] uppercase font-mono font-semibold text-slate-500 text-left">
+                    <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-500 text-left">
                       Strategy Name
                     </label>
                     <input
@@ -2692,13 +2692,13 @@ export default function QuantLabPage() {
                       disabled={backtestRunning}
                       value={strategyName}
                       onChange={(e) => setStrategyName(e.target.value)}
-                      className="w-full text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-emerald-500/50 outline-none rounded text-white"
+                      className="w-full text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-emerald-500 outline-none rounded-lg text-foreground dark:text-white shadow-xs"
                     />
                   </div>
 
                   {/* Start Date */}
                   <div className="flex flex-col gap-2">
-                    <label className="text-[10px] uppercase font-mono font-semibold text-slate-500 text-left flex items-center gap-1">
+                    <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-500 text-left flex items-center gap-1">
                       <Calendar className="w-3.5 h-3.5" />
                       <span>Start Date</span>
                     </label>
@@ -2707,13 +2707,13 @@ export default function QuantLabPage() {
                       disabled={backtestRunning}
                       value={startDate}
                       onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-emerald-500/50 outline-none rounded text-white"
+                      className="w-full text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-emerald-500 outline-none rounded-lg text-foreground dark:text-white shadow-xs"
                     />
                   </div>
 
                   {/* End Date */}
                   <div className="flex flex-col gap-2">
-                    <label className="text-[10px] uppercase font-mono font-semibold text-slate-500 text-left flex items-center gap-1">
+                    <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-500 text-left flex items-center gap-1">
                       <Calendar className="w-3.5 h-3.5" />
                       <span>End Date</span>
                     </label>
@@ -2722,14 +2722,14 @@ export default function QuantLabPage() {
                       disabled={backtestRunning}
                       value={endDate}
                       onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full text-xs font-mono px-3 py-2 bg-slate-950 border border-slate-800 focus:border-emerald-500/50 outline-none rounded text-white"
+                      className="w-full text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-emerald-500 outline-none rounded-lg text-foreground dark:text-white shadow-xs"
                     />
                   </div>
                 </div>
 
                 {/* Strategy JSON Dropzone & Visualizer */}
                 <div className="flex flex-col gap-2 mb-6">
-                  <label className="text-[10px] uppercase font-mono font-semibold text-slate-500 text-left">
+                  <label className="text-[10px] uppercase font-mono font-semibold text-muted dark:text-slate-500 text-left">
                     Strategy Config JSON
                   </label>
 
@@ -2740,18 +2740,18 @@ export default function QuantLabPage() {
                       onDragOver={handleDrag}
                       onDragLeave={handleDrag}
                       onDrop={handleDrop}
-                      className={`border border-dashed rounded-lg p-6 flex flex-col items-center justify-center gap-3 transition min-h-[220px] ${
+                      className={`border border-dashed rounded-xl p-6 flex flex-col items-center justify-center gap-3 transition min-h-[220px] ${
                         dragActive
-                          ? "border-emerald-400 bg-emerald-950/10"
-                          : "border-slate-800 bg-slate-950/30 hover:border-slate-700"
+                          ? "border-emerald-400 bg-emerald-500/10 dark:bg-emerald-950/10"
+                          : "border-card-border dark:border-slate-800 bg-background dark:bg-slate-950/30 hover:border-emerald-500/50"
                       }`}
                     >
-                      <Upload className={`w-8 h-8 ${dragActive ? "text-emerald-400 animate-bounce" : "text-slate-600"}`} />
+                      <Upload className={`w-8 h-8 ${dragActive ? "text-emerald-500 animate-bounce" : "text-muted dark:text-slate-600"}`} />
                       <div className="text-center font-mono">
-                        <span className="text-xs text-slate-200 block font-bold mb-1">
+                        <span className="text-xs text-foreground dark:text-slate-200 block font-bold mb-1">
                           Drag & Drop Strategy JSON
                         </span>
-                        <span className="text-[9px] text-slate-500 uppercase">
+                        <span className="text-[9px] text-muted dark:text-slate-500 uppercase">
                           or click to browse local files
                         </span>
                       </div>
@@ -2774,7 +2774,7 @@ export default function QuantLabPage() {
                       />
                       <label
                         htmlFor="file-upload"
-                        className="px-3 py-1.5 border border-slate-700 hover:border-slate-500 rounded bg-slate-900 text-[10px] font-bold font-mono uppercase cursor-pointer transition"
+                        className="px-3 py-1.5 border border-card-border dark:border-slate-700 hover:border-card-border/80 dark:hover:border-slate-500 rounded-lg bg-card dark:bg-slate-900 text-[10px] font-bold font-mono uppercase cursor-pointer transition shadow-xs text-foreground dark:text-slate-300"
                       >
                         Select File
                       </label>
@@ -2783,11 +2783,11 @@ export default function QuantLabPage() {
                     {/* Editor / Config Readout */}
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center justify-between">
-                        <span className="text-[9px] font-mono text-slate-500 uppercase">Interactive Editor</span>
+                        <span className="text-[9px] font-mono text-muted dark:text-slate-500 uppercase">Interactive Editor</span>
                         {configError ? (
-                          <span className="text-[9px] font-mono text-rose-400 font-bold">{configError}</span>
+                          <span className="text-[9px] font-mono text-rose-600 dark:text-rose-400 font-bold">{configError}</span>
                         ) : (
-                          <span className="text-[9px] font-mono text-emerald-400 font-bold">JSON VALID</span>
+                          <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">JSON VALID</span>
                         )}
                       </div>
                       <textarea
@@ -2795,37 +2795,37 @@ export default function QuantLabPage() {
                         value={strategyConfigText}
                         onChange={(e) => handleManualConfigChange(e.target.value)}
                         spellCheck="false"
-                        className="w-full h-[220px] font-mono text-[10px] p-4 bg-slate-950 border border-slate-800 outline-none focus:border-emerald-500/40 rounded text-slate-300 resize-none overflow-y-auto"
+                        className="w-full h-[220px] font-mono text-[10px] p-4 bg-background dark:bg-slate-950 border border-card-border dark:border-slate-800 outline-none focus:border-emerald-500/50 rounded-xl text-foreground dark:text-slate-300 resize-none overflow-y-auto shadow-xs"
                       />
                     </div>
                   </div>
                 </div>
 
                 {/* Run Button */}
-                <div className="flex items-center justify-between border-t border-slate-800/30 pt-6">
+                <div className="flex items-center justify-between border-t border-card-border/60 dark:border-slate-800/30 pt-6">
                   <div className="font-mono text-left">
-                    <p className="text-[10px] text-slate-500 uppercase">Active Asset</p>
-                    <p className="text-xs text-slate-300 font-bold">ETHUSDC (Binance Futures)</p>
+                    <p className="text-[10px] text-muted dark:text-slate-500 uppercase">Active Asset</p>
+                    <p className="text-xs text-foreground dark:text-slate-300 font-bold">ETHUSDC (Binance Futures)</p>
                   </div>
 
                   <button
                     onClick={runHeadlessBacktest}
                     disabled={backtestRunning || !!configError}
-                    className={`px-6 py-3 rounded font-mono font-bold uppercase text-xs flex items-center gap-2 transition tracking-wider ${
+                    className={`btn-solid px-6 py-3 rounded-lg font-mono font-bold uppercase text-xs flex items-center gap-2 transition tracking-wider cursor-pointer ${
                       backtestRunning
-                        ? "bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed"
+                        ? "bg-muted/20 border border-card-border dark:border-slate-800 text-muted dark:text-slate-500 cursor-not-allowed"
                         : "bg-emerald-500 text-slate-950 font-black hover:bg-emerald-400 hover:shadow-[0_0_15px_rgba(16,185,129,0.3)]"
                     }`}
                   >
                     {backtestRunning ? (
                       <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        <span>Crunching Numbers...</span>
+                        <RefreshCw className="w-4 h-4 animate-spin text-slate-400" />
+                        <span className="text-slate-400">Crunching Numbers...</span>
                       </>
                     ) : (
                       <>
-                        <Play className="w-4 h-4 fill-current" />
-                        <span>Run Headless Backtest</span>
+                        <Play className="w-4 h-4 fill-slate-950 text-slate-950" />
+                        <span className="text-slate-950 font-black">Run Headless Backtest</span>
                       </>
                     )}
                   </button>
@@ -2834,34 +2834,34 @@ export default function QuantLabPage() {
 
               {/* Active Processing HUD */}
               {(backtestRunning || backtestProgress || statusMessage) && (
-                <section className="border border-slate-800/50 bg-slate-900/20 backdrop-blur-sm rounded-lg p-5 text-left font-mono">
-                  <div className="flex items-center justify-between mb-3 border-b border-slate-800/50 pb-3">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1.5">
-                      <Activity className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                <section className="border border-card-border dark:border-slate-800/50 bg-card/60 dark:bg-slate-900/20 backdrop-blur-sm rounded-xl p-5 text-left font-mono shadow-xs">
+                  <div className="flex items-center justify-between mb-3 border-b border-card-border/60 dark:border-slate-800/50 pb-3">
+                    <span className="text-[10px] uppercase font-bold text-muted dark:text-slate-400 flex items-center gap-1.5">
+                      <Activity className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 animate-pulse" />
                       Processing HUD
                     </span>
                     {backtestRunning && (
-                      <span className="text-[9px] font-mono text-emerald-400 font-bold animate-pulse uppercase">
+                      <span className="text-[9px] font-mono text-emerald-600 dark:text-emerald-400 font-bold animate-pulse uppercase">
                         Headless Loop Active
                       </span>
                     )}
                   </div>
 
-                  <p className="text-xs text-slate-300 mb-4">{statusMessage}</p>
+                  <p className="text-xs text-foreground dark:text-slate-300 mb-4">{statusMessage}</p>
 
                   {backtestProgress && (
-                    <div className="grid grid-cols-3 gap-4 border border-emerald-500/20 bg-emerald-950/5 rounded-lg p-4 text-center">
+                    <div className="grid grid-cols-3 gap-4 border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-950/5 rounded-xl p-4 text-center shadow-xs">
                       <div className="flex flex-col">
-                        <span className="text-[9px] text-slate-500 uppercase">Tested Date</span>
-                        <span className="text-sm font-bold text-slate-200">{backtestProgress.date}</span>
+                        <span className="text-[9px] text-muted dark:text-slate-500 uppercase">Tested Date</span>
+                        <span className="text-sm font-bold text-foreground dark:text-slate-200">{backtestProgress.date}</span>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-[9px] text-slate-500 uppercase">Active Balance</span>
-                        <span className="text-sm font-bold text-emerald-400">${backtestProgress.equity}</span>
+                        <span className="text-[9px] text-muted dark:text-slate-500 uppercase">Active Balance</span>
+                        <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">${backtestProgress.equity}</span>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-[9px] text-slate-500 uppercase">Trades Placed</span>
-                        <span className="text-sm font-bold text-slate-200">{backtestProgress.tradeCount}</span>
+                        <span className="text-[9px] text-muted dark:text-slate-500 uppercase">Trades Placed</span>
+                        <span className="text-sm font-bold text-foreground dark:text-slate-200">{backtestProgress.tradeCount}</span>
                       </div>
                     </div>
                   )}
@@ -2870,13 +2870,13 @@ export default function QuantLabPage() {
 
               {/* Trades Ledger */}
               {selectedRun && (
-                <section className="border border-slate-800/50 bg-slate-900/20 backdrop-blur-sm rounded-lg p-6">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800/50 pb-5 mb-5 gap-4">
+                <section className="border border-card-border dark:border-slate-800/50 bg-card/75 dark:bg-slate-900/20 backdrop-blur-sm rounded-xl p-6 shadow-xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-card-border/60 dark:border-slate-800/50 pb-5 mb-5 gap-4">
                     <div className="text-left">
-                      <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500">
+                      <span className="text-[10px] uppercase font-mono tracking-wider text-muted dark:text-slate-500">
                         Execution Ledger
                       </span>
-                      <h3 className="text-sm font-mono font-bold text-white uppercase mt-0.5">
+                      <h3 className="text-sm font-mono font-bold text-foreground dark:text-white uppercase mt-0.5">
                         {selectedRun.name} Results
                       </h3>
                     </div>
@@ -2884,7 +2884,7 @@ export default function QuantLabPage() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={handleExportForAnalysis}
-                        className="px-4 py-2 border border-emerald-500/30 text-[10px] font-mono font-bold uppercase rounded bg-emerald-950/20 text-emerald-400 hover:bg-emerald-950/40 hover:border-emerald-400/50 flex items-center gap-1.5 transition"
+                        className="px-4 py-2 border border-emerald-500/30 text-[10px] font-mono font-bold uppercase rounded-lg bg-emerald-500/10 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 hover:dark:bg-emerald-950/40 hover:border-emerald-400/50 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
                       >
                         <Download className="w-3.5 h-3.5" />
                         <span>Export For Analysis</span>
@@ -2894,21 +2894,21 @@ export default function QuantLabPage() {
 
                   {/* Statistics Grid */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 text-center font-mono">
-                    <div className="border border-slate-800/30 bg-slate-900/10 rounded p-3">
-                      <span className="text-[8px] text-slate-500 uppercase block mb-1">Win Rate</span>
-                      <span className="text-sm font-bold text-slate-200">{Number(selectedRun.win_rate_pct).toFixed(1)}%</span>
+                    <div className="border border-card-border dark:border-slate-800/30 bg-card dark:bg-slate-900/10 rounded-xl p-3 shadow-xs">
+                      <span className="text-[8px] text-muted dark:text-slate-500 uppercase block mb-1">Win Rate</span>
+                      <span className="text-sm font-bold text-foreground dark:text-slate-200">{Number(selectedRun.win_rate_pct).toFixed(1)}%</span>
                     </div>
-                    <div className="border border-slate-800/30 bg-slate-900/10 rounded p-3">
-                      <span className="text-[8px] text-slate-500 uppercase block mb-1">Profit Trades</span>
-                      <span className="text-sm font-bold text-emerald-400">{selectedRun.winning_trades} / {selectedRun.total_trades}</span>
+                    <div className="border border-card-border dark:border-slate-800/30 bg-card dark:bg-slate-900/10 rounded-xl p-3 shadow-xs">
+                      <span className="text-[8px] text-muted dark:text-slate-500 uppercase block mb-1">Profit Trades</span>
+                      <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{selectedRun.winning_trades} / {selectedRun.total_trades}</span>
                     </div>
-                    <div className="border border-slate-800/30 bg-slate-900/10 rounded p-3">
-                      <span className="text-[8px] text-slate-500 uppercase block mb-1">Final Balance</span>
-                      <span className="text-sm font-bold text-slate-200">${Number(selectedRun.final_balance).toFixed(2)}</span>
+                    <div className="border border-card-border dark:border-slate-800/30 bg-card dark:bg-slate-900/10 rounded-xl p-3 shadow-xs">
+                      <span className="text-[8px] text-muted dark:text-slate-500 uppercase block mb-1">Final Balance</span>
+                      <span className="text-sm font-bold text-foreground dark:text-slate-200">${Number(selectedRun.final_balance).toFixed(2)}</span>
                     </div>
-                    <div className="border border-slate-800/30 bg-slate-900/10 rounded p-3">
-                      <span className="text-[8px] text-slate-500 uppercase block mb-1">Net ROI</span>
-                      <span className={`text-sm font-bold ${Number(selectedRun.total_pnl) >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                    <div className="border border-card-border dark:border-slate-800/30 bg-card dark:bg-slate-900/10 rounded-xl p-3 shadow-xs">
+                      <span className="text-[8px] text-muted dark:text-slate-500 uppercase block mb-1">Net ROI</span>
+                      <span className={`text-sm font-bold ${Number(selectedRun.total_pnl) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
                         {Number(selectedRun.total_pnl) >= 0 ? "+" : ""}{((Number(selectedRun.total_pnl) / selectedRun.initial_balance) * 100).toFixed(2)}%
                       </span>
                     </div>
@@ -2916,21 +2916,21 @@ export default function QuantLabPage() {
 
                   {/* Trades Table */}
                   {loadingTrades ? (
-                    <div className="flex flex-col items-center justify-center py-12 gap-2 text-slate-500 font-mono text-xs">
-                      <RefreshCw className="w-5 h-5 animate-spin" />
+                    <div className="flex flex-col items-center justify-center py-12 gap-2 text-muted dark:text-slate-500 font-mono text-xs">
+                      <RefreshCw className="w-5 h-5 animate-spin text-purple-500" />
                       <span>Retrieving trade ledger...</span>
                     </div>
                   ) : trades.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 border border-dashed border-slate-800 rounded-lg text-slate-500 font-mono text-xs">
+                    <div className="flex flex-col items-center justify-center py-12 border border-dashed border-card-border dark:border-slate-800 rounded-xl text-muted dark:text-slate-500 font-mono text-xs p-4">
                       <span>No trades fired during this backtest run.</span>
-                      <span className="text-[10px] mt-1 text-slate-600">The conditions in your strategy config did not align with market data.</span>
+                      <span className="text-[10px] mt-1 text-muted/80 dark:text-slate-600">The conditions in your strategy config did not align with market data.</span>
                     </div>
                   ) : (
                     <div className="flex flex-col gap-4">
                       <div className="overflow-x-auto">
-                        <table className="w-full font-mono text-[10px] text-slate-300 text-left">
+                        <table className="w-full font-mono text-[10px] text-foreground dark:text-slate-300 text-left">
                           <thead>
-                            <tr className="border-b border-slate-800 text-slate-500 uppercase">
+                            <tr className="border-b border-card-border dark:border-slate-800 text-muted dark:text-slate-500 uppercase">
                               <th className="py-3 px-2">Timestamp</th>
                               <th className="py-3 px-2">Dir</th>
                               <th className="py-3 px-2">Entry</th>
@@ -2939,7 +2939,7 @@ export default function QuantLabPage() {
                               <th className="py-3 px-2 text-right">Realized P&L</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-800/40">
+                          <tbody className="divide-y divide-card-border/60 dark:divide-slate-800/40">
                             {paginatedTrades.map((trade) => {
                               const pnl = Number(trade.realized_pnl);
                               const isWin = pnl > 0;
@@ -3025,109 +3025,109 @@ export default function QuantLabPage() {
       {/* ─────────────────────────────────────────────────────────────────── */}
       {inspectedOb && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-150 font-mono">
-          <div className="bg-slate-950 border border-slate-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative">
+          <div className="bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative text-foreground dark:text-slate-100">
             {/* Close Button */}
             <button
               onClick={() => setInspectedOb(null)}
-              className="absolute top-4 right-4 text-slate-500 hover:text-white p-1 rounded-lg hover:bg-slate-900 transition"
+              className="absolute top-4 right-4 text-muted dark:text-slate-500 hover:text-foreground dark:hover:text-white p-1 rounded-lg hover:bg-muted/15 dark:hover:bg-slate-900 transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
 
             {/* Header */}
-            <div className="flex items-start justify-between border-b border-slate-800/60 pb-4 mb-4">
+            <div className="flex items-start justify-between border-b border-card-border/60 dark:border-slate-800/60 pb-4 mb-4">
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <span
-                    className={`px-2 py-0.5 rounded text-[9px] font-bold inline-flex items-center gap-1 ${
+                    className={`px-2 py-0.5 rounded-md text-[9px] font-bold inline-flex items-center gap-1 ${
                       inspectedOb.type === "BULLISH"
-                        ? "bg-emerald-950/50 text-emerald-400 border border-emerald-500/30"
-                        : "bg-rose-950/50 text-rose-400 border border-rose-500/30"
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                        : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30"
                     }`}
                   >
                     {inspectedOb.type} ORDER BLOCK
                   </span>
-                  <span className="text-[9px] text-slate-400">
-                    Tier: <strong className="text-white">{inspectedOb.quality_tier}</strong>
+                  <span className="text-[9px] text-muted dark:text-slate-400">
+                    Tier: <strong className="text-foreground dark:text-white">{inspectedOb.quality_tier}</strong>
                   </span>
-                  <span className="text-[9px] text-slate-400">
-                    Score: <strong className="text-emerald-400">{inspectedOb.confluence_score}/100</strong>
+                  <span className="text-[9px] text-muted dark:text-slate-400">
+                    Score: <strong className="text-emerald-600 dark:text-emerald-400">{inspectedOb.confluence_score}/100</strong>
                   </span>
                 </div>
-                <h3 className="text-sm font-bold text-white uppercase">{inspectedOb.id}</h3>
+                <h3 className="text-sm font-bold text-foreground dark:text-white uppercase">{inspectedOb.id}</h3>
               </div>
             </div>
 
             {/* Geometry Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-900/40 border border-slate-800/60 rounded-lg p-3.5 mb-4 text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-background dark:bg-slate-900/40 border border-card-border dark:border-slate-800/60 rounded-xl p-3.5 mb-4 text-center shadow-xs">
               <div className="flex flex-col">
-                <span className="text-[8px] text-slate-500 uppercase">Top Boundary</span>
-                <span className="text-xs font-bold text-white">${inspectedOb.top.toFixed(2)}</span>
+                <span className="text-[8px] text-muted dark:text-slate-500 uppercase">Top Boundary</span>
+                <span className="text-xs font-bold text-foreground dark:text-white">${inspectedOb.top.toFixed(2)}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[8px] text-slate-500 uppercase">Mean Threshold (50%)</span>
-                <span className="text-xs font-bold text-cyan-300">${inspectedOb.mean_threshold.toFixed(2)}</span>
+                <span className="text-[8px] text-muted dark:text-slate-500 uppercase">Mean Threshold (50%)</span>
+                <span className="text-xs font-bold text-cyan-600 dark:text-cyan-300">${inspectedOb.mean_threshold.toFixed(2)}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[8px] text-slate-500 uppercase">Bottom Boundary</span>
-                <span className="text-xs font-bold text-white">${inspectedOb.bottom.toFixed(2)}</span>
+                <span className="text-[8px] text-muted dark:text-slate-500 uppercase">Bottom Boundary</span>
+                <span className="text-xs font-bold text-foreground dark:text-white">${inspectedOb.bottom.toFixed(2)}</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[8px] text-slate-500 uppercase">Range Height</span>
-                <span className="text-xs font-bold text-slate-300">
+                <span className="text-[8px] text-muted dark:text-slate-500 uppercase">Range Height</span>
+                <span className="text-xs font-bold text-foreground/80 dark:text-slate-300">
                   ${inspectedOb.range_height.toFixed(2)} ({inspectedOb.range_pct}%)
                 </span>
               </div>
             </div>
 
             {/* 4-Gate Validation Breakdown */}
-            <div className="border border-slate-800/60 bg-slate-900/20 rounded-lg p-4 mb-4">
-              <h4 className="text-[10px] uppercase font-bold text-slate-300 mb-3 flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <div className="border border-card-border dark:border-slate-800/60 bg-card/60 dark:bg-slate-900/20 rounded-xl p-4 mb-4 shadow-xs">
+              <h4 className="text-[10px] uppercase font-bold text-foreground dark:text-slate-300 mb-3 flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>Multi-Gate Institutional Validation Filter</span>
               </h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[10px]">
                 {/* Gate 1 */}
-                <div className={`p-2.5 rounded border ${inspectedOb.gates.gate1_liquidity_sweep ? "bg-emerald-950/20 border-emerald-500/30 text-emerald-300" : "bg-slate-900/60 border-slate-800 text-slate-500"}`}>
+                <div className={`p-2.5 rounded-lg border shadow-xs ${inspectedOb.gates.gate1_liquidity_sweep ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300" : "bg-background dark:bg-slate-900/60 border-card-border dark:border-slate-800 text-muted dark:text-slate-500"}`}>
                   <div className="flex items-center justify-between font-bold mb-1">
                     <span>Gate 1: Liquidity Sweep</span>
                     <span>{inspectedOb.gates.gate1_liquidity_sweep ? "PASSED" : "FAILED"}</span>
                   </div>
-                  <p className="text-[9px] text-slate-400">
+                  <p className="text-[9px] text-muted dark:text-slate-400">
                     Sweep Type: <strong>{inspectedOb.gates.sweep_type}</strong> {inspectedOb.gates.sweep_level ? `at $${inspectedOb.gates.sweep_level}` : ""}
                   </p>
                 </div>
 
                 {/* Gate 2 */}
-                <div className={`p-2.5 rounded border ${inspectedOb.gates.gate2_displacement_imbalance ? "bg-emerald-950/20 border-emerald-500/30 text-emerald-300" : "bg-slate-900/60 border-slate-800 text-slate-500"}`}>
+                <div className={`p-2.5 rounded-lg border shadow-xs ${inspectedOb.gates.gate2_displacement_imbalance ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300" : "bg-background dark:bg-slate-900/60 border-card-border dark:border-slate-800 text-muted dark:text-slate-500"}`}>
                   <div className="flex items-center justify-between font-bold mb-1">
                     <span>Gate 2: Displacement & FVG</span>
                     <span>{inspectedOb.gates.gate2_displacement_imbalance ? "PASSED" : "FAILED"}</span>
                   </div>
-                  <p className="text-[9px] text-slate-400">
+                  <p className="text-[9px] text-muted dark:text-slate-400">
                     FVG: <strong>{inspectedOb.gates.fvg_type || "None"}</strong> • Body: {(inspectedOb.gates.displacement_body_ratio * 100).toFixed(0)}% • Vol: {inspectedOb.gates.displacement_volume_expansion}x
                   </p>
                 </div>
 
                 {/* Gate 3 */}
-                <div className={`p-2.5 rounded border ${inspectedOb.gates.gate3_structure_break ? "bg-emerald-950/20 border-emerald-500/30 text-emerald-300" : "bg-slate-900/60 border-slate-800 text-slate-500"}`}>
+                <div className={`p-2.5 rounded-lg border shadow-xs ${inspectedOb.gates.gate3_structure_break ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300" : "bg-background dark:bg-slate-900/60 border-card-border dark:border-slate-800 text-muted dark:text-slate-500"}`}>
                   <div className="flex items-center justify-between font-bold mb-1">
                     <span>Gate 3: Structure Break</span>
                     <span>{inspectedOb.gates.gate3_structure_break ? "PASSED" : "FAILED"}</span>
                   </div>
-                  <p className="text-[9px] text-slate-400">
+                  <p className="text-[9px] text-muted dark:text-slate-400">
                     Shift: <strong>{inspectedOb.gates.structure_break_type}</strong> {inspectedOb.gates.broken_structure_level ? `fractured $${inspectedOb.gates.broken_structure_level}` : ""}
                   </p>
                 </div>
 
                 {/* Gate 4 */}
-                <div className={`p-2.5 rounded border ${inspectedOb.gates.gate4_dealing_range ? "bg-emerald-950/20 border-emerald-500/30 text-emerald-300" : "bg-slate-900/60 border-slate-800 text-slate-500"}`}>
+                <div className={`p-2.5 rounded-lg border shadow-xs ${inspectedOb.gates.gate4_dealing_range ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300" : "bg-background dark:bg-slate-900/60 border-card-border dark:border-slate-800 text-muted dark:text-slate-500"}`}>
                   <div className="flex items-center justify-between font-bold mb-1">
                     <span>Gate 4: Dealing Range</span>
                     <span>{inspectedOb.gates.gate4_dealing_range ? "PASSED" : "FAILED"}</span>
                   </div>
-                  <p className="text-[9px] text-slate-400">
+                  <p className="text-[9px] text-muted dark:text-slate-400">
                     Pricing: <strong>{inspectedOb.gates.dealing_range_location}</strong> (Eq: ${inspectedOb.gates.dealing_range_equilibrium ?? "—"})
                   </p>
                 </div>
@@ -3135,52 +3135,52 @@ export default function QuantLabPage() {
             </div>
 
             {/* Lifecycle & Simulated Trade Blueprint (Phase 3 Dynamic Management) */}
-            <div className="border border-slate-800/60 bg-slate-900/30 rounded-lg p-4 mb-4 font-mono text-[10px]">
-              <h4 className="uppercase font-bold text-slate-300 mb-2.5 flex items-center justify-between">
+            <div className="border border-card-border dark:border-slate-800/60 bg-card/60 dark:bg-slate-900/30 rounded-xl p-4 mb-4 font-mono text-[10px] shadow-xs">
+              <h4 className="uppercase font-bold text-foreground dark:text-slate-300 mb-2.5 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
-                  <Crosshair className="w-3.5 h-3.5 text-cyan-400" />
+                  <Crosshair className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
                   <span>Primary OB Dynamic Trade Lifecycle & Execution</span>
                 </span>
                 {inspectedOb.is_be_active && (
-                  <span className="px-2 py-0.5 rounded text-[8px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                  <span className="px-2 py-0.5 rounded-md text-[8px] font-bold bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30">
                     🛡️ BREAKEVEN PROTECTED
                   </span>
                 )}
               </h4>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-slate-300 mb-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-foreground/90 dark:text-slate-300 mb-3">
                 <div>
-                  <span className="text-slate-500 text-[8px] uppercase block">Lifecycle State</span>
-                  <span className="font-bold text-white">{inspectedOb.lifecycle_status}</span>
+                  <span className="text-muted dark:text-slate-500 text-[8px] uppercase block">Lifecycle State</span>
+                  <span className="font-bold text-foreground dark:text-white">{inspectedOb.lifecycle_status}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 text-[8px] uppercase block">Freshness Status</span>
-                  <span className={`font-bold ${inspectedOb.is_fresh_mitigation ? "text-emerald-400" : inspectedOb.is_expired ? "text-amber-400" : "text-slate-400"}`}>
+                  <span className="text-muted dark:text-slate-500 text-[8px] uppercase block">Freshness Status</span>
+                  <span className={`font-bold ${inspectedOb.is_fresh_mitigation ? "text-emerald-600 dark:text-emerald-400" : inspectedOb.is_expired ? "text-amber-600 dark:text-amber-400" : "text-muted dark:text-slate-400"}`}>
                     {inspectedOb.is_fresh_mitigation ? "FRESH TEST" : inspectedOb.is_expired ? "EXPIRED STALE" : "NORMAL"}
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-500 text-[8px] uppercase block">Bars to Mitigation</span>
-                  <span className="font-bold text-slate-200">{inspectedOb.bars_to_mitigation ?? "—"} bars</span>
+                  <span className="text-muted dark:text-slate-500 text-[8px] uppercase block">Bars to Mitigation</span>
+                  <span className="font-bold text-foreground dark:text-slate-200">{inspectedOb.bars_to_mitigation ?? "—"} bars</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 text-[8px] uppercase block">Entry / Initial Stop Loss</span>
-                  <span className="font-bold text-white">${inspectedOb.simulated_entry_price} / ${inspectedOb.simulated_stop_loss}</span>
+                  <span className="text-muted dark:text-slate-500 text-[8px] uppercase block">Entry / Initial Stop Loss</span>
+                  <span className="font-bold text-foreground dark:text-white">${inspectedOb.simulated_entry_price} / ${inspectedOb.simulated_stop_loss}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 text-[8px] uppercase block">TP1 (40%) • TP2 (40%) • TP3 (20%)</span>
-                  <span className="font-bold text-emerald-400">${inspectedOb.simulated_tp1} • ${inspectedOb.simulated_tp2} • ${inspectedOb.simulated_tp3}</span>
+                  <span className="text-muted dark:text-slate-500 text-[8px] uppercase block">TP1 (40%) • TP2 (40%) • TP3 (20%)</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">${inspectedOb.simulated_tp1} • ${inspectedOb.simulated_tp2} • ${inspectedOb.simulated_tp3}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 text-[8px] uppercase block">Simulated Trade Outcome</span>
+                  <span className="text-muted dark:text-slate-500 text-[8px] uppercase block">Simulated Trade Outcome</span>
                   <span className={`font-bold ${
                     inspectedOb.simulated_outcome === "FULL_TP2_WIN" || inspectedOb.simulated_outcome === "WIN"
-                      ? "text-emerald-400"
+                      ? "text-emerald-600 dark:text-emerald-400"
                       : inspectedOb.simulated_outcome === "BE_SCRATCH_WIN"
-                      ? "text-cyan-300"
+                      ? "text-cyan-600 dark:text-cyan-300"
                       : inspectedOb.simulated_outcome === "STOPPED_OUT" || inspectedOb.simulated_outcome === "LOSS"
-                      ? "text-rose-400"
-                      : "text-slate-400"
+                      ? "text-rose-600 dark:text-rose-400"
+                      : "text-muted dark:text-slate-400"
                   }`}>
                     {inspectedOb.stage_exit_type ?? inspectedOb.simulated_outcome} ({inspectedOb.realized_rr > 0 ? "+" : ""}{inspectedOb.realized_rr}R)
                   </span>
@@ -3188,85 +3188,85 @@ export default function QuantLabPage() {
               </div>
 
               {inspectedOb.is_be_active && (
-                <div className="border-t border-slate-800/60 pt-2.5 mt-2 flex flex-wrap items-center justify-between text-[9px] text-slate-400 gap-y-1.5">
-                  <span>Tranche 1 (40% @ 1.0R): <strong className="text-emerald-400">{inspectedOb.tp1_hit_time ? `${new Date(inspectedOb.tp1_hit_time).toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" })} (+0.4R)` : "—"}</strong></span>
-                  <span>Tranche 2 (40% @ 1.5R): <strong className={inspectedOb.is_tp2_filled ? "text-emerald-400" : "text-slate-500"}>{inspectedOb.tp2_hit_time ? `${new Date(inspectedOb.tp2_hit_time).toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" })} (+0.6R)` : "Pending"}</strong></span>
-                  <span>Tranche 3 (20% DOL): <strong className={inspectedOb.is_tp3_filled ? "text-purple-400" : "text-slate-500"}>{inspectedOb.is_tp3_filled ? `Filled (${inspectedOb.realized_rr}R Total)` : "Trailing"}</strong></span>
-                  <span>Active SL Trail: <strong className="text-cyan-300">${inspectedOb.active_trailing_sl ?? inspectedOb.simulated_entry_price} ({inspectedOb.trailing_sl_source ?? "BREAKEVEN"})</strong></span>
+                <div className="border-t border-card-border/60 dark:border-slate-800/60 pt-2.5 mt-2 flex flex-wrap items-center justify-between text-[9px] text-muted dark:text-slate-400 gap-y-1.5">
+                  <span>Tranche 1 (40% @ 1.0R): <strong className="text-emerald-600 dark:text-emerald-400">{inspectedOb.tp1_hit_time ? `${new Date(inspectedOb.tp1_hit_time).toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" })} (+0.4R)` : "—"}</strong></span>
+                  <span>Tranche 2 (40% @ 1.5R): <strong className={inspectedOb.is_tp2_filled ? "text-emerald-600 dark:text-emerald-400" : "text-muted dark:text-slate-500"}>{inspectedOb.tp2_hit_time ? `${new Date(inspectedOb.tp2_hit_time).toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" })} (+0.6R)` : "Pending"}</strong></span>
+                  <span>Tranche 3 (20% DOL): <strong className={inspectedOb.is_tp3_filled ? "text-purple-600 dark:text-purple-400" : "text-muted dark:text-slate-500"}>{inspectedOb.is_tp3_filled ? `Filled (${inspectedOb.realized_rr}R Total)` : "Trailing"}</strong></span>
+                  <span>Active SL Trail: <strong className="text-cyan-600 dark:text-cyan-300">${inspectedOb.active_trailing_sl ?? inspectedOb.simulated_entry_price} ({inspectedOb.trailing_sl_source ?? "BREAKEVEN"})</strong></span>
                 </div>
               )}
             </div>
 
             {/* Inverted Breaker Block Execution Blueprint (Phase 4 Confirmation-Gated) */}
             {inspectedOb.is_breaker && (
-              <div className="border border-purple-500/30 bg-purple-950/15 rounded-lg p-4 mb-4 font-mono text-[10px]">
+              <div className="border border-purple-500/30 bg-purple-500/10 dark:bg-purple-950/15 rounded-xl p-4 mb-4 font-mono text-[10px] shadow-xs">
                 <div className="flex items-center justify-between mb-2.5">
-                  <h4 className="uppercase font-bold text-purple-300 flex items-center gap-1.5">
-                    <Repeat className="w-3.5 h-3.5 text-purple-400" />
+                  <h4 className="uppercase font-bold text-purple-600 dark:text-purple-300 flex items-center gap-1.5">
+                    <Repeat className="w-3.5 h-3.5 text-purple-500" />
                     <span>Inverted Breaker Block Execution Blueprint</span>
                   </h4>
                   <div className="flex items-center gap-2">
                     {inspectedOb.breaker_is_confirmed && (
-                      <span className="px-2 py-0.5 rounded text-[8px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      <span className="px-2 py-0.5 rounded-md text-[8px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30">
                         ✓ CONFIRMED (MICRO MSS)
                       </span>
                     )}
-                    <span className="px-2 py-0.5 rounded text-[8px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                    <span className="px-2 py-0.5 rounded-md text-[8px] font-bold bg-purple-500/15 text-purple-600 dark:text-purple-300 border border-purple-500/30">
                       {inspectedOb.type === "BULLISH" ? "BEARISH BREAKER (RESISTANCE)" : "BULLISH BREAKER (SUPPORT)"}
                     </span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-slate-300 mb-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-foreground/90 dark:text-slate-300 mb-3">
                   <div>
-                    <span className="text-slate-500 text-[8px] uppercase block">Breaker Retest Status</span>
-                    <span className={`font-bold ${inspectedOb.breaker_trade_outcome === "WIN" ? "text-purple-300" : inspectedOb.breaker_trade_outcome === "LOSS" ? "text-rose-400" : inspectedOb.breaker_trade_outcome === "EXPIRED" ? "text-amber-400" : "text-slate-400"}`}>
+                    <span className="text-muted dark:text-slate-500 text-[8px] uppercase block">Breaker Retest Status</span>
+                    <span className={`font-bold ${inspectedOb.breaker_trade_outcome === "WIN" ? "text-purple-600 dark:text-purple-300" : inspectedOb.breaker_trade_outcome === "LOSS" ? "text-rose-600 dark:text-rose-400" : inspectedOb.breaker_trade_outcome === "EXPIRED" ? "text-amber-600 dark:text-amber-400" : "text-muted dark:text-slate-400"}`}>
                       {inspectedOb.breaker_trade_outcome} {inspectedOb.breaker_realized_rr !== 0 ? `(${inspectedOb.breaker_realized_rr > 0 ? "+" : ""}{inspectedOb.breaker_realized_rr}R)` : ""}
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-500 text-[8px] uppercase block">Breaker Entry Price</span>
-                    <span className="font-bold text-white">${inspectedOb.breaker_entry_price ?? "—"}</span>
+                    <span className="text-muted dark:text-slate-500 text-[8px] uppercase block">Breaker Entry Price</span>
+                    <span className="font-bold text-foreground dark:text-white">${inspectedOb.breaker_entry_price ?? "—"}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 text-[8px] uppercase block">Breaker SL / Target TP</span>
-                    <span className="font-bold text-purple-300">${inspectedOb.breaker_stop_loss ?? "—"} / ${inspectedOb.breaker_tp ?? "—"}</span>
+                    <span className="text-muted dark:text-slate-500 text-[8px] uppercase block">Breaker SL / Target TP</span>
+                    <span className="font-bold text-purple-600 dark:text-purple-300">${inspectedOb.breaker_stop_loss ?? "—"} / ${inspectedOb.breaker_tp ?? "—"}</span>
                   </div>
                   <div>
-                    <span className="text-slate-500 text-[8px] uppercase block">Draw on Liquidity (DOL)</span>
-                    <span className="font-bold text-emerald-400">
+                    <span className="text-muted dark:text-slate-500 text-[8px] uppercase block">Draw on Liquidity (DOL)</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">
                       {inspectedOb.breaker_dol_target ? `$${inspectedOb.breaker_dol_target} (${inspectedOb.breaker_dol_type})` : "Standard Target R:R"}
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-500 text-[8px] uppercase block">Confirmation Gate</span>
-                    <span className={`font-bold ${inspectedOb.breaker_is_confirmed ? "text-emerald-400" : inspectedOb.breaker_veto_reason ? "text-rose-400" : "text-slate-400"}`}>
+                    <span className="text-muted dark:text-slate-500 text-[8px] uppercase block">Confirmation Gate</span>
+                    <span className={`font-bold ${inspectedOb.breaker_is_confirmed ? "text-emerald-600 dark:text-emerald-400" : inspectedOb.breaker_veto_reason ? "text-rose-600 dark:text-rose-400" : "text-muted dark:text-slate-400"}`}>
                       {inspectedOb.breaker_is_confirmed ? "MICRO MSS + FVG CONFIRMED" : inspectedOb.breaker_veto_reason ? `VETO: ${inspectedOb.breaker_veto_reason}` : inspectedOb.breaker_confirmation_type}
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-500 text-[8px] uppercase block">Bars to Inversion Retest</span>
-                    <span className="font-bold text-slate-200">{inspectedOb.breaker_bars_to_retest ? `${inspectedOb.breaker_bars_to_retest} bars` : "No Retest"}</span>
+                    <span className="text-muted dark:text-slate-500 text-[8px] uppercase block">Bars to Inversion Retest</span>
+                    <span className="font-bold text-foreground dark:text-slate-200">{inspectedOb.breaker_bars_to_retest ? `${inspectedOb.breaker_bars_to_retest} bars` : "No Retest"}</span>
                   </div>
                 </div>
 
                 {inspectedOb.breaker_is_confirmed && (
-                  <div className="border-t border-purple-500/20 pt-2.5 mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[9px] text-purple-200">
+                  <div className="border-t border-purple-500/20 pt-2.5 mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[9px] text-purple-700 dark:text-purple-200">
                     <div>
-                      <span className="text-slate-500 block text-[7px] uppercase">Confirmation Time</span>
+                      <span className="text-muted dark:text-slate-500 block text-[7px] uppercase">Confirmation Time</span>
                       <span>{inspectedOb.breaker_confirmation_time ? new Date(inspectedOb.breaker_confirmation_time).toLocaleTimeString("en-US", { timeZone: "Africa/Cairo" }) : "—"}</span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block text-[7px] uppercase">Confirmed FVG Range</span>
+                      <span className="text-muted dark:text-slate-500 block text-[7px] uppercase">Confirmed FVG Range</span>
                       <span>{inspectedOb.breaker_fvg_top ? `$${inspectedOb.breaker_fvg_top} - $${inspectedOb.breaker_fvg_bottom}` : "Structural"}</span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block text-[7px] uppercase">Vol Expansion</span>
-                      <span className="font-bold text-cyan-300">{inspectedOb.breaker_volume_expansion ? `${inspectedOb.breaker_volume_expansion}x` : "—"}</span>
+                      <span className="text-muted dark:text-slate-500 block text-[7px] uppercase">Vol Expansion</span>
+                      <span className="font-bold text-cyan-600 dark:text-cyan-300">{inspectedOb.breaker_volume_expansion ? `${inspectedOb.breaker_volume_expansion}x` : "—"}</span>
                     </div>
                     <div>
-                      <span className="text-slate-500 block text-[7px] uppercase">Taker Delta</span>
-                      <span className="font-bold text-emerald-400">{inspectedOb.breaker_taker_delta ? `${inspectedOb.breaker_taker_delta > 0 ? "+" : ""}${inspectedOb.breaker_taker_delta}` : "—"}</span>
+                      <span className="text-muted dark:text-slate-500 block text-[7px] uppercase">Taker Delta</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">{inspectedOb.breaker_taker_delta ? `${inspectedOb.breaker_taker_delta > 0 ? "+" : ""}${inspectedOb.breaker_taker_delta}` : "—"}</span>
                     </div>
                   </div>
                 )}
@@ -3277,7 +3277,7 @@ export default function QuantLabPage() {
             <div className="flex justify-end">
               <button
                 onClick={() => setInspectedOb(null)}
-                className="px-5 py-2 rounded bg-slate-900 hover:bg-slate-800 text-xs font-bold text-slate-300 transition"
+                className="px-5 py-2 rounded-lg bg-muted/20 hover:bg-muted/30 dark:bg-slate-900 dark:hover:bg-slate-800 text-xs font-bold text-foreground dark:text-slate-300 transition cursor-pointer shadow-xs"
               >
                 Close Inspector
               </button>
