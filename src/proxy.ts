@@ -24,7 +24,7 @@ export default auth((req) => {
 
   // Define public routes that don't require authentication
   const isAuthRoute = nextUrl.pathname.startsWith("/api/auth");
-  const isPyBackend = nextUrl.pathname.startsWith("/api/py");
+  const isApiRoute = nextUrl.pathname.startsWith("/api");
   const isLoginPage = nextUrl.pathname === "/login";
   // M2M & OAuth routes — handle their own auth.
   // Must bypass the NextAuth session gate so external agents (Gemini Spark) can authenticate.
@@ -41,8 +41,8 @@ export default auth((req) => {
     nextUrl.pathname.startsWith("/manifest.json") ||
     nextUrl.pathname.startsWith("/sw.js");
 
-  // Skip proxy for auth API routes, python backend, M2M/OAuth routes, and static assets
-  if (isAuthRoute || isPyBackend || isM2MRoute || isPublicAsset) {
+  // Skip proxy for all API routes, M2M/OAuth routes, and static assets
+  if (isAuthRoute || isApiRoute || isM2MRoute || isPublicAsset) {
     return NextResponse.next();
   }
 
