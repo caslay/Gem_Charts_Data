@@ -150,16 +150,22 @@ async function runReconciliation() {
     const expectedDir = qlSetup.type === 'BULLISH' ? 'LONG' : 'SHORT';
     const reclaimTimeIso = new Date(qlSetup.reclaim_time || 0).toISOString().replace('.000Z', 'Z');
     const qlReclaimMs = qlSetup.reclaim_time || 0;
+    const stripSuffix = (id?: string) => (id ? id.replace(/_SW\d+$/, '') : '');
+    const qlBaseId = stripSuffix(qlSetup.id);
 
     const matchedLive = allLivePositions.find((t) => {
       if (usedPositionIds.has(t.id)) return false;
-      // 1. Direct ID match
-      if (t.originZoneId === qlSetup.id || t.setupId === qlSetup.id || t.id === qlSetup.id) return true;
-      // 2. Anchor Level & Direction match within temporal proximity (<= 15 mins of reclaim)
+      // 1. Direct Base ID match (ignoring dynamic candle index suffix)
+      if (t.originZoneId && stripSuffix(t.originZoneId) === qlBaseId) return true;
+      if (t.setupId && stripSuffix(t.setupId) === qlBaseId) return true;
+      if (t.id && stripSuffix(t.id) === qlBaseId) return true;
+      // 2. Anchor Level & Direction match within temporal proximity
       const sameDir = t.direction === expectedDir;
-      const sameAnchor = Math.abs((t.originAnchorLevel || t.entryPrice) - qlSetup.anchor_level) < 0.2 || t.anchorName === qlSetup.anchor_name;
+      const sameAnchor =
+        Math.abs((t.originAnchorLevel ?? t.entryPrice) - qlSetup.anchor_level) < 0.25 ||
+        t.anchorName === qlSetup.anchor_name;
       const timeDiff = Math.abs((t.openTime || t.pendingTime || 0) - qlReclaimMs);
-      return sameDir && sameAnchor && timeDiff <= 15 * 60 * 1000;
+      return sameDir && sameAnchor && timeDiff <= 60 * 60 * 1000;
     });
 
     if (matchedLive) {
