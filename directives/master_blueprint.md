@@ -1,8 +1,70 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.00
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.02
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-30 (V17.00 — VPS Deployment & Institutional Go-Live Master Roadmap)
+> **Last Updated:** 2026-08-31 (V17.02 — Structural Engine Refactor & In-Scanner Multi-Anchor Wave Deduplication)
+
+## 🆕 V17.02 Changelog — Structural Engine Refactor & In-Scanner Multi-Anchor Wave Deduplication (2026-08-31)
+
+### Summary
+Executed a forensic quant audit and complete 5-phase structural engine refactor for the Sweep & Reclaim quantitative system. Resolves trade concurrency inflation, anchors stacking leaks, dealing range equilibrium lag during runaway cascades, and retest timing ambiguity. Delivered two institutional audit & refactor specifications (`docs/FORENSIC_QUANT_AUDIT_REPORT.md` and `docs/STRUCTURAL_ENGINE_REFACTOR_PLAN.md`), implemented native in-scanner wave deduplication with institutional champion selection, integrated a 3-state regime-adaptive valuation gate (`ROTATIONAL` / `TRANSITIONAL` / `RUNAWAY`), added 5-tier retest freshness & pullback discrimination, and validated determinism with a 25-assertion automated test suite.
+
+### Key Architectural Deliverables
+1. **In-Scanner Wave Deduplication & Concurrency Guard (`SweepReclaimEngine.ts`):**
+   - Implemented dynamic `wave_fingerprint` clustering across multi-anchor sweeps sharing identical displacement waves.
+   - Built institutional Champion Election adhering to market touch physics (Shorts: lowest entry touched first on rally; Longs: highest entry touched first on dip) with anchor tier priority (`DAILY` > `LONDON` > `ASIAN` > `MAJOR` > `INTERNAL` > `INNER`) and sweep depth tiebreakers.
+   - Enforced single-position non-overlapping lifecycle walk (`maxOpenPositions: 1`), tagging overlapping trades with `stacking_discount_applied: true`.
+2. **Regime-Adaptive Valuation Gate & Trend-Direction Decoupling:**
+   - 3-State Classifier (`classifyMarketRegime`): Categorizes market into `ROTATIONAL_AUCTION`, `TRANSITIONAL_EXPANSION`, and `RUNAWAY_EXPANSION` based on structural bootstrap state and ATR-relative displacement velocity.
+   - Decoupled trend-following trades in `RUNAWAY_EXPANSION` from lagging macro equilibrium by using the local wave retest midpoint (`local_wave_equilibrium`).
+   - Gated counter-trend entries in runaway expansion behind confirmed Major HTF liquidity sweeps (`DAILY`, `SESSION`, `MAJOR`).
+   - Added transitional relaxed equilibrium buffer (`±0.25 * atr`).
+3. **Retest Freshness & Pullback vs. Continuation Discrimination:**
+   - 5-Tier Freshness Classification: `IMMEDIATE` (1 bar), `FAST` (2–3 bars), `STANDARD` (4–8 bars), `EXTENDED` (9–12 bars), `STALE` (>12 bars).
+   - Discriminated genuine pullbacks vs continuation flushes via 0.5R excursion threshold (`retest_type`: `PULLBACK_RETEST` vs `SHALLOW_PULLBACK` vs `CONTINUATION`).
+   - Standardized default `maxBarsToRetest` to 12 bars.
+4. **Scanner Route & Telemetry Reporting Synchronization:**
+   - Updated `src/app/api/quant-lab/sweep-reclaim-scanner/route.ts` and `SweepReclaimWorkspace.tsx` to serialize and display stacking reduction percentage, regime distribution, freshness distributions, and clean executable trade statistics.
+5. **Zero-Repainting Deterministic Validation Suite (`scripts/test-structural-engine.ts`):**
+   - 25/25 automated assertions verified: anchor tier priority, regime classification, in-scanner deduplication, retest discrimination, and bit-for-bit duplicate run repeatability.
+
+### Files Added / Modified
+- **`docs/FORENSIC_QUANT_AUDIT_REPORT.md`** [NEW]
+- **`docs/STRUCTURAL_ENGINE_REFACTOR_PLAN.md`** [NEW]
+- **`docs/1YEAR_FORENSIC_COMPARISON_OLD_VS_NEW.md`** [NEW]
+- **`scratch/1y-fresh-SWEEP_RECLAIM_ETHUSDC_5m_refactored.json`** [NEW]
+- **`scripts/compare-1y-scans.ts`** [NEW]
+- **`scripts/test-structural-engine.ts`** [NEW]
+- **`src/lib/quantEngine/types.ts`** [MODIFY]
+- **`src/lib/quantEngine/SweepReclaimEngine.ts`** [MODIFY]
+- **`src/lib/quantEngine/equityCalculator.ts`** [MODIFY]
+- **`src/app/api/quant-lab/sweep-reclaim-scanner/route.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V17.01 Changelog — Binance Live Execution, Risk Governor & Environment Isolation Master Plan (2026-08-31)
+
+### Summary
+Formulated and documented the comprehensive architecture and implementation blueprint at `docs/BINANCE_LIVE_EXECUTION_AND_ISOLATION_PLAN.md` covering the live Binance Futures USDⓈ-M integration, Account Risk Governor, dedicated Live Journal, and a 4-Layer Zero-Trust Environment Isolation model to completely eliminate real-money execution conflicts between local development and VPS production.
+
+### Key Architectural Deliverables
+1. **Take Profit (TP) & Risk Decoupling Doctrine:**
+   - Locked TP ratios strictly inside Strategy Presets (preserving calibrated 1.0R / 1.4R multi-stage harvest geometries).
+   - Governed risk sizing dynamically from real-time Binance Available Margin Equity via Global Account Settings.
+2. **Account Risk Governor & Max Drawdown Circuit Breaker:**
+   - Added schema extensions to native Local VPS PostgreSQL `trading_account` for live Binance equity, max daily drawdown percentage (`max_daily_drawdown_pct`), and emergency killswitch state.
+   - Defined the automated 00:00 UTC anchor reset and immediate order flush circuit breaker if daily loss reaches the configured threshold (e.g. -5.0%).
+3. **Dedicated Real-Time Binance Live Journal (`/journal`):**
+   - Replaces client-side browser sandbox with direct feeds from Binance Futures `/fapi/v2/positionRisk` and `/fapi/v1/userTrades`.
+   - Isolated research and backtest records under `/quant-lab` and `/backtest`.
+4. **4-Layer Dev Local vs. VPS Environment Isolation:**
+   - **Layer 1:** Strict `.env.local` vs VPS `.env.production` credential segregation.
+   - **Layer 2:** Server-side zero-trust `BinanceOrderRouter` triple-validation gate.
+   - **Layer 3:** Shared unauthenticated public WebSocket kline feeds for local dev charting.
+   - **Layer 4:** High-visibility UI environment watermark badges (`[ 🧪 LOCAL DEV ]` vs `[ 🔴 LIVE PM2 DAEMON ]`).
+
+### Files Added / Modified
+- **`docs/BINANCE_LIVE_EXECUTION_AND_ISOLATION_PLAN.md`** [NEW]
+- **`directives/master_blueprint.md`** [MODIFY]
 
 ## 🆕 V17.00 Changelog — VPS Deployment & Institutional Go-Live Master Roadmap (2026-08-30)
 
@@ -836,6 +898,38 @@ Completely eliminated start-date backtest splicing drift and established 100.00%
 - **`scripts/audit_quant_lab_parity.ts`**
 - **`directives/02_lessons.md`**
 - **`directives/master_blueprint.md`**
+
+## 🆕 V16.61 Changelog — Synchronizing Discount/Premium Veto Gate with True Structural Dealing Range (2026-08-31)
+
+### Summary
+Resolved an architectural valuation disconnect where `SweepReclaimEngine` evaluated Discount/Premium gating using an isolated, narrow 5-bar micro-window (`anchorIdx - 5` to `reclaimIdx`), producing false-positive `is_valuation_aligned: true` on short setups formed in deep structural discount (e.g. shorting below the 5M Structural Dealing Range Equilibrium $2458.39). Synchronized `SweepReclaimEngine`, `AutomatedStrategyExecutionEngine`, and `computeMacroContext` with the true 5M Structural Dealing Range computed from color-validated Major Swing Pivots via `MarketStructureAPI`.
+
+### Key Architectural Deliverables
+1. **Parent Structural Dealing Range Injection (`SweepReclaimEngine.ts`):**
+   - Extended `SweepReclaimScanConfig` with `structuralDealingRange?: { high: number; low: number; equilibrium: number } | null`.
+   - Updated `dealingRangeEquilibrium` resolution: prioritizes the active parent Structural Dealing Range (`structuralDealingRange.equilibrium`) from `MarketStructureAPI` / `MacroContext`, with fallback to the macro lookback swing window instead of a blind 5-bar micro-slice.
+2. **Dual-Valuation Live Execution Gating (`AutomatedStrategyExecutionEngine.ts`):**
+   - Extracted `structuralDealingRange` from `macroContext.localDealingRange` and passed it into `scanConfig`.
+   - Enforced strict structural valuation compliance in the live order arming gate: Longs must satisfy $\text{entryPrice} \le \text{EQ}$, and Shorts must satisfy $\text{entryPrice} \ge \text{EQ}$.
+   - Unaligned setups in discount/premium are strictly vetoed with `is_valuation_aligned = false` / `simulated_outcome = 'INVALIDATED'` and blocked from placing live pending limit orders.
+3. **5M Structural Dealing Range Dynamic Bootstrap (`restBootstrap.ts`, `headless-daemon.ts`):**
+   - Enhanced `computeMacroContext` to accept `candles5m` and dynamically compute the 5M Structural Dealing Range using `MarketStructureAPI`, seamlessly falling back to Daily PDH/PDL when insufficient 5m candles are available.
+   - Updated headless daemon event loops to refresh `currentMacroContext` on all closed candle intervals (`5m`, `15m`, `1h`).
+4. **API Route & Backtest Alignment (`route.ts`, `useBacktestStrategyExecution.ts`):**
+   - Updated `/api/quant-lab/sweep-reclaim-scanner` to accept and enforce `structuralDealingRange` parameter.
+5. **Verification & Audit Suite (`scratch/test_discount_premium_gate_fix.ts`):**
+   - Verified that the target Bearish Short setup @ \$2445.51 from the UI screenshot is **SUCCESSFULLY VETOED** against the UI Dealing Range (\$2400.00 – \$2516.78, EQ \$2458.39).
+   - Re-verified all 4/4 live gating tests, 40/40 temporal parity runs (100.00%), 17/17 backtest-vs-live parity checks, and 0 historical reboot leaks.
+
+### Files Modified
+- **`src/lib/quantEngine/SweepReclaimEngine.ts`**
+- **`src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`**
+- **`src/app/api/quant-lab/sweep-reclaim-scanner/route.ts`**
+- **`scripts/lib/restBootstrap.ts`**
+- **`scripts/headless-daemon.ts`**
+- **`directives/master_blueprint.md`**
+
+---
 
 ## 🆕 V16.60 Changelog — Veto Execution on Breached Stop Loss (2026-08-25)
 

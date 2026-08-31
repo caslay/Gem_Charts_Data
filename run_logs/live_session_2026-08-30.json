@@ -1078,6 +1078,28 @@
         "isDryRun": false,
         "initialEquity": 10000
       }
+    },
+    {
+      "id": "evt_1788120160937_f8cdp",
+      "type": "BOOT",
+      "timestamp": 1788120160937,
+      "timeIso": "2026-08-30T20:02:40.937Z",
+      "message": "Headless daemon booting for ETHUSDC",
+      "metadata": {
+        "isDryRun": false,
+        "initialEquity": 10000
+      }
+    },
+    {
+      "id": "evt_1788121052446_1efnn",
+      "type": "BOOT",
+      "timestamp": 1788121052446,
+      "timeIso": "2026-08-30T20:17:32.446Z",
+      "message": "Headless daemon booting for ETHUSDC",
+      "metadata": {
+        "isDryRun": false,
+        "initialEquity": 10000
+      }
     }
   ],
   "completedTrades": [

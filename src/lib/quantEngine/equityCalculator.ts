@@ -183,10 +183,10 @@ export function adaptSweepReclaimSetupsToTrades(
 
   // 2. Multi-Anchor Wave Deduplication & Single-Position Walking (Matches Live Daemon maxOpenPositions: 1)
   if (options.enforceSinglePositionWalk !== false) {
-    // 2A. Cluster setups triggered on the exact same displacement wave (same reclaim/sweep time)
+    // 2A. Cluster setups triggered on the exact same displacement wave (using wave_fingerprint if available)
     const waveMap = new Map<string, SweepReclaimSetup[]>();
     for (const s of candidateSetups) {
-      const waveKey = `${s.reclaim_time || s.sweep_time || s.anchor_time}_${s.type}`;
+      const waveKey = s.wave_fingerprint || `${s.reclaim_time || s.sweep_time || s.anchor_time}_${s.type}`;
       if (!waveMap.has(waveKey)) {
         waveMap.set(waveKey, []);
       }
@@ -227,24 +227,32 @@ export function adaptSweepReclaimSetupsToTrades(
       }
     }
 
-    // Sort chronologically by retest entry time
+    // Sort chronologically by retest entry time, tiebreak by anchor tier
     waveDeduplicated.sort((a, b) => {
       const timeA = a.retest_time || a.reclaim_time || a.sweep_time || a.anchor_time || 0;
       const timeB = b.retest_time || b.reclaim_time || b.sweep_time || b.anchor_time || 0;
-      return timeA - timeB;
+      if (timeA !== timeB) return timeA - timeB;
+      const pA = getAnchorPriority(a.anchor_type, a.anchor_swing_grade);
+      const pB = getAnchorPriority(b.anchor_type, b.anchor_swing_grade);
+      return pB - pA;
     });
 
     // 2B. Sequential Single-Position Lifecycle Walk (ensure non-overlapping [openTime, exitTime])
     const sequentialSetups: SweepReclaimSetup[] = [];
     let lastExitTimestamp = 0;
+    let lastOpenTimestamp = 0;
 
     for (const s of waveDeduplicated) {
       const openTime = s.retest_time || s.reclaim_time || s.sweep_time || s.anchor_time || 0;
       const exitTime = s.exit_time || (openTime + 15 * 60 * 1000);
 
-      if (openTime >= lastExitTimestamp) {
+      const isSameTimestamp = lastOpenTimestamp !== 0 && openTime === lastOpenTimestamp;
+      const isOverlapping = lastExitTimestamp !== 0 && openTime < lastExitTimestamp;
+
+      if (!isSameTimestamp && !isOverlapping) {
         sequentialSetups.push(s);
-        lastExitTimestamp = exitTime;
+        lastExitTimestamp = Math.max(lastExitTimestamp, exitTime);
+        lastOpenTimestamp = openTime;
       }
     }
 

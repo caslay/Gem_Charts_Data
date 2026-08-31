@@ -26,6 +26,20 @@
 
 import { Candle } from '../fvgEngine';
 import { PivotEngine } from './PivotEngine';
+import {
+  StructuralBootstrapContext,
+  MarketRegimeState,
+  RetestFreshness,
+  RetestType,
+  ValuationGateMode,
+} from './types';
+
+export type {
+  MarketRegimeState,
+  RetestFreshness,
+  RetestType,
+  ValuationGateMode,
+};
 
 // ── Types & Interfaces ────────────────────────────────────────────────────────
 
@@ -173,6 +187,23 @@ export interface SweepReclaimSetup {
   // Dealing Range & Valuation Gating
   dealing_range_equilibrium: number | null;
   is_valuation_aligned: boolean;
+  market_regime_at_entry?: MarketRegimeState;
+  valuation_gate_mode?: ValuationGateMode;
+  local_wave_equilibrium?: number | null;
+  htf_sweep_required?: boolean;
+  htf_sweep_level?: number | null;
+
+  // Wave Deduplication & Concurrency Guard Metadata
+  wave_fingerprint?: string;
+  is_wave_champion?: boolean;
+  wave_cluster_size?: number;
+  stacking_discount_applied?: boolean;
+
+  // Retest Freshness & Pullback Discrimination
+  retest_freshness?: RetestFreshness;
+  retest_type?: RetestType;
+  retest_max_excursion_r?: number | null;
+  retest_delay_bars?: number | null;
 
   // Risk / Reward & Execution Geometry
   entry_mode: SweepReclaimEntryMode;
@@ -224,7 +255,7 @@ export interface SweepReclaimScanConfig {
   lookbackInternal?: number;                  // Pivot engine internal lookback (default: 5)
   maxBarsAnchorToSweep?: number;              // Max candles between anchor and sweep (default: 30)
   maxBarsSweepToReclaim?: number;             // Max candles from sweep extreme to reclaim close (default: 12)
-  maxBarsToRetest?: number;                   // Max candles from reclaim to retest entry (default: 24)
+  maxBarsToRetest?: number;                   // Max candles from reclaim to retest entry (default: 12)
 
   // 3-Pillar Displacement Gatekeeper Thresholds
   volumeSmaPeriod?: number;                   // Rolling Volume SMA lookback period (default: 20, support: 7 to 50)
@@ -234,8 +265,21 @@ export interface SweepReclaimScanConfig {
   minBodyRatio?: number;                      // Pillar 3 alias: Min candle body-to-range ratio
   requireThreePillarDisplacement?: boolean;   // Veto reclaims that fail 3-pillar gate (default: true)
 
-  // Valuation Gating
+  // Valuation Gating & Regime Adaptation
   enforceDiscountPremiumGate?: boolean;       // Require Longs in Discount, Shorts in Premium (default: true)
+  enableRegimeAdaptiveEQ?: boolean;           // Decouple trend direction from macro EQ in runaway expansions (default: true)
+  runawayVelocityThreshold?: number;          // ATR-relative momentum multiplier for runaway state (default: 2.0)
+  transitionalVelocityThreshold?: number;     // ATR-relative momentum multiplier for transitional state (default: 1.0)
+  transitionHysteresisBarCount?: number;      // Bars to maintain expansion state before decaying (default: 2)
+  relaxedEqAtrBufferMultiplier?: number;      // Buffer in ATR for transitional relaxed EQ (default: 0.25)
+  structuralDealingRange?: { high: number; low: number; equilibrium: number } | null; // Parent structural dealing range (from MarketStructureAPI/MacroContext)
+
+  // In-Scanner Concurrency & Wave Deduplication
+  enableInScannerWaveDedup?: boolean;         // Group multi-anchor same-wave triggers into single champion (default: true)
+  enforceSinglePositionConcurrency?: boolean; // Walk single-position non-overlapping lifecycle (default: true)
+
+  // Retest Validation & Pullback Classification
+  pullbackExcursionThreshold?: number;        // Min R-distance excursion from entry for pullback classification (default: 0.5)
 
   // Target Multiples & Execution
   stage1Multiple?: number;                    // Stage 1 Tranche target R (default: 1.0)
@@ -261,6 +305,17 @@ export interface SweepReclaimTelemetrySummary {
   reclaim_rate_pct: number;
   retest_rate_pct: number;
   retest_win_rate_pct: number;
+
+  // Wave Deduplication & Concurrency Telemetry
+  total_raw_candidates?: number;
+  total_wave_champions?: number;
+  stacking_reduction_pct?: number;
+  overlapping_concurrency_vetoed_count?: number;
+
+  // Regime & Freshness Distributions
+  regime_distribution?: Record<MarketRegimeState, number>;
+  retest_freshness_distribution?: Record<RetestFreshness, number>;
+  retest_type_distribution?: Record<RetestType, number>;
 
   // 3-Pillar Displacement Breakdown & Diagnostics
   pillar1_pass_count: number;
@@ -334,13 +389,21 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   lookbackInternal: 5,
   maxBarsAnchorToSweep: 25,
   maxBarsSweepToReclaim: 10,
-  maxBarsToRetest: 20,
+  maxBarsToRetest: 12,
   volumeSmaPeriod: 20,
   volumeExpansionThreshold: 1.20,
   deltaDominanceThreshold: 52.0,
   bodyRatioThreshold: 0.40,
   requireThreePillarDisplacement: true,
   enforceDiscountPremiumGate: true,
+  enableRegimeAdaptiveEQ: true,
+  runawayVelocityThreshold: 2.0,
+  transitionalVelocityThreshold: 1.0,
+  transitionHysteresisBarCount: 2,
+  relaxedEqAtrBufferMultiplier: 0.25,
+  enableInScannerWaveDedup: true,
+  enforceSinglePositionConcurrency: true,
+  pullbackExcursionThreshold: 0.5,
   stage1Multiple: 1.0,
   stage2Multiple: 1.4,
   stage3Multiple: 3.0,
@@ -557,6 +620,69 @@ function calculateAtrSeries(candles: Candle[], period = 14): number[] {
   }
 
   return atrs;
+}
+
+export function getAnchorPriority(anchorType?: string, anchorSwingGrade?: string): number {
+  if (anchorType === 'DAILY' || anchorType === 'PDH' || anchorType === 'PDL') return 100;
+  if (anchorType === 'LONDON_HIGH' || anchorType === 'LONDON_LOW' || anchorType === 'LONDON') return 90;
+  if (anchorType === 'ASIAN_HIGH' || anchorType === 'ASIAN_LOW' || anchorType === 'ASIAN') return 80;
+  if (anchorSwingGrade === 'MAJOR') return 70;
+  if (anchorSwingGrade === 'INTERNAL') return 50;
+  return 30; // INNER
+}
+
+export function classifyMarketRegime(
+  candleIdx: number,
+  candles: Candle[],
+  atrSeries: number[],
+  bootstrap?: StructuralBootstrapContext,
+  config?: SweepReclaimScanConfig
+): {
+  regime: MarketRegimeState;
+  direction: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  velocity: number;
+} {
+  const runawayThresh = config?.runawayVelocityThreshold ?? 2.0;
+  const transitionalThresh = config?.transitionalVelocityThreshold ?? 1.0;
+
+  const currentCandle = candles[candleIdx];
+  if (!currentCandle) {
+    return { regime: 'ROTATIONAL_AUCTION', direction: 'NEUTRAL', velocity: 0 };
+  }
+
+  // 1. Check structural bootstrap expansion state if available
+  let isExpanding = false;
+  let expansionTrend: 'BULLISH' | 'BEARISH' | null = null;
+  if (bootstrap?.majorSnapshot?.is_in_expansion) {
+    isExpanding = true;
+    expansionTrend = bootstrap.majorSnapshot.current_trend_state === 'BULLISH_SWING' ? 'BULLISH' : 'BEARISH';
+  }
+
+  // 2. Compute local 6-candle displacement velocity relative to ATR
+  const lookbackBars = Math.min(6, candleIdx);
+  const startCandle = candles[candleIdx - lookbackBars];
+  const startPrice = startCandle.c ?? (startCandle as any).close;
+  const currentPrice = currentCandle.c ?? (currentCandle as any).close;
+  const priceDelta = currentPrice - startPrice;
+  const currentAtr = atrSeries[candleIdx] || 1.0;
+
+  let velocity = Math.abs(priceDelta) / Math.max(0.001, currentAtr * 3);
+  if (isExpanding) {
+    velocity += 1.5;
+  }
+
+  const direction: 'BULLISH' | 'BEARISH' | 'NEUTRAL' =
+    priceDelta > 0 ? 'BULLISH' : priceDelta < 0 ? 'BEARISH' : expansionTrend || 'NEUTRAL';
+
+  if (velocity >= runawayThresh && (isExpanding || Math.abs(priceDelta) >= currentAtr * 2)) {
+    return { regime: 'RUNAWAY_EXPANSION', direction, velocity: parseFloat(velocity.toFixed(2)) };
+  }
+
+  if (velocity >= transitionalThresh) {
+    return { regime: 'TRANSITIONAL_EXPANSION', direction, velocity: parseFloat(velocity.toFixed(2)) };
+  }
+
+  return { regime: 'ROTATIONAL_AUCTION', direction: 'NEUTRAL', velocity: parseFloat(velocity.toFixed(2)) };
 }
 
 // ── SweepReclaimEngine Implementation ────────────────────────────────────────
@@ -1001,6 +1127,12 @@ export class SweepReclaimEngine {
           bars_reclaim_to_retest: null, is_retested: false, is_immediate_fill: false,
           max_retest_index: null, is_expired: false, body_defense_passed: false,
           dealing_range_equilibrium: null, is_valuation_aligned: false,
+          market_regime_at_entry: 'ROTATIONAL_AUCTION',
+          valuation_gate_mode: 'STRUCTURAL_EQ',
+          wave_fingerprint: `${anchorTime}_${isBullish ? 'BULLISH' : 'BEARISH'}`,
+          is_wave_champion: true,
+          wave_cluster_size: 1,
+          stacking_discount_applied: false,
           entry_mode: entryMode,
           entry_price: parseFloat(anchorLevel.toFixed(4)),
           stop_loss: parseFloat((isBullish ? anchorLevel - anchorLevel * 0.0015 : anchorLevel + anchorLevel * 0.0015).toFixed(4)),
@@ -1088,6 +1220,12 @@ export class SweepReclaimEngine {
 
           dealing_range_equilibrium: null,
           is_valuation_aligned: false,
+          market_regime_at_entry: 'ROTATIONAL_AUCTION',
+          valuation_gate_mode: 'STRUCTURAL_EQ',
+          wave_fingerprint: `${anchorTime}_${isBullish ? 'BULLISH' : 'BEARISH'}`,
+          is_wave_champion: true,
+          wave_cluster_size: 1,
+          stacking_discount_applied: false,
 
           entry_mode: entryMode,
           entry_price: parseFloat(anchorLevel.toFixed(4)),
@@ -1385,18 +1523,27 @@ export class SweepReclaimEngine {
       }
 
       // ── Dealing Range & Valuation Gating (Discount vs Premium) ──────────────
-      const lookbackStart = Math.max(0, anchorIdx - 5);
-      const lookbackEnd = reclaimIdx !== null ? reclaimIdx : sweepIdx;
-      let rangeHigh = -Infinity;
-      let rangeLow = Infinity;
-      for (let k = lookbackStart; k <= lookbackEnd; k++) {
-        const cHigh = candles[k].h ?? (candles[k] as any).high;
-        const cLow = candles[k].l ?? (candles[k] as any).low;
-        if (cHigh > rangeHigh) rangeHigh = cHigh;
-        if (cLow < rangeLow) rangeLow = cLow;
+      let dealingRangeEquilibrium: number | null = null;
+      if (
+        this.config.structuralDealingRange &&
+        Number.isFinite(this.config.structuralDealingRange.equilibrium) &&
+        this.config.structuralDealingRange.equilibrium > 0
+      ) {
+        dealingRangeEquilibrium = parseFloat(this.config.structuralDealingRange.equilibrium.toFixed(4));
+      } else {
+        const lookbackStart = Math.max(0, anchorIdx - (this.config.lookbackMajor ?? 15) * 2);
+        const lookbackEnd = reclaimIdx !== null ? reclaimIdx : sweepIdx;
+        let rangeHigh = -Infinity;
+        let rangeLow = Infinity;
+        for (let k = lookbackStart; k <= lookbackEnd; k++) {
+          const cHigh = candles[k].h ?? (candles[k] as any).high;
+          const cLow = candles[k].l ?? (candles[k] as any).low;
+          if (cHigh > rangeHigh) rangeHigh = cHigh;
+          if (cLow < rangeLow) rangeLow = cLow;
+        }
+        dealingRangeEquilibrium =
+          rangeHigh > rangeLow ? parseFloat(((rangeHigh + rangeLow) / 2).toFixed(4)) : anchorLevel;
       }
-      const dealingRangeEquilibrium =
-        rangeHigh > rangeLow ? parseFloat(((rangeHigh + rangeLow) / 2).toFixed(4)) : anchorLevel;
 
       // Extract displacement impulse bounds from sweep to reclaim
       let impulseHigh = -Infinity;
@@ -1450,9 +1597,86 @@ export class SweepReclaimEngine {
         displacementExtremes: displacementData,
       }) : null;
 
-      const isValuationAligned = isBullish
-        ? executionEntry <= dealingRangeEquilibrium
-        : executionEntry >= dealingRangeEquilibrium;
+      // ── Regime-Adaptive Valuation Gating (Trend-Direction Decoupling) ─────────
+      const evalIdx = reclaimIdx !== null ? reclaimIdx : (sweepIdx !== null ? sweepIdx : anchorIdx);
+      const regimeAnalysis = (this.config.enableRegimeAdaptiveEQ !== false)
+        ? classifyMarketRegime(evalIdx, candles, atrSeries, bootstrap, this.config)
+        : { regime: 'ROTATIONAL_AUCTION' as MarketRegimeState, direction: 'NEUTRAL' as const, velocity: 0 };
+      const marketRegime = regimeAnalysis.regime;
+      const regimeDirection = regimeAnalysis.direction;
+
+      let valuationGateMode: ValuationGateMode = 'STRUCTURAL_EQ';
+      let localWaveEquilibrium: number | null = null;
+      let htfSweepRequired = false;
+      let htfSweepLevel: number | null = null;
+      let isValuationAligned = false;
+
+      if (marketRegime === 'RUNAWAY_EXPANSION') {
+        const isWithTrend = (isBullish && regimeDirection === 'BULLISH') || (!isBullish && regimeDirection === 'BEARISH');
+        if (isWithTrend) {
+          // Trend-following: decouple from macro EQ, use local wave midpoint
+          const localWaveMidpoint = impulseHigh > impulseLow
+            ? parseFloat(((impulseHigh + impulseLow) / 2).toFixed(4))
+            : (dealingRangeEquilibrium ?? anchorLevel);
+          localWaveEquilibrium = localWaveMidpoint;
+          valuationGateMode = 'LOCAL_WAVE_EQ';
+          isValuationAligned = isBullish
+            ? executionEntry <= localWaveMidpoint
+            : executionEntry >= localWaveMidpoint;
+        } else {
+          // Counter-trend: Require sweep of Major HTF level
+          valuationGateMode = 'HTF_SWEEP_REQUIRED';
+          htfSweepRequired = true;
+          htfSweepLevel = anchorLevel;
+          const isMajorHtf =
+            anchorGrade === 'DAILY' ||
+            anchorGrade === 'SESSION' ||
+            anchorGrade === 'MAJOR' ||
+            anchorType === 'PDH' ||
+            anchorType === 'PDL' ||
+            anchorType === 'LONDON_HIGH' ||
+            anchorType === 'LONDON_LOW' ||
+            anchorType === 'ASIAN_HIGH' ||
+            anchorType === 'ASIAN_LOW';
+          if (isMajorHtf) {
+            const eq = dealingRangeEquilibrium ?? anchorLevel;
+            isValuationAligned = isBullish
+              ? executionEntry <= eq
+              : executionEntry >= eq;
+          } else {
+            isValuationAligned = false; // Veto counter-trend minor anchor entries during runaway expansion
+          }
+        }
+      } else if (marketRegime === 'TRANSITIONAL_EXPANSION') {
+        valuationGateMode = 'RELAXED_EQ';
+        const atr = atrSeries[evalIdx] || 1.0;
+        const relaxedBuffer = (this.config.relaxedEqAtrBufferMultiplier ?? 0.25) * atr;
+        const eq = dealingRangeEquilibrium ?? anchorLevel;
+        isValuationAligned = isBullish
+          ? executionEntry <= eq + relaxedBuffer
+          : executionEntry >= eq - relaxedBuffer;
+      } else {
+        // ROTATIONAL_AUCTION (Default)
+        valuationGateMode = 'STRUCTURAL_EQ';
+        const eq = dealingRangeEquilibrium ?? anchorLevel;
+        isValuationAligned = isBullish
+          ? executionEntry <= eq
+          : executionEntry >= eq;
+      }
+
+      // ── Wave Fingerprint Generation for Multi-Anchor Deduplication ────────────
+      let waveFingerprint: string;
+      if (reclaimIdx !== null && sweepIdx !== null) {
+        const midpoint = impulseHigh > impulseLow ? (impulseHigh + impulseLow) / 2 : (candles[reclaimIdx].c ?? (candles[reclaimIdx] as any).close);
+        const atr = atrSeries[reclaimIdx] || 1.0;
+        const priceBand = Math.floor(midpoint / Math.max(0.5, atr));
+        // Cluster by reclaim time, direction, and price band so all multi-anchor sweeps reclaimed together belong to the same wave cluster
+        waveFingerprint = `${candles[reclaimIdx].t}_${isBullish ? 'BULLISH' : 'BEARISH'}_${priceBand}`;
+      } else if (sweepIdx !== null) {
+        waveFingerprint = `${anchorTime}_${candles[sweepIdx].t}_${isBullish ? 'BULLISH' : 'BEARISH'}`;
+      } else {
+        waveFingerprint = `${anchorTime}_${isBullish ? 'BULLISH' : 'BEARISH'}`;
+      }
 
       // Stop Loss: Locked 1 tick beyond sweep candle extreme with Anti-Micro-Friction Clamp (0.15% minimum distance)
       const atrAtSweep = atrSeries[sweepIdx] || 1.0;
@@ -1620,6 +1844,16 @@ export class SweepReclaimEngine {
 
         dealing_range_equilibrium: dealingRangeEquilibrium,
         is_valuation_aligned: isValuationAligned,
+        market_regime_at_entry: marketRegime,
+        valuation_gate_mode: valuationGateMode,
+        local_wave_equilibrium: localWaveEquilibrium,
+        htf_sweep_required: htfSweepRequired,
+        htf_sweep_level: htfSweepLevel,
+
+        wave_fingerprint: waveFingerprint,
+        is_wave_champion: true,
+        wave_cluster_size: 1,
+        stacking_discount_applied: false,
 
         entry_mode: entryMode,
         entry_price: parseFloat(executionEntry.toFixed(4)),
@@ -1673,7 +1907,7 @@ export class SweepReclaimEngine {
       }
 
       // ─── Phase 4: Independent Retest & 3-Stage Harvest Execution Simulation ───
-      const effectiveMaxRetestIdx = Math.min(n - 1, reclaimIdx + (this.config.maxBarsToRetest ?? 24));
+      const effectiveMaxRetestIdx = Math.min(n - 1, reclaimIdx + (this.config.maxBarsToRetest ?? 12));
       let retestFound = false;
       let retestIdx: number | null = null;
       let retestPrice: number | null = null;
@@ -1729,6 +1963,37 @@ export class SweepReclaimEngine {
         continue;
       }
 
+      // Retest Freshness & Pullback Discrimination Classification
+      const retestDelay = retestIdx - reclaimIdx;
+      let retestFreshness: RetestFreshness = 'STANDARD';
+      if (retestDelay === 1) retestFreshness = 'IMMEDIATE';
+      else if (retestDelay <= 3) retestFreshness = 'FAST';
+      else if (retestDelay <= 8) retestFreshness = 'STANDARD';
+      else if (retestDelay <= (this.config.maxBarsToRetest ?? 12)) retestFreshness = 'EXTENDED';
+      else retestFreshness = 'STALE';
+
+      let maxExcursionPrice = 0;
+      for (let k = reclaimIdx + 1; k <= retestIdx; k++) {
+        const ck = candles[k];
+        const cHigh = ck.h ?? (ck as any).high;
+        const cLow = ck.l ?? (ck as any).low;
+        if (isBullish) {
+          const exc = cHigh - executionEntry;
+          if (exc > maxExcursionPrice) maxExcursionPrice = exc;
+        } else {
+          const exc = executionEntry - cLow;
+          if (exc > maxExcursionPrice) maxExcursionPrice = exc;
+        }
+      }
+      const excR = riskUsd > 0 ? maxExcursionPrice / riskUsd : 0;
+      const retestMaxExcursionR = parseFloat(excR.toFixed(2));
+      const pullbackThreshold = this.config.pullbackExcursionThreshold ?? 0.5;
+      const retestType: RetestType = excR >= pullbackThreshold
+        ? 'PULLBACK_RETEST'
+        : excR >= 0.2
+        ? 'SHALLOW_PULLBACK'
+        : 'CONTINUATION';
+
       baseSetup.phase = 'RETEST';
       baseSetup.status = 'RETESTED';
       baseSetup.is_retested = true;
@@ -1736,7 +2001,12 @@ export class SweepReclaimEngine {
       baseSetup.retest_index = retestIdx;
       baseSetup.retest_time = retestTime;
       baseSetup.retest_price = retestPrice;
-      baseSetup.bars_reclaim_to_retest = retestIdx - reclaimIdx;
+      baseSetup.bars_reclaim_to_retest = retestDelay;
+      baseSetup.retest_freshness = retestFreshness;
+      baseSetup.retest_type = retestType;
+      baseSetup.retest_max_excursion_r = retestMaxExcursionR;
+      baseSetup.retest_delay_bars = retestDelay;
+
 
       let positionOpen = true;
       let activeStopLoss = stopLoss;
@@ -1994,13 +2264,105 @@ export class SweepReclaimEngine {
       detectedSetups.push(baseSetup);
     }
 
+    // ── In-Scanner Multi-Anchor Wave Deduplication & Concurrency Guard ────────
+    const enableInScannerWaveDedup = this.config.enableInScannerWaveDedup !== false;
+    const enforceSinglePositionConcurrency = this.config.enforceSinglePositionConcurrency !== false;
+
+    if (enableInScannerWaveDedup && detectedSetups.length > 0) {
+      // Step 1: Cluster candidate setups by wave_fingerprint
+      const waveMap = new Map<string, SweepReclaimSetup[]>();
+      for (const s of detectedSetups) {
+        const fp = s.wave_fingerprint || `${s.reclaim_time || s.sweep_time || s.anchor_time}_${s.type}`;
+        if (!waveMap.has(fp)) {
+          waveMap.set(fp, []);
+        }
+        waveMap.get(fp)!.push(s);
+      }
+
+      // Step 2: Elect Champion for each wave cluster using institutional market touch physics
+      const champions: SweepReclaimSetup[] = [];
+      for (const [_, cluster] of waveMap.entries()) {
+        const clusterSize = cluster.length;
+        for (const s of cluster) {
+          s.wave_cluster_size = clusterSize;
+        }
+
+        if (cluster.length === 1) {
+          cluster[0].is_wave_champion = true;
+          champions.push(cluster[0]);
+        } else {
+          cluster.sort((a, b) => {
+            if (a.type === 'BEARISH') {
+              if (Math.abs(a.entry_price - b.entry_price) > 0.01) {
+                return a.entry_price - b.entry_price; // Lowest entry touched first on rally
+              }
+            } else {
+              if (Math.abs(a.entry_price - b.entry_price) > 0.01) {
+                return b.entry_price - a.entry_price; // Highest entry touched first on dip
+              }
+            }
+            // Tie-breaker: Anchor tier ranking
+            const pA = getAnchorPriority(a.anchor_type, a.anchor_swing_grade);
+            const pB = getAnchorPriority(b.anchor_type, b.anchor_swing_grade);
+            if (pB !== pA) return pB - pA;
+
+            const depthA = a.sweep_depth_pct ?? 0;
+            const depthB = b.sweep_depth_pct ?? 0;
+            return depthB - depthA;
+          });
+
+          cluster[0].is_wave_champion = true;
+          for (let k = 1; k < cluster.length; k++) {
+            cluster[k].is_wave_champion = false;
+          }
+          champions.push(cluster[0]);
+        }
+      }
+
+      // Step 3: Single-Position Concurrency Walk (enforce maxOpenPositions: 1)
+      if (enforceSinglePositionConcurrency) {
+        // Sort champions chronologically by entry open timestamp, then tiebreak by anchor tier ranking
+        champions.sort((a, b) => {
+          const timeA = a.retest_time || a.reclaim_time || a.sweep_time || a.anchor_time || 0;
+          const timeB = b.retest_time || b.reclaim_time || b.sweep_time || b.anchor_time || 0;
+          if (timeA !== timeB) return timeA - timeB;
+          const pA = getAnchorPriority(a.anchor_type, a.anchor_swing_grade);
+          const pB = getAnchorPriority(b.anchor_type, b.anchor_swing_grade);
+          return pB - pA;
+        });
+
+        let lastExitTimestamp = 0;
+        let lastOpenTimestamp = 0;
+        for (const champ of champions) {
+          if (!champ.is_retested) {
+            champ.stacking_discount_applied = false;
+            continue;
+          }
+          const openTime = champ.retest_time || champ.reclaim_time || champ.sweep_time || champ.anchor_time || 0;
+          const exitTime = champ.exit_time || (openTime + 15 * 60 * 1000);
+
+          // Strictly enforce: No trade at the same open timestamp AND no trade during an active open position
+          const isSameTimestamp = lastOpenTimestamp !== 0 && openTime === lastOpenTimestamp;
+          const isOverlapping = lastExitTimestamp !== 0 && openTime < lastExitTimestamp;
+
+          if (!isSameTimestamp && !isOverlapping) {
+            champ.stacking_discount_applied = false;
+            lastExitTimestamp = Math.max(lastExitTimestamp, exitTime);
+            lastOpenTimestamp = openTime;
+          } else {
+            champ.stacking_discount_applied = true; // Overlaps with an open position or concurrent same-timestamp entry
+          }
+        }
+      }
+    }
+
     if (bootstrap && bootstrap.warmupCutoffTs) {
       detectedSetups = detectedSetups.filter((s) => {
         const triggerTime = s.reclaim_time ?? s.sweep_time ?? s.anchor_time;
         return triggerTime >= bootstrap.warmupCutoffTs;
       });
     }
-    
+
     // Calculate Telemetry across detected setups
     const telemetry = this.generateTelemetrySummary(detectedSetups);
 
@@ -2016,8 +2378,18 @@ export class SweepReclaimEngine {
     const totalSweeps = sweptSetups.length;
     const reclaimedSetups = setups.filter((s) => s.is_reclaimed);
     const totalReclaims = reclaimedSetups.length;
-    const retestedSetups = setups.filter((s) => s.is_retested);
+
+    // Executable setups: wave champions that did not suffer concurrency overlap veto
+    const executableSetups = setups.filter((s) => s.is_wave_champion !== false && !s.stacking_discount_applied);
+    const retestedSetups = executableSetups.filter((s) => s.is_retested);
     const totalRetests = retestedSetups.length;
+
+    const totalRawCandidates = setups.length;
+    const totalWaveChampions = setups.filter((s) => s.is_wave_champion === true).length;
+    const overlappingConcurrencyVetoed = setups.filter((s) => s.stacking_discount_applied === true).length;
+    const stackingReductionPct = totalRawCandidates > 0
+      ? parseFloat((((totalRawCandidates - totalWaveChampions) / totalRawCandidates) * 100).toFixed(1))
+      : 0;
 
     const sweepRatePct = totalAnchors > 0 ? (totalSweeps / totalAnchors) * 100 : 0;
     const reclaimRatePct = totalSweeps > 0 ? (totalReclaims / totalSweeps) * 100 : 0;
@@ -2074,9 +2446,33 @@ export class SweepReclaimEngine {
       PDL: 0,
     };
 
+    const regimeDistribution: Record<MarketRegimeState, number> = {
+      ROTATIONAL_AUCTION: 0,
+      TRANSITIONAL_EXPANSION: 0,
+      RUNAWAY_EXPANSION: 0,
+    };
+
+    const retestFreshnessDistribution: Record<RetestFreshness, number> = {
+      IMMEDIATE: 0,
+      FAST: 0,
+      STANDARD: 0,
+      EXTENDED: 0,
+      STALE: 0,
+    };
+
+    const retestTypeDistribution: Record<RetestType, number> = {
+      PULLBACK_RETEST: 0,
+      SHALLOW_PULLBACK: 0,
+      CONTINUATION: 0,
+    };
+
     for (const s of setups) {
       if (anchorDistribution[s.anchor_type] !== undefined) {
         anchorDistribution[s.anchor_type]++;
+      }
+
+      if (s.market_regime_at_entry && regimeDistribution[s.market_regime_at_entry] !== undefined) {
+        regimeDistribution[s.market_regime_at_entry]++;
       }
 
       if (s.type === 'BULLISH') bullTotal++;
@@ -2093,7 +2489,15 @@ export class SweepReclaimEngine {
       if (s.bars_sweep_to_reclaim !== null) sumBarsReclaim += s.bars_sweep_to_reclaim;
       if (s.bars_reclaim_to_retest !== null) sumBarsRetest += s.bars_reclaim_to_retest;
 
-      if (s.is_retested) {
+      // Retest metrics calculated strictly on executable clean trades
+      if (s.is_retested && s.is_wave_champion !== false && !s.stacking_discount_applied) {
+        if (s.retest_freshness && retestFreshnessDistribution[s.retest_freshness] !== undefined) {
+          retestFreshnessDistribution[s.retest_freshness]++;
+        }
+        if (s.retest_type && retestTypeDistribution[s.retest_type] !== undefined) {
+          retestTypeDistribution[s.retest_type]++;
+        }
+
         if (s.type === 'BULLISH') bullRetest++;
         else bearRetest++;
 
@@ -2162,6 +2566,15 @@ export class SweepReclaimEngine {
       reclaim_rate_pct: parseFloat(reclaimRatePct.toFixed(1)),
       retest_rate_pct: parseFloat(retestRatePct.toFixed(1)),
       retest_win_rate_pct: parseFloat(retestWinRatePct.toFixed(1)),
+
+      total_raw_candidates: totalRawCandidates,
+      total_wave_champions: totalWaveChampions,
+      stacking_reduction_pct: stackingReductionPct,
+      overlapping_concurrency_vetoed_count: overlappingConcurrencyVetoed,
+
+      regime_distribution: regimeDistribution,
+      retest_freshness_distribution: retestFreshnessDistribution,
+      retest_type_distribution: retestTypeDistribution,
 
       pillar1_pass_count: pillar1PassCount,
       pillar1_pass_pct: totalReclaims > 0 ? parseFloat(((pillar1PassCount / totalReclaims) * 100).toFixed(1)) : 0,
@@ -2234,6 +2647,29 @@ export class SweepReclaimEngine {
       reclaim_rate_pct: 0,
       retest_rate_pct: 0,
       retest_win_rate_pct: 0,
+
+      total_raw_candidates: 0,
+      total_wave_champions: 0,
+      stacking_reduction_pct: 0,
+      overlapping_concurrency_vetoed_count: 0,
+
+      regime_distribution: {
+        ROTATIONAL_AUCTION: 0,
+        TRANSITIONAL_EXPANSION: 0,
+        RUNAWAY_EXPANSION: 0,
+      },
+      retest_freshness_distribution: {
+        IMMEDIATE: 0,
+        FAST: 0,
+        STANDARD: 0,
+        EXTENDED: 0,
+        STALE: 0,
+      },
+      retest_type_distribution: {
+        PULLBACK_RETEST: 0,
+        SHALLOW_PULLBACK: 0,
+        CONTINUATION: 0,
+      },
 
       pillar1_pass_count: 0,
       pillar1_pass_pct: 0,

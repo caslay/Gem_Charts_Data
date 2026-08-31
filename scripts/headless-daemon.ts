@@ -211,10 +211,8 @@ async function main() {
 
     const buffers = wsClient.getRingBuffers();
 
-    // Recompute macro context if 15m or 1h closed
-    if (payload.interval === '15m' || payload.interval === '1h') {
-      currentMacroContext = computeMacroContext(buffers['1h'], buffers['15m']);
-    }
+    // Recompute macro context on closed candles (5m, 15m, 1h)
+    currentMacroContext = computeMacroContext(buffers['1h'], buffers['15m'], buffers['5m']);
 
     // Trigger strategy candidate scan
     const scanResult = engine.onMultiTimeframeCandles(buffers, currentMacroContext);

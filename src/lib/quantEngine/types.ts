@@ -219,3 +219,28 @@ export interface MidnightLedgerRecord {
   updated_at: string;
 }
 
+// ─── Regime-Adaptive Valuation & Retest Freshness Types ─────────────────────
+export type MarketRegimeState =
+  | 'ROTATIONAL_AUCTION'
+  | 'TRANSITIONAL_EXPANSION'
+  | 'RUNAWAY_EXPANSION';
+
+export type RetestFreshness =
+  | 'IMMEDIATE'
+  | 'FAST'
+  | 'STANDARD'
+  | 'EXTENDED'
+  | 'STALE';
+
+export type RetestType =
+  | 'PULLBACK_RETEST'
+  | 'SHALLOW_PULLBACK'
+  | 'CONTINUATION';
+
+export type ValuationGateMode =
+  | 'STRUCTURAL_EQ'
+  | 'LOCAL_WAVE_EQ'
+  | 'HTF_SWEEP_REQUIRED'
+  | 'RELAXED_EQ';
+
+
