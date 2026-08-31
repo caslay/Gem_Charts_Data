@@ -1,8 +1,33 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.03
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.04
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-31 (V17.03 — Vercel Preview Build Isolation & Manifest Parity)
+> **Last Updated:** 2026-08-31 (V17.04 — Daemon Architecture Decoupling & Vercel Build Typecheck Fix)
+
+## 🆕 V17.04 Changelog — Daemon Architecture Decoupling & Vercel Build Typecheck Fix (2026-08-31)
+
+### Summary
+Resolved Vercel preview build TypeScript typecheck failure (`Cannot find module '../../../scripts/lib/daemonLedger'`) by migrating the shared daemon persistence and networking modules into the formal application source tree (`src/lib/daemon/`). Replaced root script cross-imports with first-class `@/lib/daemon` architecture, provided transparent 1-line re-exports in `scripts/lib/`, and refined `.vercelignore` to guarantee flawless Next.js cloud builds across all development and production branches.
+
+### Key Architectural Deliverables
+1. **Shared Daemon Library Core (`src/lib/daemon/`):**
+   - Relocated `daemonLedger.ts`, `nodeWsClient.ts`, and `restBootstrap.ts` under `src/lib/daemon/`.
+   - Updated `telegramBotService.ts` and UI hooks to consume `@/lib/daemon/...` directly with strict TypeScript typing.
+2. **Transparent CLI Forwarding Re-Exports (`scripts/lib/`):**
+   - Configured 1-line clean re-exports for all legacy CLI test runners and PM2 daemons.
+3. **Vercel Manifest Refinement:**
+   - Isolated non-source research datasets (`scratch/`, `.cache/`, `api/`) while keeping all TypeScript modules accessible during build.
+
+### Files Added / Modified
+- **`src/lib/daemon/daemonLedger.ts`** [NEW]
+- **`src/lib/daemon/nodeWsClient.ts`** [NEW]
+- **`src/lib/daemon/restBootstrap.ts`** [NEW]
+- **`scripts/lib/daemonLedger.ts`** [MODIFY]
+- **`scripts/lib/nodeWsClient.ts`** [MODIFY]
+- **`scripts/lib/restBootstrap.ts`** [MODIFY]
+- **`src/lib/notifications/telegramBotService.ts`** [MODIFY]
+- **`.vercelignore`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
 
 ## 🆕 V17.03 Changelog — Vercel Preview Build Isolation & Manifest Parity (2026-08-31)
 

@@ -21,8 +21,8 @@
 
 import { TelegramNotifier, TelegramConfig } from './telegramNotifier';
 import { AutomatedStrategyExecutionEngine } from '../quantEngine/AutomatedStrategyExecutionEngine';
-import { DaemonLedger } from '../../../scripts/lib/daemonLedger';
-import { NodeWsClient } from '../../../scripts/lib/nodeWsClient';
+import { DaemonLedger } from '../daemon/daemonLedger';
+import { NodeWsClient } from '../daemon/nodeWsClient';
 
 export interface TelegramBotServiceContext {
   engine: AutomatedStrategyExecutionEngine;
