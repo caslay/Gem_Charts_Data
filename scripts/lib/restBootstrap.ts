@@ -8,6 +8,7 @@
  */
 
 import { Candle } from '../../src/lib/fvgEngine';
+import { MarketStructureAPI } from '../../src/lib/quantEngine/MarketStructureAPI';
 
 const BINANCE_FAPI_BASE = 'https://fapi.binance.com/fapi/v1/klines';
 
@@ -90,11 +91,17 @@ export async function fetchHistoricalKlines(
 /**
  * Computes Session Liquidity and Macro Context from 1h and 15m candles.
  */
+/**
+ * Computes Session Liquidity and Macro Context from 1h, 15m, and optional 5m candles.
+ */
 export function computeMacroContext(
   candles1h: Candle[],
-  candles15m: Candle[]
+  candles15m: Candle[],
+  candles5m?: Candle[]
 ): MacroStructuralContext {
-  const latestCandle = candles15m[candles15m.length - 1];
+  const latestCandle = (candles5m && candles5m.length > 0)
+    ? candles5m[candles5m.length - 1]
+    : (candles15m.length > 0 ? candles15m[candles15m.length - 1] : null);
   const lastDateUtc = latestCandle ? new Date(latestCandle.t) : new Date();
 
   // ── 1. Calculate Previous Day High/Low (PDH/PDL) strictly from UTC 1h candles ──
@@ -155,13 +162,33 @@ export function computeMacroContext(
   const asianSession = getSessionRange(0, 7);
   const londonSession = getSessionRange(7, 12);
 
-  // ── 3. Macro Daily Bias & Dealing Range ──
+  // ── 3. Macro Daily Bias & Structural Dealing Range ──
   const livePrice = latestCandle?.c || 0;
   let currentStatus: 'PREMIUM' | 'DISCOUNT' | 'EQUILIBRIUM' = 'EQUILIBRIUM';
+  let rangeHigh = pdh;
+  let rangeLow = pdl;
   let eq = 0;
 
-  if (pdh > 0 && pdl > 0) {
+  if (candles5m && candles5m.length >= 25) {
+    try {
+      const msApi = new MarketStructureAPI();
+      const structure = msApi.analyze(candles5m, livePrice);
+      const structEq = structure?.dealingRange?.equilibrium;
+      if (structEq !== null && structEq !== undefined && Number.isFinite(structEq) && structEq > 0) {
+        rangeHigh = structure?.dealingRange?.high ?? pdh;
+        rangeLow = structure?.dealingRange?.low ?? pdl;
+        eq = parseFloat(structEq.toFixed(2));
+      }
+    } catch {
+      // Fall back to PDH/PDL
+    }
+  }
+
+  if (eq === 0 && pdh > 0 && pdl > 0) {
     eq = parseFloat(((pdh + pdl) / 2).toFixed(2));
+  }
+
+  if (eq > 0) {
     if (livePrice > eq + 0.5) currentStatus = 'PREMIUM';
     else if (livePrice < eq - 0.5) currentStatus = 'DISCOUNT';
   }
@@ -186,10 +213,10 @@ export function computeMacroContext(
     macroDailyBias,
     dolDirection,
     localDealingRange:
-      pdh > 0 && pdl > 0
+      eq > 0
         ? {
-            high: pdh,
-            low: pdl,
+            high: rangeHigh,
+            low: rangeLow,
             equilibrium: eq,
             current_status: currentStatus,
           }
@@ -223,7 +250,7 @@ export async function bootstrapHistoricalBuffers(
     `[REST_BOOTSTRAP] ✅ Received: 5m (${candles5m.length} bars), 15m (${candles15m.length} bars), 1h (${candles1h.length} bars).`
   );
 
-  const macroContext = computeMacroContext(candles1h, candles15m);
+  const macroContext = computeMacroContext(candles1h, candles15m, candles5m);
   console.log(
     `[REST_BOOTSTRAP] 🧭 Macro Context: Bias=${macroContext.macroDailyBias} | PDH=$${macroContext.pdh} | PDL=$${macroContext.pdl} | Asian=[$${macroContext.asianSession.low}-$${macroContext.asianSession.high}]`
   );

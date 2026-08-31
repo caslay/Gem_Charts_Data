@@ -209,6 +209,10 @@ export async function POST(req: Request) {
         const body_ratio_threshold = Number(body.bodyRatioThreshold ?? body.body_ratio_threshold ?? body.minBodyRatio ?? body.min_body_ratio ?? 0.50);
         const require_three_pillar_displacement = (body.requireThreePillarDisplacement ?? body.require_three_pillar_displacement) !== false;
         const enforce_discount_premium_gate = (body.enforceDiscountPremiumGate ?? body.enforce_discount_premium_gate) !== undefined ? Boolean(body.enforceDiscountPremiumGate ?? body.enforce_discount_premium_gate) : true;
+        const enable_regime_adaptive_eq = (body.enableRegimeAdaptiveEQ ?? body.enable_regime_adaptive_eq) !== false;
+        const enable_in_scanner_wave_dedup = (body.enableInScannerWaveDedup ?? body.enable_in_scanner_wave_dedup) !== false;
+        const enforce_single_position_concurrency = (body.enforceSinglePositionConcurrency ?? body.enforce_single_position_concurrency) !== false;
+        const pullback_excursion_threshold = Number(body.pullbackExcursionThreshold ?? body.pullback_excursion_threshold ?? 0.5);
         const stage1_multiple = Number(body.stage1Multiple ?? body.stage1_multiple ?? 1.0);
         const stage2_multiple = Number(body.stage2Multiple ?? body.stage2_multiple ?? 1.4);
         const stage3_multiple = Number(body.stage3Multiple ?? body.stage3_multiple ?? 3.0);
@@ -290,6 +294,8 @@ export async function POST(req: Request) {
         });
 
         // Configure Engine parameters
+        const structural_dealing_range = body.structuralDealingRange ?? body.structural_dealing_range ?? null;
+
         const scanConfig: SweepReclaimScanConfig = {
           symbol,
           timeframe,
@@ -306,6 +312,11 @@ export async function POST(req: Request) {
           minBodyRatio: body_ratio_threshold,
           requireThreePillarDisplacement: require_three_pillar_displacement,
           enforceDiscountPremiumGate: enforce_discount_premium_gate,
+          enableRegimeAdaptiveEQ: enable_regime_adaptive_eq,
+          enableInScannerWaveDedup: enable_in_scanner_wave_dedup,
+          enforceSinglePositionConcurrency: enforce_single_position_concurrency,
+          pullbackExcursionThreshold: pullback_excursion_threshold,
+          structuralDealingRange: structural_dealing_range,
           stage1Multiple: stage1_multiple,
           stage2Multiple: stage2_multiple,
           stage3Multiple: stage3_multiple,

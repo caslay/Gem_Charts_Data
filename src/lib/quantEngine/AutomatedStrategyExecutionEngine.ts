@@ -1500,6 +1500,13 @@ export class AutomatedStrategyExecutionEngine {
 
         // Valuation Gating
         enforceDiscountPremiumGate: settings.enforceDiscountPremiumGate ?? true,
+        structuralDealingRange: macroContext?.localDealingRange && Number.isFinite(macroContext.localDealingRange.equilibrium)
+          ? {
+              high: Number(macroContext.localDealingRange.high),
+              low: Number(macroContext.localDealingRange.low),
+              equilibrium: Number(macroContext.localDealingRange.equilibrium),
+            }
+          : null,
       };
 
       try {
@@ -1568,10 +1575,18 @@ export class AutomatedStrategyExecutionEngine {
           }
 
           // Check if setup is confirmed for live entry (3-Pillars passed and Valuation aligned)
+          const structuralEq = macroContext?.localDealingRange?.equilibrium;
+          const isStructuralAligned = structuralEq !== undefined && Number.isFinite(structuralEq)
+            ? (isBullish ? s.entry_price <= Number(structuralEq) : s.entry_price >= Number(structuralEq))
+            : true;
+
+          const isValuationGatePassed = !settings.enforceDiscountPremiumGate ||
+            (s.is_valuation_aligned && isStructuralAligned);
+
           const isConfirmed =
             s.is_reclaimed &&
             s.three_pillar_displacement_passed &&
-            (!settings.enforceDiscountPremiumGate || s.is_valuation_aligned);
+            isValuationGatePassed;
 
           if (
             isConfirmed &&
