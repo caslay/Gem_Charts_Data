@@ -1,8 +1,35 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.06
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.07
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-31 (V17.06 — Daemon-First Single Source of Truth for Live Execution State)
+> **Last Updated:** 2026-08-31 (V17.07 — Dev Branch Deep Clean & Storage Purge)
+
+## 🆕 V17.07 Changelog — Dev Branch Deep Clean & Storage Purge (2026-08-31)
+
+### Summary
+Executed a comprehensive repository cleanup across the `dev` branch, permanently purging over **1.05 GB** of obsolete historical candle dumps (`scratch/`), stale cache runs (`.cache/`), unused Python environments (`.venv/`, `api/`), pre-compiled node packages (`package/`), temporary document chunks (`temp_docx/`, `temp_docx.zip`, `Gem_Charts_Data.rar`), and legacy version reports (<V11). Hardened `.gitignore` to prevent any future accidental tracking of scratch datasets and temporary files while preserving 100% of application code, live PM2 daemons, tests, directives, and documentation.
+
+### Key Architectural Deliverables
+1. **Repository Bloat Purge (~1.05 GB Recovered):**
+   - Removed `scratch/` (365 MB), `.cache/` (288 MB), `.venv/` (315 MB), `graphify-out/` (58 MB), `learning/` (13 MB), `package/` (9 MB), and `temp_docx/` (7.6 MB).
+   - Removed backup archives `Gem_Charts_Data.rar` and `temp_docx.zip`.
+   - Removed dead root Python scripts and text analysis dumps.
+2. **Hardened `.gitignore` Configuration:**
+   - Centralized permanent exclusion rules for scratch directories, local caches, temporary build artifacts, virtual environments, and archive blobs.
+3. **Pristine Clean Dev Branch Topology:**
+   - Preserved `src/`, `scripts/`, `run_logs/`, `directives/`, `docs/`, `data/`, `indicators/`, `public/`, `.agents/`, and core root configs.
+   - Verified 100% TypeScript compilation (`npx tsc --noEmit` exit code 0).
+
+### Files Removed / Modified
+- **`scratch/`** [DELETE]
+- **`.cache/`** [DELETE]
+- **`.venv/`** [DELETE]
+- **`learning/`** [DELETE]
+- **`package/`** [DELETE]
+- **`temp_docx/`** [DELETE]
+- **`api/`** [DELETE]
+- **`.gitignore`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
 
 ## 🆕 V17.06 Changelog — Daemon-First Single Source of Truth Architecture (2026-08-31)
 
