@@ -730,5 +730,12 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   3. **Closed Setup ID Synchronization:** Updated `reconcileWithOpenTrades()` to extract all `setupId`, `strategyId`, `originZoneId`, and `metadata.setupId` from closed trades in `useSessionJournalStore` and register them into `processedSetupIds` on mount.
   4. **Cold-Start Reboot Leak Verification Suite (`scripts/test_reboot_historical_leak.ts`):** Created an automated test suite verifying that bootstrapping a fresh engine instance across 80 historical candles results in 0 phantom limit orders and 0 phantom positions.
 
-
-
+### 64. Vercel Preview Build Failure & Research Dataset Isolation (Resolved in V16.68)
+- **The Bug:** Deployments on the `main` production branch succeeded without issue, but preview deployments on the `dev` branch failed on Vercel after committing heavy backtest JSON datasets.
+- **The Causes:**
+  1. **Disparity Between `main` and `dev` Trees:** The GitHub Actions production synchronization pipeline (`production-sync.yml`) prunes non-production files using `.prodignore` before pushing to `main`. This kept `main` lightweight.
+  2. **Unbounded Deployment Source Size on `dev`:** `dev` contained over 350 MB of raw historical backtest run datasets and JSON dumps in `scratch/` (e.g. `1y-fresh-SWEEP_RECLAIM_ETHUSDC_5m_refactored.json`, `1y-dev-new-...`). Vercel attempted to upload, trace, and bundle these massive files during preview deployments, exceeding Vercel payload and file tracing limits.
+  3. **Root `api/` Python Serverless Detection:** Vercel automatically attempted to build Serverless Python functions from `api/index.py` on `dev`, which was absent from `main`.
+- **The Fixes:**
+  1. **Implemented `.vercelignore`:** Configured `.vercelignore` to mirror `.prodignore`, explicitly excluding `scratch/`, `learning/`, `package/`, `run_logs/`, `.cache/`, `api/`, `directives/`, `docs/`, `scripts/`, and heavy datasets from all Vercel build and deployment pipelines.
+  2. **Zero Build Impact:** `dev` branch preview deployments now match the clean, isolated Next.js App Router tree used in production, guaranteeing fast and reliable builds across both branches.

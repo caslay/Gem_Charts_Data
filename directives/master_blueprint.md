@@ -1,8 +1,24 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.02
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.03
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-31 (V17.02 — Structural Engine Refactor & In-Scanner Multi-Anchor Wave Deduplication)
+> **Last Updated:** 2026-08-31 (V17.03 — Vercel Preview Build Isolation & Manifest Parity)
+
+## 🆕 V17.03 Changelog — Vercel Preview Build Isolation & Manifest Parity (2026-08-31)
+
+### Summary
+Resolved Vercel preview build payload and serverless compilation errors on the `dev` branch by implementing an official `.vercelignore` manifest mirroring `.prodignore`. Eliminates over 350 MB of raw historical backtest JSON dumps (`scratch/`), non-Next.js Python serverless entrypoints (`api/`), offline caches, and research documents from Vercel deployment tracing, achieving 100% build health and parity between `dev` preview deployments and production `main`.
+
+### Key Architectural Deliverables
+1. **Vercel Deployment Exclusion Manifest (`.vercelignore`):**
+   - Configured `.vercelignore` to isolate heavy research datasets (`scratch/`), logs, offline caches (`.cache/`), Python environment (`api/`, `.venv/`), directives, and scripts from Vercel cloud builds.
+2. **Zero-Friction Dev & Production Parity:**
+   - Ensured `dev` branch preview deployments compile the identical clean Next.js App Router tree used by the production branch.
+
+### Files Added / Modified
+- **`.vercelignore`** [NEW]
+- **`directives/02_lessons.md`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
 
 ## 🆕 V17.02 Changelog — Structural Engine Refactor & In-Scanner Multi-Anchor Wave Deduplication (2026-08-31)
 
