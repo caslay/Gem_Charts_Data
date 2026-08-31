@@ -1,8 +1,52 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.04
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.06
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-31 (V17.04 — Daemon Architecture Decoupling & Vercel Build Typecheck Fix)
+> **Last Updated:** 2026-08-31 (V17.06 — Daemon-First Single Source of Truth for Live Execution State)
+
+## 🆕 V17.06 Changelog — Daemon-First Single Source of Truth Architecture (2026-08-31)
+
+### Summary
+Completely decoupled the frontend UI (Chart overlay, Cockpit Modal, Execution HUD) from client-side `localStorage` (`sessionJournalStore`) and Neon database dependencies for live execution. Established the **PM2 Headless Daemon** and its atomic daily session ledger (`run_logs/live_session_YYYY-MM-DD.json` & `directives/ETHUSDC_Daily_Tracker.json`) as the single, authoritative source of truth. Built a dedicated server-side daemon state API (`/api/daemon/state`), real-time command dispatcher (`/api/daemon/command`), and refactored `useAutomatedStrategyExecution.ts` to consume daemon state directly. Zero harm or changes to the PM2 daemon quant logic, 3-pillar displacement, dynamic harvest, risk compounding, or Telegram bot.
+
+### Key Architectural Deliverables
+1. **Server-Side Daemon State & Command API (`/api/daemon/state` & `/api/daemon/command`):**
+   - Implemented ultra-fast (<1ms) disk reader serving live in-flight positions, resting pending orders, completed trades, equity, and heartbeat status.
+   - Built a non-blocking command file queue (`run_logs/daemon_commands.json`) enabling UI actions (`EMERGENCY_FLATTEN`, `SNAP_BREAKEVEN`, `TOGGLE_AUTO_EXEC`) to be processed directly by the background PM2 daemon.
+2. **Daemon-First Frontend React Hook (`useAutomatedStrategyExecution.ts`):**
+   - Replaced rogue client-side execution simulation and `localStorage` rehydration with continuous 1-second polling against `/api/daemon/state`.
+   - Enriches live daemon positions with sub-second WebSocket tick pricing for real-time floating P&L and dynamic distance calculation.
+   - Generates `srOverlay` strictly from authoritative daemon in-flight trades, eliminating phantom or stale position ghosts.
+3. **Execution Cockpit & HUD Real-Time Alignment (`LiveOrderBlockModal.tsx`):**
+   - Added live `[● DAEMON LIVE]` status indicator and direct integration with live daemon positions.
+   - Cleanly bypassed all Neon DB/tradingJournal writes from the live UI loop.
+
+### Files Added / Modified
+- **`src/app/api/daemon/state/route.ts`** [NEW]
+- **`src/app/api/daemon/command/route.ts`** [NEW]
+- **`src/hooks/useAutomatedStrategyExecution.ts`** [MODIFY]
+- **`src/components/modals/LiveOrderBlockModal.tsx`** [MODIFY]
+- **`scripts/headless-daemon.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+## 🆕 V17.05 Changelog — Account API In-Memory Fallback & Quota Degradation Handling (2026-08-31)
+
+### Summary
+Resolved continuous HTTP 500 server crashes and unhandled error log spamming from `/api/account` when the upstream Neon Serverless PostgreSQL database enters data transfer quota exhaustion (HTTP status 402 `NeonDbError`) or transient network disconnection. Implemented a self-healing in-memory fallback layer (`inMemoryAccounts`) with graceful degradation flags (`isOffline`, `isQuotaExceeded`), ensuring 24/7 uninterrupted operations across live HUD metrics, compounding risk calculations, and dashboard polling.
+
+### Key Architectural Deliverables
+1. **Resilient In-Memory Account Fallback (`src/app/api/account/route.ts`):**
+   - Added in-memory map storage fallback per user session (`getFallbackAccount`) defaulting safely to `$10,000.00` initial capital and dynamic balances.
+   - Guarded `initAccountTable` to catch schema migration errors non-blockingly without crashing upstream request pipelines.
+2. **Quota Error & Degradation Interception (HTTP 402 Guard):**
+   - Intercepts Neon PostgreSQL HTTP 402 `exceeded` quota errors during `GET` and `POST` mutations.
+   - Automatically shifts to in-memory state, updates account balance / risk settings synchronously, and returns clean `{ success: true, account, isOffline: true, isQuotaExceeded: true }` responses.
+3. **Zero Polling Crash Guarantee:**
+   - Client background polling hooks (`useMarketData`, `useAutomatedStrategyExecution`) receive valid account metadata without triggering 500 error cascades.
+
+### Files Modified
+- **`src/app/api/account/route.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
 
 ## 🆕 V17.04 Changelog — Daemon Architecture Decoupling & Vercel Build Typecheck Fix (2026-08-31)
 

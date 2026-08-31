@@ -76,6 +76,7 @@ function LiveOrderBlockModalContent({
     accountEquity,
     riskUsd2Pct,
     lastEvent,
+    isDaemonActive,
     emergencyClosePosition,
     moveStopToBreakeven,
   } = useAutomatedStrategyExecution();
@@ -213,6 +214,14 @@ function LiveOrderBlockModalContent({
                 </h3>
                 <span className="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 rounded-full font-bold">
                   {symbol}
+                </span>
+                <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 border ${
+                  isDaemonActive
+                    ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/50 shadow-[0_0_8px_rgba(16,185,129,0.3)]'
+                    : 'bg-slate-900 text-slate-400 border-slate-700'
+                }`}>
+                  <Radio size={10} className={isDaemonActive ? 'animate-pulse text-emerald-400' : ''} />
+                  <span>{isDaemonActive ? 'DAEMON LIVE' : 'DAEMON IDLE'}</span>
                 </span>
                 <span className="text-[9px] bg-purple-950/80 text-purple-300 border border-purple-500/40 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
                   <Lock size={10} />
