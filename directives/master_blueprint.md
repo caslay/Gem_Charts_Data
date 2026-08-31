@@ -1,8 +1,26 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.08
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.09
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-31 (V17.08 — Vercel API Proxy Pass-Through & Python Rewrite Retirement)
+> **Last Updated:** 2026-08-31 (V17.09 — Root Ignore Path Scoping & Vercel API Route Restoration)
+
+## 🆕 V17.09 Changelog — Root Ignore Path Scoping & Vercel API Route Restoration (2026-08-31)
+
+### Summary
+Fixed a critical deployment bug where Vercel build containers stripped the entire `src/app/api/` directory during deployment. The root `.vercelignore`, `.prodignore`, and `.gitignore` files contained an un-scoped `api/` entry intended for the old legacy root Python folder. Without a leading slash (`/`), standard glob matching matched all folders named `api`, wiping out `src/app/api/` and causing all API endpoints (`/api/auth/*`, `/api/market-data`, `/api/daemon/state`, `/api/strategies`, `/api/account`) to return 404 on Vercel. Properly scoped all root ignores with `/` and removed obsolete `api/` rules.
+
+### Key Architectural Deliverables
+1. **Scoped Root Ignore Manifests (`.vercelignore`, `.prodignore`, `.gitignore`):**
+   - Removed legacy `api/` rule.
+   - Prepended leading slash `/` to all top-level directory ignores (`/scratch/`, `/.cache/`, `/run_logs/`, `/docs/`, `/learning/`, etc.) ensuring subdirectories within `src/` are never touched.
+2. **Complete API Route Deployment:**
+   - Restored full deployment of all 28 Next.js App Router routes including `/api/auth/[...nextauth]`, `/api/market-data`, `/api/daemon/state`, `/api/daemon/command`, `/api/account`, and `/api/strategies`.
+
+### Files Modified
+- **`.vercelignore`** [MODIFY]
+- **`.prodignore`** [MODIFY]
+- **`.gitignore`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
 
 ## 🆕 V17.08 Changelog — Vercel API Proxy Pass-Through & Python Rewrite Retirement (2026-08-31)
 
