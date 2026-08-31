@@ -1,0 +1,63 @@
+﻿# ── Vercel Deployment Exclusion Manifest (.vercelignore) ────────────────────────
+# Prevents large research datasets, caches, python scripts, and docs from
+# failing Vercel build/deploy size limits on preview/dev branch deployments.
+
+scratch/
+learning/
+package/
+run_logs/
+temp_docx/
+indicators/
+graphify-out/
+.cache/
+.agents/
+.antigravitycli/
+api/
+.venv/
+__pycache__/
+docs/
+directives/
+scripts/
+
+# Compressed archives & temporary binary packages
+*.rar
+*.zip
+Gem_Charts_Data.rar
+temp_docx.zip
+
+# Pine script & legacy text analysis dumps
+building_smc.txt
+crypto_struct.txt
+smc_struct.txt
+structure_docs.txt
+pine_script_doc.txt
+pine_script_textract.txt
+pine_script_utf8.txt
+test.pine
+
+# Legacy scratch presets and Python scripts
+rapid_scalper_long.json
+rapid_scalper_short.json
+ultra_simple_test_long.json
+ultra_simple_test_short.json
+quant_engine_api.py
+replace_colors.py
+requirements.txt
+fix.js
+temp_screen.html
+
+# Legacy root markdown reports and design notes
+Ghost-implementation_plan.md
+Ghost-implementation_plan_updated.md
+Quant Engine Audit and Calibration report.md
+Flow-State Quant Engine V10.52 — Deep-Dive Logic Report.md
+ENGINE_CAPABILITY_MAP.md
+deep_code_extraction.md
+project-architecture.md
+
+# Agent and IDE tool configurations (dev only)
+.cursorrules
+AGENTS.md
+CLAUDE.md
+.graphifyignore
+skills-lock.json
