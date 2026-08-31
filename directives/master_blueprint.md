@@ -1,8 +1,27 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.07
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.08
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-31 (V17.07 — Dev Branch Deep Clean & Storage Purge)
+> **Last Updated:** 2026-08-31 (V17.08 — Vercel API Proxy Pass-Through & Python Rewrite Retirement)
+
+## 🆕 V17.08 Changelog — Vercel API Proxy Pass-Through & Python Rewrite Retirement (2026-08-31)
+
+### Summary
+Resolved the `Error: Failed to fetch market data: 404` on Vercel preview/production deployments. The Next.js 16 route protection middleware (`src/proxy.ts`) was intercepting unauthenticated client fetch requests to `/api/market-data` and redirecting them with HTTP 307 to HTML `/login`, causing client JSON fetch parsers to throw 404 errors. Updated `src/proxy.ts` to allow all `/api/*` data and market endpoints to pass through transparently, and removed obsolete legacy `/api/py` rewrites in `next.config.ts`.
+
+### Key Architectural Deliverables
+1. **API Route Pass-Through in `src/proxy.ts`:**
+   - Explicitly excluded `nextUrl.pathname.startsWith('/api')` from HTML login redirects.
+   - Preserves route protection for UI views while allowing Next.js App Router API endpoints to execute and return proper JSON payloads.
+2. **Next.js Config Modernization (`next.config.ts`):**
+   - Retired obsolete Python `/api/py` serverless proxy rewrites.
+3. **Zero 404 Chart Guarantee:**
+   - Live chart candles and telemetry load immediately on Vercel without auth redirection failures.
+
+### Files Modified
+- **`src/proxy.ts`** [MODIFY]
+- **`next.config.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
 
 ## 🆕 V17.07 Changelog — Dev Branch Deep Clean & Storage Purge (2026-08-31)
 
