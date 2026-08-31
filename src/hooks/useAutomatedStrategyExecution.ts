@@ -405,15 +405,12 @@ export function useAutomatedStrategyExecution(
         if (!res.ok) return;
 
         const json = await res.json();
+        // Ingest multi-timeframe candles (5m, 15m, 1h)
         const payload = json?.data_payload || {};
-        const candles15m: Candle[] = payload.candles_15m || [];
+        const candles5m: Candle[] = (payload.candles_5m || []).filter((c: Candle) => c.isClosed !== false);
+        const candles15m: Candle[] = (payload.candles_15m || []).filter((c: Candle) => c.isClosed !== false);
+        const candles1h: Candle[] = (payload.candles_1h || []).filter((c: Candle) => c.isClosed !== false);
 
-        // Guard: need at least 20 bars for the engine to produce meaningful output
-        if (candles15m.length < 20) return;
-
-        // Re-run ingestion using the historical 15m slice as the structural anchor.
-        // 5m and 1h slices are optional for reconciliation — 15m is the primary
-        // structural frame for the Sweep & Reclaim strategy.
         const ipda = json?.ipda_metrics || {};
         const macroContext = {
           macroDailyBias: ipda.macro_daily_bias,
@@ -422,7 +419,11 @@ export function useAutomatedStrategyExecution(
         };
 
         const res2 = engineRef.current.onMultiTimeframeCandles(
-          { '15m': candles15m },
+          {
+            '5m': candles5m,
+            '15m': candles15m,
+            '1h': candles1h,
+          },
           macroContext
         );
 
