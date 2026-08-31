@@ -13,6 +13,8 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { AutomatedStrategyExecutionEngine } from '../src/lib/quantEngine/AutomatedStrategyExecutionEngine';
 import { DEFAULT_SR_LIVE_SETTINGS } from '../src/lib/quantEngine/strategyExecutionConfig';
 import { bootstrapHistoricalBuffers, computeMacroContext } from './lib/restBootstrap';
@@ -187,13 +189,67 @@ async function main() {
   let currentMacroContext = bootstrapData.macroContext;
   let latestScannedSetups = initialScan.scannedSetups || [];
 
+  // 6.2. UI-to-Daemon Command Processor (run_logs/daemon_commands.json)
+  let lastCommandCheckTime = 0;
+  const processPendingCommands = () => {
+    try {
+      const rootDir = process.cwd();
+      const commandFile = path.join(rootDir, 'run_logs', 'daemon_commands.json');
+      if (!fs.existsSync(commandFile)) return;
+      const raw = fs.readFileSync(commandFile, 'utf8');
+      const commands = JSON.parse(raw);
+      if (!Array.isArray(commands)) return;
+
+      let mutated = false;
+      for (const cmd of commands) {
+        if (cmd.status === 'PENDING') {
+          console.log(`\n⚡ [DAEMON COMMAND] Executing UI command: ${cmd.action} (ID: ${cmd.id})`);
+          if (cmd.action === 'EMERGENCY_FLATTEN') {
+            const posId = cmd.positionId;
+            if (posId) {
+              const closed = engine.emergencyClosePosition(posId, wsClient.getLatestPrice());
+              cmd.status = closed ? 'PROCESSED' : 'FAILED';
+            } else {
+              // Flatten all
+              for (const p of engine.getActivePositions()) {
+                engine.emergencyClosePosition(p.id, wsClient.getLatestPrice());
+              }
+              cmd.status = 'PROCESSED';
+            }
+            mutated = true;
+          } else if (cmd.action === 'SNAP_BREAKEVEN' && cmd.positionId) {
+            const snapped = engine.moveStopToBreakeven(cmd.positionId);
+            cmd.status = snapped ? 'PROCESSED' : 'FAILED';
+            mutated = true;
+          } else if (cmd.action === 'TOGGLE_AUTO_EXEC') {
+            const enabled = !!cmd.metadata?.enabled;
+            engine.updateConfig({ autoExecute: enabled });
+            cmd.status = 'PROCESSED';
+            mutated = true;
+          }
+        }
+      }
+      if (mutated) {
+        fs.writeFileSync(commandFile, JSON.stringify(commands, null, 2), 'utf8');
+      }
+    } catch {
+      // Non-blocking
+    }
+  };
+
   // Real-Time Trade Ticks Dispatcher
   wsClient.onMarketTick((tick: MarketTickPayload) => {
     tickCount++;
     engine.processMarketTick(tick.price);
 
-    // Heartbeat ticker in console every 10 seconds
     const now = Date.now();
+    // Poll for UI commands every 1 second
+    if (now - lastCommandCheckTime > 1000) {
+      lastCommandCheckTime = now;
+      processPendingCommands();
+    }
+
+    // Heartbeat ticker in console every 10 seconds
     if (now - lastPriceLogTime > 10000) {
       lastPriceLogTime = now;
       const activeCount = engine.getActivePositions().length;
