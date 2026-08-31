@@ -1,4 +1,4 @@
-﻿# ── Vercel Deployment Exclusion Manifest (.vercelignore) ────────────────────────
+# ── Vercel Deployment Exclusion Manifest (.vercelignore) ────────────────────────
 # Prevents large research datasets, caches, python scripts, and docs from
 # failing Vercel build/deploy size limits on preview/dev branch deployments.
 
@@ -17,7 +17,6 @@ api/
 __pycache__/
 docs/
 directives/
-scripts/
 
 # Compressed archives & temporary binary packages
 *.rar
