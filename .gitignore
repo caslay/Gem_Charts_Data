@@ -27,15 +27,14 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# Scratch, Temporary & Cache directories
-.cache/
-scratch/
-temp_docx/
-learning/
-package/
-api/
-.venv/
-__pycache__/
+# Scratch, Temporary & Cache directories (Root only)
+/.cache/
+/scratch/
+/temp_docx/
+/learning/
+/package/
+/.venv/
+/__pycache__/
 *.pyc
 
 # Archives
