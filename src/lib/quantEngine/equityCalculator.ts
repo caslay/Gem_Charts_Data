@@ -141,6 +141,12 @@ export interface CompoundingMetricsSummary {
 
 export interface AdaptSweepReclaimOptions {
   enforceSinglePositionWalk?: boolean; // default true: 1:1 match with Live Daemon maxOpenPositions: 1
+  enableWaveDeduplication?: boolean; // Rule 1: Multi-anchor wave deduplication (default true)
+  filterWeekend?: boolean; // Rule 2: Weekend Off-Liquidity filter (default true)
+  enforceHtfBiasGuard?: boolean; // Rule 3: Macro HTF Bias filter (default false)
+  enableEarlyBreakeven?: boolean; // Early Breakeven Ratchet (default false)
+  earlyBreakevenMultiple?: number; // MFE Multiple to trigger Breakeven (default 0.60)
+  postLossCooldownMinutes?: number; // Rule 5: Directional cooldown after stop-out in minutes (default 45)
 }
 
 function getAnchorPriority(anchorType?: string, anchorSwingGrade?: string): number {
@@ -154,7 +160,7 @@ function getAnchorPriority(anchorType?: string, anchorSwingGrade?: string): numb
 
 export function adaptSweepReclaimSetupsToTrades(
   setups: SweepReclaimSetup[],
-  options: AdaptSweepReclaimOptions = { enforceSinglePositionWalk: true }
+  options: AdaptSweepReclaimOptions = { enforceSinglePositionWalk: true, enableWaveDeduplication: false, filterWeekend: false, enableEarlyBreakeven: false, earlyBreakevenMultiple: 0.60, postLossCooldownMinutes: 0 }
 ): StandardizedExecutedTrade[] {
   if (!setups || setups.length === 0) return [];
 
@@ -169,7 +175,7 @@ export function adaptSweepReclaimSetupsToTrades(
   ];
 
   // 1. Extract strictly valid executed/retested setups
-  const executedSetups = setups.filter((s) => {
+  let executedSetups = setups.filter((s) => {
     const isRetested = s.is_retested === true || s.status === 'RETESTED';
     const isNonExecution =
       !s.simulated_outcome ||
@@ -179,10 +185,32 @@ export function adaptSweepReclaimSetupsToTrades(
 
   if (executedSetups.length === 0) return [];
 
+  // 🛡️ Quant Shield Rule 2: Weekend Filter (Fri 22:00 - Sun 20:00 UTC)
+  if (options.filterWeekend) {
+    executedSetups = executedSetups.filter((s) => {
+      const t = s.retest_time || s.reclaim_time || s.sweep_time || s.anchor_time || 0;
+      const d = new Date(t);
+      const day = d.getUTCDay();
+      const hr = d.getUTCHours();
+      const isWknd = (day === 5 && hr >= 22) || day === 6 || (day === 0 && hr < 20);
+      return !isWknd;
+    });
+  }
+
+  // 🛡️ Quant Shield Rule 3: Macro HTF Bias Guard
+  if (options.enforceHtfBiasGuard) {
+    executedSetups = executedSetups.filter((s) => {
+      return s.is_valuation_aligned !== false;
+    });
+  }
+
   let candidateSetups = executedSetups;
 
-  // 2. Multi-Anchor Wave Deduplication & Single-Position Walking (Matches Live Daemon maxOpenPositions: 1)
-  if (options.enforceSinglePositionWalk !== false) {
+  // 🛡️ Quant Shield Rule 1: Multi-Anchor Wave Deduplication & Single-Position Walking
+  const enableWaveDedup = options.enableWaveDeduplication === true;
+  let waveDeduplicated: SweepReclaimSetup[] = [];
+
+  if (enableWaveDedup) {
     // 2A. Cluster setups triggered on the exact same displacement wave (using wave_fingerprint if available)
     const waveMap = new Map<string, SweepReclaimSetup[]>();
     for (const s of candidateSetups) {
@@ -193,7 +221,6 @@ export function adaptSweepReclaimSetupsToTrades(
       waveMap.get(waveKey)!.push(s);
     }
 
-    const waveDeduplicated: SweepReclaimSetup[] = [];
     for (const [_, cluster] of waveMap.entries()) {
       if (cluster.length === 1) {
         waveDeduplicated.push(cluster[0]);
@@ -201,7 +228,6 @@ export function adaptSweepReclaimSetupsToTrades(
         // Real-world Market Physics: When multiple limit orders rest on the same wave,
         // - For Shorts: Lower entry price is closer to market and is touched/filled FIRST as price rallies.
         // - For Longs: Higher entry price is closer to market and is touched/filled FIRST as price dips.
-        // The instant the first limit order fills, the Atomic Queue Flush purges all other orders on that wave.
         cluster.sort((a, b) => {
           if (a.type === 'BEARISH') {
             if (Math.abs(a.entry_price - b.entry_price) > 0.01) {
@@ -226,21 +252,27 @@ export function adaptSweepReclaimSetupsToTrades(
         waveDeduplicated.push(cluster[0]);
       }
     }
+  } else {
+    waveDeduplicated = [...candidateSetups];
+  }
 
-    // Sort chronologically by retest entry time, tiebreak by anchor tier
-    waveDeduplicated.sort((a, b) => {
-      const timeA = a.retest_time || a.reclaim_time || a.sweep_time || a.anchor_time || 0;
-      const timeB = b.retest_time || b.reclaim_time || b.sweep_time || b.anchor_time || 0;
-      if (timeA !== timeB) return timeA - timeB;
-      const pA = getAnchorPriority(a.anchor_type, a.anchor_swing_grade);
-      const pB = getAnchorPriority(b.anchor_type, b.anchor_swing_grade);
-      return pB - pA;
-    });
+  // Sort chronologically by retest entry time, tiebreak by anchor tier
+  waveDeduplicated.sort((a, b) => {
+    const timeA = a.retest_time || a.reclaim_time || a.sweep_time || a.anchor_time || 0;
+    const timeB = b.retest_time || b.reclaim_time || b.sweep_time || b.anchor_time || 0;
+    if (timeA !== timeB) return timeA - timeB;
+    const pA = getAnchorPriority(a.anchor_type, a.anchor_swing_grade);
+    const pB = getAnchorPriority(b.anchor_type, b.anchor_swing_grade);
+    return pB - pA;
+  });
 
-    // 2B. Sequential Single-Position Lifecycle Walk (ensure non-overlapping [openTime, exitTime])
+  // 2B. Sequential Single-Position Lifecycle Walk & 🛡️ Rule 5 Post-Loss Cooldown
+  if (options.enforceSinglePositionWalk !== false) {
     const sequentialSetups: SweepReclaimSetup[] = [];
     let lastExitTimestamp = 0;
     let lastOpenTimestamp = 0;
+    let lastTradeWasLoss = false;
+    const cooldownMs = (typeof options.postLossCooldownMinutes === 'number' ? options.postLossCooldownMinutes : 0) * 60 * 1000;
 
     for (const s of waveDeduplicated) {
       const openTime = s.retest_time || s.reclaim_time || s.sweep_time || s.anchor_time || 0;
@@ -249,20 +281,49 @@ export function adaptSweepReclaimSetupsToTrades(
       const isSameTimestamp = lastOpenTimestamp !== 0 && openTime === lastOpenTimestamp;
       const isOverlapping = lastExitTimestamp !== 0 && openTime < lastExitTimestamp;
 
-      if (!isSameTimestamp && !isOverlapping) {
+      // 🛡️ Rule 5: Check post-loss cooldown
+      let inPostLossCooldown = false;
+      if (cooldownMs > 0 && lastTradeWasLoss && lastExitTimestamp !== 0) {
+        if (openTime < lastExitTimestamp + cooldownMs) {
+          inPostLossCooldown = true;
+        }
+      }
+
+      if (!isSameTimestamp && !isOverlapping && !inPostLossCooldown) {
         sequentialSetups.push(s);
         lastExitTimestamp = Math.max(lastExitTimestamp, exitTime);
         lastOpenTimestamp = openTime;
+        lastTradeWasLoss = (typeof s.realized_rr === 'number' ? s.realized_rr : 0) < 0;
       }
     }
 
     candidateSetups = sequentialSetups;
+  } else {
+    candidateSetups = waveDeduplicated;
   }
 
   // 3. Map into Standardized Executed Trade Objects
+  const enableEarlyBE = options.enableEarlyBreakeven === true;
+  const earlyBEMultiple = typeof options.earlyBreakevenMultiple === 'number' ? options.earlyBreakevenMultiple : 0.60;
+
   const executedTrades: StandardizedExecutedTrade[] = candidateSetups.map((s) => {
     const timestamp = s.retest_time || s.reclaim_time || s.sweep_time || s.anchor_time || Date.now();
-    const realizedR = typeof s.realized_rr === 'number' ? s.realized_rr : 0;
+    let realizedR = typeof s.realized_rr === 'number' ? s.realized_rr : 0;
+    let outcome: string = s.stage_exit_type || s.simulated_outcome || 'STOPPED_OUT';
+
+    // Optional Early Breakeven Dynamic Adjustment (only if explicitly enabled)
+    if (enableEarlyBE) {
+      if (realizedR < 0 && typeof s.mfe_r === 'number' && s.mfe_r >= earlyBEMultiple) {
+        realizedR = 0.0;
+        outcome = 'BE_SCRATCH_WIN';
+      }
+    } else {
+      if (s.is_be_scratch && !s.is_stage1_filled && realizedR === 0) {
+        realizedR = -1.0;
+        outcome = 'STOPPED_OUT';
+      }
+    }
+
     const isWin = realizedR > 0;
     const isLoss = realizedR < 0;
     const isScratch = realizedR === 0;
@@ -277,19 +338,22 @@ export function adaptSweepReclaimSetupsToTrades(
       stopLossPrice: s.stop_loss,
       exitPrice: s.exit_price,
       realizedR,
-      outcome: s.stage_exit_type || s.simulated_outcome,
+      outcome,
       isWin,
       isLoss,
       isScratch,
       label: s.anchor_name ? `S&R (${s.anchor_name})` : `S&R (${s.anchor_type || 'Pivot'})`,
       metadata: {
         anchorType: s.anchor_type,
+        anchorLevel: s.anchor_level,
+        stageExitType: outcome,
+        mfeR: s.mfe_r,
+        maeR: s.mae_r,
         anchorSwingGrade: s.anchor_swing_grade,
         entryMode: s.entry_mode,
         isStage1Filled: s.is_stage1_filled,
         isStage2Filled: s.is_stage2_filled,
         isStage3Filled: s.is_stage3_filled,
-        stageExitType: s.stage_exit_type,
       },
     };
   });

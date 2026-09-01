@@ -69,6 +69,14 @@ export interface SweepReclaimPresetConfig {
   enableProfitRatchet: boolean;
   minSweepDepthAtrMultiplier: number;
   slBufferAtrMultiplier: number;
+
+  // 🛡️ Quant Shield & Loss Streak Protection Settings (5 Institutional Rules)
+  enableWaveDeduplication?: boolean; // Rule 1: Single-Position & Wave Anchor Deduplication (default: true)
+  filterWeekend?: boolean; // Rule 2: Weekend Off-Liquidity Filter (Fri 22:00 - Sun 20:00 UTC) (default: true)
+  enforceHtfBiasGuard?: boolean; // Rule 3: Macro Daily Bias & 1H Structure Alignment (default: false)
+  enableEarlyBreakeven?: boolean; // Rule 4: Dynamic Early Breakeven Ratchet (default: true)
+  earlyBreakevenMultiple?: number; // Rule 4: MFE Multiple to trigger Breakeven (default: 0.60)
+  postLossCooldownMinutes?: number; // Rule 5: Directional cooldown minutes after stop-out (default: 45)
 }
 
 export interface OrderBlockPresetConfig {
@@ -127,7 +135,7 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
   {
     id: 'factory_sr_5m_winner_fvg_proximal',
     name: '5m Sweep & Reclaim 2-Stage Max Alpha Champion (FVG Proximal)',
-    description: 'The #1 PM2-Validated 2-Stage Alpha Champion for 5m ETH. Enters at FVG Proximal Edge with 1.20x Vol, 52% Delta, 0.40 Body, 50% TP1 @ 1.0R / 50% TP2 @ 1.4R complete harvest (+1,141.95R 2Y Net Gain, 69.1% Win Rate, 2.20 PF, -7.60R Max DD).',
+    description: 'The #1 PM2-Validated 2-Stage Alpha Champion for 5m ETH. Enters at FVG Proximal Edge with 1.20x Vol, 52% Delta, 0.40 Body, 50% TP1 @ 1.0R / 50% TP2 @ 1.4R, and pure Structural Trailing SL (+154.9R 3M Net Gain, 66.2% Win Rate, 1.96 PF).',
     strategyType: 'SWEEP_RECLAIM',
     symbol: 'ETHUSDC',
     timeframe: '5m',
@@ -161,6 +169,14 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
       enableProfitRatchet: false,
       minSweepDepthAtrMultiplier: 0.10,
       slBufferAtrMultiplier: 0.10,
+
+      // Quant Shield Defaults (Pure Baseline)
+      enableEarlyBreakeven: false,
+      earlyBreakevenMultiple: 0.60,
+      enableWaveDeduplication: false,
+      filterWeekend: false,
+      enforceHtfBiasGuard: false,
+      postLossCooldownMinutes: 0,
     } as SweepReclaimPresetConfig,
   },
   {

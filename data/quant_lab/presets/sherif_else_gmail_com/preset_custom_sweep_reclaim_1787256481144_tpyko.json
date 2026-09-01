@@ -1,0 +1,43 @@
+{
+  "id": "preset_custom_sweep_reclaim_1787256481144_tpyko",
+  "name": "ETH RASL No DP (Golden)",
+  "description": "ETH Reclaimed Anchor Shelf Level No DP Val Gate",
+  "strategyType": "SWEEP_RECLAIM",
+  "symbol": "ETHUSDC",
+  "timeframe": "5m",
+  "isFactory": false,
+  "syncStatus": "synced",
+  "createdAt": 1787256481144,
+  "updatedAt": 1788215094329,
+  "config": {
+    "symbol": "ETHUSDC",
+    "entryMode": "SHELF_LEVEL",
+    "timeframe": "5m",
+    "anchorTypes": [
+      "SWING_PIVOT",
+      "ASIAN_HIGH",
+      "ASIAN_LOW",
+      "LONDON_HIGH",
+      "LONDON_LOW",
+      "PDH",
+      "PDL"
+    ],
+    "lookbackMajor": 15,
+    "stage1Multiple": 1,
+    "stage2Multiple": 1.5,
+    "stage3Multiple": 3,
+    "maxBarsToRetest": 24,
+    "lookbackInternal": 5,
+    "bodyRatioThreshold": 0.5,
+    "enableProfitRatchet": true,
+    "maxBarsAnchorToSweep": 30,
+    "enableStructuralTrail": true,
+    "maxBarsSweepToReclaim": 12,
+    "slBufferAtrMultiplier": 0.15,
+    "deltaDominanceThreshold": 60,
+    "volumeExpansionThreshold": 1.5,
+    "enforceDiscountPremiumGate": false,
+    "minSweepDepthAtrMultiplier": 0.1,
+    "requireThreePillarDisplacement": true
+  }
+}

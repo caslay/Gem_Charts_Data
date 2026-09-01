@@ -1,0 +1,43 @@
+{
+  "id": "preset_custom_sweep_reclaim_1787697783703_rqtdq",
+  "name": "ETHUSDC 5m - Custom Setup",
+  "strategyType": "SWEEP_RECLAIM",
+  "symbol": "ETHUSDC",
+  "timeframe": "5m",
+  "isFactory": false,
+  "syncStatus": "synced",
+  "createdAt": 1787697783703,
+  "updatedAt": 1788215093480,
+  "config": {
+    "symbol": "ETHUSDC",
+    "entryMode": "RECLAIM_LEVEL",
+    "timeframe": "5m",
+    "anchorTypes": [
+      "SWING_PIVOT",
+      "ASIAN_HIGH",
+      "ASIAN_LOW",
+      "LONDON_HIGH",
+      "LONDON_LOW",
+      "PDH",
+      "PDL"
+    ],
+    "lookbackMajor": 15,
+    "stage1Multiple": 1,
+    "stage2Multiple": 1.5,
+    "stage3Multiple": 3,
+    "maxBarsToRetest": 24,
+    "volumeSmaPeriod": 20,
+    "lookbackInternal": 5,
+    "bodyRatioThreshold": 0.5,
+    "enableProfitRatchet": true,
+    "maxBarsAnchorToSweep": 30,
+    "enableStructuralTrail": true,
+    "maxBarsSweepToReclaim": 12,
+    "slBufferAtrMultiplier": 0.15,
+    "deltaDominanceThreshold": 50,
+    "volumeExpansionThreshold": 1.5,
+    "enforceDiscountPremiumGate": false,
+    "minSweepDepthAtrMultiplier": 0.1,
+    "requireThreePillarDisplacement": true
+  }
+}

@@ -74,6 +74,14 @@ export interface SweepReclaimLiveSettings {
   requireThreePillarDisplacement: boolean; // default: true
   minSweepDepthAtrMultiplier: number; // default: 0.10
   slBufferAtrMultiplier: number; // default: 0.10
+
+  // 🛡️ Quant Shield & Loss Streak Protection Settings (5 Institutional Rules)
+  enableWaveDeduplication: boolean; // Rule 1: Prune duplicate multi-anchor triggers on same candle wave (default: true)
+  filterWeekend: boolean; // Rule 2: Mute trading Fri 22:00 - Sun 20:00 UTC (default: true)
+  enforceHtfBiasGuard: boolean; // Rule 3: Restrict to Daily Bias & 1H Structure alignment (default: false)
+  enableEarlyBreakeven: boolean; // Rule 4: Advance SL to Breakeven once floating MFE reaches threshold (default: true)
+  earlyBreakevenMultiple: number; // Rule 4: MFE R-Multiple threshold for early breakeven ratchet (default: 0.60)
+  postLossCooldownMinutes: number; // Rule 5: Directional cooldown minutes after stop-out (default: 45)
 }
 
 export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
@@ -109,6 +117,14 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   requireThreePillarDisplacement: true,
   minSweepDepthAtrMultiplier: 0.10,
   slBufferAtrMultiplier: 0.10,
+
+  // Quant Shield Defaults (Pure Baseline)
+  enableWaveDeduplication: false,
+  filterWeekend: false,
+  enforceHtfBiasGuard: false,
+  enableEarlyBreakeven: false,
+  earlyBreakevenMultiple: 0.60,
+  postLossCooldownMinutes: 0,
 };
 
 // Master Reversible Pause Switch for Order Block & Breaker Pipeline

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { auth } from "@/auth";
-import { sql } from "@vercel/postgres";
+import { saveLocalStrategyRun } from "@/lib/quantLab/localScanStore";
 import { buildServerEnrichedPayload, evaluateServerStrategy, ServerBtCandle, ServerMasterArrays } from "@/lib/quantLabEngine";
 
 // Base URL for Binance Futures API
@@ -110,52 +110,6 @@ function getBestMagnet(
   return nearest;
 }
 
-async function initTables() {
-  try {
-    await sql`
-      CREATE TABLE IF NOT EXISTS quant_lab_runs (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name VARCHAR(255) NOT NULL,
-        strategy_config JSONB NOT NULL,
-        symbol VARCHAR(50) NOT NULL,
-        start_date TIMESTAMP WITH TIME ZONE NOT NULL,
-        end_date TIMESTAMP WITH TIME ZONE NOT NULL,
-        initial_balance DECIMAL(18, 4) NOT NULL,
-        final_balance DECIMAL(18, 4) NOT NULL,
-        total_trades INT NOT NULL DEFAULT 0,
-        winning_trades INT NOT NULL DEFAULT 0,
-        losing_trades INT NOT NULL DEFAULT 0,
-        win_rate_pct DECIMAL(5, 2) NOT NULL DEFAULT 0,
-        total_pnl DECIMAL(18, 4) NOT NULL DEFAULT 0,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `;
-    await sql`
-      CREATE TABLE IF NOT EXISTS quant_lab_trades (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        run_id UUID REFERENCES quant_lab_runs(id) ON DELETE CASCADE,
-        timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-        direction VARCHAR(10) NOT NULL,
-        entry_price DECIMAL(18, 4) NOT NULL,
-        exit_price DECIMAL(18, 4),
-        stop_loss DECIMAL(18, 4) NOT NULL,
-        take_profit DECIMAL(18, 4) NOT NULL,
-        realized_pnl DECIMAL(18, 4),
-        roi DECIMAL(18, 4),
-        position_size DECIMAL(18, 4) NOT NULL,
-        status VARCHAR(20) NOT NULL DEFAULT 'CLOSED',
-        exit_timestamp TIMESTAMP WITH TIME ZONE,
-        logic_trigger VARCHAR(255),
-        ipda_metrics_at_entry JSONB NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `;
-  } catch (error) {
-    console.error("[QUANT LAB API] Table self-healing initialization failed:", error);
-    throw error;
-  }
-}
-
 // ── Stream Handler ──
 
 export async function POST(req: Request) {
@@ -191,9 +145,6 @@ export async function POST(req: Request) {
           controller.close();
           return;
         }
-
-        sendChunk({ type: "status", message: "Initializing self-healing database tables..." });
-        await initTables();
 
         sendChunk({ type: "status", message: `Fetching and aggregating historical ${symbol} candles from Binance...` });
         const startMs = Date.parse(`${start_date}T00:00:00.000Z`);
@@ -499,42 +450,37 @@ export async function POST(req: Request) {
           active_trade = null;
         }
 
-        sendChunk({ type: "status", message: "Saving execution run metadata and trades into the database..." });
-
         // Calculate summary statistics
         const total_trades = trades_ledger.length;
         const winning_trades = trades_ledger.filter(t => t.realized_pnl > 0).length;
         const losing_trades = trades_ledger.filter(t => t.realized_pnl <= 0).length;
         const win_rate_pct = total_trades > 0 ? parseFloat(((winning_trades / total_trades) * 100).toFixed(2)) : 0.00;
         const total_pnl = parseFloat((current_balance - initial_capital).toFixed(4));
+        const runId = crypto.randomUUID();
+        const createdAt = new Date().toISOString();
 
-        // Insert into runs
-        const runRes = await sql`
-          INSERT INTO quant_lab_runs (
-            name, strategy_config, symbol, start_date, end_date, initial_balance, final_balance,
-            total_trades, winning_trades, losing_trades, win_rate_pct, total_pnl
-          ) VALUES (
-            ${strategy_name}, ${JSON.stringify(strategy_config)}, ${symbol}, ${start_date}, ${end_date},
-            ${initial_capital}, ${current_balance}, ${total_trades}, ${winning_trades}, ${losing_trades},
-            ${win_rate_pct}, ${total_pnl}
-          ) RETURNING id, created_at
-        `;
+        const runRecord = {
+          id: runId,
+          name: strategy_name,
+          strategy_config,
+          symbol,
+          start_date,
+          end_date,
+          initial_balance: initial_capital,
+          final_balance: current_balance,
+          total_trades,
+          winning_trades,
+          losing_trades,
+          win_rate_pct,
+          total_pnl,
+          trades: trades_ledger,
+          created_at: createdAt
+        };
 
-        const runId = runRes.rows[0].id;
-        const createdAt = runRes.rows[0].created_at;
-
-        // Insert trades in batch or sequentially
-        for (const trade of trades_ledger) {
-          await sql`
-            INSERT INTO quant_lab_trades (
-              run_id, timestamp, direction, entry_price, exit_price, stop_loss, take_profit,
-              realized_pnl, roi, position_size, status, exit_timestamp, logic_trigger, ipda_metrics_at_entry
-            ) VALUES (
-              ${runId}, ${trade.timestamp}, ${trade.direction}, ${trade.entry_price}, ${trade.exit_price},
-              ${trade.stop_loss}, ${trade.take_profit}, ${trade.realized_pnl}, ${trade.roi}, ${trade.position_size},
-              ${trade.status}, ${trade.exit_timestamp}, ${trade.logic_trigger}, ${JSON.stringify(trade.ipda_metrics_at_entry)}
-            )
-          `;
+        try {
+          await saveLocalStrategyRun(runRecord);
+        } catch (saveErr) {
+          console.error("[QUANT LAB RUN LOCAL] Failed to persist run record:", saveErr);
         }
 
         sendChunk({

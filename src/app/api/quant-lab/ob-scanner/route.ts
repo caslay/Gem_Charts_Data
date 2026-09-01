@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { auth } from "@/auth";
-import { sql } from "@vercel/postgres";
+import { saveLocalObScan } from "@/lib/quantLab/localScanStore";
 import { Candle } from "@/lib/fvgEngine";
 import { OrderBlockEngine, OrderBlockScanConfig } from "@/lib/quantEngine/OrderBlockEngine";
 
@@ -133,33 +133,6 @@ function generateMockKlines(startMs: number, endMs: number, interval: string): C
   return candles;
 }
 
-// Self-healing database initialization for OB Scans table
-async function initObScansTable() {
-  try {
-    await sql`
-      CREATE TABLE IF NOT EXISTS quant_lab_ob_scans (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        scan_name VARCHAR(255) NOT NULL,
-        symbol VARCHAR(50) NOT NULL,
-        timeframe VARCHAR(20) NOT NULL,
-        start_date TIMESTAMP WITH TIME ZONE NOT NULL,
-        end_date TIMESTAMP WITH TIME ZONE NOT NULL,
-        total_detected INT NOT NULL,
-        validation_rate_pct DECIMAL(5, 2) NOT NULL,
-        mt_reaction_rate_pct DECIMAL(5, 2) NOT NULL,
-        mitigation_win_rate_pct DECIMAL(5, 2) NOT NULL,
-        avg_rr_tp1 DECIMAL(6, 2) NOT NULL,
-        avg_rr_tp2 DECIMAL(6, 2) NOT NULL,
-        telemetry_summary JSONB NOT NULL,
-        order_blocks JSONB NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `;
-  } catch (err) {
-    console.error("[OB SCANNER DB] Self-healing table check failed:", err);
-  }
-}
-
 // ── SSE Streaming Route ──
 
 export async function POST(req: Request) {
@@ -215,9 +188,6 @@ export async function POST(req: Request) {
           controller.close();
           return;
         }
-
-        sendChunk({ type: "status", message: "Initializing self-healing Order Block scan tables..." });
-        await initObScansTable();
 
         const startMs = Date.parse(`${start_date}T00:00:00.000Z`);
         const endMs = Date.parse(`${end_date}T23:59:59.000Z`);
@@ -310,36 +280,8 @@ export async function POST(req: Request) {
           winRate: telemetry.mitigation_win_rate_pct
         });
 
-        // Persist to Neon PostgreSQL
+        // Persist 100% locally to data/quant_lab/ob_scans/{id}.json
         const scanId = crypto.randomUUID();
-        try {
-          await sql`
-            INSERT INTO quant_lab_ob_scans (
-              id, scan_name, symbol, timeframe, start_date, end_date,
-              total_detected, validation_rate_pct, mt_reaction_rate_pct,
-              mitigation_win_rate_pct, avg_rr_tp1, avg_rr_tp2,
-              telemetry_summary, order_blocks
-            ) VALUES (
-              ${scanId},
-              ${scan_name},
-              ${symbol},
-              ${timeframe},
-              ${new Date(startMs).toISOString()},
-              ${new Date(endMs).toISOString()},
-              ${telemetry.total_detected},
-              ${telemetry.validation_rate_pct},
-              ${telemetry.mt_reaction_rate_pct},
-              ${telemetry.mitigation_win_rate_pct},
-              ${telemetry.avg_rr_tp1},
-              ${telemetry.avg_rr_tp2},
-              ${JSON.stringify(telemetry)},
-              ${JSON.stringify(orderBlocks)}
-            );
-          `;
-        } catch (dbErr) {
-          console.error("[OB SCANNER DB] Failed to persist scan record:", dbErr);
-        }
-
         const scanRecord = {
           id: scanId,
           scan_name,
@@ -357,6 +299,12 @@ export async function POST(req: Request) {
           order_blocks: orderBlocks,
           created_at: new Date().toISOString()
         };
+
+        try {
+          await saveLocalObScan(scanRecord);
+        } catch (saveErr) {
+          console.error("[OB SCANNER LOCAL] Failed to persist scan record:", saveErr);
+        }
 
         sendChunk({
           type: "complete",

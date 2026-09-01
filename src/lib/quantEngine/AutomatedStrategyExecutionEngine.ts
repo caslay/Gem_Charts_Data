@@ -156,6 +156,14 @@ export interface AutomatedExecutionConfig {
   enableProfitRatchet: boolean; // Ratchet SL to +1.0R floor after Stage 2
   slBufferAtrMultiplier: number; // default: 0.15 ATR
 
+  // 🛡️ Quant Shield & Loss Streak Protection Settings (5 Institutional Rules)
+  enableWaveDeduplication?: boolean; // Rule 1: Single-Position & Wave Anchor Deduplication (default: true)
+  filterWeekend?: boolean; // Rule 2: Weekend Off-Liquidity Filter (Fri 22:00 - Sun 20:00 UTC) (default: true)
+  enforceHtfBiasGuard?: boolean; // Rule 3: Macro Daily Bias & 1H Structure Alignment (default: false)
+  enableEarlyBreakeven?: boolean; // Rule 4: Dynamic Early Breakeven Ratchet (default: true)
+  earlyBreakevenMultiple?: number; // Rule 4: MFE Multiple to trigger Breakeven (default: 0.60)
+  postLossCooldownMinutes?: number; // Rule 5: Directional cooldown minutes after stop-out (default: 45)
+
   // Dynamic Live Settings
   liveSettings?: SweepReclaimLiveSettings;
 }
@@ -183,6 +191,15 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   enableStructuralTrail: true,
   enableProfitRatchet: true,
   slBufferAtrMultiplier: 0.10,
+
+  // Quant Shield Defaults (Pure Baseline)
+  enableWaveDeduplication: false,
+  filterWeekend: false,
+  enforceHtfBiasGuard: false,
+  enableEarlyBreakeven: false,
+  earlyBreakevenMultiple: 0.60,
+  postLossCooldownMinutes: 0,
+
   liveSettings: DEFAULT_SR_LIVE_SETTINGS,
 };
 
@@ -433,6 +450,20 @@ export class AutomatedStrategyExecutionEngine {
       };
     }
 
+    // ── Guardrail 1.5: 🛡️ Quant Shield Rule 2: Weekend Off-Liquidity Filter (Fri 22:00 - Sun 20:00 UTC) ──
+    const filterWeekend = this.config.filterWeekend ?? this.config.liveSettings?.filterWeekend ?? true;
+    if (filterWeekend) {
+      const d = new Date();
+      const day = d.getUTCDay();
+      const hr = d.getUTCHours();
+      const isWknd = (day === 5 && hr >= 22) || day === 6 || (day === 0 && hr < 20);
+      if (isWknd) {
+        const msg = `[WEEKEND_FILTER] Automated execution paused during weekend off-liquidity hours (Fri 22:00 - Sun 20:00 UTC).`;
+        this.emit("DIRECTIONAL_VETO", msg);
+        return { success: false, message: msg };
+      }
+    }
+
     // ── Guardrail 2: Concurrency Cap (maxOpenPositions: 1 on ACTIVE positions) ──
     if (this.activePositions.length >= this.config.maxOpenPositions) {
       return {
@@ -456,17 +487,18 @@ export class AutomatedStrategyExecutionEngine {
       return { success: false, message: msg };
     }
 
-    // ── Guardrail 4: Mandatory Post-Trade Cooldown ──
+    // ── Guardrail 4: 🛡️ Quant Shield Rule 5: Mandatory Post-Loss / Post-Trade Cooldown ──
     const now = Date.now();
     const timeSinceLastClose = now - this.lastTradeClosedTimestamp;
+    const effectiveCooldownMs = (this.config.postLossCooldownMinutes ?? 45) * 60 * 1000;
     if (
       this.lastTradeClosedTimestamp > 0 &&
-      timeSinceLastClose < this.config.cooldownMs
+      timeSinceLastClose < effectiveCooldownMs
     ) {
-      const remainingSec = Math.ceil(
-        (this.config.cooldownMs - timeSinceLastClose) / 1000,
+      const remainingMin = Math.ceil(
+        (effectiveCooldownMs - timeSinceLastClose) / 60000,
       );
-      const msg = `[COOLDOWN_ACTIVE] Post-trade cooldown in effect (${remainingSec}s remaining).`;
+      const msg = `[COOLDOWN_ACTIVE] Post-trade cooldown in effect (${remainingMin}m remaining).`;
       this.emit("COOLDOWN_ACTIVE", msg);
       return { success: false, message: msg };
     }
@@ -804,6 +836,18 @@ export class AutomatedStrategyExecutionEngine {
       }
       if (floatingR < pos.maeR) {
         pos.maeR = parseFloat(floatingR.toFixed(4));
+      }
+
+      // ── B.0: Optional Early Breakeven Ratchet (Disabled by default) ──
+      const enableEarlyBE = this.config.enableEarlyBreakeven ?? this.config.liveSettings?.enableEarlyBreakeven ?? false;
+      const earlyBEMultiple = this.config.earlyBreakevenMultiple ?? this.config.liveSettings?.earlyBreakevenMultiple ?? 0.60;
+      if (enableEarlyBE && !pos.isStage1Filled && pos.trailingSlSource === "INITIAL") {
+        if (pos.mfeR >= earlyBEMultiple) {
+          pos.activeStopLoss = pos.entryPrice;
+          pos.trailingSlSource = "BREAKEVEN";
+          const msg = `🛡️ [EARLY_BREAKEVEN_LOCKED] Position on ${pos.symbol} reached +${pos.mfeR.toFixed(2)}R MFE (>= +${earlyBEMultiple.toFixed(2)}R)! Stop loss ratcheted to Breakeven ($${pos.entryPrice.toFixed(2)}).`;
+          this.emit("STAGE_1_HARVEST", msg, pos);
+        }
       }
 
       // ── B.1: Check Stop Loss Violation ──
