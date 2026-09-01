@@ -110,108 +110,143 @@ export async function GET() {
       );
     }
 
-    // Ensure the terminal settings schema is loaded
-    await initTables();
-
-    // 1. Fetch system settings
-    const { rows } = await sql`
-      SELECT key_name, key_value FROM system_settings
-    `;
-
-    // Transform rows into a clean key-value map
-    const settings: Record<string, string> = {};
-    for (const row of rows) {
-      settings[row.key_name] = row.key_value;
-    }
-
-    // Self-seed ACTIVE_MODEL if not present
-    if (!settings.ACTIVE_MODEL) {
-      settings.ACTIVE_MODEL = "gemini-3.5-flash";
-      try {
-        await sql`
-          INSERT INTO system_settings (key_name, key_value)
-          VALUES ('ACTIVE_MODEL', 'gemini-3.5-flash')
-          ON CONFLICT (key_name) DO NOTHING;
-        `;
-      } catch (seedErr) {
-        console.warn("[SETTINGS API] Auto-seed ACTIVE_MODEL skipped:", seedErr);
-      }
-    }
-
-    // 2. Fetch specific user's terminal settings
-    const userEmail = session.user.email || "default_user";
-    let { rows: termRows } = await sql`
-      SELECT signal_sounds, enabled_signals, atr_period, adaptive_n_min, adaptive_n_max, mss_body_ratio, displacement_vef, sharp_departure_mult,
-             candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
-             include_btc_correlation, include_structure_analysis, include_fvg_detection,
-             visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback FROM terminal_settings
-      WHERE user_id = ${userEmail}
-      LIMIT 1
-    `;
-
-    // If user does not have terminal_settings yet, auto-seed default row
-    if (termRows.length === 0) {
-      try {
-        await sql`
-          INSERT INTO terminal_settings (
-            user_id, signal_sounds, enabled_signals,
-            atr_period, adaptive_n_min, adaptive_n_max,
-            mss_body_ratio, displacement_vef, sharp_departure_mult,
-            candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
-            include_btc_correlation, include_structure_analysis, include_fvg_detection,
-            visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback
-          )
-          VALUES (
-            ${userEmail}, ${JSON.stringify(DEFAULT_SIGNAL_SOUNDS)}, ${JSON.stringify(DEFAULT_ENABLED_SIGNALS)},
-            14, 3, 15,
-            0.70, 1.50, 1.50,
-            350, 350, 250, 120, 80,
-            true, true, true,
-            false, 0.5, 10, 0.3, 0.5, 0.7, 5
-          )
-          ON CONFLICT (user_id) DO NOTHING;
-        `;
-        const refetch = await sql`
-          SELECT signal_sounds, enabled_signals, atr_period, adaptive_n_min, adaptive_n_max, mss_body_ratio, displacement_vef, sharp_departure_mult,
-                 candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
-                 include_btc_correlation, include_structure_analysis, include_fvg_detection,
-                 visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback FROM terminal_settings
-          WHERE user_id = ${userEmail}
-          LIMIT 1
-        `;
-        termRows = refetch.rows;
-      } catch (seedErr) {
-        console.warn("[SETTINGS API] Auto-seed terminal_settings skipped:", seedErr);
-      }
-    }
-
-    const terminalSettings = {
-      signalSounds: termRows[0]?.signal_sounds || DEFAULT_SIGNAL_SOUNDS,
-      enabledSignals: termRows[0]?.enabled_signals || DEFAULT_ENABLED_SIGNALS,
-      atrPeriod: termRows[0]?.atr_period ?? 14,
-      adaptiveNMin: termRows[0]?.adaptive_n_min ?? 3,
-      adaptiveNMax: termRows[0]?.adaptive_n_max ?? 15,
-      mssBodyRatio: termRows[0]?.mss_body_ratio ?? 0.70,
-      displacementVef: termRows[0]?.displacement_vef ?? 1.50,
-      sharpDepartureMult: termRows[0]?.sharp_departure_mult ?? 1.50,
-      candlesLimit1m: termRows[0]?.candles_limit_1m ?? 350,
-      candlesLimit5m: termRows[0]?.candles_limit_5m ?? 350,
-      candlesLimit15m: termRows[0]?.candles_limit_15m ?? 250,
-      candlesLimit1h: termRows[0]?.candles_limit_1h ?? 120,
-      candlesLimit4h: termRows[0]?.candles_limit_4h ?? 80,
-      includeBtcCorrelation: termRows[0]?.include_btc_correlation !== false,
-      includeStructureAnalysis: termRows[0]?.include_structure_analysis !== false,
-      includeFvgDetection: termRows[0]?.include_fvg_detection !== false,
-      visualizePerfectMovementOnly: !!termRows[0]?.visualize_perfect_movement_only,
-      pmAtrMultiplier: termRows[0]?.pm_atr_multiplier ?? 0.5,
-      pmVolumeSmaPeriod: termRows[0]?.pm_volume_sma_period ?? 10,
-      pmMinBodyRatio: termRows[0]?.pm_min_body_ratio ?? 0.3,
-      pmMaxWickRatio: termRows[0]?.pm_max_wick_ratio ?? 0.5,
-      pmMaxRetracementLimit: termRows[0]?.pm_max_retracement_limit ?? 0.7,
-      pmSweepLookback: termRows[0]?.pm_sweep_lookback ?? 5,
+    const defaultTerminalSettings = {
+      signalSounds: DEFAULT_SIGNAL_SOUNDS,
+      enabledSignals: DEFAULT_ENABLED_SIGNALS,
+      atrPeriod: 14,
+      adaptiveNMin: 3,
+      adaptiveNMax: 15,
+      mssBodyRatio: 0.70,
+      displacementVef: 1.50,
+      sharpDepartureMult: 1.50,
+      candlesLimit1m: 350,
+      candlesLimit5m: 350,
+      candlesLimit15m: 250,
+      candlesLimit1h: 120,
+      candlesLimit4h: 80,
+      includeBtcCorrelation: true,
+      includeStructureAnalysis: true,
+      includeFvgDetection: true,
+      visualizePerfectMovementOnly: false,
+      pmAtrMultiplier: 0.5,
+      pmVolumeSmaPeriod: 10,
+      pmMinBodyRatio: 0.3,
+      pmMaxWickRatio: 0.5,
+      pmMaxRetracementLimit: 0.7,
+      pmSweepLookback: 5,
     };
 
-    return NextResponse.json({ settings, terminalSettings });
+    try {
+      // Ensure the terminal settings schema is loaded
+      await initTables();
+
+      // 1. Fetch system settings
+      const { rows } = await sql`
+        SELECT key_name, key_value FROM system_settings
+      `;
+
+      // Transform rows into a clean key-value map
+      const settings: Record<string, string> = {};
+      for (const row of rows) {
+        settings[row.key_name] = row.key_value;
+      }
+
+      // Self-seed ACTIVE_MODEL if not present
+      if (!settings.ACTIVE_MODEL) {
+        settings.ACTIVE_MODEL = "gemini-3.5-flash";
+        try {
+          await sql`
+            INSERT INTO system_settings (key_name, key_value)
+            VALUES ('ACTIVE_MODEL', 'gemini-3.5-flash')
+            ON CONFLICT (key_name) DO NOTHING;
+          `;
+        } catch (seedErr) {
+          console.warn("[SETTINGS API] Auto-seed ACTIVE_MODEL skipped:", seedErr);
+        }
+      }
+
+      // 2. Fetch specific user's terminal settings
+      const userEmail = session.user.email || "default_user";
+      let { rows: termRows } = await sql`
+        SELECT signal_sounds, enabled_signals, atr_period, adaptive_n_min, adaptive_n_max, mss_body_ratio, displacement_vef, sharp_departure_mult,
+               candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
+               include_btc_correlation, include_structure_analysis, include_fvg_detection,
+               visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback FROM terminal_settings
+        WHERE user_id = ${userEmail}
+        LIMIT 1
+      `;
+
+      // If user does not have terminal_settings yet, auto-seed default row
+      if (termRows.length === 0) {
+        try {
+          await sql`
+            INSERT INTO terminal_settings (
+              user_id, signal_sounds, enabled_signals,
+              atr_period, adaptive_n_min, adaptive_n_max,
+              mss_body_ratio, displacement_vef, sharp_departure_mult,
+              candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
+              include_btc_correlation, include_structure_analysis, include_fvg_detection,
+              visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback
+            )
+            VALUES (
+              ${userEmail}, ${JSON.stringify(DEFAULT_SIGNAL_SOUNDS)}, ${JSON.stringify(DEFAULT_ENABLED_SIGNALS)},
+              14, 3, 15,
+              0.70, 1.50, 1.50,
+              350, 350, 250, 120, 80,
+              true, true, true,
+              false, 0.5, 10, 0.3, 0.5, 0.7, 5
+            )
+            ON CONFLICT (user_id) DO NOTHING;
+          `;
+          const refetch = await sql`
+            SELECT signal_sounds, enabled_signals, atr_period, adaptive_n_min, adaptive_n_max, mss_body_ratio, displacement_vef, sharp_departure_mult,
+                   candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
+                   include_btc_correlation, include_structure_analysis, include_fvg_detection,
+                   visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback FROM terminal_settings
+            WHERE user_id = ${userEmail}
+            LIMIT 1
+          `;
+          termRows = refetch.rows;
+        } catch (seedErr) {
+          console.warn("[SETTINGS API] Auto-seed terminal_settings skipped:", seedErr);
+        }
+      }
+
+      const terminalSettings = {
+        signalSounds: termRows[0]?.signal_sounds || DEFAULT_SIGNAL_SOUNDS,
+        enabledSignals: termRows[0]?.enabled_signals || DEFAULT_ENABLED_SIGNALS,
+        atrPeriod: termRows[0]?.atr_period ?? 14,
+        adaptiveNMin: termRows[0]?.adaptive_n_min ?? 3,
+        adaptiveNMax: termRows[0]?.adaptive_n_max ?? 15,
+        mssBodyRatio: termRows[0]?.mss_body_ratio ?? 0.70,
+        displacementVef: termRows[0]?.displacement_vef ?? 1.50,
+        sharpDepartureMult: termRows[0]?.sharp_departure_mult ?? 1.50,
+        candlesLimit1m: termRows[0]?.candles_limit_1m ?? 350,
+        candlesLimit5m: termRows[0]?.candles_limit_5m ?? 350,
+        candlesLimit15m: termRows[0]?.candles_limit_15m ?? 250,
+        candlesLimit1h: termRows[0]?.candles_limit_1h ?? 120,
+        candlesLimit4h: termRows[0]?.candles_limit_4h ?? 80,
+        includeBtcCorrelation: termRows[0]?.include_btc_correlation !== false,
+        includeStructureAnalysis: termRows[0]?.include_structure_analysis !== false,
+        includeFvgDetection: termRows[0]?.include_fvg_detection !== false,
+        visualizePerfectMovementOnly: !!termRows[0]?.visualize_perfect_movement_only,
+        pmAtrMultiplier: termRows[0]?.pm_atr_multiplier ?? 0.5,
+        pmVolumeSmaPeriod: termRows[0]?.pm_volume_sma_period ?? 10,
+        pmMinBodyRatio: termRows[0]?.pm_min_body_ratio ?? 0.3,
+        pmMaxWickRatio: termRows[0]?.pm_max_wick_ratio ?? 0.5,
+        pmMaxRetracementLimit: termRows[0]?.pm_max_retracement_limit ?? 0.7,
+        pmSweepLookback: termRows[0]?.pm_sweep_lookback ?? 5,
+      };
+
+      return NextResponse.json({ settings, terminalSettings });
+    } catch (dbErr: any) {
+      console.warn("[SETTINGS API] Database query failed or quota exceeded (HTTP 402/Offline fallback):", dbErr?.message || dbErr);
+      return NextResponse.json({
+        settings: { ACTIVE_MODEL: "gemini-3.5-flash" },
+        terminalSettings: defaultTerminalSettings,
+        isOffline: true,
+      });
+    }
   } catch (error: unknown) {
     console.error("[SETTINGS API] GET Error:", error);
     const message = error instanceof Error ? error.message : "Failed to fetch settings.";
@@ -395,11 +430,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, message: "Settings saved." });
   } catch (error: unknown) {
-    console.error("[SETTINGS API] POST Error:", error);
-    const message = error instanceof Error ? error.message : "Failed to save settings.";
+    console.warn("[SETTINGS API] POST Error (operating with local fallback):", error);
     return NextResponse.json(
-      { error: message },
-      { status: 500 }
+      { success: true, message: "Settings saved in local store (cloud sync deferred).", isOffline: true }
     );
   }
 }

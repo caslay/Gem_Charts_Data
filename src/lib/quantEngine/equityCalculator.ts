@@ -309,19 +309,12 @@ export function adaptSweepReclaimSetupsToTrades(
   const executedTrades: StandardizedExecutedTrade[] = candidateSetups.map((s) => {
     const timestamp = s.retest_time || s.reclaim_time || s.sweep_time || s.anchor_time || Date.now();
     let realizedR = typeof s.realized_rr === 'number' ? s.realized_rr : 0;
-    let outcome: string = s.stage_exit_type || s.simulated_outcome || 'STOPPED_OUT';
+    let outcome: string = s.stage_exit_type || s.simulated_outcome || (realizedR > 0 ? 'FULL_TP2_WIN' : realizedR === 0 ? 'BE_SCRATCH_WIN' : 'STOPPED_OUT');
 
-    // Optional Early Breakeven Dynamic Adjustment (only if explicitly enabled)
-    if (enableEarlyBE) {
-      if (realizedR < 0 && typeof s.mfe_r === 'number' && s.mfe_r >= earlyBEMultiple) {
-        realizedR = 0.0;
-        outcome = 'BE_SCRATCH_WIN';
-      }
-    } else {
-      if (s.is_be_scratch && !s.is_stage1_filled && realizedR === 0) {
-        realizedR = -1.0;
-        outcome = 'STOPPED_OUT';
-      }
+    // Optional Dynamic Early Breakeven Upgrade (if not already recorded in setup)
+    if (enableEarlyBE && realizedR < 0 && typeof s.mfe_r === 'number' && s.mfe_r >= earlyBEMultiple) {
+      realizedR = 0.0;
+      outcome = 'BE_SCRATCH_WIN';
     }
 
     const isWin = realizedR > 0;
