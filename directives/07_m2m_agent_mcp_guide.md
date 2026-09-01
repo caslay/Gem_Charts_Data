@@ -8,7 +8,7 @@
 
 ## 1. Architectural Topology
 
-The Flow-State Quant Engine provides two unified, high-performance interfaces for headless machine consumers, both decoupled from browser NextAuth session cookies:
+The Quegar Quant Engine provides two unified, high-performance interfaces for headless machine consumers, both decoupled from browser NextAuth session cookies:
 
 ```
                                   ┌─────────────────────────────────────────────────────────┐
