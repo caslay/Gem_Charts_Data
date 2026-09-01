@@ -45,7 +45,10 @@ export default function SweepReclaimSidebarList({
         <div className="flex flex-col gap-2.5 max-h-[560px] overflow-y-auto pr-1">
           {scans.map((scan) => {
             const isSelected = selectedScan?.id === scan.id;
-            const winRate = Number(scan.retest_win_rate_pct);
+            const rawWinRate = Number(scan.retest_win_rate_pct);
+            const exScratchWinRate = typeof (scan.telemetry_summary as any)?.ex_scratch_win_rate_pct === 'number'
+              ? (scan.telemetry_summary as any).ex_scratch_win_rate_pct
+              : rawWinRate;
             const reclaimRate = Number(scan.reclaim_rate_pct);
 
             return (
@@ -95,8 +98,8 @@ export default function SweepReclaimSidebarList({
                   </div>
                   <div className="flex flex-col">
                     <span className="text-muted dark:text-slate-500 uppercase text-[8px]">Win Rate</span>
-                    <span className={`font-bold ${winRate >= 50 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                      {winRate.toFixed(0)}%
+                    <span className={`font-bold ${exScratchWinRate >= 50 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                      {exScratchWinRate.toFixed(0)}%
                     </span>
                   </div>
                 </div>

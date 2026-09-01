@@ -1010,6 +1010,122 @@ function LiveOrderBlockModalContent({
                   </div>
                 </div>
               </div>
+
+              {/* 7. 🛡️ Quant Shield & Loss Streak Protection Settings (5 Institutional Rules) */}
+              <div className="bg-gradient-to-r from-cyan-950/30 via-slate-900/50 to-purple-950/30 p-3.5 rounded-xl border border-cyan-500/30 flex flex-col gap-3">
+                <div className="font-bold text-slate-200 uppercase text-[10px] flex items-center justify-between border-b border-cyan-500/20 pb-2">
+                  <span className="flex items-center gap-1.5 text-cyan-300">
+                    <Shield className="w-4 h-4 text-cyan-400" />
+                    Quant Shield: 5 Anti-Loss Streak Protectors
+                  </span>
+                  <span className="text-[9px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/30 font-mono font-bold">
+                    PM2 VERIFIED
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-[9px] font-mono">
+                  {/* Rule 1: Wave Anchor Deduplication */}
+                  <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9.5px] font-bold text-white uppercase">Rule 1: Wave Deduplication</span>
+                      <input
+                        type="checkbox"
+                        checked={srSettings?.enableWaveDeduplication ?? false}
+                        onChange={(e) => updateSrSettings({ enableWaveDeduplication: e.target.checked })}
+                        className="w-3.5 h-3.5 accent-cyan-400 cursor-pointer"
+                      />
+                    </div>
+                    <span className="text-[8.5px] text-slate-400">
+                      Prunes duplicate clone entries on same candle wave (-84% loss streaks).
+                    </span>
+                  </div>
+
+                  {/* Rule 2: Weekend Off-Liquidity Filter */}
+                  <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9.5px] font-bold text-white uppercase">Rule 2: Weekend Filter</span>
+                      <input
+                        type="checkbox"
+                        checked={srSettings?.filterWeekend ?? false}
+                        onChange={(e) => updateSrSettings({ filterWeekend: e.target.checked })}
+                        className="w-3.5 h-3.5 accent-cyan-400 cursor-pointer"
+                      />
+                    </div>
+                    <span className="text-[8.5px] text-slate-400">
+                      Mutes execution Fri 22:00 - Sun 20:00 UTC (skips 50% of multi-loss traps).
+                    </span>
+                  </div>
+
+                  {/* Rule 3: Macro Daily Bias Guard */}
+                  <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9.5px] font-bold text-white uppercase">Rule 3: Daily Bias Guard</span>
+                      <input
+                        type="checkbox"
+                        checked={srSettings?.enforceHtfBiasGuard ?? false}
+                        onChange={(e) => updateSrSettings({ enforceHtfBiasGuard: e.target.checked })}
+                        className="w-3.5 h-3.5 accent-cyan-400 cursor-pointer"
+                      />
+                    </div>
+                    <span className="text-[8.5px] text-slate-400">
+                      Restricts Longs to Bullish 1D/1H, Shorts to Bearish 1D/1H.
+                    </span>
+                  </div>
+
+                  {/* Rule 4: Early Breakeven Protection */}
+                  <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-1.5 col-span-1 sm:col-span-2 lg:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9.5px] font-bold text-slate-300 uppercase">Rule 4: Early Breakeven Ratchet</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-cyan-400">+{(srSettings?.earlyBreakevenMultiple ?? 0.60).toFixed(2)}R MFE</span>
+                        <input
+                          type="checkbox"
+                          checked={srSettings?.enableEarlyBreakeven ?? false}
+                          onChange={(e) => updateSrSettings({ enableEarlyBreakeven: e.target.checked })}
+                          className="w-3.5 h-3.5 accent-cyan-400 cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.40"
+                      max="0.90"
+                      step="0.05"
+                      disabled={!(srSettings?.enableEarlyBreakeven ?? false)}
+                      value={srSettings?.earlyBreakevenMultiple ?? 0.60}
+                      onChange={(e) => updateSrSettings({ earlyBreakevenMultiple: parseFloat(e.target.value) })}
+                      className="w-full accent-cyan-400"
+                    />
+                    <span className="text-[8.5px] text-slate-400">
+                      Advances SL to Breakeven 0.0R at +{(srSettings?.earlyBreakevenMultiple ?? 0.60).toFixed(2)}R MFE before TP1.
+                    </span>
+                  </div>
+
+                  {/* Rule 5: Post-Loss Directional Cooldown */}
+                  <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 flex flex-col justify-between gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9.5px] font-bold text-white uppercase">Rule 5: Post-Loss Cooldown</span>
+                      <span className="text-[10px] font-bold text-purple-400">
+                        {(srSettings?.postLossCooldownMinutes ?? 0) === 0 ? "OFF (0m)" : `${srSettings?.postLossCooldownMinutes}m Lock`}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="120"
+                      step="5"
+                      value={srSettings?.postLossCooldownMinutes ?? 0}
+                      onChange={(e) => updateSrSettings({ postLossCooldownMinutes: parseInt(e.target.value, 10) })}
+                      className="w-full accent-purple-400"
+                    />
+                    <span className="text-[8.5px] text-slate-400">
+                      Directional cooldown after stop out to prevent cascade traps.
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

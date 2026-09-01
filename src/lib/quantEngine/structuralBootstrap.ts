@@ -1,4 +1,3 @@
-import { sql } from "@vercel/postgres";
 import fs from "fs";
 import path from "path";
 import { MarketStructureConfig, StructuralBootstrapContext } from './types';
@@ -204,34 +203,9 @@ export async function computeStructuralBootstrap(
     };
   }
 
-  // ── Tier 1 Check (Neon Cloud DB) ───────────────────────────────────────────
-  try {
-    const { rows } = await sql`
-      SELECT state_json FROM quant_lab_daily_structural_snapshots 
-      WHERE symbol = ${symbol} 
-      AND timeframe = ${timeframe} 
-      AND snapshot_date = ${snapshotDate.toISOString()}
-      LIMIT 1;
-    `;
-
-    if (rows && rows.length > 0) {
-      const state_json = rows[0].state_json;
-      const parsed = (typeof state_json === 'string' ? JSON.parse(state_json) : state_json) as StructuralBootstrapContext;
-      saveServerCacheSnapshot(symbol, timeframe, dateKey, parsed);
-      return {
-        warmupStartMs,
-        bootstrap: parsed,
-      };
-    }
-  } catch (err) {
-    console.info(`[structuralBootstrap] Tier 1 Cloud query bypassed (Offline / Quota 402): ${(err as any)?.message || err}`);
-  }
-
-  // ── Tier 3 (Self-Healing Deterministic 45-Day Warmup) ───────────────────────
-  
+  // ── Tier 2 / Tier 3 (Deterministic Warmup & Local Cache) ───────────────────────
   let warmupCandles = await fetchWarmupCandles(symbol, timeframe, warmupStartMs, targetMidnightMs);
   if (warmupCandles.length === 0) {
-    console.warn(`[structuralBootstrap] Live warmup fetch returned 0 candles. Generating deterministic seed for ${symbol} ${timeframe}...`);
     warmupCandles = generateDeterministicWarmupCandles(warmupStartMs, targetMidnightMs, timeframe);
   }
 
@@ -241,22 +215,8 @@ export async function computeStructuralBootstrap(
   const snapshot = generateSnapshot(warmupCandles, { lookbackMajor, lookbackInternal });
   snapshot.warmupCutoffTs = targetMidnightMs;
 
-  // Persist into Tier 2 Local Cache immediately
+  // Persist into Local Cache immediately
   saveServerCacheSnapshot(symbol, timeframe, dateKey, snapshot);
-
-  // Background non-blocking push to Tier 1 Cloud DB
-  (async () => {
-    try {
-      await sql`
-        INSERT INTO quant_lab_daily_structural_snapshots (symbol, timeframe, snapshot_date, state_json)
-        VALUES (${symbol}, ${timeframe}, ${snapshotDate.toISOString()}, ${JSON.stringify(snapshot)})
-        ON CONFLICT (symbol, timeframe, snapshot_date) DO UPDATE 
-        SET state_json = EXCLUDED.state_json, updated_at = CURRENT_TIMESTAMP;
-      `;
-    } catch {
-      // Silent catch
-    }
-  })().catch(() => {});
 
   return {
     warmupStartMs,

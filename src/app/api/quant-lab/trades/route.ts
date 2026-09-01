@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { sql } from "@vercel/postgres";
+import { getLocalStrategyRunById } from "@/lib/quantLab/localScanStore";
 
 export async function GET(req: Request) {
   const session = await auth();
@@ -13,45 +13,27 @@ export async function GET(req: Request) {
     const runId = url.searchParams.get("run_id");
     const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") || "100", 10), 1), 500);
     const offset = Math.max(parseInt(url.searchParams.get("offset") || "0", 10), 0);
-    const detail = url.searchParams.get("detail") === "true";
 
     if (!runId) {
       return NextResponse.json({ error: "Missing required query parameter: 'run_id'." }, { status: 400 });
     }
 
-    const tradesRes = detail
-      ? await sql`
-          SELECT * FROM quant_lab_trades 
-          WHERE run_id = ${runId} 
-          ORDER BY timestamp ASC
-          LIMIT ${limit}
-          OFFSET ${offset}
-        `
-      : await sql`
-          SELECT 
-            id, run_id, timestamp, direction, entry_price, exit_price, stop_loss, take_profit,
-            realized_pnl, roi, position_size, status, exit_timestamp, logic_trigger, created_at
-          FROM quant_lab_trades 
-          WHERE run_id = ${runId} 
-          ORDER BY timestamp ASC
-          LIMIT ${limit}
-          OFFSET ${offset}
-        `;
+    const run = await getLocalStrategyRunById(runId);
+    if (!run) {
+      return NextResponse.json({ error: "Strategy run not found" }, { status: 404 });
+    }
 
-    return NextResponse.json({ 
-      success: true, 
-      trades: tradesRes.rows,
-      pagination: { limit, offset, count: tradesRes.rows.length }
+    const allTrades = run.trades || [];
+    const paginated = allTrades.slice(offset, offset + limit);
+
+    return NextResponse.json({
+      success: true,
+      trades: paginated,
+      pagination: { limit, offset, count: paginated.length, total: allTrades.length },
     });
   } catch (error: any) {
-    console.error("[QUANT LAB GET TRADES] Fetch failed:", error);
-    const isQuotaExceeded = error?.code === "53000" || error?.message?.includes("quota") || error?.status === 402;
-    return NextResponse.json(
-      { 
-        error: isQuotaExceeded ? "Database bandwidth quota exceeded. Upgrade plan or contact administrator." : error.message,
-        quota_exceeded: isQuotaExceeded
-      }, 
-      { status: isQuotaExceeded ? 402 : 500 }
-    );
+    console.error("[QUANT LAB GET TRADES] Local fetch failed:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+

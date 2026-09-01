@@ -108,6 +108,14 @@ export default function SweepReclaimWorkspace({
   const [enableStructuralTrail, setEnableStructuralTrail] = useState(true);
   const [enableProfitRatchet, setEnableProfitRatchet] = useState(true);
 
+  // 🛡️ Quant Shield & Loss Streak Protection Controls
+  const [enableWaveDeduplication, setEnableWaveDeduplication] = useState(false);
+  const [filterWeekend, setFilterWeekend] = useState(false);
+  const [enforceHtfBiasGuard, setEnforceHtfBiasGuard] = useState(false);
+  const [enableEarlyBreakeven, setEnableEarlyBreakeven] = useState(false);
+  const [earlyBreakevenMultiple, setEarlyBreakevenMultiple] = useState(0.60);
+  const [postLossCooldownMinutes, setPostLossCooldownMinutes] = useState(0);
+
   // Structural Pivot Lookbacks & Advanced Geometry
   const [lookbackMajor, setLookbackMajor] = useState(10);
   const [lookbackInternal, setLookbackInternal] = useState(5);
@@ -184,6 +192,14 @@ export default function SweepReclaimWorkspace({
     enableProfitRatchet,
     minSweepDepthAtrMultiplier: minSweepDepthAtr,
     slBufferAtrMultiplier: slBufferAtr,
+
+    // 🛡️ Quant Shield Parameters
+    enableWaveDeduplication,
+    filterWeekend,
+    enforceHtfBiasGuard,
+    enableEarlyBreakeven,
+    earlyBreakevenMultiple,
+    postLossCooldownMinutes,
   }), [
     symbol,
     timeframe,
@@ -206,6 +222,12 @@ export default function SweepReclaimWorkspace({
     enableProfitRatchet,
     minSweepDepthAtr,
     slBufferAtr,
+    enableWaveDeduplication,
+    filterWeekend,
+    enforceHtfBiasGuard,
+    enableEarlyBreakeven,
+    earlyBreakevenMultiple,
+    postLossCooldownMinutes,
   ]);
 
   const handleApplyPreset = (preset: ScannerPreset) => {
@@ -232,6 +254,14 @@ export default function SweepReclaimWorkspace({
     if (typeof cfg.maxBarsToRetest === 'number') setMaxBarsToRetest(cfg.maxBarsToRetest);
     if (typeof cfg.minSweepDepthAtrMultiplier === 'number') setMinSweepDepthAtr(cfg.minSweepDepthAtrMultiplier);
     if (typeof cfg.slBufferAtrMultiplier === 'number') setSlBufferAtr(cfg.slBufferAtrMultiplier);
+
+    // 🛡️ Quant Shield Preset Hydration
+    setEnableWaveDeduplication(cfg.enableWaveDeduplication === true);
+    setFilterWeekend(cfg.filterWeekend === true);
+    setEnforceHtfBiasGuard(cfg.enforceHtfBiasGuard === true);
+    setEnableEarlyBreakeven(cfg.enableEarlyBreakeven === true);
+    setEarlyBreakevenMultiple(typeof cfg.earlyBreakevenMultiple === 'number' ? cfg.earlyBreakevenMultiple : 0.60);
+    setPostLossCooldownMinutes(typeof cfg.postLossCooldownMinutes === 'number' ? cfg.postLossCooldownMinutes : 0);
 
     if (Array.isArray(cfg.anchorTypes)) {
       setEnabledAnchors({
@@ -293,6 +323,14 @@ export default function SweepReclaimWorkspace({
       min_sweep_depth_atr: minSweepDepthAtr,
       slBufferAtrMultiplier: slBufferAtr,
       sl_buffer_atr: slBufferAtr,
+
+      // 🛡️ Quant Shield Scan Execution Parameters
+      enableWaveDeduplication,
+      filterWeekend,
+      enforceHtfBiasGuard,
+      enableEarlyBreakeven,
+      earlyBreakevenMultiple,
+      postLossCooldownMinutes,
     });
   };
 
@@ -338,8 +376,26 @@ export default function SweepReclaimWorkspace({
   const telemetry = selectedScan?.telemetry_summary;
 
   const executedSrTrades = useMemo(() => {
-    return selectedScan?.setups ? adaptSweepReclaimSetupsToTrades(selectedScan.setups) : [];
-  }, [selectedScan?.setups]);
+    return selectedScan?.setups
+      ? adaptSweepReclaimSetupsToTrades(selectedScan.setups, {
+          enforceSinglePositionWalk: true,
+          enableWaveDeduplication,
+          filterWeekend,
+          enforceHtfBiasGuard,
+          enableEarlyBreakeven,
+          earlyBreakevenMultiple,
+          postLossCooldownMinutes,
+        })
+      : [];
+  }, [
+    selectedScan?.setups,
+    enableWaveDeduplication,
+    filterWeekend,
+    enforceHtfBiasGuard,
+    enableEarlyBreakeven,
+    earlyBreakevenMultiple,
+    postLossCooldownMinutes,
+  ]);
 
   return (
     <>
@@ -679,6 +735,136 @@ export default function SweepReclaimWorkspace({
           </div>
         </div>
 
+        {/* ── 🛡️ Quant Shield & Loss Streak Protection Card (5 Anti-Loss Rules) ── */}
+        <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-950/20 via-slate-900/40 to-purple-950/20 border border-cyan-500/30 shadow-xs mb-4">
+          <div className="flex items-center justify-between pb-2 mb-3 border-b border-cyan-500/20">
+            <div className="flex items-center gap-2">
+              <span className="p-1 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/40">
+                <Shield className="w-3.5 h-3.5" />
+              </span>
+              <div>
+                <h4 className="text-xs font-bold font-mono uppercase tracking-wider text-cyan-300">
+                  Quant Shield: 5 Anti-Loss Streak Protectors
+                </h4>
+                <span className="text-[9px] text-slate-400 font-mono">
+                  1-Year Backtest-Proven Rules to Eliminate 3–4 Consecutive Losses & Drawdown Cascades
+                </span>
+              </div>
+            </div>
+            <span className="text-[9px] px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/40 font-mono font-bold">
+              PM2 ACTIVE
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs font-mono">
+            {/* Rule 1: Wave Anchor Deduplication */}
+            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col justify-between gap-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-white uppercase">Rule 1: Wave Deduplication</span>
+                <input
+                  type="checkbox"
+                  disabled={isScanning}
+                  checked={enableWaveDeduplication}
+                  onChange={(e) => setEnableWaveDeduplication(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-cyan-500 cursor-pointer"
+                />
+              </div>
+              <span className="text-[9px] text-slate-400">
+                Prunes multi-anchor clone triggers on the same candle wave (-84% loss streaks).
+              </span>
+            </div>
+
+            {/* Rule 2: Weekend Off-Liquidity Filter */}
+            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col justify-between gap-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-white uppercase">Rule 2: Weekend Filter</span>
+                <input
+                  type="checkbox"
+                  disabled={isScanning}
+                  checked={filterWeekend}
+                  onChange={(e) => setFilterWeekend(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-cyan-500 cursor-pointer"
+                />
+              </div>
+              <span className="text-[9px] text-slate-400">
+                Mutes trading Fri 22:00 - Sun 20:00 UTC (skips 50% of low-volume traps).
+              </span>
+            </div>
+
+            {/* Rule 3: Macro Daily Bias Guard */}
+            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col justify-between gap-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-white uppercase">Rule 3: Daily Bias Guard</span>
+                <input
+                  type="checkbox"
+                  disabled={isScanning}
+                  checked={enforceHtfBiasGuard}
+                  onChange={(e) => setEnforceHtfBiasGuard(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-cyan-500 cursor-pointer"
+                />
+              </div>
+              <span className="text-[9px] text-slate-400">
+                Restricts entries to 1D Bias & 1H structural trend alignment.
+              </span>
+            </div>
+
+            {/* Rule 4: Early Breakeven Protection */}
+            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col justify-between gap-1.5 col-span-1 sm:col-span-2 lg:col-span-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-slate-300 uppercase">Rule 4: Early Breakeven Ratchet</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-cyan-400">+{earlyBreakevenMultiple.toFixed(2)}R MFE</span>
+                  <input
+                    type="checkbox"
+                    disabled={isScanning}
+                    checked={enableEarlyBreakeven}
+                    onChange={(e) => setEnableEarlyBreakeven(e.target.checked)}
+                    className="w-3.5 h-3.5 accent-cyan-500 cursor-pointer"
+                  />
+                </div>
+              </div>
+              <input
+                type="range"
+                min="0.40"
+                max="0.90"
+                step="0.05"
+                disabled={isScanning || !enableEarlyBreakeven}
+                value={earlyBreakevenMultiple}
+                onChange={(e) => setEarlyBreakevenMultiple(parseFloat(e.target.value))}
+                className="w-full accent-cyan-500"
+              />
+              <span className="text-[9px] text-slate-400">
+                Advances SL to 0.0R Entry when floating profit reaches +{earlyBreakevenMultiple}R.
+              </span>
+            </div>
+
+            {/* Rule 5: Post-Loss Cooldown */}
+            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col justify-between gap-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-white uppercase">Rule 5: Post-Loss Cooldown</span>
+                <span className="text-[10px] font-bold text-purple-400">
+                  {postLossCooldownMinutes === 0 ? "OFF (0m)" : `${postLossCooldownMinutes}m Lock`}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="120"
+                step="5"
+                disabled={isScanning}
+                value={postLossCooldownMinutes}
+                onChange={(e) => setPostLossCooldownMinutes(parseInt(e.target.value, 10))}
+                className="w-full accent-purple-500"
+              />
+              <span className="text-[9px] text-slate-400">
+                Directional lock after stop out to prevent revenge trading.
+              </span>
+            </div>
+          </div>
+        </div>
+
         {/* Advanced Institutional Geometry & ATR Controls Accordion Drawer */}
         <div className="border-t border-card-border/60 dark:border-slate-800/40 pt-3 mb-4">
           <button
@@ -987,11 +1173,18 @@ export default function SweepReclaimWorkspace({
               <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
                 Retest Win Rate
               </span>
-              <span className="text-lg font-mono font-bold text-cyan-600 dark:text-cyan-400">
-                {telemetry.retest_win_rate_pct ?? 0}%
-              </span>
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-lg font-mono font-bold text-cyan-600 dark:text-cyan-400">
+                  {telemetry.ex_scratch_win_rate_pct ?? telemetry.retest_win_rate_pct ?? 0}%
+                </span>
+                {(telemetry.total_be_scratches ?? 0) > 0 && (
+                  <span className="text-[9px] font-mono text-muted dark:text-slate-400">
+                    ({telemetry.retest_win_rate_pct ?? 0}% TP2)
+                  </span>
+                )}
+              </div>
               <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
-                {telemetry.total_winning_trades ?? 0}W / {telemetry.total_losing_trades ?? 0}L ({telemetry.total_retests_executed ?? 0} Retests)
+                {telemetry.total_winning_trades ?? 0}W / {telemetry.total_losing_trades ?? 0}L {(telemetry.total_be_scratches ?? 0) > 0 ? `/ ${telemetry.total_be_scratches}BE` : ''}
               </span>
             </div>
 

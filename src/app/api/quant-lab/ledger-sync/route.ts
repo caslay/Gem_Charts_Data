@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { sql } from "@vercel/postgres";
+import fs from "fs";
+import path from "path";
 import { auth } from "@/auth";
 import { generateSnapshot } from "@/lib/quantEngine/structuralBootstrap";
 import { Candle } from "@/lib/fvgEngine";
 
 // Base URL for Binance Futures REST API
 const BINANCE_REST = 'https://fapi.binance.com/fapi/v1/klines';
+const SERVER_CACHE_DIR = path.join(process.cwd(), '.cache', 'structural_snapshots');
 
 async function fetchKlines(symbol: string, interval: string, startMs: number, endMs: number): Promise<Candle[]> {
   const allKlines: Candle[] = [];
@@ -38,7 +40,7 @@ async function fetchKlines(symbol: string, interval: string, startMs: number, en
       currentStart = lastTime + 1;
       if (raw.length < limit) break;
       await new Promise(r => setTimeout(r, 40));
-    } catch (err) {
+    } catch {
       break;
     }
   }
@@ -53,43 +55,28 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const mode = body.mode || 'APPEND'; // APPEND or FLUSH_AND_REBUILD
+    const mode = body.mode || 'APPEND';
     const symbol = body.symbol || 'ETHUSDC';
     const timeframe = body.timeframe || '15m';
 
-    // 1. Ensure Table Exists
-    await sql`
-      CREATE TABLE IF NOT EXISTS quant_lab_daily_structural_snapshots (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        symbol VARCHAR(50) NOT NULL,
-        timeframe VARCHAR(20) NOT NULL,
-        snapshot_date TIMESTAMP WITH TIME ZONE NOT NULL,
-        state_json JSONB NOT NULL,
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(symbol, timeframe, snapshot_date)
-      );
-    `;
+    if (!fs.existsSync(SERVER_CACHE_DIR)) {
+      fs.mkdirSync(SERVER_CACHE_DIR, { recursive: true });
+    }
 
     const now = new Date();
     now.setUTCHours(0, 0, 0, 0);
 
     if (mode === 'FLUSH_AND_REBUILD') {
-      const { rowCount } = await sql`
-        DELETE FROM quant_lab_daily_structural_snapshots 
-        WHERE symbol = ${symbol} AND timeframe = ${timeframe};
-      `;
-      return NextResponse.json({ success: true, message: `Flushed ${rowCount} old snapshots. Background rebuild would be initiated here.` });
+      return NextResponse.json({ success: true, message: `Local structural cache ready.` });
     } 
     
     if (mode === 'APPEND') {
-      // Append for today (00:00 UTC)
       const targetDate = body.date ? new Date(body.date) : now;
       targetDate.setUTCHours(0,0,0,0);
       
       const targetMs = targetDate.getTime();
       const lookbackMajor = 15;
       
-      // We need timeframe in Ms
       let intervalMs = 900000;
       switch (timeframe) {
         case '1m': intervalMs = 60000; break;
@@ -108,20 +95,17 @@ export async function POST(req: Request) {
       }
 
       const snapshot = generateSnapshot(warmupCandles, { lookbackMajor });
-      
-      await sql`
-        INSERT INTO quant_lab_daily_structural_snapshots (symbol, timeframe, snapshot_date, state_json)
-        VALUES (${symbol}, ${timeframe}, ${targetDate.toISOString()}, ${JSON.stringify(snapshot)})
-        ON CONFLICT (symbol, timeframe, snapshot_date) DO UPDATE 
-        SET state_json = EXCLUDED.state_json, updated_at = CURRENT_TIMESTAMP;
-      `;
+      const dateKey = targetDate.toISOString().split('T')[0];
+      const cacheKey = `${symbol.toUpperCase()}_${timeframe.toLowerCase()}_${dateKey}`;
+      const cachePath = path.join(SERVER_CACHE_DIR, `${cacheKey}.json`);
+      fs.writeFileSync(cachePath, JSON.stringify(snapshot, null, 2), 'utf8');
 
       return NextResponse.json({ success: true, snapshot_date: targetDate.toISOString() });
     }
 
     return NextResponse.json({ error: "Unknown mode" }, { status: 400 });
   } catch (err: any) {
-    console.error(err);
+    console.error("[LEDGER SYNC LOCAL] Error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

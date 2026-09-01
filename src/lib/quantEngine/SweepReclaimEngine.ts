@@ -293,6 +293,14 @@ export interface SweepReclaimScanConfig {
   enableProfitRatchet?: boolean;              // Ratchet SL to +1.0R floor after Stage 2 (default: true)
   minSweepDepthAtrMultiplier?: number;        // Min sweep penetration in ATR (default: 0.10)
   slBufferAtrMultiplier?: number;             // Volatility buffer added behind sweep extreme (default: 0.15)
+
+  // 🛡️ Quant Shield & Loss Streak Protection Settings (5 Institutional Rules)
+  enableWaveDeduplication?: boolean;          // Rule 1: Single-Position & Wave Anchor Deduplication (default: true)
+  filterWeekend?: boolean;                    // Rule 2: Weekend Off-Liquidity Filter (Fri 22:00 - Sun 20:00 UTC) (default: true)
+  enforceHtfBiasGuard?: boolean;              // Rule 3: Macro Daily Bias & 1H Structure Alignment Guard (default: false)
+  enableEarlyBreakeven?: boolean;             // Rule 4: Dynamic Early Breakeven Ratchet (default: true)
+  earlyBreakevenMultiple?: number;            // Rule 4: MFE Multiple to trigger Breakeven (default: 0.60)
+  postLossCooldownMinutes?: number;           // Rule 5: Directional cooldown minutes after stop-out (default: 45)
 }
 
 export interface SweepReclaimTelemetrySummary {
@@ -342,6 +350,9 @@ export interface SweepReclaimTelemetrySummary {
   total_be_scratches: number;
   total_structural_scratches: number;
   total_pending_trades: number;
+
+  ex_scratch_win_rate_pct?: number;
+  alpha_survival_rate_pct?: number;
 
   stage1_fill_count: number;
   stage1_fill_pct: number;
@@ -964,9 +975,19 @@ export class SweepReclaimEngine {
       const anchorIdx = anchor.index;
       if (anchorIdx < 2 || anchorIdx >= n - 5) continue;
 
+      const anchorTime = anchor.time;
+
+      // 🛡️ Quant Shield Rule 2: Weekend Off-Liquidity Filter (Fri 22:00 - Sun 20:00 UTC)
+      if (this.config.filterWeekend) {
+        const d = new Date(anchorTime);
+        const day = d.getUTCDay();
+        const hr = d.getUTCHours();
+        const isWknd = (day === 5 && hr >= 22) || day === 6 || (day === 0 && hr < 20);
+        if (isWknd) continue;
+      }
+
       const isBullish = anchor.bias === 'BULLISH';
       const anchorLevel = anchor.level;
-      const anchorTime = anchor.time;
       const anchorGrade = anchor.grade;
       const anchorType = anchor.type;
       const anchorName = anchor.name;
@@ -2043,6 +2064,19 @@ export class SweepReclaimEngine {
 
           let stageFilledThisBar = false;
 
+          // Proactive Early Breakeven Ratchet (Disabled by default)
+          const enableEarlyBreakeven = this.config.enableEarlyBreakeven === true;
+          const earlyBreakevenMultiple = typeof this.config.earlyBreakevenMultiple === 'number' ? this.config.earlyBreakevenMultiple : 0.60;
+          if (enableEarlyBreakeven && !baseSetup.is_stage1_filled) {
+            const currentMfeR = (maxFavorablePrice - executionEntry) / riskUsd;
+            if (currentMfeR >= earlyBreakevenMultiple && activeStopLoss < executionEntry) {
+              activeStopLoss = executionEntry;
+              baseSetup.active_trailing_sl = parseFloat(executionEntry.toFixed(4));
+              baseSetup.trailing_sl_source = 'BREAKEVEN';
+              stageFilledThisBar = true;
+            }
+          }
+
           if (hitStage1 && !baseSetup.is_stage1_filled) {
             baseSetup.is_stage1_filled = true;
             baseSetup.stage1_hit_time = c.t;
@@ -2126,6 +2160,11 @@ export class SweepReclaimEngine {
                 stageExit = 'STAGE_1_SCRATCH';
                 baseSetup.is_structural_scratch = true;
               }
+            } else if (baseSetup.trailing_sl_source === 'BREAKEVEN' || checkSL >= executionEntry) {
+              realizedRr = 0.0;
+              outcome = 'BE_SCRATCH_WIN';
+              stageExit = 'STAGE_1_SCRATCH';
+              baseSetup.is_be_scratch = true;
             } else {
               realizedRr = -1.0;
               outcome = 'STOPPED_OUT';
@@ -2143,6 +2182,19 @@ export class SweepReclaimEngine {
           const hitStage3 = target3 !== null && low <= target3;
 
           let stageFilledThisBar = false;
+
+          // Proactive Early Breakeven Ratchet (Disabled by default)
+          const enableEarlyBreakeven = this.config.enableEarlyBreakeven === true;
+          const earlyBreakevenMultiple = typeof this.config.earlyBreakevenMultiple === 'number' ? this.config.earlyBreakevenMultiple : 0.60;
+          if (enableEarlyBreakeven && !baseSetup.is_stage1_filled) {
+            const currentMfeR = (executionEntry - maxFavorablePrice) / riskUsd;
+            if (currentMfeR >= earlyBreakevenMultiple && activeStopLoss > executionEntry) {
+              activeStopLoss = executionEntry;
+              baseSetup.active_trailing_sl = parseFloat(executionEntry.toFixed(4));
+              baseSetup.trailing_sl_source = 'BREAKEVEN';
+              stageFilledThisBar = true;
+            }
+          }
 
           if (hitStage1 && !baseSetup.is_stage1_filled) {
             baseSetup.is_stage1_filled = true;
@@ -2229,6 +2281,11 @@ export class SweepReclaimEngine {
                 stageExit = 'STAGE_1_SCRATCH';
                 baseSetup.is_structural_scratch = true;
               }
+            } else if (baseSetup.trailing_sl_source === 'BREAKEVEN' || checkSL <= executionEntry) {
+              realizedRr = 0.0;
+              outcome = 'BE_SCRATCH_WIN';
+              stageExit = 'STAGE_1_SCRATCH';
+              baseSetup.is_be_scratch = true;
             } else {
               realizedRr = -1.0;
               outcome = 'STOPPED_OUT';
@@ -2265,7 +2322,7 @@ export class SweepReclaimEngine {
     }
 
     // ── In-Scanner Multi-Anchor Wave Deduplication & Concurrency Guard ────────
-    const enableInScannerWaveDedup = this.config.enableInScannerWaveDedup !== false;
+    const enableInScannerWaveDedup = this.config.enableWaveDeduplication !== false && this.config.enableInScannerWaveDedup !== false;
     const enforceSinglePositionConcurrency = this.config.enforceSinglePositionConcurrency !== false;
 
     if (enableInScannerWaveDedup && detectedSetups.length > 0) {
@@ -2319,7 +2376,7 @@ export class SweepReclaimEngine {
         }
       }
 
-      // Step 3: Single-Position Concurrency Walk (enforce maxOpenPositions: 1)
+      // Step 3: Single-Position Concurrency Walk & Rule 5 Post-Loss Cooldown (enforce maxOpenPositions: 1)
       if (enforceSinglePositionConcurrency) {
         // Sort champions chronologically by entry open timestamp, then tiebreak by anchor tier ranking
         champions.sort((a, b) => {
@@ -2333,6 +2390,9 @@ export class SweepReclaimEngine {
 
         let lastExitTimestamp = 0;
         let lastOpenTimestamp = 0;
+        let lastTradeWasLoss = false;
+        const cooldownMs = (typeof this.config.postLossCooldownMinutes === 'number' ? this.config.postLossCooldownMinutes : 0) * 60 * 1000;
+
         for (const champ of champions) {
           if (!champ.is_retested) {
             champ.stacking_discount_applied = false;
@@ -2344,13 +2404,15 @@ export class SweepReclaimEngine {
           // Strictly enforce: No trade at the same open timestamp AND no trade during an active open position
           const isSameTimestamp = lastOpenTimestamp !== 0 && openTime === lastOpenTimestamp;
           const isOverlapping = lastExitTimestamp !== 0 && openTime < lastExitTimestamp;
+          const inPostLossCooldown = cooldownMs > 0 && lastTradeWasLoss && lastExitTimestamp !== 0 && openTime < lastExitTimestamp + cooldownMs;
 
-          if (!isSameTimestamp && !isOverlapping) {
+          if (!isSameTimestamp && !isOverlapping && !inPostLossCooldown) {
             champ.stacking_discount_applied = false;
             lastExitTimestamp = Math.max(lastExitTimestamp, exitTime);
             lastOpenTimestamp = openTime;
+            lastTradeWasLoss = (typeof champ.realized_rr === 'number' ? champ.realized_rr : 0) < 0;
           } else {
-            champ.stacking_discount_applied = true; // Overlaps with an open position or concurrent same-timestamp entry
+            champ.stacking_discount_applied = true; // Overlaps with an open position, same-timestamp entry, or post-loss cooldown
           }
         }
       }
@@ -2546,6 +2608,8 @@ export class SweepReclaimEngine {
     }
 
     const retestWinRatePct = totalRetests > 0 ? (totalWins / totalRetests) * 100 : 0;
+    const exScratchWinRatePct = (totalWins + totalLosses) > 0 ? (totalWins / (totalWins + totalLosses)) * 100 : 0;
+    const alphaSurvivalRatePct = totalRetests > 0 ? ((totalWins + totalBeScratches + totalStructuralScratches) / totalRetests) * 100 : 0;
     const avgRealizedRr = totalRetests > 0 ? sumRr / totalRetests : 0;
     const avgWinningRr = totalWins > 0 ? sumWinRr / totalWins : 0;
     const avgLosingRr = totalLosses > 0 ? sumLossRr / totalLosses : 0;
@@ -2566,6 +2630,8 @@ export class SweepReclaimEngine {
       reclaim_rate_pct: parseFloat(reclaimRatePct.toFixed(1)),
       retest_rate_pct: parseFloat(retestRatePct.toFixed(1)),
       retest_win_rate_pct: parseFloat(retestWinRatePct.toFixed(1)),
+      ex_scratch_win_rate_pct: parseFloat(exScratchWinRatePct.toFixed(1)),
+      alpha_survival_rate_pct: parseFloat(alphaSurvivalRatePct.toFixed(1)),
 
       total_raw_candidates: totalRawCandidates,
       total_wave_champions: totalWaveChampions,

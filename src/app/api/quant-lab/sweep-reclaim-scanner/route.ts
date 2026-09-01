@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { auth } from "@/auth";
-import { sql } from "@vercel/postgres";
+import { saveLocalSrScan } from "@/lib/quantLab/localScanStore";
 import { Candle } from "@/lib/fvgEngine";
 import {
   SweepReclaimEngine,
@@ -140,34 +140,6 @@ function generateMockKlines(startMs: number, endMs: number, interval: string): C
   return candles;
 }
 
-// Self-healing database initialization for SR Scans table
-async function initSrScansTable() {
-  try {
-    await sql`
-      CREATE TABLE IF NOT EXISTS quant_lab_sr_scans (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        scan_name VARCHAR(255) NOT NULL,
-        symbol VARCHAR(50) NOT NULL,
-        timeframe VARCHAR(20) NOT NULL,
-        start_date TIMESTAMP WITH TIME ZONE NOT NULL,
-        end_date TIMESTAMP WITH TIME ZONE NOT NULL,
-        total_detected INT NOT NULL,
-        sweep_rate_pct DECIMAL(5, 2) NOT NULL,
-        reclaim_rate_pct DECIMAL(5, 2) NOT NULL,
-        retest_rate_pct DECIMAL(5, 2) NOT NULL,
-        retest_win_rate_pct DECIMAL(5, 2) NOT NULL,
-        avg_realized_rr DECIMAL(6, 2) NOT NULL,
-        profit_factor DECIMAL(6, 2) NOT NULL,
-        telemetry_summary JSONB NOT NULL,
-        setups JSONB NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `;
-  } catch (err) {
-    console.error("[SR SCANNER DB] Self-healing table check failed:", err);
-  }
-}
-
 // ── SSE Streaming Route ──
 
 export async function POST(req: Request) {
@@ -235,14 +207,19 @@ export async function POST(req: Request) {
         const min_sweep_depth_atr = Number(body.minSweepDepthAtrMultiplier ?? body.min_sweep_depth_atr ?? 0.10);
         const sl_buffer_atr = Number(body.slBufferAtrMultiplier ?? body.sl_buffer_atr ?? 0.12);
 
+        // 🛡️ Quant Shield & 5 Anti-Loss Streak Parameters
+        const enable_wave_deduplication = (body.enableWaveDeduplication ?? body.enable_wave_deduplication) !== undefined ? Boolean(body.enableWaveDeduplication ?? body.enable_wave_deduplication) : true;
+        const filter_weekend = (body.filterWeekend ?? body.filter_weekend) !== undefined ? Boolean(body.filterWeekend ?? body.filter_weekend) : true;
+        const enforce_htf_bias_guard = (body.enforceHtfBiasGuard ?? body.enforce_htf_bias_guard) !== undefined ? Boolean(body.enforceHtfBiasGuard ?? body.enforce_htf_bias_guard) : false;
+        const enable_early_breakeven = (body.enableEarlyBreakeven ?? body.enable_early_breakeven) !== undefined ? Boolean(body.enableEarlyBreakeven ?? body.enable_early_breakeven) : false;
+        const early_breakeven_multiple = Number(body.earlyBreakevenMultiple ?? body.early_breakeven_multiple ?? 0.60);
+        const post_loss_cooldown_minutes = Number(body.postLossCooldownMinutes ?? body.post_loss_cooldown_minutes ?? 0);
+
         if (!start_date || !end_date) {
           sendChunk({ type: "error", error: "Missing required date range parameters: start_date and end_date are required." });
           controller.close();
           return;
         }
-
-        sendChunk({ type: "status", message: "Initializing self-healing Sweep & Reclaim scan tables..." });
-        await initSrScansTable();
 
         const startMs = Date.parse(`${start_date}T00:00:00.000Z`);
         const endMs = Date.parse(`${end_date}T23:59:59.000Z`);
@@ -313,7 +290,7 @@ export async function POST(req: Request) {
           requireThreePillarDisplacement: require_three_pillar_displacement,
           enforceDiscountPremiumGate: enforce_discount_premium_gate,
           enableRegimeAdaptiveEQ: enable_regime_adaptive_eq,
-          enableInScannerWaveDedup: enable_in_scanner_wave_dedup,
+          enableInScannerWaveDedup: enable_wave_deduplication && enable_in_scanner_wave_dedup,
           enforceSinglePositionConcurrency: enforce_single_position_concurrency,
           pullbackExcursionThreshold: pullback_excursion_threshold,
           structuralDealingRange: structural_dealing_range,
@@ -325,6 +302,14 @@ export async function POST(req: Request) {
           enableProfitRatchet: enable_profit_ratchet,
           minSweepDepthAtrMultiplier: min_sweep_depth_atr,
           slBufferAtrMultiplier: sl_buffer_atr,
+
+          // 🛡️ Quant Shield Parameters
+          enableWaveDeduplication: enable_wave_deduplication,
+          filterWeekend: filter_weekend,
+          enforceHtfBiasGuard: enforce_htf_bias_guard,
+          enableEarlyBreakeven: enable_early_breakeven,
+          earlyBreakevenMultiple: early_breakeven_multiple,
+          postLossCooldownMinutes: post_loss_cooldown_minutes,
         };
 
         const engine = new SweepReclaimEngine(scanConfig);
@@ -340,42 +325,8 @@ export async function POST(req: Request) {
           winRate: telemetry.retest_win_rate_pct
         });
 
-        // Persist to Neon PostgreSQL (Sanitize setups to omit heavy raw candle audit objects)
+        // Persist 100% locally to data/quant_lab/sr_scans/{id}.json
         const scanId = crypto.randomUUID();
-        try {
-          const sanitizedSetups = setups.map((s) => {
-            const { displacement_candles, ...rest } = s;
-            return rest;
-          });
-
-          await sql`
-            INSERT INTO quant_lab_sr_scans (
-              id, scan_name, symbol, timeframe, start_date, end_date,
-              total_detected, sweep_rate_pct, reclaim_rate_pct,
-              retest_rate_pct, retest_win_rate_pct, avg_realized_rr,
-              profit_factor, telemetry_summary, setups
-            ) VALUES (
-              ${scanId},
-              ${scan_name},
-              ${symbol},
-              ${timeframe},
-              ${new Date(startMs).toISOString()},
-              ${new Date(endMs).toISOString()},
-              ${telemetry.total_anchors_detected},
-              ${telemetry.sweep_rate_pct},
-              ${telemetry.reclaim_rate_pct},
-              ${telemetry.retest_rate_pct},
-              ${telemetry.retest_win_rate_pct},
-              ${telemetry.avg_realized_rr},
-              ${telemetry.profit_factor},
-              ${JSON.stringify(telemetry)},
-              ${JSON.stringify(sanitizedSetups)}
-            );
-          `;
-        } catch (dbErr) {
-          console.error("[SR SCANNER DB] Failed to persist scan record:", dbErr);
-        }
-
         const scanRecord = {
           id: scanId,
           scan_name,
@@ -394,6 +345,12 @@ export async function POST(req: Request) {
           setups: setups,
           created_at: new Date().toISOString()
         };
+
+        try {
+          await saveLocalSrScan(scanRecord);
+        } catch (saveErr) {
+          console.error("[SR SCANNER LOCAL] Failed to persist scan record:", saveErr);
+        }
 
         sendChunk({
           type: "complete",
