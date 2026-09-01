@@ -64,7 +64,7 @@
 | :--- | :--- | :--- | :--- |
 | **1. Exchange Credentials Injection** | Binance Futures API | Update `/home/ubuntu/quegar/.env.production` with live Binance API & Secret Keys (Strictly Whitelisted to `57.181.64.238`, Futures Trading enabled, Withdrawals STRICTLY DISABLED). | ⏳ Pending User Key Entry |
 | **2. Telegram Live Bot Pairing** | Real-Time Alerts | Dedicated `@QuegarLiveBot` configured in `.env.production` (`TELEGRAM_ENABLED=true`), long-polling active in `quegar-daemon`. | 🟢 Active & Polling (Awaiting `/start`) |
-| **3. Local Dev Read-Only Tunnel Verification** | Development Sandbox | Establish SSH database tunnel (`ssh -i key.pem -N -L 5433:localhost:5432 ubuntu@57.181.64.238`) and verify `localhost:4000` dev server reads live state without mutation rights. | ⏳ Ready for Testing |
+| **3. Local Dev Read-Only Tunnel Verification** | Development Sandbox | Verified via automated audit: `quegar_readonly` PostgreSQL user blocks `INSERT`/`UPDATE`/`DELETE` (`42501`), and `READ_ONLY_LOCAL=true` intercepts API calls with `403`. | 🟢 Verified (Dual-Layer R/O Active) |
 | **4. End-to-End Live Session Smoke Test** | Full Trading Terminal | Access `https://core.quegar.com`, log in with authorized Google account, and verify real-time chart rendering, open position tracker, and WebSocket order flow sync. | ⏳ Ready for Execution |
 
 ---

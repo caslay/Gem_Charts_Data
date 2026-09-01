@@ -260,18 +260,18 @@ export async function GET() {
 // ─── POST: Upsert settings ───────────────────────────────────────────────────
 export async function POST(req: Request) {
   try {
+    if (process.env.READ_ONLY_LOCAL === "true") {
+      return NextResponse.json(
+        { error: "FORBIDDEN_READ_ONLY_LOCAL", message: "Forbidden: Local development sandbox is in READ-ONLY mode. Changes cannot be pushed to VPS database." },
+        { status: 403 }
+      );
+    }
+
     const session = await auth();
     if (!session?.user) {
       return NextResponse.json(
         { error: "Unauthorized: No active session." },
         { status: 401 }
-      );
-    }
-
-    if (process.env.READ_ONLY_LOCAL === "true") {
-      return NextResponse.json(
-        { error: "Forbidden: Local development sandbox is in READ-ONLY mode. Changes cannot be pushed to VPS database." },
-        { status: 403 }
       );
     }
 
