@@ -22,21 +22,41 @@ import { NodeWsClient, CandleClosedPayload, MarketTickPayload } from './lib/node
 import { DaemonLedger } from './lib/daemonLedger';
 import { TelegramNotifier } from '../src/lib/notifications/telegramNotifier';
 import { TelegramBotService } from '../src/lib/notifications/telegramBotService';
+import { getBinanceAccountInfo } from '../src/lib/binanceFuturesClient';
 
 // Parse CLI Arguments
 const args = process.argv.slice(2);
 const isDryRun = args.includes('--dry-run');
 const symbolArg = args.find((a) => a.startsWith('--symbol='))?.split('=')[1] || 'ETHUSDC';
-const equityArg = parseFloat(args.find((a) => a.startsWith('--equity='))?.split('=')[1] || '10000.0');
+const initialEquityArg = parseFloat(args.find((a) => a.startsWith('--equity='))?.split('=')[1] || '10000.0');
 
 async function main() {
   const telegram = new TelegramNotifier();
+
+  // Dynamic live equity hydration from Binance Futures if API credentials are configured
+  let startingEquity = initialEquityArg;
+  let isBinanceLiveHydrated = false;
+
+  if (process.env.BINANCE_API_KEY && process.env.BINANCE_API_SECRET) {
+    try {
+      const binanceInfo = await getBinanceAccountInfo();
+      if (binanceInfo && binanceInfo.totalWalletBalance > 0) {
+        startingEquity = binanceInfo.totalWalletBalance;
+        isBinanceLiveHydrated = true;
+      }
+    } catch (e: any) {
+      console.warn('[DAEMON_BOOT] Non-fatal Binance balance query warning:', e?.message || e);
+    }
+  }
+
+  const riskPerTrade = startingEquity * 0.02;
 
   console.log(`\n===============================================================`);
   console.log(` ⚡ FLOW-STATE QUANT ENGINE — LOCAL HEADLESS DAEMON (VPS HOST) `);
   console.log(`===============================================================`);
   console.log(` Asset:           ${symbolArg.toUpperCase()} (Binance Futures)`);
-  console.log(` Starting Equity: $${equityArg.toFixed(2)} USD (2% Compounded Risk)`);
+  console.log(` Starting Equity: $${startingEquity.toFixed(2)} USD (2% Compounded Risk = $${riskPerTrade.toFixed(2)} / trade)`);
+  console.log(` Exchange Link:   ${isBinanceLiveHydrated ? '🟢 BINANCE USDⓈ-M LIVE CONNECTED' : '⚪ VIRTUAL / SANDBOX'}`);
   console.log(` Strategy:        5M Sweep & Reclaim Champion (2-Stage Dynamic Harvest: 50% TP1 @ 1.0R / 50% TP2 @ 1.4R)`);
   console.log(` Telegram Alerts: ${telegram.isEnabled() ? '✅ ACTIVE (Chat: ' + telegram.getConfig().chatId + ')' : '⚪ DISABLED'}`);
   console.log(` Mode:            ${isDryRun ? 'DRY-RUN (30s Diagnostic Validation)' : '24/7 LIVE BACKGROUND EXECUTION'}`);
@@ -44,9 +64,9 @@ async function main() {
   console.log(`===============================================================\n`);
 
   // 1. Initialize Persistence Ledger
-  const ledger = new DaemonLedger(symbolArg, equityArg);
+  const ledger = new DaemonLedger(symbolArg, startingEquity);
   ledger.logEvent('BOOT', `Headless daemon booting for ${symbolArg}`, {
-    metadata: { isDryRun, initialEquity: equityArg },
+    metadata: { isDryRun, initialEquity: startingEquity, isBinanceLive: isBinanceLiveHydrated },
   });
 
   // 2. Cold-Start REST Bootstrap (500 Historical Candles per Timeframe)
@@ -285,7 +305,7 @@ async function main() {
       ledger,
       wsClient,
       symbol: symbolArg,
-      equity: equityArg,
+      equity: startingEquity,
       isDryRun,
       bootTimestamp: Date.now(),
       getMacroContext: () => currentMacroContext,

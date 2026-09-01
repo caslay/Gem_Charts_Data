@@ -43,6 +43,8 @@ interface AccountState {
   initial_capital: string;
   max_risk_limit_pct: string;
   current_balance: string;
+  available_balance?: string;
+  is_live?: boolean;
 }
 
 interface SignalAlerts {
@@ -677,27 +679,34 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 bg-card/30 border border-card-border p-5 rounded-2xl shadow-inner">
                   {/* Total Pool readout */}
                   <div className="space-y-1">
-                    <span className="text-[8px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest">
-                      Dynamic Ledger Balance
-                    </span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[8px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest">
+                        Dynamic Ledger Balance
+                      </span>
+                      {account.is_live && (
+                        <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                          BINANCE USDⓈ-M LIVE
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xl font-bold tracking-tight text-[#50ffaf] font-mono">
-                      ${parseFloat(account.current_balance).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      ${parseFloat(account.current_balance || '0').toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                     <span className="text-[8px] text-slate-400 dark:text-zinc-500 block">
-                      Recalculated from Starting Capital + realizing all CLOSED trades
+                      {account.is_live ? "Live exchange wallet equity (USDC Collateral)" : "Recalculated from Starting Capital + realizing all CLOSED trades"}
                     </span>
                   </div>
 
                   {/* Single deal allocator math readout */}
                   <div className="space-y-1">
                     <span className="text-[8px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest">
-                      Single Trade Maximum Loss Cap
+                      Single Trade Maximum Loss Cap ($1.0R)
                     </span>
                     <div className="text-xl font-bold tracking-tight text-foreground font-mono">
-                      ${((parseFloat(account.current_balance) * parseFloat(account.max_risk_limit_pct)) / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                      ${((parseFloat(account.current_balance || '0') * parseFloat(account.max_risk_limit_pct || '2')) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
                     <span className="text-[8px] text-slate-400 dark:text-zinc-500 block">
-                      Ledger Balance × Max Risk % ({account.max_risk_limit_pct}%)
+                      Ledger Balance × Max Risk % ({account.max_risk_limit_pct}%) = Micro-Cap Budget
                     </span>
                   </div>
                 </div>

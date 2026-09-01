@@ -361,7 +361,13 @@ export class AutomatedStrategyExecutionEngine {
     const factor = Math.pow(10, this.config.lotPrecision);
     let contractSize = Math.floor(rawContractSize * factor) / factor;
 
-    // Platform boundary clamping
+    // Platform boundary & Binance Minimum Notional ($5.00 USD) clamping
+    const minNotional = 5.0;
+    const minSizeForNotional = Math.ceil((minNotional / entryPrice) * factor) / factor;
+    if (contractSize < minSizeForNotional) {
+      contractSize = Math.max(minSizeForNotional, this.config.minLotSize);
+    }
+
     if (contractSize < this.config.minLotSize) {
       contractSize = this.config.minLotSize;
     }

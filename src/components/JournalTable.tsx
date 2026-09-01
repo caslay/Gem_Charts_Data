@@ -689,9 +689,42 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
     try {
       // 1. Sync from local in-memory session journal first
       const localTrades = useSessionJournalStore.getState().getTradesByMode(isBacktest ? 'BACKTEST' : 'LIVE');
+
+      // 2. In live mode, fetch server account & trades
+      if (!isBacktest) {
+        try {
+          const [accRes, tradesRes] = await Promise.all([
+            fetch('/api/account', { cache: 'no-store' }).then((r) => r.json()),
+            fetch(tradesApiUrl, { cache: 'no-store' }).then((r) => r.json()),
+          ]);
+
+          if (accRes?.success && accRes.account) {
+            setAccount(accRes.account);
+            useSessionJournalStore.getState().updateAccount(
+              {
+                current_balance: parseFloat(accRes.account.current_balance || '10000'),
+                initial_capital: parseFloat(accRes.account.initial_capital || '10000'),
+                max_risk_limit_pct: parseFloat(accRes.account.max_risk_limit_pct || '2.0'),
+              },
+              'LIVE'
+            );
+          }
+
+          if (tradesRes?.success && Array.isArray(tradesRes.trades) && tradesRes.trades.length > 0) {
+            const combinedMap = new Map<string, TradeRecord>();
+            for (const t of localTrades) combinedMap.set(t.id, t as unknown as TradeRecord);
+            for (const t of tradesRes.trades) combinedMap.set(t.id, t);
+            setTrades(Array.from(combinedMap.values()));
+            return;
+          }
+        } catch (serverErr) {
+          console.debug('[JOURNAL] Server account/trades sync fallback:', serverErr);
+        }
+      }
+
       setTrades(localTrades as unknown as TradeRecord[]);
 
-      // 2. Sync account details from session store
+      // 3. Sync account details from session store
       const localAccount = isBacktest
         ? useSessionJournalStore.getState().backtestAccount
         : useSessionJournalStore.getState().account;
@@ -703,7 +736,7 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
     } finally {
       setIsRefreshing(false);
     }
-  }, [isBacktest]);
+  }, [isBacktest, tradesApiUrl]);
 
   // Initial on-mount hydration from local session journal store
   useEffect(() => {
@@ -833,9 +866,16 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
         {/* Account Capital persistence Card */}
         <div className="glass-panel p-4 flex flex-col gap-1.5 relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-accent/2 rounded-full blur-2xl pointer-events-none" />
-          <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted">
-            Persistent Capital Balance
-          </span>
+          <div className="flex items-center justify-between">
+            <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted">
+              Persistent Capital Balance
+            </span>
+            {(account as any)?.is_live && (
+              <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                BINANCE LIVE
+              </span>
+            )}
+          </div>
           <span className="text-xl font-mono font-bold tracking-tight text-title">
             ${currentBalance.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
           </span>

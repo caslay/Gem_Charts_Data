@@ -1,8 +1,30 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.16
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.17
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-01 (V17.16 — Native PostgreSQL Engine Migration, Vercel Analytics Purge & Production API Hardening)
+> **Last Updated:** 2026-09-02 (V17.17 — Live Binance Capital Synchronization & Micro-Account Risk Calibration)
+
+## 🆕 V17.17 Changelog — Live Binance Capital Synchronization & Micro-Account Risk Calibration (2026-09-02)
+
+### Summary
+Implemented dynamic exchange balance hydration, micro-capital position sizing gates, and real-time position reconciliation for Binance USDⓈ-M Futures:
+1. **Binance Futures REST Client (`src/lib/binanceFuturesClient.ts`):** Created authenticated client with HMAC-SHA256 signing for `/fapi/v2/account` and `/fapi/v2/positionRisk`.
+2. **Dynamic Capital Hydration (`/api/account`):** In live mode (`IS_LIVE_VPS=true` / Binance credentials configured), hydrates live wallet equity ($312.51 USDC) directly from exchange, while preserving $10,000 baseline in local development sandbox.
+3. **Micro-Capital Risk Calibration:** Sizing engine computes 2.0% compounding risk ($6.25 max loss budget) while strictly enforcing Binance order filter gates: minimum notional ($5.00 USD) and minimum lot size (0.001 ETH with 3 decimal precision).
+4. **Live Position Reconciliation (`/api/trades` & Journal):** Synchronizes live open positions from Binance Futures alongside local daemon session logs, updating the journal and settings UI with live exchange status badges.
+5. **Daemon Equity Hydration (`scripts/headless-daemon.ts`):** Seeds starting equity dynamically from Binance wallet balance on daemon boot.
+
+### Files Modified
+- **`src/lib/binanceFuturesClient.ts`** [NEW]
+- **`src/app/api/account/route.ts`** [MODIFY]
+- **`src/app/api/trades/route.ts`** [MODIFY]
+- **`src/components/JournalTable.tsx`** [MODIFY]
+- **`src/app/settings/page.tsx`** [MODIFY]
+- **`src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`** [MODIFY]
+- **`scripts/headless-daemon.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.16 Changelog — Native PostgreSQL Engine Migration, Vercel Analytics Purge & Production API Hardening (2026-09-01)
 
