@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { sql } from '@vercel/postgres';
+import { sql } from '@/lib/postgres';
 import { autoLogSopSetup } from '@/lib/sopTrackerLogger';
 
 import { DEFAULT_ETH_SOP_SYSTEM_PROMPT } from '@/lib/sopPromptBuilder';
@@ -10,50 +10,33 @@ import { DEFAULT_ETH_SOP_SYSTEM_PROMPT } from '@/lib/sopPromptBuilder';
  *
  * All three critical parameters (API Key, Model, System Prompt) are
  * fetched from `system_settings` at runtime. Zero hardcoded values.
- *
- * NEW in Phase 4:
- * - Fetches `historical_memory` from `ai_trade_state` before each run.
- * - Invalidation Guard: resets state if live_price breaches invalidation_level.
- * - Injects memory into the Gemini prompt as a new context section.
- * - Parses `next_database_state` from Gemini's response and upserts it back.
- *
- * Fail-closed: if ANY critical parameter is missing, execution is aborted.
  */
 export async function POST(req: Request) {
   try {
     // ── 1. Fetch all engine parameters from the Vault in a single query ──
-    const { rows } = await sql`
-      SELECT key_name, key_value FROM system_settings
-      WHERE key_name IN ('GEMINI_LIVE_KEY', 'ACTIVE_MODEL', 'SYSTEM_PROMPT')
-    `;
-
-    const config: Record<string, string> = {};
-    for (const row of rows) {
-      config[row.key_name] = row.key_value;
+    let config: Record<string, string> = {};
+    try {
+      const { rows } = await sql`
+        SELECT key_name, key_value FROM system_settings
+        WHERE key_name IN ('GEMINI_LIVE_KEY', 'ACTIVE_MODEL', 'SYSTEM_PROMPT')
+      `;
+      for (const row of rows) {
+        config[row.key_name] = row.key_value;
+      }
+    } catch (dbErr) {
+      console.warn('[QUANT_ANALYZE] System settings read error (using env fallback):', dbErr);
     }
 
     const apiKey = config['GEMINI_LIVE_KEY'] || process.env.GEMINI_LIVE_KEY;
-    const activeModel = config['ACTIVE_MODEL'] || 'gemini-1.5-pro';
+    const activeModel = config['ACTIVE_MODEL'] || process.env.ACTIVE_MODEL || 'gemini-1.5-pro';
     const systemPrompt = config['SYSTEM_PROMPT'] || DEFAULT_ETH_SOP_SYSTEM_PROMPT;
 
-    // ── 2. Fail-closed validation ──
+    // ── 2. Graceful validation ──
     if (!apiKey) {
-      return NextResponse.json(
-        { error: 'System Vault Locked: Missing API Key.' },
-        { status: 500 }
-      );
-    }
-    if (!activeModel) {
-      return NextResponse.json(
-        { error: 'Engine Misconfigured: ACTIVE_MODEL not set in Command Center.' },
-        { status: 500 }
-      );
-    }
-    if (!systemPrompt) {
-      return NextResponse.json(
-        { error: 'Engine Misconfigured: SYSTEM_PROMPT not set in Command Center.' },
-        { status: 500 }
-      );
+      return NextResponse.json({
+        analysis: `⚠️ **Quant AI Engine Notice:** Gemini API Key is not configured in Settings. Please set your \`GEMINI_LIVE_KEY\` in the Command Center Vault or environment to activate real-time institutional AI analysis.`,
+        isConfigured: false,
+      });
     }
 
     // ── 3. Extract the incoming V8.x JSON payload ────────────────────────

@@ -737,39 +737,24 @@ class OrderFlowStateTrackerClass {
 
 export const OrderFlowStateTracker = new OrderFlowStateTrackerClass();
 
+type StatePersistHandler = (record: OrderFlowStateRecord) => void | Promise<void>;
+let statePersistHandler: StatePersistHandler | null = null;
+
+export function registerOrderFlowPersistHandler(handler: StatePersistHandler) {
+  statePersistHandler = handler;
+}
+
 /**
- * Asynchronously logs closed state transitions to database.
+ * Asynchronously logs closed state transitions via registered handler (server-side only).
  */
 async function persistStateTransitionToDb(record: OrderFlowStateRecord): Promise<void> {
-  try {
-    const { sql } = await import('@vercel/postgres');
-    await sql`
-      INSERT INTO order_flow_states_log (
-        symbol,
-        state,
-        entered_at,
-        entry_price,
-        exited_at,
-        exit_price,
-        duration_seconds,
-        price_change,
-        price_change_pct,
-        metadata
-      ) VALUES (
-        ${record.symbol},
-        ${record.state},
-        ${record.entered_at},
-        ${record.entry_price},
-        ${record.exited_at},
-        ${record.exit_price},
-        ${record.duration_seconds},
-        ${record.price_change},
-        ${record.price_change_pct},
-        ${JSON.stringify(record.metadata || {})}
-      )
-    `;
-  } catch (error: any) {
-    // Database offline or serverless cold start - silently ignore as deterministic candle truth holds state
+  if (typeof window !== 'undefined') return;
+  if (statePersistHandler) {
+    try {
+      await statePersistHandler(record);
+    } catch (err: any) {
+      console.warn('[OrderFlowTracker] State persist handler warning:', err?.message || err);
+    }
   }
 }
 

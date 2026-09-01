@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { sql } from "@vercel/postgres";
+import { sql } from "@/lib/postgres";
 
 // In-memory fallback account storage for offline mode / Neon database quota degradation
 interface TradingAccountRecord {

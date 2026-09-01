@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { sql } from "@vercel/postgres";
+import { sql } from "@/lib/postgres";
 import { UserDrawing } from "@/lib/drawings/types";
 
 // In-memory fallback storage for offline development

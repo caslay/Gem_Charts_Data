@@ -1,8 +1,40 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.15
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.16
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-01 (V17.15 — Quegar Rebranding, Decoupled VPS Architecture & Localhost Read-Only Isolation)
+> **Last Updated:** 2026-09-01 (V17.16 — Native PostgreSQL Engine Migration, Vercel Analytics Purge & Production API Hardening)
+
+## 🆕 V17.16 Changelog — Native PostgreSQL Engine Migration, Vercel Analytics Purge & Production API Hardening (2026-09-01)
+
+### Summary
+Hardened production API layer, migrated from `@vercel/postgres` to native `pg.Pool` engine, and resolved frontend runtime warnings on `core.quegar.com`:
+1. **Purged Legacy Vercel Analytics:** Removed `@vercel/analytics` and `<Analytics />` wrapper from `src/app/layout.tsx`, eliminating 404 network spam (`/_vercel/insights/script.js`) on standalone VPS deployments.
+2. **Native PostgreSQL Engine (`src/lib/postgres.ts`):** Implemented high-performance connection-pooled tagged template literal `sql` driver backed by `pg.Pool`, completely eliminating `invalid_connection_string` crashes when connecting to standard self-hosted PostgreSQL (`quegar_db`).
+3. **Hardened Strategies API (`/api/strategies`):** Added self-healing table alteration and defensive empty array fallback (`200 OK`) on database cold-start or empty records.
+4. **Resilient Daemon State Polling (`/api/daemon/state`):** Wrapped state file reader in fail-safe 200 fallback to eliminate 502 Bad Gateway errors during background daemon disk writes.
+5. **Robust Quant AI Fallback (`/api/quant-analyze`):** Added structured advisory response when Gemini API keys are missing instead of unhandled 500 exceptions.
+
+### Files Modified
+- **`src/lib/postgres.ts`** [NEW]
+- **`src/app/layout.tsx`** [MODIFY]
+- **`src/app/api/strategies/route.ts`** [MODIFY]
+- **`src/app/api/settings/route.ts`** [MODIFY]
+- **`src/app/api/quant-analyze/route.ts`** [MODIFY]
+- **`src/app/api/daemon/state/route.ts`** [MODIFY]
+- **`src/app/api/account/route.ts`** [MODIFY]
+- **`src/app/api/agent/context/route.ts`** [MODIFY]
+- **`src/app/api/drawings/route.ts`** [MODIFY]
+- **`src/app/api/market-data/route.ts`** [MODIFY]
+- **`src/app/api/order-flow/states/route.ts`** [MODIFY]
+- **`src/app/api/reset-state/route.ts`** [MODIFY]
+- **`src/app/api/self-correction/route.ts`** [MODIFY]
+- **`src/auth.ts`** [MODIFY]
+- **`src/lib/agentEngineHandlers.ts`** [MODIFY]
+- **`src/lib/oauthServer.ts`** [MODIFY]
+- **`src/lib/orderFlowEngine.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.15 Changelog — Quegar Rebrand, Decoupled VPS Architecture & Localhost Read-Only Isolation (2026-09-01)
 

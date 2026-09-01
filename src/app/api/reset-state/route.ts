@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { sql } from '@vercel/postgres';
+import { sql } from '@/lib/postgres';
 
 /**
  * Reset State API — Manual Override Endpoint (Phase 4)

@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: `Flow-State Quant Engine V${SYSTEM_VERSION}`,
-  description: `Flow-State Quant Engine V${SYSTEM_VERSION}`,
+  title: `Quegar Quant Engine V${SYSTEM_VERSION}`,
+  description: `Quegar Quant Engine V${SYSTEM_VERSION}`,
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/icon-192.png",
@@ -24,7 +24,6 @@ export const metadata: Metadata = {
   },
 };
 import { NavigationHeader } from "@/components/NavigationHeader";
-import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/components/AuthProvider";
 import { MarketDataProvider } from "@/context/MarketDataContext";
 import { ThemeProvider } from "@/components/ThemeProvider";
@@ -72,7 +71,6 @@ export default function RootLayout({
               <ThemeSync />
               <NavigationHeader />
               <main>{children}</main>
-              <Analytics />
             </MarketDataProvider>
           </AuthProvider>
         </ThemeProvider>

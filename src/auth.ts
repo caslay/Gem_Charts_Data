@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import { sql } from "@vercel/postgres";
+import { sql } from "@/lib/postgres";
 
 const googleClientId =
   process.env.AUTH_GOOGLE_ID ||

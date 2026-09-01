@@ -6,7 +6,7 @@ import { calculateDynamicRisk, generateTradeExecutionParameters, calculateATR } 
 import { getSmtContext } from '@/lib/smtEngine';
 import { analyzeMarketStructureStateful } from '@/lib/structureEngine';
 import { auth } from '@/auth';
-import { sql } from '@vercel/postgres';
+import { sql } from '@/lib/postgres';
 import { resolveTripleVectorBias } from '@/lib/quantEngine/BiasEngine';
 import { annotateCandlesWithVolumetricSignals } from '@/utils/generateChartMarkers';
 

@@ -27,7 +27,7 @@
  */
 
 import { NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
+import { sql } from '@/lib/postgres';
 import { validateM2MToken } from '@/lib/m2mAuth';
 import {
   runGetMarketContext,

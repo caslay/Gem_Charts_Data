@@ -152,17 +152,29 @@ export async function GET(req: Request) {
 
     return NextResponse.json(response);
   } catch (error: any) {
-    console.error('[api/daemon/state] Unexpected error:', error);
+    console.warn('[api/daemon/state] Non-fatal state read fallback:', error?.message || error);
     return NextResponse.json(
       {
-        success: false,
-        error: error?.message || 'Failed to read daemon state',
+        success: true,
+        isDaemonActive: false,
+        lastHeartbeatTime: null,
+        lastEvent: null,
+        symbol: 'ETHUSDC',
+        equity: 10000.0,
+        initialEquity: 10000.0,
+        totalRealizedR: 0,
+        totalTrades: 0,
+        winningTrades: 0,
+        losingTrades: 0,
+        winRatePct: 0,
         activePositions: [],
         pendingOrders: [],
         completedTrades: [],
-        equity: 10000.0,
+        allTodayTrades: [],
+        serverTime: Date.now(),
+        isFallback: true,
       },
-      { status: 500 }
+      { status: 200 }
     );
   }
 }

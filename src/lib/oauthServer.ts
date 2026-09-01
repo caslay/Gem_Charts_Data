@@ -25,7 +25,7 @@
  * @version 1.0.0 — Flow-State Quant Engine V15.4
  */
 
-import { sql } from '@vercel/postgres';
+import { sql } from '@/lib/postgres';
 import { randomBytes } from 'crypto';
 
 // ─── Schema Init ──────────────────────────────────────────────────────────────

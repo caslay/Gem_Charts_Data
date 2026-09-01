@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { sql } from "@vercel/postgres";
+import { sql } from "@/lib/postgres";
 
 /**
  * Settings API — Command Center Backend
