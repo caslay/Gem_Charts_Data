@@ -63,7 +63,7 @@
 | Task | Component | Operational Action | Status |
 | :--- | :--- | :--- | :--- |
 | **1. Exchange Credentials Injection** | Binance Futures API | Update `/home/ubuntu/quegar/.env.production` with live Binance API & Secret Keys (Strictly Whitelisted to `57.181.64.238`, Futures Trading enabled, Withdrawals STRICTLY DISABLED). | ⏳ Pending User Key Entry |
-| **2. Telegram Live Bot Pairing** | Real-Time Alerts | Configure dedicated `@QuegarLiveBot` token (`TELEGRAM_LIVE_BOT_TOKEN`) in `.env.production` and toggle `TELEGRAM_ENABLED=true` to receive 2-Stage harvest notifications. | ⏳ Pending Bot Token |
+| **2. Telegram Live Bot Pairing** | Real-Time Alerts | Dedicated `@QuegarLiveBot` configured in `.env.production` (`TELEGRAM_ENABLED=true`), long-polling active in `quegar-daemon`. | 🟢 Active & Polling (Awaiting `/start`) |
 | **3. Local Dev Read-Only Tunnel Verification** | Development Sandbox | Establish SSH database tunnel (`ssh -i key.pem -N -L 5433:localhost:5432 ubuntu@57.181.64.238`) and verify `localhost:4000` dev server reads live state without mutation rights. | ⏳ Ready for Testing |
 | **4. End-to-End Live Session Smoke Test** | Full Trading Terminal | Access `https://core.quegar.com`, log in with authorized Google account, and verify real-time chart rendering, open position tracker, and WebSocket order flow sync. | ⏳ Ready for Execution |
 
