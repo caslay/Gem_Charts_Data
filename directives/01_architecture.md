@@ -1,4 +1,4 @@
-# 🏗️ Flow-State Architecture & Graphify Directives
+# 🏗️ Quegar Architecture & Graphify Directives
 
 > [!IMPORTANT]
 > **📜 Master Blueprint Maintenance Rule:** After completing any update or task, you MUST update the master blueprint file at `directives/master_blueprint.md` to ensure all system documentation, database schemas, and API handlers remain fully synchronized and up to date.

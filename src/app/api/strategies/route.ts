@@ -134,6 +134,13 @@ export async function POST(req: Request) {
       );
     }
 
+    if (process.env.READ_ONLY_LOCAL === "true") {
+      return NextResponse.json(
+        { error: "Forbidden: Local development sandbox is in READ-ONLY mode. Strategy mutations cannot be pushed to VPS database." },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     const { id, name, conditions, is_active, target_environment } = body as {
       id?: string;
@@ -209,6 +216,13 @@ export async function DELETE(req: Request) {
       return NextResponse.json(
         { error: "Unauthorized: No active session." },
         { status: 401 }
+      );
+    }
+
+    if (process.env.READ_ONLY_LOCAL === "true") {
+      return NextResponse.json(
+        { error: "Forbidden: Local development sandbox is in READ-ONLY mode. Strategy deletion cannot be pushed to VPS database." },
+        { status: 403 }
       );
     }
 

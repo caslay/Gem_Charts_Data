@@ -1,14 +1,33 @@
 /**
  * ecosystem.config.js
  * ─────────────────────────────────────────────────────────────────────────────
- * PM2 Process Manager Configuration for Flow-State Local Headless Daemon.
+ * PM2 Process Manager Configuration for Quegar Quant Engine.
+ * Manages:
+ *  1. quegar-server : Next.js Production Server (Port 3000 on VPS)
+ *  2. quegar-daemon : 24/7 Headless Execution Daemon (Binance WS Stream)
+ *  3. quegar-dev    : Localhost Dev Sandbox (Port 4000, Read-Only Guarded)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 module.exports = {
   apps: [
     {
-      name: 'flow-state-local',
+      name: 'quegar-server',
+      script: 'node_modules/next/dist/bin/next',
+      args: 'start -p 3000',
+      cwd: __dirname,
+      instances: 1,
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '500M',
+      env: {
+        NODE_ENV: 'production',
+        PORT: 3000,
+        IS_LIVE_VPS: 'true',
+      },
+    },
+    {
+      name: 'quegar-daemon',
       script: 'node_modules/tsx/dist/cli.mjs',
       args: 'scripts/headless-daemon.ts',
       cwd: __dirname,
@@ -18,9 +37,27 @@ module.exports = {
       max_memory_restart: '500M',
       env: {
         NODE_ENV: 'production',
-        TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '8681842826:AAE_ya3wQ_IABtCXHofLDppNjOAyRDTdcVs',
-        TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || '1553743624',
+        IS_LIVE_VPS: 'true',
+        AUTO_EXECUTE: 'true',
         TELEGRAM_ENABLED: 'true',
+      },
+    },
+    {
+      name: 'quegar-dev',
+      script: 'node_modules/next/dist/bin/next',
+      args: 'dev -p 4000',
+      cwd: __dirname,
+      instances: 1,
+      autorestart: false,
+      watch: false,
+      max_memory_restart: '800M',
+      env: {
+        NODE_ENV: 'development',
+        PORT: 4000,
+        IS_LIVE_VPS: 'false',
+        READ_ONLY_LOCAL: 'true',
+        AUTO_EXECUTE: 'false',
+        TELEGRAM_ENABLED: 'false',
       },
     },
   ],

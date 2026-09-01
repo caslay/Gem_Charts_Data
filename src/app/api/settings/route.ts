@@ -268,6 +268,13 @@ export async function POST(req: Request) {
       );
     }
 
+    if (process.env.READ_ONLY_LOCAL === "true") {
+      return NextResponse.json(
+        { error: "Forbidden: Local development sandbox is in READ-ONLY mode. Changes cannot be pushed to VPS database." },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json();
     
     // Ensure the terminal settings schema is loaded
