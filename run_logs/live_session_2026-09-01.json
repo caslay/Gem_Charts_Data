@@ -726,11 +726,7 @@
         "symbol": "ETHUSDC",
         "timeframe": "5m",
         "direction": "LONG",
-<<<<<<< HEAD
-        "status": "OPEN",
-=======
         "status": "CLOSED",
->>>>>>> dev
         "limitEntryPrice": 2433,
         "entryPrice": 2433,
         "initialStopLoss": 2417.369,
@@ -754,15 +750,6 @@
         "riskPct": 3,
         "contractSize": 19.192,
         "allocatedAmount": 1,
-<<<<<<< HEAD
-        "remainingAllocation": 1,
-        "realizedR": 0,
-        "realizedUsd": 0,
-        "unrealizedR": 0,
-        "unrealizedUsd": 0,
-        "mfeR": 0,
-        "maeR": 0,
-=======
         "remainingAllocation": 0,
         "realizedR": -1,
         "realizedUsd": -300,
@@ -770,7 +757,6 @@
         "unrealizedUsd": 0,
         "mfeR": 0.3359,
         "maeR": -1.0006,
->>>>>>> dev
         "isStage1Filled": false,
         "isStage2Filled": false,
         "isStage3Filled": false,
@@ -779,15 +765,9 @@
         "stage3HitTime": null,
         "pendingTime": 1788281700177,
         "openTime": 1788281718112,
-<<<<<<< HEAD
-        "closeTime": null,
-        "exitPrice": null,
-        "exitReason": null,
-=======
         "closeTime": 1788285570089,
         "exitPrice": 2417.369,
         "exitReason": "STOPPED_OUT",
->>>>>>> dev
         "setupId": "SR_BULL_SWING_PIVOT_2433.00_1788275100000_SW496",
         "anchorName": "MAJOR Swing Low ($2433.00)",
         "originAnchorLevel": 2433,
@@ -843,11 +823,7 @@
         "symbol": "ETHUSDC",
         "timeframe": "5m",
         "direction": "LONG",
-<<<<<<< HEAD
-        "status": "OPEN",
-=======
         "status": "CLOSED",
->>>>>>> dev
         "limitEntryPrice": 2433,
         "entryPrice": 2433,
         "initialStopLoss": 2417.369,
@@ -871,15 +847,6 @@
         "riskPct": 3,
         "contractSize": 19.192,
         "allocatedAmount": 1,
-<<<<<<< HEAD
-        "remainingAllocation": 1,
-        "realizedR": 0,
-        "realizedUsd": 0,
-        "unrealizedR": 0,
-        "unrealizedUsd": 0,
-        "mfeR": 0,
-        "maeR": 0,
-=======
         "remainingAllocation": 0,
         "realizedR": -1,
         "realizedUsd": -300,
@@ -887,7 +854,6 @@
         "unrealizedUsd": 0,
         "mfeR": 0.3359,
         "maeR": -1.0006,
->>>>>>> dev
         "isStage1Filled": false,
         "isStage2Filled": false,
         "isStage3Filled": false,
@@ -896,11 +862,6 @@
         "stage3HitTime": null,
         "pendingTime": 1788281700177,
         "openTime": 1788281718112,
-<<<<<<< HEAD
-        "closeTime": null,
-        "exitPrice": null,
-        "exitReason": null,
-=======
         "closeTime": 1788285570089,
         "exitPrice": 2417.369,
         "exitReason": "STOPPED_OUT",
@@ -1001,7 +962,6 @@
         "closeTime": 1788285570089,
         "exitPrice": 2417.369,
         "exitReason": "STOPPED_OUT",
->>>>>>> dev
         "setupId": "SR_BULL_SWING_PIVOT_2433.00_1788275100000_SW496",
         "anchorName": "MAJOR Swing Low ($2433.00)",
         "originAnchorLevel": 2433,
