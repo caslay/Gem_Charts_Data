@@ -739,3 +739,15 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
 - **The Fixes:**
   1. **Implemented `.vercelignore`:** Configured `.vercelignore` to mirror `.prodignore`, explicitly excluding `scratch/`, `learning/`, `package/`, `run_logs/`, `.cache/`, `api/`, `directives/`, `docs/`, `scripts/`, and heavy datasets from all Vercel build and deployment pipelines.
   2. **Zero Build Impact:** `dev` branch preview deployments now match the clean, isolated Next.js App Router tree used in production, guaranteeing fast and reliable builds across both branches.
+
+### 65. Quant Lab Rule 4/5 Compounding Ledger Inversion & 3-Pillar Denominator Parity (Resolved in V17.14)
+- **The Bug:** When running Sweep & Reclaim scans in Quant Lab with Rule 4 (Early Breakeven) or Rule 5 (Post-Loss Cooldown) active, the scan summary card showed high performance (e.g. 67% Win Rate, +0.26R Expectancy, 2.78 Profit Factor across 624 retests), but the Compounding Ledger right below it crashed into a -72.5% drawdown with -0.218R Expectancy and 38.89% Win Rate (147W / 231L / 0BE). Additionally, 3-Pillars displacement telemetry displayed an identical 1334 (100%) for all three pillars, and Neon DB 402 quota errors caused terminal syntax errors (`Unexpected end of JSON input`).
+- **The Causes:**
+  1. **Artificial Scratch-to-Loss Mutation:** `adaptSweepReclaimSetupsToTrades` in `equityCalculator.ts` contained an `else` branch that forcibly converted all `is_be_scratch` setups into `-1.0R STOPPED_OUT` losses when `enableEarlyBreakeven` was false in UI options, turning 349 neutral 0.0R breakeven exits into -349R phantom losses.
+  2. **3-Pillars Telemetry Survival Bias:** `SweepReclaimEngine.ts` divided individual pillar pass counts by `total_reclaims_confirmed`. Because reclaims only exist if all 3 pillars pass simultaneously, all three individual pillars and the combined metric inherently evaluated to 100% (1334/1334).
+  3. **Neon Database Quota 402 Error Cascading:** When Neon reached data transfer limits, `/api/settings` returned HTTP 500/402 without offline fallback, causing unhandled JSON parsing errors on client SSR and background polling.
+- **The Fixes:**
+  1. **Preserved Raw Engine Realized R in `equityCalculator.ts`:** Removed the destructive mutation. Breakeven scratches ($0.0\text{R}$) retain their true status (`BE_SCRATCH_WIN`, $0.0\text{R}$), restoring complete mathematical parity between scan summary cards and the Compounding Ledger.
+  2. **Multi-Pillar Candidate Sweep Denominator:** `SweepReclaimEngine.ts` now tracks cumulative pillar pass flags across candidate bars and divides by `total_sweeps_detected`, providing authentic statistical attrition metrics across Pillar 1, Pillar 2, and Pillar 3.
+  3. **Resilient Offline/Quota Fallback in `/api/settings`:** Added try-catch blocks with graceful defaults and `isOffline: true` flags, preventing Next.js 500 error cascades when the cloud database quota is exceeded.
+

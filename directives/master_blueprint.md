@@ -1,8 +1,25 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.13
+# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.14
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-08-31 (V17.13 — 100% Local JSON Storage Architecture for Quant Lab)
+> **Last Updated:** 2026-09-01 (V17.14 — Quant Lab Rule 4/5 Compounding Ledger Inversion & Telemetry Parity Fix)
+
+## 🆕 V17.14 Changelog — Quant Lab Rule 4/5 Compounding Ledger Inversion & Telemetry Parity Fix (2026-09-01)
+
+### Summary
+Resolved the compounding ledger inversion and telemetry survival bias in Quant Lab when activating Rule 4 (Early Breakeven) and Rule 5 (Post-Loss Cooldown), and hardened cloud database endpoints against HTTP 402 quota errors:
+1. **Preserved Raw Realized R & Breakeven Scratch Exits (`equityCalculator.ts`):** Eliminated the destructive mutation in `adaptSweepReclaimSetupsToTrades` that converted Breakeven Scratches ($0.0\text{R}$) into $-1.0\text{R}$ losses when `enableEarlyBreakeven` was false in UI options. Restored 100% mathematical parity between top scan telemetry and the Compounding Ledger.
+2. **Multi-Pillar Candidate Sweep Denominator (`SweepReclaimEngine.ts`):** Fixed the 3-Pillars displacement telemetry by tracking cumulative pillar pass flags across candidate reclaim bars and dividing by `total_sweeps_detected`, replacing the circular 100% survivor bias with true quantitative attrition metrics.
+3. **Resilient Offline/Quota Fallback (`/api/settings/route.ts`):** Wrapped database queries in graceful default returns with `isOffline: true`, eliminating Next.js 500 error cascades and unhandled `JSON.parse` crashes during Neon HTTP 402 quota blocks.
+
+### Files Modified
+- **`src/lib/quantEngine/equityCalculator.ts`** [MODIFY]
+- **`src/lib/quantEngine/SweepReclaimEngine.ts`** [MODIFY]
+- **`src/app/api/settings/route.ts`** [MODIFY]
+- **`directives/02_lessons.md`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.13 Changelog — 100% Local JSON Storage Architecture for Quant Lab (2026-08-31)
 

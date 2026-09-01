@@ -237,6 +237,7 @@ export class AutomatedStrategyExecutionEngine {
 
   // Concurrency & Safety Controls
   private lastTradeClosedTimestamp: number = 0;
+  private lastLossClosedTimestamp: number = 0;
   private consumedZoneIds: Set<string> = new Set();
   private currentAccountEquity: number = 10000.0;
 
@@ -487,18 +488,20 @@ export class AutomatedStrategyExecutionEngine {
       return { success: false, message: msg };
     }
 
-    // ── Guardrail 4: 🛡️ Quant Shield Rule 5: Mandatory Post-Loss / Post-Trade Cooldown ──
+    // ── Guardrail 4: 🛡️ Quant Shield Rule 5: Mandatory Post-Loss Directional Cooldown ──
     const now = Date.now();
-    const timeSinceLastClose = now - this.lastTradeClosedTimestamp;
-    const effectiveCooldownMs = (this.config.postLossCooldownMinutes ?? 45) * 60 * 1000;
+    const cooldownMinutes = this.config.postLossCooldownMinutes ?? 0;
+    const effectiveCooldownMs = cooldownMinutes * 60 * 1000;
     if (
-      this.lastTradeClosedTimestamp > 0 &&
-      timeSinceLastClose < effectiveCooldownMs
+      effectiveCooldownMs > 0 &&
+      this.lastLossClosedTimestamp > 0 &&
+      (now - this.lastLossClosedTimestamp) < effectiveCooldownMs
     ) {
+      const timeSinceLastLoss = now - this.lastLossClosedTimestamp;
       const remainingMin = Math.ceil(
-        (effectiveCooldownMs - timeSinceLastClose) / 60000,
+        (effectiveCooldownMs - timeSinceLastLoss) / 60000,
       );
-      const msg = `[COOLDOWN_ACTIVE] Post-trade cooldown in effect (${remainingMin}m remaining).`;
+      const msg = `[COOLDOWN_ACTIVE] Post-loss cooldown in effect (${remainingMin}m remaining).`;
       this.emit("COOLDOWN_ACTIVE", msg);
       return { success: false, message: msg };
     }
@@ -1027,6 +1030,9 @@ export class AutomatedStrategyExecutionEngine {
     this.activePositions.splice(index, 1);
     this.closedPositionsHistory.unshift(pos);
     this.lastTradeClosedTimestamp = timestamp;
+    if (pos.realizedR < 0) {
+      this.lastLossClosedTimestamp = timestamp;
+    }
 
     const emoji = pos.realizedR > 0 ? "🏆" : pos.realizedR === 0 ? "🛡️" : "🛑";
     const msg = `${emoji} [POSITION_CLOSED] ${pos.direction} on ${pos.symbol} closed @ $${exitPrice.toFixed(2)} (${
