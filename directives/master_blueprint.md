@@ -16,14 +16,15 @@ Executed full-system rebranding to **Quegar Quant Engine (Quegar)** and establis
 6. **Unified Master Roadmap:** Consolidated all legacy, duplicated, and outdated deployment plans into [`docs/QUEGAR_VPS_DEPLOYMENT_AND_GO_LIVE_MASTER_PLAN.md`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/docs/QUEGAR_VPS_DEPLOYMENT_AND_GO_LIVE_MASTER_PLAN.md).
 
 ### Files Modified
+- **`docs/QUEGAR_LIVE_DEPLOYMENT_LEDGER.md`** [NEW]
 - **`docs/QUEGAR_VPS_DEPLOYMENT_AND_GO_LIVE_MASTER_PLAN.md`** [NEW]
 - **`scripts/db/init_quegar_db.sql`** [NEW]
+- **`scripts/db/setup_caddy.sh`** [NEW]
 - **`src/app/api/telemetry/route.ts`** [NEW]
 - **`src/app/api/settings/route.ts`** [MODIFY]
 - **`src/app/api/strategies/route.ts`** [MODIFY]
 - **`ecosystem.config.js`** [MODIFY]
 - **`AGENTS.md`** [MODIFY]
-- **`.cursorrules`** [MODIFY]
 - **`ENGINE_CAPABILITY_MAP.md`** [MODIFY]
 - **`directives/01_architecture.md`** [MODIFY]
 - **`directives/07_m2m_agent_mcp_guide.md`** [MODIFY]
