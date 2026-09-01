@@ -194,14 +194,14 @@ export function useLiveAlerts(
         // Audio Chime Throttle: Minimum 600ms gap between chimes to prevent audio screech bursts
         if (now - lastAudioPlayTimeRef.current >= 600) {
           lastAudioPlayTimeRef.current = now;
-          const audio = new Audio(finalSoundPath);
-          audio.play().catch(e => {
-            if (e.name === 'NotAllowedError') {
-              console.log('[Audio] Playback blocked by browser autoplay policy until user interacts.');
-            } else {
-              console.error('Audio play error:', e);
-            }
-          });
+          try {
+            const audio = new Audio(finalSoundPath);
+            audio.play().catch(() => {
+              // Silently ignore expected browser autoplay policy restrictions before user interaction
+            });
+          } catch {
+            // Audio creation fallback
+          }
         }
       }
     }

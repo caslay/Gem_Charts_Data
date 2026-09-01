@@ -799,7 +799,16 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
     setTrades(prev => prev.filter(t => t.id !== tradeId));
     setDeleteConfirmId(null);
 
-    
+    // 2. Delete from server-side database & session log
+    try {
+      await fetch(tradesApiUrl, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: tradeId }),
+      });
+    } catch (e) {
+      console.debug("[JOURNAL] Remote delete non-fatal error:", e);
+    }
 
     setActionLoadingId(null);
   }, [tradesApiUrl]);
@@ -1038,13 +1047,24 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
           {/* Clear Session */}
           <button
             type="button"
-            onClick={() => {
-              if (confirm(`Are you sure you want to clear all ${isBacktest ? 'backtest' : 'live'} session trades from local memory?`)) {
+            onClick={async () => {
+              if (confirm(`Are you sure you want to clear all ${isBacktest ? 'backtest' : 'live'} session trades from local memory and server history?`)) {
                 useSessionJournalStore.getState().clearSession(isBacktest ? 'BACKTEST' : 'LIVE');
                 setTrades([]);
+                if (!isBacktest) {
+                  try {
+                    await fetch('/api/trades', {
+                      method: 'DELETE',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ clearAll: true }),
+                    });
+                  } catch (e) {
+                    console.debug('[JOURNAL] Clear all remote error:', e);
+                  }
+                }
               }
             }}
-            title="Clear all session trades from in-memory journal"
+            title="Clear all session trades from in-memory journal and server"
             className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 font-mono text-[9px] font-bold uppercase tracking-wider transition-all rounded-lg shadow-sm cursor-pointer"
           >
             <Trash className="w-3.5 h-3.5" />

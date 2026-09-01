@@ -135,5 +135,71 @@ export async function PATCH(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  return NextResponse.json({ success: true });
+  try {
+    const body = await req.json().catch(() => ({}));
+    const { id, clearAll } = body as { id?: string; clearAll?: boolean };
+
+    if (clearAll) {
+      try {
+        await sql`DELETE FROM paper_trades;`;
+      } catch {}
+
+      // Clean up completedTrades in today's and all recent session logs
+      const rootDir = process.cwd();
+      const runLogsDir = path.join(rootDir, "run_logs");
+      if (fs.existsSync(runLogsDir)) {
+        try {
+          const files = fs.readdirSync(runLogsDir);
+          for (const file of files) {
+            if (file.startsWith("live_session_") && file.endsWith(".json")) {
+              const fullPath = path.join(runLogsDir, file);
+              const raw = fs.readFileSync(fullPath, "utf8");
+              const sessionLog = JSON.parse(raw);
+              sessionLog.completedTrades = [];
+              sessionLog.totalRealizedR = 0;
+              sessionLog.totalTrades = 0;
+              sessionLog.winningTrades = 0;
+              sessionLog.losingTrades = 0;
+              fs.writeFileSync(fullPath, JSON.stringify(sessionLog, null, 2), "utf8");
+            }
+          }
+        } catch (e) {
+          console.warn("[TRADES API] Failed to reset session log files:", e);
+        }
+      }
+
+      return NextResponse.json({ success: true, message: "All paper trades and simulation session logs cleared." });
+    }
+
+    if (id) {
+      try {
+        await sql`DELETE FROM paper_trades WHERE id = ${id};`;
+      } catch {}
+
+      const rootDir = process.cwd();
+      const runLogsDir = path.join(rootDir, "run_logs");
+      if (fs.existsSync(runLogsDir)) {
+        try {
+          const files = fs.readdirSync(runLogsDir);
+          for (const file of files) {
+            if (file.startsWith("live_session_") && file.endsWith(".json")) {
+              const fullPath = path.join(runLogsDir, file);
+              const raw = fs.readFileSync(fullPath, "utf8");
+              const sessionLog = JSON.parse(raw);
+              if (sessionLog.completedTrades && Array.isArray(sessionLog.completedTrades)) {
+                sessionLog.completedTrades = sessionLog.completedTrades.filter((t: any) => t.id !== id);
+                fs.writeFileSync(fullPath, JSON.stringify(sessionLog, null, 2), "utf8");
+              }
+            }
+          }
+        } catch {}
+      }
+
+      return NextResponse.json({ success: true, message: `Trade ${id} deleted.` });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json({ error: error?.message || "Failed to delete trade" }, { status: 500 });
+  }
 }
