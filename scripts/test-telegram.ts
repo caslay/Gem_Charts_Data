@@ -1,4 +1,4 @@
-﻿/**
+/**
  * test-telegram.ts
  * ─────────────────────────────────────────────────────────────────────────────
  * Diagnostic & Connectivity Test for Flow-State Telegram Bot Notifications
@@ -10,7 +10,7 @@ import { ExecutionEvent, StrategyExecutionPosition } from '../src/lib/quantEngin
 
 async function runTest() {
   console.log(`\n===============================================================`);
-  console.log(` 🤖 TESTING FLOW-STATE TELEGRAM BOT INTEGRATION`);
+  console.log(` 🤖 TESTING QUEGAR TELEGRAM BOT INTEGRATION`);
   console.log(`===============================================================\n`);
 
   const notifier = new TelegramNotifier();
@@ -29,10 +29,10 @@ async function runTest() {
   // 1. Send Welcome Verification Message
   console.log(`📡 [1/3] Sending Connectivity Diagnostic Message...`);
   const welcomeMsg =
-    `⚡ <b>Flow-State Quant Engine — Notification System Connected</b> ⚡\n` +
+    `⚡ <b>Quegar Quant Engine — Notification System Connected</b> ⚡\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `🟢 <b>Status:</b> <code>ONLINE (PM2 / VPS Ready)</code>\n` +
-    `🤖 <b>Bot:</b> Flow-State Institutional Telegram Bridge\n` +
+    `🤖 <b>Bot:</b> Quegar Institutional Telegram Bridge\n` +
     `🛡️ <b>Deduplication:</b> <code>STRICT SINGLE-DISPATCH ACTIVE</code>\n` +
     `⏰ <b>Local Time:</b> <code>${new Date().toLocaleString()}</code>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +

@@ -70,7 +70,7 @@ async function runInteractiveCommandTest() {
   // 1. Send Interactive Command Menu with Quick-Action Buttons
   console.log(`📡 [1/2] Sending Interactive Command Menu with 1-Tap Buttons...`);
   const menuMsg =
-    `⚡ <b>FLOW-STATE QUANT COMMAND CENTER ACTIVATED</b> ⚡\n` +
+    `⚡ <b>QUEGAR QUANT COMMAND CENTER ACTIVATED</b> ⚡\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `🟢 <b>Bot Status:</b> <code>ONLINE & LISTENING (PM2 Host)</code>\n` +
     `📱 <b>Interactive Menu:</b>\n\n` +
