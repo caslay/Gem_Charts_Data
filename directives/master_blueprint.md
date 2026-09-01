@@ -1,8 +1,35 @@
-# 🏛️ MASTER BLUEPRINT — Flow-State Quant Engine V17.14
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.15
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-01 (V17.14 — Quant Lab Rule 4/5 Compounding Ledger Inversion & Telemetry Parity Fix)
+> **Last Updated:** 2026-09-01 (V17.15 — Quegar Rebranding, Decoupled VPS Architecture & Localhost Read-Only Isolation)
+
+## 🆕 V17.15 Changelog — Quegar Rebrand, Decoupled VPS Architecture & Localhost Read-Only Isolation (2026-09-01)
+
+### Summary
+Executed full-system rebranding to **Quegar Quant Engine (Quegar)** and established the 5-Pillar Decoupled VPS & Stealth Architecture:
+1. **Total Deprecation of Neon & Vercel:** Replaced cloud database and serverless hosting with AWS Lightsail VPS (`quegar-core` at `57.181.64.238`, Ubuntu 24.04 LTS), Local PostgreSQL (`quegar_db` on loopback `localhost:5432`), and domain `quegar.com`.
+2. **Localhost:4000 Read-Only Isolation:** Hardened `localhost:4000` dev sandbox so local development can NEVER push settings updates or mutate VPS state. Enforced via dual-layer protection: dedicated `quegar_readonly` PostgreSQL user (`GRANT SELECT` only) and `READ_ONLY_LOCAL=true` guard returning `403 Forbidden` across mutating API endpoints (`/api/settings`, `/api/strategies`).
+3. **3-Layer Binance Live Trading Isolation:** Live Binance Futures API keys reside exclusively on VPS with static IP whitelisting (`57.181.64.238`), zero live keys on local workstation, and code-level fail-safe live gating (`IS_LIVE_VPS=true`).
+4. **Stealth Decoy Edge Routing:** Public apex visits to `https://quegar.com` resolve to a lightweight, non-financial developer telemetry worker (`/api/telemetry`), while private cockpit routes (`core.quegar.com` / SSH tunnel) fail-closed with 404 for unauthorized traffic.
+5. **Dedicated Live Telegram Dispatcher:** Isolated live trade execution alerts and command polling to `@QuegarLiveBot` (`TELEGRAM_LIVE_BOT_TOKEN`), defaulting local sandbox to `TELEGRAM_ENABLED=false`.
+6. **Unified Master Roadmap:** Consolidated all legacy, duplicated, and outdated deployment plans into [`docs/QUEGAR_VPS_DEPLOYMENT_AND_GO_LIVE_MASTER_PLAN.md`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/docs/QUEGAR_VPS_DEPLOYMENT_AND_GO_LIVE_MASTER_PLAN.md).
+
+### Files Modified
+- **`docs/QUEGAR_VPS_DEPLOYMENT_AND_GO_LIVE_MASTER_PLAN.md`** [NEW]
+- **`scripts/db/init_quegar_db.sql`** [NEW]
+- **`src/app/api/telemetry/route.ts`** [NEW]
+- **`src/app/api/settings/route.ts`** [MODIFY]
+- **`src/app/api/strategies/route.ts`** [MODIFY]
+- **`ecosystem.config.js`** [MODIFY]
+- **`AGENTS.md`** [MODIFY]
+- **`.cursorrules`** [MODIFY]
+- **`ENGINE_CAPABILITY_MAP.md`** [MODIFY]
+- **`directives/01_architecture.md`** [MODIFY]
+- **`directives/07_m2m_agent_mcp_guide.md`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.14 Changelog — Quant Lab Rule 4/5 Compounding Ledger Inversion & Telemetry Parity Fix (2026-09-01)
 

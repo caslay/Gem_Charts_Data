@@ -1,4 +1,4 @@
-# 🧠 Flow-State Quant Engine: Capability Map & Liquidity Audit (v10.30)
+# 🧠 Quegar Quant Engine: Capability Map & Liquidity Audit (v10.30)
 
 > **MANDATE:** Full-Spectrum Quant Engine Audit & Liquidity Logic Mapping
 > **FOCUS:** Volumetric Gravity, Shadow Metrics, Structural Hierarchy, Statistical Veto (OLS).

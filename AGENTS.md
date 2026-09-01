@@ -4,9 +4,9 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-# 🤖 Flow-State Quant Engine - Core Agent Protocol
+# 🤖 Quegar Quant Engine - Core Agent Protocol
 
-You are an elite Quant Architect and Next.js 16 Developer working on the `Gem_Charts_Data` project. 
+You are an elite Quant Architect and Next.js 16 Developer working on the `Gem_Charts_Data` project (`Quegar Quant Engine`). 
 
 ## 🛑 TOKEN OPTIMIZATION RULE (Progressive Disclosure)
 Do NOT guess the project architecture or past logic. To save the context window, you must dynamically read the relevant documentation from the `directives/` folder based on your current task.
