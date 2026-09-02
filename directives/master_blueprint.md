@@ -1,8 +1,26 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.22
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.23
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-02 (V17.22 — 1:1 Causal Engine Synchronization: First-Confirmed-Reclaim Lock)
+> **Last Updated:** 2026-09-02 (V17.23 — Settings & Journal Auth Flow Hardening + PostgreSQL Table Ownership & DX Tooling)
+
+## 🆕 V17.23 Changelog — Settings & Journal Auth Flow Hardening + PostgreSQL Table Ownership & DX Tooling (2026-09-02)
+
+### Summary
+1. **Settings Page Infinite Loading Trap Resolved (`src/app/settings/page.tsx`):** Eliminated `isLoading: true` hang on "ESTABLISHING SECURE LINK...". Replaced flawed `if (status === 'loading' || isLoading)` condition with strict session checks (`status === 'loading' || (status === 'authenticated' && isLoading)`). Added instant hard redirect for unauthenticated users, institutional Lock unauthorized gate card, and 10-second `AbortController` timeout on settings API requests with a "Retry Connection" UI.
+2. **Journal Page Preserved Callback URL (`src/app/journal/page.tsx`):** Fixed unauthorized gate link to preserve `callbackUrl=/journal`.
+3. **VPS PostgreSQL Ownership & Schema Remediation (`quegar_db`):** Reassigned ownership of all 9 database tables (`agent_decision_log`, `custom_strategies`, `oauth_access_tokens`, `system_settings`, `terminal_settings`, `trades`, etc.) from `postgres` to `quegar_admin`. Fixed obsolete `custom_strategies` schema (missing `logic_json`, `user_id`, `is_active`, `target_environment`) which previously triggered runtime SQL 42703/42501 errors on `/api/strategies`.
+4. **Environment & Auth Canonical Host Configuration:** Added canonical `AUTH_URL=https://core.quegar.com` to VPS production environment for clean reverse-proxy trust host resolution behind Caddy.
+5. **Developer Experience (DX) Command Center (`package.json`, `scripts/test-db-tunnel.ts`):** Added 10+ operational shortcut scripts (`tunnel:db`, `test:db`, `verify:parity`, `audit:isolation`, `test:binance`, `vps:status`, `vps:logs`, `vps:restart`, `typecheck`).
+
+### Files Modified
+- **`src/app/settings/page.tsx`** [MODIFY]
+- **`src/app/journal/page.tsx`** [MODIFY]
+- **`package.json`** [MODIFY]
+- **`scripts/test-db-tunnel.ts`** [NEW]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.22 Changelog — 1:1 Causal Engine Synchronization: First-Confirmed-Reclaim Lock (2026-09-02)
 
