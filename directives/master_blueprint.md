@@ -1,8 +1,22 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.23
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.24
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-02 (V17.23 — Settings & Journal Auth Flow Hardening + PostgreSQL Table Ownership & DX Tooling)
+> **Last Updated:** 2026-09-02 (V17.24 — React Hydration Crash Fix & Resilient OAuth Sign-In Portal)
+
+## 🆕 V17.24 Changelog — React Hydration Crash Fix & Resilient OAuth Sign-In Portal (2026-09-02)
+
+### Summary
+1. **React Rules of Hooks Invariant Crash Resolved (`src/components/NavigationHeader.tsx`):** Eliminated fatal `Rendered fewer hooks than expected` runtime exception caused by an early conditional return `if (pathname === "/login") return null;` placed in the middle of 5 consecutive `useEffect` and `useCallback` hooks. Moved the login gate check to execute strictly after all hooks have run, restoring 100% hydration and event loop processing across the client.
+2. **Resilient OAuth Sign-In Flow (`src/app/login/page.tsx`):** Equipped the Google Sign-In button with an `isSigningIn` spinner state, error handling, and hard fallback navigation to `/api/auth/signin/google` with preserved `callbackUrl`, guaranteeing that clicking the button will never stall silently.
+3. **PostgreSQL `paper_trades` View Compatibility:** Created and granted view `paper_trades` mirroring `trades` in production database `quegar_db` to ensure legacy lazy-exit monitoring runs without database errors.
+
+### Files Modified
+- **`src/components/NavigationHeader.tsx`** [MODIFY]
+- **`src/app/login/page.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.23 Changelog — Settings & Journal Auth Flow Hardening + PostgreSQL Table Ownership & DX Tooling (2026-09-02)
 
