@@ -11,10 +11,8 @@
 # Testing
 /coverage
 /data
-/run_logs
+run_logs/
 /run_logs/
-/run_logs/*
-/run_logs/**
 
 # Next.js
 /.next/
