@@ -467,10 +467,9 @@ export class TelegramBotService {
       sessionLog.completedTrades.forEach((t, i) => {
         const rSign = (t.realizedR || 0) >= 0 ? '+' : '';
         const usdSign = (t.realizedUsd || 0) >= 0 ? '+' : '';
-        const timeStr = t.closeTime
-          ? new Date(t.closeTime).toISOString().substring(11, 16) + ' UTC'
-          : '---';
-        completedListStr += `${i + 1}. <b>${t.direction}</b> @ $${t.entryPrice?.toFixed(2)} ➔ <code>${t.exitReason || 'CLOSED'}</code> (${rSign}${t.realizedR?.toFixed(2)}R / ${usdSign}$${t.realizedUsd?.toFixed(2)}) [${timeStr}]\n`;
+        const entryCairo = t.openTime ? formatCairoDateTime(t.openTime).substring(11, 16) : '—';
+        const exitCairo = t.closeTime ? formatCairoDateTime(t.closeTime).substring(11, 16) : '—';
+        completedListStr += `${i + 1}. <b>${t.direction}</b> @ $${t.entryPrice?.toFixed(2)} ➔ <code>${t.exitReason || 'CLOSED'}</code> (${rSign}${t.realizedR?.toFixed(2)}R / ${usdSign}$${t.realizedUsd?.toFixed(2)}) [${entryCairo} ➔ ${exitCairo} Cairo]\n`;
       });
     }
 
@@ -633,6 +632,8 @@ export class TelegramBotService {
       liveRealizedR: number | string;
       status: 'EXACT_MATCH' | 'IN_FLIGHT_ACTIVE' | 'INTRA_WAVE_SUPERSEDED' | 'SLIPPAGE_VARIANCE' | 'NOT_RECORDED';
       notes?: string;
+      openTime?: number | null;
+      closeTime?: number | null;
     }
 
     const reconcileItems: ReconcileItem[] = [];
@@ -705,6 +706,8 @@ export class TelegramBotService {
           liveRealizedR: lt.realizedR !== undefined ? lt.realizedR : (isInFlight ? (lt.unrealizedR || 0) : 0),
           status,
           notes,
+          openTime: lt.openTime,
+          closeTime: lt.closeTime,
         });
       } else {
         reconcileItems.push({
@@ -719,6 +722,8 @@ export class TelegramBotService {
           liveRealizedR: lt.realizedR || 0,
           status: 'NOT_RECORDED',
           notes: 'Live order executed on dynamic intra-candle tick',
+          openTime: lt.openTime,
+          closeTime: lt.closeTime,
         });
       }
     }
@@ -784,7 +789,10 @@ export class TelegramBotService {
             : '⚠️ SLIPPAGE';
         const slipStr = r.slippage === 0 ? '$0.00' : `$${r.slippage.toFixed(2)}`;
         const rSign = (typeof r.liveRealizedR === 'number' && r.liveRealizedR >= 0) ? '+' : '';
-        tradesListStr += `${idx + 1}. ${dirEmoji} <b>${r.direction}</b> @ $${typeof r.liveEntry === 'number' ? r.liveEntry.toFixed(2) : r.liveEntry} ➔ <code>${r.liveOutcome}</code> (${rSign}${r.liveRealizedR}R) [${badge} | Slip: ${slipStr}]\n`;
+        const entryCairo = r.openTime ? formatCairoDateTime(r.openTime).substring(11, 16) : '—';
+        const exitCairo = r.closeTime ? formatCairoDateTime(r.closeTime).substring(11, 16) : '';
+        const timeBadge = exitCairo ? `[${entryCairo} ➔ ${exitCairo} Cairo]` : `[${entryCairo} Cairo]`;
+        tradesListStr += `${idx + 1}. ${dirEmoji} <b>${r.direction}</b> @ $${typeof r.liveEntry === 'number' ? r.liveEntry.toFixed(2) : r.liveEntry} ${timeBadge} ➔ <code>${r.liveOutcome}</code> (${rSign}${r.liveRealizedR}R) [${badge} | Slip: ${slipStr}]\n`;
         if (r.status === 'INTRA_WAVE_SUPERSEDED') {
           tradesListStr += `   ↳ <i>Note: Live intermediate sweep entry; batch scanner evaluated full wave expansion.</i>\n`;
         }
@@ -797,7 +805,8 @@ export class TelegramBotService {
       pendingOrders.forEach((po, idx) => {
         const dirEmoji = po.direction === 'LONG' ? '🟢' : '🔴';
         const limitPrice = po.limitEntryPrice || po.entryPrice || 0;
-        pendingOrdersStr += `${idx + 1}. ${dirEmoji} <b>${po.direction}</b> Limit @ $${typeof limitPrice === 'number' ? limitPrice.toFixed(2) : limitPrice} (<code>${po.anchorName || '5m Anchor'}</code>) [Resting]\n`;
+        const placedCairo = (po.pendingTime || po.openTime) ? formatCairoDateTime(po.pendingTime || po.openTime).substring(11, 16) : '—';
+        pendingOrdersStr += `${idx + 1}. ${dirEmoji} <b>${po.direction}</b> Limit @ $${typeof limitPrice === 'number' ? limitPrice.toFixed(2) : limitPrice} (<code>${po.anchorName || '5m Anchor'}</code>) [Resting since ${placedCairo} Cairo]\n`;
       });
     }
 
