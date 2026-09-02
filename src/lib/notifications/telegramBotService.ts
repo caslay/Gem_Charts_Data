@@ -640,7 +640,11 @@ export class TelegramBotService {
     let exactMatches = 0;
     let intraWaveCount = 0;
 
-    for (const lt of allLiveTrades) {
+    // Separate executed trades from resting pending orders
+    const executedTrades = allLiveTrades.filter((t) => t.openTime && t.status !== 'PENDING_LIMIT_ENTRY');
+    const pendingOrders = allLiveTrades.filter((t) => !t.openTime || t.status === 'PENDING_LIMIT_ENTRY');
+
+    for (const lt of executedTrades) {
       const isFilled = !!lt.openTime && lt.status !== 'PENDING_LIMIT_ENTRY';
       const liveEntry = lt.entryPrice || lt.limitEntryPrice || 0;
       const expectedDir = lt.direction;
@@ -719,12 +723,12 @@ export class TelegramBotService {
       }
     }
 
-    // Calculate Mathematical Parity Score
-    const totalLive = allLiveTrades.length;
+    // Calculate Mathematical Parity Score strictly across executed trades
+    const totalExecuted = executedTrades.length;
     let parityScorePct = '100.0';
-    if (totalLive > 0) {
-      const verifiedCount = exactMatches + intraWaveCount + (allLiveTrades.some(t => t.status === 'OPEN') ? 1 : 0);
-      parityScorePct = Math.min(100.0, (verifiedCount / totalLive) * 100).toFixed(1);
+    if (totalExecuted > 0) {
+      const verifiedCount = exactMatches + intraWaveCount + (executedTrades.some(t => t.status === 'OPEN') ? 1 : 0);
+      parityScorePct = Math.min(100.0, (verifiedCount / totalExecuted) * 100).toFixed(1);
     }
 
     // Generate Markdown report and save to run_logs/reconciliation_YYYY-MM-DD.md
@@ -737,7 +741,8 @@ export class TelegramBotService {
       let md = `# 🔬 Quant Lab 1:1 Live Reconciliation Audit (${todayStr})\n\n`;
       md += `> **Symbol:** ${symbol.toUpperCase()}  \n`;
       md += `> **Session Date:** ${todayStr} (Cairo: ${formatCairoDateTime(Date.now())})  \n`;
-      md += `> **Live Recorded Trades:** ${allLiveTrades.length}  \n`;
+      md += `> **Live Executed Trades:** ${executedTrades.length}  \n`;
+      md += `> **Pending Limit Orders:** ${pendingOrders.length}  \n`;
       md += `> **Mathematical Parity:** ${parityScorePct}%  \n`;
       md += `> **Max Slippage:** $${maxSlippage.toFixed(2)}  \n`;
       md += `> **Generated:** ${new Date().toISOString()}  \n\n`;
@@ -746,6 +751,16 @@ export class TelegramBotService {
 
       for (const item of reconcileItems) {
         md += `| \`${item.tradeId}\` | **${item.direction}** | ${item.anchorName} | $${typeof item.liveEntry === 'number' ? item.liveEntry.toFixed(2) : item.liveEntry} | $${typeof item.qlEntry === 'number' ? item.qlEntry.toFixed(2) : item.qlEntry} | $${item.slippage.toFixed(2)} | ${item.liveOutcome} | ${item.qlOutcome} | ${item.status} |\n`;
+      }
+
+      if (pendingOrders.length > 0) {
+        md += `\n### ⏳ Active Resting Orders (Awaiting Fill)\n\n`;
+        md += `| Order ID | Dir | Anchor | Limit Price | Status |\n`;
+        md += `| :--- | :--- | :--- | :--- | :--- |\n`;
+        for (const po of pendingOrders) {
+          const lp = po.limitEntryPrice || po.entryPrice || 0;
+          md += `| \`${po.id}\` | **${po.direction}** | ${po.anchorName || '5m Anchor'} | $${typeof lp === 'number' ? lp.toFixed(2) : lp} | Resting Limit |\n`;
+        }
       }
 
       fs.writeFileSync(mdPath, md, 'utf8');
@@ -776,19 +791,30 @@ export class TelegramBotService {
       });
     }
 
+    let pendingOrdersStr = '';
+    if (pendingOrders.length > 0) {
+      pendingOrdersStr = '\n\n⏳ <b>Active Resting Orders (Awaiting Fill):</b>\n';
+      pendingOrders.forEach((po, idx) => {
+        const dirEmoji = po.direction === 'LONG' ? '🟢' : '🔴';
+        const limitPrice = po.limitEntryPrice || po.entryPrice || 0;
+        pendingOrdersStr += `${idx + 1}. ${dirEmoji} <b>${po.direction}</b> Limit @ $${typeof limitPrice === 'number' ? limitPrice.toFixed(2) : limitPrice} (<code>${po.anchorName || '5m Anchor'}</code>) [Resting]\n`;
+      });
+    }
+
     const msg =
       `🔬 <b>[QUANT LAB 1:1 RECONCILIATION AUDIT]</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `📅 <b>Session Date:</b> <code>${todayStr}</code> (<code>${formatCairoDateTime(Date.now())} Cairo</code>)\n` +
       `⚡ <b>Live Price:</b> <b>${livePrice.formatted} USD</b> (<code>${symbol.toUpperCase()}</code>)\n` +
-      `📊 <b>Live Session Trades:</b> <code>${allLiveTrades.length}</code> (${sessionLog.winningTrades}W / ${sessionLog.losingTrades}L)\n` +
+      `📊 <b>Live Session Trades:</b> <code>${executedTrades.length}</code> (${sessionLog.winningTrades}W / ${sessionLog.losingTrades}L)\n` +
       `🏆 <b>Session Realized R:</b> <b>${(sessionLog.totalRealizedR || 0) >= 0 ? '+' : ''}${(sessionLog.totalRealizedR || 0).toFixed(2)}R</b>\n` +
       `🏛️ <b>Candidate Setups:</b> <code>${sessionSetups.length} detected</code> (${candles5m.length} 5m bars)\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `✅ <b>Quant Lab Mathematical Parity:</b> <b>${parityScorePct}% VERIFIED</b>\n` +
       `⚖️ <b>Max Fill Slippage:</b> <code>$${maxSlippage.toFixed(2)}</code>\n` +
       `📁 <b>Audit Log:</b> <code>run_logs/reconciliation_${todayStr}.md</code>` +
-      tradesListStr;
+      tradesListStr +
+      pendingOrdersStr;
 
     await this.notifier.sendRawMessage(msg, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
   }

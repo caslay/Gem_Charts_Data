@@ -1,8 +1,22 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.18
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.19
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-02 (V17.18 — Telegram Real-Time Parity Engine, Polling Resilience & Midnight Session Rollover)
+> **Last Updated:** 2026-09-02 (V17.19 — Multi-Anchor Wave Selection Proximity Alignment & Parity Partitioning)
+
+## 🆕 V17.19 Changelog — Multi-Anchor Wave Selection Proximity Alignment & Parity Partitioning (2026-09-02)
+
+### Summary
+Resolved cross-engine setup selection divergence on multi-anchor waves and eliminated false parity dilution in Telegram reconciliation:
+1. **Market Physics Wave Sorting (`src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`):** Enforced price-proximity-to-market sorting on candidate setups on the same wave before order evaluation. For Shorts, the lowest entry price is evaluated first ($2423.79 before $2424.00); for Longs, the highest entry price is evaluated first. This aligns live execution 1:1 with Quant Lab backtest fills on tight retests (such as Trade #161 at $2423.8).
+2. **Strict Partitioning in Reconciliation (`src/lib/notifications/telegramBotService.ts`):** Separated executed/filled trades (`openTime !== null`) from resting pending limit orders (`PENDING_LIMIT_ENTRY`). Mathematical Parity is computed strictly on filled executions, while resting orders are reported in a dedicated informational section, eliminating artificial parity dilution.
+
+### Files Modified
+- **`src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`** [MODIFY]
+- **`src/lib/notifications/telegramBotService.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.18 Changelog — Telegram Real-Time Parity Engine, Polling Resilience & Midnight Session Rollover (2026-09-02)
 

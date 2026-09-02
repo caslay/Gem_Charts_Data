@@ -19,6 +19,7 @@ import {
   SweepReclaimAnchorType,
   resolveRetestEntryPrice,
   DisplacementCandleAudit,
+  getAnchorPriority,
 } from "./SweepReclaimEngine";
 import {
   SweepReclaimLiveSettings,
@@ -1568,7 +1569,32 @@ export class AutomatedStrategyExecutionEngine {
       try {
         const engine = new SweepReclaimEngine(scanConfig);
         const scanResult = engine.scanHistoricalSetups(candles);
-        const setups = scanResult.setups || [];
+        let setups = (scanResult.setups || []).slice();
+
+        // 🛡️ Market Physics Sorting: When multiple candidate setups exist on the same active wave/candle close,
+        // sort by price proximity to market so that the entry closest to current price is evaluated and armed first:
+        // - For SHORT: Lowest entry price is closest to current market and fills first as price rallies on retest.
+        // - For LONG: Highest entry price is closest to current market and fills first as price dips on retest.
+        // - Tie-breaker: Anchor tier ranking (Major > Internal > Inner).
+        setups.sort((a, b) => {
+          if (a.type === 'BEARISH' && b.type === 'BEARISH') {
+            if (Math.abs(a.entry_price - b.entry_price) > 0.01) {
+              return a.entry_price - b.entry_price; // Lowest entry price touched first
+            }
+          } else if (a.type === 'BULLISH' && b.type === 'BULLISH') {
+            if (Math.abs(a.entry_price - b.entry_price) > 0.01) {
+              return b.entry_price - a.entry_price; // Highest entry price touched first
+            }
+          }
+
+          const pA = getAnchorPriority(a.anchor_type, a.anchor_swing_grade);
+          const pB = getAnchorPriority(b.anchor_type, b.anchor_swing_grade);
+          if (pB !== pA) return pB - pA;
+
+          const depthA = a.sweep_depth_pct ?? 0;
+          const depthB = b.sweep_depth_pct ?? 0;
+          return depthB - depthA;
+        });
 
         for (const s of setups) {
           scanned.push(s);
