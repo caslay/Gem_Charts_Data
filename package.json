@@ -7,6 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "tunnel:db": "ssh -i LightsailDefaultKey-ap-northeast-1.pem -N -L 5433:127.0.0.1:5432 -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=no ubuntu@57.181.64.238",
+    "test:db": "tsx scripts/test-db-tunnel.ts",
+    "verify:parity": "tsx scripts/verify_quant_vs_pm2_parity.ts",
+    "audit:isolation": "tsx scripts/audit_readonly_local_isolation.ts",
+    "test:binance": "tsx scripts/test_binance_auth.ts",
+    "test:structural": "tsx scripts/test-structural-engine.ts",
     "dev:api": ".\\.venv\\Scripts\\python.exe -m uvicorn api.index:app --reload --port 8000",
     "daemon": "tsx scripts/headless-daemon.ts",
     "daemon:dry": "tsx scripts/headless-daemon.ts --dry-run",
@@ -14,7 +21,10 @@
     "sync:prod": "tsx scripts/sync-prod.ts",
     "sync:prod:dry": "tsx scripts/sync-prod.ts --dry-run",
     "test:telegram": "tsx scripts/test-telegram.ts",
-    "test:telegram:commands": "tsx scripts/test-telegram-commands.ts"
+    "test:telegram:commands": "tsx scripts/test-telegram-commands.ts",
+    "vps:status": "ssh -i LightsailDefaultKey-ap-northeast-1.pem -o StrictHostKeyChecking=no ubuntu@57.181.64.238 \"pm2 status\"",
+    "vps:logs": "ssh -i LightsailDefaultKey-ap-northeast-1.pem -o StrictHostKeyChecking=no ubuntu@57.181.64.238 \"pm2 logs quegar-daemon --lines 40\"",
+    "vps:restart": "ssh -i LightsailDefaultKey-ap-northeast-1.pem -o StrictHostKeyChecking=no ubuntu@57.181.64.238 \"pm2 restart all\""
   },
   "dependencies": {
     "@auth/core": "^0.41.2",
