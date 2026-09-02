@@ -559,10 +559,14 @@ export class TelegramBotService {
     }
     for (const ev of sessionLog.events || []) {
       if (ev.position && ev.position.id) {
-        liveTradeMap.set(ev.position.id, {
-          ...(liveTradeMap.get(ev.position.id) || {}),
-          ...ev.position,
-        });
+        if (ev.type === 'LIMIT_ORDER_CANCELLED') {
+          liveTradeMap.delete(ev.position.id);
+        } else {
+          liveTradeMap.set(ev.position.id, {
+            ...(liveTradeMap.get(ev.position.id) || {}),
+            ...ev.position,
+          });
+        }
       }
     }
     const allLiveTrades = Array.from(liveTradeMap.values());
@@ -641,9 +645,24 @@ export class TelegramBotService {
     let exactMatches = 0;
     let intraWaveCount = 0;
 
-    // Separate executed trades from resting pending orders
-    const executedTrades = allLiveTrades.filter((t) => t.openTime && t.status !== 'PENDING_LIMIT_ENTRY');
-    const pendingOrders = allLiveTrades.filter((t) => !t.openTime || t.status === 'PENDING_LIMIT_ENTRY');
+    // Collect all cancelled order IDs from events
+    const cancelledOrderIds = new Set<string>();
+    for (const ev of sessionLog.events || []) {
+      if (ev.type === 'LIMIT_ORDER_CANCELLED' && ev.position?.id) {
+        cancelledOrderIds.add(ev.position.id);
+      }
+    }
+
+    // Separate executed trades from active resting pending orders
+    const executedTrades = allLiveTrades.filter(
+      (t) => t.openTime && t.status !== 'PENDING_LIMIT_ENTRY' && t.status !== 'CANCELLED' && !cancelledOrderIds.has(t.id)
+    );
+    const pendingOrders = inFlightPositions.filter(
+      (t) =>
+        (!t.openTime || t.status === 'PENDING_LIMIT_ENTRY') &&
+        t.status !== 'CANCELLED' &&
+        !cancelledOrderIds.has(t.id)
+    );
 
     for (const lt of executedTrades) {
       const isFilled = !!lt.openTime && lt.status !== 'PENDING_LIMIT_ENTRY';

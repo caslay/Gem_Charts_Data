@@ -33,7 +33,8 @@ export type PositionStageStatus =
   | "STAGE_1_FILLED"
   | "STAGE_2_FILLED"
   | "STAGE_3_RUNNER"
-  | "CLOSED";
+  | "CLOSED"
+  | "CANCELLED";
 
 export type TrailingStopSource =
   "INITIAL" | "FVG_CE" | "BREAKEVEN" | "PROFIT_RATCHET_FLOOR" | "SWING_PIVOT";
@@ -797,6 +798,7 @@ export class AutomatedStrategyExecutionEngine {
           : livePrice <= order.stage1Target;
 
         if (isStopLossBreached || isTarget1Reached) {
+          order.status = "CANCELLED";
           const reason = isStopLossBreached ? "STOP_LOSS_BREACHED" : "MISSED_TP1_EXPANSION";
           const cancelMsg = `⌛ [LIMIT_ORDER_CANCELLED] Resting ${order.direction} limit @ $${order.limitEntryPrice.toFixed(
             2,
@@ -814,6 +816,7 @@ export class AutomatedStrategyExecutionEngine {
         const isExpired = order.pendingTime > 0 && (now - order.pendingTime) >= maxTtlMs;
 
         if (isExpired) {
+          order.status = "CANCELLED";
           const elapsedMins = Math.round((now - order.pendingTime) / 60000);
           const expireMsg = `⌛ [LIMIT_ORDER_EXPIRED] Resting ${order.direction} limit @ $${order.limitEntryPrice.toFixed(
             2,
@@ -1630,6 +1633,7 @@ export class AutomatedStrategyExecutionEngine {
           if (ord.timeframe === tf) {
             const isTtlExpired = ord.pendingTime > 0 && (nowMs - ord.pendingTime) >= maxTtlMs;
             if (isTtlExpired) {
+              ord.status = "CANCELLED";
               const elapsedMins = Math.round((nowMs - ord.pendingTime) / 60000);
               const expireMsg = `⌛ [LIMIT_ORDER_EXPIRED] Resting ${ord.direction} limit @ $${ord.limitEntryPrice.toFixed(
                 2,
