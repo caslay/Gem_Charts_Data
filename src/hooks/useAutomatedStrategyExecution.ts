@@ -118,19 +118,36 @@ export function useAutomatedStrategyExecution(
       const data = await res.json();
       if (!data.success) return;
 
-      setIsDaemonActive(!!data.isDaemonActive);
+      const nextActive = !!data.isDaemonActive;
+      setIsDaemonActive((prev) => (prev === nextActive ? prev : nextActive));
+
       if (typeof data.equity === 'number' && data.equity > 0) {
-        setAccountEquity(data.equity);
+        setAccountEquity((prev) => (prev === data.equity ? prev : data.equity));
       }
 
-      // 1. Sync Active In-Flight Positions (unrealized PnL is enriched via useMemo)
-      setRawActivePositions(data.activePositions || []);
+      // 1. Sync Active In-Flight Positions with state diffing
+      setRawActivePositions((prev) => {
+        const next = data.activePositions || [];
+        if (prev.length === 0 && next.length === 0) return prev;
+        if (prev.length === next.length && JSON.stringify(prev) === JSON.stringify(next)) return prev;
+        return next;
+      });
 
-      // 2. Sync Resting Pending Limit Orders
-      setPendingOrders(data.pendingOrders || []);
+      // 2. Sync Resting Pending Limit Orders with state diffing
+      setPendingOrders((prev) => {
+        const next = data.pendingOrders || [];
+        if (prev.length === 0 && next.length === 0) return prev;
+        if (prev.length === next.length && JSON.stringify(prev) === JSON.stringify(next)) return prev;
+        return next;
+      });
 
-      // 3. Sync Closed Trades (from today's session & tracker)
-      setClosedTrades(data.completedTrades || []);
+      // 3. Sync Closed Trades with state diffing
+      setClosedTrades((prev) => {
+        const next = data.completedTrades || [];
+        if (prev.length === 0 && next.length === 0) return prev;
+        if (prev.length === next.length && JSON.stringify(prev) === JSON.stringify(next)) return prev;
+        return next;
+      });
 
       // 4. Handle Live Notifications for new Daemon Events
       if (data.lastEvent && data.lastEvent.id !== lastEventIdRef.current) {
@@ -218,7 +235,12 @@ export function useAutomatedStrategyExecution(
     );
 
     if (res.scannedSetups) {
-      setScannedSetups(res.scannedSetups);
+      setScannedSetups((prev) => {
+        const next = res.scannedSetups || [];
+        if (prev.length === 0 && next.length === 0) return prev;
+        if (prev.length === next.length && JSON.stringify(prev) === JSON.stringify(next)) return prev;
+        return next;
+      });
     }
   }, [marketData?.data_payload]);
 

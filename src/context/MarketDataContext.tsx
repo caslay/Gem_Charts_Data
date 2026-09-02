@@ -28,11 +28,28 @@ export interface MarketDataLiveContextValue {
 const MarketDataStaticContext = createContext<MarketDataContextValue | null>(null);
 const MarketDataLiveContext = createContext<MarketDataLiveContextValue | null>(null);
 
-// Global background host component that executes autonomous strategy and order block scanners 24/7
-function AutonomousExecutionHost() {
+// Global defensive handler: safely intercept React 19 / PerformanceObserver race during mount
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    if (event.message && typeof event.message === 'string' && event.message.includes("reading 'startTime'")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  });
+}
+
+function BackgroundEngineRunners() {
   useAutomatedStrategyExecution();
   useLiveOrderBlockExecution();
   return null;
+}
+
+// Global background host component that executes autonomous strategy and order block scanners 24/7.
+// Gated to non-cockpit routes ('/settings', '/journal', etc.) so that '/' does not run duplicate engines.
+function AutonomousExecutionHost() {
+  const pathname = usePathname();
+  if (pathname === '/') return null;
+  return <BackgroundEngineRunners />;
 }
 
 export function MarketDataProvider({ children }: { children: ReactNode }) {
@@ -53,7 +70,8 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     reconnect: wsReconnect,
   } = useBinanceWS({ symbol: 'ethusdc', interval: wsInterval, enabled: isEnabled });
 
-  const marketData = useMarketDataHook(wsInterval, liveCandle, liveCandles, lastClosedEvent, livePrice, isEnabled);
+  // Decoupled from sub-second price ticks: useMarketDataHook does not receive liveCandle/livePrice ticks
+  const marketData = useMarketDataHook(wsInterval, null, {}, lastClosedEvent, null, isEnabled);
 
   // Background Auto-Trade Executor: automatically opens trades in journal when price touches entry
   useAutoTradeExecutor(isEnabled ? marketData.data : null, false);

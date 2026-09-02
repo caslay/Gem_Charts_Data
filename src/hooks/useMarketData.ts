@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 import { slicePayloadByLookback } from '@/components/Sidebar';
@@ -534,7 +534,11 @@ export function useMarketData(
         workerRef.current.onmessage = (event) => {
           const { type, payload, error } = event.data;
           if (type === 'STRUCTURE_RESULT') {
-            setStructureState(payload.analysis);
+            setStructureState((prev) => {
+              if (!prev || !payload.analysis) return payload.analysis;
+              if (JSON.stringify(prev) === JSON.stringify(payload.analysis)) return prev;
+              return payload.analysis;
+            });
           } else if (type === 'ERROR') {
             console.error('[QuantWorker] Error:', error);
           }
@@ -1117,7 +1121,7 @@ export function useMarketData(
 
     // Prefer the backend's fully computed, stateful structural map if available to ensure 100% stability and zero lookback truncation drift
     if (data.ipda_metrics?.full_structure_map) {
-      setStructureState(data.ipda_metrics.full_structure_map as any);
+      setStructureState((prev) => (prev === data.ipda_metrics?.full_structure_map ? prev : (data.ipda_metrics?.full_structure_map as any)));
       return;
     }
 
@@ -1149,24 +1153,25 @@ export function useMarketData(
         if (!prev) return null;
         
         // Update price-dependent dealing range properties
-        const updatedDealingRange = prev.dealingRange ? {
-          ...prev.dealingRange,
-          current_status: prev.dealingRange.equilibrium === null
-            ? 'AWAITING_IDM_SWEEP' as const
-            : (currentPrice > Number(prev.dealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const)
-        } : null;
+        const newDrStatus = prev.dealingRange ? (prev.dealingRange.equilibrium === null
+          ? 'AWAITING_IDM_SWEEP' as const
+          : (currentPrice > Number(prev.dealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const)) : null;
 
-        const updatedInternalDealingRange = prev.internalDealingRange ? {
-          ...prev.internalDealingRange,
-          current_status: prev.internalDealingRange.equilibrium === null
-            ? 'AWAITING_IDM_SWEEP' as const
-            : (currentPrice > Number(prev.internalDealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const)
-        } : null;
+        const newInternalStatus = prev.internalDealingRange ? (prev.internalDealingRange.equilibrium === null
+          ? 'AWAITING_IDM_SWEEP' as const
+          : (currentPrice > Number(prev.internalDealingRange.equilibrium) ? 'PREMIUM' as const : 'DISCOUNT' as const)) : null;
+
+        if (
+          (!prev.dealingRange || prev.dealingRange.current_status === newDrStatus) &&
+          (!prev.internalDealingRange || prev.internalDealingRange.current_status === newInternalStatus)
+        ) {
+          return prev; // STABLE: No status transition, return identical reference to prevent re-render cascade!
+        }
 
         return {
           ...prev,
-          dealingRange: updatedDealingRange,
-          internalDealingRange: updatedInternalDealingRange
+          dealingRange: prev.dealingRange ? { ...prev.dealingRange, current_status: newDrStatus! } : null,
+          internalDealingRange: prev.internalDealingRange ? { ...prev.internalDealingRange, current_status: newInternalStatus! } : null
         } as any;
       });
       return;
@@ -1353,7 +1358,7 @@ export function useMarketData(
     return () => clearInterval(timer);
   }, [isAuto30mScanActive, triggerAiAnalysisScan]);
 
-  return {
+  return useMemo(() => ({
     data,
     isLoading,
     error,
@@ -1386,7 +1391,40 @@ export function useMarketData(
     engineSettings,
     updateEngineSettings,
     mtfSummary,
-  };
+  }), [
+    data,
+    isLoading,
+    error,
+    fetchData,
+    downloadV6,
+    downloadV7Sliced,
+    activeAlerts,
+    clearAlerts,
+    dismissAlert,
+    triggerAlert,
+    aiAnalysis,
+    aiBias,
+    isAnalyzing,
+    setAiAnalysis,
+    triggerAiAnalysisScan,
+    isAuto30mScanActive,
+    toggleAuto30mScan,
+    nextScanTimestamp,
+    signalAlerts,
+    updateSignalAlert,
+    signalAlertsEnabled,
+    toggleSignalAlertEnabled,
+    syncStatus,
+    themeSettings,
+    updateThemeSettings,
+    isFetchingMore,
+    loadMoreHistory,
+    structureState,
+    contextAnchorTimestamp,
+    engineSettings,
+    updateEngineSettings,
+    mtfSummary,
+  ]);
 }
 
 function getFormattedTimestamp(): string {

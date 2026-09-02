@@ -364,9 +364,23 @@ export function useLiveOrderBlockExecution(
       macroContext
     );
 
-    setActiveZones([...engineRef.current.getActiveZones(timeframeFilter)]);
-    setActiveZonesByTimeframe({ ...engineRef.current.getActiveZonesByTimeframe() });
-    setTestingStates([...engineRef.current.getInZoneTestingStates()]);
+    setActiveZones((prev) => {
+      const next = engineRef.current.getActiveZones(timeframeFilter);
+      if (prev.length === 0 && next.length === 0) return prev;
+      if (prev.length === next.length && JSON.stringify(prev) === JSON.stringify(next)) return prev;
+      return [...next];
+    });
+    setActiveZonesByTimeframe((prev) => {
+      const next = engineRef.current.getActiveZonesByTimeframe();
+      if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
+      return { ...next };
+    });
+    setTestingStates((prev) => {
+      const next = engineRef.current.getInZoneTestingStates();
+      if (prev.length === 0 && next.length === 0) return prev;
+      if (prev.length === next.length && JSON.stringify(prev) === JSON.stringify(next)) return prev;
+      return [...next];
+    });
   }, [marketData?.data_payload, timeframeFilter]);
 
   // Process live incoming price ticks (Real-time calculation with throttled UI state sync)
@@ -396,11 +410,32 @@ export function useLiveOrderBlockExecution(
       prevClosedCountRef.current = closedPositions.length;
       prevTestingCountRef.current = testing.length;
 
-      setActivePositions([...openPositions]);
-      setActiveZones([...engineRef.current.getActiveZones(timeframeFilter)]);
-      setActiveZonesByTimeframe({ ...engineRef.current.getActiveZonesByTimeframe() });
-      setClosedLiveTrades([...closedPositions]);
-      setTestingStates([...testing]);
+      setActivePositions((prev) => {
+        if (prev.length === 0 && openPositions.length === 0) return prev;
+        if (prev.length === openPositions.length && JSON.stringify(prev) === JSON.stringify(openPositions)) return prev;
+        return [...openPositions];
+      });
+      setActiveZones((prev) => {
+        const next = engineRef.current.getActiveZones(timeframeFilter);
+        if (prev.length === 0 && next.length === 0) return prev;
+        if (prev.length === next.length && JSON.stringify(prev) === JSON.stringify(next)) return prev;
+        return [...next];
+      });
+      setActiveZonesByTimeframe((prev) => {
+        const next = engineRef.current.getActiveZonesByTimeframe();
+        if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
+        return { ...next };
+      });
+      setClosedLiveTrades((prev) => {
+        if (prev.length === 0 && closedPositions.length === 0) return prev;
+        if (prev.length === closedPositions.length && JSON.stringify(prev) === JSON.stringify(closedPositions)) return prev;
+        return [...closedPositions];
+      });
+      setTestingStates((prev) => {
+        if (prev.length === 0 && testing.length === 0) return prev;
+        if (prev.length === testing.length && JSON.stringify(prev) === JSON.stringify(testing)) return prev;
+        return [...testing];
+      });
     }
   }, [livePrice, timeframeFilter]);
 

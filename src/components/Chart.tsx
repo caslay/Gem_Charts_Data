@@ -131,12 +131,24 @@ export default function Chart({
     return layerStorageRef.current.get(layerId)!;
   }, []);
 
-  // Sync data prop to local state
+  // Sync data prop to local state with content-equality diffing
   useEffect(() => {
     if (!data) return;
     setLocalCandles((prev) => {
       if (prev === data) return prev;
       if (prev.length === 0 && data.length === 0) return prev;
+      if (prev.length === data.length && prev.length > 0) {
+        const prevLast = prev[prev.length - 1];
+        const dataLast = data[data.length - 1];
+        if (
+          prevLast.t === dataLast.t &&
+          prevLast.c === dataLast.c &&
+          prevLast.v === dataLast.v &&
+          prev[0].t === data[0].t
+        ) {
+          return prev; // Candle series content is identical, preserve state reference!
+        }
+      }
       return data;
     });
   }, [data]);
@@ -285,7 +297,7 @@ export default function Chart({
 
   const marketContextData = propsMarketContextData !== undefined ? propsMarketContextData : context.data;
   const themeSettings = propsThemeSettings !== undefined ? propsThemeSettings : context.themeSettings;
-  const { triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert: contextTriggerSmartAlert, setWsInterval, loadMoreHistory: contextLoadMoreHistory, isFetchingMore: contextIsFetchingMore, structureState: liveStructureState, contextAnchorTimestamp: liveContextAnchorTimestamp } = context;
+  const { wsInterval, triggerAiAnalysisScan, signalAlerts, signalAlertsEnabled, triggerSmartAlert: contextTriggerSmartAlert, setWsInterval, loadMoreHistory: contextLoadMoreHistory, isFetchingMore: contextIsFetchingMore, structureState: liveStructureState, contextAnchorTimestamp: liveContextAnchorTimestamp } = context;
   const triggerSmartAlert = propsTriggerSmartAlert !== undefined ? propsTriggerSmartAlert : contextTriggerSmartAlert;
   const loadMoreHistory = propsLoadMoreHistory !== undefined ? propsLoadMoreHistory : contextLoadMoreHistory;
   const isFetchingMore = propsIsFetchingMore !== undefined ? propsIsFetchingMore : contextIsFetchingMore;
@@ -512,8 +524,10 @@ export default function Chart({
   // Sync the chart's interval prop into the global WS interval.
   useEffect(() => {
     if (isBacktest) return;
-    setWsInterval(interval as any);
-  }, [interval, setWsInterval, isBacktest]);
+    if (wsInterval !== interval) {
+      setWsInterval(interval as any);
+    }
+  }, [interval, wsInterval, setWsInterval, isBacktest]);
 
   const isDark = theme === 'dark';
   const {
@@ -829,12 +843,18 @@ export default function Chart({
     theme
   ]);
 
+  const openTradesRef = useRef(openTrades);
+  openTradesRef.current = openTrades;
+  const srOverlayRef = useRef(srOverlay);
+  srOverlayRef.current = srOverlay;
+
   // Update SVG line and label coordinates directly in DOM styles to target 120 FPS
   const updateSvgCoordinates = useCallback(() => {
     const series = seriesRef.current;
-    if (!series || !openTrades) return;
+    const currentOpenTrades = openTradesRef.current;
+    if (!series || !currentOpenTrades) return;
 
-    openTrades.forEach((trade) => {
+    currentOpenTrades.forEach((trade) => {
       const entryPrice = parseFloat(trade.entry_price);
       const tpPrice = parseFloat(trade.take_profit);
       const slPrice = parseFloat(trade.stop_loss);
@@ -905,7 +925,8 @@ export default function Chart({
     });
 
     // ── Update Sweep & Reclaim Overlay DOM Lines & Labels ──
-    if (srOverlay) {
+    const currentSrOverlay = srOverlayRef.current;
+    if (currentSrOverlay) {
       const updateSrLineAndLabel = (idPrefix: string, price: number | null | undefined, xOffset = 10) => {
         const lineEl = document.getElementById(`svg-sr-line-${idPrefix}`);
         const labelEl = document.getElementById(`svg-sr-label-${idPrefix}`);
@@ -929,22 +950,22 @@ export default function Chart({
       };
 
       const entryCollidesWithAnchor =
-        srOverlay.entryPrice > 0 &&
-        srOverlay.anchorLevel > 0 &&
-        Math.abs(srOverlay.entryPrice - srOverlay.anchorLevel) < 0.05;
+        currentSrOverlay.entryPrice > 0 &&
+        currentSrOverlay.anchorLevel > 0 &&
+        Math.abs(currentSrOverlay.entryPrice - currentSrOverlay.anchorLevel) < 0.05;
 
-      const isPositionOpen = srOverlay.isPositionOpen || srOverlay.phase === 'OPEN';
+      const isPositionOpen = currentSrOverlay.isPositionOpen || currentSrOverlay.phase === 'OPEN';
 
-      updateSrLineAndLabel('anchor', srOverlay.anchorLevel, 10);
-      updateSrLineAndLabel('reclaim', srOverlay.fvgCe ?? srOverlay.reclaimPrice ?? srOverlay.sweepObMt, 10);
-      updateSrLineAndLabel('entry', srOverlay.entryPrice, 10);
+      updateSrLineAndLabel('anchor', currentSrOverlay.anchorLevel, 10);
+      updateSrLineAndLabel('reclaim', currentSrOverlay.fvgCe ?? currentSrOverlay.reclaimPrice ?? currentSrOverlay.sweepObMt, 10);
+      updateSrLineAndLabel('entry', currentSrOverlay.entryPrice, entryCollidesWithAnchor ? 110 : 10);
 
       // Gated Overlay: Only render/position SL and TP lines when position is actively OPEN
       if (isPositionOpen) {
-        updateSrLineAndLabel('sl', srOverlay.stopLoss, 10);
-        updateSrLineAndLabel('tp1', srOverlay.target1, 10);
-        updateSrLineAndLabel('tp2', srOverlay.target2, 10);
-        updateSrLineAndLabel('tp3', srOverlay.target3, 10);
+        updateSrLineAndLabel('sl', currentSrOverlay.stopLoss, 10);
+        updateSrLineAndLabel('tp1', currentSrOverlay.target1, 10);
+        updateSrLineAndLabel('tp2', currentSrOverlay.target2, 10);
+        updateSrLineAndLabel('tp3', currentSrOverlay.target3, 10);
       } else {
         updateSrLineAndLabel('sl', null, 10);
         updateSrLineAndLabel('tp1', null, 10);
@@ -981,7 +1002,7 @@ export default function Chart({
       hideLineAndLabel('tp2');
       hideLineAndLabel('tp3');
     }
-  }, [openTrades, srOverlay]);
+  }, []);
 
   // Sync coordinates when openTrades, srOverlay, or data changes
   useEffect(() => {
@@ -989,7 +1010,15 @@ export default function Chart({
       updateSvgCoordinates();
     }, 50);
     return () => clearTimeout(timer);
-  }, [openTrades, srOverlay, data, updateSvgCoordinates]);
+  }, [
+    openTrades?.length,
+    srOverlay?.phase,
+    srOverlay?.entryPrice,
+    srOverlay?.stopLoss,
+    srOverlay?.target1,
+    data?.length,
+    updateSvgCoordinates
+  ]);
 
   // ── Main Chart Initialization ─────────────────────────────────────────────
   useEffect(() => {
@@ -1157,14 +1186,19 @@ export default function Chart({
     };
 
     const resizeObserver = new ResizeObserver((entries) => {
-      if (!entries || entries.length === 0) return;
-      const entry = entries[0];
-      if (chartRef.current && entry.contentRect) {
-        const { width, height } = entry.contentRect;
-        if (width > 0 && height > 0) {
-          chartRef.current.applyOptions({ width, height });
-          updateSvgCoordinates();
+      try {
+        if (!entries || !Array.isArray(entries) || entries.length === 0) return;
+        const entry = entries[0];
+        if (!entry || !entry.contentRect) return;
+        if (chartRef.current) {
+          const { width, height } = entry.contentRect;
+          if (width > 0 && height > 0) {
+            chartRef.current.applyOptions({ width, height });
+            updateSvgCoordinates();
+          }
         }
+      } catch (err) {
+        // Prevent unhandled observer exceptions from crashing page mount
       }
     });
 

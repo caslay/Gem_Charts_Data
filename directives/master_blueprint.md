@@ -1,8 +1,27 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.25
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.26
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-02 (V17.25 — Runaway Polling Loop & Browser Socket Exhaustion Resolution)
+> **Last Updated:** 2026-09-02 (V17.26 — Circular Context Re-Render Loop & 5.4GB Memory Leak Elimination)
+
+## 🆕 V17.26 Changelog — Circular Context Re-Render Loop & 5.4GB Memory Leak Elimination (2026-09-02)
+
+### Summary
+1. **Decoupled WebSocket Price Ticks & Memoized Market Data Return (`src/context/MarketDataContext.tsx`, `src/hooks/useMarketData.ts`):** Wrapped the return object of `useMarketData` in `useMemo` so that context consumers receive a strictly stable object reference. Decoupled sub-second price ticks from `useMarketDataHook` in `MarketDataContext.tsx` by passing `null` for `livePrice` and `liveCandle` ticks, ensuring `staticValue` is never recreated on price ticks and eliminating tick-rate re-render cascades across all context subscribers.
+2. **Strict State Diffing in Consumer Hooks (`src/hooks/useAutomatedStrategyExecution.ts`, `src/hooks/useLiveOrderBlockExecution.ts`, `src/hooks/useMarketData.ts`):** Added content equality diffing (`JSON.stringify(prev) === JSON.stringify(next)`) across daemon sync calls (`rawActivePositions`, `pendingOrders`, `closedTrades`), candidate scanner setups (`scannedSetups`), live order block zones (`activePositions`, `activeZones`, `activeZonesByTimeframe`, `testingStates`), and market structure analysis (`structureState`). Consumer hooks never call `setState` unless data has genuinely transitioned.
+3. **Execution Engine Deduping (`src/context/MarketDataContext.tsx`):** Gated `AutonomousExecutionHost` to non-cockpit routes (`pathname !== '/'`). On `/`, `Home` serves as the sole execution engine, eliminating 4 parallel engine instances that previously duplicated polling intervals and candidate scans on the cockpit page.
+4. **Chart Optimization & Defensive Observer Exception Shield (`src/components/Chart.tsx`, `src/context/MarketDataContext.tsx`):** Stabilized `updateSvgCoordinates` via `openTradesRef` and `srOverlayRef` with primitive dependency arrays; added candle content equality checking in `setLocalCandles`; guarded `setWsInterval`; wrapped `ResizeObserver` with null-safe try/catch; and installed a global window error listener to cleanly intercept and swallow React 19 / PerformanceObserver timing races (`Cannot read properties of undefined (reading 'startTime')`).
+
+### Files Modified
+- **`src/context/MarketDataContext.tsx`** [MODIFY]
+- **`src/hooks/useMarketData.ts`** [MODIFY]
+- **`src/hooks/useAutomatedStrategyExecution.ts`** [MODIFY]
+- **`src/hooks/useLiveOrderBlockExecution.ts`** [MODIFY]
+- **`src/components/Chart.tsx`** [MODIFY]
+- **`directives/02_lessons.md`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.25 Changelog — Runaway Polling Loop & Browser Socket Exhaustion Resolution (2026-09-02)
 
