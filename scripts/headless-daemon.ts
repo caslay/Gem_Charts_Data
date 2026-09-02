@@ -152,6 +152,11 @@ async function main() {
         ledger.logEvent('LIMIT_ORDER_PLACED', event.message, { position: pos });
         break;
 
+      case 'LIMIT_ORDER_CANCELLED':
+        console.log(`\n⌛ [${now}] [LIMIT_ORDER_CANCELLED] ${event.message}`);
+        ledger.logEvent('LIMIT_ORDER_CANCELLED', event.message, { position: pos });
+        break;
+
       case 'ORDER_FILLED':
         console.log(`\n🚀 [${now}] [ORDER_FILLED] ${event.message}`);
         if (pos) {

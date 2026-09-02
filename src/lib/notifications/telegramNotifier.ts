@@ -201,6 +201,28 @@ export class TelegramNotifier {
         );
       }
 
+      case 'LIMIT_ORDER_CANCELLED': {
+        if (!pos) return null;
+        const dirEmoji = pos.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
+        const isExpired = event.message.toLowerCase().includes('expired');
+        const badgeTitle = isExpired ? 'PENDING LIMIT ORDER EXPIRED' : 'PENDING LIMIT ORDER CANCELLED';
+        const statusDetail = isExpired
+          ? 'Retest window expired (TTL 20-bar timeout). Queue unblocked.'
+          : 'Invalidated before fill (SL breached or TP1 reached).';
+
+        return (
+          `⌛ <b>[${badgeTitle}]</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `📊 <b>Pair:</b> <code>${pos.symbol}</code> (${pos.timeframe || '5m'})\n` +
+          `🧭 <b>Direction:</b> <b>${dirEmoji}</b>\n` +
+          `🎯 <b>Unfilled Limit:</b> <code>$${pos.limitEntryPrice.toFixed(2)}</code>\n` +
+          `🛑 <b>Stop Loss:</b> <code>$${pos.initialStopLoss.toFixed(2)}</code>\n` +
+          `🏛️ <b>Anchor:</b> <i>${pos.anchorName || '5m Structural Liquidity'}</i>\n` +
+          `ℹ️ <b>Status:</b> ${statusDetail}\n` +
+          `⏰ <b>Time:</b> <code>${nowIso}</code>`
+        );
+      }
+
       case 'ORDER_FILLED': {
         if (!pos) return null;
         const dirEmoji = pos.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';

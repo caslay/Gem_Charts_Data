@@ -206,6 +206,7 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
 
 export type ExecutionEventType =
   | "LIMIT_ORDER_PLACED"
+  | "LIMIT_ORDER_CANCELLED"
   | "ORDER_FILLED"
   | "STAGE_1_HARVEST"
   | "STAGE_2_HARVEST"
@@ -787,7 +788,7 @@ export class AutomatedStrategyExecutionEngine {
         const order = this.pendingLimitOrders[i];
         const isLong = order.direction === "LONG";
 
-        // Check if pending order has been invalidated by SL breach or missed TP1 expansion
+        // 1. Invalidation: Check if pending order has been invalidated by SL breach or missed TP1 expansion
         const isStopLossBreached = isLong
           ? livePrice <= order.activeStopLoss
           : livePrice >= order.activeStopLoss;
@@ -796,6 +797,28 @@ export class AutomatedStrategyExecutionEngine {
           : livePrice <= order.stage1Target;
 
         if (isStopLossBreached || isTarget1Reached) {
+          const reason = isStopLossBreached ? "STOP_LOSS_BREACHED" : "MISSED_TP1_EXPANSION";
+          const cancelMsg = `⌛ [LIMIT_ORDER_CANCELLED] Resting ${order.direction} limit @ $${order.limitEntryPrice.toFixed(
+            2,
+          )} invalidated (${reason}). Purged from active queue.`;
+          this.emit("LIMIT_ORDER_CANCELLED", cancelMsg, order);
+          this.pendingLimitOrders.splice(i, 1);
+          i--;
+          continue;
+        }
+
+        // 2. TTL Expiry Guard (matching Quant Lab maxBarsToRetest: 20 bars / 100 minutes)
+        const maxRetestBars = this.config.liveSettings?.maxBarsToRetest ?? 20;
+        const tfMinutes = order.timeframe === "1h" ? 60 : order.timeframe === "15m" ? 15 : 5;
+        const maxTtlMs = maxRetestBars * tfMinutes * 60 * 1000;
+        const isExpired = order.pendingTime > 0 && (now - order.pendingTime) >= maxTtlMs;
+
+        if (isExpired) {
+          const elapsedMins = Math.round((now - order.pendingTime) / 60000);
+          const expireMsg = `⌛ [LIMIT_ORDER_EXPIRED] Resting ${order.direction} limit @ $${order.limitEntryPrice.toFixed(
+            2,
+          )} expired after ${elapsedMins}m (maxRetestBars: ${maxRetestBars}). Purged from active queue.`;
+          this.emit("LIMIT_ORDER_CANCELLED", expireMsg, order);
           this.pendingLimitOrders.splice(i, 1);
           i--;
           continue;
@@ -1595,6 +1618,27 @@ export class AutomatedStrategyExecutionEngine {
           const depthB = b.sweep_depth_pct ?? 0;
           return depthB - depthA;
         });
+
+        // ── 0. Strict TTL & Expiry Pruning for Existing Resting Limit Orders ──
+        const nowMs = Date.now();
+        const maxRetestBars = settings.maxBarsToRetest ?? 20;
+        const tfMinutes = tf === "1h" ? 60 : tf === "15m" ? 15 : 5;
+        const maxTtlMs = maxRetestBars * tfMinutes * 60 * 1000;
+
+        for (let i = this.pendingLimitOrders.length - 1; i >= 0; i--) {
+          const ord = this.pendingLimitOrders[i];
+          if (ord.timeframe === tf) {
+            const isTtlExpired = ord.pendingTime > 0 && (nowMs - ord.pendingTime) >= maxTtlMs;
+            if (isTtlExpired) {
+              const elapsedMins = Math.round((nowMs - ord.pendingTime) / 60000);
+              const expireMsg = `⌛ [LIMIT_ORDER_EXPIRED] Resting ${ord.direction} limit @ $${ord.limitEntryPrice.toFixed(
+                2,
+              )} expired after ${elapsedMins}m (maxRetestBars: ${maxRetestBars}). Purged from active queue.`;
+              this.emit("LIMIT_ORDER_CANCELLED", expireMsg, ord);
+              this.pendingLimitOrders.splice(i, 1);
+            }
+          }
+        }
 
         for (const s of setups) {
           scanned.push(s);
