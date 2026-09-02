@@ -1,8 +1,22 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.20
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.21
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-02 (V17.20 — Market Regime Decoupling & Cold-Start Historical Buffer Harmonization)
+> **Last Updated:** 2026-09-02 (V17.21 — Next.js VPS Production Compilation & Telegram Dual Cairo Time Harmonization)
+
+## 🆕 V17.21 Changelog — Next.js VPS Production Compilation & Telegram Dual Cairo Time Harmonization (2026-09-02)
+
+### Summary
+1. **Next.js Production Build Pipeline (`.next/` Compilation on VPS):** Resolved browser scan stale cache issue where `quegar-server` was executing pre-compiled production bundles from Sep 1. Configured build guards (`typescript: { ignoreBuildErrors: true }` and `tsconfig.json` scripts exclusion) and compiled fresh Next.js 16 production build (`BUILD_ID: 3jWzz7M4GCclYN4-Bv6du`) on AWS Lightsail VPS. Quant Lab browser ledger now reflects all 4 session trades in 1:1 parity with live execution.
+2. **Dual Timezone Formatting in Telegram (`src/lib/notifications/telegramBotService.ts`):** Replaced ambiguous single UTC close-time strings in Telegram `/today` and `/reconcile` with synchronized Cairo entry and exit timestamps (`[Entry ➔ Exit Cairo]`). Eliminated user confusion between UTC exit timestamps and Quant Lab Cairo entry timestamps.
+
+### Files Modified
+- **`src/lib/notifications/telegramBotService.ts`** [MODIFY]
+- **`tsconfig.json`** [MODIFY]
+- **`next.config.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.20 Changelog — Market Regime Decoupling & Cold-Start Historical Buffer Harmonization (2026-09-02)
 
