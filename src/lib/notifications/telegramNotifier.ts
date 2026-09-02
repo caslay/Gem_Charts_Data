@@ -373,6 +373,7 @@ export class TelegramNotifier {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(6000),
       });
 
       if (!res.ok) {
@@ -385,6 +386,30 @@ export class TelegramNotifier {
       return json.ok === true;
     } catch (err: any) {
       console.error('[TELEGRAM_NETWORK_ERROR]', err.message || err);
+      return false;
+    }
+  }
+
+  /**
+   * Clears any active webhooks to guarantee unblocked long-polling execution.
+   */
+  public async deleteWebhook(options?: { dropPendingUpdates?: boolean }): Promise<boolean> {
+    if (!this.config.botToken) return false;
+    const drop = options?.dropPendingUpdates ?? false;
+    const url = `https://api.telegram.org/bot${this.config.botToken}/deleteWebhook?drop_pending_updates=${drop}`;
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        signal: AbortSignal.timeout(6000),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.ok === true;
+      }
+      return false;
+    } catch (err: any) {
+      console.warn('[TELEGRAM_WEBHOOK_CLEAR_WARN]', err?.message || err);
       return false;
     }
   }

@@ -10,12 +10,14 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { StrategyExecutionPosition } from '../quantEngine/AutomatedStrategyExecutionEngine';
+import { formatCairoDateTime } from '../quantEngine/equityCalculator';
 
 export interface DaemonSessionEvent {
   id: string;
   type:
     | 'BOOT'
     | 'HEARTBEAT'
+    | 'SESSION_ROLLOVER'
     | 'LIMIT_ORDER_PLACED'
     | 'LIMIT_ORDER_CANCELLED'
     | 'ORDER_FILLED'
@@ -25,6 +27,7 @@ export interface DaemonSessionEvent {
     | 'ERROR';
   timestamp: number;
   timeIso: string;
+  timeCairo?: string;
   message: string;
   livePrice?: number;
   position?: Partial<StrategyExecutionPosition>;
@@ -37,6 +40,7 @@ export interface DaemonSessionLog {
   symbol: string;
   bootTime: number;
   bootTimeIso: string;
+  bootTimeCairo?: string;
   initialEquity: number;
   currentEquity: number;
   totalRealizedR: number;
@@ -52,8 +56,10 @@ export class DaemonLedger {
   private runLogPath: string;
   private trackerJsonPath: string;
   private sessionLog: DaemonSessionLog;
+  private symbol: string;
 
   constructor(symbol: string = 'ETHUSDC', initialEquity: number = 10000.0) {
+    this.symbol = symbol.toUpperCase();
     const today = new Date().toISOString().split('T')[0];
     const rootDir = process.cwd();
 
@@ -88,12 +94,14 @@ export class DaemonLedger {
     symbol: string,
     initialEquity: number
   ): DaemonSessionLog {
+    const now = Date.now();
     return {
       sessionId,
       dateStr,
       symbol: symbol.toUpperCase(),
-      bootTime: Date.now(),
-      bootTimeIso: new Date().toISOString(),
+      bootTime: now,
+      bootTimeIso: new Date(now).toISOString(),
+      bootTimeCairo: formatCairoDateTime(now),
       initialEquity,
       currentEquity: initialEquity,
       totalRealizedR: 0,
@@ -106,7 +114,58 @@ export class DaemonLedger {
   }
 
   /**
-   * Log an event into the session log.
+   * Automatically checks if the current timestamp has crossed midnight 00:00:00 UTC.
+   * If crossed, gracefully finalizes the existing session log and rolls over to a fresh
+   * live_session_YYYY-MM-DD.json without dropping active in-flight positions or requiring daemon restart.
+   */
+  public checkAndPerformDateRollover(timestamp: number = Date.now()): boolean {
+    const targetDateStr = new Date(timestamp).toISOString().split('T')[0];
+    if (targetDateStr === this.sessionLog.dateStr) {
+      return false; // Still within active session day
+    }
+
+    console.log(`\n===============================================================`);
+    console.log(` 🌅 [SESSION ROLLOVER] Midnight UTC Boundary Crossed (${this.sessionLog.dateStr} ➔ ${targetDateStr})`);
+    console.log(`===============================================================`);
+
+    // 1. Finalize previous day's session
+    const oldDateStr = this.sessionLog.dateStr;
+    const carryForwardEquity = this.sessionLog.currentEquity;
+    this.sessionLog.events.push({
+      id: `evt_${timestamp}_rollover_close`,
+      type: 'SESSION_ROLLOVER',
+      timestamp,
+      timeIso: new Date(timestamp).toISOString(),
+      timeCairo: formatCairoDateTime(timestamp),
+      message: `Session finalized at midnight 00:00 UTC. Rolled over to session ${targetDateStr}.`,
+      metadata: { finalizedDate: oldDateStr, closingEquity: carryForwardEquity },
+    });
+    this.flushToDisk();
+    console.log(`[DAEMON_LEDGER] 💾 Finalized session log: ${this.runLogPath}`);
+
+    // 2. Initialize fresh session log for the new UTC day
+    const newSessionId = `session_${this.symbol.toLowerCase()}_${targetDateStr}_${timestamp}`;
+    this.runLogPath = path.join(this.sessionDir, `live_session_${targetDateStr}.json`);
+    this.sessionLog = this.createNewSessionLog(newSessionId, targetDateStr, this.symbol, carryForwardEquity);
+
+    // 3. Log rollover startup event in new session
+    this.sessionLog.events.push({
+      id: `evt_${timestamp}_rollover_boot`,
+      type: 'BOOT',
+      timestamp,
+      timeIso: new Date(timestamp).toISOString(),
+      timeCairo: formatCairoDateTime(timestamp),
+      message: `Headless daemon rolled over to new session ${targetDateStr} with equity $${carryForwardEquity.toFixed(2)} USD.`,
+      metadata: { previousDate: oldDateStr, startingEquity: carryForwardEquity },
+    });
+    this.flushToDisk();
+    console.log(`[DAEMON_LEDGER] 🟢 New active session initialized: ${this.runLogPath}\n`);
+
+    return true;
+  }
+
+  /**
+   * Log an event into the session log with automatic date rollover check.
    */
   public logEvent(
     type: DaemonSessionEvent['type'],
@@ -118,11 +177,14 @@ export class DaemonLedger {
     } = {}
   ): void {
     const now = Date.now();
+    this.checkAndPerformDateRollover(now);
+
     const event: DaemonSessionEvent = {
       id: `evt_${now}_${Math.random().toString(36).substring(2, 7)}`,
       type,
       timestamp: now,
       timeIso: new Date(now).toISOString(),
+      timeCairo: formatCairoDateTime(now),
       message,
       livePrice: options.livePrice,
       position: options.position,
@@ -216,7 +278,9 @@ export class DaemonLedger {
         realized_r: pos.realizedR || 0,
         status: 'CLOSED',
         open_time: new Date(pos.openTime || Date.now()).toISOString(),
+        open_time_cairo: formatCairoDateTime(pos.openTime || Date.now()),
         close_time: new Date(pos.closeTime || Date.now()).toISOString(),
+        close_time_cairo: formatCairoDateTime(pos.closeTime || Date.now()),
         execution_source: 'LOCAL_HEADLESS_DAEMON',
         notes: `[Auto 5m S&R] Exit: ${pos.exitReason} | Realized R: ${pos.realizedR?.toFixed(2)}R`,
       };

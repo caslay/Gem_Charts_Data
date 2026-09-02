@@ -260,9 +260,10 @@ async function main() {
   // Real-Time Trade Ticks Dispatcher
   wsClient.onMarketTick((tick: MarketTickPayload) => {
     tickCount++;
+    const now = Date.now();
+    ledger.checkAndPerformDateRollover(tick.timestamp || now);
     engine.processMarketTick(tick.price);
 
-    const now = Date.now();
     // Poll for UI commands every 1 second
     if (now - lastCommandCheckTime > 1000) {
       lastCommandCheckTime = now;
@@ -282,6 +283,9 @@ async function main() {
 
   // Closed Candle Boundary Dispatcher
   wsClient.onCandleClosed((payload: CandleClosedPayload) => {
+    const candleTime = payload.candle.t || Date.now();
+    ledger.checkAndPerformDateRollover(candleTime);
+
     const timeStr = new Date(payload.candle.t).toISOString().substring(11, 16);
     console.log(`\n[${new Date().toLocaleTimeString()}] 🕯️ [${payload.interval.toUpperCase()} Candle Closed @ ${timeStr} UTC] O:$${payload.candle.o} H:$${payload.candle.h} L:$${payload.candle.l} C:$${payload.candle.c} Vol:${payload.candle.v.toFixed(1)}`);
 

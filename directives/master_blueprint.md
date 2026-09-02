@@ -1,8 +1,27 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.17
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.18
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-02 (V17.17 — Live Binance Capital Synchronization & Micro-Account Risk Calibration)
+> **Last Updated:** 2026-09-02 (V17.18 — Telegram Real-Time Parity Engine, Polling Resilience & Midnight Session Rollover)
+
+## 🆕 V17.18 Changelog — Telegram Real-Time Parity Engine, Polling Resilience & Midnight Session Rollover (2026-09-02)
+
+### Summary
+Remediated live VPS execution discrepancies, eliminated Telegram command queue latency, and synchronized midnight session boundaries:
+1. **Dynamic In-Memory Telegram Reconciliation (`src/lib/notifications/telegramBotService.ts`):** Replaced static mock template in `/reconcile` with an active algorithmic audit engine. Ingests 5m candlestick ring buffers, executes `SweepReclaimEngine` locally, cross-matches live trades against candidate setups, and dynamically calculates mathematical parity, fill slippage, and annotates intra-wave intermediate sweep entries.
+2. **Telegram Polling Resilience & Concurrency Guard (`src/lib/notifications/telegramNotifier.ts` & `telegramBotService.ts`):** Added strict request timeouts (`AbortSignal.timeout(6000)`) on all outbound HTTP calls, implemented exponential jitter backoff on HTTP 409 Conflict, automated webhook cleanup on startup (`deleteWebhook`), and decoupled message routing via non-blocking async dispatch for sub-second command response.
+3. **Automated Midnight 00:00 UTC Session Rollover (`src/lib/daemon/daemonLedger.ts` & `scripts/headless-daemon.ts`):** Implemented automated date-rollover detection on live ticks and candle closes, cleanly archiving the finished session and spinning up `live_session_YYYY-MM-DD.json` without dropping in-flight positions or requiring PM2 restarts.
+4. **Dual UTC/Cairo Timezone Annotations (`daemonLedger.ts`):** Enriched all session events, trade records, and `ETHUSDC_Daily_Tracker.json` entries with both UTC ISO strings and localized Cairo timestamps (`YYYY-MM-DD HH:mm Cairo`) to eliminate day-boundary confusion.
+
+### Files Modified
+- **`src/lib/notifications/telegramBotService.ts`** [MODIFY]
+- **`src/lib/notifications/telegramNotifier.ts`** [MODIFY]
+- **`src/lib/daemon/daemonLedger.ts`** [MODIFY]
+- **`scripts/headless-daemon.ts`** [MODIFY]
+- **`scripts/test-telegram-commands.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.17 Changelog — Live Binance Capital Synchronization & Micro-Account Risk Calibration (2026-09-02)
 
