@@ -1,8 +1,25 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.24
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.25
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-02 (V17.24 — React Hydration Crash Fix & Resilient OAuth Sign-In Portal)
+> **Last Updated:** 2026-09-02 (V17.25 — Runaway Polling Loop & Browser Socket Exhaustion Resolution)
+
+## 🆕 V17.25 Changelog — Runaway Polling Loop & Browser Socket Exhaustion Resolution (2026-09-02)
+
+### Summary
+1. **Unstable Callback Dependency Decoupling (`src/hooks/useAutomatedStrategyExecution.ts`):** Eliminated runaway infinite fetch loop where `fetchDaemonState` re-instantiated on every incoming WebSocket tick (`livePrice`). Refactored active position enrichment to calculate `unrealizedR` and `unrealizedUsd` synchronously in memory via `useMemo([rawActivePositions, livePrice])`, completely severing price tick events from network requests.
+2. **In-Flight Cancellation via `AbortController`:** Added `abortControllerRef` to cancel in-flight HTTP requests before starting new polling cycles or when unmounting. Silently ignore `AbortError` without triggering console noise.
+3. **Safe Polling Cadence & Graceful Error Damping:** Throttled `/api/daemon/state` polling to a stable 4000ms `setInterval` (within the institutional 3000ms–5000ms directive). Replaced recursive error cascades with controlled warnings that gracefully wait for the next timer interval.
+4. **Universal Route & Auth Gating (`src/context/MarketDataContext.tsx`, `src/hooks/useMarketData.ts`, `src/hooks/useAutomatedStrategyExecution.ts`):** Gated all heavy market data streaming, Binance WebSocket connections, 5000ms resting liquidity polls, autonomous execution hosts, and background trade monitors behind `isEnabled = authStatus === 'authenticated' && pathname !== '/login'`. When on `/login` or unauthenticated, client network traffic is dropped to 0, completely unblocking the browser connection pool (`net::ERR_INSUFFICIENT_RESOURCES`) and enabling seamless Google OAuth sign-ins.
+
+### Files Modified
+- **`src/hooks/useAutomatedStrategyExecution.ts`** [MODIFY]
+- **`src/context/MarketDataContext.tsx`** [MODIFY]
+- **`src/hooks/useMarketData.ts`** [MODIFY]
+- **`directives/02_lessons.md`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.24 Changelog — React Hydration Crash Fix & Resilient OAuth Sign-In Portal (2026-09-02)
 

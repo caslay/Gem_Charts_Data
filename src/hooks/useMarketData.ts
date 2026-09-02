@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
+import { usePathname } from 'next/navigation';
 import { slicePayloadByLookback } from '@/components/Sidebar';
 import { SYSTEM_VERSION } from '@/lib/version';
 import { useLiveAlerts } from './useLiveAlerts';
@@ -499,7 +500,8 @@ export function useMarketData(
   liveCandle: LiveCandle | null = null,
   liveCandles: Record<string, LiveCandle> = {},
   lastClosedEvent: ClosedCandleEvent | null = null,
-  livePrice: number | null = null
+  livePrice: number | null = null,
+  enabled: boolean = true
 ) {
   const [data, setData] = useState<MarketDataPayload | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -550,6 +552,8 @@ export function useMarketData(
   }, [selectedInterval]);
 
   const { status: authStatus } = useSession();
+  const pathname = usePathname();
+  const isMarketDataActive = enabled && authStatus === 'authenticated' && pathname !== '/login';
 
   const [themeSettings, setThemeSettings] = useState<ThemeSettings>(() => {
     if (typeof window === 'undefined') return DEFAULT_THEME_SETTINGS;
@@ -645,7 +649,7 @@ export function useMarketData(
 
   // Background SWR Rehydration: fetch settings from Neon when authenticated to overwrite localStorage
   useEffect(() => {
-    if (authStatus !== 'authenticated') return;
+    if (!isMarketDataActive) return;
 
     const loadSettings = async () => {
       try {
@@ -830,6 +834,7 @@ export function useMarketData(
   const fetchDataRef = useRef<((isPolling?: boolean) => Promise<void>) | null>(null);
 
   const fetchData = useCallback(async (isPolling = false) => {
+    if (!isMarketDataActive) return;
     try {
       if (!isPolling) {
         setIsLoading(true);
@@ -868,43 +873,49 @@ export function useMarketData(
         }
 
         // Full payload outlier sanity check (>15% jump relative to active series)
-        const prevActive = prev.data_payload[`candles_${selectedInterval}`] || [];
-        const incomingActive = jsonData.data_payload?.[`candles_${selectedInterval}`] || [];
-        if (prevActive.length > 0 && incomingActive.length > 0) {
-          const prevClose = prevActive[prevActive.length - 1].c;
-          const incomingClose = incomingActive[incomingActive.length - 1].c;
-          if (prevClose > 0 && Math.abs(incomingClose - prevClose) / prevClose > 0.15) {
-            console.warn(`[OUTLIER_DATA_DROP] Rejected full payload replacement for ${selectedInterval}: incoming price ${incomingClose} deviates >15% from active price ${prevClose}. Triggering silent resync.`);
-            setTimeout(() => {
-              if (fetchDataRef.current) fetchDataRef.current(false);
-            }, 2000);
-            return prev;
+        const currentActive = prev.data_payload[`candles_${selectedInterval}`];
+        if (currentActive && currentActive.length > 0) {
+          const prevLastClose = currentActive[currentActive.length - 1].c;
+          const incomingCandles = jsonData.data_payload?.[`candles_${selectedInterval}`];
+          if (incomingCandles && incomingCandles.length > 0) {
+            const newFirstClose = incomingCandles[0].c;
+            const pctDiff = Math.abs(newFirstClose - prevLastClose) / prevLastClose;
+            if (pctDiff > 0.15) {
+              console.warn(
+                `[MarketData] Outlier rejected: Price jump of ${(pctDiff * 100).toFixed(1)}% detected on full reload.`
+              );
+              return prev;
+            }
           }
         }
-
         return jsonData;
       });
 
-      // Clear any pre-existing initial load error upon a successful poll
       setError(null);
-    } catch (err: unknown) {
-      if (isPolling) {
-        console.warn('[MarketData] Background poll error caught:', err);
+    } catch (err: any) {
+      if (!isPolling) {
+        console.error('Error fetching market data:', err);
+        setError(err.message || 'Failed to fetch market data');
       } else {
-        setError(err instanceof Error ? err.message : 'An error occurred');
+        console.warn('[MarketData] Background poll sync warning:', err.message || err);
       }
     } finally {
       if (!isPolling) {
         setIsLoading(false);
       }
     }
-  }, [selectedInterval]);
+  }, [selectedInterval, isMarketDataActive]);
 
   useEffect(() => {
     fetchDataRef.current = fetchData;
   }, [fetchData]);
 
   useEffect(() => {
+    if (!isMarketDataActive) {
+      setIsLoading(false);
+      return;
+    }
+
     // Wrap initial fetch in a macro-task to prevent synchronous cascading React state updates
     const initialTimer = setTimeout(() => {
       fetchData();
@@ -934,7 +945,7 @@ export function useMarketData(
         window.removeEventListener('visibilitychange', handleVisibilityChange);
       }
     };
-  }, [fetchData]);
+  }, [fetchData, isMarketDataActive]);
 
   // ── 1. Event-Driven Automated Recalculation & MTF Rolling Buffers ─────────────
   // Deterministically executed strictly upon verified candle close events ('isClosed === true')

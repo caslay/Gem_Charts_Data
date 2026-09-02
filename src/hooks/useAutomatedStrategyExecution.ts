@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
+import { usePathname } from 'next/navigation';
 import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 import type { SweepReclaimOverlayData } from '@/hooks/useBacktestStrategyExecution';
 import {
@@ -40,10 +42,18 @@ export function useAutomatedStrategyExecution(
   initialConfig?: Partial<AutomatedExecutionConfig>,
   triggerAlertOverride?: (type: SmartAlert['type'], message: string, soundPath?: string, sourceTag?: string) => void
 ) {
+  const { status: authStatus } = useSession();
+  const pathname = usePathname();
+  const isGated = pathname === '/login' || authStatus !== 'authenticated';
+
   const { data: marketData, triggerSmartAlert } = useMarketDataContext();
   const { livePrice } = useMarketDataLiveContext();
 
   const dispatchAlert = triggerAlertOverride || triggerSmartAlert;
+  const dispatchAlertRef = useRef(dispatchAlert);
+  useEffect(() => {
+    dispatchAlertRef.current = dispatchAlert;
+  }, [dispatchAlert]);
 
   const [engineConfig, setEngineConfig] = useState<AutomatedExecutionConfig>({
     ...DEFAULT_AUTOMATED_CONFIG,
@@ -53,7 +63,7 @@ export function useAutomatedStrategyExecution(
   });
 
   const engineRef = useRef<AutomatedStrategyExecutionEngine>(getSharedStrategyEngine(engineConfig));
-  const [activePositions, setActivePositions] = useState<StrategyExecutionPosition[]>([]);
+  const [rawActivePositions, setRawActivePositions] = useState<StrategyExecutionPosition[]>([]);
   const [pendingOrders, setPendingOrders] = useState<StrategyExecutionPosition[]>([]);
   const [closedTrades, setClosedTrades] = useState<StrategyExecutionPosition[]>([]);
   const [scannedSetups, setScannedSetups] = useState<SweepReclaimSetup[]>([]);
@@ -61,16 +71,47 @@ export function useAutomatedStrategyExecution(
   const [lastEvent, setLastEvent] = useState<ExecutionEvent | null>(null);
   const [isDaemonActive, setIsDaemonActive] = useState<boolean>(false);
 
+  // Synchronously compute unrealized PnL locally in memory whenever livePrice ticks without firing network requests
+  const activePositions = useMemo<StrategyExecutionPosition[]>(() => {
+    return rawActivePositions.map((pos) => {
+      const curPrice = livePrice || pos.entryPrice;
+      const isLong = pos.direction === 'LONG';
+      const priceDiff = isLong ? curPrice - pos.entryPrice : pos.entryPrice - curPrice;
+      const uR = pos.riskPerContract && pos.riskPerContract > 0 ? priceDiff / pos.riskPerContract : 0;
+      const uUsd = pos.contractSize ? priceDiff * pos.contractSize : 0;
+      return {
+        ...pos,
+        unrealizedR: parseFloat(uR.toFixed(4)),
+        unrealizedUsd: parseFloat(uUsd.toFixed(2)),
+      };
+    });
+  }, [rawActivePositions, livePrice]);
+
   // ── 1. Daemon-First Live State Polling (Single Source of Truth) ────────────
-  // Polls /api/daemon/state every 1000ms to synchronize directly with the PM2 Headless Daemon.
-  // Completely eliminates local client-side state divergence and localStorage ghosts.
+  // Polls /api/daemon/state on a stable 4000ms interval to synchronize directly with PM2 Headless Daemon.
+  // Completely eliminates local client-side state divergence, localStorage ghosts, and socket starvation.
   const lastEventIdRef = useRef<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const isFetchingRef = useRef<boolean>(false);
 
   const fetchDaemonState = useCallback(async () => {
+    if (isGated) return;
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (isFetchingRef.current) return;
+
+    // Abort previous in-flight request if still pending
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    isFetchingRef.current = true;
+
     try {
       const res = await fetch('/api/daemon/state?symbol=ETHUSDC', {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' },
+        signal: controller.signal,
       });
       if (!res.ok) return;
 
@@ -82,21 +123,8 @@ export function useAutomatedStrategyExecution(
         setAccountEquity(data.equity);
       }
 
-      // 1. Sync Active In-Flight Positions enriched with real-time price
-      const rawActive: StrategyExecutionPosition[] = data.activePositions || [];
-      const enrichedActive = rawActive.map((pos) => {
-        const curPrice = livePrice || pos.entryPrice;
-        const isLong = pos.direction === 'LONG';
-        const priceDiff = isLong ? curPrice - pos.entryPrice : pos.entryPrice - curPrice;
-        const uR = pos.riskPerContract && pos.riskPerContract > 0 ? priceDiff / pos.riskPerContract : 0;
-        const uUsd = pos.contractSize ? priceDiff * pos.contractSize : 0;
-        return {
-          ...pos,
-          unrealizedR: parseFloat(uR.toFixed(4)),
-          unrealizedUsd: parseFloat(uUsd.toFixed(2)),
-        };
-      });
-      setActivePositions(enrichedActive);
+      // 1. Sync Active In-Flight Positions (unrealized PnL is enriched via useMemo)
+      setRawActivePositions(data.activePositions || []);
 
       // 2. Sync Resting Pending Limit Orders
       setPendingOrders(data.pendingOrders || []);
@@ -110,33 +138,57 @@ export function useAutomatedStrategyExecution(
         const evt = data.lastEvent;
         setLastEvent(evt);
 
-        if (evt.type === 'LIMIT_ORDER_PLACED') {
-          dispatchAlert?.('AUTO_ORDER_ROUTED', evt.message, '/audio/fvg_alert.mp3', 'STRATEGY_EXECUTION');
-        } else if (evt.type === 'ORDER_FILLED') {
-          dispatchAlert?.('AUTO_ORDER_ROUTED', evt.message, '/audio/sweep_alert.mp3', 'STRATEGY_EXECUTION');
-        } else if (evt.type === 'STAGE_1_HARVEST' || evt.type === 'STAGE_2_HARVEST') {
-          dispatchAlert?.('STAGE_FILL', evt.message, '/audio/objective_update.wav', 'STRATEGY_EXECUTION');
-        } else if (evt.type === 'POSITION_CLOSED') {
-          dispatchAlert?.('SMT_TRAP', evt.message, '/audio/flow_state.wav', 'STRATEGY_EXECUTION');
+        const alertFn = dispatchAlertRef.current;
+        if (alertFn) {
+          if (evt.type === 'LIMIT_ORDER_PLACED') {
+            alertFn('AUTO_ORDER_ROUTED', evt.message, '/audio/fvg_alert.mp3', 'STRATEGY_EXECUTION');
+          } else if (evt.type === 'ORDER_FILLED') {
+            alertFn('AUTO_ORDER_ROUTED', evt.message, '/audio/sweep_alert.mp3', 'STRATEGY_EXECUTION');
+          } else if (evt.type === 'STAGE_1_HARVEST' || evt.type === 'STAGE_2_HARVEST') {
+            alertFn('STAGE_FILL', evt.message, '/audio/objective_update.wav', 'STRATEGY_EXECUTION');
+          } else if (evt.type === 'POSITION_CLOSED') {
+            alertFn('SMT_TRAP', evt.message, '/audio/flow_state.wav', 'STRATEGY_EXECUTION');
+          }
         }
       }
-    } catch (err) {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return; // Silently ignore cancelled requests
+      }
       console.warn('[useAutomatedStrategyExecution] Daemon state sync warning:', err);
+    } finally {
+      isFetchingRef.current = false;
     }
-  }, [livePrice, dispatchAlert]);
+  }, [isGated]);
 
-  // Periodic polling interval
+  // Periodic polling interval: stable 4000ms cadence, strictly gated behind active session and route
   useEffect(() => {
+    if (isGated) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      return;
+    }
+
     fetchDaemonState();
-    const intervalId = setInterval(fetchDaemonState, 1000);
-    return () => clearInterval(intervalId);
-  }, [fetchDaemonState]);
+    const intervalId = setInterval(fetchDaemonState, 4000);
+
+    return () => {
+      clearInterval(intervalId);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, [isGated, fetchDaemonState]);
 
   // ── 2. Local Candidate Scans for Active Anchors Matrix ─────────────────────
   // Continues ingesting multi-timeframe candles (5m, 15m, 1h) to populate the visual
   // Active Anchors Liquidity Matrix without running rogue trade executions.
   const lastProcessedSrCandleRef = useRef<string>('');
   useEffect(() => {
+    if (isGated) return;
     if (!engineRef.current || !marketData) return;
     if (typeof document !== 'undefined' && document.hidden) return;
 
