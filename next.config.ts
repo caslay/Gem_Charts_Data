@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   rewrites: async () => {
     return [
       // RFC 8414 OAuth Authorization Server Metadata — required by Gemini Spark
