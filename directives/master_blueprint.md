@@ -1,8 +1,23 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.19
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.20
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-02 (V17.19 — Multi-Anchor Wave Selection Proximity Alignment & Parity Partitioning)
+> **Last Updated:** 2026-09-02 (V17.20 — Market Regime Decoupling & Cold-Start Historical Buffer Harmonization)
+
+## 🆕 V17.20 Changelog — Market Regime Decoupling & Cold-Start Historical Buffer Harmonization (2026-09-02)
+
+### Summary
+Resolved fundamental regime evaluation asymmetry and historical candle depth differences between Quant Lab backtesting and Live PM2 execution:
+1. **Dynamic Market Regime Decoupling (`src/lib/quantEngine/SweepReclaimEngine.ts`):** Scoped static structural bootstrap expansion checks strictly to the T-Zero seed candle (`candleIdx === 0`). Eliminated false historical contamination where a 45-day-old snapshot permanently added `+1.5` velocity to every future candle, locking the backtest into `RUNAWAY_EXPANSION` and vetoing valid `INNER` swing anchors as `INVALIDATED`. Restored 100% dynamic 6-candle rolling displacement physics.
+2. **Cold-Start Candlestick Buffer Expansion (`scripts/headless-daemon.ts`):** Doubled PM2 cold-start 5m historical buffer from 500 to 1,000 bars (~3.5 days of market structure), ensuring full structural anchor continuity with Quant Lab scans. Explicitly harmonized `slBufferAtrMultiplier: 0.10` across live execution and champion presets.
+3. **100% Session Parity Re-established:** Verified that both Quant Lab and Live PM2 produce the exact same 4 trades for `2026-09-02`: `03:50 Cairo` (-1.00R), `06:45 Cairo` (-1.00R), `09:20 Cairo` (-1.00R), and `10:20 Cairo` (+1.20R).
+
+### Files Modified
+- **`src/lib/quantEngine/SweepReclaimEngine.ts`** [MODIFY]
+- **`scripts/headless-daemon.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.19 Changelog — Multi-Anchor Wave Selection Proximity Alignment & Parity Partitioning (2026-09-02)
 

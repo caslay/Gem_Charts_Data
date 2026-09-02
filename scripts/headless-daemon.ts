@@ -69,11 +69,11 @@ async function main() {
     metadata: { isDryRun, initialEquity: startingEquity, isBinanceLive: isBinanceLiveHydrated },
   });
 
-  // 2. Cold-Start REST Bootstrap (500 Historical Candles per Timeframe)
+  // 2. Cold-Start REST Bootstrap (1000 Historical 5m Candles for Extended Anchor Continuity)
   let bootstrapData;
   try {
     bootstrapData = await bootstrapHistoricalBuffers(symbolArg, {
-      '5m': 500,
+      '5m': 1000,
       '15m': 500,
       '1h': 500,
     });
@@ -97,6 +97,7 @@ async function main() {
     stage3Multiple: 3.0,
     enableStructuralTrail: true,
     enableProfitRatchet: false,
+    slBufferAtrMultiplier: 0.10,
     liveSettings: {
       ...DEFAULT_SR_LIVE_SETTINGS,
       enabledTimeframes: ['5m'],
@@ -111,6 +112,7 @@ async function main() {
       enableProfitRatchet: false,
       requireThreePillarDisplacement: true,
       enforceDiscountPremiumGate: true,
+      slBufferAtrMultiplier: 0.10,
     },
   });
 

@@ -661,13 +661,11 @@ export function classifyMarketRegime(
     return { regime: 'ROTATIONAL_AUCTION', direction: 'NEUTRAL', velocity: 0 };
   }
 
-  // 1. Check structural bootstrap expansion state if available
-  let isExpanding = false;
-  let expansionTrend: 'BULLISH' | 'BEARISH' | null = null;
-  if (bootstrap?.majorSnapshot?.is_in_expansion) {
-    isExpanding = true;
-    expansionTrend = bootstrap.majorSnapshot.current_trend_state === 'BULLISH_SWING' ? 'BULLISH' : 'BEARISH';
-  }
+  // 1. Check structural bootstrap expansion state strictly at initial seed boundary (candleIdx === 0)
+  // to avoid falsely inflating velocity across future rolling historical candles
+  const isExpanding = candleIdx === 0 && !!bootstrap?.majorSnapshot?.is_in_expansion;
+  const expansionTrend: 'BULLISH' | 'BEARISH' | null =
+    bootstrap?.majorSnapshot?.current_trend_state === 'BULLISH_SWING' ? 'BULLISH' : 'BEARISH';
 
   // 2. Compute local 6-candle displacement velocity relative to ATR
   const lookbackBars = Math.min(6, candleIdx);
