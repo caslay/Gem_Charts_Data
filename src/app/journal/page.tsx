@@ -22,7 +22,7 @@ export default async function JournalPage() {
             The Flow-State Vault is locked. This terminal page requires an active institutional session to view paper trade history.
           </p>
           <Link
-            href="/login"
+            href="/login?callbackUrl=/journal"
             className="w-full bg-accent hover:bg-accent/80 text-black py-2.5 px-4 font-black text-xs uppercase tracking-widest transition-all text-center rounded-lg shadow-md shadow-accent/10 cursor-pointer"
           >
             Authenticate Terminal

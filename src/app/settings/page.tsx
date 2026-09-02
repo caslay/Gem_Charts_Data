@@ -2,6 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import {
   Settings,
@@ -13,6 +14,7 @@ import {
   Loader2,
   CheckCircle2,
   AlertTriangle,
+  Lock,
   User,
   Sliders,
   Volume2,
@@ -199,9 +201,12 @@ export default function SettingsPage() {
   // ── Auth Guard ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.push("/login?callbackUrl=/settings");
+      const targetUrl = "/login?callbackUrl=" + encodeURIComponent("/settings");
+      if (typeof window !== "undefined") {
+        window.location.href = targetUrl;
+      }
     }
-  }, [status, router]);
+  }, [status]);
 
   // Load local storage UI preferences on mount
   useEffect(() => {
@@ -214,12 +219,17 @@ export default function SettingsPage() {
 
   // ── Fetch all settings from server endpoints ────────────────────────────────
   const fetchAllSettings = useCallback(async () => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
       setIsLoading(true);
       setErrorMessage("");
 
       // 1. Fetch AI & Terminal settings
-      const settingsRes = await fetch("/api/settings", { credentials: "same-origin" });
+      const settingsRes = await fetch("/api/settings", { 
+        credentials: "same-origin",
+        signal: controller.signal
+      });
       if (!settingsRes.ok) throw new Error("Failed to fetch settings from cloud vault.");
       const settingsData = await settingsRes.json();
 
@@ -251,7 +261,10 @@ export default function SettingsPage() {
       }
 
       // 2. Fetch Account & Risk settings
-      const accountRes = await fetch("/api/account", { credentials: "same-origin" });
+      const accountRes = await fetch("/api/account", { 
+        credentials: "same-origin",
+        signal: controller.signal
+      });
       if (accountRes.ok) {
         const accountData = await accountRes.json();
         if (accountData.account) {
@@ -262,10 +275,15 @@ export default function SettingsPage() {
           });
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("[SETTINGS PAGE] Load error:", err);
-      setErrorMessage(err instanceof Error ? err.message : "Failed to establish cloud linkage.");
+      setErrorMessage(
+        err.name === 'AbortError' 
+          ? "Connection timed out reaching cloud vault." 
+          : (err instanceof Error ? err.message : "Failed to establish cloud linkage.")
+      );
     } finally {
+      clearTimeout(timeoutId);
       setIsLoading(false);
     }
   }, []);
@@ -443,7 +461,7 @@ export default function SettingsPage() {
   };
 
   // ── Auth Loading States ──────────────────────────────────────────────────
-  if (status === "loading" || isLoading) {
+  if (status === "loading" || (status === "authenticated" && isLoading)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -451,6 +469,56 @@ export default function SettingsPage() {
           <span className="text-xs text-slate-500 dark:text-zinc-400 font-sans tracking-widest uppercase font-black">
             Establishing Secure Link...
           </span>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Unauthenticated Gate ────────────────────────────────────────────────
+  if (status === "unauthenticated" || (!session && status !== "loading")) {
+    return (
+      <div className="flex h-[calc(100vh-64px)] w-full items-center justify-center bg-background selection:bg-accent/30 font-sans p-6 transition-colors duration-300">
+        <div className="max-w-md w-full glass-panel p-8 flex flex-col items-center text-center border-rose-500/20">
+          <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/20 rounded-full flex items-center justify-center mb-6">
+            <Lock className="w-8 h-8 text-rose-500" />
+          </div>
+          <h2 className="text-lg font-bold text-title uppercase tracking-wider mb-2">
+            Unauthorized Access
+          </h2>
+          <p className="text-sm text-muted mb-6 leading-relaxed">
+            The Flow-State Vault is locked. This terminal page requires an active institutional session to view or configure settings.
+          </p>
+          <Link
+            href="/login?callbackUrl=/settings"
+            className="w-full bg-accent hover:bg-accent/80 text-black py-2.5 px-4 font-black text-xs uppercase tracking-widest transition-all text-center rounded-lg shadow-md shadow-accent/10 cursor-pointer"
+          >
+            Authenticate Terminal
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Cloud Linkage Disrupted Gate (With Retry) ───────────────────────────
+  if (errorMessage && !quantSettings.ACTIVE_MODEL) {
+    return (
+      <div className="flex h-[calc(100vh-64px)] w-full items-center justify-center bg-background selection:bg-accent/30 font-sans p-6">
+        <div className="max-w-md w-full glass-panel p-8 flex flex-col items-center text-center border-amber-500/20">
+          <div className="w-16 h-16 bg-amber-500/10 border border-amber-500/20 rounded-full flex items-center justify-center mb-6">
+            <AlertTriangle className="w-8 h-8 text-amber-500" />
+          </div>
+          <h2 className="text-lg font-bold text-title uppercase tracking-wider mb-2">
+            Cloud Linkage Disrupted
+          </h2>
+          <p className="text-sm text-muted mb-6 leading-relaxed">
+            {errorMessage}
+          </p>
+          <button
+            onClick={() => fetchAllSettings()}
+            className="w-full bg-accent hover:bg-accent/80 text-black py-2.5 px-4 font-black text-xs uppercase tracking-widest transition-all text-center rounded-lg shadow-md shadow-accent/10 cursor-pointer"
+          >
+            Retry Connection
+          </button>
         </div>
       </div>
     );
