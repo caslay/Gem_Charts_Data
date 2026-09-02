@@ -1015,11 +1015,25 @@ export class SweepReclaimEngine {
         for (let i = anchorIdx + 1; i <= maxSweepIdx; i++) {
           const c = candles[i];
           const low = c.l ?? (c as any).low;
+          const close = c.c ?? (c as any).close;
 
           if (low < anchorLevel) {
             if (low < localMinLow) {
               localMinLow = low;
               localMinIdx = i;
+            }
+          }
+
+          // 🛡️ Causal First-Confirmed-Reclaim Lock:
+          // If price has breached the anchor with minimum depth and closed back inside (reclaim close),
+          // lock this sweep extreme immediately. Do not allow subsequent wicks across the 25-bar
+          // lookahead window to overwrite an already completed, reclaimed sweep cycle.
+          if (localMinIdx !== -1) {
+            const atr = atrSeries[localMinIdx] || 1.0;
+            const minDepth = (this.config.minSweepDepthAtrMultiplier ?? 0.10) * atr;
+            const currentDepth = anchorLevel - localMinLow;
+            if (currentDepth >= minDepth && close > anchorLevel) {
+              break;
             }
           }
         }
@@ -1060,11 +1074,25 @@ export class SweepReclaimEngine {
         for (let i = anchorIdx + 1; i <= maxSweepIdx; i++) {
           const c = candles[i];
           const high = c.h ?? (c as any).high;
+          const close = c.c ?? (c as any).close;
 
           if (high > anchorLevel) {
             if (high > localMaxHigh) {
               localMaxHigh = high;
               localMaxIdx = i;
+            }
+          }
+
+          // 🛡️ Causal First-Confirmed-Reclaim Lock:
+          // If price has breached the anchor with minimum depth and closed back inside (reclaim close),
+          // lock this sweep extreme immediately. Do not allow subsequent wicks across the 25-bar
+          // lookahead window to overwrite an already completed, reclaimed sweep cycle.
+          if (localMaxIdx !== -1) {
+            const atr = atrSeries[localMaxIdx] || 1.0;
+            const minDepth = (this.config.minSweepDepthAtrMultiplier ?? 0.10) * atr;
+            const currentDepth = localMaxHigh - anchorLevel;
+            if (currentDepth >= minDepth && close < anchorLevel) {
+              break;
             }
           }
         }

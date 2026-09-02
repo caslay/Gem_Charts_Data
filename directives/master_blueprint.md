@@ -1,8 +1,23 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.21
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.22
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-02 (V17.21 — Next.js VPS Production Compilation & Telegram Dual Cairo Time Harmonization)
+> **Last Updated:** 2026-09-02 (V17.22 — 1:1 Causal Engine Synchronization: First-Confirmed-Reclaim Lock)
+
+## 🆕 V17.22 Changelog — 1:1 Causal Engine Synchronization: First-Confirmed-Reclaim Lock (2026-09-02)
+
+### Summary
+Resolved fundamental temporal lookahead leak between Quant Lab historical batch scanning and Live PM2 real-time execution:
+1. **Causal First-Confirmed-Reclaim Lock (`src/lib/quantEngine/SweepReclaimEngine.ts`):** In Phase 2 sweep search, eliminated unconstrained 25-bar forward lookahead where higher wicks occurring hours after a confirmed reclaim retrospectively overwrote earlier completed trades. Implemented causal sweep lock: the moment price breaches an anchor with minimum depth and closes back inside the anchor level (reclaim close), the sweep extreme is immediately locked and the search terminates for that cycle.
+2. **100% 1:1 Trade & Timestamp Parity Re-established:** Verified that Quant Lab historical scan reproduces PM2 Trade #3: `09:00 Cairo` (06:00 UTC) `SHORT @ $2422.00` (+1.20R) on `INNER Swing High ($2422.00)`, matching PM2's live session execution 100%.
+3. **Automated Parity Suite (`scripts/verify_quant_vs_pm2_parity.ts`):** Added automated regression test verifying that Quant Lab with structural bootstrap matches PM2 pure live execution 6/6 trades identically across the entire session.
+
+### Files Modified
+- **`src/lib/quantEngine/SweepReclaimEngine.ts`** [MODIFY]
+- **`scripts/verify_quant_vs_pm2_parity.ts`** [NEW]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.21 Changelog — Next.js VPS Production Compilation & Telegram Dual Cairo Time Harmonization (2026-09-02)
 
