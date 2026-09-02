@@ -66,6 +66,9 @@ export function NavigationHeader() {
     setMounted(true);
   }, []);
 
+  // Do not render navigation header on login screen
+  if (pathname === "/login") return null;
+
   // Close mobile drawer on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);

@@ -1,21 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useMarketDataContext } from "@/context/MarketDataContext";
 
 export default function ThemeSync() {
   const { themeSettings } = useMarketDataContext();
-  const [mounted, setMounted] = useState(false);
+  const lastCssRef = useRef<string>("");
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    if (!themeSettings || typeof document === "undefined") return;
 
-  if (!mounted || !themeSettings) return null;
-
-  return (
-    <style id="dynamic-theme-customizer" dangerouslySetInnerHTML={{
-      __html: `
+    const newCss = `
         :root {
           --background: ${themeSettings.light_bg} !important;
           --accent: ${themeSettings.light_accent} !important;
@@ -152,7 +147,24 @@ export default function ThemeSync() {
           --manual-tp-line: ${themeSettings.theme_manual_tp_line} !important;
           --manual-sl-line: ${themeSettings.theme_manual_sl_line} !important;
         }
-      `
-    }} />
-  );
+      `;
+
+    // Strict equality check: only mutate DOM if the CSS content actually changed
+    if (lastCssRef.current === newCss) return;
+    lastCssRef.current = newCss;
+
+    let styleEl = document.getElementById("dynamic-theme-customizer") as HTMLStyleElement | null;
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.id = "dynamic-theme-customizer";
+      document.head.appendChild(styleEl);
+    }
+
+    if (styleEl.textContent !== newCss) {
+      styleEl.textContent = newCss;
+    }
+  }, [themeSettings]);
+
+  // Return null so React's reconciliation engine NEVER re-renders or touches the <style> tag in the DOM
+  return null;
 }
