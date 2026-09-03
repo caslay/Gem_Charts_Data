@@ -248,6 +248,39 @@ Resolved the compounding ledger inversion and telemetry survival bias in Quant L
 
 ---
 
+## 🆕 V17.19 Changelog — Dedicated Live Binance Futures Journal (Web UI) & 3-Second Cached Telemetry (2026-09-03)
+
+### Summary
+Engineered and launched **Phase 3** of the Binance USDⓈ-M Live Execution architecture: the **Dedicated Live Binance Futures Journal (`LiveBinanceJournal.tsx`)** embedded seamlessly into `/journal`. Introduces real-time exchange ground truth (margin balance, floating P&L, resting exchange orders, and fill history), a server-side 3-second in-memory rate-limit cache (`/api/binance/live-state`) protecting the Binance 2,400 weight quota, environment watermark isolation (`[ 🧪 LOCAL DEV ]` vs `[ 🔴 VPS LIVE PM2 ]`), and a 2-step desktop emergency flatten modal (`/api/binance/flatten`).
+
+### Key Features & Architectural Enhancements
+1. **Server-Side Cached Exchange Pipeline (`/api/binance/live-state`):**
+   - Enforces a 3-second server-side TTL cache for signed account/position/orders/trades queries. Eliminates exchange weight burning regardless of how many client browser tabs are open.
+   - Automatic shadow fallback for local workstations: if running on local dev or unverified environments, returns local daemon session data and paper telemetry with zero exchange exposure.
+2. **Comprehensive 3-Viewport Institutional Dashboard (`src/components/LiveBinanceJournal.tsx`):**
+   - **Account Margin Telemetry Ribbon:** 5 live KPI cards (Total Margin Balance, Available Free Collateral, Floating Unrealized P&L, Margin Ratio gauge, and Session Realized Net).
+   - **Viewport 1 (Live Exchange Positions):** Real-time contracts, entry vs mark price, floating P&L, liquidation distance, active hard stop loss, and take profit targets.
+   - **Viewport 2 (PM2 Limit Queue):** Monitored liquidity anchors, resting limit orders, and live 20-bar (100-minute) TTL timeout countdowns.
+   - **Viewport 3 (Execution Fills & Parity):** Official exchange trade history with exact commissions paid (in USDC/BNB), fill slippage scores, and net P&L.
+3. **Desktop Two-Step Emergency Flatten Modal (`/api/binance/flatten`):**
+   - Prevents web-side accidental liquidations via a 15-second auto-disarming confirmation modal.
+   - Upon confirmation, writes an emergency command to `data/daemon_commands.json` and routes signed market liquidation via `BinanceOrderRouter`.
+4. **Dual-Mode Journal Switching (`src/components/JournalContainer.tsx`):**
+   - Clean segmented toggle allowing instant switching between the Live Exchange & PM2 Daemon dashboard and the historical Paper Journal archive.
+
+### Files Created & Modified
+- **`src/lib/binanceFuturesClient.ts`** [MODIFY]
+- **`src/app/api/binance/live-state/route.ts`** [NEW]
+- **`src/app/api/binance/flatten/route.ts`** [NEW]
+- **`src/components/LiveBinanceJournal.tsx`** [NEW]
+- **`src/components/JournalContainer.tsx`** [NEW]
+- **`src/app/journal/page.tsx`** [MODIFY]
+- **`scripts/test_live_binance_journal.ts`** [NEW]
+- **`directives/08_pm2_engine_and_quant_lab.md`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
+
 ## 🆕 V17.18 Changelog — Two-Factor Armed Safety Interlock & 20s Auto-Disarm for Emergency Flatten (2026-09-03)
 
 ### Summary
