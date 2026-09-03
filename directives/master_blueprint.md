@@ -248,6 +248,43 @@ Resolved the compounding ledger inversion and telemetry survival bias in Quant L
 
 ---
 
+## 🆕 V17.17 Changelog — Binance Futures Live Order Router & Emergency Killswitch (Phases 1 & 2) (2026-09-03)
+
+### Summary
+Engineered and verified Phase 1 and Phase 2 of the institutional Binance USDⓈ-M Futures live execution architecture. Establishes the **Triple-Lock Safety Gate**, the **Binance Order Router (`src/lib/binanceOrderRouter.ts`)**, real-time exchange bracket order synchronization, and the **Emergency Telegram Killswitch (`/flatten`)**. Provides deterministic protection against accidental local execution while arming the PM2 headless daemon for full autonomous live order routing on the production VPS.
+
+### Key Features & Architectural Enhancements
+1. **Low-Level Signed REST Client (`src/lib/binanceFuturesClient.ts`):**
+   - Added authenticated HMAC-SHA256 methods: `placeBinanceOrder` (`POST /fapi/v1/order`), `cancelBinanceOrder` (`DELETE /fapi/v1/order`), `cancelAllBinanceOrders` (`DELETE /fapi/v1/allOpenOrders`), and `getBinanceOrder` (`GET /fapi/v1/order`).
+   - Implemented graceful error recovery for code `-2011` (`Unknown order sent / Order already filled or cancelled`).
+2. **Triple-Lock Safety Governor (`src/lib/binanceOrderRouter.ts`):**
+   - Enforces 5 simultaneous environment checks (`NODE_ENV === 'production'`, `IS_LIVE_VPS === 'true'`, `EXECUTION_MODE === 'LIVE_BINANCE'`, `ENABLE_REAL_EXCHANGE_ORDERS === 'true'`, and valid API keys).
+   - If any condition is unmet (e.g. running on local workstation), all orders are automatically downgraded to `SHADOW_SIMULATION` with guaranteed zero exchange exposure.
+3. **Exchange-Side Bracket Order Synchronization:**
+   - On `LIMIT_ORDER_PLACED`: Submits signed GTC limit order to Binance order book and captures exchange `orderId`.
+   - On `LIMIT_ORDER_CANCELLED`: Automatically issues signed cancellation to purge resting order upon 20-bar TTL expiry or missed expansion invalidation.
+   - On `ORDER_FILLED`: Submits hard native exchange `STOP_MARKET` order (`closePosition: true`) directly to Binance's matching engine, guaranteeing stop-loss execution even across daemon or VPS downtime. Simultaneously places Stage 1 reduce-only TP limit order.
+   - On `STAGE_1_HARVEST`: Cancels initial SL, ratchets Stop Loss to Breakeven (`entryPrice`), and submits Stage 2 reduce-only TP limit order.
+   - On `POSITION_CLOSED`: Purges all lingering open orders for the symbol to eliminate orphan orders.
+4. **Emergency Telegram Killswitch (`/flatten`, `/panic`, `/closeall`):**
+   - Added interactive `[🚨 /flatten]` button to the main Telegram reply keyboard and command router.
+   - Triggers `routeEmergencyFlatten`: immediately liquidates open positions via `MARKET reduceOnly`, cancels all open resting orders on Binance, and purges the engine's internal pending queue.
+5. **Comprehensive Verification Suite (`scripts/test_binance_order_router.ts`):**
+   - 100% test coverage validating the safety gate rejection in development, shadow simulation routing, micro-lot sizing compliance ($5 min notional, 0.001 ETH step), and emergency queue clearing.
+
+### Files Created & Modified
+- **`src/lib/binanceFuturesClient.ts`** [MODIFY]
+- **`src/lib/binanceOrderRouter.ts`** [NEW]
+- **`src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`** [MODIFY]
+- **`src/lib/daemon/daemonLedger.ts`** [MODIFY]
+- **`src/lib/notifications/telegramBotService.ts`** [MODIFY]
+- **`scripts/headless-daemon.ts`** [MODIFY]
+- **`scripts/test_binance_order_router.ts`** [NEW]
+- **`directives/08_pm2_engine_and_quant_lab.md`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
+
 ## 🆕 V17.16 Changelog — Codified Directive 08 (PM2 Execution Engine & Quant Lab Protocol) & Directives Index Registration (2026-09-03)
 
 ### Summary

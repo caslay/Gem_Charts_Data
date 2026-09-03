@@ -263,3 +263,219 @@ export function calculateMicroLotSize(
     isValid: true,
   };
 }
+
+export interface BinanceOrderParams {
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  type: 'LIMIT' | 'MARKET' | 'STOP_MARKET' | 'TAKE_PROFIT_MARKET';
+  quantity?: number;
+  price?: number;
+  stopPrice?: number;
+  timeInForce?: 'GTC' | 'IOC' | 'FOK' | 'GTX';
+  reduceOnly?: boolean;
+  closePosition?: boolean;
+  newClientOrderId?: string;
+  workingType?: 'MARK_PRICE' | 'CONTRACT_PRICE';
+}
+
+export interface BinanceOrderResponse {
+  orderId: number;
+  clientOrderId: string;
+  symbol: string;
+  status: 'NEW' | 'PARTIALLY_FILLED' | 'FILLED' | 'CANCELED' | 'REJECTED' | 'EXPIRED';
+  price: string;
+  avgPrice: string;
+  origQty: string;
+  executedQty: string;
+  cumQuote: string;
+  timeInForce: string;
+  type: string;
+  reduceOnly: boolean;
+  closePosition: boolean;
+  side: 'BUY' | 'SELL';
+  stopPrice: string;
+  workingType: string;
+  updateTime: number;
+}
+
+/**
+ * Places an authenticated order on Binance USDⓈ-M Futures (POST /fapi/v1/order)
+ */
+export async function placeBinanceOrder(
+  params: BinanceOrderParams
+): Promise<{ success: boolean; data?: BinanceOrderResponse; error?: string }> {
+  try {
+    const { apiKey } = getCredentials();
+    if (!apiKey) {
+      return { success: false, error: 'Binance credentials not configured in environment.' };
+    }
+
+    const payload: Record<string, string | number> = {
+      symbol: params.symbol.toUpperCase(),
+      side: params.side,
+      type: params.type,
+    };
+
+    if (params.quantity !== undefined) {
+      payload.quantity = params.quantity;
+    }
+    if (params.price !== undefined) {
+      payload.price = params.price;
+    }
+    if (params.stopPrice !== undefined) {
+      payload.stopPrice = params.stopPrice;
+    }
+    if (params.timeInForce) {
+      payload.timeInForce = params.timeInForce;
+    }
+    if (params.reduceOnly !== undefined) {
+      payload.reduceOnly = params.reduceOnly ? 'true' : 'false';
+    }
+    if (params.closePosition !== undefined) {
+      payload.closePosition = params.closePosition ? 'true' : 'false';
+    }
+    if (params.newClientOrderId) {
+      payload.newClientOrderId = params.newClientOrderId;
+    }
+    if (params.workingType) {
+      payload.workingType = params.workingType;
+    }
+
+    const { url } = createSignedUrl('/fapi/v1/order', payload);
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-MBX-APIKEY': apiKey,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    const body = await res.json();
+    if (!res.ok) {
+      const msg = body?.msg || JSON.stringify(body);
+      console.error(`[BINANCE_CLIENT] POST /fapi/v1/order failed (${res.status}):`, msg);
+      return { success: false, error: `HTTP ${res.status}: ${msg}` };
+    }
+
+    return { success: true, data: body as BinanceOrderResponse };
+  } catch (err: any) {
+    console.error('[BINANCE_CLIENT] Order placement network exception:', err?.message || err);
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Cancels an active order on Binance Futures (DELETE /fapi/v1/order)
+ */
+export async function cancelBinanceOrder(
+  symbol: string,
+  orderId?: number,
+  origClientOrderId?: string
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const { apiKey } = getCredentials();
+    if (!apiKey) return { success: false, error: 'Missing Binance credentials.' };
+    if (!orderId && !origClientOrderId) {
+      return { success: false, error: 'Must provide either orderId or origClientOrderId to cancel.' };
+    }
+
+    const payload: Record<string, string | number> = { symbol: symbol.toUpperCase() };
+    if (orderId) payload.orderId = orderId;
+    if (origClientOrderId) payload.origClientOrderId = origClientOrderId;
+
+    const { url } = createSignedUrl('/fapi/v1/order', payload);
+    const res = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'X-MBX-APIKEY': apiKey,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    const body = await res.json();
+    if (!res.ok) {
+      const msg = body?.msg || JSON.stringify(body);
+      // If error is code -2011 (Unknown order sent / Order already filled or cancelled), treat gracefully
+      if (body?.code === -2011) {
+        return { success: true, data: body, error: 'ORDER_ALREADY_CLOSED_OR_CANCELLED' };
+      }
+      return { success: false, error: `HTTP ${res.status}: ${msg}` };
+    }
+
+    return { success: true, data: body };
+  } catch (err: any) {
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Cancels all open orders for a specific symbol on Binance Futures (DELETE /fapi/v1/allOpenOrders)
+ */
+export async function cancelAllBinanceOrders(
+  symbol: string
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const { apiKey } = getCredentials();
+    if (!apiKey) return { success: false, error: 'Missing Binance credentials.' };
+
+    const { url } = createSignedUrl('/fapi/v1/allOpenOrders', { symbol: symbol.toUpperCase() });
+    const res = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'X-MBX-APIKEY': apiKey,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    const body = await res.json();
+    if (!res.ok) {
+      return { success: false, error: `HTTP ${res.status}: ${body?.msg || JSON.stringify(body)}` };
+    }
+
+    return { success: true, data: body };
+  } catch (err: any) {
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Queries an order's status on Binance Futures (GET /fapi/v1/order)
+ */
+export async function getBinanceOrder(
+  symbol: string,
+  orderId?: number,
+  origClientOrderId?: string
+): Promise<{ success: boolean; data?: BinanceOrderResponse; error?: string }> {
+  try {
+    const { apiKey } = getCredentials();
+    if (!apiKey) return { success: false, error: 'Missing Binance credentials.' };
+
+    const payload: Record<string, string | number> = { symbol: symbol.toUpperCase() };
+    if (orderId) payload.orderId = orderId;
+    if (origClientOrderId) payload.origClientOrderId = origClientOrderId;
+
+    const { url } = createSignedUrl('/fapi/v1/order', payload);
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'X-MBX-APIKEY': apiKey,
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    const body = await res.json();
+    if (!res.ok) {
+      return { success: false, error: `HTTP ${res.status}: ${body?.msg || JSON.stringify(body)}` };
+    }
+
+    return { success: true, data: body as BinanceOrderResponse };
+  } catch (err: any) {
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+

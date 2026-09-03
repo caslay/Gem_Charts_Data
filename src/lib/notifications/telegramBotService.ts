@@ -32,6 +32,7 @@ import {
 } from '../quantEngine/SweepReclaimEngine';
 import { DEFAULT_SR_LIVE_SETTINGS } from '../quantEngine/strategyExecutionConfig';
 import { formatCairoDateTime } from '../quantEngine/equityCalculator';
+import { routeEmergencyFlatten } from '../binanceOrderRouter';
 
 export interface TelegramBotServiceContext {
   engine: AutomatedStrategyExecutionEngine;
@@ -51,6 +52,7 @@ export const MAIN_TELEGRAM_KEYBOARD = {
     [{ text: '⚡ /price' }, { text: '📊 /status' }],
     [{ text: '🎯 /trade' }, { text: '💰 /today' }],
     [{ text: '🏛️ /setups' }, { text: '🔬 /reconcile' }],
+    [{ text: '🚨 /flatten' }],
   ],
   resize_keyboard: true,
   is_persistent: true,
@@ -216,6 +218,12 @@ export class TelegramBotService {
         await this.handlePriceCommand();
         break;
 
+      case '/flatten':
+      case '/panic':
+      case '/closeall':
+        await this.handleEmergencyFlattenCommand();
+        break;
+
       default:
         await this.notifier.sendRawMessage(
           `❓ <b>Unrecognized Command:</b> <code>${rawText}</code>\n\n` +
@@ -299,6 +307,7 @@ export class TelegramBotService {
       `💰 <b>/today</b> — Today's closed performance, realized R & capital\n` +
       `🏛️ <b>/setups</b> — Monitored liquidity anchors with live price distance\n` +
       `🔬 <b>/reconcile</b> — 1:1 Quant Lab parity audit check\n` +
+      `🚨 <b>/flatten</b> — Emergency panic market close & purge all orders\n` +
       `❓ <b>/help</b> — Show this command menu & quick buttons\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `<i>Tap any quick-action button below to execute instantly!</i>`;
@@ -845,6 +854,58 @@ export class TelegramBotService {
       pendingOrdersStr;
 
     await this.notifier.sendRawMessage(msg, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
+  }
+
+  /**
+   * 🚨 Emergency Flatten: Panic market close of open positions + purge of resting limit orders
+   */
+  private async handleEmergencyFlattenCommand(): Promise<void> {
+    const activePositions = this.context.engine.getActivePositions();
+    const livePrice = this.getLivePrice();
+
+    console.log(`[TELEGRAM_BOT] 🚨 EMERGENCY FLATTEN triggered by user!`);
+
+    // 1. Purge all pending limit orders in engine
+    const purgedPendingCount = this.context.engine.emergencyClearAllPendingOrders();
+
+    // 2. Emergency close active open position in engine
+    let closedPositionSummary = 'No active position open.';
+    const activePos = activePositions[0];
+    if (activePos) {
+      this.context.engine.emergencyClosePosition(activePos.id, livePrice.price);
+      closedPositionSummary = `${activePos.direction} ${activePos.contractSize} contracts @ ~$${livePrice.price.toFixed(2)}`;
+    }
+
+    // 3. Call Binance Order Router to cancel orders and market close on Binance
+    const routerResult = await routeEmergencyFlatten(this.context.symbol, activePos);
+
+    // 4. Log to persistence ledger
+    this.context.ledger.logEvent('EMERGENCY_FLATTEN', `Telegram /flatten executed: ${closedPositionSummary}`, {
+      metadata: {
+        purgedPendingCount,
+        closedPosition: activePos
+          ? { id: activePos.id, direction: activePos.direction, size: activePos.contractSize }
+          : null,
+        currentPrice: livePrice.price,
+        routerMessage: routerResult.message,
+      },
+    });
+
+    const cairoTime = formatCairoDateTime(Date.now());
+
+    const message =
+      `🚨 <b>[EMERGENCY FLATTEN COMPLETED]</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `⚡ <b>Asset:</b> <code>${this.context.symbol.toUpperCase()}</code>\n` +
+      `🏷️ <b>Action:</b> Instant Market Liquidation & Order Purge\n` +
+      `🛑 <b>Pending Limits Purged:</b> <code>${purgedPendingCount}</code>\n` +
+      `📦 <b>Closed Position:</b> <code>${closedPositionSummary}</code>\n` +
+      `🛡️ <b>Exchange Router:</b> <i>${routerResult.message}</i>\n` +
+      `⏰ <b>Timestamp:</b> <code>${cairoTime} Cairo</code>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `✅ <i>Account is flat. Zero active resting risk.</i>`;
+
+    await this.notifier.sendRawMessage(message, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
   }
 
   public isRunning(): boolean {
