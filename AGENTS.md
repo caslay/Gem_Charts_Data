@@ -42,6 +42,10 @@ Do NOT guess the project architecture or past logic. To save the context window,
    - **File:** `directives/07_m2m_agent_mcp_guide.md`
    - **When to read:** When modifying headless AI integrations, the Remote MCP server (`/api/mcp`), OAuth 2.0 gateway (`/api/oauth/*`), or the M2M context serialization pipeline (`/api/agent/context`). Complete integration manual available at `docs/M2M_AGENT_MCP_MANUAL.md`.
 
+8. **PM2 Execution Engine & Quant Lab Protocol** 🔬
+   - **File:** `directives/08_pm2_engine_and_quant_lab.md`
+   - **When to read:** When modifying the live PM2 headless daemon (`scripts/headless-daemon.ts`), `AutomatedStrategyExecutionEngine.ts`, `SweepReclaimEngine.ts`, `scannerPresets.ts`, Telegram trade reconciliation, Binance Futures API integration, or Quant Lab endpoints. Enforces strict Binance 2,400 weight rate limits, 20-bar TTL order expiry, and 1:1 mathematical execution parity.
+
 ## ⚠️ Execution Mandate
 Before writing any code or answering, output an internal thought process indicating WHICH directive file you need to read to complete the task accurately.
 

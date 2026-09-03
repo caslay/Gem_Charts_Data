@@ -248,6 +248,33 @@ Resolved the compounding ledger inversion and telemetry survival bias in Quant L
 
 ---
 
+## 🆕 V17.16 Changelog — Codified Directive 08 (PM2 Execution Engine & Quant Lab Protocol) & Directives Index Registration (2026-09-03)
+
+### Summary
+Established and codified **Directive 08 (`directives/08_pm2_engine_and_quant_lab.md`)** as an official core protocol directive, registered in `AGENTS.md`. Serves as the dedicated, comprehensive operational runbook and engineering manual specifically for the PM2 Automated Execution Daemon (`scripts/headless-daemon.ts`), `AutomatedStrategyExecutionEngine.ts`, and the Quant Lab Suite (`SweepReclaimEngine.ts`, `scannerPresets.ts`, `/quant-lab`). Explicitly isolates quantitative execution logic, exchange safety rules, and backtesting architecture from VPS OS infrastructure and full-stack web schemas (which remain in `master_blueprint.md`).
+
+### Key Features & Operational Safeguards
+1. **Inviolable AI Rules & Binance Quota Mandates:**
+   - Strict credential isolation: live Binance Futures API keys reside exclusively on the production Lightsail VPS (`57.181.64.238`) with static IP exchange whitelisting. Zero live keys in local development (`IS_LIVE_VPS=false`, `READ_ONLY_LOCAL=true`).
+   - Exchange rate-limit ceiling: enforced Binance 2,400 weight/min ceiling. Enforces WebSocket-first streaming (`wss://fstream.binance.com/market/stream`), strictly prohibiting tight REST polling loops. Deep historical pagination requires minimum 250ms inter-batch spacing.
+   - Dual-layer read-only sandbox: local SQL mutations blocked via `quegar_readonly` DB user (`42501`) and local scans stored in atomic JSON store (`data/quant_lab/sr_scans/`).
+2. **1:1 Mathematical Execution Parity & Guardrail Lifecycle:**
+   - Codified the 5 hard execution guardrails: Freshness Gate ($\le 20$ bars), Concurrency Lock (Max 1 open position), Directional Lock, 45m Post-Loss Cooldown, and Active Zone Lock ($<\$0.50$).
+   - Enforced the centralized FVG Proximal entry resolver (`resolveRetestEntryPrice`), 3-tier anchor ranking, and 20-bar ($100\text{m}$) Limit Order TTL expiry.
+   - Fixed `/reconcile` Telegram audit reporting to actively exclude cancelled/expired orders from active resting lists.
+3. **Active Backlog & AI Pre-Flight Protocol:**
+   - Seeded active research priorities: Anchor Tie-Breaker Proximal Parity (ENG-01), Automated Midnight Reconciliation Scheduler (ENG-02), WebSocket Order-Book Slip Modeling (ENG-03), and Live Web UI Anti-Cluster Preset Switch (ENG-04).
+   - Codified mandatory 4-step pre-flight verification checklist (`tsc --noEmit`, `test_ttl_and_parity.ts`, `verify_quant_vs_pm2_parity.ts`, `npm run build`) required before any AI agent commits quant code.
+
+### Files Created & Modified
+- **`directives/08_pm2_engine_and_quant_lab.md`** [NEW]
+- **`AGENTS.md`** [MODIFY]
+- **`src/lib/notifications/telegramBotService.ts`** [MODIFY]
+- **`src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
+
 ## 🆕 V17.15 Changelog — 1:1 Live PM2 & Quant Lab Parity Hardening (Resting Order TTL & Invalidation Lifecycle) (2026-09-02)
 
 ### Summary
