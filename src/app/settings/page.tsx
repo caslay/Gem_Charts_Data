@@ -29,6 +29,8 @@ import {
   VolumeX,
   Palette,
   Crosshair,
+  ShieldCheck,
+  Zap,
 } from "lucide-react";
 import { useAlertSounds, AVAILABLE_ALERT_FILES } from "@/hooks/useAlertSounds";
 import { DEFAULT_THEME_SETTINGS } from "@/hooks/useMarketData";
@@ -44,8 +46,15 @@ interface QuantSettings {
 interface AccountState {
   initial_capital: string;
   max_risk_limit_pct: string;
+  risk_per_trade_pct: string;
+  max_daily_loss_pct: string;
+  max_daily_loss_usd: string;
+  max_consecutive_losses: number;
+  max_daily_trades: number;
   current_balance: string;
   available_balance?: string;
+  circuit_breaker_active?: boolean;
+  circuit_breaker_reason?: string | null;
   is_live?: boolean;
 }
 
@@ -177,7 +186,14 @@ export default function SettingsPage() {
   const [account, setAccount] = useState<AccountState>({
     initial_capital: "10000.00",
     max_risk_limit_pct: "3.00",
+    risk_per_trade_pct: "2.00",
+    max_daily_loss_pct: "4.00",
+    max_daily_loss_usd: "400.00",
+    max_consecutive_losses: 3,
+    max_daily_trades: 6,
     current_balance: "10000.00",
+    circuit_breaker_active: false,
+    circuit_breaker_reason: null,
   });
   // ── Terminal / Audio Alerts State ──────────────────────────────────────────
   const [signalAlerts, setSignalAlerts] = useState<SignalAlerts>(DEFAULT_SIGNAL_ALERTS);
@@ -268,10 +284,20 @@ export default function SettingsPage() {
       if (accountRes.ok) {
         const accountData = await accountRes.json();
         if (accountData.account) {
+          const acc = accountData.account;
           setAccount({
-            initial_capital: parseFloat(accountData.account.initial_capital).toFixed(2),
-            max_risk_limit_pct: parseFloat(accountData.account.max_risk_limit_pct).toFixed(2),
-            current_balance: parseFloat(accountData.account.current_balance).toFixed(2),
+            initial_capital: parseFloat(acc.initial_capital || '10000').toFixed(2),
+            max_risk_limit_pct: parseFloat(acc.max_risk_limit_pct || '3').toFixed(2),
+            risk_per_trade_pct: parseFloat(acc.risk_per_trade_pct || '2').toFixed(2),
+            max_daily_loss_pct: parseFloat(acc.max_daily_loss_pct || '4').toFixed(2),
+            max_daily_loss_usd: parseFloat(acc.max_daily_loss_usd || '400').toFixed(2),
+            max_consecutive_losses: parseInt(acc.max_consecutive_losses || 3, 10),
+            max_daily_trades: parseInt(acc.max_daily_trades || 6, 10),
+            current_balance: parseFloat(acc.current_balance || '10000').toFixed(2),
+            available_balance: acc.available_balance ? parseFloat(acc.available_balance).toFixed(2) : undefined,
+            circuit_breaker_active: Boolean(acc.circuit_breaker_active),
+            circuit_breaker_reason: acc.circuit_breaker_reason || null,
+            is_live: Boolean(acc.is_live),
           });
         }
       }
@@ -362,6 +388,11 @@ export default function SettingsPage() {
 
       const capital = parseFloat(account.initial_capital);
       const riskLimit = parseFloat(account.max_risk_limit_pct);
+      const tradeRisk = parseFloat(account.risk_per_trade_pct);
+      const dailyLossPct = parseFloat(account.max_daily_loss_pct);
+      const dailyLossUsd = parseFloat(account.max_daily_loss_usd);
+      const consecLosses = parseInt(String(account.max_consecutive_losses), 10);
+      const dailyTrades = parseInt(String(account.max_daily_trades), 10);
 
       if (isNaN(capital) || capital <= 0) {
         throw new Error("Initial Capital must be a positive number.");
@@ -371,6 +402,14 @@ export default function SettingsPage() {
         throw new Error("Max Risk Limit must be a percentage between 0% and 100%.");
       }
 
+      if (isNaN(tradeRisk) || tradeRisk <= 0 || tradeRisk > 100) {
+        throw new Error("Risk Ratio per Trade must be a percentage between 0% and 100%.");
+      }
+
+      if (tradeRisk > riskLimit * 1.05) {
+        throw new Error(`Operational Risk (${tradeRisk}%) cannot exceed Max Risk Limit ceiling (${riskLimit}%).`);
+      }
+
       const accountRes = await fetch("/api/account", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -378,6 +417,11 @@ export default function SettingsPage() {
         body: JSON.stringify({
           initial_capital: capital,
           max_risk_limit_pct: riskLimit,
+          risk_per_trade_pct: tradeRisk,
+          max_daily_loss_pct: dailyLossPct,
+          max_daily_loss_usd: dailyLossUsd,
+          max_consecutive_losses: consecLosses,
+          max_daily_trades: dailyTrades,
         }),
       });
 
@@ -388,11 +432,18 @@ export default function SettingsPage() {
 
       const json = await accountRes.json();
       if (json.account) {
-        setAccount({
-          initial_capital: parseFloat(json.account.initial_capital).toFixed(2),
-          max_risk_limit_pct: parseFloat(json.account.max_risk_limit_pct).toFixed(2),
-          current_balance: parseFloat(json.account.current_balance).toFixed(2),
-        });
+        const acc = json.account;
+        setAccount((prev) => ({
+          ...prev,
+          initial_capital: parseFloat(acc.initial_capital || prev.initial_capital).toFixed(2),
+          max_risk_limit_pct: parseFloat(acc.max_risk_limit_pct || prev.max_risk_limit_pct).toFixed(2),
+          risk_per_trade_pct: parseFloat(acc.risk_per_trade_pct || prev.risk_per_trade_pct).toFixed(2),
+          max_daily_loss_pct: parseFloat(acc.max_daily_loss_pct || prev.max_daily_loss_pct).toFixed(2),
+          max_daily_loss_usd: parseFloat(acc.max_daily_loss_usd || prev.max_daily_loss_usd).toFixed(2),
+          max_consecutive_losses: parseInt(acc.max_consecutive_losses || prev.max_consecutive_losses, 10),
+          max_daily_trades: parseInt(acc.max_daily_trades || prev.max_daily_trades, 10),
+          current_balance: parseFloat(acc.current_balance || prev.current_balance).toFixed(2),
+        }));
       }
 
       // Proactively trigger a global data refresh so components update immediately
@@ -405,6 +456,29 @@ export default function SettingsPage() {
     } catch (err: unknown) {
       setSaveStatus("error");
       setErrorMessage(err instanceof Error ? err.message : "Unknown error occurred");
+      setTimeout(() => setSaveStatus("idle"), 5000);
+    }
+  };
+
+  const handleResetCircuitBreaker = async () => {
+    try {
+      setSaveStatus("saving");
+      setErrorMessage("");
+      const res = await fetch("/api/risk/reset", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      if (!res.ok) throw new Error("Failed to reset circuit breaker.");
+      setAccount((prev) => ({
+        ...prev,
+        circuit_breaker_active: false,
+        circuit_breaker_reason: null,
+      }));
+      setSaveStatus("success");
+      setTimeout(() => setSaveStatus("idle"), 2500);
+    } catch (err: any) {
+      setSaveStatus("error");
+      setErrorMessage(err?.message || "Failed to reset circuit breaker");
       setTimeout(() => setSaveStatus("idle"), 5000);
     }
   };
@@ -737,51 +811,199 @@ export default function SettingsPage() {
               <div className="space-y-6 animate-[fade-in_0.2s_ease-out]">
                 <div>
                   <h2 className="text-xs font-black tracking-widest text-accent uppercase flex items-center gap-2 mb-1">
-                    <Sliders className="w-4 h-4 text-emerald-400" /> [ 02 / TRADING ACCOUNT RISK GATES ]
+                    <Sliders className="w-4 h-4 text-emerald-400" /> [ 02 / GLOBAL RISK GOVERNOR & POSITION SIZING ]
                   </h2>
                   <p className="text-[9px] text-slate-500 dark:text-zinc-400 uppercase font-black">
-                    Configure exposure limits and initial dynamic calculation baselines
+                    Multi-Tier Risk Hierarchy: Operational $1.0R Allocation, Sizing Sliders & Portfolio Circuit Breakers
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 bg-card/30 border border-card-border p-5 rounded-2xl shadow-inner">
-                  {/* Total Pool readout */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[8px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest">
-                        Dynamic Ledger Balance
-                      </span>
-                      {account.is_live && (
-                        <span className="text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                          BINANCE USDⓈ-M LIVE
-                        </span>
-                      )}
+                {/* ── CIRCUIT BREAKER LIVE STATUS BANNER ────────────────────── */}
+                {account.circuit_breaker_active ? (
+                  <div className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-500 shrink-0">
+                        <AlertTriangle className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-black uppercase tracking-wider text-rose-400 flex items-center gap-2">
+                          <span>🚨 CIRCUIT BREAKER ENGAGED — EXECUTION HALTED</span>
+                        </div>
+                        <div className="text-[10px] text-muted font-mono mt-0.5">
+                          {account.circuit_breaker_reason || "Daily drawdown or streak threshold reached. All new order entries locked."}
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xl font-bold tracking-tight text-[#50ffaf] font-mono">
+                    <button
+                      type="button"
+                      onClick={handleResetCircuitBreaker}
+                      disabled={saveStatus === "saving"}
+                      className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md transition-all cursor-pointer shrink-0"
+                    >
+                      [ 🔓 Manual Override & Reset ]
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                        CIRCUIT BREAKER ARMED & NORMAL — ZERO ACTIVE HALTS
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-mono text-muted uppercase">Daily Auto-Reset @ 00:00 UTC</span>
+                  </div>
+                )}
+
+                {/* ── LIVE MATH TELEMETRY RIBBON ───────────────────────────── */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-card/30 border border-card-border p-4 rounded-2xl shadow-inner font-mono">
+                  {/* Ledger Balance */}
+                  <div className="space-y-1">
+                    <span className="text-[8px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
+                      Ledger Collateral
+                    </span>
+                    <div className="text-lg font-bold text-[#50ffaf]">
                       ${parseFloat(account.current_balance || '0').toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>
-                    <span className="text-[8px] text-slate-400 dark:text-zinc-500 block">
-                      {account.is_live ? "Live exchange wallet equity (USDC Collateral)" : "Recalculated from Starting Capital + realizing all CLOSED trades"}
+                    <span className="text-[8px] text-muted block truncate">
+                      {account.is_live ? "Binance USDC Balance" : "Local Sandbox Equity"}
                     </span>
                   </div>
 
-                  {/* Single deal allocator math readout */}
+                  {/* Planned 1.0R Risk */}
                   <div className="space-y-1">
-                    <span className="text-[8px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest">
-                      Single Trade Maximum Loss Cap ($1.0R)
+                    <span className="text-[8px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
+                      Trade Risk ($1.0R)
                     </span>
-                    <div className="text-xl font-bold tracking-tight text-foreground font-mono">
-                      ${((parseFloat(account.current_balance || '0') * parseFloat(account.max_risk_limit_pct || '2')) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <div className="text-lg font-bold text-accent">
+                      ${((parseFloat(account.current_balance || '0') * parseFloat(account.risk_per_trade_pct || '2')) / 100).toFixed(2)}
                     </div>
-                    <span className="text-[8px] text-slate-400 dark:text-zinc-500 block">
-                      Ledger Balance × Max Risk % ({account.max_risk_limit_pct}%) = Micro-Cap Budget
+                    <span className="text-[8px] text-muted block truncate">
+                      {account.risk_per_trade_pct}% of Ledger Equity
+                    </span>
+                  </div>
+
+                  {/* Sizing Preview */}
+                  <div className="space-y-1">
+                    <span className="text-[8px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
+                      Size Est. ($10 Stop)
+                    </span>
+                    <div className="text-lg font-bold text-foreground">
+                      {(((parseFloat(account.current_balance || '0') * parseFloat(account.risk_per_trade_pct || '2')) / 100) / 10).toFixed(3)} <span className="text-xs text-muted">ETH</span>
+                    </div>
+                    <span className="text-[8px] text-emerald-400 block truncate">
+                      Min Notional Met ($5)
+                    </span>
+                  </div>
+
+                  {/* Daily Drawdown Stop */}
+                  <div className="space-y-1">
+                    <span className="text-[8px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
+                      Daily Max Drawdown
+                    </span>
+                    <div className="text-lg font-bold text-rose-400">
+                      -${Math.min((parseFloat(account.current_balance || '0') * parseFloat(account.max_daily_loss_pct || '4')) / 100, parseFloat(account.max_daily_loss_usd || '400')).toFixed(2)}
+                    </div>
+                    <span className="text-[8px] text-muted block truncate">
+                      Halt at {account.max_daily_loss_pct}% loss
                     </span>
                   </div>
                 </div>
 
+                {/* ── TIER 1: OPERATIONAL SIZING SLIDER & PRESETS ─────────────── */}
+                <div className="p-5 bg-card/40 border border-card-border rounded-2xl space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-accent" />
+                        <h3 className="text-xs font-black uppercase tracking-wider text-title">
+                          Operational Risk Ratio per Trade ($1.0R)
+                        </h3>
+                      </div>
+                      <p className="text-[9px] text-muted uppercase font-bold mt-0.5">
+                        Controls exact contract lot size calculated for each automated and manual setup
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="relative w-24">
+                        <input
+                          type="number"
+                          step="0.05"
+                          min="0.10"
+                          max="10.00"
+                          value={account.risk_per_trade_pct}
+                          onChange={(e) =>
+                            setAccount((prev) => ({ ...prev, risk_per_trade_pct: e.target.value }))
+                          }
+                          className="w-full bg-card border border-card-border focus:border-accent focus:outline-none pl-3 pr-6 py-1.5 text-xs text-foreground font-mono font-bold rounded-lg text-right"
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted text-[10px] font-bold">%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Range Slider */}
+                  <div className="space-y-1.5">
+                    <input
+                      type="range"
+                      min="0.25"
+                      max="5.00"
+                      step="0.05"
+                      value={account.risk_per_trade_pct}
+                      onChange={(e) =>
+                        setAccount((prev) => ({ ...prev, risk_per_trade_pct: e.target.value }))
+                      }
+                      className="w-full accent-accent h-2 bg-card border border-card-border rounded-lg cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[9px] font-mono text-muted">
+                      <span>0.25% (Ultra-Safe)</span>
+                      <span>1.00% (Standard)</span>
+                      <span>2.00% (Baseline)</span>
+                      <span>3.50%</span>
+                      <span>5.00% (Max)</span>
+                    </div>
+                  </div>
+
+                  {/* Preset Pills */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <span className="text-[9px] text-muted uppercase font-black tracking-widest mr-1">Quick Presets:</span>
+                    {[
+                      { label: "0.50% Conservative", val: "0.50" },
+                      { label: "1.00% Standard", val: "1.00" },
+                      { label: "1.50% Growth", val: "1.50" },
+                      { label: "2.00% Aggressive", val: "2.00" },
+                    ].map((pill) => (
+                      <button
+                        key={pill.val}
+                        type="button"
+                        onClick={() => setAccount((prev) => ({ ...prev, risk_per_trade_pct: pill.val }))}
+                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer border ${
+                          parseFloat(account.risk_per_trade_pct) === parseFloat(pill.val)
+                            ? "bg-accent text-black border-accent shadow-md shadow-accent/20"
+                            : "bg-card/60 hover:bg-card border-card-border text-muted hover:text-foreground"
+                        }`}
+                      >
+                        {pill.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Risk Conflict Warning */}
+                  {parseFloat(account.risk_per_trade_pct) > parseFloat(account.max_risk_limit_pct) && (
+                    <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 text-xs">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      <span>
+                        <strong>Risk Hierarchy Warning:</strong> Operational Risk ({account.risk_per_trade_pct}%) cannot exceed Single-Trade Max Risk Limit ({account.max_risk_limit_pct}%). Please raise your ceiling or lower trade risk.
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── TIER 2 & TIER 3: CEILINGS & CIRCUIT BREAKERS ─────────────── */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {/* Initial Capital Seed input */}
-                  <div className="space-y-2">
+                  {/* Initial Capital Seed */}
+                  <div className="space-y-2 p-4 bg-card/30 border border-card-border rounded-xl">
                     <label className="text-[9px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
                       Initial Capital Seed (USD)
                     </label>
@@ -796,19 +1018,20 @@ export default function SettingsPage() {
                       className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3.5 py-2.5 text-xs text-foreground rounded-lg transition-all shadow-sm font-mono"
                       placeholder="10000.00"
                     />
+                    <span className="text-[8px] text-muted block">Benchmark starting equity for ROI calculations</span>
                   </div>
 
-                  {/* Max Risk Limit Input */}
-                  <div className="space-y-2">
+                  {/* Single-Trade Ceiling */}
+                  <div className="space-y-2 p-4 bg-card/30 border border-card-border rounded-xl">
                     <label className="text-[9px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
-                      Max Risk Limit (Percentage)
+                      Single-Trade Risk Ceiling (%)
                     </label>
                     <div className="relative">
                       <input
                         type="number"
-                        step="0.01"
-                        min="0.01"
-                        max="100"
+                        step="0.1"
+                        min="0.5"
+                        max="10.0"
                         value={account.max_risk_limit_pct}
                         onChange={(e) =>
                           setAccount((prev) => ({ ...prev, max_risk_limit_pct: e.target.value }))
@@ -816,8 +1039,94 @@ export default function SettingsPage() {
                         className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none pl-3.5 pr-8 py-2.5 text-xs text-foreground rounded-lg transition-all shadow-sm font-mono"
                         placeholder="3.00"
                       />
-                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 dark:text-zinc-500 text-[10px] font-bold">%</span>
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted text-[10px] font-bold">%</span>
                     </div>
+                    <span className="text-[8px] text-muted block">Hard stop loss safety ceiling per position</span>
+                  </div>
+
+                  {/* Max Daily Drawdown % */}
+                  <div className="space-y-2 p-4 bg-card/30 border border-card-border rounded-xl">
+                    <label className="text-[9px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
+                      Max Daily Drawdown Limit (%)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="1.0"
+                        max="20.0"
+                        value={account.max_daily_loss_pct}
+                        onChange={(e) =>
+                          setAccount((prev) => ({ ...prev, max_daily_loss_pct: e.target.value }))
+                        }
+                        className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none pl-3.5 pr-8 py-2.5 text-xs text-foreground rounded-lg transition-all shadow-sm font-mono"
+                        placeholder="4.00"
+                      />
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted text-[10px] font-bold">%</span>
+                    </div>
+                    <span className="text-[8px] text-muted block">Trips Circuit Breaker and halts execution until 00:00 UTC</span>
+                  </div>
+
+                  {/* Max Daily Drawdown USD */}
+                  <div className="space-y-2 p-4 bg-card/30 border border-card-border rounded-xl">
+                    <label className="text-[9px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
+                      Max Daily Drawdown Cap ($USD)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="10"
+                        min="50"
+                        value={account.max_daily_loss_usd}
+                        onChange={(e) =>
+                          setAccount((prev) => ({ ...prev, max_daily_loss_usd: e.target.value }))
+                        }
+                        className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none pl-3.5 pr-8 py-2.5 text-xs text-foreground rounded-lg transition-all shadow-sm font-mono"
+                        placeholder="400.00"
+                      />
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted text-[10px] font-bold">$</span>
+                    </div>
+                    <span className="text-[8px] text-muted block">Absolute dollar loss ceiling per 24h trading cycle</span>
+                  </div>
+
+                  {/* Max Consecutive Losses */}
+                  <div className="space-y-2 p-4 bg-card/30 border border-card-border rounded-xl">
+                    <label className="text-[9px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
+                      Max Consecutive Losses (Streak Halt)
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      max="10"
+                      value={account.max_consecutive_losses}
+                      onChange={(e) =>
+                        setAccount((prev) => ({ ...prev, max_consecutive_losses: parseInt(e.target.value, 10) || 3 }))
+                      }
+                      className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3.5 py-2.5 text-xs text-foreground rounded-lg transition-all shadow-sm font-mono"
+                      placeholder="3"
+                    />
+                    <span className="text-[8px] text-muted block">Triggers 6-hour cooldown if hit to prevent tilt in market chop</span>
+                  </div>
+
+                  {/* Max Daily Trades */}
+                  <div className="space-y-2 p-4 bg-card/30 border border-card-border rounded-xl">
+                    <label className="text-[9px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
+                      Daily Execution Frequency Cap
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      max="20"
+                      value={account.max_daily_trades}
+                      onChange={(e) =>
+                        setAccount((prev) => ({ ...prev, max_daily_trades: parseInt(e.target.value, 10) || 6 }))
+                      }
+                      className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3.5 py-2.5 text-xs text-foreground rounded-lg transition-all shadow-sm font-mono"
+                      placeholder="6"
+                    />
+                    <span className="text-[8px] text-muted block">Limits total entries per day to avoid overtrading churn</span>
                   </div>
                 </div>
 
@@ -825,7 +1134,7 @@ export default function SettingsPage() {
                 <div className="pt-4 border-t border-card-border flex justify-end">
                   <button
                     onClick={handleSaveAccountRisk}
-                    disabled={saveStatus === "saving"}
+                    disabled={saveStatus === "saving" || parseFloat(account.risk_per_trade_pct) > parseFloat(account.max_risk_limit_pct)}
                     className={`flex items-center gap-2 px-5 py-2.5 border font-black text-[10px] uppercase tracking-widest transition-all cursor-pointer rounded-lg shadow-sm ${saveStatus === "saving"
                       ? "bg-accent/10 border-accent/30 text-accent/50 cursor-wait"
                       : saveStatus === "success"
@@ -843,7 +1152,7 @@ export default function SettingsPage() {
                     ) : saveStatus === "success" ? (
                       <>
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Config Saved</span>
+                        <span>Risk Config Saved</span>
                       </>
                     ) : saveStatus === "error" ? (
                       <>

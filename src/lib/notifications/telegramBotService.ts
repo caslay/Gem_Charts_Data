@@ -33,6 +33,7 @@ import {
 import { DEFAULT_SR_LIVE_SETTINGS } from '../quantEngine/strategyExecutionConfig';
 import { formatCairoDateTime } from '../quantEngine/equityCalculator';
 import { routeEmergencyFlatten } from '../binanceOrderRouter';
+import { GlobalRiskGovernor } from '../risk/GlobalRiskGovernor';
 
 export interface TelegramBotServiceContext {
   engine: AutomatedStrategyExecutionEngine;
@@ -43,7 +44,7 @@ export interface TelegramBotServiceContext {
   isDryRun: boolean;
   bootTimestamp: number;
   getMacroContext: () => any;
-  getLatestSetups?: () => any[];
+  getLatestSetups: () => SweepReclaimSetup[];
   runReconciliationFn?: () => Promise<string>;
 }
 
@@ -51,8 +52,8 @@ export const MAIN_TELEGRAM_KEYBOARD = {
   keyboard: [
     [{ text: '⚡ /price' }, { text: '📊 /status' }],
     [{ text: '🎯 /trade' }, { text: '💰 /today' }],
-    [{ text: '🏛️ /setups' }, { text: '🔬 /reconcile' }],
-    [{ text: '🚨 /flatten' }],
+    [{ text: '🏛️ /setups' }, { text: '🛡️ /risk' }],
+    [{ text: '🔬 /reconcile' }, { text: '🚨 /flatten' }],
   ],
   resize_keyboard: true,
   is_persistent: true,
@@ -229,6 +230,16 @@ export class TelegramBotService {
       case '/price':
       case '/p':
         await this.handlePriceCommand();
+        break;
+
+      case '/risk':
+      case '/governor':
+        await this.handleRiskCommand();
+        break;
+
+      case '/reset_risk':
+      case '/reset_circuit':
+        await this.handleResetRiskCommand();
         break;
 
       case '/flatten':
@@ -1075,6 +1086,53 @@ export class TelegramBotService {
       `✅ <i>Account is flat. Zero active resting risk.</i>`;
 
     await this.notifier.sendRawMessage(message, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
+  }
+
+  /**
+   * /risk: Real-time report of Global Risk Governor parameters, daily P&L, and circuit breaker health
+   */
+  private async handleRiskCommand(): Promise<void> {
+    const { config, state } = await GlobalRiskGovernor.hydrateState('institutional_admin');
+    const equity = state.current_balance;
+    const riskUsd = (equity * config.risk_per_trade_pct) / 100;
+    const estSize = (riskUsd / 10).toFixed(3);
+    const cbStatus = state.circuit_breaker_active
+      ? `🚨 <b>ENGAGED (LOCKED)</b>\n<i>Reason: ${state.circuit_breaker_reason || 'Threshold reached'}</i>`
+      : `🟢 <b>ARMED & NORMAL (No Halts)</b>`;
+
+    const sign = state.daily_realized_pnl >= 0 ? '+' : '';
+
+    const message =
+      `🛡️ <b>[GLOBAL RISK GOVERNOR REPORT]</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `💰 <b>Ledger Equity:</b> <code>$${equity.toFixed(2)} USD</code>\n` +
+      `📊 <b>Operational Risk:</b> <code>${config.risk_per_trade_pct.toFixed(2)}% ($${riskUsd.toFixed(2)} USD)</code>\n` +
+      `🎯 <b>Size Est. ($10 Stop):</b> <code>${estSize} ETH</code>\n` +
+      `🧱 <b>Risk Ceiling:</b> <code>${config.max_risk_limit_pct.toFixed(2)}%</code>\n\n` +
+      `📉 <b>Today's Realized P&L:</b> <code>${sign}$${state.daily_realized_pnl.toFixed(2)} USD</code>\n` +
+      `🛑 <b>Max Daily Drawdown:</b> <code>-${config.max_daily_loss_pct.toFixed(2)}% (-$${config.max_daily_loss_usd.toFixed(2)})</code>\n` +
+      `⚠️ <b>Loss Streak:</b> <code>${state.consecutive_losses_count} / ${config.max_consecutive_losses} max</code>\n` +
+      `🔄 <b>Daily Trades:</b> <code>${state.daily_trades_count} / ${config.max_daily_trades} cap</code>\n\n` +
+      `⚡ <b>Circuit Breaker:</b>\n${cbStatus}\n` +
+      `⏰ <b>Server Time:</b> <code>${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC</code>`;
+
+    await this.notifier.sendRawMessage(message, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
+  }
+
+  /**
+   * /reset_risk: Unlocks circuit breaker and restores operational status
+   */
+  private async handleResetRiskCommand(): Promise<void> {
+    await GlobalRiskGovernor.resetCircuitBreaker('institutional_admin');
+    await this.notifier.sendRawMessage(
+      `🔓 <b>[CIRCUIT BREAKER RESET]</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `✅ Circuit breaker manually unlocked.\n` +
+      `🔄 Consecutive loss streak reset to 0.\n` +
+      `🚀 Automated execution engine re-armed for live orders.\n` +
+      `⏰ <b>Timestamp:</b> <code>${new Date().toISOString().replace('T', ' ').substring(0, 19)} UTC</code>`,
+      { replyMarkup: MAIN_TELEGRAM_KEYBOARD }
+    );
   }
 
   public isRunning(): boolean {

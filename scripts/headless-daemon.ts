@@ -32,6 +32,8 @@ import {
   routePositionClosedCleanup,
   routeEmergencyFlatten,
 } from '../src/lib/binanceOrderRouter';
+import { GlobalRiskGovernor } from '../src/lib/risk/GlobalRiskGovernor';
+import { sql } from '../src/lib/postgres';
 
 // Parse CLI Arguments
 const args = process.argv.slice(2);
@@ -94,10 +96,15 @@ async function main() {
     process.exit(1);
   }
 
-  // 3. Initialize AutomatedStrategyExecutionEngine
+  // 3. Hydrate Institutional Risk Configuration & Initialize Engine
+  const { config: initialRiskConfig } = await GlobalRiskGovernor.hydrateState('institutional_admin');
+  console.log(
+    `[DAEMON] 🛡️ Global Risk Governor: Operational Risk ${initialRiskConfig.risk_per_trade_pct}% ($1.0R) | Max Drawdown ${initialRiskConfig.max_daily_loss_pct}% ($${initialRiskConfig.max_daily_loss_usd}) | Streak Cap ${initialRiskConfig.max_consecutive_losses}`
+  );
+
   const engine = new AutomatedStrategyExecutionEngine({
     symbol: symbolArg.toUpperCase(),
-    compoundingRiskPct: 2.0,
+    compoundingRiskPct: initialRiskConfig.risk_per_trade_pct,
     maxOpenPositions: 1,
     autoExecute: true,
     stage1Ratio: 0.50,
@@ -159,9 +166,39 @@ async function main() {
           console.log(
             `   ➔ Setup: ${pos.anchorName} | Limit: $${pos.limitEntryPrice.toFixed(2)} | SL: $${pos.initialStopLoss.toFixed(2)} | TP1: $${pos.stage1Target.toFixed(2)} | TP2: $${pos.stage2Target.toFixed(2)}`
           );
-          // Route limit order to Binance (armed on VPS production)
-          routeLimitOrderPlacement(pos).catch((err) => {
-            console.error('[ORDER_ROUTER_ERROR] Failed routing limit order placement:', err);
+
+          // 🛡️ INSTITUTIONAL PRE-TRADE RISK GOVERNOR GATE
+          GlobalRiskGovernor.evaluatePreTradeRisk({
+            symbol: pos.symbol,
+            direction: pos.direction,
+            entryPrice: pos.limitEntryPrice,
+            stopLossPrice: pos.initialStopLoss,
+            currentEquity: startingEquity,
+            currentOpenPositionsCount: engine.getActivePositions().length,
+          }).then((assessment) => {
+            if (!assessment.isApproved) {
+              console.warn(`[DAEMON] 🚫 [RISK_GOVERNOR_VETO] ${assessment.reason}`);
+              engine.cancelPendingLimitOrder(pos.id, `Risk Governor Veto: ${assessment.reason}`);
+              telegram.sendExecutionAlert(
+                `🛡️ <b>[RISK GOVERNOR VETO]</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
+                `📊 <b>Pair:</b> <code>${pos.symbol}</code>\n` +
+                `🧭 <b>Direction:</b> <b>${pos.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT'}</b>\n` +
+                `🏛️ <b>Anchor:</b> <i>${pos.anchorName || '5m Setup'}</i>\n` +
+                `⚠️ <b>Reason:</b> <i>${assessment.reason}</i>\n` +
+                `🛑 <b>Action:</b> Limit order aborted. Zero exchange exposure.`
+              ).catch(() => {});
+              return;
+            }
+
+            // Route limit order to Binance (armed on VPS production)
+            routeLimitOrderPlacement(pos).catch((err) => {
+              console.error('[ORDER_ROUTER_ERROR] Failed routing limit order placement:', err);
+            });
+          }).catch((err) => {
+            console.error('[RISK_GOVERNOR_ERROR]', err);
+            routeLimitOrderPlacement(pos).catch((rErr) => {
+              console.error('[ORDER_ROUTER_ERROR] Failed routing limit order placement:', rErr);
+            });
           });
         }
         ledger.logEvent('LIMIT_ORDER_PLACED', event.message, { position: pos });
@@ -219,6 +256,49 @@ async function main() {
           console.log(
             `   ➔ Exit: ${pos.exitReason} @ $${pos.exitPrice?.toFixed(2)} | Realized: ${sign}${pos.realizedR?.toFixed(2)}R ($${pos.realizedUsd?.toFixed(2)} USD)`
           );
+
+          // 1. Record outcome in GlobalRiskGovernor (updates daily realized PnL, loss streaks, trade count)
+          GlobalRiskGovernor.recordTradeOutcome({
+            symbol: pos.symbol,
+            direction: pos.direction,
+            entryPrice: pos.entryPrice,
+            exitPrice: pos.exitPrice || pos.entryPrice,
+            contractSize: pos.contractSize,
+            realizedPnl: pos.realizedUsd || 0,
+            realizedR: pos.realizedR || 0,
+            isWin: (pos.realizedR || 0) > 0,
+            timestamp: Date.now(),
+            anchorName: pos.anchorName,
+            binanceOrderId: pos.binanceOrderId || undefined,
+            binanceClientOrderId: pos.binanceClientOrderId || undefined,
+          }).catch((err) => console.warn('[DAEMON] Failed recording outcome to RiskGovernor:', err));
+
+          // 2. Permanent PostgreSQL trade audit persistence
+          sql`
+            INSERT INTO trades (
+              trade_id, symbol, direction, entry_price, exit_price, stop_loss,
+              take_profit_1, take_profit_2, status, realized_pnl, realized_r,
+              entry_time, exit_time, metadata, binance_order_id, binance_client_order_id,
+              execution_mode, anchor_name
+            )
+            VALUES (
+              ${pos.id}, ${pos.symbol}, ${pos.direction}, ${pos.entryPrice},
+              ${pos.exitPrice || pos.entryPrice}, ${pos.initialStopLoss},
+              ${pos.stage1Target}, ${pos.stage2Target}, ${pos.exitReason || 'CLOSED'},
+              ${pos.realizedUsd || 0}, ${pos.realizedR || 0},
+              ${new Date(pos.openTime || Date.now())}, ${new Date(pos.closeTime || Date.now())},
+              ${JSON.stringify({ riskUsd: pos.riskUsd, contractSize: pos.contractSize, setupId: pos.setupId })},
+              ${pos.binanceOrderId || null}, ${pos.binanceClientOrderId || null},
+              ${process.env.IS_LIVE_VPS === 'true' ? 'LIVE_BINANCE' : 'SHADOW_SIMULATION'},
+              ${pos.anchorName || null}
+            )
+            ON CONFLICT (trade_id) DO UPDATE SET
+              exit_price = EXCLUDED.exit_price,
+              status = EXCLUDED.status,
+              realized_pnl = EXCLUDED.realized_pnl,
+              realized_r = EXCLUDED.realized_r,
+              exit_time = EXCLUDED.exit_time;
+          `.catch((err) => console.warn('[DAEMON] DB trade insert skipped (offline fallback):', err?.message || err));
         }
         // Purge lingering open orders on Binance to ensure zero orphans
         routePositionClosedCleanup(symbolArg).catch((err) => {
@@ -345,6 +425,16 @@ async function main() {
     if (scanResult.scannedSetups.length > 0) {
       console.log(`   ➔ Scanned ${scanResult.scannedSetups.length} valid structural setups.`);
     }
+
+    // 🛡️ Dynamic Risk Hot-Reload from GlobalRiskGovernor / PostgreSQL
+    GlobalRiskGovernor.hydrateState('institutional_admin').then(({ config: freshConfig }) => {
+      if (engine.config.compoundingRiskPct !== freshConfig.risk_per_trade_pct) {
+        console.log(
+          `\n[DAEMON] 🔄 Dynamic Risk Hot-Reload: Updated compounding risk to ${freshConfig.risk_per_trade_pct}% (was ${engine.config.compoundingRiskPct}%)`
+        );
+        engine.updateConfig({ compoundingRiskPct: freshConfig.risk_per_trade_pct });
+      }
+    }).catch(() => {});
   });
 
   // 6.5. Start Interactive Telegram Bot Command Center (Two-Way Commands)
