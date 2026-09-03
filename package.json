@@ -30,8 +30,6 @@
     "@auth/core": "^0.41.2",
     "@google/generative-ai": "^0.24.1",
     "@modelcontextprotocol/server": "^2.0.0",
-    "@vercel/analytics": "^2.0.1",
-    "@vercel/postgres": "^0.10.0",
     "lightweight-charts": "^5.2.0",
     "lucide-react": "^1.11.0",
     "mcp-handler": "^2.1.1",
