@@ -58,12 +58,20 @@ export const MAIN_TELEGRAM_KEYBOARD = {
   is_persistent: true,
 };
 
+interface PendingFlattenState {
+  chatId: string | number;
+  messageId: number;
+  armedAt: number;
+  timeoutTimer: NodeJS.Timeout;
+}
+
 export class TelegramBotService {
   private notifier: TelegramNotifier;
   private context: TelegramBotServiceContext;
   private isPolling = false;
   private lastUpdateId = 0;
   private abortController: AbortController | null = null;
+  private pendingFlatten: PendingFlattenState | null = null;
 
   constructor(context: TelegramBotServiceContext, notifier?: TelegramNotifier) {
     this.context = context;
@@ -116,7 +124,7 @@ export class TelegramBotService {
     while (this.isPolling) {
       try {
         this.abortController = new AbortController();
-        const url = `https://api.telegram.org/bot${token}/getUpdates?offset=${this.lastUpdateId + 1}&timeout=20&allowed_updates=["message"]`;
+        const url = `https://api.telegram.org/bot${token}/getUpdates?offset=${this.lastUpdateId + 1}&timeout=20&allowed_updates=["message","callback_query"]`;
 
         const res = await fetch(url, {
           method: 'GET',
@@ -145,6 +153,11 @@ export class TelegramBotService {
               // Non-blocking asynchronous message dispatch: prevents command queue stalls
               this.processIncomingMessage(update.message).catch((cmdErr) => {
                 console.error('[TELEGRAM_COMMAND_DISPATCH_ERROR]', cmdErr);
+              });
+            } else if (update.callback_query) {
+              // Non-blocking asynchronous callback query dispatch
+              this.processIncomingCallbackQuery(update.callback_query).catch((cbErr) => {
+                console.error('[TELEGRAM_CALLBACK_DISPATCH_ERROR]', cbErr);
               });
             }
           }
@@ -857,13 +870,169 @@ export class TelegramBotService {
   }
 
   /**
-   * 🚨 Emergency Flatten: Panic market close of open positions + purge of resting limit orders
+   * Processes incoming Telegram callback queries (e.g. inline button clicks).
+   */
+  private async processIncomingCallbackQuery(cb: any): Promise<void> {
+    const cbId = cb.id;
+    const data = String(cb.data || '').trim();
+    const chatId = cb.message?.chat?.id;
+    const messageId = cb.message?.message_id;
+
+    console.log(`[TELEGRAM_BOT] 🔘 Callback Query received: "${data}" from chat ${chatId}`);
+
+    // Always acknowledge callback immediately to dismiss button loading spinner
+    await this.notifier.answerCallbackQuery(cbId);
+
+    if (data === 'confirm_flatten') {
+      if (this.pendingFlatten && (!messageId || this.pendingFlatten.messageId === messageId)) {
+        clearTimeout(this.pendingFlatten.timeoutTimer);
+        this.pendingFlatten = null;
+        if (chatId && messageId) {
+          await this.notifier.editMessageReplyMarkup(chatId, messageId, { inline_keyboard: [] });
+        }
+        await this.executeEmergencyFlatten();
+      } else {
+        await this.notifier.sendRawMessage(
+          `ℹ️ <b>[ACTION EXPIRED]</b> This emergency flatten confirmation has expired or was already handled.`,
+          { replyMarkup: MAIN_TELEGRAM_KEYBOARD }
+        );
+      }
+    } else if (data === 'cancel_flatten') {
+      if (this.pendingFlatten && (!messageId || this.pendingFlatten.messageId === messageId)) {
+        clearTimeout(this.pendingFlatten.timeoutTimer);
+        this.pendingFlatten = null;
+        if (chatId && messageId) {
+          await this.notifier.editMessageText(
+            chatId,
+            messageId,
+            `🛡️ <b>[EMERGENCY FLATTEN DISARMED]</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `Operation cancelled by user. <b>Zero action taken.</b>\n` +
+            `━━━━━━━━━━━━━━━━━━━━\n` +
+            `<i>Normal algorithmic execution continues uninterrupted.</i>`,
+            { replyMarkup: { inline_keyboard: [] } }
+          );
+        } else {
+          await this.notifier.sendRawMessage(
+            `🛡️ <b>[EMERGENCY FLATTEN DISARMED]</b> Cancelled. Zero action taken.`,
+            { replyMarkup: MAIN_TELEGRAM_KEYBOARD }
+          );
+        }
+      } else {
+        await this.notifier.sendRawMessage(
+          `ℹ️ <b>[ACTION EXPIRED]</b> This confirmation has already been cleared.`,
+          { replyMarkup: MAIN_TELEGRAM_KEYBOARD }
+        );
+      }
+    }
+  }
+
+  /**
+   * 🚨 Step 1 of Two-Factor Flatten: Arms the safety interlock and presents inline confirmation
    */
   private async handleEmergencyFlattenCommand(): Promise<void> {
     const activePositions = this.context.engine.getActivePositions();
+    const pendingOrders = this.context.engine.getPendingLimitOrders();
+    const livePrice = this.getLivePrice();
+    const { symbol } = this.context;
+    const config = this.notifier.getConfig();
+    const chatId = config.chatId;
+
+    console.log(`[TELEGRAM_BOT] ⚠️ User requested /flatten — Arming 20-second Two-Factor Interlock...`);
+
+    // Cancel any previous pending flatten timer
+    if (this.pendingFlatten) {
+      clearTimeout(this.pendingFlatten.timeoutTimer);
+      this.pendingFlatten = null;
+    }
+
+    const activePos = activePositions[0];
+    let positionDetails = `📦 <b>Active Position:</b> <i>None (No open market exposure)</i>\n`;
+    if (activePos) {
+      const isLong = activePos.direction === 'LONG';
+      const priceDiff = isLong ? livePrice.price - activePos.entryPrice : activePos.entryPrice - livePrice.price;
+      const floatingUsd = priceDiff * activePos.contractSize;
+      const floatingR = activePos.riskUsd > 0 ? floatingUsd / activePos.riskUsd : 0;
+      const signUsd = floatingUsd >= 0 ? '+' : '';
+      const signR = floatingR >= 0 ? '+' : '';
+
+      positionDetails =
+        `📦 <b>Active Position:</b> <b>${activePos.direction}</b> <code>${activePos.contractSize} contracts @ $${activePos.entryPrice.toFixed(2)}</code>\n` +
+        `💵 <b>Floating P&L:</b> <b>${signUsd}$${floatingUsd.toFixed(2)} USD (${signR}${floatingR.toFixed(2)}R)</b>\n` +
+        `🛑 <b>Active SL:</b> <code>$${activePos.activeStopLoss.toFixed(2)}</code> | 🎯 <b>TP1:</b> <code>$${activePos.stage1Target.toFixed(2)}</code>\n`;
+    }
+
+    const pendingDetails = `🛑 <b>Resting Limit Orders:</b> <code>${pendingOrders.length} pending order(s)</code>\n`;
+
+    const warningText =
+      `⚠️ <b>[EMERGENCY FLATTEN ARMED — CONFIRMATION REQUIRED]</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `⚡ <b>Asset:</b> <code>${symbol.toUpperCase()}</code> (Binance Futures)\n` +
+      positionDetails +
+      pendingDetails +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `⚠️ <b>CONFIRMING WILL IMMEDIATELY:</b>\n` +
+      ` • Market close active open positions\n` +
+      ` • Purge all resting limit & stop orders on Binance\n` +
+      ` • Clear local execution queues\n\n` +
+      `⏱️ <i>Safety Timeout: Automatically disarming in 20 seconds...</i>`;
+
+    const inlineKeyboard = {
+      inline_keyboard: [
+        [
+          { text: '🔴 CONFIRM EMERGENCY FLATTEN', callback_data: 'confirm_flatten' },
+          { text: '🟢 CANCEL / DISARM', callback_data: 'cancel_flatten' },
+        ],
+      ],
+    };
+
+    const sent = await this.notifier.sendRawMessageWithResponse(warningText, {
+      replyMarkup: inlineKeyboard,
+      targetChatId: chatId,
+    });
+
+    if (!sent.ok || !sent.messageId) {
+      console.error('[TELEGRAM_BOT] ❌ Failed to dispatch armed flatten confirmation message.');
+      return;
+    }
+
+    const messageId = sent.messageId;
+
+    // Start the 20-second auto-disarm timer
+    const timeoutTimer = setTimeout(async () => {
+      if (this.pendingFlatten && this.pendingFlatten.messageId === messageId) {
+        console.log(`[TELEGRAM_BOT] ⌛ Emergency flatten timed out after 20s. Disarming...`);
+        this.pendingFlatten = null;
+        await this.notifier.editMessageText(
+          chatId,
+          messageId,
+          `⌛ <b>[EMERGENCY FLATTEN TIMED OUT]</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `20 seconds elapsed with no confirmation.\n` +
+          `🛡️ Safety interlock disarmed. <b>No trades were touched.</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `<i>Normal algorithmic execution continues uninterrupted.</i>`,
+          { replyMarkup: { inline_keyboard: [] } }
+        );
+      }
+    }, 20000);
+
+    this.pendingFlatten = {
+      chatId,
+      messageId,
+      armedAt: Date.now(),
+      timeoutTimer,
+    };
+  }
+
+  /**
+   * 🚨 Step 2: Executes the verified emergency flatten after user confirmation
+   */
+  private async executeEmergencyFlatten(): Promise<void> {
+    const activePositions = this.context.engine.getActivePositions();
     const livePrice = this.getLivePrice();
 
-    console.log(`[TELEGRAM_BOT] 🚨 EMERGENCY FLATTEN triggered by user!`);
+    console.log(`[TELEGRAM_BOT] 🚨 EXECUTING CONFIRMED EMERGENCY FLATTEN!`);
 
     // 1. Purge all pending limit orders in engine
     const purgedPendingCount = this.context.engine.emergencyClearAllPendingOrders();

@@ -248,6 +248,33 @@ Resolved the compounding ledger inversion and telemetry survival bias in Quant L
 
 ---
 
+## 🆕 V17.18 Changelog — Two-Factor Armed Safety Interlock & 20s Auto-Disarm for Emergency Flatten (2026-09-03)
+
+### Summary
+Engineered an institutional-grade **Two-Factor Armed Safety Interlock** for the emergency killswitch (`/flatten`) across Telegram and PM2 daemon execution. Eliminates the operational hazard of accidental or pocket-tap liquidations ("Fat-Finger Hazard"). When `/flatten` is pressed, the system arms a 20-second safety window, presents real-time telemetry (floating PnL in USD/R, active position size, resting limit count), and prompts for explicit confirmation via interactive **Inline Buttons** (`confirm_flatten` / `cancel_flatten`). If unconfirmed within 20 seconds, the interlock automatically disarms, edits the alert, and self-destructs the buttons with zero market interference.
+
+### Key Features & Architectural Enhancements
+1. **Interactive Inline Button Engine (`src/lib/notifications/telegramNotifier.ts`):**
+   - Added `sendRawMessageWithResponse` capturing message IDs for dynamic in-place message mutation.
+   - Added `answerCallbackQuery` to acknowledge taps and dismiss Telegram client loading spinners.
+   - Added `editMessageReplyMarkup` to self-destruct inline keyboards after execution, disarm, or expiry.
+   - Added `editMessageText` for zero-spam in-place status updates.
+2. **Two-Factor Armed Confirmation Flow (`src/lib/notifications/telegramBotService.ts`):**
+   - Long-polling loop enhanced to listen for both `message` and `callback_query` updates.
+   - Step 1 (Arming): When `/flatten` is invoked, calculates live floating PnL, displays active position parameters and resting limit counts, and renders high-contrast inline buttons: `[🔴 CONFIRM EMERGENCY FLATTEN]` and `[🟢 CANCEL / DISARM]`.
+   - Step 2 (Execution / Disarm / Timeout):
+     * **Confirm:** Liquidates active position at market, purges all open orders on Binance and local queues, clears inline buttons, and issues an audit confirmation alert.
+     * **Cancel:** Instantly cancels the armed state, clears the timer, and edits the message to confirm disarm.
+     * **Auto-Disarm Timeout (20s):** If idle for 20 seconds, automatically disarms, wipes the inline buttons, and notifies the user that no action was taken.
+
+### Files Modified
+- **`src/lib/notifications/telegramNotifier.ts`** [MODIFY]
+- **`src/lib/notifications/telegramBotService.ts`** [MODIFY]
+- **`directives/08_pm2_engine_and_quant_lab.md`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
+
 ## 🆕 V17.17 Changelog — Binance Futures Live Order Router & Emergency Killswitch (Phases 1 & 2) (2026-09-03)
 
 ### Summary
