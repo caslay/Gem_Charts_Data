@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Activity, ChevronRight, Magnet, Target, Clock, History, TrendingUp } from 'lucide-react';
 import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
+import { SYSTEM_VERSION } from '@/lib/version';
 
 export interface MatrixDataPayload {
   ipda_metrics?: {
@@ -103,7 +104,7 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
         {/* Drawer Header */}
         <div className="flex items-center justify-between p-4 border-b border-card-border bg-card/50 backdrop-blur-md">
           <div className="flex items-center gap-2">
-            <h2 className="text-title text-xs font-bold tracking-[0.15em] uppercase">IPDA MATRIX BASIN (V14.9)</h2>
+            <h2 className="text-title text-xs font-bold tracking-[0.15em] uppercase">IPDA MATRIX BASIN (V{SYSTEM_VERSION})</h2>
             <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20">
               <span className="w-1.5 h-1.5 bg-emerald-500 animate-pulse rounded-full" />
               <span className="text-[9px] text-emerald-500 font-mono font-bold tracking-tight">LIVE SYNC</span>
@@ -498,7 +499,7 @@ const MatrixConfigDrawer: React.FC<MatrixConfigDrawerProps> = ({ isOpen, onClose
         {/* Footer Stats Bar */}
         <div className="p-3.5 bg-card/50 border-t border-card-border flex justify-between items-center px-5">
           <div className="flex items-center gap-3">
-            <span className="text-[9px] text-muted font-mono uppercase tracking-widest font-semibold">V14.9 (SOP V2.0.0)</span>
+            <span className="text-[9px] text-muted font-mono uppercase tracking-widest font-semibold">V{SYSTEM_VERSION} (SOP V2.0.0)</span>
             <span className="w-1 h-1 bg-card-border rounded-full" />
             <span className="text-[9px] text-muted font-mono font-semibold">STATUS: {data ? 'CONNECTED' : 'STANDBY'}</span>
           </div>

@@ -30,6 +30,7 @@
 import { createMcpHandler } from 'mcp-handler';
 import { z } from 'zod';
 import { validateOAuthToken } from '@/lib/oauthServer';
+import { SYSTEM_VERSION } from '@/lib/version';
 import {
   runGetMarketContext,
   runSubmitQuantDecision,
@@ -233,7 +234,7 @@ The decision is stored with status 'ACTIVE' and can later be updated via the RES
     // MCP server metadata — visible to Gemini Spark and other MCP clients
     serverInfo: {
       name: 'Quegar Core Engine',
-      version: '15.3.0',
+      version: SYSTEM_VERSION,
     },
   }
 );

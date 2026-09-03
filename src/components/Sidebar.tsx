@@ -1433,10 +1433,10 @@ const Sidebar = memo(function Sidebar({
                   onClick={() => onDownloadV7Sliced(counts)}
                   disabled={!data}
                   className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-background hover:bg-card border border-card-border text-muted hover:text-foreground rounded-full transition-all duration-300 cursor-pointer"
-                  title="Download Sliced V14.0 JSON"
+                  title={`Download Sliced V${SYSTEM_VERSION} JSON`}
                 >
                   <Download size={12} />
-                  <span className="text-[9px] font-black uppercase tracking-wider">DL V14.0 JSON</span>
+                  <span className="text-[9px] font-black uppercase tracking-wider">DL V{SYSTEM_VERSION} JSON</span>
                 </button>
               </div>
 

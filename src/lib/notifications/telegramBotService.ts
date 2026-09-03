@@ -34,6 +34,7 @@ import { DEFAULT_SR_LIVE_SETTINGS } from '../quantEngine/strategyExecutionConfig
 import { formatCairoDateTime } from '../quantEngine/equityCalculator';
 import { routeEmergencyFlatten } from '../binanceOrderRouter';
 import { GlobalRiskGovernor } from '../risk/GlobalRiskGovernor';
+import { SYSTEM_VERSION } from '../version';
 
 export interface TelegramBotServiceContext {
   engine: AutomatedStrategyExecutionEngine;
@@ -373,7 +374,7 @@ export class TelegramBotService {
     const msg =
       `⚡ <b>[QUEGAR ENGINE — LIVE STATUS]</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🟢 <b>Daemon Status:</b> <code>ONLINE (PM2 Host)</code>\n` +
+      `🟢 <b>Daemon Status:</b> <code>ONLINE (PM2 Host · V${SYSTEM_VERSION})</code>\n` +
       `⏱️ <b>Uptime:</b> <code>${uptimeStr}</code>\n` +
       `📊 <b>Asset:</b> <code>${symbol.toUpperCase()}</code> (Binance Futures)\n` +
       `⚡ <b>Live Market Price:</b> <b>${livePrice.formatted} USD</b>\n` +

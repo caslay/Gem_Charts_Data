@@ -34,6 +34,7 @@ import {
 } from '../src/lib/binanceOrderRouter';
 import { GlobalRiskGovernor } from '../src/lib/risk/GlobalRiskGovernor';
 import { sql } from '../src/lib/postgres';
+import { SYSTEM_VERSION } from '../src/lib/version';
 
 // Parse CLI Arguments
 const args = process.argv.slice(2);
@@ -64,7 +65,7 @@ async function main() {
   const safetyGate = evaluateExecutionSafetyGate();
 
   console.log(`\n===============================================================`);
-  console.log(` ⚡ QUEGAR ENGINE — LOCAL HEADLESS DAEMON (VPS HOST) `);
+  console.log(` ⚡ QUEGAR ENGINE — LOCAL HEADLESS DAEMON (VPS HOST · V${SYSTEM_VERSION}) `);
   console.log(`===============================================================`);
   console.log(` Asset:           ${symbolArg.toUpperCase()} (Binance Futures)`);
   console.log(` Starting Equity: $${startingEquity.toFixed(2)} USD (2% Compounded Risk = $${riskPerTrade.toFixed(2)} / trade)`);

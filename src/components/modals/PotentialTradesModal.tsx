@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { SYSTEM_VERSION } from "@/lib/version";
 import {
   X,
   TrendingUp,
@@ -363,7 +364,7 @@ Timestamp: ${new Date().toISOString()}`;
                   [ QUANT POTENTIAL TRADES & CONTEXT ]
                 </h2>
                 <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                  V13.3 ENGINE
+                  V{SYSTEM_VERSION} ENGINE
                 </span>
               </div>
               <p className="text-[10px] text-muted font-bold uppercase tracking-wider">

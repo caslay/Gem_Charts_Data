@@ -14,6 +14,7 @@
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { SYSTEM_VERSION } from '@/lib/version';
 
 export type SessionTradeStatus = 'OPEN' | 'STAGE_1_FILLED' | 'STAGE_2_FILLED' | 'CLOSED' | 'PAUSED' | 'PENDING_LIMIT_ENTRY';
 
@@ -304,7 +305,7 @@ export const useSessionJournalStore = create<SessionJournalState>()(
         const exportPayload = {
           export_timestamp: new Date().toISOString(),
           platform: 'Quegar Core',
-          version: 'V16.50',
+          version: `V${SYSTEM_VERSION}`,
           mode,
           account: mode === 'BACKTEST' ? get().backtestAccount : get().account,
           total_trades: filtered.length,
