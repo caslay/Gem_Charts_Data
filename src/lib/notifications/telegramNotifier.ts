@@ -413,6 +413,140 @@ export class TelegramNotifier {
   }
 
   /**
+   * Low-level raw HTML message sender returning the message_id and API result.
+   */
+  public async sendRawMessageWithResponse(
+    htmlText: string,
+    options?: { replyMarkup?: any; targetChatId?: string }
+  ): Promise<{ ok: boolean; messageId?: number; result?: any }> {
+    const chatId = options?.targetChatId || this.config.chatId;
+    if (!this.config.enabled || !this.config.botToken || !chatId) {
+      return { ok: false };
+    }
+
+    const url = `https://api.telegram.org/bot${this.config.botToken}/sendMessage`;
+    const payload: any = {
+      chat_id: chatId,
+      text: htmlText,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+    };
+
+    if (options?.replyMarkup) {
+      payload.reply_markup = options.replyMarkup;
+    }
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(6000),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error(`[TELEGRAM_API_ERROR] HTTP ${res.status}:`, errText);
+        return { ok: false };
+      }
+
+      const json = await res.json();
+      return { ok: json.ok === true, messageId: json.result?.message_id, result: json.result };
+    } catch (err: any) {
+      console.error('[TELEGRAM_NETWORK_ERROR]', err.message || err);
+      return { ok: false };
+    }
+  }
+
+  /**
+   * Answers a Telegram callback query (dismisses loading indicator on inline buttons).
+   */
+  public async answerCallbackQuery(
+    callbackQueryId: string,
+    text?: string,
+    showAlert: boolean = false
+  ): Promise<boolean> {
+    if (!this.config.botToken) return false;
+    const url = `https://api.telegram.org/bot${this.config.botToken}/answerCallbackQuery`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callback_query_id: callbackQueryId,
+          text,
+          show_alert: showAlert,
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Updates an existing message's reply markup (e.g. to remove or update inline buttons).
+   */
+  public async editMessageReplyMarkup(
+    chatId: string | number,
+    messageId: number,
+    replyMarkup: any = { inline_keyboard: [] }
+  ): Promise<boolean> {
+    if (!this.config.botToken) return false;
+    const url = `https://api.telegram.org/bot${this.config.botToken}/editMessageReplyMarkup`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_id: messageId,
+          reply_markup: replyMarkup,
+        }),
+        signal: AbortSignal.timeout(5000),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Updates an existing message's text and reply markup in-place.
+   */
+  public async editMessageText(
+    chatId: string | number,
+    messageId: number,
+    htmlText: string,
+    options?: { replyMarkup?: any }
+  ): Promise<boolean> {
+    if (!this.config.botToken) return false;
+    const url = `https://api.telegram.org/bot${this.config.botToken}/editMessageText`;
+    const payload: any = {
+      chat_id: chatId,
+      message_id: messageId,
+      text: htmlText,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+    };
+    if (options?.replyMarkup) {
+      payload.reply_markup = options.replyMarkup;
+    }
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(5000),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Clears any active webhooks to guarantee unblocked long-polling execution.
    */
   public async deleteWebhook(options?: { dropPendingUpdates?: boolean }): Promise<boolean> {
