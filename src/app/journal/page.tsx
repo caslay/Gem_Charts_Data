@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
-import { JournalTable, type TradeRecord } from "@/components/JournalTable";
+import { JournalContainer } from "@/components/JournalContainer";
+import { type TradeRecord } from "@/components/JournalTable";
 import Link from "next/link";
 import { Lock } from "lucide-react";
 
@@ -50,10 +51,10 @@ export default async function JournalPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-card-border pb-6 mb-6 gap-4">
           <div className="flex flex-col">
             <h1 className="text-xl md:text-2xl font-bold text-title uppercase tracking-[0.15em]">
-              Automated Trading Journal
+              Institutional Trading Journal
             </h1>
             <p className="text-xs text-muted uppercase tracking-widest mt-1.5 font-semibold">
-              Active Paper Positions & Execution Audit Logs
+              Live Exchange Fills, PM2 Pipeline & Execution Audit
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -66,8 +67,8 @@ export default async function JournalPage() {
           </div>
         </div>
  
-        {/* Dynamic Interactive CRUD Table Component */}
-        <JournalTable initialTrades={initialTrades} initialAccount={initialAccount} />
+        {/* Dynamic Dual-Mode Container (Live Binance Journal + Legacy Paper Archive) */}
+        <JournalContainer initialTrades={initialTrades} initialAccount={initialAccount} />
       </div>
     </main>
   );

@@ -32,6 +32,7 @@ export interface BinancePositionRisk {
   marginType: string;
   isolatedMargin: string;
   positionSide: 'BOTH' | 'LONG' | 'SHORT';
+  notional?: string;
   updateTime: number;
 }
 
@@ -110,6 +111,7 @@ export async function getBinanceAccountInfo(): Promise<BinanceAccountInfo | null
         'X-MBX-APIKEY': apiKey,
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(5000),
       cache: 'no-store',
     });
 
@@ -175,6 +177,7 @@ export async function getBinanceOpenPositions(symbol: string = 'ETHUSDC'): Promi
         'X-MBX-APIKEY': apiKey,
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(5000),
       cache: 'no-store',
     });
 
@@ -349,6 +352,7 @@ export async function placeBinanceOrder(
         'X-MBX-APIKEY': apiKey,
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(5000),
       cache: 'no-store',
     });
 
@@ -392,6 +396,7 @@ export async function cancelBinanceOrder(
         'X-MBX-APIKEY': apiKey,
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(5000),
       cache: 'no-store',
     });
 
@@ -428,6 +433,7 @@ export async function cancelAllBinanceOrders(
         'X-MBX-APIKEY': apiKey,
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(5000),
       cache: 'no-store',
     });
 
@@ -465,6 +471,7 @@ export async function getBinanceOrder(
         'X-MBX-APIKEY': apiKey,
         'Content-Type': 'application/json',
       },
+      signal: AbortSignal.timeout(5000),
       cache: 'no-store',
     });
 
@@ -474,6 +481,108 @@ export async function getBinanceOrder(
     }
 
     return { success: true, data: body as BinanceOrderResponse };
+  } catch (err: any) {
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+
+export interface BinanceUserTrade {
+  symbol: string;
+  id: number;
+  orderId: number;
+  side: 'BUY' | 'SELL';
+  price: string;
+  qty: string;
+  realizedPnl: string;
+  marginAsset: string;
+  quoteQty: string;
+  commission: string;
+  commissionAsset: string;
+  time: number;
+  positionSide: string;
+  buyer: boolean;
+  maker: boolean;
+}
+
+/**
+ * Queries Binance Futures Open Resting Orders (GET /fapi/v1/openOrders)
+ * Weight: 1 (with symbol), 40 (all symbols)
+ */
+export async function getBinanceOpenOrders(symbol?: string): Promise<{
+  success: boolean;
+  data?: BinanceOrderResponse[];
+  error?: string;
+}> {
+  try {
+    const { apiKey } = getCredentials();
+    if (!apiKey) return { success: false, error: 'Missing Binance credentials.' };
+
+    const payload: Record<string, string> = {};
+    if (symbol) payload.symbol = symbol.toUpperCase();
+
+    const { url } = createSignedUrl('/fapi/v1/openOrders', payload);
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'X-MBX-APIKEY': apiKey,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(5000),
+      cache: 'no-store',
+    });
+
+    const body = await res.json();
+    if (!res.ok) {
+      return { success: false, error: `HTTP ${res.status}: ${body?.msg || JSON.stringify(body)}` };
+    }
+
+    const orders = Array.isArray(body) ? (body as BinanceOrderResponse[]) : [];
+    return { success: true, data: orders };
+  } catch (err: any) {
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Queries Binance Futures User Trade History / Fills (GET /fapi/v1/userTrades)
+ * Weight: 5
+ */
+export async function getBinanceUserTrades(
+  symbol: string,
+  limit: number = 50
+): Promise<{
+  success: boolean;
+  data?: BinanceUserTrade[];
+  error?: string;
+}> {
+  try {
+    const { apiKey } = getCredentials();
+    if (!apiKey) return { success: false, error: 'Missing Binance credentials.' };
+
+    const payload: Record<string, string | number> = {
+      symbol: symbol.toUpperCase(),
+      limit: Math.min(Math.max(limit, 1), 100),
+    };
+
+    const { url } = createSignedUrl('/fapi/v1/userTrades', payload);
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'X-MBX-APIKEY': apiKey,
+        'Content-Type': 'application/json',
+      },
+      signal: AbortSignal.timeout(5000),
+      cache: 'no-store',
+    });
+
+    const body = await res.json();
+    if (!res.ok) {
+      return { success: false, error: `HTTP ${res.status}: ${body?.msg || JSON.stringify(body)}` };
+    }
+
+    const trades = Array.isArray(body) ? (body as BinanceUserTrade[]) : [];
+    return { success: true, data: trades };
   } catch (err: any) {
     return { success: false, error: err?.message || String(err) };
   }
