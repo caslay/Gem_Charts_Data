@@ -1104,7 +1104,7 @@ Timestamp: ${new Date().toISOString()}`;
 
         {/* ── Modal Footer ────────────────────────────────────────────────────── */}
         <div className="px-6 py-3 border-t border-card-border bg-background/60 flex items-center justify-between text-[10px] text-muted font-mono">
-          <span>Flow-State Quant Engine V13.3</span>
+          <span>Quegar Core Engine</span>
           <span>Interbank Price Delivery Algorithm (IPDA) Rules Applied</span>
         </div>
 

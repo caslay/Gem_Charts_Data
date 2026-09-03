@@ -139,17 +139,17 @@ export function NavigationHeader() {
             <Link
               href="/"
               className="flex items-center gap-2.5 group focus:outline-none"
-              title="Flow-State Quant Engine"
+              title="Quegar"
             >
               <div className="w-7 h-7 rounded-md bg-gradient-to-tr from-purple-600 to-indigo-600 dark:from-purple-500 dark:to-cyan-400 flex items-center justify-center shadow-md group-hover:shadow-[0_0_12px_rgba(168,85,247,0.4)] transition-all duration-300">
-                <span className="text-white text-xs font-black tracking-tighter">FS</span>
+                <span className="text-white text-xs font-black tracking-tighter">QG</span>
               </div>
               <div className="hidden min-[400px]:flex flex-col">
                 <span className="text-[11px] font-mono font-black tracking-wider text-foreground leading-none">
-                  FLOW<span className="text-cyan-400">STATE</span>
+                  QUE<span className="text-cyan-400">GAR</span>
                 </span>
                 <span className="text-[7.5px] font-mono text-muted tracking-widest uppercase">
-                  QUANT COCKPIT
+                  CORE SYSTEM
                 </span>
               </div>
             </Link>
@@ -472,7 +472,7 @@ export function NavigationHeader() {
 
           {/* Drawer Footer */}
           <div className="pt-4 border-t border-card-border dark:border-slate-800/80 flex items-center justify-between text-[9px] font-mono text-muted">
-            <span>FLOW-STATE QUANT</span>
+            <span>QUEGAR CORE</span>
             <span>V{SYSTEM_VERSION}</span>
           </div>
         </aside>

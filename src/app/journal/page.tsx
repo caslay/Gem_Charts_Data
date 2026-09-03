@@ -20,7 +20,7 @@ export default async function JournalPage() {
             Unauthorized Access
           </h2>
           <p className="text-sm text-muted mb-6 leading-relaxed">
-            The Flow-State Vault is locked. This terminal page requires an active institutional session to view paper trade history.
+            The Quegar Vault is locked. This terminal page requires an active institutional session to view trade history.
           </p>
           <Link
             href="/login?callbackUrl=/journal"

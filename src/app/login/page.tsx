@@ -51,7 +51,7 @@ function LoginContent() {
               </svg>
             </div>
             <h1 className="text-2xl font-semibold text-white tracking-tight">
-              Flow-State Terminal
+              Quegar Portal
             </h1>
             <p className="text-sm text-zinc-500 mt-2">
               Institutional access only. Sign in with your authorized Google
@@ -134,7 +134,7 @@ function LoginContent() {
 
         {/* Footer */}
         <p className="text-center text-xs text-zinc-700 mt-6">
-          Flow-State Quant Engine V{SYSTEM_VERSION} · Secure Access
+          Quegar Core V{SYSTEM_VERSION} · Secure Access
         </p>
       </div>
     </div>

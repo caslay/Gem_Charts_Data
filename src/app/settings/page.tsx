@@ -560,7 +560,7 @@ export default function SettingsPage() {
             Unauthorized Access
           </h2>
           <p className="text-sm text-muted mb-6 leading-relaxed">
-            The Flow-State Vault is locked. This terminal page requires an active institutional session to view or configure settings.
+            The Quegar Vault is locked. This terminal page requires an active institutional session to view or configure settings.
           </p>
           <Link
             href="/login?callbackUrl=/settings"

@@ -1,6 +1,6 @@
 /**
  * @file src/app/api/agent/context/route.ts
- * @description M2M Agent Bridge REST API — Flow-State Quant Engine V15.3
+ * @description M2M Agent Bridge REST API — Quegar Core Engine V15.3
  *
  * ╔══════════════════════════════════════════════════════════════════╗
  * ║  ARCHITECTURE MANDATE                                           ║
@@ -23,7 +23,7 @@
  *   PATCH /api/agent/context
  *     → Updates an existing agent_decision_log record by id.
  *
- * @version 2.0.0 — Flow-State Quant Engine V15.3
+ * @version 2.0.0 — Quegar Core Engine V15.3
  */
 
 import { NextResponse } from 'next/server';

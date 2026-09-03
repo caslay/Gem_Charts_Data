@@ -64,7 +64,7 @@ async function main() {
   const safetyGate = evaluateExecutionSafetyGate();
 
   console.log(`\n===============================================================`);
-  console.log(` ⚡ FLOW-STATE QUANT ENGINE — LOCAL HEADLESS DAEMON (VPS HOST) `);
+  console.log(` ⚡ QUEGAR ENGINE — LOCAL HEADLESS DAEMON (VPS HOST) `);
   console.log(`===============================================================`);
   console.log(` Asset:           ${symbolArg.toUpperCase()} (Binance Futures)`);
   console.log(` Starting Equity: $${startingEquity.toFixed(2)} USD (2% Compounded Risk = $${riskPerTrade.toFixed(2)} / trade)`);
@@ -457,7 +457,7 @@ async function main() {
   // Connect WebSocket
   await wsClient.connect();
 
-  console.log(`\n[DAEMON] 🟢 Flow-State Engine is actively monitoring live market order flow.\n`);
+  console.log(`\n[DAEMON] 🟢 Quegar Engine is actively monitoring live market order flow.\n`);
 
   // 7. Handle Dry-Run Timer or Keep-Alive
   if (isDryRun) {
@@ -478,7 +478,7 @@ async function main() {
 
   // Graceful Shutdown
   const shutdown = () => {
-    console.log(`\n\n[DAEMON] 🛑 Stopping Flow-State Headless Daemon...`);
+    console.log(`\n\n[DAEMON] 🛑 Stopping Quegar Headless Daemon...`);
     ledger.logEvent('HEARTBEAT', `Daemon stopped cleanly.`);
     botService.stop();
     wsClient.stop();

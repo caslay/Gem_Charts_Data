@@ -7,7 +7,7 @@
  *
  * ╔══════════════════════════════════════════════════════════════════════╗
  * ║  CONNECT TO GEMINI SPARK (Custom Apps → MCP URL):                  ║
- * ║    https://flow-state-terminal.vercel.app/api/mcp                  ║
+ * ║    https://mcp.quegar.com/api/mcp                                   ║
  * ║    Authorization: Bearer <M2M_AGENT_SECRET>                        ║
  * ║                                                                     ║
  * ║  LOCAL DEV:                                                         ║
@@ -232,7 +232,7 @@ The decision is stored with status 'ACTIVE' and can later be updated via the RES
   {
     // MCP server metadata — visible to Gemini Spark and other MCP clients
     serverInfo: {
-      name: 'Flow-State Quant Engine',
+      name: 'Quegar Core Engine',
       version: '15.3.0',
     },
   }
@@ -257,7 +257,7 @@ async function authGuard(req: Request): Promise<Response | null> {
         status: 401,
         headers: {
           'Content-Type': 'application/json',
-          'WWW-Authenticate': 'Bearer realm="Flow-State Quant Engine MCP"',
+          'WWW-Authenticate': 'Bearer realm="Quegar MCP"',
         },
       }
     );

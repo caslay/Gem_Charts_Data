@@ -1363,7 +1363,7 @@ const Sidebar = memo(function Sidebar({
           {/* Footer Branding */}
           <div className="p-3 border-t border-card-border bg-card/45 shrink-0 select-none text-center">
             <span className="text-[8px] font-black text-muted-foreground tracking-widest uppercase">
-              Flow-State Quant Engine V{SYSTEM_VERSION} (SOP V2.0.0)
+              Quegar Core V{SYSTEM_VERSION}
             </span>
           </div>
 

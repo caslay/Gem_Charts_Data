@@ -3,9 +3,9 @@ import { SYSTEM_VERSION } from "@/lib/version";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: `Flow-State Quant Engine V${SYSTEM_VERSION}`,
-    short_name: "QuantEngine",
-    description: `Elite Flow-State Quant Engine V${SYSTEM_VERSION} Dashboard`,
+    name: "Quegar",
+    short_name: "Quegar",
+    description: "Quegar Portal",
     start_url: "/",
     display: "standalone",
     background_color: "#09090b",

@@ -303,7 +303,7 @@ export const useSessionJournalStore = create<SessionJournalState>()(
 
         const exportPayload = {
           export_timestamp: new Date().toISOString(),
-          platform: 'Flow-State Quant Engine',
+          platform: 'Quegar Core',
           version: 'V16.50',
           mode,
           account: mode === 'BACKTEST' ? get().backtestAccount : get().account,

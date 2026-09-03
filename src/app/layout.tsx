@@ -14,8 +14,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: `Quegar Quant Engine V${SYSTEM_VERSION}`,
-  description: `Quegar Quant Engine V${SYSTEM_VERSION}`,
+  title: "Quegar",
+  description: "Quegar Core System",
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: {
+      index: false,
+      follow: false,
+      noimageindex: true,
+    },
+  },
   manifest: "/manifest.webmanifest",
   icons: {
     icon: "/icon-192.png",

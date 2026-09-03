@@ -1758,7 +1758,7 @@ export default function Chart({
       );
     } else if (alert.actionChain?.browserNotification && typeof window !== 'undefined' && 'Notification' in window) {
       if (Notification.permission === 'granted') {
-        new Notification(`[FLOW-STATE ALERT] ${alert.label || 'Level Struck'}`, {
+        new Notification(`[QUEGAR ALERT] ${alert.label || 'Level Struck'}`, {
           body: `${alert.label || 'Price Alert'} struck at ${alert.price.toFixed(2)}`,
         });
       }

@@ -90,7 +90,7 @@ export function getBaseUrl(req?: Request): string {
     return process.env.NEXTAUTH_URL.replace(/\/$/, '');
   }
   if (process.env.NODE_ENV === 'production') {
-    return 'https://flow-state-terminal.vercel.app';
+    return 'https://core.quegar.com';
   }
   return 'http://localhost:4000';
 }

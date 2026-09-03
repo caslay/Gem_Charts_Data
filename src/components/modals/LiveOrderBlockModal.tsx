@@ -210,7 +210,7 @@ function LiveOrderBlockModalContent({
             <div>
               <div className="flex items-center gap-2.5">
                 <h3 className="font-black text-white text-sm tracking-tight uppercase">
-                  Flow-State Quant Execution Cockpit
+                  Quegar Execution Cockpit
                 </h3>
                 <span className="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-500/40 px-2 py-0.5 rounded-full font-bold">
                   {symbol}

@@ -182,7 +182,7 @@ export function useLiveAlerts(
       if ('Notification' in window && Notification.permission === 'granted' && isHighPriorityExecution) {
         if (now - lastDesktopNotificationTimeRef.current >= 4000) {
           lastDesktopNotificationTimeRef.current = now;
-          new Notification("Flow-State Alert", { body: message });
+          new Notification("Quegar Alert", { body: message });
         }
       }
       

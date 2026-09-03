@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Sign In · Flow-State Quant Engine",
-  description: "Institutional access gate for the Flow-State Quant Engine.",
+  title: "Sign In · Quegar",
+  description: "Quegar Portal Access Gate",
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 /**

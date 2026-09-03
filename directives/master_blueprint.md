@@ -4,6 +4,28 @@
 > **Generated:** 2026-05-30  
 > **Last Updated:** 2026-09-03 (V17.27 — Phase 4 Database Schema Extensions & Global Risk Governor)
 
+## 🆕 V17.28 Changelog — Complete Quegar Rebrand, Search Engine Stealth Cloaking & Obsolete Docs Purge (2026-09-04)
+
+### Summary
+1. **Search Engine Stealth & Anti-Crawler Cloaking (`src/app/robots.ts`, `src/app/layout.tsx`, `src/app/login/layout.tsx`, `src/app/manifest.ts`):** Created `robots.ts` serving `User-agent: * Disallow: /` to block all search engine crawlers and security scanners. Sanitized root and login HTML titles and metadata to discreet `Quegar` / `Quegar Core System`, completely stripping "Quant Engine", "Trading", "Futures", and system version numbers from the browser window title bar and search engine previews. Added `noindex, nofollow, nocache` metadata guards.
+2. **Global Visual Brand Modernization (Flow-State $\to$ Quegar):**
+   - **Navigation Header (`NavigationHeader.tsx`):** Replaced legacy `FS` badge with `QG` badge; rebranded title to `QUEGAR CORE SYSTEM`.
+   - **Sidebar (`Sidebar.tsx`):** Replaced legacy footer with `Quegar Core V{SYSTEM_VERSION}`.
+   - **Login Cockpit (`login/page.tsx`):** Rebranded to `Quegar Portal` and `Quegar Core V{SYSTEM_VERSION} · Secure Access`.
+   - **Vault Access Banners (`settings/page.tsx`, `journal/page.tsx`):** Updated to `The Quegar Vault is locked...`.
+   - **Modals (`LiveOrderBlockModal.tsx`, `PotentialTradesModal.tsx`):** Rebranded to `Quegar Execution Cockpit` and `Quegar Core Engine`.
+3. **Daemon & Telegram Command Center Rebranding (`scripts/headless-daemon.ts`, `telegramBotService.ts`):**
+   - Rebranded Telegram bot banners to `⚡ QUEGAR COMMAND CENTER ⚡` and `⚡ [QUEGAR ENGINE — LIVE STATUS]`.
+   - Rebranded daemon console banners and lifecycle output to `⚡ QUEGAR ENGINE — LOCAL HEADLESS DAEMON (VPS HOST) ⚡`.
+   - Rebranded desktop alert banners to `Quegar Alert` / `[QUEGAR ALERT]`.
+4. **Remote MCP Server & M2M Gateway Modernization (`/api/mcp`, `/api/agent/context`, `oauthServer.ts`):**
+   - Updated MCP server name to `Quegar Core Engine` and realm to `Quegar MCP`.
+   - Pointed all production endpoint links and OAuth fallback URIs to canonical private domain `https://mcp.quegar.com` and `https://core.quegar.com`.
+5. **Obsolete Documentation & Plan Files Purge:**
+   - Purged 10 superseded implementation plans, temporary walkthroughs, and research PDFs from `docs/` and `directives/` (`walkthrough.md`, `daemon_walkthrough.md`, `daemon_implementation_plan.md`, `VPS_implementation_plan.md`, `VPS_implementation_plan_v2.md`, `Quegar_Quant_Engine_Architecture_and_Deployment_walkthrough.md`, `Architecture & Implementation Plan - Scenario 3...`, `Cheap Domains for AWS Lightsail.pdf`, `Decoupled VPS and Local Architecture.pdf`, `Completed_Cloud_and_DNS_Infrastructure_Manifest.md`, `optimization_phase_1_plan.md`). All architecture is canonically centralized in `directives/master_blueprint.md`.
+
+---
+
 ## 🆕 V17.27 Changelog — Phase 4 Database Schema Extensions & Global Risk Governor (2026-09-03)
 
 ### Summary

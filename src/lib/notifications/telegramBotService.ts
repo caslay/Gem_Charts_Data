@@ -320,7 +320,7 @@ export class TelegramBotService {
   private async handleHelpCommand(): Promise<void> {
     const livePrice = this.getLivePrice();
     const msg =
-      `⚡ <b>FLOW-STATE QUANT COMMAND CENTER</b> ⚡\n` +
+      `⚡ <b>QUEGAR COMMAND CENTER</b> ⚡\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `⚡ <b>Live Price:</b> <b>${livePrice.formatted}</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -371,7 +371,7 @@ export class TelegramBotService {
     const livePrice = this.getLivePrice();
 
     const msg =
-      `⚡ <b>[FLOW-STATE ENGINE — LIVE STATUS]</b>\n` +
+      `⚡ <b>[QUEGAR ENGINE — LIVE STATUS]</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `🟢 <b>Daemon Status:</b> <code>ONLINE (PM2 Host)</code>\n` +
       `⏱️ <b>Uptime:</b> <code>${uptimeStr}</code>\n` +
