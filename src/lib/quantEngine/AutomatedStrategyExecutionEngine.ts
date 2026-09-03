@@ -129,6 +129,14 @@ export interface StrategyExecutionPosition {
   threePillarsPassed?: boolean;
   displacementCandles?: DisplacementCandleAudit[];
   isRehydrated?: boolean;
+
+  // Binance Live Exchange Execution Tracking
+  binanceOrderId?: number | null;
+  binanceClientOrderId?: string | null;
+  binanceStopLossOrderId?: number | null;
+  binanceTp1OrderId?: number | null;
+  binanceTp2OrderId?: number | null;
+  binanceExecutionStatus?: string | null;
 }
 
 export interface AutomatedExecutionConfig {
@@ -1459,6 +1467,42 @@ export class AutomatedStrategyExecutionEngine {
       return true;
     }
     return false;
+  }
+
+  public cancelPendingLimitOrder(posId: string): boolean {
+    const idx = this.pendingLimitOrders.findIndex(
+      (p) => p.id === posId || p.dbTradeId === posId,
+    );
+    if (idx !== -1) {
+      const order = this.pendingLimitOrders[idx];
+      order.status = "CANCELLED";
+      this.emit(
+        "LIMIT_ORDER_CANCELLED",
+        `⌛ [LIMIT_ORDER_CANCELLED] Resting ${order.direction} limit @ $${order.limitEntryPrice.toFixed(
+          2,
+        )} manually cancelled.`,
+        order,
+      );
+      this.pendingLimitOrders.splice(idx, 1);
+      return true;
+    }
+    return false;
+  }
+
+  public emergencyClearAllPendingOrders(): number {
+    const count = this.pendingLimitOrders.length;
+    while (this.pendingLimitOrders.length > 0) {
+      const order = this.pendingLimitOrders.shift()!;
+      order.status = "CANCELLED";
+      this.emit(
+        "LIMIT_ORDER_CANCELLED",
+        `⌛ [LIMIT_ORDER_CANCELLED] Resting ${order.direction} limit @ $${order.limitEntryPrice.toFixed(
+          2,
+        )} purged in emergency flatten.`,
+        order,
+      );
+    }
+    return count;
   }
 
   public getActivePositions(): StrategyExecutionPosition[] {

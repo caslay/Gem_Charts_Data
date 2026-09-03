@@ -24,6 +24,7 @@ export interface DaemonSessionEvent {
     | 'STAGE_1_HARVEST'
     | 'STAGE_2_HARVEST'
     | 'POSITION_CLOSED'
+    | 'EMERGENCY_FLATTEN'
     | 'ERROR';
   timestamp: number;
   timeIso: string;

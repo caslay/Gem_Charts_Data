@@ -23,6 +23,15 @@ import { DaemonLedger } from './lib/daemonLedger';
 import { TelegramNotifier } from '../src/lib/notifications/telegramNotifier';
 import { TelegramBotService } from '../src/lib/notifications/telegramBotService';
 import { getBinanceAccountInfo } from '../src/lib/binanceFuturesClient';
+import {
+  evaluateExecutionSafetyGate,
+  routeLimitOrderPlacement,
+  routeLimitOrderCancellation,
+  routeOrderFilledBracket,
+  routeStage1HarvestUpdate,
+  routePositionClosedCleanup,
+  routeEmergencyFlatten,
+} from '../src/lib/binanceOrderRouter';
 
 // Parse CLI Arguments
 const args = process.argv.slice(2);
@@ -50,6 +59,7 @@ async function main() {
   }
 
   const riskPerTrade = startingEquity * 0.02;
+  const safetyGate = evaluateExecutionSafetyGate();
 
   console.log(`\n===============================================================`);
   console.log(` ⚡ FLOW-STATE QUANT ENGINE — LOCAL HEADLESS DAEMON (VPS HOST) `);
@@ -57,6 +67,7 @@ async function main() {
   console.log(` Asset:           ${symbolArg.toUpperCase()} (Binance Futures)`);
   console.log(` Starting Equity: $${startingEquity.toFixed(2)} USD (2% Compounded Risk = $${riskPerTrade.toFixed(2)} / trade)`);
   console.log(` Exchange Link:   ${isBinanceLiveHydrated ? '🟢 BINANCE USDⓈ-M LIVE CONNECTED' : '⚪ VIRTUAL / SANDBOX'}`);
+  console.log(` Execution Gate:  ${safetyGate.isAllowed ? '🔴 LIVE REAL EXECUTION ARMED' : '🧪 SHADOW SIMULATION (' + safetyGate.reason + ')'}`);
   console.log(` Strategy:        5M Sweep & Reclaim Champion (2-Stage Dynamic Harvest: 50% TP1 @ 1.0R / 50% TP2 @ 1.4R)`);
   console.log(` Telegram Alerts: ${telegram.isEnabled() ? '✅ ACTIVE (Chat: ' + telegram.getConfig().chatId + ')' : '⚪ DISABLED'}`);
   console.log(` Mode:            ${isDryRun ? 'DRY-RUN (30s Diagnostic Validation)' : '24/7 LIVE BACKGROUND EXECUTION'}`);
@@ -148,12 +159,22 @@ async function main() {
           console.log(
             `   ➔ Setup: ${pos.anchorName} | Limit: $${pos.limitEntryPrice.toFixed(2)} | SL: $${pos.initialStopLoss.toFixed(2)} | TP1: $${pos.stage1Target.toFixed(2)} | TP2: $${pos.stage2Target.toFixed(2)}`
           );
+          // Route limit order to Binance (armed on VPS production)
+          routeLimitOrderPlacement(pos).catch((err) => {
+            console.error('[ORDER_ROUTER_ERROR] Failed routing limit order placement:', err);
+          });
         }
         ledger.logEvent('LIMIT_ORDER_PLACED', event.message, { position: pos });
         break;
 
       case 'LIMIT_ORDER_CANCELLED':
         console.log(`\n⌛ [${now}] [LIMIT_ORDER_CANCELLED] ${event.message}`);
+        if (pos) {
+          // Cancel order on Binance order book
+          routeLimitOrderCancellation(pos, event.message).catch((err) => {
+            console.error('[ORDER_ROUTER_ERROR] Failed routing limit order cancellation:', err);
+          });
+        }
         ledger.logEvent('LIMIT_ORDER_CANCELLED', event.message, { position: pos });
         break;
 
@@ -163,6 +184,10 @@ async function main() {
           console.log(
             `   ➔ Direction: ${pos.direction} | Fill Price: $${pos.entryPrice.toFixed(2)} | Size: ${pos.contractSize} contracts ($${pos.riskUsd.toFixed(2)} Risk)`
           );
+          // Arm native exchange Stop Loss and Stage 1 TP limit orders on Binance
+          routeOrderFilledBracket(pos).catch((err) => {
+            console.error('[ORDER_ROUTER_ERROR] Failed routing bracket orders:', err);
+          });
         }
         ledger.logEvent('ORDER_FILLED', event.message, { position: pos });
         break;
@@ -171,6 +196,10 @@ async function main() {
         console.log(`\n🎯 [${now}] [STAGE_1_HARVEST] ${event.message}`);
         if (pos) {
           console.log(`   ➔ Locked: +0.50R | Stop Loss advanced to Breakeven ($${pos.activeStopLoss.toFixed(2)})`);
+          // Ratchet Stop Loss to Breakeven on Binance & submit Stage 2 TP limit
+          routeStage1HarvestUpdate(pos).catch((err) => {
+            console.error('[ORDER_ROUTER_ERROR] Failed routing Stage 1 harvest update:', err);
+          });
         }
         ledger.logEvent('STAGE_1_HARVEST', event.message, { position: pos });
         break;
@@ -191,6 +220,10 @@ async function main() {
             `   ➔ Exit: ${pos.exitReason} @ $${pos.exitPrice?.toFixed(2)} | Realized: ${sign}${pos.realizedR?.toFixed(2)}R ($${pos.realizedUsd?.toFixed(2)} USD)`
           );
         }
+        // Purge lingering open orders on Binance to ensure zero orphans
+        routePositionClosedCleanup(symbolArg).catch((err) => {
+          console.error('[ORDER_ROUTER_ERROR] Failed cleaning up open orders:', err);
+        });
         ledger.logEvent('POSITION_CLOSED', event.message, { position: pos });
         break;
     }
@@ -233,6 +266,8 @@ async function main() {
           console.log(`\n⚡ [DAEMON COMMAND] Executing UI command: ${cmd.action} (ID: ${cmd.id})`);
           if (cmd.action === 'EMERGENCY_FLATTEN') {
             const posId = cmd.positionId;
+            const activePos = engine.getActivePositions()[0];
+            engine.emergencyClearAllPendingOrders();
             if (posId) {
               const closed = engine.emergencyClosePosition(posId, wsClient.getLatestPrice());
               cmd.status = closed ? 'PROCESSED' : 'FAILED';
@@ -243,6 +278,9 @@ async function main() {
               }
               cmd.status = 'PROCESSED';
             }
+            routeEmergencyFlatten(symbolArg, activePos).catch((err) => {
+              console.error('[ORDER_ROUTER_ERROR] Emergency flatten exception:', err);
+            });
             mutated = true;
           } else if (cmd.action === 'SNAP_BREAKEVEN' && cmd.positionId) {
             const snapped = engine.moveStopToBreakeven(cmd.positionId);
