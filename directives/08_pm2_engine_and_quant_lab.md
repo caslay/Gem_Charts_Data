@@ -140,14 +140,33 @@ npx tsx scripts/test_ttl_and_parity.ts
 # 3. Verify 1:1 Live PM2 vs Quant Lab Execution Parity
 npx tsx scripts/verify_quant_vs_pm2_parity.ts
 
-# 4. Compile Next.js 16 production build bundle
+# 4. Verify Phase 4 Global Risk Governor Circuit Breakers & Pre-Trade Gates
+npx tsx scripts/test_risk_governor.ts
+
+# 5. Compile Next.js 16 production build bundle
 npm run build
 ```
 
 ---
 
-## 📜 7. Engine Changelog Ledger
+## 🛡️ 7. Phase 4: Database Schema Extensions & Global Risk Governor
 
+The Global Risk Governor operates as an independent pre-trade and post-trade gatekeeper across both the Web UI and Headless PM2 Execution Daemon:
+
+### 3-Tier Risk Hierarchy:
+1. **Tier 1 (Operational Sizing $1.0R):** Controlled dynamically via the interactive range slider (0.25% - 5.00%) and quick presets (`[0.5%]`, `[1.0%]`, `[1.5%]`, `[2.0%]`) in `/settings`. The PM2 daemon hot-reloads this value dynamically on candle close without needing a process restart.
+2. **Tier 2 (Single-Trade Risk Ceiling):** Absolute stop loss risk ceiling (e.g. 3.0%). If a setup's calculated operational risk exceeds this, `GlobalRiskGovernor.evaluatePreTradeRisk()` vetoes the order before it reaches the exchange.
+3. **Tier 3 (Portfolio Circuit Breakers):**
+   - **Daily Max Drawdown:** Tripped if cumulative daily loss reaches `max_daily_loss_pct` (e.g. 4.0%) or `max_daily_loss_usd` (e.g. $400). Halts execution until 00:00 UTC rollover.
+   - **Consecutive Loss Streak Cooldown (Anti-Tilt):** Tripped if 3 consecutive losses occur. Enforces a mandatory 6-hour cooldown.
+   - **Daily Trade Frequency Cap (Anti-Chop):** Limits maximum trades to 6/day to eliminate overtrading churn.
+   - **Manual Override & Telegram Integration:** Circuit breaker can be reset via `/api/risk/reset` in the Web UI or via `/reset_risk` on Telegram. Full telemetry available via `/risk`.
+
+---
+
+## 📜 8. Engine Changelog Ledger
+
+* **2026-09-03 (V17.20):** Completed Phase 4 Database Schema Extensions & Global Risk Governor. Extended PostgreSQL schemas (`trading_account` and `trades`) with self-healing migrations. Implemented `GlobalRiskGovernor.ts` pre-trade gatekeeper, dynamic 3-tier risk hierarchy with `/settings` interactive slider, PM2 daemon dynamic hot-reloading & DB trade auditing, `/api/risk/reset` manual override endpoint, Telegram `/risk` and `/reset_risk` bot commands, and automated test suite `scripts/test_risk_governor.ts` (22/22 tests passing).
 * **2026-09-03 (V17.19):** Completed Phase 3 Dedicated Live Binance Journal (Web UI). Implemented server-side 3s cached live state route (`/api/binance/live-state`), 3-viewport telemetry dashboard (`LiveBinanceJournal.tsx`), 2-step desktop emergency flatten modal (`/api/binance/flatten`), environment watermark isolation, and dual-mode journal switching (`JournalContainer.tsx`).
 * **2026-09-03 (V17.18):** Engineered Two-Factor Armed Interlock with 20s auto-disarm timer for emergency Telegram `/flatten`. Features interactive Inline Buttons (`confirm_flatten` / `cancel_flatten`), live floating P&L exposure telemetry, self-destructing buttons, and callback query long-polling.
 * **2026-09-03 (V17.17):** Completed Phase 1 & 2 Binance Live Execution Router (`binanceFuturesClient.ts`, `binanceOrderRouter.ts`, `headless-daemon.ts`). Engineered Triple-Lock Safety Gate, exchange-side `STOP_MARKET` protection, 3-stage harvest ratcheting, and emergency `/flatten` Telegram killswitch.

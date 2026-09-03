@@ -1,8 +1,34 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.26
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.27
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-02 (V17.26 — Circular Context Re-Render Loop & 5.4GB Memory Leak Elimination)
+> **Last Updated:** 2026-09-03 (V17.27 — Phase 4 Database Schema Extensions & Global Risk Governor)
+
+## 🆕 V17.27 Changelog — Phase 4 Database Schema Extensions & Global Risk Governor (2026-09-03)
+
+### Summary
+Delivered Phase 4 of the Binance Live Execution Architecture, establishing an institutional-grade pre-trade gatekeeper and multi-tier risk governor across the web application, headless PM2 execution daemon, and PostgreSQL databases:
+1. **Self-Healing PostgreSQL Migrations (`004_risk_governor_schema.sql`, `/api/account`):** Extended `trading_account` and `trades` tables with 11 new risk governance and Binance audit parity columns. Built auto-migrating SQL initialization in Next.js App Router API routes to ensure automatic cloud schema synchronization without requiring manual SSH migrations.
+2. **Global Risk Governor Engine (`GlobalRiskGovernor.ts`):** Engineered 5 pre-trade safety gates: Master Circuit Breaker, Cumulative Daily Max Drawdown (Percentage & USD caps), Consecutive Loss Streak Cooldown (6-hour anti-tilt timer), Daily Trade Frequency Cap (anti-chop limit of 6 trades/day), and Single-Position Non-Overlapping Cap. Implemented automatic session rollover detection at 00:00 UTC and resilient in-memory fallback.
+3. **Settings UI Position Sizing & Risk Suite (`/settings`):** Added the interactive **Risk Ratio per Trade ($1.0R)** slider (0.25% to 5.00%, step 0.05%) with 4 quick presets (`[0.50% Conservative]`, `[1.00% Standard]`, `[1.50% Growth]`, `[2.00% Aggressive]`), dynamic real-time sizing math preview cards (Dollar risk $1.0R, ETH lot size estimate, Daily drawdown stop in USD), Risk Hierarchy Conflict warning banners, and Live Circuit Breaker status cards with manual override buttons.
+4. **PM2 Headless Daemon Integration (`scripts/headless-daemon.ts`):** Wired dynamic risk hot-reloading on closed candle intervals, pre-trade risk evaluation before limit order routing to Binance, and post-trade recording on `POSITION_CLOSED` with dual synchronization to `GlobalRiskGovernor` and PostgreSQL `trades` table.
+5. **Interactive Telegram Bot Command Center (`telegramBotService.ts`):** Added `/risk` command providing real-time telemetry of ledger equity, $1.0R risk allocation, daily P&L, loss streaks, and circuit breaker status; and `/reset_risk` command to manually unlock circuit breakers remotely.
+6. **Automated Institutional Test Suite (`scripts/test_risk_governor.ts`):** Verified all 5 pre-trade checks, circuit breaker trips, consecutive loss cooldowns, daily trade caps, and manual/daily resets with 22/22 automated assertions passing.
+
+### Files Added / Modified
+- **`scripts/db/migrations/004_risk_governor_schema.sql`** [NEW]
+- **`src/lib/risk/types.ts`** [NEW]
+- **`src/lib/risk/GlobalRiskGovernor.ts`** [NEW]
+- **`src/app/api/risk/reset/route.ts`** [NEW]
+- **`scripts/test_risk_governor.ts`** [NEW]
+- **`src/app/api/account/route.ts`** [MODIFY]
+- **`src/app/settings/page.tsx`** [MODIFY]
+- **`scripts/headless-daemon.ts`** [MODIFY]
+- **`src/lib/notifications/telegramBotService.ts`** [MODIFY]
+- **`directives/08_pm2_engine_and_quant_lab.md`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.26 Changelog — Circular Context Re-Render Loop & 5.4GB Memory Leak Elimination (2026-09-02)
 
