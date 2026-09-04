@@ -1,9 +1,15 @@
 # 🔬 FORENSIC QUANT AUDIT REPORT — Flow-State Engine 1-Year Backtest Deep Dive
 
-**Audit Target:** [`1YEAR_QUANT_AUDIT_STRUCTURAL_DEALING_RANGE_REPORT.md`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/docs/1YEAR_QUANT_AUDIT_STRUCTURAL_DEALING_RANGE_REPORT.md)
-**Classification:** Institutional Forensic Audit — INTERNAL
-**Audit Date:** 2026-08-31
-**Auditor Role:** Senior Quantitative Architect & SMC/ICT Systems Engineer
+> [!WARNING]
+> **HISTORICAL INVESTIGATION ARTIFACT (PRE-PARITY BASELINE)**  
+> This forensic audit was conducted on 2026-08-31 to identify anchor stacking in the legacy 3,550-trade dataset.  
+> It successfully led to the development of the Single-Position Walk and Parity Engine (V17.30/V17.31).  
+> The numbers discussed herein analyze pre-parity unconstrained data. For live PM2 executable performance, refer to `docs/1YEAR_POST_PARITY_AUDIT_REPORT.md` and `directives/08_pm2_engine_and_quant_lab.md`.
+
+**Audit Target:** [`1YEAR_QUANT_AUDIT_STRUCTURAL_DEALING_RANGE_REPORT.md`](file:///c:/My%20Files/Work/Lab/Gem_Charts_Data/docs/1YEAR_QUANT_AUDIT_STRUCTURAL_DEALING_RANGE_REPORT.md)  
+**Classification:** Institutional Forensic Audit — HISTORICAL  
+**Audit Date:** 2026-08-31  
+**Auditor Role:** Senior Quantitative Architect & SMC/ICT Systems Engineer  
 
 ---
 

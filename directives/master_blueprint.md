@@ -70,8 +70,8 @@
 6. **1-Year Post-Parity Quantitative Audit Completed across 105,120 Candles (365 Days):**
    - Streamed and validated complete 1-year ETHUSDC 5m historical dataset (2025-09-04 to 2026-09-04, 106,560 bars with warmup).
    - Exposed why the trader felt *"we was going to hell"*: with lookahead bias and phantom trade stacking removed, the raw unassisted Champion baseline (no early BE) produces only **+5.15R net return** over 1,815 trades with an intolerable **-48.79R max drawdown** (decaying a compounded $10k account to $7,645 due to 890 full -1.00R stop-outs).
-   - Discovered that activating **Quant Shield Rule 4 (Early Breakeven @ +0.60R MFE)** slashes stop-outs by **41.1%** (converting 366 reversals into 0.00R scratches), catapulting net performance from **+5.15R to +371.15R**, raising Profit Factor to **1.71**, cutting Max Drawdown to **-9.20R**, and delivering **12 out of 12 green calendar months**.
-   - Full report and multi-profile matrix published at `docs/1YEAR_POST_PARITY_AUDIT_REPORT.md` and saved to `data/quant_lab/sr_scans/1y-champion-parity-*.json`.
+   - [POST-MORTEM CORRECTION — See V17.31/V17.32 & Lesson 70]: The initial theoretical projection (+371.15R / $12.4M) was derived from post-facto ledger alteration. Under true candle-by-candle path simulation with the Next-Bar Ratchet Rule (V17.31), the validated Alpha Shield Champion (`factory_sr_5m_alpha_shield_early_be`) delivers **+161.4R Net Return**, **1.37 PF**, **-13.20R Max DD**, and compounds $10k to **$202,853.20 (+1,928% Compounding)** with only **-24.09% drawdown** across 106,560 bars.
+   - Comprehensive post-parity audit and true path scorecards published at `docs/1YEAR_POST_PARITY_AUDIT_REPORT.md`.
 
 ### Files Added / Modified
 - **`src/lib/quantEngine/SweepReclaimEngine.ts`** [MODIFY]
@@ -1643,6 +1643,9 @@ Completely eliminated premature live trade executions on limit touches during ma
 ## 🆕 V16.62 Changelog — 5m Sweep & Reclaim Quantitative Optimization & Factory Presets (2026-08-26)
 
 ### Summary
+> [!WARNING]
+> **Historical Pre-Parity Artifact:** The metrics below (+1,213R, +990R, 10.34 PF) reflect early V16 development runs conducted prior to the V17.30 Parity Engine (which eliminated multi-position concurrency stacking, FVG lookahead bias, and intra-candle sequence bugs). Refer to V17.31/V17.32 for live-executable 1:1 metrics.
+
 Conducted a massive 20-run institutional backtest and 1,872-iteration refinement grid search for the **Sweep & Reclaim Strategy on the 5-Minute Timeframe** across a 6-month historical dataset (March 1, 2026 – August 26, 2026, comprising 51,459 5m candles on ETHUSDC). Discovered and deployed the **Top 3 Refined Setups** into immutable factory presets, highlighted by the **Maximum Profit Champion** achieving **+1,213.02R net gain** and the **Mean Threshold Sniper** achieving **10.34 Profit Factor** with an **8.95% Stop Loss Hit Rate**.
 
 ### Key Architectural Deliverables

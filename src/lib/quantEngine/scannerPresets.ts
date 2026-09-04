@@ -135,7 +135,7 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
   {
     id: 'factory_sr_5m_winner_fvg_proximal',
     name: '5m Sweep & Reclaim 2-Stage Max Alpha Champion (FVG Proximal)',
-    description: 'The #1 PM2-Validated 2-Stage Alpha Champion for 5m ETH. Enters at FVG Proximal Edge with 1.20x Vol, 52% Delta, 0.40 Body, 50% TP1 @ 1.0R / 50% TP2 @ 1.4R, and pure Structural Trailing SL (+154.9R 3M Net Gain, 66.2% Win Rate, 1.96 PF).',
+    description: 'Raw baseline 2-Stage Sweep & Reclaim benchmark on 5m ETH. Enters at FVG Proximal Edge with 1.20x Vol, 52% Delta, 0.40 Body, 50% TP1 @ 1.0R / 50% TP2 @ 1.4R, and pure Structural Trailing SL without cooldowns or early breakeven (+5.15R 1Y baseline, 1.01 PF).',
     strategyType: 'SWEEP_RECLAIM',
     symbol: 'ETHUSDC',
     timeframe: '5m',
@@ -311,7 +311,7 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
   {
     id: 'factory_sr_5m_winner_ob_mt',
     name: '5m Sweep OB 50% MT Institutional Sniper (Lowest SL Rate)',
-    description: 'Institutional Order Block Mean Threshold precision sniper with 10.34 Profit Factor, 60.6% Win Rate, and ultra-low 8.95% SL hit rate (+990.21R Net Gain across 1,184 trades).',
+    description: 'Institutional Order Block Mean Threshold sniper entering at the 50% level of the origin displacement order block with 1.25x Vol, 52% Delta, and 1.0R / 1.4R / 3.0R three-stage harvest.',
     strategyType: 'SWEEP_RECLAIM',
     symbol: 'ETHUSDC',
     timeframe: '5m',
@@ -347,7 +347,7 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
   {
     id: 'factory_sr_5m_fast_harvest_shield',
     name: '5m Fast-Harvest Structural Pivot Shield (Highest Win Rate)',
-    description: 'High-frequency defensive structural model delivering 65.3% Win Rate and 8.21 Profit Factor with 1.0R/1.3R/2.2R dynamic harvest (+915.93R Net Gain across 1,150 trades).',
+    description: 'High-frequency defensive structural pivot model with tight 18-bar retest window, 1.30x Vol, and accelerated 1.0R / 1.3R / 2.2R dynamic harvest.',
     strategyType: 'SWEEP_RECLAIM',
     symbol: 'ETHUSDC',
     timeframe: '5m',

@@ -97,14 +97,22 @@ Both systems must determine execution entry prices using the identical pure func
 
 All strategy profiles must be immutably declared in `src/lib/quantEngine/scannerPresets.ts`:
 
-### 1. Alpha Champion (Platform Default)
-* **Preset ID:** `factory_sr_5m_winner_fvg_proximal`
+### 1. Alpha Shield Champion (Institutional Default Benchmark)
+* **Preset ID:** `factory_sr_5m_alpha_shield_early_be`
 * **Anchors:** All anchor types enabled (including 5m Swing Pivots).
 * **Entry Mode:** `FVG_PROXIMAL`.
 * **Displacement:** $1.20\times$ Volume SMA, $52\%$ Taker Delta, $0.40$ Body Ratio.
-* **Characteristics:** Maximum cumulative profitability ($+482.6\text{R}\text{/year}$, $60.6\%$ Win Rate, $1.40\text{ PF}$), higher trade frequency, standard drawdown tolerance.
+* **Quant Shield Rules:** Active Rule 1 (Wave Deduplication), Active Rule 5 (45-min Post-Loss Cooldown), and Active Rule 4 (Early Breakeven Ratchet @ $+0.50\text{R}$ MFE).
+* **1-Year Verified Path Reality:** $+161.4\text{R}$ Net Profit, $1.37\text{ PF}$, $-13.20\text{R}$ Max DD, $+1,928\%$ Compounded Equity (\$10k $\to$ \$202,853.20) with only $-24.09\%$ Max Drawdown across 106,560 raw bars. 100% executable on live Binance Futures.
 
-### 2. Dual-Optimized Anti-Cluster Shield (Selective Auxiliary)
+### 2. Baseline Champion (Unfiltered Trailing Benchmark)
+* **Preset ID:** `factory_sr_5m_winner_fvg_proximal`
+* **Anchors:** All anchor types enabled.
+* **Entry Mode:** `FVG_PROXIMAL`.
+* **Quant Shield Rules:** Pure baseline (`enableEarlyBreakeven: false`, `postLossCooldownMinutes: 0`).
+* **1-Year Verified Path Reality:** 1,815 sequential trades, $+5.15\text{R}$ Net Return, $1.01\text{ PF}$, $-48.79\text{R}$ Max DD (flat breakeven with heavy chop). Serves as the raw reference demonstrating why the Alpha Shield rules are necessary.
+
+### 3. Dual-Optimized Anti-Cluster Shield (Selective Auxiliary)
 * **Preset ID:** `factory_sr_5m_anti_cluster_dual_optimized`
 * **Anchors:** Restricts anchors strictly to macro liquidity pools (`ASIAN_HIGH`, `ASIAN_LOW`, `LONDON_HIGH`, `LONDON_LOW`, `PDH`, `PDL`). **`SWING_PIVOT` disabled.**
 * **Displacement:** Identical 3-pillar displacement thresholds.

@@ -1,11 +1,16 @@
 # 🔬 THE STREAK LOSS vs. PROFIT TRADE-OFF: A MASTER QUANTITATIVE RESOLUTION
 
-> **Classification:** Institutional Quant Architecture — INTERNAL MASTER REPORT  
+> [!WARNING]
+> **HISTORICAL PRE-PARITY RESEARCH REPORT (DO NOT USE AS ACTIVE BENCHMARK)**  
+> This report reflects ablation research conducted on Sep 1, 2026 across legacy unconstrained datasets (3,738 trades).  
+> It precedes the V17.30 Parity Engine, the Next-Bar Ratchet Rule (V17.31), and the Zero-Guessing Mandate (Lesson 70).  
+> For current, bit-for-bit live PM2 executable performance metrics, refer to `docs/1YEAR_POST_PARITY_AUDIT_REPORT.md` and `directives/08_pm2_engine_and_quant_lab.md`.
+
+> **Classification:** Institutional Quant Architecture — HISTORICAL REPORT  
 > **Scope:** Why Consecutive Losses Happen · Why Guardrails Cut Profit · The Mathematical Resolution  
-> **Dataset:** 2-Year Live Backtest (Aug 2024 – Aug 2026) + **Live Engine Validation (Sep 1, 2025 – Sep 1, 2026)**  
-> **Current Week (Trigger):** Aug 28 – Sep 1, 2026 · 13 Executed Trades · 5 Consecutive Losses (Aug 31)  
+> **Dataset:** Legacy Pre-Parity Datasets (3,738 raw entries)  
 > **Author:** Flow-State Quant Architecture & Forensic Research Team  
-> **Revision:** v2 — Sep 1, 2026. Rule 4 verdict corrected based on live Quant Equity Ledger Engine compounding results.
+> **Revision:** v2 — Sep 1, 2026 (Historical)  
 
 ---
 

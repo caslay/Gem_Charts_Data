@@ -1,11 +1,18 @@
 # 🔬 Flow-State Quant Engine — 1-Year & 180-Day Deep Forensic Audit & Market Structure Analysis
 
+> [!CAUTION]
+> **DEPRECATED PRE-PARITY HISTORICAL ARTIFACT (DO NOT USE FOR LIVE DECISIONS)**  
+> This document records pre-parity research generated on 2026-08-31 prior to the implementation of the **V17.30/V17.31 Execution Parity Engine**.  
+> The 3,550 trade count and +1,612R return reflect **unconstrained multi-position concurrency stacking** (up to 6 overlapping positions on the same displacement wave) and pre-parity FVG lookahead bias.  
+> Under live PM2 execution with single-position gating (`maxOpenPositions: 1`), the true baseline is **1,815 trades (+5.15R)**, and the verified institutional champion is **`factory_sr_5m_alpha_shield_early_be` (+161.4R Net, 1.37 PF, -13.20R Max DD)**.  
+> Refer to `docs/1YEAR_POST_PARITY_AUDIT_REPORT.md` and `directives/08_pm2_engine_and_quant_lab.md` for live-verified metrics.
+
 **Asset:** `ETHUSDC.P` (Binance Futures)  
 **Timeframe:** `5M` (Candle Resolution)  
 **Evaluated Datasets:** 365-Day (1-Year) & 180-Day Historical Backtest Slices  
 **Total Historical Anchors:** $22,876$ multi-timeframe liquidity points  
 **Total Evaluated Setups:** $13,278$ structural setups  
-**Total Executed Trades:** $3,550$ completed trades  
+**Total Executed Trades:** $3,550$ completed trades (Pre-Parity Stacking)  
 **Strategy Model:** 5M Sweep & Reclaim 2-Stage Dynamic Harvest (50% TP1 @ 1.0R / 50% TP2 @ 1.4R)
 
 ---

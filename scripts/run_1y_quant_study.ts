@@ -537,8 +537,8 @@ async function main() {
   await saveLocalSrScan(scanRecord as any);
   console.log(`\n💾 Saved scan to Quant Lab local store: data/quant_lab/sr_scans/${scanId}.json`);
 
-  // Write a summary markdown file for documentation
-  const reportMdPath = path.join(process.cwd(), 'docs', '1YEAR_POST_PARITY_AUDIT_REPORT.md');
+  // Write a summary markdown file for scratch inspection
+  const reportMdPath = path.join(process.cwd(), 'scratch', '1YEAR_RAW_STUDY_OUTPUT.md');
   const mdContent = `# 🏛️ 1-Year Quantitative Performance Audit (V17.30 Parity Cleansed)
 
 > **Asset:** ETHUSDC.p (Binance Futures 5m)  

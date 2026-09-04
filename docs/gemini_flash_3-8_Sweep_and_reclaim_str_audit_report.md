@@ -1,3 +1,8 @@
+# 📝 Historical Scratch Transcript (Dev Only)
+
+> [!NOTE]
+> This file is a historical agent execution log generated during V16 development. It contains raw tool traces and is preserved strictly as an internal scratch archive.
+
 Searched for files: *sr*
 Searched for "factory_sr_5m_winner_fvg_proximal"
 Searched for files: *quant*shield*
