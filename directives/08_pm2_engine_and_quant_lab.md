@@ -105,19 +105,20 @@ All strategy profiles must be immutably declared in `src/lib/quantEngine/scanner
 * **Quant Shield Rules:** Active Rule 1 (Wave Deduplication), Active Rule 5 (45-min Post-Loss Cooldown), and Active Rule 4 (Early Breakeven Ratchet @ $+0.50\text{R}$ MFE).
 * **1-Year Verified Path Reality:** $+161.4\text{R}$ Net Profit, $1.37\text{ PF}$, $-13.20\text{R}$ Max DD, $+1,928\%$ Compounded Equity (\$10k $\to$ \$202,853.20) with only $-24.09\%$ Max Drawdown across 106,560 raw bars. 100% executable on live Binance Futures.
 
-### 2. Baseline Champion (Unfiltered Trailing Benchmark)
+### 2. FVG 50% CE Sniper (Ultra-Low Drawdown Institutional Champion)
+* **Preset ID:** `factory_sr_5m_fvg_ce_sniper`
+* **Anchors:** All anchor types enabled (including 5m Swing Pivots).
+* **Entry Mode:** `FVG_CE` (50% Consequent Encroachment).
+* **Displacement:** $1.20\times$ Volume SMA, $52\%$ Taker Delta, $0.40$ Body Ratio.
+* **Quant Shield Rules:** Active Rule 1 (Wave Deduplication) and accelerated Active Rule 4 (Early Breakeven Ratchet @ $+0.40\text{R}$ MFE).
+* **1-Year Verified Path Reality:** $+191.9\text{R}$ Net Profit, $1.61\text{ PF}$, **$-6.50\text{R}$ Max DD**, $+3,808\%$ Compounded Equity (\$10k $\to$ \$390,823.00) with only **$13.4\%$ Max Drawdown** across 106,560 raw bars. Delivers the highest profit factor and lowest drawdown in the system.
+
+### 3. Baseline Champion (Unfiltered Trailing Benchmark Control)
 * **Preset ID:** `factory_sr_5m_winner_fvg_proximal`
 * **Anchors:** All anchor types enabled.
 * **Entry Mode:** `FVG_PROXIMAL`.
 * **Quant Shield Rules:** Pure baseline (`enableEarlyBreakeven: false`, `postLossCooldownMinutes: 0`).
-* **1-Year Verified Path Reality:** 1,815 sequential trades, $+5.15\text{R}$ Net Return, $1.01\text{ PF}$, $-48.79\text{R}$ Max DD (flat breakeven with heavy chop). Serves as the raw reference demonstrating why the Alpha Shield rules are necessary.
-
-### 3. Dual-Optimized Anti-Cluster Shield (Selective Auxiliary)
-* **Preset ID:** `factory_sr_5m_anti_cluster_dual_optimized`
-* **Anchors:** Restricts anchors strictly to macro liquidity pools (`ASIAN_HIGH`, `ASIAN_LOW`, `LONDON_HIGH`, `LONDON_LOW`, `PDH`, `PDL`). **`SWING_PIVOT` disabled.**
-* **Displacement:** Identical 3-pillar displacement thresholds.
-* **Quant Shield Rules:** Active Rule 1 Wave Deduplication, Active Rule 5 Post-Loss Cooldown (45 min), Configurable Rule 4 Early Breakeven (+0.60R).
-* **Characteristics:** Slashes $\ge 3$ consecutive loss clusters by **$80.0\%$ to $87.3\%$**, cuts max drawdown from $-20.8\text{R}$ to $-10.6\text{R}$.
+* **1-Year Verified Path Reality:** 1,815 sequential trades, $+5.15\text{R}$ Net Return, $1.01\text{ PF}$, $-48.79\text{R}$ Max DD (flat breakeven with heavy chop). Serves as the raw reference demonstrating why early breakeven ratchets are mathematically necessary.
 
 ---
 

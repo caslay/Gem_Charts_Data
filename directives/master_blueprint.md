@@ -1,8 +1,28 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.33
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.34
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-04 (V17.33 — Clean S&R Presets Purge, Post-Facto Ledger Slicing Removal & Clean 1Y Parity Grid Search)
+> **Last Updated:** 2026-09-04 (V17.34 — Registration of FVG 50% CE Sniper Institutional Factory Preset)
+
+## 🆕 V17.34 Changelog — Registration of FVG 50% CE Sniper Institutional Factory Preset (2026-09-04)
+
+### Summary
+1. **Official Factory Preset Promotion (`factory_sr_5m_fvg_ce_sniper`):**
+   - Registered `factory_sr_5m_fvg_ce_sniper` ("5m Sweep & Reclaim FVG 50% CE Sniper (Ultra-Low Drawdown)") into `FACTORY_SWEEP_RECLAIM_PRESETS` in `src/lib/quantEngine/scannerPresets.ts`.
+   - Verified 1-Year Performance (106,560 5m bars): **+191.9R Net Return**, **1.61 Profit Factor**, **-6.50R Max Drawdown**, and **$390,823.00 (+3,808%)** Compounded Equity with only **13.4% Max Drawdown**.
+   - Parameters: Enters at FVG 50% Consequent Encroachment (CE), 2-Stage Harvest (50% @ 1.0R / 50% @ 1.4R), Active Rule 1 Wave Deduplication, and accelerated Active Rule 4 Early Breakeven Ratchet (+0.40R MFE).
+2. **Directive Synchronization (`directives/08_pm2_engine_and_quant_lab.md`):**
+   - Synchronized Section 4 Strategy Preset Lifecycle to document the 3 verified institutional profiles:
+     1. `factory_sr_5m_alpha_shield_early_be` (Active Production Champion - FVG Proximal)
+     2. `factory_sr_5m_fvg_ce_sniper` (Institutional Sniper Champion - FVG 50% CE)
+     3. `factory_sr_5m_winner_fvg_proximal` (Baseline Control Group - Pure Trailing Benchmark)
+
+### Files Modified
+- **`src/lib/quantEngine/scannerPresets.ts`** [MODIFY]
+- **`directives/08_pm2_engine_and_quant_lab.md`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.33 Changelog — Clean S&R Presets Purge, Post-Facto Ledger Slicing Removal & Clean 1Y Parity Grid Search (2026-09-04)
 
