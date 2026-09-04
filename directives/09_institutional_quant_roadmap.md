@@ -221,6 +221,10 @@ This live ledger tracks every completed, active, and pending research experiment
 | `EXP-P3-SYN-B`| P4 | Synthesis All-Time | TP2 1.30R (60/40 Split) | 1,938 | **+223.76R** | **1.75** | **-6.68R** | **12.9%** | **$74,287** | 🏆 **NEW ALL-TIME CHAMPION** |
 | `EXP-P3-03B` | P4 | Early BE Multiple | Delayed to 0.50R | 1,886 | +193.00R | 1.47 | -9.70R | 18.2% | $38,374 | 🔴 Severe Degradation |
 | `EXP-P3-03C` | P4 | Early BE Multiple | Delayed to 0.60R | 1,850 | +167.10R | 1.33 | -18.30R | 32.0% | $22,058 | 🔴 Catastrophic DD |
+| `EXP-P4-01A` | P1 | HTF Valuation Gate | HTF Guard: ON (Eq Filter) | 1,938 | **+223.76R** | **1.75** | -6.68R | 12.9% | **$74,287** | ⚪ Identical (Gate Active) |
+| `EXP-P4-02A` | P1 | Weekend Filter | Filter Fri 22:00-Sun 20:00 | 1,238 | +134.90R | 1.72 | -6.60R | 12.7% | $13,401 | 🔴 REJECTED (-82% Eq Loss) |
+| `EXP-P4-SMT-1`| P1 | BTC Strict SMT | Bullish/Bearish Divergence | 758 | +95.10R | **1.84** | **-5.30R** | **10.2%** | $6,270 | 🛡️ **PRECISION PROFILE (1.84 PF)** |
+| `EXP-P4-SMT-2`| P1 | BTC Symmetric Sweeps | Both ETH & BTC Sweep | 1,251 | +129.10R | 1.64 | -7.60R | 14.9% | $11,874 | ⚪ Positive Secondary Alpha |
 
 ---
 
@@ -252,3 +256,12 @@ This live ledger tracks every completed, active, and pending research experiment
 #### Entry 006 (2026-09-04) — Target Harvest Calibration & The Early Breakeven Bedrock
 * **Finding:** Shifting harvest execution to **$60\%$ @ $1.0\text{R}$ and $40\%$ @ $1.30\text{R}$** crowned a new All-Time Champion: **$+223.76\text{R}$ Net Return, $1.75$ Profit Factor, $-6.68\text{R}$ Max Drawdown, and $\$74,287$ final equity from $\$1,000$** ($+68.9\%$ higher capital accumulation than baseline). Delaying Early Breakeven to $0.50\text{R}$ or $0.60\text{R}$ caused catastrophic drawdown degradation ($-18.3\text{R}$ Max DD, $32.0\%$ compounded DD).
 * **Microstructure Rationale:** Banking $60\%$ of inventory at $1.0\text{R}$ mathematically guarantees a winning trade, while a $1.30\text{R}$ TP2 has a significantly higher hit probability in 5m ETH market structure than wider targets. Meanwhile, the $+0.40\text{R}$ Early Breakeven is proven to be the non-negotiable structural bedrock of the entire engine: it converts impending multi-R loss streaks into harmless breakeven scratches.
+
+#### Entry 007 (2026-09-04) — The Weekend Liquidity Paradox (Why 24/7 Crypto Flow Must Not Be Filtered)
+* **Finding:** Filtering weekend trading (Rule 2) chopped off 700 executed setups, causing Net Return to collapse from $+223.8\text{R} \to +134.9\text{R}$ and destroying $82\%$ of total compounded equity ($\$74,287 \to \$13,401$) with zero improvement in drawdown ($-6.6\text{R}$ vs $-6.7\text{R}$).
+* **Microstructure Rationale:** Unlike traditional equity markets where weekends cause erratic gaps, crypto futures operate 24/7. Weekend sessions routinely feature low-volume stop purges of Friday's swing pivots that trigger exceptionally clean, high-conviction mean-reversion reclaims. Filtering weekends discards one of the richest sources of institutional alpha in crypto derivatives.
+
+#### Entry 008 (2026-09-04) — BTC vs ETH SMT Divergence (Precision Sniper vs Volume Compounding Trade-Off)
+* **Finding:** Requiring strict BTC SMT Divergence (ETH sweeps while BTC holds Higher Low / Lower High) pushed the Profit Factor to an engine-record **$1.84\text{ PF}$** and compressed Max Drawdown to **$-5.30\text{R}$** ($10.2\%$ compounded DD). However, it reduced annual trade count from $1,938 \to 758$, lowering total 1-year compounded accumulation to $+95.1\text{R}$ ($\$6,270$). Symmetric sweeps (where both ETH and BTC sweep together) independently generated $+129.1\text{R}$ ($1.64\text{ PF}$).
+* **Microstructure Rationale:** SMT divergence is the ultimate institutional confirmation signal for high win-rate, low-drawdown execution. For traders seeking maximum peace of mind and minimum drawdowns ($-5.3\text{R}$), strict SMT filtering is supreme. For maximum accumulated portfolio compounding, accepting both confirmed SMT and symmetric liquidity sweeps captures the full $+223.8\text{R}$ and $\$74,287$ equity trajectory.
+
