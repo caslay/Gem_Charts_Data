@@ -746,8 +746,8 @@ export function adaptOrderBlocksToTrades(
 // ── Dual Compounding Engine Calculation ───────────────────────────────────────
 
 export interface CalculateCompoundingOptions {
-  initialCapital?: number;       // default 10,000
-  riskPerTradePct?: number;      // default 1.5
+  initialCapital?: number;       // default 1,000
+  riskPerTradePct?: number;      // default 2.0
   compoundingMode?: 'DYNAMIC_COMPOUNDING' | 'FIXED_FRACTIONAL'; // default DYNAMIC_COMPOUNDING
 }
 
@@ -755,8 +755,8 @@ export function calculateCompoundingMetrics(
   trades: StandardizedExecutedTrade[],
   options: CalculateCompoundingOptions = {}
 ): CompoundingMetricsSummary {
-  const initialCapital = Math.max(100, options.initialCapital ?? 10000);
-  const riskPerTradePct = Math.max(0.01, Math.min(50, options.riskPerTradePct ?? 1.5));
+  const initialCapital = Math.max(100, options.initialCapital ?? 1000);
+  const riskPerTradePct = Math.max(0.01, Math.min(50, options.riskPerTradePct ?? 2.0));
   const compoundingMode = options.compoundingMode ?? 'DYNAMIC_COMPOUNDING';
 
   const totalExecutedTrades = trades.length;

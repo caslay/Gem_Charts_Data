@@ -30,11 +30,12 @@ Any new candidate setup, factor filter, or parameter modification must satisfy t
 ### 🏆 The Champion Baseline Benchmark (`factory_sr_5m_fvg_ce_sniper`)
 $$\begin{aligned}
 \text{Dataset:} &\quad 106,560\text{ 5m Candles (1 Full Year: Aug 2023 – Aug 2024)} \\
+\text{Starting Equity Standard:} &\quad \mathbf{\$1,000.00}\text{ (\$1.0R = \$20.00 initial risk @ 2\% compounding)} \\
 \text{Net Realized R:} &\quad \mathbf{+191.90R} \\
 \text{Profit Factor (PF):} &\quad \mathbf{1.61} \\
 \text{Execution Win Rate:} &\quad \mathbf{53.4\%}\text{ (Ex-Scratch: } 60.2\%\text{)} \\
 \text{Max Drawdown (DD):} &\quad \mathbf{-6.50R} \\
-\text{Compounded Return (\$10k @ 2\%):} &\quad \mathbf{+3,808\%}\text{ (\$390,823.00)} \\
+\text{Compounded Return (\$1k @ 2\%):} &\quad \mathbf{+3,808\%}\text{ (\$39,082.30 Final Equity)} \\
 \text{Max Compounded DD:} &\quad \mathbf{13.4\%} \\
 \text{Trade Frequency:} &\quad 206\text{ Trades/Year (}\approx 0.56\text{ trades/day)}
 \end{aligned}$$

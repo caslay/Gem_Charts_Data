@@ -50,8 +50,8 @@ export default function CapitalGrowthLedger({
   trades,
   totalMonitoredCount,
   monitoredLabel = "Scanned Setups",
-  defaultCapital = 10000,
-  defaultRiskPct = 1.5,
+  defaultCapital = 1000,
+  defaultRiskPct = 2.0,
   title = "CAPITAL GROWTH & CHRONOLOGICAL EQUITY LEDGER",
   subtitle = "Dynamic path-dependent compounding, drawdown telemetry, and theoretical closed-expectancy modeling."
 }: CapitalGrowthLedgerProps) {
@@ -75,7 +75,7 @@ export default function CapitalGrowthLedger({
             const data = await res.json();
             if (isMounted && data.account?.initial_capital) {
               const parsed = parseFloat(data.account.initial_capital);
-              if (!isNaN(parsed) && parsed > 0 && initialCapital === 10000) {
+              if (!isNaN(parsed) && parsed > 0 && initialCapital === 1000) {
                 setInitialCapital(parsed);
               }
             }
@@ -335,7 +335,7 @@ export default function CapitalGrowthLedger({
 
               {/* Capital Preset Pills */}
               <div className="hidden sm:flex items-center gap-1 text-[9px]">
-                {[5000, 10000, 25000, 50000].map((cap) => (
+                {[1000, 2500, 5000, 10000].map((cap) => (
                   <button
                     key={cap}
                     type="button"

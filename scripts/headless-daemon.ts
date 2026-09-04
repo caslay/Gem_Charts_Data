@@ -40,7 +40,7 @@ import { SYSTEM_VERSION } from '../src/lib/version';
 const args = process.argv.slice(2);
 const isDryRun = args.includes('--dry-run');
 const symbolArg = args.find((a) => a.startsWith('--symbol='))?.split('=')[1] || 'ETHUSDC';
-const initialEquityArg = parseFloat(args.find((a) => a.startsWith('--equity='))?.split('=')[1] || '10000.0');
+const initialEquityArg = parseFloat(args.find((a) => a.startsWith('--equity='))?.split('=')[1] || '1000.0');
 
 async function main() {
   const telegram = new TelegramNotifier();

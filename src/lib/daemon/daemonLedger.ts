@@ -59,7 +59,7 @@ export class DaemonLedger {
   private sessionLog: DaemonSessionLog;
   private symbol: string;
 
-  constructor(symbol: string = 'ETHUSDC', initialEquity: number = 10000.0) {
+  constructor(symbol: string = 'ETHUSDC', initialEquity: number = 1000.0) {
     this.symbol = symbol.toUpperCase();
     const today = new Date().toISOString().split('T')[0];
     const rootDir = process.cwd();
