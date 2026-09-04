@@ -346,11 +346,9 @@ export function adaptSweepReclaimSetupsToTrades(
       ? 'PENDING'
       : (s.stage_exit_type || s.simulated_outcome || (realizedR > 0 ? 'FULL_TP2_WIN' : realizedR === 0 ? 'BE_SCRATCH_WIN' : 'STOPPED_OUT'));
 
-    // Optional Dynamic Early Breakeven Upgrade (if not already recorded in setup)
-    if (!isPending && enableEarlyBE && realizedR < 0 && typeof s.mfe_r === 'number' && s.mfe_r >= earlyBEMultiple) {
-      realizedR = 0.0;
-      outcome = 'BE_SCRATCH_WIN';
-    }
+    // Note: Early Breakeven MUST be simulated candle-by-candle inside SweepReclaimEngine
+    // using the Next-Bar Ratchet Rule to account for both saved losses AND scratched winners.
+    // Post-facto modification of realizedR here is strictly prohibited per AGENTS.md Parity Mandate.
 
     const isWin = !isPending && realizedR > 0;
     const isLoss = !isPending && realizedR < 0;

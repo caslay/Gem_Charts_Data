@@ -14,7 +14,18 @@ async function main() {
     lookbackInternal: 5,
   });
 
-  const candles = await fetchHistoricalKlines('ETHUSDC', '5m', 1000);
+  let candles = await fetchHistoricalKlines('ETHUSDC', '5m', 1000);
+  // Ensure candles cover the verification window from startMs; if live 1000 buffer rolled forward, load from disk cache
+  if (!candles || candles.length === 0 || candles[0].t > startMs) {
+    const fs = await import('fs');
+    const path = await import('path');
+    const scratchDir = path.join(process.cwd(), 'scratch');
+    const files = fs.readdirSync(scratchDir).filter(f => f.startsWith('cached_ETHUSDC_5m_1y_'));
+    if (files.length > 0) {
+      const allCandles = JSON.parse(fs.readFileSync(path.join(scratchDir, files[0]), 'utf8'));
+      candles = allCandles.filter((c: any) => c.t >= startMs && c.t <= Date.parse('2026-09-03T00:00:00.000Z'));
+    }
+  }
 
   const config: SweepReclaimScanConfig = {
     symbol: 'ETHUSDC',

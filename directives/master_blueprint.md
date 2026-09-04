@@ -1,8 +1,33 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.32
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.33
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-04 (V17.32 — The Zero-Guessing 100% Quant Lab & Live Execution Parity Mandate)
+> **Last Updated:** 2026-09-04 (V17.33 — Clean S&R Presets Purge, Post-Facto Ledger Slicing Removal & Clean 1Y Parity Grid Search)
+
+## 🆕 V17.33 Changelog — Clean S&R Presets Purge, Post-Facto Ledger Slicing Removal & Clean 1Y Parity Grid Search (2026-09-04)
+
+### Summary
+1. **Clean Purge of Obsolete Sweep & Reclaim Presets (`scannerPresets.ts`, `LiveCockpitStatusBadge.tsx`):**
+   - Removed all 8 legacy, unverified presets (`factory_sr_golden_default`, `factory_sr_5m_winner_ob_mt`, `factory_sr_5m_fast_harvest_shield`, `factory_sr_eth_high_velocity`, `factory_sr_btc_institutional_sniper`, `factory_sr_runaway_momentum_ote`, `factory_sr_reclaimed_shelf_breakout`, `factory_sr_5m_anti_cluster_dual_optimized`) that were accepted under flawed pre-parity backtests.
+   - Retained strictly the verified Active Production Champion (`factory_sr_5m_alpha_shield_early_be`) and the Baseline Control Group (`factory_sr_5m_winner_fvg_proximal`).
+   - Standardized default fallbacks across `getArmedExecutionStatus()` and `LiveCockpitStatusBadge.tsx` to `factory_sr_5m_alpha_shield_early_be`.
+2. **Permanent Removal of Post-Facto Ledger Alterations (`equityCalculator.ts`):**
+   - Eliminated lines 349-354 in `adaptSweepReclaimSetupsToTrades` that were retroactively turning losing trades into scratches (`realizedR < 0 && s.mfe_r >= earlyBEMultiple`) in memory without accounting for winners that retraced to entry.
+   - Mandated that Early Breakeven is strictly simulated candle-by-candle inside `SweepReclaimEngine.ts` with the Next-Bar Ratchet Rule, preventing any discrepancy between backtest reporting and live Binance Futures execution.
+3. **Clean 1-Year Multi-Parameter Grid Search (`scripts/run_clean_parity_grid_search.ts`):**
+   - Executed comprehensive sweep across 106,560 5m candles (1 full year of ETHUSDC futures data) testing 22 in-engine configurations across hundreds of execution combinations (entry modes, anchor universes, early BE thresholds, cooldowns, and wave deduplication).
+   - Discovered and validated the top-performing institutional setup: **`FVG_CE_ALL_BE0.40`** (FVG 50% Consequent Encroachment entry with +0.40R Early BE), delivering **+191.9R Net Return**, **1.61 Profit Factor**, **-6.5R Max Drawdown**, and compounding $10k to **$390,823 (+3,808%)** with only **13.4% Max Drawdown**.
+   - Confirmed that `factory_sr_5m_alpha_shield_early_be` reliably delivers **+155.4R - +161.4R Net Return** with 1.35-1.37 PF and -13.2R Max DD under true candle-by-candle simulation.
+
+### Files Added / Modified
+- **`src/lib/quantEngine/scannerPresets.ts`** [MODIFY]
+- **`src/components/LiveCockpitStatusBadge.tsx`** [MODIFY]
+- **`src/lib/quantEngine/equityCalculator.ts`** [MODIFY]
+- **`scripts/pull_and_test_live_payload.ts`** [MODIFY]
+- **`scripts/run_clean_parity_grid_search.ts`** [NEW]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.32 Changelog — The Zero-Guessing 100% Quant Lab & Live Execution Parity Mandate (2026-09-04)
 

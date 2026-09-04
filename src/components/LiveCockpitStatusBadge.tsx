@@ -15,11 +15,11 @@ import {
 
 const DEFAULT_SERVER_STATUS: ArmedExecutionStatus = {
   type: 'SWEEP_RECLAIM',
-  id: 'factory_sr_golden_default',
-  name: 'Golden Sweep & Reclaim',
+  id: 'factory_sr_5m_alpha_shield_early_be',
+  name: '5m Sweep & Reclaim Alpha Shield (Early BE + Wave Guard)',
   isAutoExecEnabled: true,
   symbol: 'ETHUSDC',
-  timeframe: '15m',
+  timeframe: '5m',
   updatedAt: 0,
 };
 

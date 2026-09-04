@@ -73,8 +73,8 @@ async function main() {
   console.log(`✓ Fetched ${candles5m.length} candles.`);
   console.log(`✓ Latest 5m Candle: ${new Date(latestCandle.t).toISOString()} | Close: $${latestPrice.toFixed(2)}\n`);
 
-  // Use the 5m Factory Winner configuration
-  const preset5m = FACTORY_SWEEP_RECLAIM_PRESETS.find((p) => p.id === 'factory_sr_5m_winner_ob_mt') || FACTORY_SWEEP_RECLAIM_PRESETS[0];
+  // Use the 5m Factory Alpha Shield configuration
+  const preset5m = FACTORY_SWEEP_RECLAIM_PRESETS.find((p) => p.id === 'factory_sr_5m_alpha_shield_early_be') || FACTORY_SWEEP_RECLAIM_PRESETS[0];
   const cfg = preset5m.config as any;
 
   console.log(`2. Scanning with preset: "${preset5m.name}" (${preset5m.timeframe.toUpperCase()})...`);
