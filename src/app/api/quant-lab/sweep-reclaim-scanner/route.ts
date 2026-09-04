@@ -271,7 +271,31 @@ export async function POST(req: Request) {
         });
 
         // Configure Engine parameters
-        const structural_dealing_range = body.structuralDealingRange ?? body.structural_dealing_range ?? null;
+        let structural_dealing_range = body.structuralDealingRange ?? body.structural_dealing_range ?? null;
+        if (!structural_dealing_range && candles.length >= 25) {
+          try {
+            const { MarketStructureAPI } = await import("@/lib/quantEngine/MarketStructureAPI");
+            const msApi = new MarketStructureAPI({
+              lookbackMajor: lookback_major,
+              lookbackInternal: lookback_internal,
+            });
+            const lastCandle = candles[candles.length - 1];
+            const lastPrice = lastCandle.c ?? (lastCandle as any).close ?? 0;
+            const structure = bootstrap
+              ? msApi.analyzeWithBootstrap(candles, lastPrice, undefined, bootstrap)
+              : msApi.analyze(candles, lastPrice);
+            const structEq = structure?.dealingRange?.equilibrium;
+            if (structEq !== null && structEq !== undefined && Number.isFinite(structEq) && structEq > 0) {
+              structural_dealing_range = {
+                high: Number(structure.dealingRange.high),
+                low: Number(structure.dealingRange.low),
+                equilibrium: parseFloat(structEq.toFixed(4)),
+              };
+            }
+          } catch (msErr) {
+            console.warn("[SR SCANNER] MarketStructure dealing range fallback:", msErr);
+          }
+        }
 
         const scanConfig: SweepReclaimScanConfig = {
           symbol,

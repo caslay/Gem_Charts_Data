@@ -698,6 +698,7 @@ export function classifyMarketRegime(
 
 export class SweepReclaimEngine {
   public config: SweepReclaimScanConfig;
+  private confirmedPivots: any[] = [];
 
   constructor(config: SweepReclaimScanConfig = {}) {
     this.config = { ...DEFAULT_SWEEP_RECLAIM_CONFIG, ...config };
@@ -728,6 +729,7 @@ export class SweepReclaimEngine {
         pivotEngine.seedConfirmedPivots(bootstrap.confirmedPivots);
       }
       pivotEngine.processCandles(candles);
+      this.confirmedPivots = pivotEngine.pivots;
 
       const uniquePivotsMap = new Map<string, (typeof pivotEngine.pivots)[0]>();
       for (const p of pivotEngine.pivots) {
@@ -1587,8 +1589,21 @@ export class SweepReclaimEngine {
         this.config.structuralDealingRange.equilibrium > 0
       ) {
         dealingRangeEquilibrium = parseFloat(this.config.structuralDealingRange.equilibrium.toFixed(4));
-      } else {
-        const lookbackStart = Math.max(0, anchorIdx - (this.config.lookbackMajor ?? 15) * 2);
+      } else if (this.confirmedPivots && this.confirmedPivots.length > 0) {
+        const evalIndex = reclaimIdx !== null ? reclaimIdx : (sweepIdx !== null ? sweepIdx : anchorIdx);
+        const pastPivots = this.confirmedPivots.filter((p) => p.index <= evalIndex && p.confirmed);
+        // Prioritize Level 2 (MAJOR) swings for macro structural dealing range
+        const majorHighs = pastPivots.filter((p) => p.type === 'SWING_HIGH' && (p.level ?? 0) === 2);
+        const majorLows = pastPivots.filter((p) => p.type === 'SWING_LOW' && (p.level ?? 0) === 2);
+        const lastHigh = (majorHighs.length > 0 ? majorHighs : pastPivots.filter((p) => p.type === 'SWING_HIGH' && (p.level ?? 0) >= 1)).pop();
+        const lastLow = (majorLows.length > 0 ? majorLows : pastPivots.filter((p) => p.type === 'SWING_LOW' && (p.level ?? 0) >= 1)).pop();
+        if (lastHigh && lastLow && lastHigh.price > lastLow.price) {
+          dealingRangeEquilibrium = parseFloat(((lastHigh.price + lastLow.price) / 2).toFixed(4));
+        }
+      }
+
+      if (dealingRangeEquilibrium === null) {
+        const lookbackStart = Math.max(0, anchorIdx - (this.config.lookbackMajor ?? 15) * 6);
         const lookbackEnd = reclaimIdx !== null ? reclaimIdx : sweepIdx;
         let rangeHigh = -Infinity;
         let rangeLow = Infinity;
@@ -1995,23 +2010,7 @@ export class SweepReclaimEngine {
         const close = c.c ?? (c as any).close;
 
         if (isBullish) {
-          // Pre-fill target invalidation (MISSED_TP1_EXPANSION):
-          // If price opened at or above entry and expanded directly to target 1 before retracing to entry
-          if ((open >= executionEntry && high >= target1) || open >= target1) {
-            baseSetup.status = 'RECLAIMED_NO_RETEST';
-            baseSetup.simulated_outcome = 'NO_RETEST';
-            baseSetup.stage_exit_type = 'NO_RETEST';
-            break;
-          }
-
-          // Pre-fill stop loss breach
-          if ((open >= executionEntry && low <= stopLoss) || open <= stopLoss) {
-            baseSetup.status = 'INVALIDATED_AT_RETEST';
-            baseSetup.simulated_outcome = 'NO_RETEST';
-            baseSetup.stage_exit_type = 'NO_RETEST';
-            break;
-          }
-
+          // 1. Retest Fill: If price dipped to or below limit entry on this candle, order fills!
           if (low <= executionEntry) {
             retestFound = true;
             retestIdx = i;
@@ -2021,28 +2020,24 @@ export class SweepReclaimEngine {
             break;
           }
 
-          // Target clearance strictly after reclaim candle closed
-          if (high >= target1) {
-            break;
-          }
-        } else {
-          // Pre-fill target invalidation (MISSED_TP1_EXPANSION):
-          // If price opened at or below entry and expanded directly down to target 1 before retracing to entry
-          if ((open <= executionEntry && low <= target1) || open <= target1) {
+          // 2. Pre-fill target invalidation (MISSED_TP1_EXPANSION):
+          // Only triggers if price reached target 1 WITHOUT touching entry (low > executionEntry)
+          if (open >= target1 || high >= target1) {
             baseSetup.status = 'RECLAIMED_NO_RETEST';
             baseSetup.simulated_outcome = 'NO_RETEST';
             baseSetup.stage_exit_type = 'NO_RETEST';
             break;
           }
 
-          // Pre-fill stop loss breach
-          if ((open <= executionEntry && high >= stopLoss) || open >= stopLoss) {
+          // 3. Pre-fill stop loss breach (price dumped past SL without touching entry)
+          if (open <= stopLoss || low <= stopLoss) {
             baseSetup.status = 'INVALIDATED_AT_RETEST';
             baseSetup.simulated_outcome = 'NO_RETEST';
             baseSetup.stage_exit_type = 'NO_RETEST';
             break;
           }
-
+        } else {
+          // 1. Retest Fill: If price rallied to or above limit entry on this candle, order fills!
           if (high >= executionEntry) {
             retestFound = true;
             retestIdx = i;
@@ -2052,8 +2047,20 @@ export class SweepReclaimEngine {
             break;
           }
 
-          // Target clearance strictly after reclaim candle closed
-          if (low <= target1) {
+          // 2. Pre-fill target invalidation (MISSED_TP1_EXPANSION):
+          // Only triggers if price reached target 1 WITHOUT touching entry (high < executionEntry)
+          if (open <= target1 || low <= target1) {
+            baseSetup.status = 'RECLAIMED_NO_RETEST';
+            baseSetup.simulated_outcome = 'NO_RETEST';
+            baseSetup.stage_exit_type = 'NO_RETEST';
+            break;
+          }
+
+          // 3. Pre-fill stop loss breach (price rallied past SL without touching entry)
+          if (open >= stopLoss || high >= stopLoss) {
+            baseSetup.status = 'INVALIDATED_AT_RETEST';
+            baseSetup.simulated_outcome = 'NO_RETEST';
+            baseSetup.stage_exit_type = 'NO_RETEST';
             break;
           }
         }

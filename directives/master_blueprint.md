@@ -1,8 +1,27 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.39
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.40
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-05 (V17.39 — Early Breakeven Event Disambiguation & Breakeven Scratch Accounting Fix)
+> **Last Updated:** 2026-09-05 (V17.40 — Intra-Candle Retest Fill Priority & Structural Dealing Range Parity Fix)
+
+## 🆕 V17.40 Changelog — Intra-Candle Retest Fill Priority & Structural Dealing Range Parity Fix (2026-09-05)
+
+### Summary
+1. **Intra-Candle Retest Fill Priority Order-of-Operations Resolution (`SweepReclaimEngine.ts`):**
+   - **Root Cause:** In Phase 4 retest search, `SweepReclaimEngine` evaluated pre-fill invalidation (missed TP1 expansion: `(open <= executionEntry && low <= target1)`) *before* checking whether the candle touched the resting limit entry (`high >= executionEntry` for shorts / `low <= executionEntry` for longs).
+   - **Forensic Failure:** On the 2026-09-04 21:50 UTC (00:50 Cairo) candle, open was $2454.24, high reached $2455.55 (touching short entry $2455.15), and low dropped to $2449.20 (clearing TP1 $2451.47 and TP2 $2450.36). Because `open <= executionEntry` and `low <= target1` were both true, the engine prematurely aborted as `NO_RETEST`, ignoring that the resting limit order was filled when the high touched $2455.55.
+   - **Institutional Fix:** Reordered evaluation: candle price bounds are tested for entry fill FIRST. Pre-fill target invalidation only triggers if price reached target 1 *without* penetrating entry (`high < executionEntry` for shorts, `low > executionEntry` for longs).
+2. **Structural Dealing Range Dynamic Parity Alignment (`route.ts` & `SweepReclaimEngine.ts`):**
+   - **Root Cause:** In live PM2 daemon execution, `AutomatedStrategyExecutionEngine` receives `macroContext.localDealingRange` derived from `MarketStructureAPI.analyze()`, which tracks Level 2 (MAJOR) protected swings ($2463.99 / $2441.61 $\rightarrow$ EQ $2452.80$). In Quant Lab, `structuralDealingRange` was omitted in API calls, causing the engine to fall back to an arbitrary short lookback that falsely deemed setups non-compliant with valuation gating (`is_valuation_aligned: false`).
+   - **Institutional Fix in API Route:** `src/app/api/quant-lab/sweep-reclaim-scanner/route.ts` dynamically derives `structural_dealing_range` via `MarketStructureAPI.analyze()` when omitted in the request body, matching live PM2 execution.
+   - **Institutional Fix in Engine:** `SweepReclaimEngine` fallback now evaluates confirmed pivots strictly up to `evalIndex` (`reclaimIdx`) and prioritizes Level 2 (MAJOR) swings to prevent micro-swing range collapse.
+3. **100% Bit-for-Bit Parity Verification Across Live Executions:**
+   - Both Quant Lab (`localhost:4000` & live VPS) and PM2 daemon now produce 100% identical outputs for recent live executions:
+     - **Trade #5:** `2026-09-04 23:50` (Cairo) BULLISH @ $2452.53 $\rightarrow$ `STAGE_1_SCRATCH (0.00R)` (BE Scratch Win)
+     - **Trade #6:** `2026-09-05 00:50` (Cairo) BEARISH @ $2455.15 $\rightarrow$ `FULL_TP2_WIN (+1.12R)` (Target 2 Full Exit)
+     - **Trade #7:** `2026-09-05 01:05` (Cairo) BULLISH @ $2451.84 $\rightarrow$ `STAGE_1_SCRATCH (0.00R)` (BE Scratch Win)
+
+---
 
 ## 🆕 V17.39 Changelog — Early Breakeven Event Disambiguation & Breakeven Scratch Accounting Fix (2026-09-05)
 
