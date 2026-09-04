@@ -272,7 +272,7 @@ export async function POST(req: Request) {
 
         // Configure Engine parameters
         let structural_dealing_range = body.structuralDealingRange ?? body.structural_dealing_range ?? null;
-        if (!structural_dealing_range && candles.length >= 25) {
+        if (!structural_dealing_range && candles.length >= 25 && candles.length <= 2000) {
           try {
             const { MarketStructureAPI } = await import("@/lib/quantEngine/MarketStructureAPI");
             const msApi = new MarketStructureAPI({
