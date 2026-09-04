@@ -67,6 +67,10 @@ Do NOT guess the project architecture or past logic. To save the context window,
    - **File:** `directives/08_pm2_engine_and_quant_lab.md`
    - **When to read:** When modifying the live PM2 headless daemon (`scripts/headless-daemon.ts`), `AutomatedStrategyExecutionEngine.ts`, `SweepReclaimEngine.ts`, `scannerPresets.ts`, Telegram trade reconciliation, Binance Futures API integration, or Quant Lab endpoints. Enforces strict Binance 2,400 weight rate limits, 20-bar TTL order expiry, and 1:1 mathematical execution parity.
 
+9. **Institutional Quant Research Roadmap & Anti-Tunnel Optimization Protocol** 🧭
+   - **File:** `directives/09_institutional_quant_roadmap.md`
+   - **When to read:** When planning, conducting, or evaluating quantitative backtests, parameter sweeps, hypothesis testing, or strategy optimization phases. Enforces the 4-pillar orthogonal factor architecture, the 3-strike hypothesis rejection rule, the benchmark hurdle rate against `factory_sr_5m_fvg_ce_sniper`, and the staged operational promotion protocol. Contains the live experiment tracking matrix and fine-tuning lessons ledger.
+
 ## ⚠️ Execution Mandate
 Before writing any code or answering, output an internal thought process indicating WHICH directive file you need to read to complete the task accurately.
 

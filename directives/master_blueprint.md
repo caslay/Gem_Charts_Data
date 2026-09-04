@@ -1,8 +1,36 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.35
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.36
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-04 (V17.35 — 100% Mutual Visibility, Parity & Hot-Reload Dynamic Synchronization Audit)
+> **Last Updated:** 2026-09-04 (V17.36 — Institutional Quant Research Roadmap & Anti-Tunnel Optimization Protocol Directive 09)
+
+## 🆕 V17.36 Changelog — Institutional Quant Research Roadmap & Anti-Tunnel Optimization Protocol (2026-09-04)
+
+### Summary
+1. **Creation of Directive 09 (`directives/09_institutional_quant_roadmap.md`):**
+   - Established the master quantitative research protocol and strategy progression ledger to permanently prevent the "Tight Tunnel Trap" and circular micro-tweaking.
+   - Categorized the Quant Engine's intelligence into 4 independent, non-overlapping pillars:
+     1. *Pillar 1: Structural Context & Macro Gating* (Dealing Range, SMT, Value Area, 1D/1H Trend Vector)
+     2. *Pillar 2: Liquidity Geometry & Sweep Dynamics* (Anchor Universes, Sweep Depth ATR, Sweep Velocity)
+     3. *Pillar 3: Microstructure & Volumetric Sponsorship* (OLS Slope, CVD Divergence, Delta Dominance, Volumetric Absorption)
+     4. *Pillar 4: Execution Mechanics & Dynamic Harvest* (FVG CE Retest, Vol-Adaptive TP2, Stale Trade Exits, Next-Bar Ratchets)
+2. **Dual-Pillar Superiority Hurdle Rate:**
+   - Codified the strict mathematical acceptance gate against the 1-Year Champion (`factory_sr_5m_fvg_ce_sniper`: $+191.9\text{R}$, $1.61\text{ PF}$, $-6.50\text{R Max DD}$):
+     Must achieve $\text{Net R} > +191.9\text{R}$ OR $\text{Max DD} < -6.0\text{R}$ while strictly maintaining $\text{PF} \ge 1.50$, $\text{Max DD} \le -8.0\text{R}$, and $N \ge 150$ trades/year.
+3. **The 3-Strike Hypothesis Rejection Rule & Anti-Tunnel Circuit Breaker:**
+   - Constrained each factor exploration to at most 3 distinct microstructure hypotheses. If all 3 fail the hurdle rate across 106,560 5m bars, the factor is marked `EXHAUSTED / NO_EDGE` and permanently barred from further micro-tweaking.
+4. **Staged Promotion Pipeline & Live Progress Ledger:**
+   - Engineered the 4-step promotion pipeline: 1Y Lab Proof -> 3-Regime Anti-Fragility Audit (Bull/Bear/Chop) -> Directive & Master Blueprint Sync -> Live PM2 Hot-Reload.
+   - Built the dynamic Experiment Tracking Matrix and Institutional Lessons Log directly inside Directive 09.
+5. **System Governance Registration (`AGENTS.md`):**
+   - Registered Directive 09 in `AGENTS.md` Directives Index with mandatory invocation rules for all backtesting, parameter sweeps, and strategy optimization phases.
+
+### Files Added / Modified
+- **`directives/09_institutional_quant_roadmap.md`** [NEW]
+- **`AGENTS.md`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.35 Changelog — 100% Mutual Visibility, Parity & Hot-Reload Dynamic Synchronization Audit (2026-09-04)
 
