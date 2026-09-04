@@ -186,7 +186,7 @@ async function main() {
             if (!assessment.isApproved) {
               console.warn(`[DAEMON] 🚫 [RISK_GOVERNOR_VETO] ${assessment.reason}`);
               engine.cancelPendingLimitOrder(pos.id, `Risk Governor Veto: ${assessment.reason}`);
-              telegram.sendExecutionAlert(
+              telegram.sendRawMessage(
                 `🛡️ <b>[RISK GOVERNOR VETO]</b>\n━━━━━━━━━━━━━━━━━━━━\n` +
                 `📊 <b>Pair:</b> <code>${pos.symbol}</code>\n` +
                 `🧭 <b>Direction:</b> <b>${pos.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT'}</b>\n` +
