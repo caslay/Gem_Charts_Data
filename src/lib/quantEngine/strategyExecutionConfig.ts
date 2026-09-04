@@ -85,17 +85,17 @@ export interface SweepReclaimLiveSettings {
 }
 
 export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
-  compoundingRiskPct: 3.0,
+  compoundingRiskPct: 2.0,
   enabledTimeframes: ['5m'],
   anchorTypes: ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'],
-  entryMode: 'FVG_PROXIMAL',
+  entryMode: 'FVG_CE',
   volumeSmaPeriod: 20,
   volumeExpansionThreshold: 1.20,
   deltaDominanceThreshold: 52.0,
   bodyRatioThreshold: 0.40,
   enforceDiscountPremiumGate: true,
   enableStructuralTrail: true,
-  enableProfitRatchet: true,
+  enableProfitRatchet: false,
   enableTp1AutoBreakeven: true,
   stage1Multiple: 1.0,
   stage2Multiple: 1.4,
@@ -118,12 +118,12 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   minSweepDepthAtrMultiplier: 0.10,
   slBufferAtrMultiplier: 0.10,
 
-  // Quant Shield Defaults (Pure Baseline)
-  enableWaveDeduplication: false,
+  // Quant Shield Defaults (FVG CE Sniper Champion Verified Baseline)
+  enableWaveDeduplication: true,
   filterWeekend: false,
   enforceHtfBiasGuard: false,
-  enableEarlyBreakeven: false,
-  earlyBreakevenMultiple: 0.60,
+  enableEarlyBreakeven: true,
+  earlyBreakevenMultiple: 0.40,
   postLossCooldownMinutes: 0,
 };
 

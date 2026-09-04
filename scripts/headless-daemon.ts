@@ -103,36 +103,42 @@ async function main() {
     `[DAEMON] 🛡️ Global Risk Governor: Operational Risk ${initialRiskConfig.risk_per_trade_pct}% ($1.0R) | Max Drawdown ${initialRiskConfig.max_daily_loss_pct}% ($${initialRiskConfig.max_daily_loss_usd}) | Streak Cap ${initialRiskConfig.max_consecutive_losses}`
   );
 
+  // Load persisted live settings if available (synced from UI or saved presets)
+  let persistedLiveSettings: any = {};
+  const liveSettingsFile = path.join(process.cwd(), 'run_logs', 'daemon_live_settings.json');
+  if (fs.existsSync(liveSettingsFile)) {
+    try {
+      persistedLiveSettings = JSON.parse(fs.readFileSync(liveSettingsFile, 'utf8'));
+      console.log(`[DAEMON] 📂 Hydrated persisted live settings from daemon_live_settings.json`);
+    } catch (e) {
+      console.warn('[DAEMON] ⚠️ Could not parse daemon_live_settings.json:', e);
+    }
+  }
+
+  const initialLiveSettings = {
+    ...DEFAULT_SR_LIVE_SETTINGS,
+    enabledTimeframes: ['5m'] as any,
+    ...persistedLiveSettings,
+  };
+
   const engine = new AutomatedStrategyExecutionEngine({
     symbol: symbolArg.toUpperCase(),
-    compoundingRiskPct: initialRiskConfig.risk_per_trade_pct,
+    compoundingRiskPct: initialLiveSettings.compoundingRiskPct ?? initialRiskConfig.risk_per_trade_pct,
     maxOpenPositions: 1,
     autoExecute: true,
-    stage1Ratio: 0.50,
-    stage2Ratio: 0.50,
-    stage3Ratio: 0.00,
-    stage1Multiple: 1.0,
-    stage2Multiple: 1.4,
-    stage3Multiple: 3.0,
-    enableStructuralTrail: true,
-    enableProfitRatchet: false,
-    slBufferAtrMultiplier: 0.10,
-    liveSettings: {
-      ...DEFAULT_SR_LIVE_SETTINGS,
-      enabledTimeframes: ['5m'],
-      entryMode: 'FVG_PROXIMAL',
-      stage1Multiple: 1.0,
-      stage2Multiple: 1.4,
-      stage3Multiple: 3.0,
-      stage1Ratio: 0.50,
-      stage2Ratio: 0.50,
-      stage3Ratio: 0.00,
-      enableStructuralTrail: true,
-      enableProfitRatchet: false,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
-      slBufferAtrMultiplier: 0.10,
-    },
+    stage1Ratio: initialLiveSettings.stage1Ratio ?? 0.50,
+    stage2Ratio: initialLiveSettings.stage2Ratio ?? 0.50,
+    stage3Ratio: initialLiveSettings.stage3Ratio ?? 0.00,
+    stage1Multiple: initialLiveSettings.stage1Multiple ?? 1.0,
+    stage2Multiple: initialLiveSettings.stage2Multiple ?? 1.4,
+    stage3Multiple: initialLiveSettings.stage3Multiple ?? 3.0,
+    enableStructuralTrail: initialLiveSettings.enableStructuralTrail ?? true,
+    enableProfitRatchet: initialLiveSettings.enableProfitRatchet ?? false,
+    slBufferAtrMultiplier: initialLiveSettings.slBufferAtrMultiplier ?? 0.10,
+    enableWaveDeduplication: initialLiveSettings.enableWaveDeduplication ?? true,
+    enableEarlyBreakeven: initialLiveSettings.enableEarlyBreakeven ?? true,
+    earlyBreakevenMultiple: initialLiveSettings.earlyBreakevenMultiple ?? 0.40,
+    liveSettings: initialLiveSettings,
   });
 
   // 4. Pre-run historical candle scan & mark cold-start setups as PROCESSED
@@ -370,6 +376,11 @@ async function main() {
           } else if (cmd.action === 'TOGGLE_AUTO_EXEC') {
             const enabled = !!cmd.metadata?.enabled;
             engine.updateConfig({ autoExecute: enabled });
+            cmd.status = 'PROCESSED';
+            mutated = true;
+          } else if (cmd.action === 'UPDATE_SETTINGS' && cmd.metadata?.settings) {
+            console.log(`[DAEMON] 🔄 Applying live settings hot-reload from UI command:`, Object.keys(cmd.metadata.settings));
+            engine.updateSweepReclaimSettings(cmd.metadata.settings);
             cmd.status = 'PROCESSED';
             mutated = true;
           }

@@ -160,7 +160,7 @@ function getAnchorPriority(anchorType?: string, anchorSwingGrade?: string): numb
 
 export function adaptSweepReclaimSetupsToTrades(
   setups: SweepReclaimSetup[],
-  options: AdaptSweepReclaimOptions = { enforceSinglePositionWalk: true, enableWaveDeduplication: false, filterWeekend: false, enableEarlyBreakeven: false, earlyBreakevenMultiple: 0.60, postLossCooldownMinutes: 0 }
+  options: AdaptSweepReclaimOptions = { enforceSinglePositionWalk: true, enableWaveDeduplication: true, filterWeekend: false, enforceHtfBiasGuard: false, enableEarlyBreakeven: true, earlyBreakevenMultiple: 0.40, postLossCooldownMinutes: 0 }
 ): StandardizedExecutedTrade[] {
   if (!setups || setups.length === 0) return [];
 
@@ -443,10 +443,11 @@ export function calculate1to1ExecutionTelemetry(
   setups: SweepReclaimSetup[],
   options: AdaptSweepReclaimOptions = {
     enforceSinglePositionWalk: true,
-    enableWaveDeduplication: false,
+    enableWaveDeduplication: true,
     filterWeekend: false,
-    enableEarlyBreakeven: false,
-    earlyBreakevenMultiple: 0.60,
+    enforceHtfBiasGuard: false,
+    enableEarlyBreakeven: true,
+    earlyBreakevenMultiple: 0.40,
     postLossCooldownMinutes: 0,
   }
 ): ReconciledExecutionSummary {

@@ -109,19 +109,19 @@ export default function SweepReclaimWorkspace({
   const [enforceDiscountPremiumGate, setEnforceDiscountPremiumGate] = useState(true);
 
   // 3-Stage Harvest & Risk Controls
-  const [entryMode, setEntryMode] = useState<SweepReclaimEntryMode>("FVG_PROXIMAL");
+  const [entryMode, setEntryMode] = useState<SweepReclaimEntryMode>("FVG_CE");
   const [stage1Multiple, setStage1Multiple] = useState(1.0);
   const [stage2Multiple, setStage2Multiple] = useState(1.4);
   const [stage3Multiple, setStage3Multiple] = useState(3.0);
   const [enableStructuralTrail, setEnableStructuralTrail] = useState(true);
-  const [enableProfitRatchet, setEnableProfitRatchet] = useState(true);
+  const [enableProfitRatchet, setEnableProfitRatchet] = useState(false);
 
-  // 🛡️ Quant Shield & Loss Streak Protection Controls
-  const [enableWaveDeduplication, setEnableWaveDeduplication] = useState(false);
+  // 🛡️ Quant Shield & Loss Streak Protection Controls (Champion Defaults)
+  const [enableWaveDeduplication, setEnableWaveDeduplication] = useState(true);
   const [filterWeekend, setFilterWeekend] = useState(false);
   const [enforceHtfBiasGuard, setEnforceHtfBiasGuard] = useState(false);
-  const [enableEarlyBreakeven, setEnableEarlyBreakeven] = useState(false);
-  const [earlyBreakevenMultiple, setEarlyBreakevenMultiple] = useState(0.60);
+  const [enableEarlyBreakeven, setEnableEarlyBreakeven] = useState(true);
+  const [earlyBreakevenMultiple, setEarlyBreakevenMultiple] = useState(0.40);
   const [postLossCooldownMinutes, setPostLossCooldownMinutes] = useState(0);
 
   // Structural Pivot Lookbacks & Advanced Geometry
@@ -272,7 +272,7 @@ export default function SweepReclaimWorkspace({
     setFilterWeekend(cfg.filterWeekend === true);
     setEnforceHtfBiasGuard(cfg.enforceHtfBiasGuard === true);
     setEnableEarlyBreakeven(cfg.enableEarlyBreakeven === true);
-    setEarlyBreakevenMultiple(typeof cfg.earlyBreakevenMultiple === 'number' ? cfg.earlyBreakevenMultiple : 0.60);
+    setEarlyBreakevenMultiple(typeof cfg.earlyBreakevenMultiple === 'number' ? cfg.earlyBreakevenMultiple : 0.40);
     setPostLossCooldownMinutes(typeof cfg.postLossCooldownMinutes === 'number' ? cfg.postLossCooldownMinutes : 0);
 
     if (Array.isArray(cfg.anchorTypes)) {

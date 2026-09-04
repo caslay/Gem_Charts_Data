@@ -1,8 +1,40 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.34
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.35
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-04 (V17.34 — Registration of FVG 50% CE Sniper Institutional Factory Preset)
+> **Last Updated:** 2026-09-04 (V17.35 — 100% Mutual Visibility, Parity & Hot-Reload Dynamic Synchronization Audit)
+
+## 🆕 V17.35 Changelog — 100% Mutual Visibility, Parity & Hot-Reload Dynamic Synchronization Audit (2026-09-04)
+
+### Summary
+1. **Full Mutual Visibility & Zero Hardcoded Parameters across Cockpit & Quant Lab:**
+   - Unified all configuration parameters across `SweepReclaimWorkspace.tsx` (Quant Lab) and `LiveOrderBlockModal.tsx` (Live Execution Cockpit).
+   - Upgraded Section 1 with continuous Compounding Risk slider (`0.25% - 5.00%`) alongside quick-select pills (`[0.5%]`, `[1.0%]`, `[1.5%]`, `[2.0%]`, `[3.0%]`).
+   - Added Section 8 Accordion Drawer for Advanced Institutional Geometry & ATR controls (`lookbackMajor`, `lookbackInternal`, `maxBarsAnchorToSweep`, `maxBarsSweepToReclaim`, `maxBarsToRetest`, `minSweepDepthAtrMultiplier`, `slBufferAtrMultiplier`).
+   - Added Section 9 Execution & Trailing SL Risk Controls (`enableStructuralTrail` and `enableProfitRatchet`).
+   - Expanded Retest Entry Models to all 8 geometries (`OB 50% MT`, `OB Proximal`, `FVG 50% CE`, `FVG Proximal`, `FVG Distal`, `62% OTE`, `Shelf Level`, `Reclaim Level`).
+2. **Eliminated Preset Hydration Loss & Unchecked Settings Gap:**
+   - Corrected `handleApplySrLivePreset` and `applyPresetToLiveExecution` to comprehensively hydrate all Quant Shield rules (`enableWaveDeduplication`, `enableEarlyBreakeven`, `earlyBreakevenMultiple`, `postLossCooldownMinutes`, `filterWeekend`, `enforceHtfBiasGuard`) without silent overrides or omissions.
+   - Synchronized default initial states and fallbacks across `SweepReclaimWorkspace.tsx`, `strategyExecutionConfig.ts`, `equityCalculator.ts`, and `sweep-reclaim-scanner/route.ts` to the institutional champion `factory_sr_5m_fvg_ce_sniper` (`2.0%` compounding, `FVG_CE`, `stage1Multiple: 1.0`, `stage2Multiple: 1.4`, `enableStructuralTrail: true`, `enableProfitRatchet: false`, `enableWaveDeduplication: true`, `enableEarlyBreakeven: true`, `earlyBreakevenMultiple: 0.40`).
+3. **Headless PM2 Daemon Bidirectional Hot-Reload & Cold-Start Persistence:**
+   - Engineered an atomic `UPDATE_SETTINGS` command dispatch pipeline: UI settings changes write to `run_logs/daemon_commands.json` and persist to `run_logs/daemon_live_settings.json`.
+   - Updated `scripts/headless-daemon.ts` to hydrate `daemon_live_settings.json` on cold boot, and to poll and process `UPDATE_SETTINGS` within 1 second via `processPendingCommands()`, updating `AutomatedStrategyExecutionEngine` dynamically without requiring process restarts.
+   - Implemented in-engine Rule 1 Multi-Anchor Wave Deduplication by `s.wave_fingerprint` in `AutomatedStrategyExecutionEngine.ts` to maintain 100% bit-for-bit execution parity with `equityCalculator.ts`.
+
+### Files Modified
+- **`src/lib/quantEngine/strategyExecutionConfig.ts`** [MODIFY]
+- **`src/lib/quantEngine/scannerPresets.ts`** [MODIFY]
+- **`src/components/modals/LiveOrderBlockModal.tsx`** [MODIFY]
+- **`src/components/quantLab/SweepReclaimWorkspace.tsx`** [MODIFY]
+- **`src/app/api/daemon/command/route.ts`** [MODIFY]
+- **`src/hooks/useAutomatedStrategyExecution.ts`** [MODIFY]
+- **`src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`** [MODIFY]
+- **`src/lib/quantEngine/equityCalculator.ts`** [MODIFY]
+- **`src/app/api/quant-lab/sweep-reclaim-scanner/route.ts`** [MODIFY]
+- **`scripts/headless-daemon.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.34 Changelog — Registration of FVG 50% CE Sniper Institutional Factory Preset (2026-09-04)
 

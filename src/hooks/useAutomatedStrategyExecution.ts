@@ -354,6 +354,19 @@ export function useAutomatedStrategyExecution(
       enableProfitRatchet: next.enableProfitRatchet ?? prev.enableProfitRatchet,
       liveSettings: next,
     }));
+
+    // Asynchronously dispatch UPDATE_SETTINGS command to background PM2 daemon
+    fetch('/api/daemon/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'UPDATE_SETTINGS',
+        metadata: { settings: next },
+      }),
+    }).catch((err) => {
+      console.warn('[useAutomatedStrategyExecution] Failed to dispatch UPDATE_SETTINGS to daemon:', err);
+    });
+
     return next;
   }, []);
 

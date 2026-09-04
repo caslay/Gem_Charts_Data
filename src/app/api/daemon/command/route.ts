@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export interface DaemonCommandPayload {
   id: string;
-  action: 'EMERGENCY_FLATTEN' | 'SNAP_BREAKEVEN' | 'CANCEL_PENDING' | 'TOGGLE_AUTO_EXEC';
+  action: 'EMERGENCY_FLATTEN' | 'SNAP_BREAKEVEN' | 'CANCEL_PENDING' | 'TOGGLE_AUTO_EXEC' | 'UPDATE_SETTINGS';
   positionId?: string;
   timestamp: number;
   timeIso: string;
@@ -27,6 +27,21 @@ export async function POST(req: Request) {
     const runLogsDir = path.join(rootDir, 'run_logs');
     if (!fs.existsSync(runLogsDir)) {
       fs.mkdirSync(runLogsDir, { recursive: true });
+    }
+
+    // When updating settings, atomically mirror active settings to daemon_live_settings.json
+    if (action === 'UPDATE_SETTINGS' && metadata?.settings) {
+      const liveSettingsFile = path.join(runLogsDir, 'daemon_live_settings.json');
+      try {
+        let existing = {};
+        if (fs.existsSync(liveSettingsFile)) {
+          existing = JSON.parse(fs.readFileSync(liveSettingsFile, 'utf8'));
+        }
+        const updated = { ...existing, ...metadata.settings, updatedAt: Date.now() };
+        fs.writeFileSync(liveSettingsFile, JSON.stringify(updated, null, 2), 'utf8');
+      } catch (e) {
+        console.warn('[DAEMON COMMAND API] Failed to mirror daemon_live_settings.json:', e);
+      }
     }
 
     const commandFile = path.join(runLogsDir, 'daemon_commands.json');

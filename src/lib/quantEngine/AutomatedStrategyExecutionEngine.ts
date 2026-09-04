@@ -199,15 +199,15 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   stage3Ratio: 0.0,
 
   enableStructuralTrail: true,
-  enableProfitRatchet: true,
+  enableProfitRatchet: false,
   slBufferAtrMultiplier: 0.10,
 
-  // Quant Shield Defaults (Pure Baseline)
-  enableWaveDeduplication: false,
+  // Quant Shield Defaults (Aligned with factory_sr_5m_fvg_ce_sniper champion)
+  enableWaveDeduplication: true,
   filterWeekend: false,
   enforceHtfBiasGuard: false,
-  enableEarlyBreakeven: false,
-  earlyBreakevenMultiple: 0.60,
+  enableEarlyBreakeven: true,
+  earlyBreakevenMultiple: 0.40,
   postLossCooldownMinutes: 0,
 
   liveSettings: DEFAULT_SR_LIVE_SETTINGS,
@@ -262,6 +262,31 @@ export class AutomatedStrategyExecutionEngine {
 
   public updateConfig(newConfig: Partial<AutomatedExecutionConfig>): void {
     this.config = { ...this.config, ...newConfig };
+  }
+
+  public updateSweepReclaimSettings(newSettings: Partial<SweepReclaimLiveSettings>): void {
+    const currentLive = this.config.liveSettings || DEFAULT_SR_LIVE_SETTINGS;
+    const mergedLive = { ...currentLive, ...newSettings };
+    this.config = {
+      ...this.config,
+      liveSettings: mergedLive,
+      compoundingRiskPct: mergedLive.compoundingRiskPct ?? this.config.compoundingRiskPct,
+      stage1Ratio: mergedLive.stage1Ratio ?? this.config.stage1Ratio,
+      stage2Ratio: mergedLive.stage2Ratio ?? this.config.stage2Ratio,
+      stage3Ratio: mergedLive.stage3Ratio ?? this.config.stage3Ratio,
+      stage1Multiple: mergedLive.stage1Multiple ?? this.config.stage1Multiple,
+      stage2Multiple: mergedLive.stage2Multiple ?? this.config.stage2Multiple,
+      stage3Multiple: mergedLive.stage3Multiple ?? this.config.stage3Multiple,
+      enableStructuralTrail: mergedLive.enableStructuralTrail ?? this.config.enableStructuralTrail,
+      enableProfitRatchet: mergedLive.enableProfitRatchet ?? this.config.enableProfitRatchet,
+      slBufferAtrMultiplier: mergedLive.slBufferAtrMultiplier ?? this.config.slBufferAtrMultiplier,
+      enableWaveDeduplication: mergedLive.enableWaveDeduplication ?? this.config.enableWaveDeduplication,
+      filterWeekend: mergedLive.filterWeekend ?? this.config.filterWeekend,
+      enforceHtfBiasGuard: mergedLive.enforceHtfBiasGuard ?? this.config.enforceHtfBiasGuard,
+      enableEarlyBreakeven: mergedLive.enableEarlyBreakeven ?? this.config.enableEarlyBreakeven,
+      earlyBreakevenMultiple: mergedLive.earlyBreakevenMultiple ?? this.config.earlyBreakevenMultiple,
+      postLossCooldownMinutes: mergedLive.postLossCooldownMinutes ?? this.config.postLossCooldownMinutes,
+    };
   }
 
   public getConfig(): AutomatedExecutionConfig {
@@ -1602,10 +1627,10 @@ export class AutomatedStrategyExecutionEngine {
         slBufferAtrMultiplier:
           settings.slBufferAtrMultiplier ??
           this.config.slBufferAtrMultiplier ??
-          0.12,
+          0.10,
 
         // Target Multiples & Execution
-        entryMode: settings.entryMode ?? "FVG_PROXIMAL",
+        entryMode: settings.entryMode ?? "FVG_CE",
         stage1Multiple:
           settings.stage1Multiple ?? this.config.stage1Multiple ?? 1.0,
         stage2Multiple:
@@ -1613,17 +1638,19 @@ export class AutomatedStrategyExecutionEngine {
         stage3Multiple:
           settings.stage3Multiple ?? this.config.stage3Multiple ?? 3.0,
         enableStructuralTrail:
-          settings.enableStructuralTrail ?? this.config.enableStructuralTrail,
+          settings.enableStructuralTrail ?? this.config.enableStructuralTrail ?? false,
         enableProfitRatchet:
-          settings.enableProfitRatchet ?? this.config.enableProfitRatchet,
+          settings.enableProfitRatchet ?? this.config.enableProfitRatchet ?? false,
 
         // 3-Pillar Displacement Gatekeeper Thresholds
         volumeSmaPeriod: settings.volumeSmaPeriod ?? 20,
-        volumeExpansionThreshold: settings.volumeExpansionThreshold ?? 1.35,
-        deltaDominanceThreshold: settings.deltaDominanceThreshold ?? 52.0,
-        bodyRatioThreshold: settings.bodyRatioThreshold ?? 0.50,
+        volumeExpansionThreshold: settings.volumeExpansionThreshold ?? 1.20,
+        deltaDominanceThreshold: settings.deltaDominanceThreshold ?? 50.0,
+        bodyRatioThreshold: settings.bodyRatioThreshold ?? 0.40,
         requireThreePillarDisplacement:
           settings.requireThreePillarDisplacement ?? true,
+        enableWaveDeduplication:
+          settings.enableWaveDeduplication ?? true,
 
         // Valuation Gating
         enforceDiscountPremiumGate: settings.enforceDiscountPremiumGate ?? true,
@@ -1640,6 +1667,48 @@ export class AutomatedStrategyExecutionEngine {
         const engine = new SweepReclaimEngine(scanConfig);
         const scanResult = engine.scanHistoricalSetups(candles);
         let setups = (scanResult.setups || []).slice();
+
+        // 🛡️ Quant Shield Rule 1: Multi-Anchor Wave Deduplication
+        // When multiple anchor tiers trigger on the same displacement wave, keep only the single champion setup
+        const enableWaveDedup = (settings.enableWaveDeduplication ?? this.config.enableWaveDeduplication) !== false;
+        if (enableWaveDedup && setups.length > 0) {
+          const waveMap = new Map<string, SweepReclaimSetup[]>();
+          for (const s of setups) {
+            const waveKey = s.wave_fingerprint || `${s.reclaim_time || s.sweep_time || s.anchor_time}_${s.type}`;
+            if (!waveMap.has(waveKey)) {
+              waveMap.set(waveKey, []);
+            }
+            waveMap.get(waveKey)!.push(s);
+          }
+
+          const champions: SweepReclaimSetup[] = [];
+          for (const [_, cluster] of waveMap.entries()) {
+            if (cluster.length === 1) {
+              champions.push(cluster[0]);
+            } else {
+              cluster.sort((a, b) => {
+                if (a.type === 'BEARISH') {
+                  if (Math.abs(a.entry_price - b.entry_price) > 0.01) {
+                    return a.entry_price - b.entry_price; // Lowest entry price touched first
+                  }
+                } else {
+                  if (Math.abs(a.entry_price - b.entry_price) > 0.01) {
+                    return b.entry_price - a.entry_price; // Highest entry price touched first
+                  }
+                }
+                const pA = getAnchorPriority(a.anchor_type, a.anchor_swing_grade);
+                const pB = getAnchorPriority(b.anchor_type, b.anchor_swing_grade);
+                if (pB !== pA) return pB - pA;
+
+                const depthA = a.sweep_depth_pct ?? 0;
+                const depthB = b.sweep_depth_pct ?? 0;
+                return depthB - depthA;
+              });
+              champions.push(cluster[0]);
+            }
+          }
+          setups = champions;
+        }
 
         // 🛡️ Market Physics Sorting: When multiple candidate setups exist on the same active wave/candle close,
         // sort by price proximity to market so that the entry closest to current price is evaluated and armed first:

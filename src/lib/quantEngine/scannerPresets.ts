@@ -707,8 +707,8 @@ export function purgeConditionCache(): void {
 export function getArmedExecutionStatus(): ArmedExecutionStatus {
   const defaultStatus: ArmedExecutionStatus = {
     type: 'SWEEP_RECLAIM',
-    id: 'factory_sr_5m_alpha_shield_early_be',
-    name: '5m Sweep & Reclaim Alpha Shield (Early BE + Wave Guard)',
+    id: 'factory_sr_5m_fvg_ce_sniper',
+    name: '5m Sweep & Reclaim FVG 50% CE Sniper (Ultra-Low Drawdown)',
     isAutoExecEnabled: getSweepReclaimAutoExec(),
     symbol: 'ETHUSDC',
     timeframe: '5m',
@@ -765,25 +765,37 @@ export function applyPresetToLiveExecution(preset: ScannerPreset): void {
 
     updateSweepReclaimLiveSettings({
       entryMode: cfg.entryMode,
-      enforceDiscountPremiumGate: cfg.enforceDiscountPremiumGate,
-      volumeExpansionThreshold: cfg.volumeExpansionThreshold,
-      deltaDominanceThreshold: cfg.deltaDominanceThreshold,
-      bodyRatioThreshold: cfg.bodyRatioThreshold,
+      enforceDiscountPremiumGate: cfg.enforceDiscountPremiumGate ?? true,
+      volumeSmaPeriod: cfg.volumeSmaPeriod ?? 20,
+      volumeExpansionThreshold: cfg.volumeExpansionThreshold ?? 1.20,
+      deltaDominanceThreshold: cfg.deltaDominanceThreshold ?? 52.0,
+      bodyRatioThreshold: cfg.bodyRatioThreshold ?? 0.40,
       stage1Multiple: cfg.stage1Multiple ?? 1.0,
-      stage2Multiple: cfg.stage2Multiple ?? 1.5,
+      stage2Multiple: cfg.stage2Multiple ?? 1.4,
       stage3Multiple: cfg.stage3Multiple ?? 3.0,
-      enableStructuralTrail: cfg.enableStructuralTrail,
-      enableProfitRatchet: cfg.enableProfitRatchet,
+      stage1Ratio: cfg.stage1Ratio ?? 0.50,
+      stage2Ratio: cfg.stage2Ratio ?? 0.50,
+      stage3Ratio: cfg.stage3Ratio ?? 0.00,
+      enableStructuralTrail: cfg.enableStructuralTrail ?? true,
+      enableProfitRatchet: cfg.enableProfitRatchet ?? false,
       anchorTypes: liveAnchors.length > 0 ? liveAnchors : ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'],
-      lookbackMajor: cfg.lookbackMajor ?? 15,
+      lookbackMajor: cfg.lookbackMajor ?? 10,
       lookbackInternal: cfg.lookbackInternal ?? 5,
-      maxBarsAnchorToSweep: cfg.maxBarsAnchorToSweep ?? 40,
-      maxBarsSweepToReclaim: cfg.maxBarsSweepToReclaim ?? 16,
-      maxBarsToRetest: cfg.maxBarsToRetest ?? 30,
+      maxBarsAnchorToSweep: cfg.maxBarsAnchorToSweep ?? 25,
+      maxBarsSweepToReclaim: cfg.maxBarsSweepToReclaim ?? 10,
+      maxBarsToRetest: cfg.maxBarsToRetest ?? 20,
       minSweepDepthAtrMultiplier: cfg.minSweepDepthAtrMultiplier ?? 0.10,
-      slBufferAtrMultiplier: cfg.slBufferAtrMultiplier ?? 0.15,
+      slBufferAtrMultiplier: cfg.slBufferAtrMultiplier ?? 0.10,
       requireThreePillarDisplacement: cfg.requireThreePillarDisplacement ?? true,
-      enabledTimeframes: cfg.timeframe ? [cfg.timeframe as SupportedOBTimeframe] : ['15m'],
+      enabledTimeframes: cfg.timeframe ? [cfg.timeframe as SupportedOBTimeframe] : ['5m'],
+
+      // 🛡️ Quant Shield Parameters (Full Parity)
+      enableWaveDeduplication: cfg.enableWaveDeduplication === true,
+      filterWeekend: cfg.filterWeekend === true,
+      enforceHtfBiasGuard: cfg.enforceHtfBiasGuard === true,
+      enableEarlyBreakeven: cfg.enableEarlyBreakeven === true,
+      earlyBreakevenMultiple: typeof cfg.earlyBreakevenMultiple === 'number' ? cfg.earlyBreakevenMultiple : 0.40,
+      postLossCooldownMinutes: typeof cfg.postLossCooldownMinutes === 'number' ? cfg.postLossCooldownMinutes : 0,
     });
 
     setArmedExecutionStatus({
@@ -792,7 +804,7 @@ export function applyPresetToLiveExecution(preset: ScannerPreset): void {
       name: preset.name,
       isAutoExecEnabled: getSweepReclaimAutoExec(),
       symbol: cfg.symbol || 'ETHUSDC',
-      timeframe: cfg.timeframe || '15m',
+      timeframe: cfg.timeframe || '5m',
       updatedAt: Date.now(),
     });
   } else if (preset.strategyType === 'ORDER_BLOCK') {

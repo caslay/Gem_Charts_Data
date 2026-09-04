@@ -201,18 +201,18 @@ export async function POST(req: Request) {
         ];
         const entry_mode: SweepReclaimEntryMode = validEntryModes.includes(rawEntryMode as SweepReclaimEntryMode)
           ? (rawEntryMode as SweepReclaimEntryMode)
-          : "FVG_PROXIMAL";
+          : "FVG_CE";
         const enable_structural_trail = (body.enableStructuralTrail ?? body.enable_structural_trail) !== false;
-        const enable_profit_ratchet = (body.enableProfitRatchet ?? body.enable_profit_ratchet) !== false;
+        const enable_profit_ratchet = (body.enableProfitRatchet ?? body.enable_profit_ratchet) === true;
         const min_sweep_depth_atr = Number(body.minSweepDepthAtrMultiplier ?? body.min_sweep_depth_atr ?? 0.10);
         const sl_buffer_atr = Number(body.slBufferAtrMultiplier ?? body.sl_buffer_atr ?? 0.10);
 
-        // 🛡️ Quant Shield & 5 Anti-Loss Streak Parameters (Default to Pure Baseline Champion Preset)
-        const enable_wave_deduplication = (body.enableWaveDeduplication ?? body.enable_wave_deduplication) !== undefined ? Boolean(body.enableWaveDeduplication ?? body.enable_wave_deduplication) : false;
+        // 🛡️ Quant Shield & 5 Anti-Loss Streak Parameters (Default to Champion FVG CE Preset)
+        const enable_wave_deduplication = (body.enableWaveDeduplication ?? body.enable_wave_deduplication) !== undefined ? Boolean(body.enableWaveDeduplication ?? body.enable_wave_deduplication) : true;
         const filter_weekend = (body.filterWeekend ?? body.filter_weekend) !== undefined ? Boolean(body.filterWeekend ?? body.filter_weekend) : false;
         const enforce_htf_bias_guard = (body.enforceHtfBiasGuard ?? body.enforce_htf_bias_guard) !== undefined ? Boolean(body.enforceHtfBiasGuard ?? body.enforce_htf_bias_guard) : false;
-        const enable_early_breakeven = (body.enableEarlyBreakeven ?? body.enable_early_breakeven) !== undefined ? Boolean(body.enableEarlyBreakeven ?? body.enable_early_breakeven) : false;
-        const early_breakeven_multiple = Number(body.earlyBreakevenMultiple ?? body.early_breakeven_multiple ?? 0.60);
+        const enable_early_breakeven = (body.enableEarlyBreakeven ?? body.enable_early_breakeven) !== undefined ? Boolean(body.enableEarlyBreakeven ?? body.enable_early_breakeven) : true;
+        const early_breakeven_multiple = Number(body.earlyBreakevenMultiple ?? body.early_breakeven_multiple ?? 0.40);
         const post_loss_cooldown_minutes = Number(body.postLossCooldownMinutes ?? body.post_loss_cooldown_minutes ?? 0);
 
         if (!start_date || !end_date) {

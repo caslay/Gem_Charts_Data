@@ -34,6 +34,8 @@ import {
   Radio,
   SlidersHorizontal,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   AlertTriangle
 } from 'lucide-react';
 import { useAutomatedStrategyExecution } from '@/hooks/useAutomatedStrategyExecution';
@@ -83,6 +85,7 @@ function LiveOrderBlockModalContent({
 
   const [activeTab, setActiveTab] = useState<'POSITIONS' | 'ANCHORS' | 'SETTINGS'>('POSITIONS');
   const [anchorFilter, setAnchorFilter] = useState<'ALL' | 'RECLAIMED' | 'SWEPT' | 'MONITORED'>('ALL');
+  const [showAdvancedControls, setShowAdvancedControls] = useState(false);
 
   // Multi-Timeframe Stream Ingestion state
   const enabledTimeframes = srSettings?.enabledTimeframes || ['5m', '15m', '1h'];
@@ -121,7 +124,7 @@ function LiveOrderBlockModalContent({
 
   const currentSrLivePresetConfig: SweepReclaimPresetConfig = {
     symbol: symbol || 'ETHUSDC',
-    timeframe: '5m',
+    timeframe: (srSettings?.enabledTimeframes?.[0] as any) || '5m',
     anchorTypes: (() => {
       const result: any[] = [];
       const list = srSettings?.anchorTypes || ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'];
@@ -145,11 +148,22 @@ function LiveOrderBlockModalContent({
     stage1Multiple: srSettings?.stage1Multiple ?? 1.0,
     stage2Multiple: srSettings?.stage2Multiple ?? 1.4,
     stage3Multiple: srSettings?.stage3Multiple ?? 3.0,
-    entryMode: srSettings?.entryMode || 'FVG_PROXIMAL',
+    stage1Ratio: srSettings?.stage1Ratio ?? 0.50,
+    stage2Ratio: srSettings?.stage2Ratio ?? 0.50,
+    stage3Ratio: srSettings?.stage3Ratio ?? 0.00,
+    entryMode: srSettings?.entryMode || 'FVG_CE',
     enableStructuralTrail: srSettings?.enableStructuralTrail ?? true,
-    enableProfitRatchet: srSettings?.enableProfitRatchet ?? true,
+    enableProfitRatchet: srSettings?.enableProfitRatchet ?? false,
     minSweepDepthAtrMultiplier: srSettings?.minSweepDepthAtrMultiplier ?? 0.10,
     slBufferAtrMultiplier: srSettings?.slBufferAtrMultiplier ?? 0.10,
+
+    // 🛡️ Quant Shield Parameters (Full Parity)
+    enableWaveDeduplication: srSettings?.enableWaveDeduplication ?? true,
+    filterWeekend: srSettings?.filterWeekend ?? false,
+    enforceHtfBiasGuard: srSettings?.enforceHtfBiasGuard ?? false,
+    enableEarlyBreakeven: srSettings?.enableEarlyBreakeven ?? true,
+    earlyBreakevenMultiple: srSettings?.earlyBreakevenMultiple ?? 0.40,
+    postLossCooldownMinutes: srSettings?.postLossCooldownMinutes ?? 0,
   };
 
   const handleApplySrLivePreset = (preset: ScannerPreset) => {
@@ -163,16 +177,19 @@ function LiveOrderBlockModalContent({
 
     updateSrSettings({
       entryMode: cfg.entryMode,
-      enforceDiscountPremiumGate: cfg.enforceDiscountPremiumGate,
+      enforceDiscountPremiumGate: cfg.enforceDiscountPremiumGate ?? true,
       volumeSmaPeriod: cfg.volumeSmaPeriod ?? 20,
-      volumeExpansionThreshold: cfg.volumeExpansionThreshold,
-      deltaDominanceThreshold: cfg.deltaDominanceThreshold,
-      bodyRatioThreshold: cfg.bodyRatioThreshold,
+      volumeExpansionThreshold: cfg.volumeExpansionThreshold ?? 1.20,
+      deltaDominanceThreshold: cfg.deltaDominanceThreshold ?? 52.0,
+      bodyRatioThreshold: cfg.bodyRatioThreshold ?? 0.40,
       stage1Multiple: cfg.stage1Multiple ?? 1.0,
       stage2Multiple: cfg.stage2Multiple ?? 1.4,
       stage3Multiple: cfg.stage3Multiple ?? 3.0,
+      stage1Ratio: cfg.stage1Ratio ?? 0.50,
+      stage2Ratio: cfg.stage2Ratio ?? 0.50,
+      stage3Ratio: cfg.stage3Ratio ?? 0.00,
       enableStructuralTrail: cfg.enableStructuralTrail ?? true,
-      enableProfitRatchet: cfg.enableProfitRatchet ?? true,
+      enableProfitRatchet: cfg.enableProfitRatchet ?? false,
       anchorTypes: liveAnchors.length > 0 ? liveAnchors : ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'],
       lookbackMajor: cfg.lookbackMajor ?? 10,
       lookbackInternal: cfg.lookbackInternal ?? 5,
@@ -182,6 +199,15 @@ function LiveOrderBlockModalContent({
       requireThreePillarDisplacement: cfg.requireThreePillarDisplacement ?? true,
       minSweepDepthAtrMultiplier: cfg.minSweepDepthAtrMultiplier ?? 0.10,
       slBufferAtrMultiplier: cfg.slBufferAtrMultiplier ?? 0.10,
+      enabledTimeframes: cfg.timeframe ? [cfg.timeframe as any] : ['5m'],
+
+      // 🛡️ Quant Shield Parameters (Full Parity)
+      enableWaveDeduplication: cfg.enableWaveDeduplication === true,
+      filterWeekend: cfg.filterWeekend === true,
+      enforceHtfBiasGuard: cfg.enforceHtfBiasGuard === true,
+      enableEarlyBreakeven: cfg.enableEarlyBreakeven === true,
+      earlyBreakevenMultiple: typeof cfg.earlyBreakevenMultiple === 'number' ? cfg.earlyBreakevenMultiple : 0.40,
+      postLossCooldownMinutes: typeof cfg.postLossCooldownMinutes === 'number' ? cfg.postLossCooldownMinutes : 0,
     });
   };
 
@@ -622,37 +648,49 @@ function LiveOrderBlockModalContent({
               />
 
               {/* 1. Dynamic Compounding Risk Sizing Selector */}
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-2.5 p-3 rounded-xl bg-slate-900/40 border border-slate-800">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                     <Percent className="w-3.5 h-3.5 text-cyan-400" />
                     Dynamic Compounding Risk Sizing ($1.0R)
                   </span>
-                  <span className="text-[9px] text-cyan-400 font-mono font-bold">
-                    ${((accountEquity * ((srSettings?.compoundingRiskPct || 2.0) / 100))).toFixed(2)} USD / Trade
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-cyan-400 font-mono font-bold">
+                      {(srSettings?.compoundingRiskPct || 2.0).toFixed(2)}%
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-mono">
+                      (${((accountEquity * ((srSettings?.compoundingRiskPct || 2.0) / 100))).toFixed(2)} USD / Trade)
+                    </span>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2">
-                  {[1.0, 2.0, 3.0].map((riskPct) => {
-                    const isSelected = (srSettings?.compoundingRiskPct || 2.0) === riskPct;
-                    const calculatedUsd = (accountEquity * (riskPct / 100)).toFixed(2);
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min="0.25"
+                    max="5.00"
+                    step="0.05"
+                    value={srSettings?.compoundingRiskPct || 2.0}
+                    onChange={(e) => updateSrSettings({ compoundingRiskPct: parseFloat(e.target.value) })}
+                    className="w-full accent-cyan-400 cursor-pointer"
+                  />
+                </div>
+
+                <div className="grid grid-cols-5 gap-1.5">
+                  {[0.5, 1.0, 1.5, 2.0, 3.0].map((riskPct) => {
+                    const isSelected = Math.abs((srSettings?.compoundingRiskPct || 2.0) - riskPct) < 0.01;
                     return (
                       <button
                         key={riskPct}
                         type="button"
                         onClick={() => updateSrSettings({ compoundingRiskPct: riskPct })}
-                        className={`p-2.5 rounded-lg border text-left transition flex flex-col gap-0.5 cursor-pointer ${
+                        className={`py-1.5 rounded-lg border text-center transition cursor-pointer font-mono font-bold text-[9px] ${
                           isSelected
-                            ? 'bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_12px_rgba(34,211,238,0.45)] font-black'
-                            : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                            ? 'bg-cyan-400 border-cyan-300 text-slate-950 shadow-[0_0_10px_rgba(34,211,238,0.45)]'
+                            : 'bg-slate-950/80 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
                         }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-black">{riskPct.toFixed(1)}% Compounding</span>
-                          {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-slate-950" />}
-                        </div>
-                        <span className={`text-[9px] font-mono font-bold ${isSelected ? 'text-slate-900' : 'text-slate-400'}`}>${calculatedUsd} @ 1.0R</span>
+                        {riskPct.toFixed(1)}%
                       </button>
                     );
                   })}
@@ -1030,7 +1068,7 @@ function LiveOrderBlockModalContent({
                       <span className="text-[9.5px] font-bold text-white uppercase">Rule 1: Wave Deduplication</span>
                       <input
                         type="checkbox"
-                        checked={srSettings?.enableWaveDeduplication ?? false}
+                        checked={srSettings?.enableWaveDeduplication ?? true}
                         onChange={(e) => updateSrSettings({ enableWaveDeduplication: e.target.checked })}
                         className="w-3.5 h-3.5 accent-cyan-400 cursor-pointer"
                       />
@@ -1079,10 +1117,10 @@ function LiveOrderBlockModalContent({
                         <span className="text-[9.5px] font-bold text-slate-300 uppercase">Rule 4: Early Breakeven Ratchet</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-cyan-400">+{(srSettings?.earlyBreakevenMultiple ?? 0.60).toFixed(2)}R MFE</span>
+                        <span className="text-[10px] font-bold text-cyan-400">+{(srSettings?.earlyBreakevenMultiple ?? 0.40).toFixed(2)}R MFE</span>
                         <input
                           type="checkbox"
-                          checked={srSettings?.enableEarlyBreakeven ?? false}
+                          checked={srSettings?.enableEarlyBreakeven ?? true}
                           onChange={(e) => updateSrSettings({ enableEarlyBreakeven: e.target.checked })}
                           className="w-3.5 h-3.5 accent-cyan-400 cursor-pointer"
                         />
@@ -1093,13 +1131,13 @@ function LiveOrderBlockModalContent({
                       min="0.40"
                       max="0.90"
                       step="0.05"
-                      disabled={!(srSettings?.enableEarlyBreakeven ?? false)}
-                      value={srSettings?.earlyBreakevenMultiple ?? 0.60}
+                      disabled={!(srSettings?.enableEarlyBreakeven ?? true)}
+                      value={srSettings?.earlyBreakevenMultiple ?? 0.40}
                       onChange={(e) => updateSrSettings({ earlyBreakevenMultiple: parseFloat(e.target.value) })}
                       className="w-full accent-cyan-400"
                     />
                     <span className="text-[8.5px] text-slate-400">
-                      Advances SL to Breakeven 0.0R at +{(srSettings?.earlyBreakevenMultiple ?? 0.60).toFixed(2)}R MFE before TP1.
+                      Advances SL to Breakeven 0.0R at +{(srSettings?.earlyBreakevenMultiple ?? 0.40).toFixed(2)}R MFE before TP1.
                     </span>
                   </div>
 
@@ -1125,6 +1163,206 @@ function LiveOrderBlockModalContent({
                     </span>
                   </div>
                 </div>
+              </div>
+
+              {/* 8. Advanced Institutional Geometry & ATR Controls Accordion Drawer */}
+              <div className="border-t border-slate-800 pt-2 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedControls(!showAdvancedControls)}
+                  className="flex items-center justify-between w-full py-2 px-3 rounded-lg bg-slate-900/60 hover:bg-slate-900 border border-slate-800 text-slate-300 text-xs font-mono transition cursor-pointer shadow-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
+                    <span className="font-bold uppercase tracking-wider text-[10px]">
+                      Advanced Institutional Geometry, ATR & Timing Controls
+                    </span>
+                    <span className="text-[9px] text-slate-500 font-normal hidden sm:inline">
+                      (Lookbacks, Anchor → Sweep → Reclaim Limits, ATR Buffers)
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-cyan-400 text-[10px] font-bold">
+                    <span>{showAdvancedControls ? "Hide Parameters" : "Customize Geometry"}</span>
+                    {showAdvancedControls ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </div>
+                </button>
+
+                {showAdvancedControls && (
+                  <div className="p-4 rounded-lg bg-slate-950/90 border border-slate-800 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 animate-fadeIn text-[10px] font-mono">
+                    {/* Lookback Major Pivots */}
+                    <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
+                      <label className="text-[9.5px] uppercase font-semibold text-slate-400 flex items-center justify-between">
+                        <span>Major Pivot Lookback</span>
+                        <span className="text-cyan-400 font-bold">{srSettings?.lookbackMajor ?? 10} bars</span>
+                      </label>
+                      <input
+                        type="range"
+                        min="5"
+                        max="30"
+                        step="1"
+                        value={srSettings?.lookbackMajor ?? 10}
+                        onChange={(e) => updateSrSettings({ lookbackMajor: parseInt(e.target.value, 10) })}
+                        className="w-full accent-cyan-400"
+                      />
+                      <span className="text-[8.5px] text-slate-500">
+                        Lookback window for Major Highs/Lows
+                      </span>
+                    </div>
+
+                    {/* Lookback Internal Pivots */}
+                    <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
+                      <label className="text-[9.5px] uppercase font-semibold text-slate-400 flex items-center justify-between">
+                        <span>Internal Pivot Lookback</span>
+                        <span className="text-cyan-400 font-bold">{srSettings?.lookbackInternal ?? 5} bars</span>
+                      </label>
+                      <input
+                        type="range"
+                        min="3"
+                        max="15"
+                        step="1"
+                        value={srSettings?.lookbackInternal ?? 5}
+                        onChange={(e) => updateSrSettings({ lookbackInternal: parseInt(e.target.value, 10) })}
+                        className="w-full accent-cyan-400"
+                      />
+                      <span className="text-[8.5px] text-slate-500">
+                        Lookback window for Internal Fractal Swings
+                      </span>
+                    </div>
+
+                    {/* Max Bars Anchor to Sweep */}
+                    <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
+                      <label className="text-[9.5px] uppercase font-semibold text-slate-400 flex items-center justify-between">
+                        <span>Max Anchor-to-Sweep</span>
+                        <span className="text-cyan-400 font-bold">{srSettings?.maxBarsAnchorToSweep ?? 25} bars</span>
+                      </label>
+                      <input
+                        type="range"
+                        min="10"
+                        max="60"
+                        step="1"
+                        value={srSettings?.maxBarsAnchorToSweep ?? 25}
+                        onChange={(e) => updateSrSettings({ maxBarsAnchorToSweep: parseInt(e.target.value, 10) })}
+                        className="w-full accent-cyan-400"
+                      />
+                      <span className="text-[8.5px] text-slate-500">
+                        Max elapsed bars before liquidity expires
+                      </span>
+                    </div>
+
+                    {/* Max Bars Sweep to Reclaim */}
+                    <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
+                      <label className="text-[9.5px] uppercase font-semibold text-slate-400 flex items-center justify-between">
+                        <span>Max Sweep-to-Reclaim</span>
+                        <span className="text-cyan-400 font-bold">{srSettings?.maxBarsSweepToReclaim ?? 10} bars</span>
+                      </label>
+                      <input
+                        type="range"
+                        min="4"
+                        max="30"
+                        step="1"
+                        value={srSettings?.maxBarsSweepToReclaim ?? 10}
+                        onChange={(e) => updateSrSettings({ maxBarsSweepToReclaim: parseInt(e.target.value, 10) })}
+                        className="w-full accent-cyan-400"
+                      />
+                      <span className="text-[8.5px] text-slate-500">
+                        Max bars between sweep wick and reclaim close
+                      </span>
+                    </div>
+
+                    {/* Max Bars to Retest */}
+                    <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
+                      <label className="text-[9.5px] uppercase font-semibold text-slate-400 flex items-center justify-between">
+                        <span>Max Retest Window</span>
+                        <span className="text-cyan-400 font-bold">{srSettings?.maxBarsToRetest ?? 20} bars</span>
+                      </label>
+                      <input
+                        type="range"
+                        min="5"
+                        max="40"
+                        step="1"
+                        value={srSettings?.maxBarsToRetest ?? 20}
+                        onChange={(e) => updateSrSettings({ maxBarsToRetest: parseInt(e.target.value, 10) })}
+                        className="w-full accent-cyan-400"
+                      />
+                      <span className="text-[8.5px] text-slate-500">
+                        Max waiting bars for limit entry fill
+                      </span>
+                    </div>
+
+                    {/* Min Sweep Depth ATR Multiplier */}
+                    <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
+                      <label className="text-[9.5px] uppercase font-semibold text-slate-400 flex items-center justify-between">
+                        <span>Min Sweep Depth (ATR)</span>
+                        <span className="text-cyan-400 font-bold">{(srSettings?.minSweepDepthAtrMultiplier ?? 0.10).toFixed(2)}x ATR</span>
+                      </label>
+                      <input
+                        type="range"
+                        min="0.05"
+                        max="0.30"
+                        step="0.01"
+                        value={srSettings?.minSweepDepthAtrMultiplier ?? 0.10}
+                        onChange={(e) => updateSrSettings({ minSweepDepthAtrMultiplier: parseFloat(e.target.value) })}
+                        className="w-full accent-cyan-400"
+                      />
+                      <span className="text-[8.5px] text-slate-500">
+                        Minimum wick breach beyond anchor level
+                      </span>
+                    </div>
+
+                    {/* SL Buffer ATR Multiplier */}
+                    <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-slate-900/60 border border-slate-800/80">
+                      <label className="text-[9.5px] uppercase font-semibold text-slate-400 flex items-center justify-between">
+                        <span>Stop Loss Buffer (ATR)</span>
+                        <span className="text-cyan-400 font-bold">{(srSettings?.slBufferAtrMultiplier ?? 0.10).toFixed(2)}x ATR</span>
+                      </label>
+                      <input
+                        type="range"
+                        min="0.05"
+                        max="0.30"
+                        step="0.01"
+                        value={srSettings?.slBufferAtrMultiplier ?? 0.10}
+                        onChange={(e) => updateSrSettings({ slBufferAtrMultiplier: parseFloat(e.target.value) })}
+                        className="w-full accent-cyan-400"
+                      />
+                      <span className="text-[8.5px] text-slate-500">
+                        Structural SL offset beyond sweep extreme
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 9. Execution & Trailing SL Risk Controls */}
+              <div className="p-3 rounded-lg bg-slate-900/40 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300 hover:text-white transition">
+                  <input
+                    type="checkbox"
+                    checked={srSettings?.enableStructuralTrail ?? true}
+                    onChange={(e) => updateSrSettings({ enableStructuralTrail: e.target.checked })}
+                    className="w-3.5 h-3.5 rounded accent-cyan-400 cursor-pointer"
+                  />
+                  <span className="text-[9.5px] font-bold">Structural Trailing SL (FVG CE)</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300 hover:text-white transition">
+                  <input
+                    type="checkbox"
+                    checked={srSettings?.enableProfitRatchet ?? false}
+                    onChange={(e) => updateSrSettings({ enableProfitRatchet: e.target.checked })}
+                    className="w-3.5 h-3.5 rounded accent-cyan-400 cursor-pointer"
+                  />
+                  <span className="text-[9.5px] font-bold">+1.0R Profit Ratchet Floor</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer text-slate-300 hover:text-white transition">
+                  <input
+                    type="checkbox"
+                    checked={srSettings?.enforceDiscountPremiumGate ?? true}
+                    onChange={(e) => updateSrSettings({ enforceDiscountPremiumGate: e.target.checked })}
+                    className="w-3.5 h-3.5 rounded accent-cyan-400 cursor-pointer"
+                  />
+                  <span className="text-[9.5px] font-bold">Discount/Premium Valuation Gate</span>
+                </label>
               </div>
             </div>
           )}
