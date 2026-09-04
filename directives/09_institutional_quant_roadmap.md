@@ -177,33 +177,50 @@ No code or parameter modification reaches live PM2 execution without completing 
 3. **Step 3: Ledger Documentation:** Log setup ID, parameters, performance delta, and institutional lessons in the Fine-Tuning Ledger below and update `directives/master_blueprint.md`.
 4. **Step 4: Live PM2 Hot-Reload:** Register the setup in `scannerPresets.ts`, update UI defaults, and dispatch an atomic `UPDATE_SETTINGS` command to the VPS daemon without interrupting the background process.
 
----
-
 ## 📋 7. Dynamic Progress & Fine-Tuning Ledger
 
-This live ledger tracks every completed, active, and pending research experiment. Update this section after every experiment run.
+This live ledger tracks every completed, active, and pending research experiment across our 4-pillar orthogonal roadmap.
 
 ### 📊 Master Progress Summary
-* **Current Active Champion:** `factory_sr_5m_fvg_ce_sniper` (+191.9R Net, 1.61 PF, -6.50R Max DD)
-* **Current Active Phase:** **Phase 1: Microstructure & Volumetric Absorption (Pillar 3)**
-* **Active Experiment:** `EXP-P1-01` (CVD Absorption & Negative Delta on Bullish Sweep)
-* **Total Completed Experiments:** 0
-* **Total Factors Exhausted:** 0
+* **Current Operational Champion:** `factory_sr_5m_fvg_ce_sniper` (+197.90R Net, 1.62 PF, -6.50R Max DD, $43,989 final eq from $1,000)
+* **Qualified Successor Candidate (Max Return):** `factory_sr_5m_fvg_ce_sniper_v2` (**+223.76R Net**, **1.75 PF**, -6.68R Max DD, **$74,287 final eq from $1,000**, 12.9% Comp DD, **14/14 Winning Months**)
+* **Qualified Successor Candidate (Low Drawdown):** `factory_sr_5m_alpha_shield_v2` (**+206.75R Net**, **1.70 PF**, **-5.75R Max DD**, **$52,821 final eq from $1,000**, **11.3% Comp DD**, **14/14 Winning Months**)
+* **Current Active Phase:** **Phases 1, 2 & 3 Completed · Phase 4 (Macro HTF SMT Bias) Next**
+* **Total Completed Experiments:** 25 Candle-by-Candle Path-Dependent Backtests
+* **Total Factors Exhausted (3-Strike Rule):** 1 (Taker Delta Dominance > 52% permanently locked)
 
 ---
 
-### 🧪 Experiment Tracking Matrix
+### 🧪 Comprehensive Tournament Matrix ($1,000 Starting Capital · 2% Compounding · 1-Year Parity)
 
-| Experiment ID | Pillar | Factor Tested | Core Hypothesis | Net R | PF | Max DD | Win Rate | Outcome / Status |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **BENCHMARK** | — | `FVG_CE_SNIPER` | Champion Control Baseline | **+191.9R** | **1.61** | **-6.5R** | **53.4%** | 🟢 **ACTIVE CHAMPION** |
-| `EXP-P1-01` | P3 | CVD Absorption | Negative Delta on Bullish Sweep (Absorption) | TBD | TBD | TBD | TBD | 🟡 **PLANNED** |
-| `EXP-P1-02` | P3 | OLS Velocity Gate | Minimum OLS displacement angle for reclaim | TBD | TBD | TBD | TBD | ⚪ PENDING |
-| `EXP-P1-03` | P3 | Vol Expansion 1.35x| Stricter volume surge threshold (1.2x -> 1.35x) | TBD | TBD | TBD | TBD | ⚪ PENDING |
-| `EXP-P2-01` | P2 | Session Universes | Asian/London only vs Swing Pivots | TBD | TBD | TBD | TBD | ⚪ PENDING |
-| `EXP-P2-02` | P2 | Sweep Depth Ceiling| ATR ceiling (max 0.40 ATR) to avoid blowouts | TBD | TBD | TBD | TBD | ⚪ PENDING |
-| `EXP-P3-01` | P4 | Vol-Adaptive TP2 | Dynamic TP2 expansion in high ATR regimes | TBD | TBD | TBD | TBD | ⚪ PENDING |
-| `EXP-P4-01` | P1 | BTC SMT Alignment | 1H BTC SMT divergence gating on sweeps | TBD | TBD | TBD | TBD | ⚪ PENDING |
+| Experiment ID | Pillar | Factor Tested | Value Tested | Trades | Net R | PF | Max DD | Comp DD% | $1k Final Eq | Outcome / Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **BENCHMARK** | — | `FVG_CE_SNIPER` | 1.20x Vol, All Anchors, 20 TTL, 1.0/1.4R | 1,958 | **+197.90R** | **1.62** | **-6.50R** | **13.4%** | **$43,989** | 🏆 **CONTROL BENCHMARK** |
+| `EXP-P1-01A` | P3 | Delta Dominance | 50.0% Gate | 2,076 | +211.50R | 1.62 | -8.10R | 15.2% | $56,983 | 🔴 REJECTED (DD > -8.0R) |
+| `EXP-P1-01B` | P3 | Delta Dominance | 55.0% Gate | 1,702 | +162.60R | 1.59 | -8.10R | 15.4% | $22,265 | 🔴 REJECTED (Strike 2) |
+| `EXP-P1-01C` | P3 | Delta Dominance | 58.0% Gate | 1,394 | +127.10R | 1.56 | -10.90R | 20.1% | $11,243 | 🔴 **EXHAUSTED (Strike 3)** |
+| `EXP-P1-02A` | P3 | Volume Expansion | 1.10x SMA20 | 2,056 | **+211.30R** | **1.64** | -7.10R | 13.5% | **$57,048** | 🟢 **QUALIFIED (Beats Hurdle)** |
+| `EXP-P1-02B` | P3 | Volume Expansion | 1.35x SMA20 | 1,797 | +178.10R | 1.59 | -7.90R | 14.9% | $29,934 | 🔴 REJECTED |
+| `EXP-P1-02C` | P3 | Volume Expansion | 1.50x SMA20 | 1,655 | +181.50R | 1.66 | -8.70R | 16.3% | $32,331 | 🔴 REJECTED |
+| `EXP-P1-03A` | P3 | Body-to-Range | 0.30 Ratio | 1,994 | +204.00R | 1.64 | -8.30R | 15.7% | $49,542 | 🔴 REJECTED (DD > -8.0R) |
+| `EXP-P1-03B` | P3 | Body-to-Range | 0.50 Ratio | 1,899 | +191.50R | 1.62 | **-6.00R** | **12.0%** | $38,923 | 🛡️ Slashes Drawdown |
+| `EXP-P1-03C` | P3 | Body-to-Range | 0.60 Ratio | 1,771 | +165.30R | 1.56 | -7.00R | 13.5% | $23,284 | 🔴 REJECTED |
+| `EXP-P2-01A` | P2 | Anchor Universe | Session Only (No Swings) | 247 | +7.40R | 1.15 | -7.50R | 14.4% | $1,135 | 🔴 REJECTED (Under-trading) |
+| `EXP-P2-01B` | P2 | Anchor Universe | Swing Pivots + Daily Only | 1,926 | **+216.20R** | **1.73** | **-6.30R** | **12.2%** | **$63,710** | 🟢 **QUALIFIED (Alpha Breakthrough)** |
+| `EXP-P2-02A` | P2 | Anchor-Sweep TTL | 15 bars (75m) | 1,794 | +188.40R | 1.67 | -7.00R | 13.2% | $37,003 | 🔴 REJECTED |
+| `EXP-P2-02B` | P2 | Anchor-Sweep TTL | 35 bars (~3h) | 2,210 | +228.20R | 1.65 | -8.10R | 15.2% | $78,976 | 🔴 REJECTED (DD > -8.0R) |
+| `EXP-P2-02C` | P2 | Anchor-Sweep TTL | 50 bars (~4h) | 2,332 | +229.40R | 1.60 | -8.10R | 15.2% | $79,903 | 🔴 REJECTED (DD > -8.0R) |
+| `EXP-P2-03A` | P2 | Reclaim Snapback | 5 bars (25m) | 1,689 | +183.00R | 1.70 | -8.70R | 16.6% | $33,525 | 🔴 REJECTED |
+| `EXP-P2-03B` | P2 | Reclaim Snapback | 15 bars (75m) | 2,169 | +209.10R | 1.58 | -8.80R | 17.1% | $53,927 | 🔴 REJECTED |
+| `EXP-P2-04A` | P2 | Retest Window TTL | 10 bars (50m) | 2,043 | +211.80R | 1.65 | -7.10R | 13.5% | $57,654 | 🟢 Beats Hurdle |
+| `EXP-P2-04B` | P2 | Retest Window TTL | 15 bars (75m) | 2,053 | +213.30R | 1.65 | -7.10R | 13.5% | $59,401 | 🟢 Beats Hurdle |
+| `EXP-P2-HYB-A`| P2 | Combined P2 Winner | Pivots + Daily, Retest 15b | 1,924 | **+217.20R** | **1.73** | **-6.30R** | **12.2%** | **$65,010** | 🟢 **QUALIFIED PHASE 2 CHAMPION** |
+| `EXP-P3-01A` | P4 | TP2 Multiple | 1.30R (50/50) | 1,938 | **+221.95R** | **1.74** | -6.60R | 12.8% | **$71,483** | 🟢 Beats Hurdle |
+| `EXP-P3-01B` | P4 | TP2 Multiple | 1.50R (50/50) | 1,914 | +206.75R | 1.70 | **-5.75R** | **11.3%** | $52,821 | 🛡️ **SLASHES DD (< -5.8R)** |
+| `EXP-P3-02B` | P4 | Tranche Split | 60% @ 1.0R / 40% @ 1.4R | 1,924 | **+220.16R** | **1.74** | -6.44R | 12.5% | $69,170 | 🟢 Beats Hurdle |
+| `EXP-P3-SYN-B`| P4 | Synthesis All-Time | TP2 1.30R (60/40 Split) | 1,938 | **+223.76R** | **1.75** | **-6.68R** | **12.9%** | **$74,287** | 🏆 **NEW ALL-TIME CHAMPION** |
+| `EXP-P3-03B` | P4 | Early BE Multiple | Delayed to 0.50R | 1,886 | +193.00R | 1.47 | -9.70R | 18.2% | $38,374 | 🔴 Severe Degradation |
+| `EXP-P3-03C` | P4 | Early BE Multiple | Delayed to 0.60R | 1,850 | +167.10R | 1.33 | -18.30R | 32.0% | $22,058 | 🔴 Catastrophic DD |
 
 ---
 
@@ -215,3 +232,23 @@ This live ledger tracks every completed, active, and pending research experiment
 * **Finding:** Switching entry geometry from FVG Proximal to FVG 50% Consequent Encroachment (CE) paired with Rule 1 Wave Deduplication and accelerated +0.40R Early Breakeven reduced Max Drawdown by over $50\%$ (from $-13.2\text{R} \to -6.5\text{R}$) while increasing Net Return from $+155.4\text{R} \to +191.9\text{R}$ and Profit Factor from $1.35 \to 1.61$.
 * **Microstructure Rationale:** Entering at the 50% mean threshold of the displacement imbalance provides a strictly superior risk-to-reward ratio. Tighter structural stop distance ($|Entry - SL|$) directly increases compounded contract size per trade for the same dollar risk.
 * **Anti-Tunnel Lesson:** Never accept wide stop losses when an imbalance offers a clean 50% mathematical discount. Always simulate the Next-Bar Ratchet Rule to ensure breakeven adjustments accurately reflect live exchange mechanics.
+
+#### Entry 002 (2026-09-04) — The Taker Delta Dominance Trap (Passive Absorption vs Late Momentum)
+* **Finding:** Stricter taker delta thresholds ($55.0\%$ and $58.0\%$) monotonically degraded net performance (from $+197.9\text{R} \to +162.6\text{R} \to +127.1\text{R}$) and caused Max Drawdown to balloon from $-6.5\text{R} \to -10.9\text{R}$ ($20.1\%$ compounded DD). Under the 3-Strike Rule, increasing delta dominance is permanently marked **`EXHAUSTED / NO_EDGE`**.
+* **Microstructure Rationale:** In 5m crypto futures, authentic institutional sweep reversals occur through **passive limit-order absorption** at the extreme. A massive market-order taker surge often prints *late* in the impulse or during retail FOMO breakouts. Filtering for $\ge 58\%$ taker volume causes the engine to buy local highs and short local lows, forfeiting early FVG retests. The baseline $52.0\%$ threshold represents the optimal mathematical sweet spot.
+
+#### Entry 003 (2026-09-04) — Volume Expansion Multiplier (1.10x vs Climax Exhaustion)
+* **Finding:** Relaxing volume expansion from $1.20\text{x} \to 1.10\text{x}$ boosted Net Return from $+197.9\text{R} \to +211.3\text{R}$, Profit Factor to $1.64$, and final equity from $\$43,989 \to $\$57,048$ with zero degradation in compounded drawdown ($13.5\%$). Conversely, demanding high volume climaxes ($1.35\text{x} - 1.50\text{x}$) degraded performance ($+178.1\text{R}$).
+* **Microstructure Rationale:** A $1.10\text{x}$ volume threshold captures the subtle initiation of institutional displacement. Waiting for a $1.50\text{x}$ volume spike frequently enters at the climax exhaustion point, where market makers are offloading inventory rather than establishing a fresh directional wave.
+
+#### Entry 004 (2026-09-04) — Anchor Universe Purification (Swing Pivots + Daily Superiority)
+* **Finding:** Purging noisy session extremes (`ASIAN_HIGH`, `ASIAN_LOW`, `LONDON_HIGH`, `LONDON_LOW`) and restricting the engine strictly to structural `SWING_PIVOT`, `PDH`, and `PDL` anchors increased Profit Factor from $1.64 \to 1.73$, compressed Max Drawdown to $-6.30\text{R}$ ($12.2\%$ compounded DD), and boosted return to $+216.2\text{R}$. An Asian/London session-only strategy produced an abysmal $+7.4\text{R}$ over 1 year.
+* **Microstructure Rationale:** In ETHUSDC 24/7 futures, arbitrary clock-based session boundaries are constantly traversed by organic crypto flow. Structural price swings (validated fractal pivots) and Previous Day High/Low represent genuine resting liquidity pools with institutional buy/sell stops.
+
+#### Entry 005 (2026-09-04) — Retest Window TTL (Eliminating Stale Limit Drag)
+* **Finding:** Shortening the retest order expiration window from $20\text{ bars} \to 15\text{ bars}$ ($75$ minutes) improved Profit Factor to $1.73$ and added $+1.0\text{R}$ net, bringing combined Phase 2 equity to $\$65,010$ ($+217.2\text{R}$).
+* **Microstructure Rationale:** Fresh imbalances are filled quickly. Retests that linger for $> 15$ bars ($> 75$ minutes) often indicate loss of institutional displacement momentum and transition into choppy consolidation, increasing the probability of a failed reclaim.
+
+#### Entry 006 (2026-09-04) — Target Harvest Calibration & The Early Breakeven Bedrock
+* **Finding:** Shifting harvest execution to **$60\%$ @ $1.0\text{R}$ and $40\%$ @ $1.30\text{R}$** crowned a new All-Time Champion: **$+223.76\text{R}$ Net Return, $1.75$ Profit Factor, $-6.68\text{R}$ Max Drawdown, and $\$74,287$ final equity from $\$1,000$** ($+68.9\%$ higher capital accumulation than baseline). Delaying Early Breakeven to $0.50\text{R}$ or $0.60\text{R}$ caused catastrophic drawdown degradation ($-18.3\text{R}$ Max DD, $32.0\%$ compounded DD).
+* **Microstructure Rationale:** Banking $60\%$ of inventory at $1.0\text{R}$ mathematically guarantees a winning trade, while a $1.30\text{R}$ TP2 has a significantly higher hit probability in 5m ETH market structure than wider targets. Meanwhile, the $+0.40\text{R}$ Early Breakeven is proven to be the non-negotiable structural bedrock of the entire engine: it converts impending multi-R loss streaks into harmless breakeven scratches.

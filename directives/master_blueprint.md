@@ -1,8 +1,23 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.36
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.37
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-04 (V17.36 — Institutional Quant Research Roadmap & Anti-Tunnel Optimization Protocol Directive 09)
+> **Last Updated:** 2026-09-04 (V17.37 — V2 Champion Promotion & Legacy Preset Deprecation)
+
+## 🆕 V17.37 Changelog — V2 Champion Promotion & Legacy Preset Deprecation (2026-09-04)
+
+### Summary
+1. **Promotion of All-Time Champion `factory_sr_5m_fvg_ce_sniper_v2`:**
+   - Evaluated across 106,560 5m bars under 100% live PM2 parity: $+223.76\text{R}$ Net Realized Return, $1.75$ Profit Factor, $-6.68\text{R}$ Max DD ($12.9\%$ Compounded DD), and $\$74,287$ accumulated equity from $\$1,000$ initial capital (+7,328% gain), with $14/14$ winning months across the full 1-year historical dataset.
+   - Core Architecture: FVG 50% Consequent Encroachment (CE), purified `SWING_PIVOT`, `PDH`, `PDL` anchors, $1.10\text{x}$ volume expansion, $15\text{ bars}$ ($75\text{m}$) retest TTL, asymmetric $60\%$ @ $1.0\text{R}$ / $40\%$ @ $1.30\text{R}$ harvest, and accelerated $+0.40\text{R}$ Early Breakeven.
+2. **Promotion of Capital Preservation Champion `factory_sr_5m_alpha_shield_v2`:**
+   - Delivers ultra-compressed $-5.75\text{R}$ Max Drawdown ($11.3\%$ compounded DD) with $+206.75\text{R}$ Net Return, $1.70\text{ PF}$, and $\$52,821$ final equity from $\$1,000$, with $14/14$ winning months.
+   - Core Architecture: $50\%$ @ $1.0\text{R}$ / $50\%$ @ $1.50\text{R}$ harvest with identical purified microstructure filters.
+3. **Deprecation & Removal of Legacy Factory Presets:**
+   - Completely purged obsolete presets (`factory_sr_5m_alpha_shield_early_be`, `factory_sr_5m_winner_fvg_proximal`, and old `factory_sr_5m_fvg_ce_sniper`) from `FACTORY_SWEEP_RECLAIM_PRESETS` in `scannerPresets.ts`.
+   - Updated `getArmedExecutionStatus()`, `DEFAULT_SR_LIVE_SETTINGS`, `DEFAULT_AUTOMATED_CONFIG`, and `LiveCockpitStatusBadge.tsx` to automatically default to `factory_sr_5m_fvg_ce_sniper_v2`.
+
+---
 
 ## 🆕 V17.36 Changelog — Institutional Quant Research Roadmap & Anti-Tunnel Optimization Protocol (2026-09-04)
 

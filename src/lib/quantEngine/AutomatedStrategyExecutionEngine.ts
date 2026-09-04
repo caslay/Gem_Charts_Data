@@ -191,18 +191,18 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   tickSize: 0.01,
 
   stage1Multiple: 1.0,
-  stage2Multiple: 1.4,
+  stage2Multiple: 1.30,
   stage3Multiple: 3.0,
 
-  stage1Ratio: 0.5,
-  stage2Ratio: 0.5,
+  stage1Ratio: 0.60,
+  stage2Ratio: 0.40,
   stage3Ratio: 0.0,
 
   enableStructuralTrail: true,
   enableProfitRatchet: false,
   slBufferAtrMultiplier: 0.10,
 
-  // Quant Shield Defaults (Aligned with factory_sr_5m_fvg_ce_sniper champion)
+  // Quant Shield Defaults (Aligned with factory_sr_5m_fvg_ce_sniper_v2 champion)
   enableWaveDeduplication: true,
   filterWeekend: false,
   enforceHtfBiasGuard: false,

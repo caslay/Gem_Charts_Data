@@ -15,8 +15,8 @@ import {
 
 const DEFAULT_SERVER_STATUS: ArmedExecutionStatus = {
   type: 'SWEEP_RECLAIM',
-  id: 'factory_sr_5m_alpha_shield_early_be',
-  name: '5m Sweep & Reclaim Alpha Shield (Early BE + Wave Guard)',
+  id: 'factory_sr_5m_fvg_ce_sniper_v2',
+  name: '5m Sweep & Reclaim FVG 50% CE Sniper V2 (All-Time Champion)',
   isAutoExecEnabled: true,
   symbol: 'ETHUSDC',
   timeframe: '5m',
