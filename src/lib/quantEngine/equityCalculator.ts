@@ -166,7 +166,6 @@ export function adaptSweepReclaimSetupsToTrades(
 
   const nonExecutionOutcomes = [
     'NO_RETEST',
-    'PENDING',
     'EXPIRED',
     'SWEPT_NO_RECLAIM',
     'ANCHOR_ONLY',
@@ -174,7 +173,7 @@ export function adaptSweepReclaimSetupsToTrades(
     'INVALIDATED_AT_RETEST',
   ];
 
-  // 1. Extract strictly valid executed/retested setups
+  // 1. Extract strictly valid executed/retested setups (including active in-flight positions)
   let executedSetups = setups.filter((s) => {
     const isRetested = s.is_retested === true || s.status === 'RETESTED';
     const isNonExecution =
@@ -239,7 +238,20 @@ export function adaptSweepReclaimSetupsToTrades(
             }
           }
 
-          // Tie-breaker: Anchor tier ranking
+          // Primary tie-breaker: Anchor level proximity to current market price
+          // - For Shorts: Lower anchor level is closer to market and touched first as price rallies
+          // - For Longs: Higher anchor level is closer to market and touched first as price dips
+          if (a.type === 'BEARISH') {
+            if (Math.abs(a.anchor_level - b.anchor_level) > 0.01) {
+              return a.anchor_level - b.anchor_level;
+            }
+          } else {
+            if (Math.abs(a.anchor_level - b.anchor_level) > 0.01) {
+              return b.anchor_level - a.anchor_level;
+            }
+          }
+
+          // Secondary tie-breaker: Anchor tier ranking
           const pA = getAnchorPriority(a.anchor_type, a.anchor_swing_grade);
           const pB = getAnchorPriority(b.anchor_type, b.anchor_swing_grade);
           if (pB !== pA) return pB - pA;
@@ -256,14 +268,33 @@ export function adaptSweepReclaimSetupsToTrades(
     waveDeduplicated = [...candidateSetups];
   }
 
-  // Sort chronologically by retest entry time, tiebreak by anchor tier
+  // Sort chronologically by retest entry time, tiebreak by entry price proximity to market (identical to AutomatedStrategyExecutionEngine)
   waveDeduplicated.sort((a, b) => {
     const timeA = a.retest_time || a.reclaim_time || a.sweep_time || a.anchor_time || 0;
     const timeB = b.retest_time || b.reclaim_time || b.sweep_time || b.anchor_time || 0;
     if (timeA !== timeB) return timeA - timeB;
+
+    // 🛡️ Market Physics Sorting: When multiple candidate setups have the exact same retest time,
+    // sort by price proximity to market so that the entry closest to current price is evaluated first:
+    // - For SHORT: Lowest entry price is closest to market and fills first.
+    // - For LONG: Highest entry price is closest to market and fills first.
+    if (a.type === 'BEARISH' && b.type === 'BEARISH') {
+      if (Math.abs(a.entry_price - b.entry_price) > 0.01) {
+        return a.entry_price - b.entry_price;
+      }
+    } else if (a.type === 'BULLISH' && b.type === 'BULLISH') {
+      if (Math.abs(a.entry_price - b.entry_price) > 0.01) {
+        return b.entry_price - a.entry_price;
+      }
+    }
+
     const pA = getAnchorPriority(a.anchor_type, a.anchor_swing_grade);
     const pB = getAnchorPriority(b.anchor_type, b.anchor_swing_grade);
-    return pB - pA;
+    if (pB !== pA) return pB - pA;
+
+    const depthA = a.sweep_depth_pct ?? 0;
+    const depthB = b.sweep_depth_pct ?? 0;
+    return depthB - depthA;
   });
 
   // 2B. Sequential Single-Position Lifecycle Walk & 🛡️ Rule 5 Post-Loss Cooldown
@@ -276,14 +307,15 @@ export function adaptSweepReclaimSetupsToTrades(
 
     for (const s of waveDeduplicated) {
       const openTime = s.retest_time || s.reclaim_time || s.sweep_time || s.anchor_time || 0;
-      const exitTime = s.exit_time || (openTime + 15 * 60 * 1000);
+      const isPending = s.simulated_outcome === 'PENDING' || s.exit_time === null;
+      const exitTime = isPending ? Infinity : (s.exit_time || (openTime + 15 * 60 * 1000));
 
       const isSameTimestamp = lastOpenTimestamp !== 0 && openTime === lastOpenTimestamp;
       const isOverlapping = lastExitTimestamp !== 0 && openTime < lastExitTimestamp;
 
       // 🛡️ Rule 5: Check post-loss cooldown
       let inPostLossCooldown = false;
-      if (cooldownMs > 0 && lastTradeWasLoss && lastExitTimestamp !== 0) {
+      if (cooldownMs > 0 && lastTradeWasLoss && lastExitTimestamp !== 0 && lastExitTimestamp !== Infinity) {
         if (openTime < lastExitTimestamp + cooldownMs) {
           inPostLossCooldown = true;
         }
@@ -293,7 +325,7 @@ export function adaptSweepReclaimSetupsToTrades(
         sequentialSetups.push(s);
         lastExitTimestamp = Math.max(lastExitTimestamp, exitTime);
         lastOpenTimestamp = openTime;
-        lastTradeWasLoss = (typeof s.realized_rr === 'number' ? s.realized_rr : 0) < 0;
+        lastTradeWasLoss = !isPending && (typeof s.realized_rr === 'number' ? s.realized_rr : 0) < 0;
       }
     }
 
@@ -308,18 +340,21 @@ export function adaptSweepReclaimSetupsToTrades(
 
   const executedTrades: StandardizedExecutedTrade[] = candidateSetups.map((s) => {
     const timestamp = s.retest_time || s.reclaim_time || s.sweep_time || s.anchor_time || Date.now();
+    const isPending = s.simulated_outcome === 'PENDING' || s.exit_time === null;
     let realizedR = typeof s.realized_rr === 'number' ? s.realized_rr : 0;
-    let outcome: string = s.stage_exit_type || s.simulated_outcome || (realizedR > 0 ? 'FULL_TP2_WIN' : realizedR === 0 ? 'BE_SCRATCH_WIN' : 'STOPPED_OUT');
+    let outcome: string = isPending
+      ? 'PENDING'
+      : (s.stage_exit_type || s.simulated_outcome || (realizedR > 0 ? 'FULL_TP2_WIN' : realizedR === 0 ? 'BE_SCRATCH_WIN' : 'STOPPED_OUT'));
 
     // Optional Dynamic Early Breakeven Upgrade (if not already recorded in setup)
-    if (enableEarlyBE && realizedR < 0 && typeof s.mfe_r === 'number' && s.mfe_r >= earlyBEMultiple) {
+    if (!isPending && enableEarlyBE && realizedR < 0 && typeof s.mfe_r === 'number' && s.mfe_r >= earlyBEMultiple) {
       realizedR = 0.0;
       outcome = 'BE_SCRATCH_WIN';
     }
 
-    const isWin = realizedR > 0;
-    const isLoss = realizedR < 0;
-    const isScratch = realizedR === 0;
+    const isWin = !isPending && realizedR > 0;
+    const isLoss = !isPending && realizedR < 0;
+    const isScratch = !isPending && realizedR === 0;
 
     return {
       id: s.id,
@@ -347,12 +382,269 @@ export function adaptSweepReclaimSetupsToTrades(
         isStage1Filled: s.is_stage1_filled,
         isStage2Filled: s.is_stage2_filled,
         isStage3Filled: s.is_stage3_filled,
+        exitTime: s.exit_time || null,
       },
     };
   });
 
   // Sort strictly ascending by execution timestamp
   return executedTrades.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+// ── 1:1 Institutional PM2 Execution Telemetry & Guardrail Audit ───────────────
+
+export type ExecutionDisposition =
+  | 'EXECUTED'
+  | 'NO_RETEST'
+  | 'VETOED_CONCURRENCY'
+  | 'VETOED_COOLDOWN'
+  | 'VETOED_DIRECTIONAL'
+  | 'CANCELLED_PRE_FILL'
+  | 'EXPIRED_TTL';
+
+export interface AnnotatedSetupDisposition {
+  setup: SweepReclaimSetup;
+  disposition: ExecutionDisposition;
+  reason: string;
+  badgeLabel: string;
+  badgeColor: 'emerald' | 'rose' | 'amber' | 'slate' | 'purple';
+  matchedTrade?: StandardizedExecutedTrade;
+}
+
+export interface ReconciledExecutionSummary {
+  totalScannedSetups: number;
+  totalExecutedTrades: number;
+  totalWinningTrades: number;
+  totalLosingTrades: number;
+  totalBeScratches: number;
+  executionWinRatePct: number;
+  winRateExScratchPct: number;
+  totalRealizedR: number;
+  avgRealizedR: number;
+  profitFactor: number;
+  maxDrawdownR: number;
+  vetoedBreakdown: {
+    unretestedCount: number;
+    concurrencyVetoCount: number;
+    directionalVetoCount: number;
+    cooldownVetoCount: number;
+  };
+  annotatedSetups: AnnotatedSetupDisposition[];
+  executedTrades: StandardizedExecutedTrade[];
+}
+
+/**
+ * Pure function that calculates high-fidelity 1:1 Live PM2 execution metrics
+ * across candidate setups by strictly honoring institutional risk guardrails:
+ * - Single position concurrency lock (maxOpenPositions: 1)
+ * - Directional conflict vetoes (no long while holding short)
+ * - Retest pullbacks vs missed target expansions
+ * - Post-loss cooldown gating
+ */
+export function calculate1to1ExecutionTelemetry(
+  setups: SweepReclaimSetup[],
+  options: AdaptSweepReclaimOptions = {
+    enforceSinglePositionWalk: true,
+    enableWaveDeduplication: false,
+    filterWeekend: false,
+    enableEarlyBreakeven: false,
+    earlyBreakevenMultiple: 0.60,
+    postLossCooldownMinutes: 0,
+  }
+): ReconciledExecutionSummary {
+  if (!setups || setups.length === 0) {
+    return {
+      totalScannedSetups: 0,
+      totalExecutedTrades: 0,
+      totalWinningTrades: 0,
+      totalLosingTrades: 0,
+      totalBeScratches: 0,
+      executionWinRatePct: 0,
+      winRateExScratchPct: 0,
+      totalRealizedR: 0,
+      avgRealizedR: 0,
+      profitFactor: 0,
+      maxDrawdownR: 0,
+      vetoedBreakdown: {
+        unretestedCount: 0,
+        concurrencyVetoCount: 0,
+        directionalVetoCount: 0,
+        cooldownVetoCount: 0,
+      },
+      annotatedSetups: [],
+      executedTrades: [],
+    };
+  }
+
+  const executedTrades = adaptSweepReclaimSetupsToTrades(setups, options);
+  const executedTradeIds = new Set(executedTrades.map((t) => t.id));
+  const executedTradeMap = new Map(executedTrades.map((t) => [t.id, t]));
+
+  const nonExecutionOutcomes = [
+    'NO_RETEST',
+    'PENDING',
+    'EXPIRED',
+    'SWEPT_NO_RECLAIM',
+    'ANCHOR_ONLY',
+    'INVALIDATED',
+    'INVALIDATED_AT_RETEST',
+  ];
+
+  let unretestedCount = 0;
+  let concurrencyVetoCount = 0;
+  let directionalVetoCount = 0;
+  let cooldownVetoCount = 0;
+
+  const annotatedSetups: AnnotatedSetupDisposition[] = setups.map((s) => {
+    // 1. If executed
+    if (executedTradeIds.has(s.id)) {
+      const matchedTrade = executedTradeMap.get(s.id);
+      const isPending = matchedTrade?.outcome === 'PENDING';
+      return {
+        setup: s,
+        disposition: 'EXECUTED',
+        reason: isPending ? '1:1 PM2 In-Flight Active Position' : '1:1 PM2 Order Filled & Managed',
+        badgeLabel: isPending ? '1:1 PM2 IN-FLIGHT' : '1:1 PM2 FILLED',
+        badgeColor: 'emerald',
+        matchedTrade,
+      };
+    }
+
+    // 2. If never pulled back / retested
+    const isNonExecution =
+      !s.simulated_outcome ||
+      nonExecutionOutcomes.includes(s.simulated_outcome as string) ||
+      !s.is_retested ||
+      s.status === 'RECLAIMED_NO_RETEST';
+
+    if (isNonExecution) {
+      unretestedCount++;
+      return {
+        setup: s,
+        disposition: 'NO_RETEST',
+        reason: 'Price swept & reclaimed but never pulled back to Limit Entry',
+        badgeLabel: 'NO RETEST',
+        badgeColor: 'slate',
+      };
+    }
+
+    // 3. Retested, but vetoed during the sequential execution walk
+    const sTime = s.retest_time || s.reclaim_time || s.sweep_time || s.anchor_time || 0;
+    const overlappingActiveTrade = executedTrades.find((t) => {
+      const tOpen = t.timestamp;
+      const isPending = t.outcome === 'PENDING' || !t.metadata?.exitTime;
+      const tExit = isPending ? Infinity : (t.metadata?.exitTime ?? tOpen + 60 * 60 * 1000);
+      return sTime >= tOpen && sTime <= tExit;
+    });
+
+    if (overlappingActiveTrade) {
+      concurrencyVetoCount++;
+      const isOpposing = overlappingActiveTrade.direction !== s.type;
+      const activeDirLabel = overlappingActiveTrade.direction === 'BULLISH' ? 'LONG' : 'SHORT';
+      if (isOpposing) {
+        directionalVetoCount++;
+        return {
+          setup: s,
+          disposition: 'VETOED_DIRECTIONAL',
+          reason: `Guardrail 3: Blocked because an opposing ${activeDirLabel} position was active`,
+          badgeLabel: 'VETO: OPPOSING LOCK',
+          badgeColor: 'rose',
+        };
+      }
+      return {
+        setup: s,
+        disposition: 'VETOED_CONCURRENCY',
+        reason: `Guardrail 2: Blocked because an active ${activeDirLabel} position was already open`,
+        badgeLabel: 'VETO: ACTIVE POSITION',
+        badgeColor: 'rose',
+      };
+    }
+
+    // Default concurrency / cooldown veto
+    concurrencyVetoCount++;
+    return {
+      setup: s,
+      disposition: 'VETOED_CONCURRENCY',
+      reason: 'Guardrail 2: Single-position concurrency limit reached',
+      badgeLabel: 'VETO: CONCURRENCY',
+      badgeColor: 'amber',
+    };
+  });
+
+  // Calculate high-fidelity institutional performance metrics strictly on closed trades
+  const closedTrades = executedTrades.filter((t) => t.outcome !== 'PENDING');
+  const totalExecutedTrades = closedTrades.length;
+  const totalWinningTrades = closedTrades.filter((t) => t.isWin).length;
+  const totalLosingTrades = closedTrades.filter((t) => t.isLoss).length;
+  const totalBeScratches = closedTrades.filter((t) => t.isScratch).length;
+
+  const executionWinRatePct =
+    totalExecutedTrades > 0
+      ? parseFloat(((totalWinningTrades / totalExecutedTrades) * 100).toFixed(1))
+      : 0;
+
+  const closedWithoutScratch = totalWinningTrades + totalLosingTrades;
+  const winRateExScratchPct =
+    closedWithoutScratch > 0
+      ? parseFloat(((totalWinningTrades / closedWithoutScratch) * 100).toFixed(1))
+      : executionWinRatePct;
+
+  const totalRealizedR = parseFloat(
+    closedTrades.reduce((acc, t) => acc + (t.realizedR || 0), 0).toFixed(2)
+  );
+  const avgRealizedR =
+    totalExecutedTrades > 0
+      ? parseFloat((totalRealizedR / totalExecutedTrades).toFixed(2))
+      : 0;
+
+  const grossWinR = closedTrades
+    .filter((t) => t.isWin)
+    .reduce((acc, t) => acc + t.realizedR, 0);
+  const grossLossR = Math.abs(
+    closedTrades
+      .filter((t) => t.isLoss)
+      .reduce((acc, t) => acc + t.realizedR, 0)
+  );
+  const profitFactor =
+    grossLossR > 0
+      ? parseFloat((grossWinR / grossLossR).toFixed(2))
+      : grossWinR > 0
+      ? 99.9
+      : 0;
+
+  // Max Drawdown in R
+  let peakR = 0;
+  let runningR = 0;
+  let maxDrawdownR = 0;
+  for (const t of executedTrades) {
+    runningR += t.realizedR || 0;
+    if (runningR > peakR) peakR = runningR;
+    const dd = peakR - runningR;
+    if (dd > maxDrawdownR) maxDrawdownR = dd;
+  }
+  maxDrawdownR = parseFloat(maxDrawdownR.toFixed(2));
+
+  return {
+    totalScannedSetups: setups.length,
+    totalExecutedTrades,
+    totalWinningTrades,
+    totalLosingTrades,
+    totalBeScratches,
+    executionWinRatePct,
+    winRateExScratchPct,
+    totalRealizedR,
+    avgRealizedR,
+    profitFactor,
+    maxDrawdownR,
+    vetoedBreakdown: {
+      unretestedCount,
+      concurrencyVetoCount,
+      directionalVetoCount,
+      cooldownVetoCount,
+    },
+    annotatedSetups,
+    executedTrades,
+  };
 }
 
 // ── Order Block Trade Adapter ─────────────────────────────────────────────────

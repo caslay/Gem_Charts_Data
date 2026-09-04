@@ -164,8 +164,45 @@ The Global Risk Governor operates as an independent pre-trade and post-trade gat
 
 ---
 
-## 📜 8. Engine Changelog Ledger
+## ⚖️ 8. The Zero-Guessing 100% Parity Covenant (Quant Lab ≡ PM2 Live Execution)
 
+Quant Lab was engineered to test real strategies under real market conditions. It is **NOT** a theoretical sandbox or a paper spreadsheet. It exists to serve as the **100% bit-for-bit digital twin of the live PM2 Headless Daemon (`AutomatedStrategyExecutionEngine.ts`)**.
+
+To ensure that no trader is ever misled or exposed to hidden execution risks, the following rules are **ABSOLUTE LAW**:
+
+### Rule 8.1: Absolute Prohibition of Post-Facto Ledger Modification
+- **The Violation:** Modifying historical trade ledgers in memory (e.g., `if (s.mfe_r >= 0.60) s.realized_rr = 0.0`) to project hypothetical compounding or win rates.
+- **The Reality:** In real trading, moving a stop loss to Breakeven places a resting stop order on Binance Futures. That stop order triggers whenever price retraces to entry, regardless of whether price would have eventually hit TP2. Post-facto models falsely assume zero winning trades ever pull back to entry, hallucinating unachievable figures (e.g. $12.4M vs real $202k).
+- **The Mandate:** Strategy returns, profit factors, win rates, and drawdowns must **ONLY** be quoted from the end-to-end, sequential, path-dependent candle-by-candle simulation.
+
+### Rule 8.2: Intra-Candle Execution Sequence Safety (The Next-Bar Ratchet Rule)
+- **The Violation:** Triggering an early breakeven or stop ratchet on candle $i$ and evaluating the new stop against candle $i$'s low/high.
+- **The Reality:** For a limit order, candle $i$'s extreme (low for longs, high for shorts) is the exact dip/rally that filled the order before price expanded toward target. Checking the newly ratcheted stop against candle $i$'s extreme causes the simulator to believe price hit the high first and then crashed below entry, instantly murdering hundreds of winning trades on their entry bar (`retest_time === exit_time`).
+- **The Mandate:** Stop-loss ratchets, breakeven adjustments, and trailing stops triggered on candle $i$ take effect strictly starting on candle $i + 1$. The trade cannot be stopped out on bar $i$ by the price action that preceded the fill.
+
+### Rule 8.3: End-to-End Simulation Verification Before Publishing Presets
+- Before any preset is added to `FACTORY_SWEEP_RECLAIM_PRESETS` or recommended to the user, the agent **MUST** run the scan through the actual Quant Lab engine across the entire historical dataset.
+- The agent must inspect:
+  1. The total executed trade count.
+  2. The exact win, loss, and scratch counts.
+  3. The peak-to-trough max drawdown in R and percentage.
+  4. The same-bar exit count (`retest_time === exit_time`), which must be $\le 1$ across 100,000+ bars.
+
+### Rule 8.4: Single Source of Truth Parity Checklist
+Every single execution rule in PM2 Live Execution must have an identical implementation in Quant Lab:
+- **Limit Entry Resolver:** `FVG_PROXIMAL` with identical proximal pricing.
+- **Concurrency Cap:** Max 1 open position at any time (`maxOpenPositions: 1`).
+- **Directional Lock:** Veto opposing entries while in an active trade.
+- **Order TTL:** Expire resting limit orders at 20 bars (100m) and emit `CANCELLED`.
+- **Post-Loss Cooldown:** 45-minute pause after any stop-out.
+
+---
+
+## 📜 9. Engine Changelog Ledger
+
+* **2026-09-04 (V17.32):** Codified Section 8 "The Zero-Guessing 100% Parity Covenant (Quant Lab ≡ PM2 Live Execution)" and Lesson 70. Enforced strict next-bar stop ratchet rule, absolute prohibition of post-facto ledger modifications, and mandatory end-to-end simulation verification across all quant research.
+* **2026-09-04 (V17.31):** Resolved Intra-Candle Sequence Bug in Early Breakeven Simulator (`SweepReclaimEngine.ts` lines 2161 & 2280). Slashed false same-bar exits from 609 to 1. Registered institutional champion preset `factory_sr_5m_alpha_shield_early_be` (+161.4R Net Profit, 1.37 PF, -13.2R Max DD, +1,928% Compounded Return across 106,560 candles).
+* **2026-09-04 (V17.30):** Eliminated Displacement FVG lookahead bias (`searchMax = i`), added Phase 4 immediate missed expansion invalidation, and synchronized in-flight position tracking with 100.0% execution parity.
 * **2026-09-03 (V17.20):** Completed Phase 4 Database Schema Extensions & Global Risk Governor. Extended PostgreSQL schemas (`trading_account` and `trades`) with self-healing migrations. Implemented `GlobalRiskGovernor.ts` pre-trade gatekeeper, dynamic 3-tier risk hierarchy with `/settings` interactive slider, PM2 daemon dynamic hot-reloading & DB trade auditing, `/api/risk/reset` manual override endpoint, Telegram `/risk` and `/reset_risk` bot commands, and automated test suite `scripts/test_risk_governor.ts` (22/22 tests passing).
 * **2026-09-03 (V17.19):** Completed Phase 3 Dedicated Live Binance Journal (Web UI). Implemented server-side 3s cached live state route (`/api/binance/live-state`), 3-viewport telemetry dashboard (`LiveBinanceJournal.tsx`), 2-step desktop emergency flatten modal (`/api/binance/flatten`), environment watermark isolation, and dual-mode journal switching (`JournalContainer.tsx`).
 * **2026-09-03 (V17.18):** Engineered Two-Factor Armed Interlock with 20s auto-disarm timer for emergency Telegram `/flatten`. Features interactive Inline Buttons (`confirm_flatten` / `cancel_flatten`), live floating P&L exposure telemetry, self-destructing buttons, and callback query long-polling.
@@ -173,3 +210,4 @@ The Global Risk Governor operates as an independent pre-trade and post-trade gat
 * **2026-09-03 (V17.16):** Codified Directive 08 operational protocol. Hardened Telegram daily reconciliation report to exclude cancelled/expired orders from active resting queues.
 * **2026-09-02 (V17.15):** Implemented mandatory 20-bar (100-minute) Limit Order TTL expiry and dynamic invalidation guards in `AutomatedStrategyExecutionEngine.ts`.
 * **2026-09-02 (V17.14):** Engineered and registered the Dual-Optimized 5m Anti-Cluster Profile in `scannerPresets.ts`, cutting multi-day loss clusters by up to 87.3%.
+

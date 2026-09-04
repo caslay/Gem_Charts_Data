@@ -35,7 +35,9 @@ import {
   Percent,
   ChevronDown,
   ChevronUp,
-  SlidersHorizontal
+  SlidersHorizontal,
+  ShieldCheck,
+  ShieldAlert
 } from "lucide-react";
 import {
   SweepReclaimSetup,
@@ -46,7 +48,13 @@ import {
   getEntryModeLabel,
   getEntryModeDescription,
 } from "@/lib/quantEngine/SweepReclaimEngine";
-import { adaptSweepReclaimSetupsToTrades, formatCairoDateTime } from "@/lib/quantEngine/equityCalculator";
+import {
+  adaptSweepReclaimSetupsToTrades,
+  calculate1to1ExecutionTelemetry,
+  ReconciledExecutionSummary,
+  AnnotatedSetupDisposition,
+  formatCairoDateTime
+} from "@/lib/quantEngine/equityCalculator";
 import CapitalGrowthLedger from "@/components/quantLab/CapitalGrowthLedger";
 import ScannerPresetControlDeck from "@/components/quantLab/ScannerPresetControlDeck";
 import { ScannerPreset, SweepReclaimPresetConfig } from "@/lib/quantEngine/scannerPresets";
@@ -135,6 +143,10 @@ export default function SweepReclaimWorkspace({
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // ── Global Simulation Mode: 1:1 PM2 Live Execution vs Unconstrained Signal Discovery
+  const [simulationMode, setSimulationMode] = useState<"PM2_LIVE_EXECUTION" | "SIGNAL_DISCOVERY">("PM2_LIVE_EXECUTION");
+  const [tableTab, setTableTab] = useState<"EXECUTED" | "VETOED" | "ALL">("EXECUTED");
 
   // Inspector Modal State
   const [inspectedSetup, setInspectedSetup] = useState<SweepReclaimSetup | null>(null);
@@ -334,9 +346,69 @@ export default function SweepReclaimWorkspace({
     });
   };
 
-  // Filtered Setups
-  const filteredSetups = useMemo(() => {
+  // ── 1:1 Live Execution Telemetry & Guardrail Disposition Summary ───────────
+  const execution1to1Summary: ReconciledExecutionSummary | null = useMemo(() => {
+    return selectedScan?.setups
+      ? calculate1to1ExecutionTelemetry(selectedScan.setups, {
+          enforceSinglePositionWalk: true,
+          enableWaveDeduplication,
+          filterWeekend,
+          enforceHtfBiasGuard,
+          enableEarlyBreakeven,
+          earlyBreakevenMultiple,
+          postLossCooldownMinutes,
+        })
+      : null;
+  }, [
+    selectedScan?.setups,
+    enableWaveDeduplication,
+    filterWeekend,
+    enforceHtfBiasGuard,
+    enableEarlyBreakeven,
+    earlyBreakevenMultiple,
+    postLossCooldownMinutes,
+  ]);
+
+  const executedSrTrades = useMemo(() => {
+    return execution1to1Summary?.executedTrades || [];
+  }, [execution1to1Summary]);
+
+  // Filtered Items (Supports both 1:1 PM2 Execution Mode and Signal Discovery Mode)
+  const filteredAnnotatedItems: AnnotatedSetupDisposition[] = useMemo(() => {
     if (!selectedScan || !selectedScan.setups) return [];
+
+    if (simulationMode === "PM2_LIVE_EXECUTION" && execution1to1Summary) {
+      let items = execution1to1Summary.annotatedSetups;
+
+      // Table Tab Filter
+      if (tableTab === "EXECUTED") {
+        items = items.filter((item) => item.disposition === "EXECUTED");
+      } else if (tableTab === "VETOED") {
+        items = items.filter((item) => item.disposition !== "EXECUTED");
+      }
+
+      if (filterDirection !== "ALL") {
+        items = items.filter((item) => item.setup.type === filterDirection);
+      }
+      if (filterAnchor !== "ALL") {
+        items = items.filter((item) => (item.setup.anchor_type || "SWING_PIVOT") === filterAnchor);
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        items = items.filter(
+          (item) =>
+            item.setup.id.toLowerCase().includes(q) ||
+            item.setup.type.toLowerCase().includes(q) ||
+            (item.setup.anchor_name ? item.setup.anchor_name.toLowerCase().includes(q) : false) ||
+            item.setup.anchor_level.toString().includes(q) ||
+            item.reason.toLowerCase().includes(q) ||
+            item.badgeLabel.toLowerCase().includes(q)
+        );
+      }
+      return items;
+    }
+
+    // Signal Discovery Mode: Map raw setups to AnnotatedSetupDisposition format
     let list = selectedScan.setups;
 
     if (filterDirection !== "ALL") {
@@ -364,38 +436,39 @@ export default function SweepReclaimWorkspace({
       );
     }
 
-    return list;
-  }, [selectedScan, filterDirection, filterAnchor, filterStatus, filterOutcome, searchQuery]);
-
-  const paginatedSetups = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredSetups.slice(start, start + itemsPerPage);
-  }, [filteredSetups, currentPage, itemsPerPage]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredSetups.length / itemsPerPage));
-  const telemetry = selectedScan?.telemetry_summary;
-
-  const executedSrTrades = useMemo(() => {
-    return selectedScan?.setups
-      ? adaptSweepReclaimSetupsToTrades(selectedScan.setups, {
-          enforceSinglePositionWalk: true,
-          enableWaveDeduplication,
-          filterWeekend,
-          enforceHtfBiasGuard,
-          enableEarlyBreakeven,
-          earlyBreakevenMultiple,
-          postLossCooldownMinutes,
-        })
-      : [];
+    return list.map((s) => {
+      const isWin = s.simulated_outcome === "FULL_TP3_WIN" || s.simulated_outcome === "FULL_TP2_WIN";
+      const isLoss = s.simulated_outcome === "STOPPED_OUT";
+      return {
+        setup: s,
+        disposition: s.is_retested ? ("EXECUTED" as const) : ("NO_RETEST" as const),
+        reason: s.simulated_outcome || s.status,
+        badgeLabel: (s.simulated_outcome || s.status).replace(/_/g, " "),
+        badgeColor: isWin ? "emerald" : isLoss ? "rose" : "slate",
+      };
+    });
   }, [
-    selectedScan?.setups,
-    enableWaveDeduplication,
-    filterWeekend,
-    enforceHtfBiasGuard,
-    enableEarlyBreakeven,
-    earlyBreakevenMultiple,
-    postLossCooldownMinutes,
+    selectedScan,
+    simulationMode,
+    execution1to1Summary,
+    tableTab,
+    filterDirection,
+    filterAnchor,
+    filterStatus,
+    filterOutcome,
+    searchQuery,
   ]);
+
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredAnnotatedItems.slice(start, start + itemsPerPage);
+  }, [filteredAnnotatedItems, currentPage, itemsPerPage]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredAnnotatedItems.length / itemsPerPage));
+  const rawTelemetry = selectedScan?.telemetry_summary;
+  const telemetry = rawTelemetry;
+  const filteredSetups = useMemo(() => filteredAnnotatedItems.map((i) => i.setup), [filteredAnnotatedItems]);
+  const paginatedSetups = useMemo(() => paginatedItems.map((i) => i.setup), [paginatedItems]);
 
   return (
     <>
@@ -1138,97 +1211,239 @@ export default function SweepReclaimWorkspace({
       {/* ─────────────────────────────────────────────────────────────────── */}
       {/* 2. TELEMETRY & 3-STAGE HARVEST PERFORMANCE HUD                       */}
       {/* ─────────────────────────────────────────────────────────────────── */}
-      {telemetry && (
+      {(rawTelemetry || execution1to1Summary) && (
         <section className="flex flex-col gap-4">
-          {/* Top Metric Cards Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {/* Total Anchors */}
-            <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
-              <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
-                Anchors Detected
+          {/* ── SIMULATION ENVIRONMENT MODE SELECTOR ── */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 rounded-xl border border-card-border dark:border-slate-800/80 bg-card/90 dark:bg-slate-900/60 backdrop-blur-md shadow-xs gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] uppercase font-mono font-bold text-muted dark:text-slate-400">
+                Simulation Engine:
               </span>
-              <span className="text-lg font-mono font-bold text-foreground dark:text-white">
-                {telemetry.total_anchors_detected ?? 0}
-              </span>
-              <span className="text-[9px] font-mono text-cyan-600 dark:text-cyan-400/80 block mt-0.5">
-                {telemetry.total_sweeps_detected ?? 0} Swept ({telemetry.sweep_rate_pct ?? 0}%)
-              </span>
-            </div>
+              <div className="flex items-center gap-1 p-1 bg-background dark:bg-slate-950 rounded-lg border border-card-border dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSimulationMode("PM2_LIVE_EXECUTION");
+                    setCurrentPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-md text-xs font-mono font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    simulationMode === "PM2_LIVE_EXECUTION"
+                      ? "bg-emerald-500 text-slate-950 font-black shadow-[0_0_12px_rgba(16,185,129,0.35)]"
+                      : "text-muted dark:text-slate-400 hover:text-foreground"
+                  }`}
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>⚡ PM2 Live Execution (1:1 Parity)</span>
+                </button>
 
-            {/* Reclaim Rate */}
-            <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
-              <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
-                Reclaim Rate
-              </span>
-              <span className="text-lg font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                {telemetry.reclaim_rate_pct ?? 0}%
-              </span>
-              <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
-                {telemetry.total_reclaims_confirmed ?? 0} Reclaims
-              </span>
-            </div>
-
-            {/* Retest Win Rate */}
-            <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
-              <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
-                Retest Win Rate
-              </span>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-lg font-mono font-bold text-cyan-600 dark:text-cyan-400">
-                  {telemetry.ex_scratch_win_rate_pct ?? telemetry.retest_win_rate_pct ?? 0}%
-                </span>
-                {(telemetry.total_be_scratches ?? 0) > 0 && (
-                  <span className="text-[9px] font-mono text-muted dark:text-slate-400">
-                    ({telemetry.retest_win_rate_pct ?? 0}% TP2)
-                  </span>
-                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSimulationMode("SIGNAL_DISCOVERY");
+                    setCurrentPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-md text-xs font-mono font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    simulationMode === "SIGNAL_DISCOVERY"
+                      ? "bg-cyan-500 text-slate-950 font-black shadow-[0_0_12px_rgba(6,182,212,0.35)]"
+                      : "text-muted dark:text-slate-400 hover:text-foreground"
+                  }`}
+                >
+                  <Search className="w-3.5 h-3.5" />
+                  <span>🔍 Signal Discovery (Raw Scanner)</span>
+                </button>
               </div>
-              <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
-                {telemetry.total_winning_trades ?? 0}W / {telemetry.total_losing_trades ?? 0}L {(telemetry.total_be_scratches ?? 0) > 0 ? `/ ${telemetry.total_be_scratches}BE` : ''}
-              </span>
             </div>
 
-            {/* Realized R:R */}
-            <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
-              <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
-                Avg Realized R:R
-              </span>
-              <span className={`text-lg font-mono font-bold ${(telemetry.avg_realized_rr ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                {(telemetry.avg_realized_rr ?? 0) > 0 ? "+" : ""}{telemetry.avg_realized_rr ?? 0}R
-              </span>
-              <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
-                Win: +{telemetry.avg_winning_rr ?? 0}R
-              </span>
-            </div>
-
-            {/* Profit Factor */}
-            <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
-              <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
-                Profit Factor
-              </span>
-              <span className="text-lg font-mono font-bold text-purple-600 dark:text-purple-400">
-                {(telemetry.profit_factor ?? 0) >= 99 ? "99.9+" : (telemetry.profit_factor ?? 0).toFixed(2)}
-              </span>
-              <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
-                Gross Win / Loss Ratio
-              </span>
-            </div>
-
-            {/* Expected Value E[R] */}
-            <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
-              <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
-                Expected Value E[R]
-              </span>
-              <span className={`text-lg font-mono font-bold ${(telemetry.expected_value_r ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                {(telemetry.expected_value_r ?? 0) > 0 ? "+" : ""}{telemetry.expected_value_r ?? 0}R
-              </span>
-              <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
-                Per Retest Trade
-              </span>
+            {/* Environmental Rules Badge */}
+            <div className="flex items-center gap-2 text-[10px] font-mono text-muted dark:text-slate-400">
+              {simulationMode === "PM2_LIVE_EXECUTION" ? (
+                <span className="px-2.5 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 font-bold">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>PM2 Guardrails: Max 1 Pos • Directional Locks • 20-Bar TTL</span>
+                </span>
+              ) : (
+                <span className="px-2.5 py-1 rounded bg-cyan-500/10 border border-cyan-500/20 text-cyan-600 dark:text-cyan-400 flex items-center gap-1.5 font-bold">
+                  <Info className="w-3.5 h-3.5" />
+                  <span>Unconstrained Discovery: All Potential Signals Evaluated</span>
+                </span>
+              )}
             </div>
           </div>
 
+          {/* Top Metric Cards Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {simulationMode === "PM2_LIVE_EXECUTION" && execution1to1Summary ? (
+              <>
+                {/* 1. PM2 Executed Trades */}
+                <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+                  <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
+                    PM2 Executed Trades
+                  </span>
+                  <span className="text-lg font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    {execution1to1Summary.totalExecutedTrades} Trades
+                  </span>
+                  <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
+                    {execution1to1Summary.totalScannedSetups} Signals ({execution1to1Summary.vetoedBreakdown.unretestedCount} Unfilled)
+                  </span>
+                </div>
+
+                {/* 2. Execution Win Rate */}
+                <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+                  <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
+                    Execution Win Rate
+                  </span>
+                  <span className="text-lg font-mono font-bold text-cyan-600 dark:text-cyan-400">
+                    {execution1to1Summary.executionWinRatePct}%
+                  </span>
+                  <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
+                    {execution1to1Summary.totalWinningTrades}W / {execution1to1Summary.totalLosingTrades}L {execution1to1Summary.totalBeScratches > 0 ? `/ ${execution1to1Summary.totalBeScratches}BE` : ''}
+                  </span>
+                </div>
+
+                {/* 3. Net Realized Return */}
+                <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+                  <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
+                    Net Realized Return
+                  </span>
+                  <span className={`text-lg font-mono font-bold ${execution1to1Summary.totalRealizedR >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                    {execution1to1Summary.totalRealizedR > 0 ? "+" : ""}{execution1to1Summary.totalRealizedR}R
+                  </span>
+                  <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
+                    Avg: {execution1to1Summary.avgRealizedR > 0 ? "+" : ""}{execution1to1Summary.avgRealizedR}R / trade
+                  </span>
+                </div>
+
+                {/* 4. Profit Factor */}
+                <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+                  <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
+                    Profit Factor
+                  </span>
+                  <span className="text-lg font-mono font-bold text-purple-600 dark:text-purple-400">
+                    {execution1to1Summary.profitFactor >= 99 ? "99.9+" : execution1to1Summary.profitFactor.toFixed(2)}
+                  </span>
+                  <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
+                    Gross Win / Loss Ratio
+                  </span>
+                </div>
+
+                {/* 5. Max Drawdown */}
+                <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+                  <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
+                    Max Drawdown (R)
+                  </span>
+                  <span className="text-lg font-mono font-bold text-rose-600 dark:text-rose-400">
+                    -{execution1to1Summary.maxDrawdownR}R
+                  </span>
+                  <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
+                    Peak-to-Trough Risk Walk
+                  </span>
+                </div>
+
+                {/* 6. Conflicting Losses Filtered */}
+                <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+                  <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
+                    Losses Prevented
+                  </span>
+                  <span className="text-lg font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    {execution1to1Summary.vetoedBreakdown.concurrencyVetoCount + execution1to1Summary.vetoedBreakdown.directionalVetoCount} Vetoed
+                  </span>
+                  <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
+                    Guardrail Veto Protected
+                  </span>
+                </div>
+              </>
+            ) : rawTelemetry ? (
+              <>
+                {/* Total Anchors */}
+                <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+                  <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
+                    Anchors Detected
+                  </span>
+                  <span className="text-lg font-mono font-bold text-foreground dark:text-white">
+                    {rawTelemetry.total_anchors_detected ?? 0}
+                  </span>
+                  <span className="text-[9px] font-mono text-cyan-600 dark:text-cyan-400/80 block mt-0.5">
+                    {rawTelemetry.total_sweeps_detected ?? 0} Swept ({rawTelemetry.sweep_rate_pct ?? 0}%)
+                  </span>
+                </div>
+
+                {/* Reclaim Rate */}
+                <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+                  <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
+                    Reclaim Rate
+                  </span>
+                  <span className="text-lg font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    {rawTelemetry.reclaim_rate_pct ?? 0}%
+                  </span>
+                  <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
+                    {rawTelemetry.total_reclaims_confirmed ?? 0} Reclaims
+                  </span>
+                </div>
+
+                {/* Retest Win Rate */}
+                <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+                  <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
+                    Retest Win Rate
+                  </span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-lg font-mono font-bold text-cyan-600 dark:text-cyan-400">
+                      {rawTelemetry.ex_scratch_win_rate_pct ?? rawTelemetry.retest_win_rate_pct ?? 0}%
+                    </span>
+                    {(rawTelemetry.total_be_scratches ?? 0) > 0 && (
+                      <span className="text-[9px] font-mono text-muted dark:text-slate-400">
+                        ({rawTelemetry.retest_win_rate_pct ?? 0}% TP2)
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
+                    {rawTelemetry.total_winning_trades ?? 0}W / {rawTelemetry.total_losing_trades ?? 0}L {(rawTelemetry.total_be_scratches ?? 0) > 0 ? `/ ${rawTelemetry.total_be_scratches}BE` : ''}
+                  </span>
+                </div>
+
+                {/* Realized R:R */}
+                <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+                  <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
+                    Avg Realized R:R
+                  </span>
+                  <span className={`text-lg font-mono font-bold ${(rawTelemetry.avg_realized_rr ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                    {(rawTelemetry.avg_realized_rr ?? 0) > 0 ? "+" : ""}{rawTelemetry.avg_realized_rr ?? 0}R
+                  </span>
+                  <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
+                    Win: +{rawTelemetry.avg_winning_rr ?? 0}R
+                  </span>
+                </div>
+
+                {/* Profit Factor */}
+                <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+                  <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
+                    Profit Factor
+                  </span>
+                  <span className="text-lg font-mono font-bold text-purple-600 dark:text-purple-400">
+                    {(rawTelemetry.profit_factor ?? 0) >= 99 ? "99.9+" : (rawTelemetry.profit_factor ?? 0).toFixed(2)}
+                  </span>
+                  <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
+                    Gross Win / Loss Ratio
+                  </span>
+                </div>
+
+                {/* Expected Value E[R] */}
+                <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
+                  <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
+                    Expected Value E[R]
+                  </span>
+                  <span className={`text-lg font-mono font-bold ${(rawTelemetry.expected_value_r ?? 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                    {(rawTelemetry.expected_value_r ?? 0) > 0 ? "+" : ""}{rawTelemetry.expected_value_r ?? 0}R
+                  </span>
+                  <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
+                    Per Retest Trade
+                  </span>
+                </div>
+              </>
+            ) : null}
+          </div>
+
           {/* 3-Stage Harvest Distribution & Funnel Visuals */}
+          {telemetry && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
             {/* 4-Phase Conversion Funnel */}
             <div className="lg:col-span-6 p-4 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/30 font-mono shadow-xs">
@@ -1386,6 +1601,7 @@ export default function SweepReclaimWorkspace({
               </div>
             </div>
           </div>
+          )}
         </section>
       )}
 
@@ -1407,6 +1623,58 @@ export default function SweepReclaimWorkspace({
       {/* ─────────────────────────────────────────────────────────────────── */}
       {selectedScan && (
         <section className="border border-card-border dark:border-slate-800/50 bg-card/75 dark:bg-slate-900/30 backdrop-blur-sm rounded-xl p-5 shadow-xs">
+          {/* Mode-Aware Table Sub-Tabs */}
+          {simulationMode === "PM2_LIVE_EXECUTION" && execution1to1Summary && (
+            <div className="flex items-center gap-1.5 p-1 bg-background dark:bg-slate-950 rounded-lg border border-card-border dark:border-slate-800 w-fit mb-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setTableTab("EXECUTED");
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-md text-[11px] font-mono font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  tableTab === "EXECUTED"
+                    ? "bg-emerald-500 text-slate-950 font-black shadow-xs"
+                    : "text-muted dark:text-slate-400 hover:text-foreground"
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>1:1 Executed Trades ({execution1to1Summary.totalExecutedTrades})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTableTab("VETOED");
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-md text-[11px] font-mono font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  tableTab === "VETOED"
+                    ? "bg-rose-500/20 text-rose-600 dark:text-rose-300 border border-rose-500/30 font-black shadow-xs"
+                    : "text-muted dark:text-slate-400 hover:text-foreground"
+                }`}
+              >
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>Guardrail Vetoed Log ({execution1to1Summary.totalScannedSetups - execution1to1Summary.totalExecutedTrades})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setTableTab("ALL");
+                  setCurrentPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-md text-[11px] font-mono font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                  tableTab === "ALL"
+                    ? "bg-muted/30 dark:bg-slate-800 text-foreground dark:text-white font-black shadow-xs"
+                    : "text-muted dark:text-slate-400 hover:text-foreground"
+                }`}
+              >
+                <span>All Signals ({execution1to1Summary.totalScannedSetups})</span>
+              </button>
+            </div>
+          )}
+
           {/* Table Header Controls */}
           <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 mb-4 border-b border-card-border/60 dark:border-slate-800/50 gap-4">
             <div className="flex flex-wrap items-center gap-3">
@@ -1534,10 +1802,13 @@ export default function SweepReclaimWorkspace({
                 </tr>
               </thead>
               <tbody className="divide-y divide-card-border/40 dark:divide-slate-800/40">
-                {paginatedSetups.map((setup, idx) => {
+                {paginatedItems.map((item, idx) => {
+                  const setup = item.setup;
                   const isBull = setup.type === "BULLISH";
                   const isWin = setup.simulated_outcome === "FULL_TP3_WIN" || setup.simulated_outcome === "FULL_TP2_WIN";
                   const isScratch = setup.simulated_outcome === "BE_SCRATCH_WIN" || setup.simulated_outcome === "STRUCTURAL_SCRATCH";
+                  const isExecuted = item.disposition === "EXECUTED";
+                  const isVetoed = item.disposition.startsWith("VETOED");
 
                   return (
                     <tr
@@ -1634,23 +1905,66 @@ export default function SweepReclaimWorkspace({
 
                       {/* Outcome Badge */}
                       <td className="py-2.5 px-3 whitespace-nowrap">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${isWin
-                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30"
-                            : isScratch
-                              ? "bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30"
-                              : setup.simulated_outcome === "STOPPED_OUT"
+                        {simulationMode === "PM2_LIVE_EXECUTION" ? (
+                          <div className="flex flex-col gap-0.5">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[9px] font-bold w-fit ${
+                                isExecuted
+                                  ? isWin
+                                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30"
+                                    : isScratch
+                                    ? "bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30"
+                                    : "bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30"
+                                  : isVetoed
+                                  ? "bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30"
+                                  : "bg-muted/15 text-muted dark:bg-slate-800 dark:text-slate-400"
+                              }`}
+                            >
+                              {item.badgeLabel}
+                            </span>
+                            <span className="text-[8px] font-mono text-muted dark:text-slate-500 truncate max-w-[150px]" title={item.reason}>
+                              {isExecuted ? setup.simulated_outcome?.replace(/_/g, " ") : item.reason}
+                            </span>
+                          </div>
+                        ) : (
+                          <span
+                            className={`px-2 py-0.5 rounded text-[9px] font-bold ${
+                              isWin
+                                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300 border border-emerald-500/30"
+                                : isScratch
+                                ? "bg-cyan-500/15 text-cyan-600 dark:text-cyan-300 border border-cyan-500/30"
+                                : setup.simulated_outcome === "STOPPED_OUT"
                                 ? "bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/30"
                                 : "bg-muted/15 text-muted dark:bg-slate-800 dark:text-slate-400"
-                          }`}>
-                          {setup.simulated_outcome.replace(/_/g, " ")}
-                        </span>
+                            }`}
+                          >
+                            {setup.simulated_outcome.replace(/_/g, " ")}
+                          </span>
+                        )}
                       </td>
 
                       {/* Realized R:R */}
                       <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                        <span className={`font-bold ${setup.realized_rr > 0 ? "text-emerald-600 dark:text-emerald-400" : setup.realized_rr < 0 ? "text-rose-600 dark:text-rose-400" : "text-muted dark:text-slate-400"}`}>
-                          {setup.realized_rr > 0 ? "+" : ""}{setup.realized_rr}R
-                        </span>
+                        {simulationMode === "PM2_LIVE_EXECUTION" && isVetoed ? (
+                          <div className="flex flex-col items-end">
+                            <span className="text-[11px] font-mono text-muted dark:text-slate-500">0.00R</span>
+                            <span className="text-[8px] text-emerald-600 dark:text-emerald-400 font-bold">Veto Protected</span>
+                          </div>
+                        ) : simulationMode === "PM2_LIVE_EXECUTION" && item.disposition === "NO_RETEST" ? (
+                          <span className="text-[11px] font-mono text-muted dark:text-slate-600">—</span>
+                        ) : (
+                          <span
+                            className={`font-bold ${
+                              setup.realized_rr > 0
+                                ? "text-emerald-600 dark:text-emerald-400"
+                                : setup.realized_rr < 0
+                                ? "text-rose-600 dark:text-rose-400"
+                                : "text-muted dark:text-slate-400"
+                            }`}
+                          >
+                            {setup.realized_rr > 0 ? "+" : ""}{setup.realized_rr}R
+                          </span>
+                        )}
                       </td>
 
                       {/* Actions */}

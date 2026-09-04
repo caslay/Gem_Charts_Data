@@ -1436,7 +1436,8 @@ export class SweepReclaimEngine {
             let foundFvg = false;
             let fvgTop = 0;
             let fvgBottom = 0;
-            const searchMax = Math.min(n - 1, i + 2);
+            // FVG must be formed strictly by candles that have already closed on or before reclaim candle i
+            const searchMax = i;
             for (let f = Math.max(2, sweepIdx); f <= searchMax; f++) {
               const c0 = candles[f - 2];
               const c2 = candles[f];
@@ -1534,7 +1535,8 @@ export class SweepReclaimEngine {
             let foundFvg = false;
             let fvgTop = 0;
             let fvgBottom = 0;
-            const searchMax = Math.min(n - 1, i + 2);
+            // FVG must be formed strictly by candles that have already closed on or before reclaim candle i
+            const searchMax = i;
             for (let f = Math.max(2, sweepIdx); f <= searchMax; f++) {
               const c0 = candles[f - 2];
               const c2 = candles[f];
@@ -1962,6 +1964,20 @@ export class SweepReclaimEngine {
       }
 
       // ─── Phase 4: Independent Retest & 3-Stage Harvest Execution Simulation ───
+      // 0. Immediate Missed Expansion Check at Reclaim Candle Close:
+      // If the reclaim candle itself has already closed at or past Target 1,
+      // price expanded directly to TP1 during displacement without waiting for a retrace.
+      // In live PM2 (Gate 4), this setup is rejected as MISSED_TP1_EXPANSION and never armed.
+      const reclaimCandle = candles[reclaimIdx];
+      const reclaimClose = reclaimCandle.c ?? (reclaimCandle as any).close;
+      if ((isBullish && reclaimClose >= target1) || (!isBullish && reclaimClose <= target1)) {
+        baseSetup.status = 'RECLAIMED_NO_RETEST';
+        baseSetup.simulated_outcome = 'NO_RETEST';
+        baseSetup.stage_exit_type = 'NO_RETEST';
+        detectedSetups.push(baseSetup);
+        continue;
+      }
+
       const effectiveMaxRetestIdx = Math.min(n - 1, reclaimIdx + (this.config.maxBarsToRetest ?? 12));
       let retestFound = false;
       let retestIdx: number | null = null;
@@ -1973,11 +1989,29 @@ export class SweepReclaimEngine {
       // (An institutional limit order placed upon candle close can only execute on subsequent ticks/bars)
       for (let i = reclaimIdx + 1; i <= effectiveMaxRetestIdx; i++) {
         const c = candles[i];
+        const open = c.o ?? (c as any).open;
         const low = c.l ?? (c as any).low;
         const high = c.h ?? (c as any).high;
         const close = c.c ?? (c as any).close;
 
         if (isBullish) {
+          // Pre-fill target invalidation (MISSED_TP1_EXPANSION):
+          // If price opened at or above entry and expanded directly to target 1 before retracing to entry
+          if ((open >= executionEntry && high >= target1) || open >= target1) {
+            baseSetup.status = 'RECLAIMED_NO_RETEST';
+            baseSetup.simulated_outcome = 'NO_RETEST';
+            baseSetup.stage_exit_type = 'NO_RETEST';
+            break;
+          }
+
+          // Pre-fill stop loss breach
+          if ((open >= executionEntry && low <= stopLoss) || open <= stopLoss) {
+            baseSetup.status = 'INVALIDATED_AT_RETEST';
+            baseSetup.simulated_outcome = 'NO_RETEST';
+            baseSetup.stage_exit_type = 'NO_RETEST';
+            break;
+          }
+
           if (low <= executionEntry) {
             retestFound = true;
             retestIdx = i;
@@ -1987,11 +2021,28 @@ export class SweepReclaimEngine {
             break;
           }
 
-          // Only check for target clearance strictly AFTER reclaim candle has closed
+          // Target clearance strictly after reclaim candle closed
           if (high >= target1) {
             break;
           }
         } else {
+          // Pre-fill target invalidation (MISSED_TP1_EXPANSION):
+          // If price opened at or below entry and expanded directly down to target 1 before retracing to entry
+          if ((open <= executionEntry && low <= target1) || open <= target1) {
+            baseSetup.status = 'RECLAIMED_NO_RETEST';
+            baseSetup.simulated_outcome = 'NO_RETEST';
+            baseSetup.stage_exit_type = 'NO_RETEST';
+            break;
+          }
+
+          // Pre-fill stop loss breach
+          if ((open <= executionEntry && high >= stopLoss) || open >= stopLoss) {
+            baseSetup.status = 'INVALIDATED_AT_RETEST';
+            baseSetup.simulated_outcome = 'NO_RETEST';
+            baseSetup.stage_exit_type = 'NO_RETEST';
+            break;
+          }
+
           if (high >= executionEntry) {
             retestFound = true;
             retestIdx = i;
@@ -2001,7 +2052,7 @@ export class SweepReclaimEngine {
             break;
           }
 
-          // Only check for target clearance strictly AFTER reclaim candle has closed
+          // Target clearance strictly after reclaim candle closed
           if (low <= target1) {
             break;
           }
@@ -2107,7 +2158,8 @@ export class SweepReclaimEngine {
               activeStopLoss = executionEntry;
               baseSetup.active_trailing_sl = parseFloat(executionEntry.toFixed(4));
               baseSetup.trailing_sl_source = 'BREAKEVEN';
-              stageFilledThisBar = true;
+              // Do NOT set stageFilledThisBar = true here; the new BE stop loss applies
+              // starting on the next bar (i + 1), preventing false same-bar exits caused by bar i's entry dip.
             }
           }
 
@@ -2226,7 +2278,8 @@ export class SweepReclaimEngine {
               activeStopLoss = executionEntry;
               baseSetup.active_trailing_sl = parseFloat(executionEntry.toFixed(4));
               baseSetup.trailing_sl_source = 'BREAKEVEN';
-              stageFilledThisBar = true;
+              // Do NOT set stageFilledThisBar = true here; the new BE stop loss applies
+              // starting on the next bar (i + 1), preventing false same-bar exits caused by bar i's entry rally.
             }
           }
 

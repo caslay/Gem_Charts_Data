@@ -8,6 +8,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 You are an elite Quant Architect and Next.js 16 Developer working on the `Gem_Charts_Data` project (`Quegar Quant Engine`). 
 
+## ⚖️ THE ZERO-GUESSING 100% PARITY MANDATE (Quant Lab ≡ PM2 Live Execution)
+Quant Lab was engineered to test real strategies under real market conditions with **100% bit-for-bit parity to live PM2 execution**.
+1. **Never Quote Post-Facto Paper Numbers:** It is strictly prohibited to modify trade ledgers in memory (e.g. assuming losers become scratches while winners stay untouched) to report hypothetical figures. All performance metrics (R return, Profit Factor, Win Rate, Compounding, Drawdown) MUST be generated through full end-to-end, candle-by-candle simulation in Quant Lab.
+2. **Next-Bar Ratchet Rule:** Stop-loss modifications, breakeven adjustments, and trailing ratchets take effect strictly on bar $i + 1$, preventing same-bar entry-dip stop-out corruption.
+3. **No Guessing Allowed:** Always test every preset and strategy directly in Quant Lab across raw historical candles before presenting results or recommending setups to the trader.
+
 ## 🛑 TOKEN OPTIMIZATION RULE (Progressive Disclosure)
 Do NOT guess the project architecture or past logic. To save the context window, you must dynamically read the relevant documentation from the `directives/` folder based on your current task.
 
