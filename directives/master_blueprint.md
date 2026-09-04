@@ -19,6 +19,10 @@
 4. **Retirement of Auto-Sync GitHub Action (`production-sync.yml`):**
    - Removed `.github/workflows/production-sync.yml` to prevent automated workflows from stripping documentation or directives via `.prodignore`.
    - Standardized direct, normal branch merges (`git merge dev` into `main`) for safe, controlled production releases.
+5. **Institutional Persona & Triple Mandate Codification:**
+   - Formalized the explicit triple role in `AGENTS.md` and `directives/08`: Quant Engine Expert, Expert Futures Trader, and Senior System Architecture Designer (AR).
+   - Codified the Operational Conflict Hierarchy ($\text{Futures Risk \& Execution Reality} > \text{System Stability \& Architecture} > \text{Theoretical Quant Optimization}$) enforcing Trader Capital Safety First.
+   - Enforced Unified Tri-Lens Output Protocol across all non-trivial proposals.
 
 ---
 

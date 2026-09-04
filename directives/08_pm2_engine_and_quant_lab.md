@@ -2,7 +2,7 @@
 
 > **Document Version:** 1.0.0 (V17.16)  
 > **Target Systems:** Headless PM2 Daemon (`scripts/headless-daemon.ts`), Live Automated Engine (`AutomatedStrategyExecutionEngine.ts`), Quant Lab Suite (`SweepReclaimEngine.ts`, `scannerPresets.ts`, `/quant-lab`, SSE routes).  
-> **Audience:** AI Coding Agents, Quant Researchers, and Systems Engineers.  
+> **Audience & Operator Mandate:** Quant Engine Experts, Expert Futures Traders, and Senior System Architecture Designers (subordinate to `AGENTS.md` Triple Mandate).  
 > **Precedence:** Subordinate only to `AGENTS.md` core protocol. Supplements `03_quant_logic.md` and `06_volumetric_sponsorship.md`.  
 > **Master Scope Boundary:** Explicitly excludes VPS OS provisioning, DNS/Caddy reverse proxy configuration, and full-stack Next.js database schemas, which are permanently maintained in `directives/master_blueprint.md`.
 
