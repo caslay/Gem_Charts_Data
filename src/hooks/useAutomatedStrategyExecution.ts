@@ -161,7 +161,7 @@ export function useAutomatedStrategyExecution(
             alertFn('AUTO_ORDER_ROUTED', evt.message, '/audio/fvg_alert.mp3', 'STRATEGY_EXECUTION');
           } else if (evt.type === 'ORDER_FILLED') {
             alertFn('AUTO_ORDER_ROUTED', evt.message, '/audio/sweep_alert.mp3', 'STRATEGY_EXECUTION');
-          } else if (evt.type === 'STAGE_1_HARVEST' || evt.type === 'STAGE_2_HARVEST') {
+          } else if (evt.type === 'STAGE_1_HARVEST' || evt.type === 'STAGE_2_HARVEST' || evt.type === 'EARLY_BREAKEVEN') {
             alertFn('STAGE_FILL', evt.message, '/audio/objective_update.wav', 'STRATEGY_EXECUTION');
           } else if (evt.type === 'POSITION_CLOSED') {
             alertFn('SMT_TRAP', evt.message, '/audio/flow_state.wav', 'STRATEGY_EXECUTION');

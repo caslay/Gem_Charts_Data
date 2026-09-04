@@ -78,11 +78,11 @@ The Flow-State Quant Engine provides two machine-level entry points that operate
 
 | Platform | Protocol | Connection Type | Auth Method | Primary Endpoint |
 |---|---|---|---|---|
-| **Google Gemini Spark** | MCP | Custom Connected App | OAuth 2.0 | `https://flow-state-terminal.vercel.app/api/mcp` |
-| **Antigravity IDE / CLI** | MCP (stdio bridge) | `mcp_config.json` | `mcp-remote` + Bearer Token | `https://flow-state-terminal.vercel.app/api/mcp` |
-| **Claude Desktop** | MCP (stdio bridge) | `claude_desktop_config.json` | `mcp-remote` + Bearer Token | `https://flow-state-terminal.vercel.app/api/mcp` |
-| **Cursor IDE** | MCP (stdio bridge) | Cursor Settings -> MCP | `mcp-remote` + Bearer Token | `https://flow-state-terminal.vercel.app/api/mcp` |
-| **Python / Background Daemons** | REST HTTP | Direct Requests / HTTPX | Bearer Header | `https://flow-state-terminal.vercel.app/api/agent/context` |
+| **Google Gemini Spark** | MCP | Custom Connected App | OAuth 2.0 | `https://mcp.quegar.com/api/mcp` |
+| **Antigravity IDE / CLI** | MCP (stdio bridge) | `mcp_config.json` | `mcp-remote` + Bearer Token | `https://mcp.quegar.com/api/mcp` |
+| **Claude Desktop** | MCP (stdio bridge) | `claude_desktop_config.json` | `mcp-remote` + Bearer Token | `https://mcp.quegar.com/api/mcp` |
+| **Cursor IDE** | MCP (stdio bridge) | Cursor Settings -> MCP | `mcp-remote` + Bearer Token | `https://mcp.quegar.com/api/mcp` |
+| **Python / Background Daemons** | REST HTTP | Direct Requests / HTTPX | Bearer Header | `https://mcp.quegar.com/api/agent/context` |
 
 ---
 
@@ -100,7 +100,7 @@ Fill in the modal fields exactly as follows:
 
 * **Add a custom app link:**
   ```text
-  https://flow-state-terminal.vercel.app/api/mcp
+  https://mcp.quegar.com/api/mcp
   ```
 * **Under Advanced Settings (Expand):**
   * **Client ID:**
@@ -136,19 +136,19 @@ Edit your global configuration file at:
 - **Windows:** `C:\Users\<username>\.gemini\config\mcp_config.json`
 - **macOS/Linux:** `~/.gemini/config/mcp_config.json`
 
-Add the `flow-state-quant-engine` server definition:
+Add the `Quegar-mcp` server definition:
 
 ```json
 {
   "mcpServers": {
-    "flow-state-quant-engine": {
+    "Quegar-mcp": {
       "command": "npx",
       "args": [
         "-y",
         "mcp-remote",
-        "https://flow-state-terminal.vercel.app/api/mcp",
+        "https://mcp.quegar.com/api/mcp",
         "--header",
-        "Authorization: Bearer 961d2c9ac5320b55c0a455bf41c349fbaeb12b5c609ce756"
+        "Authorization: Bearer 919ffb05b951192f6baefc10d23c5f3012ff4c2988491a07b42c5c46e3ce138f"
       ]
     }
   }
@@ -161,14 +161,14 @@ Place the file at `.agents/mcp_config.json` at the root of your repository:
 ```json
 {
   "mcpServers": {
-    "flow-state-quant-engine": {
+    "Quegar-mcp": {
       "command": "npx",
       "args": [
         "-y",
         "mcp-remote",
-        "https://flow-state-terminal.vercel.app/api/mcp",
+        "https://mcp.quegar.com/api/mcp",
         "--header",
-        "Authorization: Bearer 961d2c9ac5320b55c0a455bf41c349fbaeb12b5c609ce756"
+        "Authorization: Bearer 919ffb05b951192f6baefc10d23c5f3012ff4c2988491a07b42c5c46e3ce138f"
       ]
     }
   }
@@ -177,7 +177,7 @@ Place the file at `.agents/mcp_config.json` at the root of your repository:
 
 ### Verification in Antigravity
 In the Antigravity Chat panel, run:
-> *"What tools are available from the flow-state-quant-engine MCP server?"*
+> *"What tools are available from the Quegar-mcp MCP server?"*
 
 The agent will automatically list `get_market_context` and `submit_quant_decision`.
 
@@ -193,14 +193,14 @@ Edit `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "flow-state-quant-engine": {
+    "Quegar-mcp": {
       "command": "npx",
       "args": [
         "-y",
         "mcp-remote",
-        "https://flow-state-terminal.vercel.app/api/mcp",
+        "https://mcp.quegar.com/api/mcp",
         "--header",
-        "Authorization: Bearer 961d2c9ac5320b55c0a455bf41c349fbaeb12b5c609ce756"
+        "Authorization: Bearer 919ffb05b951192f6baefc10d23c5f3012ff4c2988491a07b42c5c46e3ce138f"
       ]
     }
   }
@@ -210,11 +210,11 @@ Edit `claude_desktop_config.json`:
 ### Cursor IDE Configuration
 1. Go to **Cursor Settings** -> **Features** -> **MCP**.
 2. Click **+ Add New MCP Server**.
-3. **Name:** `flow-state-quant-engine`
+3. **Name:** `Quegar-mcp`
 4. **Type:** `command`
 5. **Command:**
    ```bash
-   npx -y mcp-remote https://flow-state-terminal.vercel.app/api/mcp --header "Authorization: Bearer 961d2c9ac5320b55c0a455bf41c349fbaeb12b5c609ce756"
+   npx -y mcp-remote https://mcp.quegar.com/api/mcp --header "Authorization: Bearer 919ffb05b951192f6baefc10d23c5f3012ff4c2988491a07b42c5c46e3ce138f"
    ```
 
 ---
@@ -227,16 +227,16 @@ For automated bots, trading microservices, or custom scripts, the `/api/agent/co
 
 #### cURL Example:
 ```bash
-curl -X GET "https://flow-state-terminal.vercel.app/api/agent/context?symbol=ETHUSDC&timeframe=15m" \
-  -H "Authorization: Bearer 961d2c9ac5320b55c0a455bf41c349fbaeb12b5c609ce756"
+curl -X GET "https://mcp.quegar.com/api/agent/context?symbol=ETHUSDC&timeframe=15m" \
+  -H "Authorization: Bearer 919ffb05b951192f6baefc10d23c5f3012ff4c2988491a07b42c5c46e3ce138f"
 ```
 
 #### Python (`httpx` / `requests`) Example:
 ```python
 import httpx
 
-M2M_SECRET = "961d2c9ac5320b55c0a455bf41c349fbaeb12b5c609ce756"
-BASE_URL = "https://flow-state-terminal.vercel.app"
+M2M_SECRET = "919ffb05b951192f6baefc10d23c5f3012ff4c2988491a07b42c5c46e3ce138f"
+BASE_URL = "https://mcp.quegar.com"
 
 headers = {
     "Authorization": f"Bearer {M2M_SECRET}",
@@ -464,43 +464,43 @@ The engine enforces automated pre-flight safety on all submitted trade decisions
 ---
 
 ## 10. Environment Variables & Deployment Checklist
-
-Ensure the following variables are configured in **Vercel Project Settings (Production & Preview)** and local `.env.local`:
-
-```bash
-# 1. High-Entropy Shared M2M Secret (Bearer Token for Antigravity, Claude, Python)
-M2M_AGENT_SECRET=961d2c9ac5320b55c0a455bf41c349fbaeb12b5c609ce756
-
-# 2. OAuth 2.0 Credentials for Gemini Spark
-OAUTH_CLIENT_ID=gemini-spark-client-176ab3226a39516b
-OAUTH_CLIENT_SECRET=sec_b8b3d5aec9bf2271c8f3fcca3e7b1695d58bc425a905b977
-
-# 3. Database Connection (Neon Postgres)
-POSTGRES_URL=postgres://...
-```
-
----
-
-## 11. Troubleshooting & FAQ
-
-### Q1: Gemini Spark says "This MCP server is not yet supported"
-- **Cause:** The OAuth discovery endpoint metadata returned an unreachable URL (e.g. `localhost`).
-- **Fix:** Verify that `https://flow-state-terminal.vercel.app/.well-known/oauth-authorization-server` returns `https://flow-state-terminal.vercel.app` in `issuer` and `authorization_endpoint`.
-
-### Q2: MCP request returns `406 Not Acceptable`
-- **Cause:** Missing client header `Accept: application/json, text/event-stream`.
-- **Fix:** Use standard MCP clients or ensure `Accept` header includes both `application/json` and `text/event-stream`.
-
-### Q3: External agent requests are redirected to `/login`
-- **Cause:** Middleware route protection intercepting machine paths.
-- **Fix:** Verify `src/proxy.ts` contains the bypass list for `/api/agent`, `/api/mcp`, `/api/oauth`, and `/.well-known`.
-
-### Q4: How do I test the endpoint manually via cURL?
-```bash
-# Test MCP tools/list
-curl -X POST https://flow-state-terminal.vercel.app/api/mcp \
-  -H "Authorization: Bearer 961d2c9ac5320b55c0a455bf41c349fbaeb12b5c609ce756" \
-  -H "Accept: application/json, text/event-stream" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
-```
+ 
+ Ensure the following variables are configured in the VPS production environment (`/home/ubuntu/quegar/.env.production`) and local `.env.local`:
+ 
+ ```bash
+ # 1. High-Entropy Shared M2M Secret (Bearer Token for Antigravity, Claude, Python)
+ M2M_AGENT_SECRET=919ffb05b951192f6baefc10d23c5f3012ff4c2988491a07b42c5c46e3ce138f
+ 
+ # 2. OAuth 2.0 Credentials for Gemini Spark
+ OAUTH_CLIENT_ID=gemini-spark-client-176ab3226a39516b
+ OAUTH_CLIENT_SECRET=sec_b8b3d5aec9bf2271c8f3fcca3e7b1695d58bc425a905b977
+ 
+ # 3. Database Connection (VPS PostgreSQL on loopback)
+ POSTGRES_URL=postgres://quegar_admin:...@127.0.0.1:5432/quegar_db
+ ```
+ 
+ ---
+ 
+ ## 11. Troubleshooting & FAQ
+ 
+ ### Q1: Gemini Spark says "This MCP server is not yet supported"
+ - **Cause:** The OAuth discovery endpoint metadata returned an unreachable URL (e.g. `localhost`).
+ - **Fix:** Verify that `https://mcp.quegar.com/.well-known/oauth-authorization-server` returns `https://mcp.quegar.com` in `issuer` and `authorization_endpoint`.
+ 
+ ### Q2: MCP request returns `406 Not Acceptable`
+ - **Cause:** Missing client header `Accept: application/json, text/event-stream`.
+ - **Fix:** Use standard MCP clients or ensure `Accept` header includes both `application/json` and `text/event-stream`.
+ 
+ ### Q3: External agent requests are redirected to `/login`
+ - **Cause:** Middleware route protection intercepting machine paths.
+ - **Fix:** Verify `src/proxy.ts` contains the bypass list for `/api/agent`, `/api/mcp`, `/api/oauth`, and `/.well-known`.
+ 
+ ### Q4: How do I test the endpoint manually via cURL?
+ ```bash
+ # Test MCP tools/list
+ curl -X POST https://mcp.quegar.com/api/mcp \
+   -H "Authorization: Bearer 919ffb05b951192f6baefc10d23c5f3012ff4c2988491a07b42c5c46e3ce138f" \
+   -H "Accept: application/json, text/event-stream" \
+   -H "Content-Type: application/json" \
+   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+ ```

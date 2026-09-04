@@ -248,6 +248,19 @@ export class TelegramNotifier {
         );
       }
 
+      case 'EARLY_BREAKEVEN': {
+        if (!pos) return null;
+        return (
+          `🛡️ <b>[EARLY BREAKEVEN ACTIVATED — RULE 4]</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `📊 <b>Pair:</b> <code>${pos.symbol}</code> (${pos.timeframe || '5m'})\n` +
+          `⚡ <b>Floating Peak:</b> <b>+${(pos.mfeR || 0).toFixed(2)}R MFE</b>\n` +
+          `🛡️ <b>Trailing Stop Loss:</b> Advanced to <b>BREAKEVEN ($${pos.activeStopLoss.toFixed(2)})</b>\n` +
+          `<i>Net trade risk is now eliminated (Risk-Free / Scratch Protected).</i>\n` +
+          `⏰ <b>Time:</b> <code>${nowIso}</code>`
+        );
+      }
+
       case 'STAGE_1_HARVEST': {
         if (!pos) return null;
         const lockedR = stage1Ratio * (pos.stage1Multiple ?? 1.0);
@@ -307,6 +320,8 @@ export class TelegramNotifier {
           outcomeHeader = '💰 <b>[POSITION CLOSED — PROFIT FLOOR WIN]</b>';
         } else if (pos.exitReason === 'STAGE_1_SCRATCH') {
           outcomeHeader = '🛡️ <b>[POSITION CLOSED — BREAKEVEN SCRATCH]</b>';
+        } else if (pos.exitReason === 'BREAKEVEN_SCRATCH') {
+          outcomeHeader = '🛡️ <b>[EARLY BREAKEVEN SCRATCH — ZERO LOSS]</b>';
         } else if (pos.exitReason === 'STOPPED_OUT') {
           outcomeHeader = '🛑 <b>[STOP LOSS HIT — POSITION CLOSED]</b>';
         }

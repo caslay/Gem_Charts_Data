@@ -9,7 +9,7 @@
 
 ## 1. Executive Summary & Purpose
 
-The **`eth-quant-sop`** skill transforms the **Institutional Synthesis Framework: ETHUSDC.p Quantitative Analysis SOP** into an executable, interactive quant engine capability within Antigravity and Gemini Sparks powered by the **`flow-state-quant-engine` MCP Server**.
+The **`eth-quant-sop`** skill transforms the **Institutional Synthesis Framework: ETHUSDC.p Quantitative Analysis SOP** into an executable, interactive quant engine capability within Antigravity and Gemini Sparks powered by the **`Quegar-mcp` MCP Server**.
 
 It systematically synthesizes four foundational institutional paradigms:
 1. **Pure ICT Time & Price Engine:** Kill-Zones, PD Arrays, and strict TDO prohibition.

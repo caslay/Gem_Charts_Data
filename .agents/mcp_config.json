@@ -1,13 +1,23 @@
 {
   "mcpServers": {
+    "Quegar-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://mcp.quegar.com/api/mcp",
+        "--header",
+        "Authorization: Bearer 919ffb05b951192f6baefc10d23c5f3012ff4c2988491a07b42c5c46e3ce138f"
+      ]
+    },
     "flow-state-quant-engine": {
       "command": "npx",
       "args": [
         "-y",
         "mcp-remote",
-        "https://flow-state-terminal.vercel.app/api/mcp",
+        "https://mcp.quegar.com/api/mcp",
         "--header",
-        "Authorization: Bearer 961d2c9ac5320b55c0a455bf41c349fbaeb12b5c609ce756"
+        "Authorization: Bearer 919ffb05b951192f6baefc10d23c5f3012ff4c2988491a07b42c5c46e3ce138f"
       ]
     }
   }

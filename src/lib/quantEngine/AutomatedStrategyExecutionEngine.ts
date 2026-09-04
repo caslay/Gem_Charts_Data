@@ -41,6 +41,7 @@ export type TrailingStopSource =
 
 export type TradeExitReason =
   | "STOPPED_OUT"
+  | "BREAKEVEN_SCRATCH"
   | "STAGE_1_SCRATCH"
   | "STAGE_2_WIN"
   | "FULL_TP2_WIN"
@@ -217,6 +218,7 @@ export type ExecutionEventType =
   | "LIMIT_ORDER_PLACED"
   | "LIMIT_ORDER_CANCELLED"
   | "ORDER_FILLED"
+  | "EARLY_BREAKEVEN"
   | "STAGE_1_HARVEST"
   | "STAGE_2_HARVEST"
   | "STAGE_3_RUNNER"
@@ -915,7 +917,7 @@ export class AutomatedStrategyExecutionEngine {
           pos.activeStopLoss = pos.entryPrice;
           pos.trailingSlSource = "BREAKEVEN";
           const msg = `🛡️ [EARLY_BREAKEVEN_LOCKED] Position on ${pos.symbol} reached +${pos.mfeR.toFixed(2)}R MFE (>= +${earlyBEMultiple.toFixed(2)}R)! Stop loss ratcheted to Breakeven ($${pos.entryPrice.toFixed(2)}).`;
-          this.emit("STAGE_1_HARVEST", msg, pos);
+          this.emit("EARLY_BREAKEVEN", msg, pos);
         }
       }
 
@@ -1071,7 +1073,12 @@ export class AutomatedStrategyExecutionEngine {
 
     // Calculate final realized R and USD if not already fully realized via targets
     if (reason === "STOPPED_OUT") {
-      if (!pos.isStage1Filled && !pos.isStage2Filled) {
+      if (pos.trailingSlSource === "BREAKEVEN" || Math.abs(pos.exitPrice - pos.entryPrice) < 0.05) {
+        // Early Breakeven exit: zero loss, 0.0R scratch!
+        pos.realizedR = 0.0;
+        pos.realizedUsd = 0.0;
+        pos.exitReason = "BREAKEVEN_SCRATCH";
+      } else if (!pos.isStage1Filled && !pos.isStage2Filled) {
         // Full stop out at initial SL (-1.0R)
         pos.realizedR = -1.0;
         pos.realizedUsd = -pos.riskUsd;
@@ -1100,7 +1107,7 @@ export class AutomatedStrategyExecutionEngine {
       this.lastLossClosedTimestamp = timestamp;
     }
 
-    const emoji = pos.realizedR > 0 ? "🏆" : pos.realizedR === 0 ? "🛡️" : "🛑";
+    const emoji = pos.realizedR > 0 ? "🏆" : (pos.exitReason === "BREAKEVEN_SCRATCH" || pos.exitReason === "STAGE_1_SCRATCH" || pos.realizedR === 0) ? "🛡️" : "🛑";
     const msg = `${emoji} [POSITION_CLOSED] ${pos.direction} on ${pos.symbol} closed @ $${exitPrice.toFixed(2)} (${
       pos.exitReason
     }). Final P&L: ${pos.realizedR > 0 ? "+" : ""}${pos.realizedR.toFixed(2)}R ($${pos.realizedUsd > 0 ? "+" : ""}$${pos.realizedUsd.toFixed(

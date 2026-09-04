@@ -1,8 +1,48 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.37
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.39
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-04 (V17.37 — V2 Champion Promotion & Legacy Preset Deprecation)
+> **Last Updated:** 2026-09-05 (V17.39 — Early Breakeven Event Disambiguation & Breakeven Scratch Accounting Fix)
+
+## 🆕 V17.39 Changelog — Early Breakeven Event Disambiguation & Breakeven Scratch Accounting Fix (2026-09-05)
+
+### Summary
+1. **Root Cause Diagnosis of Live Execution & Alert Anomaly:**
+   - **Incident:** ETHUSDC 5m long on 2026-09-04 20:45–21:05 UTC (Entry $2452.53, Initial SL $2448.85, TP1 $2456.21).
+   - **Trigger:** Price reached +0.44R MFE ($2454.34), crossing the $\ge +0.40\text{R}$ Rule 4 Early Breakeven threshold. The engine ratcheted the stop loss to Entry ($2452.53) with `trailingSlSource = "BREAKEVEN"`.
+   - **Anomaly 1:** Line 918 of `AutomatedStrategyExecutionEngine.ts` emitted `"STAGE_1_HARVEST"` instead of a dedicated event, triggering a false Telegram alert proclaiming "TP1 FILLED — STAGE 1 HARVEST @ $2456.21" despite TP1 never being touched.
+   - **Anomaly 2:** When price subsequently retraced and tagged the breakeven stop loss at $2452.53, `closePosition()` evaluated `!pos.isStage1Filled && !pos.isStage2Filled` and defaulted the trade to a full `-1.00R` / `-$300.00` loss (`STOPPED_OUT`), corrupting the ledger.
+2. **Engine Disambiguation & 100% Quant Lab Parity:**
+   - Introduced dedicated `ExecutionEventType` and `DaemonSessionEvent` named `"EARLY_BREAKEVEN"`.
+   - Introduced dedicated `TradeExitReason` named `"BREAKEVEN_SCRATCH"`.
+   - Updated `AutomatedStrategyExecutionEngine.ts` line 918 to emit `"EARLY_BREAKEVEN"` upon Rule 4 breakeven lock.
+   - Patched `closePosition()`: If `pos.trailingSlSource === "BREAKEVEN"` or $|exitPrice - entryPrice| < 0.05$, the exit is classified as `BREAKEVEN_SCRATCH` with `realizedR = 0.0` and `realizedUsd = 0.0`, achieving 100% mathematical parity with `SweepReclaimEngine.ts:L2249-2254`.
+3. **Telegram Notifier & Daemon Ledger Harmonization:**
+   - Added dedicated Telegram alert format for `EARLY_BREAKEVEN`: `🛡️ [EARLY BREAKEVEN ACTIVATED — RULE 4]`, clearly reporting floating MFE and new breakeven stop level.
+   - Updated Telegram exit header for `BREAKEVEN_SCRATCH`: `🛡️ [EARLY BREAKEVEN SCRATCH — ZERO LOSS]`.
+   - Updated `DaemonLedger.appendToDailyTracker()` to categorize $0.0\text{R}$ exits as `'BREAKEVEN'`.
+   - Updated Next.js API `/api/daemon/state` and client hook `useAutomatedStrategyExecution` to properly track and sound-alert on `EARLY_BREAKEVEN`.
+4. **Historical Database & Ledger Reconciliation on VPS (`quegar_db`):**
+   - Corrected Trade #6 (`POS_LONG_1788554700747_8ZZWD`) in the PostgreSQL `trades` table on VPS to `status = 'BREAKEVEN_SCRATCH'`, `realized_r = 0.0`, `realized_pnl = 0.0`.
+   - Synchronized `directives/ETHUSDC_Daily_Tracker.json` to reflect `outcome = 'BREAKEVEN'`, `realized_r = 0.0`, `realized_pnl_usd = 0.0`.
+
+---
+
+## 🆕 V17.38 Changelog — Quegar MCP Gateway & Gemini Spark Full Alignment (2026-09-04)
+
+### Summary
+1. **Quegar MCP Gateway Re-branding & Canonical Renaming:**
+   - Standardized MCP server identifier to `Quegar-mcp` across global Antigravity (`~/.gemini/config/mcp_config.json`), workspace (`.agents/mcp_config.json`), and skills (`eth-quant-sop`). Maintained `flow-state-quant-engine` compatibility alias for active sessions.
+   - Initialized schema registry directory at `~/.gemini/antigravity/mcp/Quegar-mcp/` with `get_market_context.json` and `submit_quant_decision.json`.
+2. **VPS Production Gateway Synchronization:**
+   - Replaced legacy, defunct Vercel endpoints (`flow-state-terminal.vercel.app`) with the live AWS Lightsail VPS canonical M2M domain (`https://mcp.quegar.com/api/mcp`).
+   - Synchronized static token validation to the active VPS high-entropy `M2M_AGENT_SECRET` (`919ffb05b...138f`) across `.env.local` and `docs/M2M_AGENT_MCP_MANUAL.md`.
+3. **PostgreSQL OAuth 2.0 Hardening on VPS (`quegar_db`):**
+   - Realigned the `oauth_access_tokens` table schema with the RFC 6749 specification (`token`, `client_id`, `scope`, `expires_at`).
+   - Injected `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` into `/home/ubuntu/quegar/.env.production` on the VPS.
+   - Tested and verified 100% end-to-end OAuth authorization code exchange and MCP tool execution for Google Gemini Spark.
+
+---
 
 ## 🆕 V17.37 Changelog — V2 Champion Promotion & Legacy Preset Deprecation (2026-09-04)
 
@@ -3814,15 +3854,15 @@ Engineered a fully compliant **Remote MCP (Model Context Protocol) Server** at `
 
 ### Gemini Spark Connection (Custom Connected Apps)
 ```
-Add a custom app link:  https://flow-state-terminal.vercel.app/api/mcp
+Add a custom app link:  https://mcp.quegar.com/api/mcp
 Client ID:              gemini-spark-client-176ab3226a39516b
 Client secret:          sec_b8b3d5aec9bf2271c8f3fcca3e7b1695d58bc425a905b977
 ```
 
 ### Environment Variables Required
 ```bash
-# In .env.local (already saved) AND in Vercel Project Settings:
-M2M_AGENT_SECRET=961d2c9ac5320b55c0a455bf41c349fbaeb12b5c609ce756
+# In .env.local (already saved) AND in VPS Production Environment (/home/ubuntu/quegar/.env.production):
+M2M_AGENT_SECRET=919ffb05b951192f6baefc10d23c5f3012ff4c2988491a07b42c5c46e3ce138f
 OAUTH_CLIENT_ID=gemini-spark-client-176ab3226a39516b
 OAUTH_CLIENT_SECRET=sec_b8b3d5aec9bf2271c8f3fcca3e7b1695d58bc425a905b977
 ```

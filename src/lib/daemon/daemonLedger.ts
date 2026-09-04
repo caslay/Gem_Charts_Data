@@ -21,6 +21,7 @@ export interface DaemonSessionEvent {
     | 'LIMIT_ORDER_PLACED'
     | 'LIMIT_ORDER_CANCELLED'
     | 'ORDER_FILLED'
+    | 'EARLY_BREAKEVEN'
     | 'STAGE_1_HARVEST'
     | 'STAGE_2_HARVEST'
     | 'POSITION_CLOSED'
@@ -230,6 +231,7 @@ export class DaemonLedger {
       if (
         (evt.type === 'LIMIT_ORDER_PLACED' ||
           evt.type === 'ORDER_FILLED' ||
+          evt.type === 'EARLY_BREAKEVEN' ||
           evt.type === 'STAGE_1_HARVEST' ||
           evt.type === 'STAGE_2_HARVEST') &&
         evt.position?.id
@@ -274,7 +276,7 @@ export class DaemonLedger {
         take_profit_2: pos.stage2Target,
         take_profit_3: pos.stage3Target,
         exit_price: pos.exitPrice,
-        outcome: (pos.realizedR || 0) >= 0 ? 'WIN' : 'LOSS',
+        outcome: (pos.realizedR || 0) > 0 ? 'WIN' : ((pos.realizedR || 0) === 0 ? 'BREAKEVEN' : 'LOSS'),
         realized_pnl_usd: pos.realizedUsd || 0,
         realized_r: pos.realizedR || 0,
         status: 'CLOSED',

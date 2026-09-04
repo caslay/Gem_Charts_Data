@@ -1,7 +1,7 @@
 ---
 name: eth-quant-sop
 description: >-
-  Institutional Synthesis Quantitative Analysis Framework & AI Agent SOP for ETHUSDC.p price action and inter-market correlation (BTC SMT). Integrates Pure ICT, Auction Market Theory (AMT & Volume Profile), The Wyckoff Method, and Market Microstructure (OI & CVD Delta) with live MCP Tool integration (flow-state-quant-engine) and dual daily tracker persistence. Includes 7 execution sub-commands: analyze, guided, smt, log, review, audit, and report. Strict prohibition of True Day Open (TDO) or Cairo TDO, with Two-Stage Trailing Stop Risk Management.
+  Institutional Synthesis Quantitative Analysis Framework & AI Agent SOP for ETHUSDC.p price action and inter-market correlation (BTC SMT). Integrates Pure ICT, Auction Market Theory (AMT & Volume Profile), The Wyckoff Method, and Market Microstructure (OI & CVD Delta) with live MCP Tool integration (Quegar-mcp) and dual daily tracker persistence. Includes 7 execution sub-commands: analyze, guided, smt, log, review, audit, and report. Strict prohibition of True Day Open (TDO) or Cairo TDO, with Two-Stage Trailing Stop Risk Management.
 license: MIT
 metadata:
   version: 2.1.0
@@ -10,11 +10,11 @@ metadata:
 
 # 🤖 Institutional Synthesis Framework: ETHUSDC.p Quantitative Analysis SOP Skill
 
-This skill operationalizes the **Institutional Synthesis Framework: ETHUSDC.p Quantitative Analysis SOP** into a suite of AI Agent commands powered by the live **`flow-state-quant-engine` Model Context Protocol (MCP)** toolset. It systematically synthesizes **Pure ICT Time & Price**, **Auction Market Theory (AMT & Volume Profile)**, **The Wyckoff Method**, and **Market Microstructure (OI & CVD Delta)** with automated live context extraction, pre-flight safety invalidation guards, and dual daily tracker persistence.
+This skill operationalizes the **Institutional Synthesis Framework: ETHUSDC.p Quantitative Analysis SOP** into a suite of AI Agent commands powered by the live **`Quegar-mcp` Model Context Protocol (MCP)** toolset. It systematically synthesizes **Pure ICT Time & Price**, **Auction Market Theory (AMT & Volume Profile)**, **The Wyckoff Method**, and **Market Microstructure (OI & CVD Delta)** with automated live context extraction, pre-flight safety invalidation guards, and dual daily tracker persistence.
 
 ---
 
-## ⚡ LIVE MCP INTEGRATION PROTOCOL (`flow-state-quant-engine`)
+## ⚡ LIVE MCP INTEGRATION PROTOCOL (`Quegar-mcp`)
 
 When executing quantitative workflows, the AI Agent must utilize the available MCP tools to fetch live state and log decisions:
 
