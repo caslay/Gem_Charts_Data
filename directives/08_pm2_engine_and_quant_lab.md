@@ -91,6 +91,17 @@ Both systems must determine execution entry prices using the identical pure func
 * **Stage 2 (TP2 @ 1.4R Champion):** Harvest remaining 50% (or 40%). Full exit in 2-stage mode ($+1.20\text{R}$ net realized gain). In 3-stage mode, Stop Loss ratchets to a hard $+1.0\text{R}$ profit floor.
 * **Stage 3 (TP3 @ 3.0R DOL):** Optional 20% runner targeting macro Draw on Liquidity.
 
+### 3.3: Intra-Candle Retest Fill Priority Invariant
+* **Physics of Limit Order Matching:** A resting limit order on Binance Futures executes the instant market price reaches the limit price (`high >= entry` for Shorts, `low <= entry` for Longs).
+* **Order of Operations Mandate:** In `SweepReclaimEngine.ts` Phase 4, the simulator MUST evaluate whether price penetrated the entry level **FIRST**.
+* **Pre-Fill Invalidation Constraint:** Missed-expansion invalidation (`status = 'RECLAIMED_NO_RETEST'`) can only trigger if price reached Target 1 *without* touching the entry price (`high < entry` for shorts, `low > entry` for longs). Evaluating missed expansion before the entry touch test constitutes an intra-candle lookahead race condition.
+
+### 3.4: Structural Dealing Range Valuation Parity (MarketStructureAPI ≡ Quant Lab)
+* **Institutional Equilibrium Derivation:** In live execution, `AutomatedStrategyExecutionEngine` receives `macroContext.localDealingRange` computed from `MarketStructureAPI.analyze()`, which bounds the market between Level 2 (MAJOR) Protected Anchors (e.g. Protected High $2463.99 / Protected Low $2441.61 $\to$ Equilibrium $2452.80$).
+* **Quant Lab Route Injection:** When `structuralDealingRange` is omitted from Quant Lab API payloads, `/api/quant-lab/sweep-reclaim-scanner` dynamically derives it directly from `MarketStructureAPI.analyze(candles, lastPrice)`, guaranteeing 100% bit-for-bit parity with live daemon valuation gating.
+* **Engine Fallback Gating:** In `SweepReclaimEngine.ts`, when dealing range is computed internally from confirmed pivots, it must evaluate pivots up to `evalIndex` (`reclaimIdx`) and prioritize Level 2 (MAJOR) swings, preventing range collapse onto minor 5-bar noise.
+
+
 ---
 
 ## 🎛️ 4. Strategy Preset Lifecycle & Management
@@ -209,6 +220,8 @@ Every single execution rule in PM2 Live Execution must have an identical impleme
 
 ## 📜 9. Engine Changelog Ledger
 
+* **2026-09-05 (V17.40):** Resolved Intra-Candle Retest Fill Priority Race Condition (`SweepReclaimEngine.ts:L2006-2065`) and Structural Dealing Range Dynamic Parity (`route.ts:L274-298`). Limit orders touched intra-candle are evaluated for entry fills before missed-expansion checks. Quant Lab scanner route dynamically derives structural dealing range from `MarketStructureAPI.analyze()`, recovering 100% bit-for-bit parity with live PM2 execution (Trades #5, #6, and #7 verified).
+* **2026-09-05 (V17.39):** Disambiguated Early Breakeven Execution Events & Accounting. Introduced `EARLY_BREAKEVEN` event type and `BREAKEVEN_SCRATCH` exit classification, eliminating false "TP1 Harvest" Telegram alerts and preventing scratch exits from being misrecorded as full `-1.00R` losses.
 * **2026-09-04 (V17.32):** Codified Section 8 "The Zero-Guessing 100% Parity Covenant (Quant Lab ≡ PM2 Live Execution)" and Lesson 70. Enforced strict next-bar stop ratchet rule, absolute prohibition of post-facto ledger modifications, and mandatory end-to-end simulation verification across all quant research.
 * **2026-09-04 (V17.31):** Resolved Intra-Candle Sequence Bug in Early Breakeven Simulator (`SweepReclaimEngine.ts` lines 2161 & 2280). Slashed false same-bar exits from 609 to 1. Registered institutional champion preset `factory_sr_5m_alpha_shield_early_be` (+161.4R Net Profit, 1.37 PF, -13.2R Max DD, +1,928% Compounded Return across 106,560 candles).
 * **2026-09-04 (V17.30):** Eliminated Displacement FVG lookahead bias (`searchMax = i`), added Phase 4 immediate missed expansion invalidation, and synchronized in-flight position tracking with 100.0% execution parity.
