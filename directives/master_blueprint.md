@@ -1,8 +1,25 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.40
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.41
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-05 (V17.40 — Intra-Candle Retest Fill Priority & Structural Dealing Range Parity Fix)
+> **Last Updated:** 2026-09-05 (V17.41 — Specialized Quant MCP Tools & Zero-Terminal Autonomous Execution)
+
+## 🆕 V17.41 Changelog — Specialized Quant MCP Tools & Zero-Terminal Autonomous Execution (2026-09-05)
+
+### Summary
+1. **Private MCP Server Upgrade (`Quegar-mcp` & `flow-state-quant-engine`):**
+   - Expanded the Model Context Protocol server (`/api/mcp`) from 2 to 6 high-level quantitative tools, enabling Antigravity and Gemini Spark to perform in-memory backtesting, forensic trade diagnostics, live daemon inspections, and market structure queries without requiring terminal commands or user approval popups.
+2. **Four New Institutional MCP Tools Implemented:**
+   - `run_quant_backtest`: Direct in-memory candle-by-candle backtesting across 1–365 days with 100% PM2 execution parity, T-Zero bootstrap hydration, 4-phase Sweep & Reclaim state machine, Next-Bar Ratchet rule, wave deduplication, and dynamic 2% compounding equity curves.
+   - `get_trade_diagnostics`: Forensic trade setup reconstruction matching by price or timestamp. Provides full anchor geometry, sweep depth, reclaim candle, 3-pillar displacement metrics (volume ratio, delta dominance, body ratio), dealing range equilibrium, and fill/exit outcome.
+   - `get_live_daemon_status`: Live PM2 daemon state inspector reading `run_logs/live_session_YYYY-MM-DD.json` and `ETHUSDC_Daily_Tracker.json`, tracking in-flight positions, pending limit orders, and session events.
+   - `get_market_structure`: Real-time Level 2 dealing range (High, Low, Equilibrium, Discount/Premium status), protected levels, recent confirmed swings, and institutional displacement states via `MarketStructureAPI`.
+3. **Local Schema Synchronization:**
+   - Generated and deployed tool schemas (`.json`) into `~/.gemini/antigravity/mcp/Quegar-mcp/` and `~/.gemini/antigravity/mcp/flow-state-quant-engine/`.
+4. **Documentation & Directives Updated:**
+   - Synchronized `directives/07_m2m_agent_mcp_guide.md`, `directives/master_blueprint.md`, and `docs/M2M_AGENT_MCP_MANUAL.md`.
+
+---
 
 ## 🆕 V17.40 Changelog — Intra-Candle Retest Fill Priority & Structural Dealing Range Parity Fix (2026-09-05)
 

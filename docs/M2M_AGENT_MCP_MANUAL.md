@@ -179,7 +179,7 @@ Place the file at `.agents/mcp_config.json` at the root of your repository:
 In the Antigravity Chat panel, run:
 > *"What tools are available from the Quegar-mcp MCP server?"*
 
-The agent will automatically list `get_market_context` and `submit_quant_decision`.
+The agent will automatically list all 6 tools: `get_market_context`, `submit_quant_decision`, `run_quant_backtest`, `get_trade_diagnostics`, `get_live_daemon_status`, and `get_market_structure`.
 
 ---
 
@@ -378,6 +378,80 @@ def update_trade_decision(decision_id: int, status: str, narrative: str = None):
       "target_1": { "type": "number" },
       "target_2": { "type": "number" },
       "narrative": { "type": "string" }
+    }
+  }
+}
+```
+
+### Tool: `run_quant_backtest`
+
+```json
+{
+  "name": "run_quant_backtest",
+  "description": "Executes a candle-by-candle quantitative backtest directly in memory with 100% bit-for-bit parity to live PM2 execution.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "symbol": { "type": "string", "default": "ETHUSDC" },
+      "timeframe": { "type": "string", "default": "5m" },
+      "preset_id": { "type": "string", "default": "factory_sr_5m_fvg_ce_sniper_v2" },
+      "days_lookback": { "type": "number", "default": 30 },
+      "start_date": { "type": "string" },
+      "end_date": { "type": "string" },
+      "initial_equity": { "type": "number", "default": 1000 },
+      "risk_per_trade_pct": { "type": "number", "default": 2.0 },
+      "compounding_mode": { "type": "string", "enum": ["DYNAMIC_COMPOUNDING", "FIXED_FRACTIONAL"], "default": "DYNAMIC_COMPOUNDING" }
+    }
+  }
+}
+```
+
+### Tool: `get_trade_diagnostics`
+
+```json
+{
+  "name": "get_trade_diagnostics",
+  "description": "Pulls forensic quantitative diagnostics for any specific trade setup, price level, or timestamp with 100% PM2 parity.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "symbol": { "type": "string", "default": "ETHUSDC" },
+      "timeframe": { "type": "string", "default": "5m" },
+      "target_price": { "type": "number" },
+      "timestamp": { "type": "string" },
+      "lookback_candles": { "type": "number", "default": 300 }
+    }
+  }
+}
+```
+
+### Tool: `get_live_daemon_status`
+
+```json
+{
+  "name": "get_live_daemon_status",
+  "description": "Queries the live headless PM2 execution daemon ('quegar-daemon') state, active in-flight positions, pending limit orders, and session events.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "symbol": { "type": "string", "default": "ETHUSDC" }
+    }
+  }
+}
+```
+
+### Tool: `get_market_structure`
+
+```json
+{
+  "name": "get_market_structure",
+  "description": "Retrieves real-time Level 2 Dealing Range (High, Low, Equilibrium, Regime), Protected High/Low, and ZigZag swings via MarketStructureAPI.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "symbol": { "type": "string", "default": "ETHUSDC" },
+      "timeframe": { "type": "string", "enum": ["1m", "5m", "15m", "1h"], "default": "5m" },
+      "lookback_candles": { "type": "number", "default": 250 }
     }
   }
 }

@@ -98,6 +98,43 @@ The Quegar Quant Engine provides two unified, high-performance interfaces for he
   - `target_2` (number, optional): Second macro take-profit target.
   - `narrative` (string, optional): Structured ICT/SOP reasoning text.
 
+#### Tool 3: `run_quant_backtest`
+- **Description:** Executes a candle-by-candle quantitative backtest directly in memory with 100% bit-for-bit parity to live PM2 execution (eliminating terminal commands).
+- **Inputs:**
+  - `symbol` (string, default: `"ETHUSDC"`): Trading pair symbol.
+  - `timeframe` (string, default: `"5m"`): Primary execution timeframe.
+  - `preset_id` (string, default: `"factory_sr_5m_fvg_ce_sniper_v2"`): Strategy preset ID.
+  - `days_lookback` (number, default: `30`, range: 1-365): Historical days to test.
+  - `start_date` / `end_date` (string, optional): Specific date bounds (YYYY-MM-DD).
+  - `initial_equity` (number, default: `1000`): Starting account balance in USD.
+  - `risk_per_trade_pct` (number, default: `2.0`): 1.0R compounded risk per trade.
+  - `compounding_mode` (`"DYNAMIC_COMPOUNDING"` | `"FIXED_FRACTIONAL"`, default: `"DYNAMIC_COMPOUNDING"`).
+- **Return Value:** Structured summary containing total trades, win rate %, net realized R, profit factor, max drawdown (R and %), final equity, and recent 10 trades.
+
+#### Tool 4: `get_trade_diagnostics`
+- **Description:** Forensic quantitative diagnostics for any specific trade setup, price level, or timestamp with 100% PM2 parity.
+- **Inputs:**
+  - `symbol` (string, default: `"ETHUSDC"`): Trading pair symbol.
+  - `timeframe` (string, default: `"5m"`): Candle timeframe.
+  - `target_price` (number, optional): Target price level (matches entry, anchor, or sweep).
+  - `timestamp` (string | number, optional): Target timestamp (matches execution within 30m).
+  - `lookback_candles` (number, default: `300`): Historical buffer to evaluate.
+- **Return Value:** Forensic breakdown of anchor geometry, sweep depth, reclaim candle, 3-pillar displacement metrics (volume expansion, delta dominance, body ratio), dealing range equilibrium, bracket levels, and simulated outcome.
+
+#### Tool 5: `get_live_daemon_status`
+- **Description:** Queries the live headless PM2 execution daemon (`quegar-daemon`), active in-flight positions, pending limit orders, and session events.
+- **Inputs:**
+  - `symbol` (string, default: `"ETHUSDC"`): Trading pair symbol.
+- **Return Value:** Live session ID, date, boot time, equity, total R, active in-flight positions, pending limit orders, and last 15 session events from `run_logs/live_session_YYYY-MM-DD.json`.
+
+#### Tool 6: `get_market_structure`
+- **Description:** Retrieves real-time Level 2 Dealing Range (High, Low, Equilibrium, Regime), Protected High/Low, and ZigZag swings via `MarketStructureAPI`.
+- **Inputs:**
+  - `symbol` (string, default: `"ETHUSDC"`): Trading pair symbol.
+  - `timeframe` (enum: `["1m", "5m", "15m", "1h"]`, default: `"5m"`).
+  - `lookback_candles` (number, default: `250`): Candle count.
+- **Return Value:** Dealing range boundaries, equilibrium, current discount/premium regime, protected levels, recent confirmed swings, and active displacement state.
+
 ---
 
 ## 4. Pre-Flight Invalidation Guard Algorithm

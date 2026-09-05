@@ -35,6 +35,26 @@ import { resolveTripleVectorBias } from '@/lib/quantEngine/BiasEngine';
 import { verifyDisplacement } from '@/lib/displacementEngine';
 
 import type { AgentContextPayload, AgentDecisionPayload, AgentDecisionRecord } from '@/types/agentTypes';
+import * as fs from 'fs';
+import * as path from 'path';
+import {
+  SweepReclaimEngine,
+  SweepReclaimScanConfig,
+  SweepReclaimSetup,
+} from '@/lib/quantEngine/SweepReclaimEngine';
+import { computeStructuralBootstrap } from '@/lib/quantEngine/structuralBootstrap';
+import {
+  calculate1to1ExecutionTelemetry,
+  calculateCompoundingMetrics,
+  formatCairoDateTime,
+  StandardizedExecutedTrade,
+} from '@/lib/quantEngine/equityCalculator';
+import {
+  FACTORY_SWEEP_RECLAIM_PRESETS,
+  SweepReclaimPresetConfig,
+} from '@/lib/quantEngine/scannerPresets';
+import { MarketStructureAPI } from '@/lib/quantEngine/MarketStructureAPI';
+import type { Candle } from '@/lib/fvgEngine';
 
 // ─── Supported primary timeframes for structure analysis ──────────────────────
 
@@ -143,6 +163,56 @@ export async function fetchKlines(
     console.warn(`[agentEngineHandlers] Klines fetch failed for ${symbol}/${interval}: ${err.message}.`);
     return [];
   }
+}
+
+/**
+ * Robust paginated historical fetcher supporting multi-month lookbacks.
+ */
+export async function fetchPagedKlines(
+  symbol: string,
+  interval: string,
+  startMs: number,
+  endMs: number,
+  onProgress?: (fetchedCount: number, currentTimestamp: number) => void
+): Promise<any[]> {
+  const allKlines: any[] = [];
+  let currentStart = startMs;
+  const limit = 1000;
+  const BINANCE_REST = 'https://fapi.binance.com/fapi/v1/klines';
+
+  while (currentStart < endMs) {
+    const url = `${BINANCE_REST}?symbol=${symbol}&interval=${interval}&startTime=${currentStart}&endTime=${endMs - 1}&limit=${limit}`;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+      if (!res.ok) {
+        console.warn(`[agentEngineHandlers] Binance kline fetch warning [${interval}]: ${res.status}`);
+        break;
+      }
+      const raw: unknown[][] = await res.json();
+      if (!raw || raw.length === 0) break;
+
+      const parsed = parseBinanceKlines(raw);
+      allKlines.push(...parsed);
+
+      if (onProgress) {
+        onProgress(allKlines.length, parsed[parsed.length - 1].t);
+      }
+
+      const lastTime = Number(raw[raw.length - 1][0]);
+      if (lastTime <= currentStart) break;
+      currentStart = lastTime + 1;
+
+      if (raw.length < limit) break;
+
+      // Rate limit pacing: 40ms pause between pages
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    } catch (err) {
+      console.warn(`[agentEngineHandlers] Fetch interrupted, continuing with ${allKlines.length} candles.`, err);
+      break;
+    }
+  }
+
+  return allKlines;
 }
 
 /**
@@ -640,5 +710,596 @@ export async function runSubmitQuantDecision(
     invalidation_guard: invalidation_level !== undefined
       ? { checked: true, live_price: livePriceAtSubmission, passed: true }
       : { checked: false },
+  };
+}
+
+// ─── Handler 3: runQuantBacktest ──────────────────────────────────────────────
+
+export interface QuantBacktestOptions {
+  /** Symbol to backtest. Default: 'ETHUSDC' */
+  symbol?: string;
+  /** Primary candle resolution. Default: '5m' */
+  timeframe?: string;
+  /** Strategy preset ID. Default: 'factory_sr_5m_fvg_ce_sniper_v2' */
+  preset_id?: string;
+  /** Historical lookback in days. Default: 30, max: 365 */
+  days_lookback?: number;
+  /** Explicit start date YYYY-MM-DD */
+  start_date?: string;
+  /** Explicit end date YYYY-MM-DD */
+  end_date?: string;
+  /** Initial capital in USD. Default: 1000 */
+  initial_equity?: number;
+  /** Risk per trade in percentage (1.0R). Default: 2.0 */
+  risk_per_trade_pct?: number;
+  /** Compounding calculation model */
+  compounding_mode?: 'DYNAMIC_COMPOUNDING' | 'FIXED_FRACTIONAL';
+}
+
+export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
+  const symbol = (options.symbol ?? 'ETHUSDC').toUpperCase();
+  const timeframe = options.timeframe ?? '5m';
+  const daysLookback = Math.min(365, Math.max(1, options.days_lookback ?? 30));
+
+  let startMs: number;
+  let endMs: number;
+
+  if (options.start_date && options.end_date) {
+    startMs = Date.parse(`${options.start_date}T00:00:00.000Z`);
+    endMs = Date.parse(`${options.end_date}T23:59:59.000Z`);
+  } else {
+    endMs = Date.now();
+    startMs = endMs - daysLookback * 24 * 60 * 60 * 1000;
+  }
+
+  // 1. Resolve preset configuration
+  const preset =
+    FACTORY_SWEEP_RECLAIM_PRESETS.find((p) => p.id === options.preset_id) ||
+    FACTORY_SWEEP_RECLAIM_PRESETS[0];
+  const pConfig = preset.config as SweepReclaimPresetConfig;
+
+  // 2. T-Zero Structural Seed / Bootstrap Warmup
+  const { warmupStartMs, bootstrap } = await computeStructuralBootstrap(symbol, timeframe, startMs, {
+    lookbackMajor: pConfig.lookbackMajor,
+    lookbackInternal: pConfig.lookbackInternal,
+  });
+
+  // 3. Paginated Kline Fetching from Binance Futures
+  const candles = await fetchPagedKlines(symbol, timeframe, warmupStartMs, endMs);
+  if (candles.length === 0) {
+    throw new Error(`No candles fetched from Binance for ${symbol} on ${timeframe}. Check network connection.`);
+  }
+
+  // 4. Dealing Range derivation for short scans (<= 2000 candles)
+  let structural_dealing_range = null;
+  if (candles.length >= 25 && candles.length <= 2000) {
+    try {
+      const msApi = new MarketStructureAPI({
+        lookbackMajor: pConfig.lookbackMajor,
+        lookbackInternal: pConfig.lookbackInternal,
+      });
+      const lastCandle = candles[candles.length - 1];
+      const lastPrice = lastCandle.c ?? (lastCandle as any).close ?? 0;
+      const structure = bootstrap
+        ? msApi.analyzeWithBootstrap(candles, lastPrice, undefined, bootstrap)
+        : msApi.analyze(candles, lastPrice);
+      const structEq = structure?.dealingRange?.equilibrium;
+      if (structEq !== null && structEq !== undefined && Number.isFinite(structEq) && structEq > 0) {
+        structural_dealing_range = {
+          high: Number(structure.dealingRange.high),
+          low: Number(structure.dealingRange.low),
+          equilibrium: parseFloat(structEq.toFixed(4)),
+        };
+      }
+    } catch (msErr) {
+      console.warn('[runQuantBacktest] Dealing range fallback error:', msErr);
+    }
+  }
+
+  // 5. Build Engine Configuration with 1:1 Execution Parity
+  const scanConfig: SweepReclaimScanConfig = {
+    symbol,
+    timeframe,
+    anchorTypes: pConfig.anchorTypes,
+    lookbackMajor: pConfig.lookbackMajor,
+    lookbackInternal: pConfig.lookbackInternal,
+    maxBarsAnchorToSweep: pConfig.maxBarsAnchorToSweep,
+    maxBarsSweepToReclaim: pConfig.maxBarsSweepToReclaim,
+    maxBarsToRetest: pConfig.maxBarsToRetest,
+    volumeSmaPeriod: pConfig.volumeSmaPeriod ?? 20,
+    volumeExpansionThreshold: pConfig.volumeExpansionThreshold,
+    deltaDominanceThreshold: pConfig.deltaDominanceThreshold,
+    bodyRatioThreshold: pConfig.bodyRatioThreshold,
+    minBodyRatio: pConfig.bodyRatioThreshold,
+    requireThreePillarDisplacement: pConfig.requireThreePillarDisplacement,
+    enforceDiscountPremiumGate: pConfig.enforceDiscountPremiumGate,
+    enableRegimeAdaptiveEQ: true,
+    enableInScannerWaveDedup: pConfig.enableWaveDeduplication ?? true,
+    enforceSinglePositionConcurrency: true,
+    pullbackExcursionThreshold: 0.5,
+    structuralDealingRange: structural_dealing_range,
+    stage1Multiple: pConfig.stage1Multiple,
+    stage2Multiple: pConfig.stage2Multiple,
+    stage3Multiple: pConfig.stage3Multiple,
+    entryMode: pConfig.entryMode,
+    enableStructuralTrail: pConfig.enableStructuralTrail,
+    enableProfitRatchet: pConfig.enableProfitRatchet,
+    minSweepDepthAtrMultiplier: pConfig.minSweepDepthAtrMultiplier,
+    slBufferAtrMultiplier: pConfig.slBufferAtrMultiplier,
+    enableWaveDeduplication: pConfig.enableWaveDeduplication ?? true,
+    filterWeekend: pConfig.filterWeekend ?? false,
+    enforceHtfBiasGuard: pConfig.enforceHtfBiasGuard ?? false,
+    enableEarlyBreakeven: pConfig.enableEarlyBreakeven ?? true,
+    earlyBreakevenMultiple: pConfig.earlyBreakevenMultiple ?? 0.40,
+    postLossCooldownMinutes: pConfig.postLossCooldownMinutes ?? 0,
+  };
+
+  // 6. Execute Sweep & Reclaim Engine
+  const engine = new SweepReclaimEngine(scanConfig);
+  const { setups } = engine.scanHistoricalSetups(candles, bootstrap);
+
+  // 7. Calculate Reconciled Execution Summary & Sequential Compounding
+  const summary = calculate1to1ExecutionTelemetry(setups, {
+    enforceSinglePositionWalk: true,
+    enableWaveDeduplication: pConfig.enableWaveDeduplication ?? true,
+    filterWeekend: pConfig.filterWeekend ?? false,
+    enforceHtfBiasGuard: pConfig.enforceHtfBiasGuard ?? false,
+    enableEarlyBreakeven: pConfig.enableEarlyBreakeven ?? true,
+    earlyBreakevenMultiple: pConfig.earlyBreakevenMultiple ?? 0.40,
+    postLossCooldownMinutes: pConfig.postLossCooldownMinutes ?? 0,
+  });
+
+  const initialCapital = options.initial_equity ?? 1000;
+  const riskPct = options.risk_per_trade_pct ?? 2.0;
+  const compounding = calculateCompoundingMetrics(summary.executedTrades, {
+    initialCapital,
+    riskPerTradePct: riskPct,
+    compoundingMode: options.compounding_mode ?? 'DYNAMIC_COMPOUNDING',
+  });
+
+  // Recent executed trades (last 10)
+  const recentTrades = summary.executedTrades.slice(-10).map((t: StandardizedExecutedTrade) => ({
+    id: t.id,
+    date_cairo: t.dateStr,
+    direction: t.direction,
+    entry_price: t.entryPrice,
+    stop_loss: t.stopLossPrice,
+    exit_price: t.exitPrice ?? null,
+    realized_r: t.realizedR,
+    outcome: t.outcome,
+    label: t.label,
+  }));
+
+  return {
+    status: 'SUCCESS',
+    preset: {
+      id: preset.id,
+      name: preset.name,
+      entry_mode: pConfig.entryMode,
+      stage1_multiple: pConfig.stage1Multiple,
+      stage2_multiple: pConfig.stage2Multiple,
+      early_breakeven_multiple: pConfig.earlyBreakevenMultiple,
+    },
+    date_range: {
+      start: new Date(startMs).toISOString(),
+      end: new Date(endMs).toISOString(),
+      days: Math.round((endMs - startMs) / (24 * 60 * 60 * 1000)),
+      total_candles: candles.length,
+    },
+    performance: {
+      total_scanned_setups: summary.totalScannedSetups,
+      total_executed_trades: summary.totalExecutedTrades,
+      winning_trades: summary.totalWinningTrades,
+      losing_trades: summary.totalLosingTrades,
+      be_scratches: summary.totalBeScratches,
+      win_rate_pct: summary.executionWinRatePct,
+      win_rate_ex_scratch_pct: summary.winRateExScratchPct,
+      total_realized_r: summary.totalRealizedR,
+      avg_realized_r: summary.avgRealizedR,
+      profit_factor: summary.profitFactor,
+      max_drawdown_r: summary.maxDrawdownR,
+      max_drawdown_pct: compounding.maxDrawdownPct,
+      initial_equity_usd: compounding.initialCapital,
+      final_equity_usd: parseFloat(compounding.finalRealizedEquity.toFixed(2)),
+      net_pnl_usd: parseFloat(compounding.realizedNetPnlUsd.toFixed(2)),
+      net_roi_pct: parseFloat(compounding.realizedNetRoiPct.toFixed(2)),
+      longest_win_streak: compounding.longestWinStreak,
+      longest_loss_streak: compounding.longestLossStreak,
+    },
+    vetoed_breakdown: summary.vetoedBreakdown,
+    recent_trades: recentTrades,
+  };
+}
+
+// ─── Handler 4: runGetTradeDiagnostics ────────────────────────────────────────
+
+export interface TradeDiagnosticsOptions {
+  symbol?: string;
+  timeframe?: string;
+  target_price?: number;
+  timestamp?: string | number;
+  lookback_candles?: number;
+}
+
+export async function runGetTradeDiagnostics(options: TradeDiagnosticsOptions = {}) {
+  const symbol = (options.symbol ?? 'ETHUSDC').toUpperCase();
+  const timeframe = options.timeframe ?? '5m';
+  const lookback = Math.min(1500, Math.max(50, options.lookback_candles ?? 300));
+
+  const endMs = Date.now();
+  // For fast sub-second diagnostics, fetch recent lookback + buffer candles directly
+  const fetchLimit = Math.min(1000, lookback + 200);
+  const candles = await fetchKlines(symbol, timeframe, fetchLimit);
+  if (candles.length === 0) {
+    throw new Error(`Failed to load candles for trade diagnostics (${symbol} ${timeframe}).`);
+  }
+
+  const preset = FACTORY_SWEEP_RECLAIM_PRESETS[0];
+  const pConfig = preset.config as SweepReclaimPresetConfig;
+
+  let structural_dealing_range = null;
+  if (candles.length >= 25) {
+    try {
+      const msApi = new MarketStructureAPI({ lookbackMajor: 10, lookbackInternal: 5 });
+      const lastCandle = candles[candles.length - 1];
+      const lastPrice = lastCandle.c ?? (lastCandle as any).close ?? 0;
+      const structure = msApi.analyze(candles, lastPrice);
+      const structEq = structure?.dealingRange?.equilibrium;
+      if (structEq && Number.isFinite(structEq) && structEq > 0) {
+        structural_dealing_range = {
+          high: Number(structure.dealingRange.high),
+          low: Number(structure.dealingRange.low),
+          equilibrium: parseFloat(structEq.toFixed(4)),
+        };
+      }
+    } catch (e) {
+      console.warn('[runGetTradeDiagnostics] Dealing range fallback error:', e);
+    }
+  }
+
+  const scanConfig: SweepReclaimScanConfig = {
+    symbol,
+    timeframe,
+    anchorTypes: pConfig.anchorTypes,
+    lookbackMajor: pConfig.lookbackMajor,
+    lookbackInternal: pConfig.lookbackInternal,
+    maxBarsAnchorToSweep: pConfig.maxBarsAnchorToSweep,
+    maxBarsSweepToReclaim: pConfig.maxBarsSweepToReclaim,
+    maxBarsToRetest: pConfig.maxBarsToRetest,
+    volumeSmaPeriod: pConfig.volumeSmaPeriod ?? 20,
+    volumeExpansionThreshold: pConfig.volumeExpansionThreshold,
+    deltaDominanceThreshold: pConfig.deltaDominanceThreshold,
+    bodyRatioThreshold: pConfig.bodyRatioThreshold,
+    minBodyRatio: pConfig.bodyRatioThreshold,
+    requireThreePillarDisplacement: pConfig.requireThreePillarDisplacement,
+    enforceDiscountPremiumGate: pConfig.enforceDiscountPremiumGate,
+    enableRegimeAdaptiveEQ: true,
+    enableInScannerWaveDedup: true,
+    enforceSinglePositionConcurrency: true,
+    pullbackExcursionThreshold: 0.5,
+    structuralDealingRange: structural_dealing_range,
+    stage1Multiple: pConfig.stage1Multiple,
+    stage2Multiple: pConfig.stage2Multiple,
+    stage3Multiple: pConfig.stage3Multiple,
+    entryMode: pConfig.entryMode,
+    enableStructuralTrail: pConfig.enableStructuralTrail,
+    enableProfitRatchet: pConfig.enableProfitRatchet,
+    minSweepDepthAtrMultiplier: pConfig.minSweepDepthAtrMultiplier,
+    slBufferAtrMultiplier: pConfig.slBufferAtrMultiplier,
+    enableWaveDeduplication: true,
+    filterWeekend: false,
+    enforceHtfBiasGuard: false,
+    enableEarlyBreakeven: true,
+    earlyBreakevenMultiple: 0.40,
+    postLossCooldownMinutes: 0,
+  };
+
+  const engine = new SweepReclaimEngine(scanConfig);
+  const { setups } = engine.scanHistoricalSetups(candles);
+
+  // Filter setups based on target price or timestamp
+  let matchedSetups = setups;
+  if (options.target_price) {
+    const target = options.target_price;
+    matchedSetups = setups.filter((s) => {
+      const entryDiff = Math.abs(s.entry_price - target) / target;
+      const anchorDiff = Math.abs(s.anchor_level - target) / target;
+      const sweepDiff = s.sweep_price ? Math.abs(s.sweep_price - target) / target : 1;
+      return entryDiff <= 0.003 || anchorDiff <= 0.003 || sweepDiff <= 0.003;
+    });
+  } else if (options.timestamp) {
+    const targetTs = typeof options.timestamp === 'string' ? Date.parse(options.timestamp) : options.timestamp;
+    if (!isNaN(targetTs)) {
+      matchedSetups = setups.filter((s) => {
+        const t = s.retest_time || s.reclaim_time || s.sweep_time || s.anchor_time || 0;
+        return Math.abs(t - targetTs) <= 30 * 60 * 1000;
+      });
+    }
+  }
+
+  // Fallback to top 3 most recent setups
+  if (matchedSetups.length === 0) {
+    matchedSetups = setups.slice(-3);
+  }
+
+  const diagnostics = matchedSetups.map((s) => ({
+    setup_id: s.id,
+    direction: s.type,
+    anchor: {
+      name: s.anchor_name,
+      type: s.anchor_type,
+      grade: s.anchor_swing_grade,
+      price: s.anchor_level,
+      time_cairo: formatCairoDateTime(s.anchor_time),
+      time_iso: s.anchor_time ? new Date(s.anchor_time).toISOString() : null,
+    },
+    sweep: {
+      price: s.sweep_price,
+      depth_atr: s.sweep_depth,
+      time_cairo: formatCairoDateTime(s.sweep_time),
+      time_iso: s.sweep_time ? new Date(s.sweep_time).toISOString() : null,
+    },
+    reclaim: {
+      close_price: s.reclaim_close_price,
+      time_cairo: formatCairoDateTime(s.reclaim_time),
+      bars_since_sweep: s.bars_sweep_to_reclaim,
+      fvg_ce: s.reclaim_fvg_ce,
+      fvg_zone: s.reclaim_fvg_bottom && s.reclaim_fvg_top ? [s.reclaim_fvg_bottom, s.reclaim_fvg_top] : null,
+      displacement_metrics: {
+        volume_expansion: s.reclaim_volume_expansion,
+        delta_dominance_pct: s.reclaim_delta_dominance_pct,
+        body_ratio: s.reclaim_body_ratio,
+        three_pillar_passed: s.three_pillar_displacement_passed,
+      },
+    },
+    dealing_range: {
+      equilibrium: s.dealing_range_equilibrium,
+      regime: s.type === 'BULLISH'
+        ? (s.entry_price <= (s.dealing_range_equilibrium ?? 0) ? 'DISCOUNT (VALID LONG)' : 'PREMIUM (VETO RISK)')
+        : (s.entry_price >= (s.dealing_range_equilibrium ?? 0) ? 'PREMIUM (VALID SHORT)' : 'DISCOUNT (VETO RISK)'),
+      valuation_aligned: s.is_valuation_aligned,
+    },
+    execution_bracket: {
+      entry_mode: s.entry_mode,
+      entry_price: s.entry_price,
+      stop_loss: s.stop_loss,
+      risk_points: parseFloat(Math.abs(s.entry_price - s.stop_loss).toFixed(2)),
+      stage1_target: s.stage1_target,
+      stage2_target: s.stage2_target,
+      is_retested: s.is_retested,
+      retest_time_cairo: formatCairoDateTime(s.retest_time),
+      retest_time_iso: s.retest_time ? new Date(s.retest_time).toISOString() : null,
+      retest_price: s.retest_price,
+    },
+    trade_outcome: {
+      status: s.status,
+      simulated_outcome: s.simulated_outcome,
+      stage_exit_type: s.stage_exit_type,
+      realized_rr: s.realized_rr,
+      is_be_scratch: s.is_be_scratch,
+      exit_reason: s.stage_exit_type || s.simulated_outcome,
+      exit_time_cairo: formatCairoDateTime(s.exit_time),
+      exit_time_iso: s.exit_time ? new Date(s.exit_time).toISOString() : null,
+    },
+  }));
+
+  return {
+    symbol,
+    timeframe,
+    candles_evaluated: candles.length,
+    matches_found: diagnostics.length,
+    setups: diagnostics,
+  };
+}
+
+// ─── Handler 5: runGetLiveDaemonStatus ─────────────────────────────────────────
+
+export interface LiveDaemonStatusOptions {
+  symbol?: string;
+}
+
+export async function runGetLiveDaemonStatus(options: LiveDaemonStatusOptions = {}) {
+  const symbol = (options.symbol ?? 'ETHUSDC').toUpperCase();
+  const rootDir = process.cwd();
+  const sessionDir = path.join(rootDir, 'run_logs');
+
+  let sessionLog: any = null;
+  let logFileName = '';
+
+  if (fs.existsSync(sessionDir)) {
+    const files = fs.readdirSync(sessionDir)
+      .filter((f) => f.startsWith('live_session_') && f.endsWith('.json'))
+      .sort()
+      .reverse();
+
+    if (files.length > 0) {
+      logFileName = files[0];
+      try {
+        const raw = fs.readFileSync(path.join(sessionDir, logFileName), 'utf8');
+        sessionLog = JSON.parse(raw);
+      } catch (e) {
+        console.warn('[runGetLiveDaemonStatus] Error reading session log:', e);
+      }
+    }
+  }
+
+  // Read directives/ETHUSDC_Daily_Tracker.json
+  const trackerPath = path.join(rootDir, 'directives', 'ETHUSDC_Daily_Tracker.json');
+  let recentTrackerTrades: any[] = [];
+  if (fs.existsSync(trackerPath)) {
+    try {
+      const rawTracker = fs.readFileSync(trackerPath, 'utf8');
+      const tracker = JSON.parse(rawTracker);
+      if (Array.isArray(tracker.trades)) {
+        recentTrackerTrades = tracker.trades.slice(-5);
+      }
+    } catch (e) {
+      console.warn('[runGetLiveDaemonStatus] Error reading daily tracker:', e);
+    }
+  }
+
+  if (!sessionLog) {
+    return {
+      status: 'OFFLINE_OR_NO_LOGS',
+      message: 'No active session log file found in run_logs/. The daemon may not have booted yet today.',
+      recent_tracker_trades: recentTrackerTrades,
+    };
+  }
+
+  // Reconstruct active positions and pending limit orders from events
+  const activeMap = new Map<string, any>();
+  const pendingLimitOrders: any[] = [];
+
+  if (Array.isArray(sessionLog.events)) {
+    for (const evt of sessionLog.events) {
+      if (
+        (evt.type === 'LIMIT_ORDER_PLACED' ||
+          evt.type === 'ORDER_FILLED' ||
+          evt.type === 'EARLY_BREAKEVEN' ||
+          evt.type === 'STAGE_1_HARVEST' ||
+          evt.type === 'STAGE_2_HARVEST') &&
+        evt.position?.id
+      ) {
+        activeMap.set(evt.position.id, evt.position);
+      } else if (evt.type === 'POSITION_CLOSED' && evt.position?.id) {
+        activeMap.delete(evt.position.id);
+      } else if (evt.type === 'LIMIT_ORDER_CANCELLED' && evt.position?.id) {
+        activeMap.delete(evt.position.id);
+      }
+
+      if (evt.type === 'LIMIT_ORDER_PLACED' && evt.position) {
+        pendingLimitOrders.push({
+          id: evt.position.id,
+          placed_at: evt.timeCairo || evt.timeIso,
+          symbol: evt.position.symbol,
+          direction: evt.position.direction,
+          limit_entry: evt.position.limitEntryPrice ?? evt.position.entryPrice,
+          stop_loss: evt.position.initialStopLoss ?? evt.position.activeStopLoss,
+          tp1: evt.position.stage1Target,
+          tp2: evt.position.stage2Target,
+          anchor: evt.position.anchorName,
+        });
+      }
+    }
+  }
+
+  const livePendingOrders = pendingLimitOrders.filter((po) => {
+    const activePos = activeMap.get(po.id);
+    return activePos && activePos.status === 'PENDING';
+  });
+
+  const activeInFlightPositions = Array.from(activeMap.values()).filter((p) => p.status !== 'PENDING');
+
+  const recentEvents = Array.isArray(sessionLog.events)
+    ? sessionLog.events.slice(-15).map((e: any) => ({
+        type: e.type,
+        time_cairo: e.timeCairo,
+        time_iso: e.timeIso,
+        message: e.message,
+        live_price: e.livePrice,
+      }))
+    : [];
+
+  return {
+    status: 'ACTIVE_SESSION_FOUND',
+    session_file: logFileName,
+    session: {
+      session_id: sessionLog.sessionId,
+      date_str: sessionLog.dateStr,
+      symbol: sessionLog.symbol,
+      boot_time_iso: sessionLog.bootTimeIso,
+      boot_time_cairo: sessionLog.bootTimeCairo,
+      current_equity_usd: sessionLog.currentEquity,
+      initial_equity_usd: sessionLog.initialEquity,
+      total_realized_r: sessionLog.totalRealizedR,
+      total_trades: sessionLog.totalTrades,
+      winning_trades: sessionLog.winningTrades,
+      losing_trades: sessionLog.losingTrades,
+    },
+    active_in_flight_positions: activeInFlightPositions,
+    active_pending_limit_orders: livePendingOrders,
+    recent_events: recentEvents,
+    today_completed_trades: (sessionLog.completedTrades || []).slice(-5),
+    daily_tracker_last_trades: recentTrackerTrades,
+  };
+}
+
+// ─── Handler 6: runGetMarketStructure ─────────────────────────────────────────
+
+export interface MarketStructureOptions {
+  symbol?: string;
+  timeframe?: AgentTimeframe;
+  lookback_candles?: number;
+}
+
+export async function runGetMarketStructure(options: MarketStructureOptions = {}) {
+  const symbol = (options.symbol ?? 'ETHUSDC').toUpperCase();
+  const timeframe: AgentTimeframe = options.timeframe ?? '5m';
+  const lookback = Math.min(1000, Math.max(50, options.lookback_candles ?? 250));
+
+  const candles = await fetchKlines(symbol, timeframe, lookback);
+  if (candles.length === 0) {
+    throw new Error(`Failed to fetch candles for market structure (${symbol} ${timeframe}).`);
+  }
+
+  const lastCandle = candles[candles.length - 1];
+  const currentPrice = lastCandle.c ?? 0;
+
+  const msApi = new MarketStructureAPI({
+    lookbackMajor: 10,
+    lookbackInternal: 5,
+  });
+
+  const structure = msApi.analyze(candles, currentPrice);
+
+  const eq = structure.dealingRange?.equilibrium ?? 0;
+  const regime = currentPrice < eq ? 'DISCOUNT' : 'PREMIUM';
+  const distToEqPct = eq > 0 ? parseFloat((((currentPrice - eq) / eq) * 100).toFixed(2)) : 0;
+
+  const recentSwings = (structure.swings || []).slice(-8).map((s) => ({
+    price: s.price,
+    type: s.type,
+    grade: s.grade,
+    time_iso: s.timestamp || (s.t ? new Date(s.t).toISOString() : null),
+    confirmed: s.confirmed ?? true,
+  }));
+
+  const recentBreaks = (structure.zigzag || [])
+    .filter((z) => z.label === 'BOS' || z.label === 'MSS')
+    .slice(-5)
+    .map((z) => ({
+      label: z.label,
+      broken_level: z.brokenLevel,
+      trend_before: z.trendBefore,
+      trend_after: z.trendAfter,
+      displacement_confirmed: z.displacementConfirmed,
+    }));
+
+  return {
+    symbol,
+    timeframe,
+    current_price: currentPrice,
+    primary_trend: structure.currentTrend,
+    dealing_range: {
+      high: structure.dealingRange?.high ?? null,
+      low: structure.dealingRange?.low ?? null,
+      equilibrium: eq,
+      current_regime: regime,
+      distance_to_equilibrium_pct: distToEqPct,
+      status: structure.dealingRange?.current_status,
+    },
+    protected_levels: {
+      protected_high: structure.engine_state?.protected_high ?? null,
+      protected_low: structure.engine_state?.protected_low ?? null,
+    },
+    recent_swings: recentSwings,
+    recent_structural_breaks: recentBreaks,
+    displacement_state: {
+      expansion_mode: structure.expansion_mode,
+      market_velocity: structure.market_velocity,
+      is_in_expansion: structure.is_in_expansion,
+      expansion_high_float: structure.expansion_high_float,
+      expansion_low_float: structure.expansion_low_float,
+    },
   };
 }
