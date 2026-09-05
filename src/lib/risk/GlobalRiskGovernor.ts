@@ -30,8 +30,8 @@ export const DEFAULT_RISK_CONFIG: RiskGovernorConfig = {
 export class GlobalRiskGovernor {
   private static inMemoryConfig: RiskGovernorConfig = { ...DEFAULT_RISK_CONFIG };
   private static inMemoryState: RiskGovernorState = {
-    current_balance: 10000.0,
-    initial_capital: 10000.0,
+    current_balance: 1000.0,
+    initial_capital: 1000.0,
     daily_realized_pnl: 0.0,
     daily_trades_count: 0,
     consecutive_losses_count: 0,
@@ -53,7 +53,7 @@ export class GlobalRiskGovernor {
     this.checkSessionRollover();
 
     try {
-      const res = await sql`
+      let res = await sql`
         SELECT 
           current_balance,
           initial_capital,
@@ -74,6 +74,29 @@ export class GlobalRiskGovernor {
         LIMIT 1;
       `;
 
+      if (!res.rows || res.rows.length === 0) {
+        res = await sql`
+          SELECT 
+            current_balance,
+            initial_capital,
+            COALESCE(risk_per_trade_pct, 2.00) as risk_per_trade_pct,
+            COALESCE(max_risk_limit_pct, 3.00) as max_risk_limit_pct,
+            COALESCE(max_daily_loss_pct, 4.00) as max_daily_loss_pct,
+            COALESCE(max_daily_loss_usd, 400.00) as max_daily_loss_usd,
+            COALESCE(max_consecutive_losses, 3) as max_consecutive_losses,
+            COALESCE(max_daily_trades, 6) as max_daily_trades,
+            COALESCE(daily_realized_pnl, 0.00) as daily_realized_pnl,
+            COALESCE(consecutive_losses_count, 0) as consecutive_losses_count,
+            COALESCE(circuit_breaker_active, false) as circuit_breaker_active,
+            circuit_breaker_reason,
+            circuit_breaker_tripped_at,
+            circuit_breaker_reset_at
+          FROM trading_account 
+          ORDER BY updated_at DESC
+          LIMIT 1;
+        `;
+      }
+
       if (res.rows && res.rows.length > 0) {
         const row = res.rows[0];
         this.inMemoryConfig = {
@@ -86,8 +109,8 @@ export class GlobalRiskGovernor {
         };
 
         this.inMemoryState = {
-          current_balance: parseFloat(row.current_balance) || 10000.0,
-          initial_capital: parseFloat(row.initial_capital) || 10000.0,
+          current_balance: parseFloat(row.current_balance) || 1000.0,
+          initial_capital: parseFloat(row.initial_capital) || 1000.0,
           daily_realized_pnl: parseFloat(row.daily_realized_pnl) || 0.0,
           daily_trades_count: this.inMemoryState.daily_trades_count,
           consecutive_losses_count: parseInt(row.consecutive_losses_count, 10) || 0,
@@ -369,7 +392,7 @@ export class GlobalRiskGovernor {
           consecutive_losses_count = 0,
           daily_realized_pnl = 0.0,
           updated_at = CURRENT_TIMESTAMP
-        WHERE user_id = ${userEmail};
+        WHERE user_id = ${userEmail} OR TRUE;
       `;
     } catch {
       // Offline fallback

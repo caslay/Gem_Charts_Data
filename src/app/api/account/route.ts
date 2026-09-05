@@ -237,7 +237,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const capital = initial_capital !== undefined ? parseFloat(initial_capital) : 10000.0;
+    const capital = initial_capital !== undefined ? parseFloat(initial_capital) : 1000.0;
 
     // Update GlobalRiskGovernor static memory immediately
     await GlobalRiskGovernor.updateConfig(
@@ -252,10 +252,14 @@ export async function POST(req: Request) {
       userEmail
     );
 
+    // Reset circuit breaker on commit so new risk limits apply cleanly
+    await GlobalRiskGovernor.resetCircuitBreaker(userEmail);
+    await GlobalRiskGovernor.resetCircuitBreaker('institutional_admin');
+
     // In Live VPS mode with Binance active:
     if (process.env.BINANCE_API_KEY && process.env.BINANCE_API_SECRET) {
       const binanceInfo = await getBinanceAccountInfo();
-      const liveBal = binanceInfo ? binanceInfo.totalWalletBalance : (capital || 312.51);
+      const liveBal = binanceInfo && binanceInfo.totalWalletBalance > 0 ? binanceInfo.totalWalletBalance : (capital || 312.51);
 
       try {
         await initAccountTable();
@@ -263,21 +267,24 @@ export async function POST(req: Request) {
           INSERT INTO trading_account (
             user_id, current_balance, initial_capital, max_risk_limit_pct,
             risk_per_trade_pct, max_daily_loss_pct, max_daily_loss_usd,
-            max_consecutive_losses, max_daily_trades, updated_at
+            max_consecutive_losses, max_daily_trades, circuit_breaker_active, circuit_breaker_reason, updated_at
           )
           VALUES (
-            ${userEmail}, ${liveBal}, ${liveBal}, ${riskLimit},
+            ${userEmail}, ${liveBal}, ${capital}, ${riskLimit},
             ${tradeRisk}, ${dailyLossPct}, ${dailyLossUsd},
-            ${maxConsecLosses}, ${maxDailyTradesCount}, CURRENT_TIMESTAMP
+            ${maxConsecLosses}, ${maxDailyTradesCount}, FALSE, NULL, CURRENT_TIMESTAMP
           )
           ON CONFLICT (user_id)
           DO UPDATE SET 
+            initial_capital = ${capital},
             max_risk_limit_pct = ${riskLimit},
             risk_per_trade_pct = ${tradeRisk},
             max_daily_loss_pct = ${dailyLossPct},
             max_daily_loss_usd = ${dailyLossUsd},
             max_consecutive_losses = ${maxConsecLosses},
             max_daily_trades = ${maxDailyTradesCount},
+            circuit_breaker_active = FALSE,
+            circuit_breaker_reason = NULL,
             updated_at = CURRENT_TIMESTAMP
         `;
       } catch (e) {
@@ -339,6 +346,8 @@ export async function POST(req: Request) {
             max_consecutive_losses = ${maxConsecLosses},
             max_daily_trades = ${maxDailyTradesCount},
             current_balance = ${capital},
+            circuit_breaker_active = FALSE,
+            circuit_breaker_reason = NULL,
             updated_at = CURRENT_TIMESTAMP
         WHERE user_id = ${userEmail}
         RETURNING *

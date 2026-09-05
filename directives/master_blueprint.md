@@ -1,8 +1,24 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.41
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.42
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-05 (V17.41 — Specialized Quant MCP Tools & Zero-Terminal Autonomous Execution)
+> **Last Updated:** 2026-09-05 (V17.42 — Live Daemon Capital Synchronization & Risk Governor Sizing Parity Fix)
+
+## 🆕 V17.42 Changelog — Live Daemon Capital Synchronization & Risk Governor Sizing Parity Fix (2026-09-05)
+
+### Summary
+1. **Live Daemon Capital Sizing Synchronization (`scripts/headless-daemon.ts`):**
+   - **Root Cause:** When `AutomatedStrategyExecutionEngine` calculated order sizes, it defaulted to an in-memory baseline equity of $10,000.00. At 3% risk, it opened positions risking $300.00 USD (81.5 ETH contracts). On an account with ~$312.51 seed, this represented a 96% risk on a single trade. When a stop-out occurred (-$300), the loss was 15x larger than the 6.5% daily drawdown limit ($20.31), tripping the 24-hour circuit breaker and causing all subsequent valid setups to be vetoed.
+   - **Institutional Fix:** `AutomatedExecutionConfig` now accepts `initialEquity?: number` (defaulting to 1,000.0, never 10,000.0). In `headless-daemon.ts`, `startingEquity` is synchronized directly from `initialRiskState.initial_capital` ($312.51), passed into the engine constructor, and enforced via `engine.setAccountEquity(startingEquity)`.
+2. **Dynamic Closed-Candle Equity & Risk Hot-Reload:**
+   - In `wsClient.onCandleClosed`, the daemon now hot-reloads both `compoundingRiskPct` and `engine.setAccountEquity()` directly from `GlobalRiskGovernor.hydrateState()`, instantly syncing UI risk changes without daemon restarts.
+   - In `evaluatePreTradeRisk`, the sizing gate uses `engine.getAccountEquity()` instead of static numbers.
+3. **Database User Mismatch Resolution (`GlobalRiskGovernor.ts`):**
+   - Added automatic fallback to `SELECT * FROM trading_account ORDER BY updated_at DESC LIMIT 1` in `hydrateState` if `user_id = ${userEmail}` returns no rows, preventing configuration isolation between web UI sessions and headless daemon.
+4. **Auto-Reset Circuit Breaker on Config Commit (`/api/account`):**
+   - When the trader commits new risk parameters in the UI, `/api/account` calls `GlobalRiskGovernor.resetCircuitBreaker` and resets `circuit_breaker_active = false`, immediately restoring operational live execution with the new sizing rules.
+
+---
 
 ## 🆕 V17.41 Changelog — Specialized Quant MCP Tools & Zero-Terminal Autonomous Execution (2026-09-05)
 

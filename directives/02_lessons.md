@@ -827,3 +827,15 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
 
 
 
+
+### 73. Live Daemon Equity Sizing Decoupling & Risk Governor Parity Fix (Resolved in V17.42)
+- **The Bug:** On 2026-09-05, the live daemon risked $300.00 USD (81.5 ETH contracts) on a single 5m trade on an account with ~$312 to $588 capital. When the trade stopped out (-1.00R), the cumulative loss (-$300.00) immediately breached the 6.5% Daily Drawdown Limit ($20.31), tripping the 24-hour circuit breaker and causing all subsequent valid setups to be vetoed by `GlobalRiskGovernor`.
+- **The Causes:**
+  1. **Internal Default Baseline in Execution Engine:** `AutomatedStrategyExecutionEngine.ts` had hardcoded `private currentAccountEquity: number = 10000.0`. When `submitAutomatedLimitEntry` sized positions at 3% risk, it used the $10,000 baseline -> $300 risk per trade, completely detached from the user's actual initial capital seed ($312.51).
+  2. **Missing Equity Synchronization:** In `scripts/headless-daemon.ts`, `engine.setAccountEquity(startingEquity)` was never called at boot or on closed candles.
+  3. **Database User Mismatch:** In `GlobalRiskGovernor.ts`, `hydrateState` looked up `WHERE user_id = ${userEmail}` (defaulting to `'institutional_admin'`). When the user saved their settings via the Web UI under their login email, the daemon fell back to static memory without reading the updated row.
+- **The Fixes:**
+  1. **Dynamic Initial Equity in Engine:** Added `initialEquity?: number` to `AutomatedExecutionConfig` and initialized `currentAccountEquity` to `config.initialEquity || 1000.0` (with dynamic hot-reload in `updateConfig`).
+  2. **Boot & Candle Closed Synchronization:** In `scripts/headless-daemon.ts`, synchronized `startingEquity` from `initialRiskState.initial_capital` when not live-hydrated from Binance, explicitly called `engine.setAccountEquity(startingEquity)`, and hot-reloaded equity on every closed candle.
+  3. **Universal Fallback in `hydrateState`:** In `GlobalRiskGovernor.ts`, if no row exists for `userEmail`, query `ORDER BY updated_at DESC LIMIT 1`.
+  4. **Auto-Reset Circuit Breaker on Config Commit:** In `src/app/api/account/route.ts`, committing new risk settings calls `GlobalRiskGovernor.resetCircuitBreaker` and resets `circuit_breaker_active = false` so new parameters take effect immediately.

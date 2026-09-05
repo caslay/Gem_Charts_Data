@@ -98,10 +98,16 @@ async function main() {
   }
 
   // 3. Hydrate Institutional Risk Configuration & Initialize Engine
-  const { config: initialRiskConfig } = await GlobalRiskGovernor.hydrateState('institutional_admin');
+  const { config: initialRiskConfig, state: initialRiskState } = await GlobalRiskGovernor.hydrateState('institutional_admin');
   console.log(
     `[DAEMON] 🛡️ Global Risk Governor: Operational Risk ${initialRiskConfig.risk_per_trade_pct}% ($1.0R) | Max Drawdown ${initialRiskConfig.max_daily_loss_pct}% ($${initialRiskConfig.max_daily_loss_usd}) | Streak Cap ${initialRiskConfig.max_consecutive_losses}`
   );
+
+  // If not live hydrated from Binance balance, use configured initial_capital from settings if available
+  if (!isBinanceLiveHydrated && initialRiskState.initial_capital && initialRiskState.initial_capital > 0) {
+    startingEquity = initialRiskState.initial_capital;
+    console.log(`[DAEMON] 💰 Starting Equity synchronized from Risk Config: $${startingEquity.toFixed(2)} USD`);
+  }
 
   // Load persisted live settings if available (synced from UI or saved presets)
   let persistedLiveSettings: any = {};
@@ -123,6 +129,7 @@ async function main() {
 
   const engine = new AutomatedStrategyExecutionEngine({
     symbol: symbolArg.toUpperCase(),
+    initialEquity: startingEquity,
     compoundingRiskPct: initialLiveSettings.compoundingRiskPct ?? initialRiskConfig.risk_per_trade_pct,
     maxOpenPositions: 1,
     autoExecute: true,
@@ -140,6 +147,9 @@ async function main() {
     earlyBreakevenMultiple: initialLiveSettings.earlyBreakevenMultiple ?? 0.40,
     liveSettings: initialLiveSettings,
   });
+
+  // Explicitly enforce account equity on the engine
+  engine.setAccountEquity(startingEquity);
 
   // 4. Pre-run historical candle scan & mark cold-start setups as PROCESSED
   const initialScan = engine.onMultiTimeframeCandles(bootstrapData.buffers, bootstrapData.macroContext);
@@ -180,7 +190,7 @@ async function main() {
             direction: pos.direction,
             entryPrice: pos.limitEntryPrice,
             stopLossPrice: pos.initialStopLoss,
-            currentEquity: startingEquity,
+            currentEquity: engine.getAccountEquity(),
             currentOpenPositionsCount: engine.getActivePositions().length,
           }).then((assessment) => {
             if (!assessment.isApproved) {
@@ -439,12 +449,21 @@ async function main() {
     }
 
     // 🛡️ Dynamic Risk Hot-Reload from GlobalRiskGovernor / PostgreSQL
-    GlobalRiskGovernor.hydrateState('institutional_admin').then(({ config: freshConfig }) => {
+    GlobalRiskGovernor.hydrateState('institutional_admin').then(({ config: freshConfig, state: freshState }) => {
       if (engine.config.compoundingRiskPct !== freshConfig.risk_per_trade_pct) {
         console.log(
           `\n[DAEMON] 🔄 Dynamic Risk Hot-Reload: Updated compounding risk to ${freshConfig.risk_per_trade_pct}% (was ${engine.config.compoundingRiskPct}%)`
         );
         engine.updateConfig({ compoundingRiskPct: freshConfig.risk_per_trade_pct });
+      }
+
+      // Sync account equity if capital configured in UI changed
+      const targetEquity = isBinanceLiveHydrated ? startingEquity : (freshState.initial_capital || startingEquity);
+      if (targetEquity > 0 && Math.abs(engine.getAccountEquity() - targetEquity) > 0.01) {
+        console.log(
+          `\n[DAEMON] 🔄 Dynamic Equity Hot-Reload: Updated account equity to $${targetEquity.toFixed(2)} USD (was $${engine.getAccountEquity().toFixed(2)})`
+        );
+        engine.setAccountEquity(targetEquity);
       }
     }).catch(() => {});
   });

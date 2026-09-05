@@ -144,6 +144,7 @@ export interface AutomatedExecutionConfig {
   symbol: string;
   timeframe: string;
   autoExecute: boolean;
+  initialEquity?: number; // Portfolio equity baseline for dynamic compounding (default: 1000.0)
   compoundingRiskPct: number; // default: 2.0% ($1.0R = Equity * 0.02)
   maxOpenPositions: number; // default: 1 (Strict Single-Position Cap)
   cooldownMs: number; // default: 60000 (60s cooldown post close)
@@ -183,6 +184,7 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   symbol: "ETHUSDC",
   timeframe: "5m",
   autoExecute: true,
+  initialEquity: 1000.0,
   compoundingRiskPct: 2.0,
   maxOpenPositions: 1,
   cooldownMs: 60000,
@@ -252,7 +254,7 @@ export class AutomatedStrategyExecutionEngine {
   private lastTradeClosedTimestamp: number = 0;
   private lastLossClosedTimestamp: number = 0;
   private consumedZoneIds: Set<string> = new Set();
-  private currentAccountEquity: number = 10000.0;
+  private currentAccountEquity: number = 1000.0;
 
   // Background Multi-Timeframe Scanning State
   private processedSetupIds: Set<string> = new Set();
@@ -260,10 +262,16 @@ export class AutomatedStrategyExecutionEngine {
 
   constructor(config?: Partial<AutomatedExecutionConfig>) {
     this.config = { ...DEFAULT_AUTOMATED_CONFIG, ...config };
+    if (this.config.initialEquity && this.config.initialEquity > 0) {
+      this.currentAccountEquity = this.config.initialEquity;
+    }
   }
 
   public updateConfig(newConfig: Partial<AutomatedExecutionConfig>): void {
     this.config = { ...this.config, ...newConfig };
+    if (newConfig.initialEquity && newConfig.initialEquity > 0) {
+      this.currentAccountEquity = newConfig.initialEquity;
+    }
   }
 
   public updateSweepReclaimSettings(newSettings: Partial<SweepReclaimLiveSettings>): void {
