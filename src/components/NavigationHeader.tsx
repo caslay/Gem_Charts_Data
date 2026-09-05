@@ -30,6 +30,7 @@ import PotentialTradesModal from "./modals/PotentialTradesModal";
 import LiveOrderBlockModal from "./modals/LiveOrderBlockModal";
 import LiveCockpitStatusBadge from "./LiveCockpitStatusBadge";
 import { useMarketDataContext } from "@/context/MarketDataContext";
+import { QuegarBrandMark } from "@/components/brand/QuegarBrandMark";
 
 type ResetStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -141,8 +142,8 @@ export function NavigationHeader() {
               className="flex items-center gap-2.5 group focus:outline-none"
               title="Quegar"
             >
-              <div className="w-7 h-7 rounded-md bg-gradient-to-tr from-purple-600 to-indigo-600 dark:from-purple-500 dark:to-cyan-400 flex items-center justify-center shadow-md group-hover:shadow-[0_0_12px_rgba(168,85,247,0.4)] transition-all duration-300">
-                <span className="text-white text-xs font-black tracking-tighter">QG</span>
+              <div className="w-8 h-8 rounded-lg bg-slate-900/90 dark:bg-black/80 border border-slate-700/60 dark:border-cyan-500/30 flex items-center justify-center shadow-md group-hover:border-cyan-400/60 group-hover:shadow-[0_0_14px_rgba(0,240,255,0.35)] transition-all duration-300 p-1 shrink-0">
+                <QuegarBrandMark size={22} className="w-full h-full" />
               </div>
               <div className="hidden min-[400px]:flex flex-col">
                 <span className="text-[11px] font-mono font-black tracking-wider text-foreground leading-none">

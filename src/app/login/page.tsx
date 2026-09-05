@@ -4,6 +4,7 @@ import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { SYSTEM_VERSION } from "@/lib/version";
+import { QuegarBrandMark } from "@/components/brand/QuegarBrandMark";
 
 function LoginContent() {
   const searchParams = useSearchParams();
@@ -35,20 +36,8 @@ function LoginContent() {
         <div className="bg-zinc-950 border border-zinc-800/60 rounded-2xl p-8 shadow-2xl shadow-black/40 backdrop-blur-sm">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 mb-4">
-              <svg
-                className="w-8 h-8 text-emerald-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
-                />
-              </svg>
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-zinc-900/80 border border-zinc-800/80 mb-5 shadow-2xl p-3">
+              <QuegarBrandMark size={56} className="w-full h-full drop-shadow-[0_0_12px_rgba(0,240,255,0.25)]" />
             </div>
             <h1 className="text-2xl font-semibold text-white tracking-tight">
               Quegar Portal
