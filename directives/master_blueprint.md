@@ -1,8 +1,18 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.44
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.45
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-05 (V17.44 — Edge Perimeter Hardening: Sovereign Stealth & Reverse-Proxy Header Stripping)
+> **Last Updated:** 2026-09-06 (V17.45 — Core Protocol Enforcement: Zero-Popup MCP-First Mandate)
+
+## 🆕 V17.45 Changelog — Core Protocol Enforcement: Zero-Popup MCP-First Mandate (2026-09-06)
+
+### Summary
+1. **Institutional MCP-First Protocol (`AGENTS.md`):**
+   - Codified the **ZERO-POPUP MCP-FIRST MANDATE** as a tier-1 system rule. Whenever an agent needs to query live PM2 daemon status, active positions, resting limit orders, trade diagnostics, Level 2 market structure, orderbook context, or in-memory strategy backtests, the agent MUST call `Quegar-mcp` / `flow-state-quant-engine` tools directly.
+   - Eliminates terminal approval popups, SSH handshakes, and command latency by keeping all quantitative diagnostic inspection in-memory via JSON-RPC.
+   - Restricts shell/terminal usage strictly to operating system process administration (daemon boots/restarts, git operations, and OS package management).
+
+---
 
 ## 🆕 V17.44 Changelog — Edge Perimeter Hardening: Sovereign Stealth & Reverse-Proxy Header Stripping (2026-09-05)
 

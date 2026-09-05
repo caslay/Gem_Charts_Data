@@ -29,6 +29,18 @@ Quant Lab was engineered to test real strategies under real market conditions wi
 2. **Next-Bar Ratchet Rule:** Stop-loss modifications, breakeven adjustments, and trailing ratchets take effect strictly on bar $i + 1$, preventing same-bar entry-dip stop-out corruption.
 3. **No Guessing Allowed:** Always test every preset and strategy directly in Quant Lab across raw historical candles before presenting results or recommending setups to the trader.
 
+## ⚡ ZERO-POPUP MCP-FIRST MANDATE (Quegar-mcp > Terminal Execution)
+Whenever querying market data, live PM2 daemon status, trade diagnostics, market structure, backtests, or quant decisions, ALWAYS use the specialized `Quegar-mcp` / `flow-state-quant-engine` MCP tools directly instead of executing terminal commands (`pm2 logs`, `curl`, `tsx`, `ssh`):
+1. **Zero Permission Delay:** Calling MCP tools runs in-memory and requires ZERO user terminal approval popups, avoiding unnecessary user friction and execution latency.
+2. **Dedicated Tool Coverage:**
+   - **Live Daemon State & In-Flight Positions:** Use `get_live_daemon_status`.
+   - **Forensic Setup & Displacement Diagnostics:** Use `get_trade_diagnostics`.
+   - **Level 2 Dealing Ranges & Market Structure:** Use `get_market_structure`.
+   - **Market Context (Orderbook, CVD, Funding):** Use `get_market_context`.
+   - **In-Memory Strategy Backtesting:** Use `run_quant_backtest`.
+   - **Quant Decision Submission:** Use `submit_quant_decision`.
+3. **Strict Terminal Fallback Boundary:** ONLY reach for terminal commands (`run_command`, SSH, PM2 process management) when performing actual server-level process administration (restarts, git pulls, builds, OS configuration) that MCP tools do not cover.
+
 ## 🛑 TOKEN OPTIMIZATION RULE (Progressive Disclosure)
 Do NOT guess the project architecture or past logic. To save the context window, you must dynamically read the relevant documentation from the `directives/` folder based on your current task.
 
