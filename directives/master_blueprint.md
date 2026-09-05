@@ -1,8 +1,23 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.43
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.44
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-05 (V17.43 — Quegar Brand Mark Synthesis: Apex Accumulator Integration)
+> **Last Updated:** 2026-09-05 (V17.44 — Edge Perimeter Hardening: Sovereign Stealth & Reverse-Proxy Header Stripping)
+
+## 🆕 V17.44 Changelog — Edge Perimeter Hardening: Sovereign Stealth & Reverse-Proxy Header Stripping (2026-09-05)
+
+### Summary
+1. **Apex Domain Stealth Camouflage (`quegar.com`):**
+   - Eliminated the self-describing JSON telemetry fingerprint (`{"status":"healthy","service":"telemetry-node","region":"ap-northeast-1"}`) which exposed AWS regional infrastructure and flagged the host for active API scanning suites.
+   - Deployed an authentic, sterile `404 Not Found` response mimicking standard `nginx` edge behavior with zero executable DOM, zero brand links, and no JSON API signatures.
+   - All arbitrary scanner probe paths (`/.env`, `/admin`, `/wp-login.php`, `/api`) return identical sterile `404 Not Found` responses.
+2. **Global Server Header Stripping (`header -Server`, `header -Via`, `header -X-Powered-By`):**
+   - Configured Caddy to strip all identifying edge signatures (`Server: Caddy`, `Via: 1.1 Caddy`) across `quegar.com`, `core.quegar.com`, and `mcp.quegar.com`.
+   - Stripped upstream framework leakage (`X-Powered-By: Next.js`) on reverse proxies using `header_down -X-Powered-By`, preventing automated fingerprinting tools (Wappalyzer, WhatWeb, Shodan) from identifying Next.js or Caddy.
+3. **Hardened Transport Security & Cache Disabling:**
+   - Enforced `Cache-Control: no-store, no-cache, must-revalidate` and `X-Content-Type-Options: nosniff` on apex responses to prevent caching and MIME-type sniffing.
+
+---
 
 ## 🆕 V17.43 Changelog — Quegar Brand Mark Synthesis: Apex Accumulator Integration (2026-09-05)
 
