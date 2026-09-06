@@ -177,11 +177,12 @@ export class TelegramNotifier {
       case 'LIMIT_ORDER_PLACED': {
         if (!pos) return null;
         const dirEmoji = pos.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
+        const tp2Label = (pos.stage2Multiple ?? 1.30).toFixed(1);
         const targetBlocks = isTwoStage
           ? `🎯 <b>TP1 (1.0R):</b> <code>$${pos.stage1Target.toFixed(2)}</code> (${(stage1Ratio * 100).toFixed(0)}%)\n` +
-            `💰 <b>TP2 (1.4R):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${(stage2Ratio * 100).toFixed(0)}% Full Exit)\n`
+            `💰 <b>TP2 (${tp2Label}R):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${(stage2Ratio * 100).toFixed(0)}% Full Exit)\n`
           : `🎯 <b>TP1 (1.0R):</b> <code>$${pos.stage1Target.toFixed(2)}</code> (${(stage1Ratio * 100).toFixed(0)}%)\n` +
-            `💰 <b>TP2 (1.4R):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${(stage2Ratio * 100).toFixed(0)}%)\n` +
+            `💰 <b>TP2 (${tp2Label}R):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${(stage2Ratio * 100).toFixed(0)}%)\n` +
             `🚀 <b>TP3 (DOL):</b> <code>$${pos.stage3Target.toFixed(2)}</code> (${(stage3Ratio * 100).toFixed(0)}% Runner)\n`;
 
         return (

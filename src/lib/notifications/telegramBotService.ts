@@ -431,7 +431,7 @@ export class TelegramBotService {
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `🛡️ <b>Active Stop Loss:</b> <code>$${pos.activeStopLoss.toFixed(2)}</code> (<i>${pos.trailingSlSource}</i>) [<code>$${slDist} buffer</code>]\n` +
         `🎯 <b>TP1 (1.0R):</b> <code>$${pos.stage1Target.toFixed(2)}</code> (${pos.isStage1Filled ? '✅ FILLED' : `⏳ $${tp1Dist} away`})\n` +
-        `💰 <b>TP2 (1.4R):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${pos.isStage2Filled ? '✅ FILLED' : `⏳ $${tp2Dist} away`})\n` +
+        `💰 <b>TP2 (${(pos.stage2Multiple ?? 1.30).toFixed(1)}R):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${pos.isStage2Filled ? '✅ FILLED' : `⏳ $${tp2Dist} away`})\n` +
         `🚀 <b>TP3 (DOL):</b> <code>$${pos.stage3Target.toFixed(2)}</code> (${pos.isStage3Filled ? '✅ FILLED' : '⏳ Runner'})\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `📦 <b>Remaining Allocation:</b> <code>${(pos.remainingAllocation * 100).toFixed(0)}%</code>\n` +
@@ -462,7 +462,7 @@ export class TelegramBotService {
         `🛑 <b>Stop Loss:</b> <code>$${ord.initialStopLoss.toFixed(2)}</code>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `🎯 <b>TP1 (1.0R):</b> <code>$${ord.stage1Target.toFixed(2)}</code>\n` +
-        `💰 <b>TP2 (1.4R):</b> <code>$${ord.stage2Target.toFixed(2)}</code>\n` +
+        `💰 <b>TP2 (${(ord.stage2Multiple ?? 1.30).toFixed(1)}R):</b> <code>$${ord.stage2Target.toFixed(2)}</code>\n` +
         `🚀 <b>TP3 (DOL):</b> <code>$${ord.stage3Target.toFixed(2)}</code>\n` +
         `💵 <b>Risk USD:</b> <code>$${ord.riskUsd.toFixed(2)}</code> (2% Compounded)\n` +
         `🏛️ <b>Setup:</b> <i>${ord.anchorName || '5m Structural Liquidity'}</i>\n` +
