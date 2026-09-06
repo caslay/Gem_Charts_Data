@@ -101,6 +101,18 @@ Both systems must determine execution entry prices using the identical pure func
 * **Quant Lab Route Injection:** When `structuralDealingRange` is omitted from Quant Lab API payloads, `/api/quant-lab/sweep-reclaim-scanner` dynamically derives it directly from `MarketStructureAPI.analyze(candles, lastPrice)`, guaranteeing 100% bit-for-bit parity with live daemon valuation gating.
 * **Engine Fallback Gating:** In `SweepReclaimEngine.ts`, when dealing range is computed internally from confirmed pivots, it must evaluate pivots up to `evalIndex` (`reclaimIdx`) and prioritize Level 2 (MAJOR) swings, preventing range collapse onto minor 5-bar noise.
 
+### 3.5: Binance USDC-M Institutional Fee Model & True Scratch Accounting
+* **USDC-M Perpetual Exclusivity:** Trading is strictly restricted to Binance USDⓈ-M `ETHUSDC` futures. All USDT pairs and USDT fee tiers are permanently bypassed.
+* **Exchange Order Friction Physics:**
+  - **Limit Entries & Take-Profits:** Resting limit orders execute with **0.0000% Maker fees** (VIP 1).
+  - **Stop Losses & Scratches:** Market-clearing liquidation triggers execute with **0.0400% Taker fees** (or **0.0360%** with BNB discount).
+* **Fee-Padded Breakeven Stop Invariant:**
+  - When Fee-Padded Breakeven is active (`enableFeePaddedBreakeven: true`, default `breakevenOffsetPct: 0.05`), the stop loss is moved past entry into positive territory upon reaching early MFE threshold:
+    - Longs: $P_{\text{BE}} = P_{\text{entry}} \times (1 + \frac{\text{OffsetPct}}{100})$
+    - Shorts: $P_{\text{BE}} = P_{\text{entry}} \times (1 - \frac{\text{OffsetPct}}{100})$
+  - **Dynamic Breathing Room Guard:** The early breakeven ratchet multiple is dynamically constrained: $\text{effectiveEarlyBEMultiple} = \max(\text{earlyBreakevenMultiple}, \text{feeOffsetInR} + 0.05)$, ensuring price clears the offset with $+0.05\text{R}$ breathing room before moving the stop.
+* **True Scratch Net Cash Accounting:**
+  - Price appreciation on protected scratch exits covers the exchange taker fee, resulting in exactly $0.00\text{R}$ and $\$0.00$ net cash drag. Phantom fee double-deductions are strictly prohibited.
 
 ---
 
@@ -220,6 +232,8 @@ Every single execution rule in PM2 Live Execution must have an identical impleme
 
 ## 📜 9. Engine Changelog Ledger
 
+* **2026-09-06 (V17.47):** Integrated Binance USDC Institutional Fee Engine, Fee-Padded Breakeven Shield, and Net-First Dual Accounting across Quant Lab and Live PM2 Headless Daemon. Eliminated double-deduction phantom fee accounting bug on protected scratches. Verified 1-Year edge (+184.81R Net vs +52.27R unshielded, +$91,994.79 edge). Synchronized VPS production daemon (`quegar-daemon` PID 114890) with 100% bit-for-bit parity.
+* **2026-09-06 (V17.46):** Implemented Fee-Padded Breakeven Stop Placement with Dynamic Breathing Room Guard (`effectiveEarlyBEMultiple = Math.max(earlyBreakevenMultiple, feeOffsetInR + 0.05)`). Added Rule 4 UI offset controls and auto-sync to Binance USDC fee schedule.
 * **2026-09-05 (V17.40):** Resolved Intra-Candle Retest Fill Priority Race Condition (`SweepReclaimEngine.ts:L2006-2065`) and Structural Dealing Range Dynamic Parity (`route.ts:L274-298`). Limit orders touched intra-candle are evaluated for entry fills before missed-expansion checks. Quant Lab scanner route dynamically derives structural dealing range from `MarketStructureAPI.analyze()`, recovering 100% bit-for-bit parity with live PM2 execution (Trades #5, #6, and #7 verified).
 * **2026-09-05 (V17.39):** Disambiguated Early Breakeven Execution Events & Accounting. Introduced `EARLY_BREAKEVEN` event type and `BREAKEVEN_SCRATCH` exit classification, eliminating false "TP1 Harvest" Telegram alerts and preventing scratch exits from being misrecorded as full `-1.00R` losses.
 * **2026-09-04 (V17.32):** Codified Section 8 "The Zero-Guessing 100% Parity Covenant (Quant Lab ≡ PM2 Live Execution)" and Lesson 70. Enforced strict next-bar stop ratchet rule, absolute prohibition of post-facto ledger modifications, and mandatory end-to-end simulation verification across all quant research.

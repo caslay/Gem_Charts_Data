@@ -135,3 +135,21 @@ A momentum breakout strategy designed to sponsor trades during violent runaway m
   2. `MARKET_VELOCITY` >= `2.0` [TICK] (Sequential unmitigated FVGs active)
   3. `HIGH_VOLUME_SESSION` `IS TRUE` [CLOSE] (Trades strictly during sponsored killzones)
   4. `BTC_RELATIVE_STRENGTH` == `LAGGARD` [TICK] (Ensures ETH leads the downward sweep relative to BTC open anchors)
+
+---
+
+## 5. Strategy Tester & Quant Lab Fee Configuration (V17.47)
+
+When evaluating or backtesting custom strategies across historical candles in Quant Lab, fee models are integrated directly into performance simulations to prevent post-facto paper distortions:
+
+### 5.1 Fee Schedule Configuration
+* **Binance Fee Tier Preset:** Select from predefined institutional tiers (`USDC_REGULAR_VIP1`, `USDC_REGULAR_VIP1_BNB`, `USDC_VIP2`, `USDC_VIP2_BNB`, `USDC_VIP3`, `USDC_VIP3_BNB`, `CUSTOM`).
+* **Maker Fee (Limits):** Deducted strictly on limit entry fills and limit take-profit harvests (default: `0.0000%`).
+* **Taker Fee (Stops):** Deducted on stop loss liquidations and unshielded breakeven scratches (default: `0.0400%`, or `0.0360%` with BNB).
+* **Rule 4 Fee-Padded Breakeven:** Offsets breakeven stops by `+0.05%` (Longs) or `-0.05%` (Shorts) with the Dynamic Breathing Room Guard (`effectiveEarlyBEMultiple = max(earlyBEMultiple, feeOffsetInR + 0.05)`).
+
+### 5.2 Net-First Dual Accounting Standards
+* **Primary KPI Cards:** Net Realized Return (R), Net Profit Factor, and Net Compounded Balance.
+* **Secondary Badges:** Gross Signal Edge (R) and Total Fees Paid (R & $).
+* **Parity Covenant:** All trade metrics must reflect sequential candle-by-candle execution matching live PM2 daemon mechanics with zero phantom double-deductions.
+

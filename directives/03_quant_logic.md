@@ -56,3 +56,25 @@ A Market Structure Shift (MSS) event is classified as:
 - **Execution Constraints:**
   1. Primary setups MUST align with the **HTF Bearish Retest** (shorting the HTF Supply Zone for $1,868 SSL / $1,850 Demand).
   2. Long counter-trend SMT trades inside HTF Bearish trends MUST NOT target macro BSL or PDH. They are capped at the HTF Bearish Supply entry boundary ($1,888.00) with mandatory breakeven locks.
+
+## 6. Institutional Binance Fee Model & True Scratch Breakeven Protocol (V17.47)
+
+### 6.1 Strict USDC-M Perpetual Focus
+All automated execution and backtesting are strictly bound to Binance USDⓈ-M `ETHUSDC` futures. USDT fee structures and pairs are permanently bypassed.
+- **Limit Orders (Entry & TPs):** $0.0000\%$ Maker fee (Regular / VIP 1).
+- **Stop-Market Orders (SL & Breakeven Scratches):** $0.0400\%$ Taker fee ($0.0360\%$ with BNB discount).
+
+### 6.2 Fee-Padded Breakeven Stop Physics
+When Rule 4 (Early Breakeven) ratchets the stop loss, unshielded stops trigger at exact entry, incurring $\approx -0.20\text{R}$ to $-0.23\text{R}$ in taker fee drag. Fee-Padded Breakeven shifts the stop into positive territory:
+- **Longs:** $P_{\text{BE}} = P_{\text{entry}} \times (1 + \frac{\text{OffsetPct}}{100})$ (default $+0.05\%$)
+- **Shorts:** $P_{\text{BE}} = P_{\text{entry}} \times (1 - \frac{\text{OffsetPct}}{100})$ (default $-0.05\%$)
+
+### 6.3 Dynamic Breathing Room Guard
+To prevent premature stop-outs from normal intra-bar noise, the early breakeven ratchet multiple is dynamically constrained:
+$$\text{EffectiveEarlyBEMultiple} = \max(\text{ConfiguredEarlyBEMultiple}, \text{FeeOffsetInR} + 0.05\text{R})$$
+Price must expand at least $+0.05\text{R}$ beyond the fee offset before the stop moves.
+
+### 6.4 True Scratch Accounting & Double-Deduction Prohibition
+The price gain $\Delta P_{\text{fee}}$ upon exit pays the exchange taker fee directly. In the quant ledger and live daemon:
+$$\text{Net Realized R} = 0.00\text{R}, \quad \text{Net Cash Drag} = \$0.00, \quad \text{Fee Paid in R} = 0.00\text{R}$$
+Double-deducting taker fees against protected scratches is strictly prohibited.

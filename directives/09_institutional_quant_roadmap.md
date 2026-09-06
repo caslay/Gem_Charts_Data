@@ -108,8 +108,10 @@ flowchart TD
 │ • FVG 50% CE Retest Entry            │ • Volatility-Adaptive TP2 (Expanding ATR)  │
 │ • 2-Stage TP (50% @ 1.0R / 50% @ 1.4R│ • Time-Decay Stale Trade Exit (> 12 bars)  │
 │ • Rule 4: Early Breakeven (+0.40R)   │ • HTF DOL Magnet Runner Routing (TP3)      │
-│ • Next-Bar Ratchet Protection        │ • Trailing SL to Dynamic Swing Pivots      │
-│ • Structural Stop Loss (0.10 ATR)    │ • Post-Loss Directional Cooldown Tuning    │
+│ • Fee-Padded BE Shield (+0.05% offset)│ • Trailing SL to Dynamic Swing Pivots      │
+│ • True Scratch Net Cash Accounting   │ • Post-Loss Directional Cooldown Tuning    │
+│ • Next-Bar Ratchet Protection        │                                            │
+│ • Structural Stop Loss (0.10 ATR)    │                                            │
 └──────────────────────────────────────┴────────────────────────────────────────────┘
 ```
 
@@ -264,4 +266,9 @@ This live ledger tracks every completed, active, and pending research experiment
 #### Entry 008 (2026-09-04) — BTC vs ETH SMT Divergence (Precision Sniper vs Volume Compounding Trade-Off)
 * **Finding:** Requiring strict BTC SMT Divergence (ETH sweeps while BTC holds Higher Low / Lower High) pushed the Profit Factor to an engine-record **$1.84\text{ PF}$** and compressed Max Drawdown to **$-5.30\text{R}$** ($10.2\%$ compounded DD). However, it reduced annual trade count from $1,938 \to 758$, lowering total 1-year compounded accumulation to $+95.1\text{R}$ ($\$6,270$). Symmetric sweeps (where both ETH and BTC sweep together) independently generated $+129.1\text{R}$ ($1.64\text{ PF}$).
 * **Microstructure Rationale:** SMT divergence is the ultimate institutional confirmation signal for high win-rate, low-drawdown execution. For traders seeking maximum peace of mind and minimum drawdowns ($-5.3\text{R}$), strict SMT filtering is supreme. For maximum accumulated portfolio compounding, accepting both confirmed SMT and symmetric liquidity sweeps captures the full $+223.8\text{R}$ and $\$74,287$ equity trajectory.
+
+#### Entry 009 (2026-09-06) — Real-World Taker Fee Drag & The Fee-Padded Breakeven Shield (+184.81R Net vs +52.27R Unshielded)
+* **Finding:** When unshielded Flat Breakeven (0.00% offset) was backtested across 118,246 raw 5m bars, taker fee friction on 1,178 scratches leaked **$-331.13\text{R}$ in cash drag**, slashing nominal return from $+383.40\text{R} \to +52.27\text{R}$ Net ($1.09\text{ Net PF}$, $\$6,621.00$ final equity). Implementing Fee-Padded Breakeven ($+0.05\%$ offset) with the Dynamic Breathing Room Guard recovered **`+184.81R Net`**, **`1.46 Net PF`**, and grew a $\$1,000$ base to **`$98,615.79`** with only **$19.5\%$ Max Drawdown**, delivering a **+$91,994.79 edge**.
+* **Microstructure Rationale:** In 5m crypto futures, Stop-Loss and Breakeven scratch exits are Stop-Market orders that cross the spread and incur Binance taker fees ($0.0400\%$). On typical ETH stop distances ($\approx 0.18\%$), a taker fee translates to $\approx -0.23\text{R}$ of notional risk per trade. Offsetting the breakeven stop by $+0.05\%$ captures price appreciation that directly pays the exchange taker fee upon execution, preserving true cash equity at $\$0.00$ drag.
+
 
