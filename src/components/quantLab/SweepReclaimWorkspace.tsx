@@ -58,6 +58,10 @@ import {
 import CapitalGrowthLedger from "@/components/quantLab/CapitalGrowthLedger";
 import ScannerPresetControlDeck from "@/components/quantLab/ScannerPresetControlDeck";
 import { ScannerPreset, SweepReclaimPresetConfig } from "@/lib/quantEngine/scannerPresets";
+import {
+  BinanceFeeTier,
+  BINANCE_USDC_FEE_SCHEDULES,
+} from "@/lib/quantEngine/strategyExecutionConfig";
 import { StoredSrScan } from "@/app/quant-lab/page";
 
 interface SweepReclaimWorkspaceProps {
@@ -122,7 +126,31 @@ export default function SweepReclaimWorkspace({
   const [enforceHtfBiasGuard, setEnforceHtfBiasGuard] = useState(false);
   const [enableEarlyBreakeven, setEnableEarlyBreakeven] = useState(true);
   const [earlyBreakevenMultiple, setEarlyBreakevenMultiple] = useState(0.40);
+  const [enableFeePaddedBreakeven, setEnableFeePaddedBreakeven] = useState(true);
+  const [breakevenOffsetPct, setBreakevenOffsetPct] = useState(0.05);
   const [postLossCooldownMinutes, setPostLossCooldownMinutes] = useState(0);
+
+  // 💰 Real-World Binance Futures Fee Schedule (USDC Pairs)
+  const [feeTierPreset, setFeeTierPreset] = useState<BinanceFeeTier>('USDC_REGULAR_VIP1');
+  const [useBnbDiscount, setUseBnbDiscount] = useState<boolean>(false);
+  const [makerFeePct, setMakerFeePct] = useState<number>(0.0000);
+  const [takerFeePct, setTakerFeePct] = useState<number>(0.0400);
+  const [autoSyncBeOffset, setAutoSyncBeOffset] = useState<boolean>(true);
+
+  const handleFeeTierPresetChange = (tier: BinanceFeeTier) => {
+    setFeeTierPreset(tier);
+    if (tier !== 'CUSTOM') {
+      const schedule = BINANCE_USDC_FEE_SCHEDULES[tier];
+      if (schedule) {
+        setMakerFeePct(schedule.makerFeePct);
+        setTakerFeePct(schedule.takerFeePct);
+        setUseBnbDiscount(tier.endsWith('_BNB'));
+        if (autoSyncBeOffset) {
+          setBreakevenOffsetPct(schedule.recommendedBreakevenOffsetPct);
+        }
+      }
+    }
+  };
 
   // Structural Pivot Lookbacks & Advanced Geometry
   const [lookbackMajor, setLookbackMajor] = useState(10);
@@ -211,7 +239,15 @@ export default function SweepReclaimWorkspace({
     enforceHtfBiasGuard,
     enableEarlyBreakeven,
     earlyBreakevenMultiple,
+    enableFeePaddedBreakeven,
+    breakevenOffsetPct,
     postLossCooldownMinutes,
+
+    // 💰 Real-World Binance Futures Fee Schedule (USDC Pairs)
+    makerFeePct,
+    takerFeePct,
+    feeTierPreset,
+    useBnbDiscount,
   }), [
     symbol,
     timeframe,
@@ -239,7 +275,13 @@ export default function SweepReclaimWorkspace({
     enforceHtfBiasGuard,
     enableEarlyBreakeven,
     earlyBreakevenMultiple,
+    enableFeePaddedBreakeven,
+    breakevenOffsetPct,
     postLossCooldownMinutes,
+    makerFeePct,
+    takerFeePct,
+    feeTierPreset,
+    useBnbDiscount,
   ]);
 
   const handleApplyPreset = (preset: ScannerPreset) => {
@@ -273,7 +315,15 @@ export default function SweepReclaimWorkspace({
     setEnforceHtfBiasGuard(cfg.enforceHtfBiasGuard === true);
     setEnableEarlyBreakeven(cfg.enableEarlyBreakeven === true);
     setEarlyBreakevenMultiple(typeof cfg.earlyBreakevenMultiple === 'number' ? cfg.earlyBreakevenMultiple : 0.40);
+    setEnableFeePaddedBreakeven(cfg.enableFeePaddedBreakeven !== false);
+    setBreakevenOffsetPct(typeof cfg.breakevenOffsetPct === 'number' ? cfg.breakevenOffsetPct : 0.05);
     setPostLossCooldownMinutes(typeof cfg.postLossCooldownMinutes === 'number' ? cfg.postLossCooldownMinutes : 0);
+
+    // 💰 Real-World Binance Futures Fee Hydration
+    if (typeof cfg.makerFeePct === 'number') setMakerFeePct(cfg.makerFeePct);
+    if (typeof cfg.takerFeePct === 'number') setTakerFeePct(cfg.takerFeePct);
+    if (cfg.feeTierPreset) setFeeTierPreset(cfg.feeTierPreset as BinanceFeeTier);
+    if (typeof cfg.useBnbDiscount === 'boolean') setUseBnbDiscount(cfg.useBnbDiscount);
 
     if (Array.isArray(cfg.anchorTypes)) {
       setEnabledAnchors({
@@ -342,7 +392,17 @@ export default function SweepReclaimWorkspace({
       enforceHtfBiasGuard,
       enableEarlyBreakeven,
       earlyBreakevenMultiple,
+      enableFeePaddedBreakeven,
+      breakevenOffsetPct,
       postLossCooldownMinutes,
+
+      // 💰 Real-World Binance Futures Fee Parameters
+      makerFeePct,
+      maker_fee_pct: makerFeePct,
+      takerFeePct,
+      taker_fee_pct: takerFeePct,
+      feeTierPreset,
+      useBnbDiscount,
     });
   };
 
@@ -356,7 +416,11 @@ export default function SweepReclaimWorkspace({
           enforceHtfBiasGuard,
           enableEarlyBreakeven,
           earlyBreakevenMultiple,
+          enableFeePaddedBreakeven,
+          breakevenOffsetPct,
           postLossCooldownMinutes,
+          makerFeePct,
+          takerFeePct,
         })
       : null;
   }, [
@@ -366,7 +430,11 @@ export default function SweepReclaimWorkspace({
     enforceHtfBiasGuard,
     enableEarlyBreakeven,
     earlyBreakevenMultiple,
+    enableFeePaddedBreakeven,
+    breakevenOffsetPct,
     postLossCooldownMinutes,
+    makerFeePct,
+    takerFeePct,
   ]);
 
   const executedSrTrades = useMemo(() => {
@@ -908,8 +976,36 @@ export default function SweepReclaimWorkspace({
                 onChange={(e) => setEarlyBreakevenMultiple(parseFloat(e.target.value))}
                 className="w-full accent-cyan-500"
               />
+              <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    id="ql_fee_padded_be"
+                    disabled={isScanning || !enableEarlyBreakeven}
+                    checked={enableFeePaddedBreakeven}
+                    onChange={(e) => setEnableFeePaddedBreakeven(e.target.checked)}
+                    className="w-3.5 h-3.5 accent-cyan-500 cursor-pointer"
+                  />
+                  <label htmlFor="ql_fee_padded_be" className="text-[9.5px] text-slate-300 cursor-pointer font-medium">
+                    Fee-Padded BE (Taker Shield)
+                  </label>
+                </div>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max="0.20"
+                    disabled={isScanning || !enableEarlyBreakeven || !enableFeePaddedBreakeven}
+                    value={breakevenOffsetPct}
+                    onChange={(e) => setBreakevenOffsetPct(parseFloat(e.target.value) || 0)}
+                    className="w-14 px-1 py-0.5 text-right text-[9.5px] bg-slate-900 border border-slate-700 rounded text-cyan-300 focus:outline-none focus:border-cyan-500 font-mono"
+                  />
+                  <span className="text-[9px] text-slate-500 font-mono">%</span>
+                </div>
+              </div>
               <span className="text-[9px] text-slate-400">
-                Advances SL to 0.0R Entry when floating profit reaches +{earlyBreakevenMultiple}R.
+                Advances SL to {enableFeePaddedBreakeven ? `Fee-Padded BE (+${breakevenOffsetPct.toFixed(2)}%)` : '0.0R Entry'} when floating profit reaches +{earlyBreakevenMultiple}R.
               </span>
             </div>
 
@@ -933,6 +1029,91 @@ export default function SweepReclaimWorkspace({
               />
               <span className="text-[9px] text-slate-400">
                 Directional lock after stop out to prevent revenge trading.
+              </span>
+            </div>
+
+            {/* 💰 Binance USDC Futures Fee Schedule & Friction Calibration */}
+            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col justify-between gap-1.5 col-span-1 sm:col-span-2 lg:col-span-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-amber-400 uppercase">Binance USDC Fee Schedule</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1 text-[9px] text-slate-400 cursor-pointer font-medium">
+                    <input
+                      type="checkbox"
+                      checked={autoSyncBeOffset}
+                      onChange={(e) => setAutoSyncBeOffset(e.target.checked)}
+                      className="w-3 h-3 accent-cyan-500 cursor-pointer"
+                    />
+                    <span>Auto-Sync BE Offset</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Fee Tier Selector */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-slate-800/80">
+                <div className="sm:col-span-1 flex flex-col gap-0.5">
+                  <label className="text-[8.5px] uppercase text-slate-400 font-semibold">Tier Preset</label>
+                  <select
+                    disabled={isScanning}
+                    value={feeTierPreset}
+                    onChange={(e) => handleFeeTierPresetChange(e.target.value as BinanceFeeTier)}
+                    className="w-full px-1.5 py-1 text-[9.5px] bg-slate-900 border border-slate-700 rounded text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
+                  >
+                    <option value="USDC_REGULAR_VIP1">USDC Regular / VIP 1 (0.00% / 0.040%)</option>
+                    <option value="USDC_REGULAR_VIP1_BNB">USDC Regular / VIP 1 + BNB (0.00% / 0.036%)</option>
+                    <option value="USDC_VIP2">USDC VIP 2 (0.00% / 0.032%)</option>
+                    <option value="USDC_VIP2_BNB">USDC VIP 2 + BNB (0.00% / 0.0288%)</option>
+                    <option value="USDC_VIP3">USDC VIP 3 (0.00% / 0.0256%)</option>
+                    <option value="USDC_VIP3_BNB">USDC VIP 3 + BNB (0.00% / 0.0230%)</option>
+                    <option value="CUSTOM">Custom Manual Input</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[8.5px] uppercase text-slate-400 font-semibold">Maker Fee (Limits)</label>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0.000"
+                      max="0.100"
+                      disabled={isScanning || feeTierPreset !== 'CUSTOM'}
+                      value={makerFeePct}
+                      onChange={(e) => setMakerFeePct(parseFloat(e.target.value) || 0)}
+                      className="w-full px-1.5 py-1 text-right text-[9.5px] bg-slate-900 border border-slate-700 rounded text-emerald-400 focus:outline-none focus:border-cyan-500 font-mono disabled:opacity-60"
+                    />
+                    <span className="text-[9px] text-slate-500 font-mono">%</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-[8.5px] uppercase text-slate-400 font-semibold">Taker Fee (Stops/Scratches)</label>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0.000"
+                      max="0.100"
+                      disabled={isScanning || feeTierPreset !== 'CUSTOM'}
+                      value={takerFeePct}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value) || 0;
+                        setTakerFeePct(val);
+                        if (autoSyncBeOffset) {
+                          setBreakevenOffsetPct(parseFloat((val * 1.25).toFixed(2)));
+                        }
+                      }}
+                      className="w-full px-1.5 py-1 text-right text-[9.5px] bg-slate-900 border border-slate-700 rounded text-rose-400 focus:outline-none focus:border-cyan-500 font-mono disabled:opacity-60"
+                    />
+                    <span className="text-[9px] text-slate-500 font-mono">%</span>
+                  </div>
+                </div>
+              </div>
+
+              <span className="text-[9px] text-slate-400">
+                Deducts {makerFeePct.toFixed(4)}% on Limit entries/TPs and {takerFeePct.toFixed(4)}% on SL/BE scratches for 100% bit-for-bit live exchange parity.
               </span>
             </div>
           </div>
@@ -1302,27 +1483,34 @@ export default function SweepReclaimWorkspace({
 
                 {/* 3. Net Realized Return */}
                 <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
-                  <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
-                    Net Realized Return
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block">
+                      Net Realized Return
+                    </span>
+                    {execution1to1Summary.totalFeesPaidR !== undefined && execution1to1Summary.totalFeesPaidR > 0 && (
+                      <span className="text-[8px] px-1 py-0.2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-500 font-mono font-bold">
+                        Net
+                      </span>
+                    )}
+                  </div>
+                  <span className={`text-lg font-mono font-bold ${(execution1to1Summary.netRealizedR ?? execution1to1Summary.totalRealizedR) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                    {(execution1to1Summary.netRealizedR ?? execution1to1Summary.totalRealizedR) > 0 ? "+" : ""}{execution1to1Summary.netRealizedR ?? execution1to1Summary.totalRealizedR}R
                   </span>
-                  <span className={`text-lg font-mono font-bold ${execution1to1Summary.totalRealizedR >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                    {execution1to1Summary.totalRealizedR > 0 ? "+" : ""}{execution1to1Summary.totalRealizedR}R
-                  </span>
-                  <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
-                    Avg: {execution1to1Summary.avgRealizedR > 0 ? "+" : ""}{execution1to1Summary.avgRealizedR}R / trade
+                  <span className="text-[8.5px] font-mono text-muted dark:text-slate-400 block mt-0.5">
+                    Gross: {execution1to1Summary.totalRealizedR > 0 ? "+" : ""}{execution1to1Summary.totalRealizedR}R • Fees: -{execution1to1Summary.totalFeesPaidR ?? 0}R
                   </span>
                 </div>
 
                 {/* 4. Profit Factor */}
                 <div className="p-3.5 rounded-xl border border-card-border dark:border-slate-800/60 bg-card/75 dark:bg-slate-900/40 backdrop-blur-sm shadow-xs">
                   <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
-                    Profit Factor
+                    Profit Factor (Net)
                   </span>
                   <span className="text-lg font-mono font-bold text-purple-600 dark:text-purple-400">
-                    {execution1to1Summary.profitFactor >= 99 ? "99.9+" : execution1to1Summary.profitFactor.toFixed(2)}
+                    {(execution1to1Summary.netProfitFactor ?? execution1to1Summary.profitFactor) >= 99 ? "99.9+" : (execution1to1Summary.netProfitFactor ?? execution1to1Summary.profitFactor).toFixed(2)}
                   </span>
-                  <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
-                    Gross Win / Loss Ratio
+                  <span className="text-[8.5px] font-mono text-muted dark:text-slate-400 block mt-0.5">
+                    Gross PF: {execution1to1Summary.grossProfitFactor !== undefined ? execution1to1Summary.grossProfitFactor.toFixed(2) : execution1to1Summary.profitFactor.toFixed(2)}
                   </span>
                 </div>
 
@@ -1613,6 +1801,8 @@ export default function SweepReclaimWorkspace({
           trades={executedSrTrades}
           totalMonitoredCount={telemetry?.total_anchors_detected}
           monitoredLabel="Anchors"
+          makerFeePct={makerFeePct}
+          takerFeePct={takerFeePct}
           title={`SWEEP & RECLAIM COMPOUNDING LEDGER • ${selectedScan.symbol} (${selectedScan.timeframe})`}
           subtitle={`Sequential path-dependent walk across ${executedSrTrades.length} executed retest trades from ${selectedScan.scan_name}.`}
         />

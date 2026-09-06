@@ -213,6 +213,8 @@ export async function POST(req: Request) {
         const enforce_htf_bias_guard = (body.enforceHtfBiasGuard ?? body.enforce_htf_bias_guard) !== undefined ? Boolean(body.enforceHtfBiasGuard ?? body.enforce_htf_bias_guard) : false;
         const enable_early_breakeven = (body.enableEarlyBreakeven ?? body.enable_early_breakeven) !== undefined ? Boolean(body.enableEarlyBreakeven ?? body.enable_early_breakeven) : true;
         const early_breakeven_multiple = Number(body.earlyBreakevenMultiple ?? body.early_breakeven_multiple ?? 0.40);
+        const enable_fee_padded_breakeven = (body.enableFeePaddedBreakeven ?? body.enable_fee_padded_breakeven) !== undefined ? Boolean(body.enableFeePaddedBreakeven ?? body.enable_fee_padded_breakeven) : true;
+        const breakeven_offset_pct = Number(body.breakevenOffsetPct ?? body.breakeven_offset_pct ?? 0.05);
         const post_loss_cooldown_minutes = Number(body.postLossCooldownMinutes ?? body.post_loss_cooldown_minutes ?? 0);
 
         if (!start_date || !end_date) {
@@ -333,6 +335,8 @@ export async function POST(req: Request) {
           enforceHtfBiasGuard: enforce_htf_bias_guard,
           enableEarlyBreakeven: enable_early_breakeven,
           earlyBreakevenMultiple: early_breakeven_multiple,
+          enableFeePaddedBreakeven: enable_fee_padded_breakeven,
+          breakevenOffsetPct: breakeven_offset_pct,
           postLossCooldownMinutes: post_loss_cooldown_minutes,
         };
 

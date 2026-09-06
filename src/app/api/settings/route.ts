@@ -53,6 +53,10 @@ async function initTables() {
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS pm_max_wick_ratio DOUBLE PRECISION DEFAULT 0.15;`;
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS pm_max_retracement_limit DOUBLE PRECISION DEFAULT 0.5;`;
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS pm_sweep_lookback INTEGER DEFAULT 5;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS fee_tier_preset VARCHAR(50) DEFAULT 'USDC_REGULAR_VIP1';`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS use_bnb_discount BOOLEAN DEFAULT false;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS maker_fee_pct DOUBLE PRECISION DEFAULT 0.0000;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS taker_fee_pct DOUBLE PRECISION DEFAULT 0.0400;`;
   } catch (err) {
     console.error("[SETTINGS API] Failed to alter table terminal_settings:", err);
   }
@@ -134,6 +138,10 @@ export async function GET() {
       pmMaxWickRatio: 0.5,
       pmMaxRetracementLimit: 0.7,
       pmSweepLookback: 5,
+      feeTierPreset: 'USDC_REGULAR_VIP1',
+      useBnbDiscount: false,
+      makerFeePct: 0.0000,
+      takerFeePct: 0.0400,
     };
 
     try {
@@ -171,7 +179,8 @@ export async function GET() {
         SELECT signal_sounds, enabled_signals, atr_period, adaptive_n_min, adaptive_n_max, mss_body_ratio, displacement_vef, sharp_departure_mult,
                candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
                include_btc_correlation, include_structure_analysis, include_fvg_detection,
-               visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback FROM terminal_settings
+               visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback,
+               fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct FROM terminal_settings
         WHERE user_id = ${userEmail}
         LIMIT 1
       `;
@@ -186,7 +195,8 @@ export async function GET() {
               mss_body_ratio, displacement_vef, sharp_departure_mult,
               candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
               include_btc_correlation, include_structure_analysis, include_fvg_detection,
-              visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback
+              visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback,
+              fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct
             )
             VALUES (
               ${userEmail}, ${JSON.stringify(DEFAULT_SIGNAL_SOUNDS)}, ${JSON.stringify(DEFAULT_ENABLED_SIGNALS)},
@@ -194,7 +204,8 @@ export async function GET() {
               0.70, 1.50, 1.50,
               350, 350, 250, 120, 80,
               true, true, true,
-              false, 0.5, 10, 0.3, 0.5, 0.7, 5
+              false, 0.5, 10, 0.3, 0.5, 0.7, 5,
+              'USDC_REGULAR_VIP1', false, 0.0000, 0.0400
             )
             ON CONFLICT (user_id) DO NOTHING;
           `;
@@ -202,7 +213,8 @@ export async function GET() {
             SELECT signal_sounds, enabled_signals, atr_period, adaptive_n_min, adaptive_n_max, mss_body_ratio, displacement_vef, sharp_departure_mult,
                    candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
                    include_btc_correlation, include_structure_analysis, include_fvg_detection,
-                   visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback FROM terminal_settings
+                   visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback,
+                   fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct FROM terminal_settings
             WHERE user_id = ${userEmail}
             LIMIT 1
           `;
@@ -236,6 +248,10 @@ export async function GET() {
         pmMaxWickRatio: termRows[0]?.pm_max_wick_ratio ?? 0.5,
         pmMaxRetracementLimit: termRows[0]?.pm_max_retracement_limit ?? 0.7,
         pmSweepLookback: termRows[0]?.pm_sweep_lookback ?? 5,
+        feeTierPreset: termRows[0]?.fee_tier_preset || 'USDC_REGULAR_VIP1',
+        useBnbDiscount: !!termRows[0]?.use_bnb_discount,
+        makerFeePct: termRows[0]?.maker_fee_pct !== undefined && termRows[0]?.maker_fee_pct !== null ? Number(termRows[0].maker_fee_pct) : 0.0000,
+        takerFeePct: termRows[0]?.taker_fee_pct !== undefined && termRows[0]?.taker_fee_pct !== null ? Number(termRows[0].taker_fee_pct) : 0.0400,
       };
 
       return NextResponse.json({ settings, terminalSettings });
@@ -305,7 +321,11 @@ export async function POST(req: Request) {
         pmMinBodyRatio,
         pmMaxWickRatio,
         pmMaxRetracementLimit,
-        pmSweepLookback
+        pmSweepLookback,
+        feeTierPreset,
+        useBnbDiscount,
+        makerFeePct,
+        takerFeePct
       } = body.terminalSettings as {
         signalSounds: Record<string, string>;
         enabledSignals: Record<string, boolean>;
@@ -330,6 +350,10 @@ export async function POST(req: Request) {
         pmMaxWickRatio?: number;
         pmMaxRetracementLimit?: number;
         pmSweepLookback?: number;
+        feeTierPreset?: string;
+        useBnbDiscount?: boolean;
+        makerFeePct?: number;
+        takerFeePct?: number;
       };
 
       if (!signalSounds || !enabledSignals) {
@@ -361,6 +385,10 @@ export async function POST(req: Request) {
       const pm_max_wick_ratio = pmMaxWickRatio ?? 0.5;
       const pm_max_retracement_limit = pmMaxRetracementLimit ?? 0.7;
       const pm_sweep_lookback = pmSweepLookback ?? 5;
+      const fee_tier_preset = feeTierPreset ?? "USDC_REGULAR_VIP1";
+      const use_bnb_discount = !!useBnbDiscount;
+      const maker_fee_pct = makerFeePct !== undefined && makerFeePct !== null ? Number(makerFeePct) : 0.0000;
+      const taker_fee_pct = takerFeePct !== undefined && takerFeePct !== null ? Number(takerFeePct) : 0.0400;
 
       await sql`
         INSERT INTO terminal_settings (
@@ -370,6 +398,7 @@ export async function POST(req: Request) {
           candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
           include_btc_correlation, include_structure_analysis, include_fvg_detection,
           visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback,
+          fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct,
           updated_at
         )
         VALUES (
@@ -379,6 +408,7 @@ export async function POST(req: Request) {
           ${candles_limit_1m}, ${candles_limit_5m}, ${candles_limit_15m}, ${candles_limit_1h}, ${candles_limit_4h},
           ${include_btc_correlation}, ${include_structure_analysis}, ${include_fvg_detection},
           ${visualize_perfect_movement_only}, ${pm_atr_multiplier}, ${pm_volume_sma_period}, ${pm_min_body_ratio}, ${pm_max_wick_ratio}, ${pm_max_retracement_limit}, ${pm_sweep_lookback},
+          ${fee_tier_preset}, ${use_bnb_discount}, ${maker_fee_pct}, ${taker_fee_pct},
           NOW()
         )
         ON CONFLICT (user_id)
@@ -406,6 +436,10 @@ export async function POST(req: Request) {
           pm_max_wick_ratio = EXCLUDED.pm_max_wick_ratio,
           pm_max_retracement_limit = EXCLUDED.pm_max_retracement_limit,
           pm_sweep_lookback = EXCLUDED.pm_sweep_lookback,
+          fee_tier_preset = EXCLUDED.fee_tier_preset,
+          use_bnb_discount = EXCLUDED.use_bnb_discount,
+          maker_fee_pct = EXCLUDED.maker_fee_pct,
+          taker_fee_pct = EXCLUDED.taker_fee_pct,
           updated_at = NOW()
       `;
 
