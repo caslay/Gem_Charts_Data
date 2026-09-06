@@ -215,14 +215,14 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   enableProfitRatchet: false,
   slBufferAtrMultiplier: 0.10,
 
-  // Quant Shield Defaults (Aligned with factory_sr_5m_fvg_ce_sniper_v2 champion)
+  // Quant Shield Defaults (Aligned with factory_sr_5m_fvg_ce_sniper_v3 champion)
   enableWaveDeduplication: true,
   filterWeekend: false,
   enforceHtfBiasGuard: false,
   enableEarlyBreakeven: true,
   earlyBreakevenMultiple: 0.40,
   enableFeePaddedBreakeven: true,
-  breakevenOffsetPct: 0.05,
+  breakevenOffsetPct: 0.015,
   postLossCooldownMinutes: 0,
 
   // Binance USDC Regular / VIP 1 Schedule

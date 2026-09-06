@@ -71,7 +71,7 @@ async function main() {
   console.log(` Starting Equity: $${startingEquity.toFixed(2)} USD (2% Compounded Risk = $${riskPerTrade.toFixed(2)} / trade)`);
   console.log(` Exchange Link:   ${isBinanceLiveHydrated ? '🟢 BINANCE USDⓈ-M LIVE CONNECTED' : '⚪ VIRTUAL / SANDBOX'}`);
   console.log(` Execution Gate:  ${safetyGate.isAllowed ? '🔴 LIVE REAL EXECUTION ARMED' : '🧪 SHADOW SIMULATION (' + safetyGate.reason + ')'}`);
-  console.log(` Strategy:        5M Sweep & Reclaim Champion (2-Stage Dynamic Harvest: 50% TP1 @ 1.0R / 50% TP2 @ 1.4R)`);
+  console.log(` Strategy:        5M Sweep & Reclaim Fee Shield V3 Sniper (60% TP1 @ 1.0R / 40% TP2 @ 1.3R · 0.015% Fee Shield)`);
   console.log(` Telegram Alerts: ${telegram.isEnabled() ? '✅ ACTIVE (Chat: ' + telegram.getConfig().chatId + ')' : '⚪ DISABLED'}`);
   console.log(` Mode:            ${isDryRun ? 'DRY-RUN (30s Diagnostic Validation)' : '24/7 LIVE BACKGROUND EXECUTION'}`);
   console.log(` Local Time:      ${new Date().toLocaleString()} (UTC: ${new Date().toISOString()})`);

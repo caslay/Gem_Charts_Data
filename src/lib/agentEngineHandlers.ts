@@ -41,6 +41,7 @@ import {
   SweepReclaimEngine,
   SweepReclaimScanConfig,
   SweepReclaimSetup,
+  SweepReclaimAnchorType,
 } from '@/lib/quantEngine/SweepReclaimEngine';
 import { computeStructuralBootstrap } from '@/lib/quantEngine/structuralBootstrap';
 import {
@@ -720,7 +721,7 @@ export interface QuantBacktestOptions {
   symbol?: string;
   /** Primary candle resolution. Default: '5m' */
   timeframe?: string;
-  /** Strategy preset ID. Default: 'factory_sr_5m_fvg_ce_sniper_v2' */
+  /** Strategy preset ID. Default: 'factory_sr_5m_fvg_ce_sniper_v3' */
   preset_id?: string;
   /** Historical lookback in days. Default: 30, max: 365 */
   days_lookback?: number;
@@ -742,6 +743,23 @@ export interface QuantBacktestOptions {
   maker_fee_pct?: number;
   /** Optional override for Binance Taker fee % (default: 0.0400%) */
   taker_fee_pct?: number;
+
+  // ── 🔬 Inline Parameter Overrides for Fee-Resilient Tournament ──
+  // These override the resolved preset's config for single-variable experiments.
+  /** Override body-to-range ratio threshold (default: preset value) */
+  body_ratio_threshold?: number;
+  /** Override volume expansion threshold multiplier (default: preset value) */
+  volume_expansion_threshold?: number;
+  /** Override TP2 (stage2) R-multiple (default: preset value) */
+  stage2_multiple?: number;
+  /** Override early breakeven MFE multiple (default: preset value) */
+  early_breakeven_multiple?: number;
+  /** Override max bars to retest / FVG retest TTL (default: preset value) */
+  max_bars_to_retest?: number;
+  /** Override anchor types array (default: preset value). Accepts: SWING_PIVOT, PDH, PDL, ASIAN_HIGH, ASIAN_LOW, LONDON_HIGH, LONDON_LOW */
+  anchor_types?: string[];
+  /** Override TP1/TP2 tranche split ratios. E.g. [0.60, 0.40] for 60/40 */
+  stage_ratios?: number[];
 }
 
 export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
@@ -805,20 +823,30 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
   }
 
   // 5. Build Engine Configuration with 1:1 Execution Parity
+  // 🔬 Inline overrides (options.*) take precedence over preset values (pConfig.*) for tournament experiments
+  const effectiveBodyRatio = options.body_ratio_threshold ?? pConfig.bodyRatioThreshold;
+  const effectiveVolExpansion = options.volume_expansion_threshold ?? pConfig.volumeExpansionThreshold;
+  const effectiveStage2 = options.stage2_multiple ?? pConfig.stage2Multiple;
+  const effectiveEarlyBE = options.early_breakeven_multiple ?? pConfig.earlyBreakevenMultiple ?? 0.40;
+  const effectiveMaxRetest = options.max_bars_to_retest ?? pConfig.maxBarsToRetest;
+  const effectiveAnchors = (options.anchor_types as SweepReclaimAnchorType[] | undefined) ?? pConfig.anchorTypes;
+  const effectiveStage1Ratio = options.stage_ratios?.[0] ?? pConfig.stage1Ratio;
+  const effectiveStage2Ratio = options.stage_ratios?.[1] ?? pConfig.stage2Ratio;
+
   const scanConfig: SweepReclaimScanConfig = {
     symbol,
     timeframe,
-    anchorTypes: pConfig.anchorTypes,
+    anchorTypes: effectiveAnchors,
     lookbackMajor: pConfig.lookbackMajor,
     lookbackInternal: pConfig.lookbackInternal,
     maxBarsAnchorToSweep: pConfig.maxBarsAnchorToSweep,
     maxBarsSweepToReclaim: pConfig.maxBarsSweepToReclaim,
-    maxBarsToRetest: pConfig.maxBarsToRetest,
+    maxBarsToRetest: effectiveMaxRetest,
     volumeSmaPeriod: pConfig.volumeSmaPeriod ?? 20,
-    volumeExpansionThreshold: pConfig.volumeExpansionThreshold,
+    volumeExpansionThreshold: effectiveVolExpansion,
     deltaDominanceThreshold: pConfig.deltaDominanceThreshold,
-    bodyRatioThreshold: pConfig.bodyRatioThreshold,
-    minBodyRatio: pConfig.bodyRatioThreshold,
+    bodyRatioThreshold: effectiveBodyRatio,
+    minBodyRatio: effectiveBodyRatio,
     requireThreePillarDisplacement: pConfig.requireThreePillarDisplacement,
     enforceDiscountPremiumGate: pConfig.enforceDiscountPremiumGate,
     enableRegimeAdaptiveEQ: true,
@@ -827,8 +855,10 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
     pullbackExcursionThreshold: 0.5,
     structuralDealingRange: structural_dealing_range,
     stage1Multiple: pConfig.stage1Multiple,
-    stage2Multiple: pConfig.stage2Multiple,
+    stage2Multiple: effectiveStage2,
     stage3Multiple: pConfig.stage3Multiple,
+    stage1Ratio: effectiveStage1Ratio,
+    stage2Ratio: effectiveStage2Ratio,
     entryMode: pConfig.entryMode,
     enableStructuralTrail: pConfig.enableStructuralTrail,
     enableProfitRatchet: pConfig.enableProfitRatchet,
@@ -838,7 +868,7 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
     filterWeekend: pConfig.filterWeekend ?? false,
     enforceHtfBiasGuard: pConfig.enforceHtfBiasGuard ?? false,
     enableEarlyBreakeven: pConfig.enableEarlyBreakeven ?? true,
-    earlyBreakevenMultiple: pConfig.earlyBreakevenMultiple ?? 0.40,
+    earlyBreakevenMultiple: effectiveEarlyBE,
     enableFeePaddedBreakeven: options.enable_fee_padded_breakeven !== undefined ? options.enable_fee_padded_breakeven : (pConfig.enableFeePaddedBreakeven ?? true),
     breakevenOffsetPct: options.breakeven_offset_pct !== undefined ? options.breakeven_offset_pct : (pConfig.breakevenOffsetPct ?? 0.05),
     postLossCooldownMinutes: pConfig.postLossCooldownMinutes ?? 0,
