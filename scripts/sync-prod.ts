@@ -122,7 +122,14 @@ export function runProductionSync() {
 
   if (fs.existsSync(worktreePath)) {
     console.log('🧹 [SYNC] Cleaning up preexisting temporary worktree...');
-    executeGitCommand(`git worktree remove --force "${worktreePath}"`, rootPath);
+    try {
+      executeGitCommand(`git worktree remove --force "${worktreePath}"`, rootPath);
+    } catch {
+      try {
+        executeGitCommand('git worktree prune', rootPath);
+      } catch {}
+      fs.rmSync(worktreePath, { recursive: true, force: true });
+    }
   }
 
   try {
