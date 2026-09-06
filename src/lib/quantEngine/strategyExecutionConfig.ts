@@ -156,7 +156,7 @@ export const BINANCE_USDC_FEE_SCHEDULES: Record<BinanceFeeTier, BinanceFeeSchedu
 export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   compoundingRiskPct: 2.0,
   enabledTimeframes: ['5m'],
-  anchorTypes: ['SWING_PIVOT', 'DAILY'],
+  anchorTypes: ['SWING_PIVOT', 'DAILY', 'ASIAN'],
   entryMode: 'FVG_CE',
   volumeSmaPeriod: 20,
   volumeExpansionThreshold: 1.10,
@@ -187,14 +187,14 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   minSweepDepthAtrMultiplier: 0.10,
   slBufferAtrMultiplier: 0.10,
 
-  // Quant Shield Defaults (FVG CE Sniper V2 All-Time Champion Verified Baseline)
+  // Quant Shield Defaults (FVG CE Fee Shield V3 All-Time Champion Verified)
   enableWaveDeduplication: true,
   filterWeekend: false,
   enforceHtfBiasGuard: false,
   enableEarlyBreakeven: true,
   earlyBreakevenMultiple: 0.40,
   enableFeePaddedBreakeven: true,
-  breakevenOffsetPct: 0.05,
+  breakevenOffsetPct: 0.015, // 🔬 Calibrated 0.015% Fee Shield
   postLossCooldownMinutes: 0,
 
   // 💰 Institutional Binance Fee Model

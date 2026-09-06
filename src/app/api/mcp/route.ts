@@ -262,8 +262,8 @@ Eliminates terminal scripts. Automatically:
             .describe("Primary execution timeframe (e.g. '5m', '15m'). Default: '5m'."),
           preset_id: z
             .string()
-            .default('factory_sr_5m_fvg_ce_sniper_v2')
-            .describe("Strategy preset ID (e.g. 'factory_sr_5m_fvg_ce_sniper_v2', 'factory_sr_5m_alpha_shield_v2'). Default: Champion V2."),
+            .default('factory_sr_5m_fvg_ce_sniper_v3')
+            .describe("Strategy preset ID (e.g. 'factory_sr_5m_fvg_ce_sniper_v3', 'factory_sr_5m_fvg_ce_sniper_v2', 'factory_sr_5m_alpha_shield_v3'). Default: Champion V3."),
           days_lookback: z
             .number()
             .default(30)
