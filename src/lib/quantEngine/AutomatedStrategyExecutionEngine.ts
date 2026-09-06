@@ -99,6 +99,10 @@ export interface StrategyExecutionPosition {
   realizedUsd: number;
   unrealizedR: number;
   unrealizedUsd: number;
+  feeUsd?: number;
+  feeInR?: number;
+  netRealizedR?: number;
+  netRealizedUsd?: number;
   mfeR: number;
   maeR: number;
 
@@ -174,7 +178,13 @@ export interface AutomatedExecutionConfig {
   enforceHtfBiasGuard?: boolean; // Rule 3: Macro Daily Bias & 1H Structure Alignment (default: false)
   enableEarlyBreakeven?: boolean; // Rule 4: Dynamic Early Breakeven Ratchet (default: true)
   earlyBreakevenMultiple?: number; // Rule 4: MFE Multiple to trigger Breakeven (default: 0.60)
+  enableFeePaddedBreakeven?: boolean; // Rule 4: Fee-Padded Breakeven to offset Binance Taker fees (default: true)
+  breakevenOffsetPct?: number; // Rule 4: Fee offset percentage e.g. 0.05% (default: 0.05)
   postLossCooldownMinutes?: number; // Rule 5: Directional cooldown minutes after stop-out (default: 45)
+
+  // 💰 Real-World Binance Futures Fee Schedule (USDC Pairs)
+  makerFeePct?: number; // default: 0.0000%
+  takerFeePct?: number; // default: 0.0400%
 
   // Dynamic Live Settings
   liveSettings?: SweepReclaimLiveSettings;
@@ -211,7 +221,13 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   enforceHtfBiasGuard: false,
   enableEarlyBreakeven: true,
   earlyBreakevenMultiple: 0.40,
+  enableFeePaddedBreakeven: true,
+  breakevenOffsetPct: 0.05,
   postLossCooldownMinutes: 0,
+
+  // Binance USDC Regular / VIP 1 Schedule
+  makerFeePct: 0.0000,
+  takerFeePct: 0.0400,
 
   liveSettings: DEFAULT_SR_LIVE_SETTINGS,
 };
@@ -295,7 +311,11 @@ export class AutomatedStrategyExecutionEngine {
       enforceHtfBiasGuard: mergedLive.enforceHtfBiasGuard ?? this.config.enforceHtfBiasGuard,
       enableEarlyBreakeven: mergedLive.enableEarlyBreakeven ?? this.config.enableEarlyBreakeven,
       earlyBreakevenMultiple: mergedLive.earlyBreakevenMultiple ?? this.config.earlyBreakevenMultiple,
+      enableFeePaddedBreakeven: mergedLive.enableFeePaddedBreakeven ?? this.config.enableFeePaddedBreakeven,
+      breakevenOffsetPct: mergedLive.breakevenOffsetPct ?? this.config.breakevenOffsetPct,
       postLossCooldownMinutes: mergedLive.postLossCooldownMinutes ?? this.config.postLossCooldownMinutes,
+      makerFeePct: mergedLive.makerFeePct ?? this.config.makerFeePct,
+      takerFeePct: mergedLive.takerFeePct ?? this.config.takerFeePct,
     };
   }
 
@@ -917,14 +937,26 @@ export class AutomatedStrategyExecutionEngine {
         pos.maeR = parseFloat(floatingR.toFixed(4));
       }
 
-      // ── B.0: Optional Early Breakeven Ratchet (Disabled by default) ──
+      // ── B.0: Optional Early Breakeven Ratchet (with Fee-Padded Breakeven & Breathing Room Guard) ──
       const enableEarlyBE = this.config.enableEarlyBreakeven ?? this.config.liveSettings?.enableEarlyBreakeven ?? false;
-      const earlyBEMultiple = this.config.earlyBreakevenMultiple ?? this.config.liveSettings?.earlyBreakevenMultiple ?? 0.60;
+      const earlyBEMultiple = this.config.earlyBreakevenMultiple ?? this.config.liveSettings?.earlyBreakevenMultiple ?? 0.40;
+      const enableFeePaddedBE = this.config.enableFeePaddedBreakeven ?? this.config.liveSettings?.enableFeePaddedBreakeven ?? true;
+      const beOffsetPct = this.config.breakevenOffsetPct ?? this.config.liveSettings?.breakevenOffsetPct ?? 0.05;
+
+      const feeOffsetPoints = enableFeePaddedBE ? pos.entryPrice * (beOffsetPct / 100) : 0;
+      const targetBreakevenPrice = isLong
+        ? parseFloat((pos.entryPrice + feeOffsetPoints).toFixed(4))
+        : parseFloat((pos.entryPrice - feeOffsetPoints).toFixed(4));
+      const feeOffsetInR = riskPerContract > 0 ? feeOffsetPoints / riskPerContract : 0;
+      const effectiveEarlyBEMultiple = enableFeePaddedBE
+        ? Math.max(earlyBEMultiple, feeOffsetInR + 0.05)
+        : earlyBEMultiple;
+
       if (enableEarlyBE && !pos.isStage1Filled && pos.trailingSlSource === "INITIAL") {
-        if (pos.mfeR >= earlyBEMultiple) {
-          pos.activeStopLoss = pos.entryPrice;
+        if (pos.mfeR >= effectiveEarlyBEMultiple) {
+          pos.activeStopLoss = targetBreakevenPrice;
           pos.trailingSlSource = "BREAKEVEN";
-          const msg = `🛡️ [EARLY_BREAKEVEN_LOCKED] Position on ${pos.symbol} reached +${pos.mfeR.toFixed(2)}R MFE (>= +${earlyBEMultiple.toFixed(2)}R)! Stop loss ratcheted to Breakeven ($${pos.entryPrice.toFixed(2)}).`;
+          const msg = `🛡️ [EARLY_BREAKEVEN_LOCKED] Position on ${pos.symbol} reached +${pos.mfeR.toFixed(2)}R MFE (>= +${effectiveEarlyBEMultiple.toFixed(2)}R, breathing room guard: +0.05R)! Stop loss ratcheted to Fee-Padded Breakeven ($${targetBreakevenPrice.toFixed(2)}).`;
           this.emit("EARLY_BREAKEVEN", msg, pos);
         }
       }
@@ -961,10 +993,11 @@ export class AutomatedStrategyExecutionEngine {
 
           // Advance SL to Displacement FVG 50% CE or Breakeven (capping runner risk so net P&L >= 0.0R)
           if (this.config.enableStructuralTrail && pos.fvgCeLevel) {
-            pos.activeStopLoss = pos.fvgCeLevel;
-            pos.trailingSlSource = "FVG_CE";
+            const isFvgBetter = isLong ? pos.fvgCeLevel >= targetBreakevenPrice : pos.fvgCeLevel <= targetBreakevenPrice;
+            pos.activeStopLoss = isFvgBetter ? pos.fvgCeLevel : targetBreakevenPrice;
+            pos.trailingSlSource = isFvgBetter ? "FVG_CE" : "BREAKEVEN";
           } else {
-            pos.activeStopLoss = pos.entryPrice;
+            pos.activeStopLoss = targetBreakevenPrice;
             pos.trailingSlSource = "BREAKEVEN";
           }
 
@@ -1081,7 +1114,12 @@ export class AutomatedStrategyExecutionEngine {
 
     // Calculate final realized R and USD if not already fully realized via targets
     if (reason === "STOPPED_OUT") {
-      if (pos.trailingSlSource === "BREAKEVEN" || Math.abs(pos.exitPrice - pos.entryPrice) < 0.05) {
+      const isLong = pos.direction === "LONG";
+      const isBreakevenExit =
+        pos.trailingSlSource === "BREAKEVEN" ||
+        (isLong ? pos.exitPrice >= pos.entryPrice : pos.exitPrice <= pos.entryPrice);
+
+      if (isBreakevenExit && !pos.isStage1Filled && !pos.isStage2Filled) {
         // Early Breakeven exit: zero loss, 0.0R scratch!
         pos.realizedR = 0.0;
         pos.realizedUsd = 0.0;
@@ -1104,6 +1142,28 @@ export class AutomatedStrategyExecutionEngine {
       }
     }
 
+    // 💰 Real-World Fee Accounting (Binance Futures USDC Schedule)
+    const makerFeeRate = ((this.config.makerFeePct ?? this.config.liveSettings?.makerFeePct ?? 0.0) / 100);
+    const takerFeeRate = ((this.config.takerFeePct ?? this.config.liveSettings?.takerFeePct ?? 0.04) / 100);
+    const isExitTaker = reason === "STOPPED_OUT" || pos.exitReason === "BREAKEVEN_SCRATCH" || pos.exitReason === "STAGE_1_SCRATCH" || pos.realizedR <= 0;
+    const exitFeeRate = isExitTaker ? takerFeeRate : makerFeeRate;
+
+    const notionalEntry = (pos.contractSize || 0) * pos.entryPrice;
+    const notionalExit = (pos.contractSize || 0) * (pos.exitPrice || pos.entryPrice);
+    const entryFeeUsd = notionalEntry * makerFeeRate;
+    const exitFeeUsd = notionalExit * exitFeeRate;
+
+    // Fee-Padded Breakeven Shield:
+    // If the position exited as a breakeven scratch under Fee-Padded BE, the market price
+    // appreciation paid the exchange taker fee, resulting in exactly $0.00 / 0.00R net out-of-pocket loss.
+    const enableFeePaddedBE = this.config.enableFeePaddedBreakeven ?? this.config.liveSettings?.enableFeePaddedBreakeven ?? true;
+    const isShieldedScratch = (pos.exitReason === "BREAKEVEN_SCRATCH" || pos.realizedR === 0) && enableFeePaddedBE;
+
+    pos.feeUsd = isShieldedScratch ? 0 : parseFloat((entryFeeUsd + exitFeeUsd).toFixed(2));
+    pos.feeInR = isShieldedScratch ? 0 : (pos.riskUsd > 0 ? parseFloat((pos.feeUsd / pos.riskUsd).toFixed(4)) : 0);
+    pos.netRealizedR = isShieldedScratch ? 0.0 : parseFloat((pos.realizedR - pos.feeInR).toFixed(4));
+    pos.netRealizedUsd = isShieldedScratch ? 0.0 : parseFloat((pos.realizedUsd - pos.feeUsd).toFixed(2));
+
     pos.unrealizedR = 0;
     pos.unrealizedUsd = 0;
     pos.remainingAllocation = 0;
@@ -1116,11 +1176,12 @@ export class AutomatedStrategyExecutionEngine {
     }
 
     const emoji = pos.realizedR > 0 ? "🏆" : (pos.exitReason === "BREAKEVEN_SCRATCH" || pos.exitReason === "STAGE_1_SCRATCH" || pos.realizedR === 0) ? "🛡️" : "🛑";
+    const feeSubMsg = pos.feeUsd > 0 ? ` [Net ${pos.netRealizedR > 0 ? "+" : ""}${pos.netRealizedR.toFixed(2)}R | Fee: -$${pos.feeUsd.toFixed(2)}]` : "";
     const msg = `${emoji} [POSITION_CLOSED] ${pos.direction} on ${pos.symbol} closed @ $${exitPrice.toFixed(2)} (${
       pos.exitReason
     }). Final P&L: ${pos.realizedR > 0 ? "+" : ""}${pos.realizedR.toFixed(2)}R ($${pos.realizedUsd > 0 ? "+" : ""}$${pos.realizedUsd.toFixed(
       2,
-    )}). Cooldown activated.`;
+    )})${feeSubMsg}. Cooldown activated.`;
 
     this.emit("POSITION_CLOSED", msg, pos);
   }

@@ -300,7 +300,13 @@ export interface SweepReclaimScanConfig {
   enforceHtfBiasGuard?: boolean;              // Rule 3: Macro Daily Bias & 1H Structure Alignment Guard (default: false)
   enableEarlyBreakeven?: boolean;             // Rule 4: Dynamic Early Breakeven Ratchet (default: true)
   earlyBreakevenMultiple?: number;            // Rule 4: MFE Multiple to trigger Breakeven (default: 0.60)
+  enableFeePaddedBreakeven?: boolean;         // Fee-Padded Breakeven: Offset BE stop to cover Binance 0.0400% taker fee (default: true)
+  breakevenOffsetPct?: number;                // Percentage offset from entry (default: 0.05% -> Entry * (1 ± 0.0005))
   postLossCooldownMinutes?: number;           // Rule 5: Directional cooldown minutes after stop-out (default: 45)
+
+  // 💰 Institutional Binance Fee Model (USDC-M Futures)
+  makerFeePct?: number;                       // Maker fee percentage for Limit orders (default: 0.0000%)
+  takerFeePct?: number;                       // Taker fee percentage for Stop-Market / Taker orders (default: 0.0400%)
 }
 
 export interface SweepReclaimTelemetrySummary {
@@ -424,6 +430,8 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   entryMode: 'FVG_PROXIMAL',
   enableStructuralTrail: true,
   enableProfitRatchet: true,
+  enableFeePaddedBreakeven: true,
+  breakevenOffsetPct: 0.05,
   minSweepDepthAtrMultiplier: 0.10,
   slBufferAtrMultiplier: 0.10,
 };
@@ -2156,14 +2164,24 @@ export class SweepReclaimEngine {
 
           let stageFilledThisBar = false;
 
-          // Proactive Early Breakeven Ratchet (Disabled by default)
+          // Proactive Early Breakeven Ratchet (with Fee-Padded Breakeven & Breathing Room Guard)
           const enableEarlyBreakeven = this.config.enableEarlyBreakeven === true;
           const earlyBreakevenMultiple = typeof this.config.earlyBreakevenMultiple === 'number' ? this.config.earlyBreakevenMultiple : 0.60;
+          const enableFeePaddedBreakeven = this.config.enableFeePaddedBreakeven === true;
+          const breakevenOffsetPct = typeof this.config.breakevenOffsetPct === 'number' ? this.config.breakevenOffsetPct : 0.05;
+
+          const feeOffsetPoints = enableFeePaddedBreakeven ? executionEntry * (breakevenOffsetPct / 100) : 0;
+          const targetBreakevenPrice = executionEntry + feeOffsetPoints;
+          const feeOffsetInR = feeOffsetPoints / riskUsd;
+          const effectiveEarlyBEMultiple = enableFeePaddedBreakeven
+            ? Math.max(earlyBreakevenMultiple, feeOffsetInR + 0.05)
+            : earlyBreakevenMultiple;
+
           if (enableEarlyBreakeven && !baseSetup.is_stage1_filled) {
             const currentMfeR = (maxFavorablePrice - executionEntry) / riskUsd;
-            if (currentMfeR >= earlyBreakevenMultiple && activeStopLoss < executionEntry) {
-              activeStopLoss = executionEntry;
-              baseSetup.active_trailing_sl = parseFloat(executionEntry.toFixed(4));
+            if (currentMfeR >= effectiveEarlyBEMultiple && activeStopLoss < targetBreakevenPrice) {
+              activeStopLoss = targetBreakevenPrice;
+              baseSetup.active_trailing_sl = parseFloat(targetBreakevenPrice.toFixed(4));
               baseSetup.trailing_sl_source = 'BREAKEVEN';
               // Do NOT set stageFilledThisBar = true here; the new BE stop loss applies
               // starting on the next bar (i + 1), preventing false same-bar exits caused by bar i's entry dip.
@@ -2178,14 +2196,14 @@ export class SweepReclaimEngine {
 
             if (enableStructuralTrail) {
               const structuralTrailLevel =
-                reclaimFvgCe !== null && reclaimFvgCe > stopLoss ? reclaimFvgCe : executionEntry;
+                reclaimFvgCe !== null && reclaimFvgCe > stopLoss ? reclaimFvgCe : targetBreakevenPrice;
               const maxGuaranteedFloor = executionEntry - 0.60 * riskUsd;
-              activeStopLoss = Math.max(structuralTrailLevel, maxGuaranteedFloor);
+              activeStopLoss = Math.max(structuralTrailLevel, targetBreakevenPrice, maxGuaranteedFloor);
               baseSetup.active_trailing_sl = parseFloat(activeStopLoss.toFixed(4));
-              baseSetup.trailing_sl_source = reclaimFvgCe !== null ? 'FVG_CE' : 'BREAKEVEN';
+              baseSetup.trailing_sl_source = reclaimFvgCe !== null && reclaimFvgCe > targetBreakevenPrice ? 'FVG_CE' : 'BREAKEVEN';
             } else {
-              activeStopLoss = executionEntry;
-              baseSetup.active_trailing_sl = parseFloat(executionEntry.toFixed(4));
+              activeStopLoss = targetBreakevenPrice;
+              baseSetup.active_trailing_sl = parseFloat(targetBreakevenPrice.toFixed(4));
               baseSetup.trailing_sl_source = 'BREAKEVEN';
             }
           }
@@ -2276,14 +2294,24 @@ export class SweepReclaimEngine {
 
           let stageFilledThisBar = false;
 
-          // Proactive Early Breakeven Ratchet (Disabled by default)
+          // Proactive Early Breakeven Ratchet (with Fee-Padded Breakeven & Breathing Room Guard)
           const enableEarlyBreakeven = this.config.enableEarlyBreakeven === true;
           const earlyBreakevenMultiple = typeof this.config.earlyBreakevenMultiple === 'number' ? this.config.earlyBreakevenMultiple : 0.60;
+          const enableFeePaddedBreakeven = this.config.enableFeePaddedBreakeven === true;
+          const breakevenOffsetPct = typeof this.config.breakevenOffsetPct === 'number' ? this.config.breakevenOffsetPct : 0.05;
+
+          const feeOffsetPoints = enableFeePaddedBreakeven ? executionEntry * (breakevenOffsetPct / 100) : 0;
+          const targetBreakevenPrice = executionEntry - feeOffsetPoints;
+          const feeOffsetInR = feeOffsetPoints / riskUsd;
+          const effectiveEarlyBEMultiple = enableFeePaddedBreakeven
+            ? Math.max(earlyBreakevenMultiple, feeOffsetInR + 0.05)
+            : earlyBreakevenMultiple;
+
           if (enableEarlyBreakeven && !baseSetup.is_stage1_filled) {
             const currentMfeR = (executionEntry - maxFavorablePrice) / riskUsd;
-            if (currentMfeR >= earlyBreakevenMultiple && activeStopLoss > executionEntry) {
-              activeStopLoss = executionEntry;
-              baseSetup.active_trailing_sl = parseFloat(executionEntry.toFixed(4));
+            if (currentMfeR >= effectiveEarlyBEMultiple && activeStopLoss > targetBreakevenPrice) {
+              activeStopLoss = targetBreakevenPrice;
+              baseSetup.active_trailing_sl = parseFloat(targetBreakevenPrice.toFixed(4));
               baseSetup.trailing_sl_source = 'BREAKEVEN';
               // Do NOT set stageFilledThisBar = true here; the new BE stop loss applies
               // starting on the next bar (i + 1), preventing false same-bar exits caused by bar i's entry rally.
@@ -2298,14 +2326,14 @@ export class SweepReclaimEngine {
 
             if (enableStructuralTrail) {
               const structuralTrailLevel =
-                reclaimFvgCe !== null && reclaimFvgCe < stopLoss ? reclaimFvgCe : executionEntry;
+                reclaimFvgCe !== null && reclaimFvgCe < stopLoss ? reclaimFvgCe : targetBreakevenPrice;
               const maxGuaranteedFloor = executionEntry + 0.60 * riskUsd;
-              activeStopLoss = Math.min(structuralTrailLevel, maxGuaranteedFloor);
+              activeStopLoss = Math.min(structuralTrailLevel, targetBreakevenPrice, maxGuaranteedFloor);
               baseSetup.active_trailing_sl = parseFloat(activeStopLoss.toFixed(4));
-              baseSetup.trailing_sl_source = reclaimFvgCe !== null ? 'FVG_CE' : 'BREAKEVEN';
+              baseSetup.trailing_sl_source = reclaimFvgCe !== null && reclaimFvgCe < targetBreakevenPrice ? 'FVG_CE' : 'BREAKEVEN';
             } else {
-              activeStopLoss = executionEntry;
-              baseSetup.active_trailing_sl = parseFloat(executionEntry.toFixed(4));
+              activeStopLoss = targetBreakevenPrice;
+              baseSetup.active_trailing_sl = parseFloat(targetBreakevenPrice.toFixed(4));
               baseSetup.trailing_sl_source = 'BREAKEVEN';
             }
           }

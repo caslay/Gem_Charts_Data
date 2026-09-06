@@ -145,6 +145,10 @@ async function main() {
     enableWaveDeduplication: initialLiveSettings.enableWaveDeduplication ?? true,
     enableEarlyBreakeven: initialLiveSettings.enableEarlyBreakeven ?? true,
     earlyBreakevenMultiple: initialLiveSettings.earlyBreakevenMultiple ?? 0.40,
+    enableFeePaddedBreakeven: initialLiveSettings.enableFeePaddedBreakeven ?? true,
+    breakevenOffsetPct: initialLiveSettings.breakevenOffsetPct ?? 0.05,
+    makerFeePct: initialLiveSettings.makerFeePct ?? 0.0000,
+    takerFeePct: initialLiveSettings.takerFeePct ?? 0.0400,
     liveSettings: initialLiveSettings,
   });
 

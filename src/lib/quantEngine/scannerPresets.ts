@@ -20,6 +20,7 @@ import {
   getSweepReclaimAutoExec,
   getOrderBlockAutoExec,
   SupportedOBTimeframe,
+  BinanceFeeTier,
 } from './strategyExecutionConfig';
 
 export type ScannerStrategyType = 'SWEEP_RECLAIM' | 'ORDER_BLOCK';
@@ -76,7 +77,15 @@ export interface SweepReclaimPresetConfig {
   enforceHtfBiasGuard?: boolean; // Rule 3: Macro Daily Bias & 1H Structure Alignment (default: false)
   enableEarlyBreakeven?: boolean; // Rule 4: Dynamic Early Breakeven Ratchet (default: true)
   earlyBreakevenMultiple?: number; // Rule 4: MFE Multiple to trigger Breakeven (default: 0.60)
+  enableFeePaddedBreakeven?: boolean; // Fee-Padded Breakeven: Offset BE stop to cover Binance 0.0400% taker fee (default: true)
+  breakevenOffsetPct?: number; // Percentage offset from entry (default: 0.05% -> Entry * (1 ± 0.0005))
   postLossCooldownMinutes?: number; // Rule 5: Directional cooldown minutes after stop-out (default: 45)
+
+  // 💰 Institutional Binance Fee Model (USDC-M Futures)
+  makerFeePct?: number;
+  takerFeePct?: number;
+  feeTierPreset?: BinanceFeeTier;
+  useBnbDiscount?: boolean;
 }
 
 export interface OrderBlockPresetConfig {
@@ -173,6 +182,8 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
       // 🛡️ Quant Shield Hardened Parameters (1-Year Tested)
       enableEarlyBreakeven: true,
       earlyBreakevenMultiple: 0.40,
+      enableFeePaddedBreakeven: true,
+      breakevenOffsetPct: 0.05,
       enableWaveDeduplication: true,
       filterWeekend: false,
       enforceHtfBiasGuard: false,
@@ -220,6 +231,8 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
       // 🛡️ Quant Shield Hardened Parameters (1-Year Tested)
       enableEarlyBreakeven: true,
       earlyBreakevenMultiple: 0.40,
+      enableFeePaddedBreakeven: true,
+      breakevenOffsetPct: 0.05,
       enableWaveDeduplication: true,
       filterWeekend: false,
       enforceHtfBiasGuard: false,
@@ -748,7 +761,15 @@ export function applyPresetToLiveExecution(preset: ScannerPreset): void {
       enforceHtfBiasGuard: cfg.enforceHtfBiasGuard === true,
       enableEarlyBreakeven: cfg.enableEarlyBreakeven === true,
       earlyBreakevenMultiple: typeof cfg.earlyBreakevenMultiple === 'number' ? cfg.earlyBreakevenMultiple : 0.40,
+      enableFeePaddedBreakeven: cfg.enableFeePaddedBreakeven === true,
+      breakevenOffsetPct: typeof cfg.breakevenOffsetPct === 'number' ? cfg.breakevenOffsetPct : 0.05,
       postLossCooldownMinutes: typeof cfg.postLossCooldownMinutes === 'number' ? cfg.postLossCooldownMinutes : 0,
+
+      // 💰 Institutional Binance Fee Model
+      makerFeePct: typeof cfg.makerFeePct === 'number' ? cfg.makerFeePct : 0.0000,
+      takerFeePct: typeof cfg.takerFeePct === 'number' ? cfg.takerFeePct : 0.0400,
+      feeTierPreset: cfg.feeTierPreset || 'USDC_REGULAR_VIP1',
+      useBnbDiscount: cfg.useBnbDiscount === true,
     });
 
     setArmedExecutionStatus({

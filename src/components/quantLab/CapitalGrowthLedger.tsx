@@ -44,6 +44,8 @@ interface CapitalGrowthLedgerProps {
   defaultRiskPct?: number;
   title?: string;
   subtitle?: string;
+  makerFeePct?: number;
+  takerFeePct?: number;
 }
 
 export default function CapitalGrowthLedger({
@@ -53,7 +55,9 @@ export default function CapitalGrowthLedger({
   defaultCapital = 1000,
   defaultRiskPct = 2.0,
   title = "CAPITAL GROWTH & CHRONOLOGICAL EQUITY LEDGER",
-  subtitle = "Dynamic path-dependent compounding, drawdown telemetry, and theoretical closed-expectancy modeling."
+  subtitle = "Dynamic path-dependent compounding, drawdown telemetry, and theoretical closed-expectancy modeling.",
+  makerFeePct = 0.0000,
+  takerFeePct = 0.0400,
 }: CapitalGrowthLedgerProps) {
   // ── 1. Configuration State ──────────────────────────────────────────────────
   const [initialCapital, setInitialCapital] = useState<number>(defaultCapital);
@@ -97,8 +101,10 @@ export default function CapitalGrowthLedger({
       initialCapital,
       riskPerTradePct,
       compoundingMode,
+      makerFeePct,
+      takerFeePct,
     });
-  }, [trades, initialCapital, riskPerTradePct, compoundingMode]);
+  }, [trades, initialCapital, riskPerTradePct, compoundingMode, makerFeePct, takerFeePct]);
 
   // ── 3. SVG Path Derivation & Interactive Zoom/Pan State ──────────────────
   const chartWidth = 900;
@@ -489,9 +495,16 @@ export default function CapitalGrowthLedger({
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {/* Metric 1: Final Compounded Equity */}
         <div className="border border-card-border dark:border-slate-800/80 bg-card/75 dark:bg-slate-900/40 rounded-xl p-3 flex flex-col justify-between shadow-xs">
-          <span className="text-[8px] uppercase text-muted dark:text-slate-500 font-bold block mb-1">
-            Compounded Balance
-          </span>
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[8px] uppercase text-muted dark:text-slate-500 font-bold block">
+              Net Compounded Balance
+            </span>
+            {metrics.totalFeesPaidUsd !== undefined && metrics.totalFeesPaidUsd > 0 && (
+              <span className="text-[8px] px-1 py-0.2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 font-mono font-bold">
+                Fee-Adjusted
+              </span>
+            )}
+          </div>
           <div>
             <span className={`text-base font-bold block ${isNetPositive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
               {fmtUsd(metrics.finalRealizedEquity)}
@@ -499,6 +512,11 @@ export default function CapitalGrowthLedger({
             <span className={`text-[9px] font-bold block mt-0.5 ${isNetPositive ? "text-emerald-600 dark:text-emerald-500" : "text-rose-600 dark:text-rose-500"}`}>
               {metrics.realizedNetPnlUsd >= 0 ? "+" : ""}{fmtUsd(metrics.realizedNetPnlUsd)} ({metrics.realizedNetRoiPct >= 0 ? "+" : ""}{metrics.realizedNetRoiPct}%)
             </span>
+            {metrics.nominalFinalEquity !== undefined && (
+              <span className="text-[8.5px] text-muted dark:text-slate-400 block mt-1 border-t border-card-border/60 dark:border-slate-800/40 pt-1 font-mono">
+                Gross: {fmtUsd(metrics.nominalFinalEquity)} • Fees: -${metrics.totalFeesPaidUsd?.toFixed(2) ?? "0.00"}
+              </span>
+            )}
           </div>
         </div>
 
@@ -520,15 +538,20 @@ export default function CapitalGrowthLedger({
         {/* Metric 3: Profit Factor & Average Realized R */}
         <div className="border border-card-border dark:border-slate-800/80 bg-card/75 dark:bg-slate-900/40 rounded-xl p-3 flex flex-col justify-between shadow-xs">
           <span className="text-[8px] uppercase text-muted dark:text-slate-500 font-bold block mb-1">
-            Profit Factor
+            Profit Factor (Net)
           </span>
           <div>
             <span className="text-base font-bold text-purple-600 dark:text-purple-300 block">
               {metrics.profitFactor >= 99 ? "99.9+" : metrics.profitFactor.toFixed(2)}
             </span>
             <span className="text-[9px] text-muted dark:text-slate-400 block mt-0.5">
-              Avg R: {fmtR(metrics.avgRealizedR)}
+              Net R: {fmtR(metrics.netRealizedR ?? metrics.avgRealizedR)}
             </span>
+            {metrics.grossProfitFactor !== undefined && (
+              <span className="text-[8.5px] text-muted dark:text-slate-400 block mt-1 border-t border-card-border/60 dark:border-slate-800/40 pt-1 font-mono">
+                Gross PF: {metrics.grossProfitFactor.toFixed(2)} • Fees: -{metrics.totalFeesPaidR?.toFixed(1) ?? "0.0"}R
+              </span>
+            )}
           </div>
         </div>
 
@@ -1099,17 +1122,18 @@ export default function CapitalGrowthLedger({
                         <th className="py-2.5 px-2">Direction</th>
                         <th className="py-2.5 px-2">Entry / SL</th>
                         <th className="py-2.5 px-2">Outcome</th>
-                        <th className="py-2.5 px-2 text-right">Realized R</th>
+                        <th className="py-2.5 px-2 text-right">R (Net / Gross)</th>
                         <th className="py-2.5 px-2 text-right">Risk ($)</th>
-                        <th className="py-2.5 px-2 text-right">PnL ($)</th>
+                        <th className="py-2.5 px-2 text-right">Fee ($)</th>
+                        <th className="py-2.5 px-2 text-right">Net PnL ($)</th>
                         <th className="py-2.5 px-2 text-right">Running Equity</th>
                         <th className="py-2.5 px-2 text-right">Drawdown</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-card-border/40 dark:divide-slate-800/40">
                       {paginatedTrades.map((pt) => {
-                        const isWin = pt.realizedR > 0;
-                        const isLoss = pt.realizedR < 0;
+                        const isNetWin = (pt.netRealizedR ?? pt.realizedR) > 0;
+                        const isNetLoss = (pt.netRealizedR ?? pt.realizedR) < 0;
 
                         return (
                           <tr key={pt.tradeId || pt.tradeIndex} className="hover:bg-muted/10 hover:dark:bg-slate-900/40 transition">
@@ -1155,9 +1179,9 @@ export default function CapitalGrowthLedger({
                             <td className="py-2.5 px-2">
                               <span
                                 className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
-                                  isWin
+                                  pt.realizedR > 0
                                     ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                                    : isLoss
+                                    : pt.realizedR < 0
                                     ? "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20"
                                     : "bg-muted/15 text-muted dark:bg-slate-800 dark:text-slate-400"
                                 }`}
@@ -1166,13 +1190,24 @@ export default function CapitalGrowthLedger({
                               </span>
                             </td>
 
-                            {/* Realized R */}
-                            <td
-                              className={`py-2.5 px-2 text-right font-bold ${
-                                isWin ? "text-emerald-600 dark:text-emerald-400" : isLoss ? "text-rose-600 dark:text-rose-400" : "text-muted dark:text-slate-400"
-                              }`}
-                            >
-                              {fmtR(pt.realizedR)}
+                            {/* Realized R (Net / Gross) */}
+                            <td className="py-2.5 px-2 text-right">
+                              <span
+                                className={`font-bold block ${
+                                  isNetWin
+                                    ? "text-emerald-600 dark:text-emerald-400"
+                                    : isNetLoss
+                                    ? "text-rose-600 dark:text-rose-400"
+                                    : "text-muted dark:text-slate-400"
+                                }`}
+                              >
+                                {fmtR(pt.netRealizedR ?? pt.realizedR)}
+                              </span>
+                              {pt.feeInR !== undefined && pt.feeInR > 0 && (
+                                <span className="text-[8px] text-muted dark:text-slate-500 block font-mono">
+                                  Gross: {fmtR(pt.realizedR)}
+                                </span>
+                              )}
                             </td>
 
                             {/* Risk USD */}
@@ -1180,10 +1215,23 @@ export default function CapitalGrowthLedger({
                               {fmtUsd(pt.riskUsd)}
                             </td>
 
-                            {/* PnL USD */}
+                            {/* Fee USD */}
+                            <td className="py-2.5 px-2 text-right text-muted dark:text-slate-400 font-mono">
+                              {pt.feeUsd && pt.feeUsd > 0 ? (
+                                <span className="text-amber-500">-${pt.feeUsd.toFixed(2)}</span>
+                              ) : (
+                                <span className="text-slate-500">$0.00</span>
+                              )}
+                            </td>
+
+                            {/* Net PnL USD */}
                             <td
                               className={`py-2.5 px-2 text-right font-bold ${
-                                isWin ? "text-emerald-600 dark:text-emerald-400" : isLoss ? "text-rose-600 dark:text-rose-400" : "text-muted dark:text-slate-400"
+                                pt.pnlUsd > 0
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : pt.pnlUsd < 0
+                                  ? "text-rose-600 dark:text-rose-400"
+                                  : "text-muted dark:text-slate-400"
                               }`}
                             >
                               {pt.pnlUsd >= 0 ? "+" : ""}

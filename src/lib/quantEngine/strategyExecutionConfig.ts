@@ -81,8 +81,77 @@ export interface SweepReclaimLiveSettings {
   enforceHtfBiasGuard: boolean; // Rule 3: Restrict to Daily Bias & 1H Structure alignment (default: false)
   enableEarlyBreakeven: boolean; // Rule 4: Advance SL to Breakeven once floating MFE reaches threshold (default: true)
   earlyBreakevenMultiple: number; // Rule 4: MFE R-Multiple threshold for early breakeven ratchet (default: 0.60)
+  enableFeePaddedBreakeven: boolean; // Fee-Padded Breakeven: Offset BE stop to cover Binance 0.0400% taker fee (default: true)
+  breakevenOffsetPct: number; // Percentage offset from entry (default: 0.05% -> Entry * (1 ± 0.0005))
   postLossCooldownMinutes: number; // Rule 5: Directional cooldown minutes after stop-out (default: 45)
+
+  // 💰 Institutional Binance Fee Model (USDC-M Futures)
+  makerFeePct: number; // Maker fee percentage for Limit orders (default: 0.0000%)
+  takerFeePct: number; // Taker fee percentage for Stop-Market / Taker orders (default: 0.0400%)
+  feeTierPreset: BinanceFeeTier; // Active Binance Fee Tier Preset (default: 'USDC_REGULAR_VIP1')
+  useBnbDiscount: boolean; // 10% fee discount using BNB balance (default: false)
 }
+
+export type BinanceFeeTier =
+  | 'USDC_REGULAR_VIP1'
+  | 'USDC_REGULAR_VIP1_BNB'
+  | 'USDC_VIP2'
+  | 'USDC_VIP2_BNB'
+  | 'USDC_VIP3'
+  | 'USDC_VIP3_BNB'
+  | 'CUSTOM';
+
+export interface BinanceFeeSchedule {
+  name: string;
+  makerFeePct: number;
+  takerFeePct: number;
+  recommendedBreakevenOffsetPct: number;
+}
+
+export const BINANCE_USDC_FEE_SCHEDULES: Record<BinanceFeeTier, BinanceFeeSchedule> = {
+  USDC_REGULAR_VIP1: {
+    name: 'Regular / VIP 1 (0.0000% / 0.0400%)',
+    makerFeePct: 0.0000,
+    takerFeePct: 0.0400,
+    recommendedBreakevenOffsetPct: 0.05,
+  },
+  USDC_REGULAR_VIP1_BNB: {
+    name: 'Regular / VIP 1 + BNB (0.0000% / 0.0360%)',
+    makerFeePct: 0.0000,
+    takerFeePct: 0.0360,
+    recommendedBreakevenOffsetPct: 0.04,
+  },
+  USDC_VIP2: {
+    name: 'VIP 2 (0.0000% / 0.0320%)',
+    makerFeePct: 0.0000,
+    takerFeePct: 0.0320,
+    recommendedBreakevenOffsetPct: 0.035,
+  },
+  USDC_VIP2_BNB: {
+    name: 'VIP 2 + BNB (0.0000% / 0.0288%)',
+    makerFeePct: 0.0000,
+    takerFeePct: 0.0288,
+    recommendedBreakevenOffsetPct: 0.03,
+  },
+  USDC_VIP3: {
+    name: 'VIP 3 (0.0000% / 0.0256%)',
+    makerFeePct: 0.0000,
+    takerFeePct: 0.0256,
+    recommendedBreakevenOffsetPct: 0.03,
+  },
+  USDC_VIP3_BNB: {
+    name: 'VIP 3 + BNB (0.0000% / 0.0230%)',
+    makerFeePct: 0.0000,
+    takerFeePct: 0.0230,
+    recommendedBreakevenOffsetPct: 0.025,
+  },
+  CUSTOM: {
+    name: 'Custom Fee Tier',
+    makerFeePct: 0.0000,
+    takerFeePct: 0.0400,
+    recommendedBreakevenOffsetPct: 0.05,
+  },
+};
 
 export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   compoundingRiskPct: 2.0,
@@ -124,7 +193,15 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   enforceHtfBiasGuard: false,
   enableEarlyBreakeven: true,
   earlyBreakevenMultiple: 0.40,
+  enableFeePaddedBreakeven: true,
+  breakevenOffsetPct: 0.05,
   postLossCooldownMinutes: 0,
+
+  // 💰 Institutional Binance Fee Model
+  makerFeePct: 0.0000,
+  takerFeePct: 0.0400,
+  feeTierPreset: 'USDC_REGULAR_VIP1',
+  useBnbDiscount: false,
 };
 
 // Master Reversible Pause Switch for Order Block & Breaker Pipeline

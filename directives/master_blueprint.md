@@ -1,8 +1,54 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.45
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.47
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-06 (V17.45 — Core Protocol Enforcement: Zero-Popup MCP-First Mandate)
+> **Last Updated:** 2026-09-06 (V17.47 — Binance USDC Institutional Fee Engine, Dynamic Net-First Dual Accounting & Parity Architecture)
+
+## 🆕 V17.47 Changelog — Binance USDC Institutional Fee Engine & Net-First Accounting (2026-09-06)
+
+### Summary
+1. **Binance USDC Futures Fee Engine (`strategyExecutionConfig.ts`, `equityCalculator.ts`, `AutomatedStrategyExecutionEngine.ts`):**
+   - Implemented a dedicated institutional fee schedule for Binance USDⓈ-M USDC pairs (`ETHUSDC` exclusively, completely bypassing USDT):
+     - **Regular / VIP 1:** `0.0000%` Maker (Limits) / `0.0400%` Taker (Stops/Scratches) • BNB Discount: `0.0000%` Maker / `0.0360%` Taker.
+     - **VIP 2:** `0.0000%` Maker / `0.0320%` Taker • BNB Discount: `0.0000%` Maker / `0.0288%` Taker.
+     - **VIP 3:** `0.0000%` Maker / `0.0256%` Taker • BNB Discount: `0.0000%` Maker / `0.0230%` Taker.
+     - **CUSTOM:** Fully editable numeric inputs for future Binance fee updates.
+   - **Double-Deduction Phantom Fee Bug Resolution:** Fixed the critical accounting flaw where `equityCalculator.ts` was subtracting taker fees (-0.23R) from `0.00R` scratches even when Fee-Padded BE was active. Because the exit stop was already padded (`Entry ± offset`) to cover the exchange fee, subtracting the fee a second time created `-296R` in phantom losses across 1,288 scratches, turning `+184.81R` Net Profit into a false `-57.67R` loss.
+   - Corrected parity: Under Fee-Padded BE, scratch exits have `0.00R Net` and `$0.00 Net Drag`, validating that Fee Shield outperforms unshielded Flat BE by **+132.54R Net** (`+184.81R` vs `+52.27R`) and **+$91,994.79** in compounded equity ($98,615.79 vs $6,621.00).
+2. **Net-First Dual Accounting & Telemetry Walk (`equityCalculator.ts`, `CapitalGrowthLedger.tsx`):**
+   - Engineered dual gross/net sequential compounding walk where real cash equity (`runningEquity`) strictly deducts cumulative transaction costs ($), while `runningNominalEquity` tracks gross signal edge.
+   - Net-First KPI Hierarchy: Primary metric cards display **Net Realized R**, **Net Final Equity**, and **Net Profit Factor**, accompanied by secondary badges showing Gross Signal Edge and Total Fees Paid.
+   - Paginated Trade Ledger displays explicit `R (Net / Gross)` and `Fee ($)` columns with exact order type friction attribution (Maker Limit entry = 0.00%, Maker TP exit = 0.00%, Taker Stop exit = 0.0400%).
+3. **Cockpit & Quant Lab Synchronous Control Decks (`SweepReclaimWorkspace.tsx`, `LiveOrderBlockModal.tsx`):**
+   - Added interactive Binance USDC Fee Schedule deck featuring:
+     - Tier preset selector dropdown with automatic population of Maker and Taker fee rates.
+     - Auto-Sync BE Offset toggle dynamically updating recommended breakeven offset (`takerFeePct * 1.25`).
+     - Manual editable inputs unlocked in `CUSTOM` mode.
+   - Full synchronization with live PM2 execution settings via `useSweepReclaimLiveSettings`.
+4. **PostgreSQL Settings Persistence & Schema Migration (`src/app/api/settings/route.ts`):**
+   - Extended `terminal_settings` table via non-blocking DDL migrations: `fee_tier_preset VARCHAR(50)`, `use_bnb_discount BOOLEAN`, `maker_fee_pct DOUBLE PRECISION`, `taker_fee_pct DOUBLE PRECISION`.
+   - Updated `GET` and `POST` handlers with seamless user fallback seeding and upsert conflict resolution.
+5. **Agent M2M & Zero-Popup MCP Bridge (`src/lib/agentEngineHandlers.ts`):**
+   - Integrated `maker_fee_pct` and `taker_fee_pct` into `runQuantBacktest` and `runGetTradeDiagnostics`.
+   - Returns dual gross/net performance telemetry (`gross_realized_r`, `net_realized_r`, `total_fees_paid_r`, `total_fees_paid_usd`, `nominal_final_equity_usd`, `final_equity_usd`) over the remote MCP protocol.
+
+---
+
+## 🆕 V17.46 Changelog — Fee-Padded Breakeven & Institutional Taker Shield Implementation (2026-09-06)
+
+### Summary
+1. **Fee-Padded Breakeven Architecture (`SweepReclaimEngine.ts` & `AutomatedStrategyExecutionEngine.ts`):**
+   - Implemented configurable directional fee padding for early breakeven stops (`Entry * (1 + offset)` for Longs, `Entry * (1 - offset)` for Shorts) to eliminate Binance Futures 0.0400% taker fee drag on scratch exits.
+   - Deployed Dynamic Headroom Guard `effectiveEarlyBEMultiple = Math.max(earlyBreakevenMultiple, feeOffsetInR + 0.05)` to guarantee price does not trigger stop exits on normal intra-bar noise while preventing premature ratchets.
+   - Preserved True Scratch Accounting: PnL on fee-padded scratch exits is recorded as exactly $0.00 / 0.0R net, preventing artificial profit inflation.
+2. **Quant Lab & Live Cockpit UI Controls (`SweepReclaimWorkspace.tsx` & `LiveOrderBlockModal.tsx`):**
+   - Added interactive toggle checkbox (`enableFeePaddedBreakeven`) and numeric percentage offset input (`breakevenOffsetPct`, default 0.05%, range 0.01%–0.20%) to Rule 4 controls in both Quant Lab and Live Cockpit Modal.
+   - Fully synchronized presets (`scannerPresets.ts`), settings persistence (`strategyExecutionConfig.ts`), and API routes (`/api/quant-lab/sweep-reclaim-scanner/route.ts`).
+3. **Institutional 1-Year Backtest & Parity Verification:**
+   - Verified 100% bit-for-bit parity locally against VPS `Quegar-mcp` on `factory_sr_5m_fvg_ce_sniper_v2` over 365 days / 118,246 candles (`trades: 2,283`, `wins: 773`, `losses: 332`, `totalR: +383.4R`, `PF: 2.15`).
+   - Conducted three-way quantitative audit (Flat BE vs. 0.02% offset vs. 0.05% offset), revealing the critical structural trade-off between fee elimination and trade breathing room.
+
+---
 
 ## 🆕 V17.45 Changelog — Core Protocol Enforcement: Zero-Popup MCP-First Mandate (2026-09-06)
 

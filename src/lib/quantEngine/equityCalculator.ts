@@ -53,13 +53,23 @@ export interface StandardizedExecutedTrade {
   entryPrice: number;
   stopLossPrice: number;
   exitPrice?: number | null;
-  realizedR: number; // e.g. +1.5, -1.0, +0.4
+  realizedR: number; // e.g. +1.5, -1.0, +0.4 (Gross R)
   outcome: string;   // e.g. "FULL_TP2_WIN", "STOPPED_OUT", "STAGE_2_WIN"
   isWin: boolean;
   isLoss: boolean;
   isScratch: boolean;
   label: string;
   metadata?: Record<string, any>;
+
+  // 💰 Fee Telemetry per Trade
+  entryFeeUsd?: number;
+  exitFeeUsd?: number;
+  totalFeeUsd?: number;
+  feeInR?: number;
+  grossRealizedR?: number;
+  netRealizedR?: number;
+  grossRealizedUsd?: number;
+  netRealizedUsd?: number;
 }
 
 // ── Sequential Equity Point for Path-Dependent Visualization ──────────────────
@@ -69,13 +79,18 @@ export interface SequentialEquityPoint {
   tradeId: string;
   timestamp: number;
   dateStr: string;
-  equity: number;
+  equity: number; // Real net cash equity after fees
+  nominalEquity?: number; // Theoretical equity before fees
   peakEquity: number;
   drawdownPct: number;
   drawdownUsd: number;
   riskUsd: number;
-  pnlUsd: number;
-  realizedR: number;
+  pnlUsd: number; // Net PnL in USD
+  grossPnlUsd?: number;
+  feeUsd?: number;
+  feeInR?: number;
+  realizedR: number; // Gross R
+  netRealizedR?: number; // Net R after fees
   isWin: boolean;
   isLoss: boolean;
   isScratch: boolean;
@@ -116,14 +131,23 @@ export interface CompoundingMetricsSummary {
   initialCapital: number;
   riskPerTradePct: number;
   compoundingMode: 'DYNAMIC_COMPOUNDING' | 'FIXED_FRACTIONAL';
-  finalRealizedEquity: number;
+  finalRealizedEquity: number; // Real Net Equity after fees
+  nominalFinalEquity?: number; // Theoretical Gross Equity before fees
   realizedNetPnlUsd: number;
   realizedNetRoiPct: number;
   maxDrawdownPct: number;
   maxDrawdownUsd: number;
   grossProfitUsd: number;
   grossLossUsd: number;
-  profitFactor: number;
+  profitFactor: number; // Net Profit Factor
+
+  // 💰 Real-World Fee Metrics
+  totalFeesPaidUsd?: number;
+  totalFeesPaidR?: number;
+  grossRealizedR?: number;
+  netRealizedR?: number;
+  grossProfitFactor?: number;
+  netProfitFactor?: number;
 
   // Streaks
   longestWinStreak: number;
@@ -137,8 +161,6 @@ export interface CompoundingMetricsSummary {
 
 // ── Sweep & Reclaim Trade Adapter ─────────────────────────────────────────────
 
-// ── Sweep & Reclaim Trade Adapter ─────────────────────────────────────────────
-
 export interface AdaptSweepReclaimOptions {
   enforceSinglePositionWalk?: boolean; // default true: 1:1 match with Live Daemon maxOpenPositions: 1
   enableWaveDeduplication?: boolean; // Rule 1: Multi-anchor wave deduplication (default true)
@@ -146,7 +168,11 @@ export interface AdaptSweepReclaimOptions {
   enforceHtfBiasGuard?: boolean; // Rule 3: Macro HTF Bias filter (default false)
   enableEarlyBreakeven?: boolean; // Early Breakeven Ratchet (default false)
   earlyBreakevenMultiple?: number; // MFE Multiple to trigger Breakeven (default 0.60)
+  enableFeePaddedBreakeven?: boolean; // Fee-Padded Breakeven (default true)
+  breakevenOffsetPct?: number; // Fee offset percentage e.g. 0.05% (default 0.05)
   postLossCooldownMinutes?: number; // Rule 5: Directional cooldown after stop-out in minutes (default 45)
+  makerFeePct?: number; // Maker fee percentage for Limit orders (default: 0.0000%)
+  takerFeePct?: number; // Taker fee percentage for Stop-Market orders (default: 0.0400%)
 }
 
 function getAnchorPriority(anchorType?: string, anchorSwingGrade?: string): number {
@@ -160,7 +186,7 @@ function getAnchorPriority(anchorType?: string, anchorSwingGrade?: string): numb
 
 export function adaptSweepReclaimSetupsToTrades(
   setups: SweepReclaimSetup[],
-  options: AdaptSweepReclaimOptions = { enforceSinglePositionWalk: true, enableWaveDeduplication: true, filterWeekend: false, enforceHtfBiasGuard: false, enableEarlyBreakeven: true, earlyBreakevenMultiple: 0.40, postLossCooldownMinutes: 0 }
+  options: AdaptSweepReclaimOptions = { enforceSinglePositionWalk: true, enableWaveDeduplication: true, filterWeekend: false, enforceHtfBiasGuard: false, enableEarlyBreakeven: true, earlyBreakevenMultiple: 0.40, enableFeePaddedBreakeven: true, breakevenOffsetPct: 0.05, postLossCooldownMinutes: 0 }
 ): StandardizedExecutedTrade[] {
   if (!setups || setups.length === 0) return [];
 
@@ -338,6 +364,9 @@ export function adaptSweepReclaimSetupsToTrades(
   const enableEarlyBE = options.enableEarlyBreakeven === true;
   const earlyBEMultiple = typeof options.earlyBreakevenMultiple === 'number' ? options.earlyBreakevenMultiple : 0.60;
 
+  const makerFeeRate = (options.makerFeePct ?? 0.0000) / 100;
+  const takerFeeRate = (options.takerFeePct ?? 0.0400) / 100;
+
   const executedTrades: StandardizedExecutedTrade[] = candidateSetups.map((s) => {
     const timestamp = s.retest_time || s.reclaim_time || s.sweep_time || s.anchor_time || Date.now();
     const isPending = s.simulated_outcome === 'PENDING' || s.exit_time === null;
@@ -354,6 +383,33 @@ export function adaptSweepReclaimSetupsToTrades(
     const isLoss = !isPending && realizedR < 0;
     const isScratch = !isPending && realizedR === 0;
 
+    // 💰 Institutional Fee Accounting per Trade
+    const stopDistance = Math.abs(s.entry_price - s.stop_loss);
+    const exitPrice = s.exit_price || s.entry_price;
+    const isExitTaker = isLoss || isScratch || outcome === 'STOPPED_OUT' || outcome === 'BE_SCRATCH_WIN' || outcome === 'STAGE_1_SCRATCH';
+    const exitFeeRate = isExitTaker ? takerFeeRate : makerFeeRate;
+
+    // Fee-Padded Breakeven Shield Check:
+    // When Fee-Padded BE is active (options.enableFeePaddedBreakeven !== false),
+    // the stop was ratcheted to (Entry ± offset) specifically to cover the exit fee.
+    // The market price appreciation paid the exchange taker fee, resulting in exactly $0.00 / 0.00R net cost.
+    const isFeePaddedScratch = isScratch && (options.enableFeePaddedBreakeven !== false);
+
+    let feeInR = 0;
+    if (stopDistance > 0 && !isPending) {
+      if (isFeePaddedScratch) {
+        // Shield active: net fee drag on trader is 0.00R (covered by price offset)
+        feeInR = 0;
+      } else {
+        const entryFeeR = (s.entry_price / stopDistance) * makerFeeRate;
+        const exitFeeR = (exitPrice / stopDistance) * exitFeeRate;
+        feeInR = parseFloat((entryFeeR + exitFeeR).toFixed(4));
+      }
+    }
+
+    const grossRealizedR = realizedR;
+    const netRealizedR = isPending ? 0 : isFeePaddedScratch ? 0.0 : parseFloat((grossRealizedR - feeInR).toFixed(4));
+
     return {
       id: s.id,
       timestamp,
@@ -369,7 +425,14 @@ export function adaptSweepReclaimSetupsToTrades(
       isLoss,
       isScratch,
       label: s.anchor_name ? `S&R (${s.anchor_name})` : `S&R (${s.anchor_type || 'Pivot'})`,
+      feeInR,
+      grossRealizedR,
+      netRealizedR,
       metadata: {
+        ...s,
+        isFeePaddedScratch,
+        riskUsd: s.risk_usd,
+        retestTime: s.retest_time,
         anchorType: s.anchor_type,
         anchorLevel: s.anchor_level,
         stageExitType: outcome,
@@ -429,6 +492,16 @@ export interface ReconciledExecutionSummary {
   };
   annotatedSetups: AnnotatedSetupDisposition[];
   executedTrades: StandardizedExecutedTrade[];
+
+  // 💰 Real-World Binance Futures Fee Telemetry (USDC Pairs)
+  makerFeePct?: number;
+  takerFeePct?: number;
+  totalFeesPaidR?: number;
+  grossRealizedR?: number;
+  netRealizedR?: number;
+  grossProfitFactor?: number;
+  netProfitFactor?: number;
+  netMaxDrawdownR?: number;
 }
 
 /**
@@ -604,14 +677,14 @@ export function calculate1to1ExecutionTelemetry(
       .filter((t) => t.isLoss)
       .reduce((acc, t) => acc + t.realizedR, 0)
   );
-  const profitFactor =
+  const grossProfitFactor =
     grossLossR > 0
       ? parseFloat((grossWinR / grossLossR).toFixed(2))
       : grossWinR > 0
       ? 99.9
       : 0;
 
-  // Max Drawdown in R
+  // Max Drawdown in Gross R
   let peakR = 0;
   let runningR = 0;
   let maxDrawdownR = 0;
@@ -623,6 +696,42 @@ export function calculate1to1ExecutionTelemetry(
   }
   maxDrawdownR = parseFloat(maxDrawdownR.toFixed(2));
 
+  // 💰 Real-World Binance Futures Fee Telemetry (USDC Pairs)
+  const totalFeesPaidR = parseFloat(
+    closedTrades.reduce((acc, t) => acc + (t.feeInR || 0), 0).toFixed(2)
+  );
+  const netRealizedR = parseFloat(
+    closedTrades.reduce((acc, t) => acc + (t.netRealizedR !== undefined ? t.netRealizedR : (t.realizedR - (t.feeInR || 0))), 0).toFixed(2)
+  );
+
+  const netWinR = closedTrades
+    .filter((t) => (t.netRealizedR ?? t.realizedR) > 0)
+    .reduce((acc, t) => acc + (t.netRealizedR ?? t.realizedR), 0);
+  const netLossR = Math.abs(
+    closedTrades
+      .filter((t) => (t.netRealizedR ?? t.realizedR) < 0)
+      .reduce((acc, t) => acc + (t.netRealizedR ?? t.realizedR), 0)
+  );
+  const netProfitFactor =
+    netLossR > 0
+      ? parseFloat((netWinR / netLossR).toFixed(2))
+      : netWinR > 0
+      ? 99.9
+      : 0;
+
+  // Net Max Drawdown in R
+  let netPeakR = 0;
+  let netRunningR = 0;
+  let netMaxDrawdownR = 0;
+  for (const t of executedTrades) {
+    const r = t.netRealizedR !== undefined ? t.netRealizedR : (t.realizedR || 0);
+    netRunningR += r;
+    if (netRunningR > netPeakR) netPeakR = netRunningR;
+    const dd = netPeakR - netRunningR;
+    if (dd > netMaxDrawdownR) netMaxDrawdownR = dd;
+  }
+  netMaxDrawdownR = parseFloat(netMaxDrawdownR.toFixed(2));
+
   return {
     totalScannedSetups: setups.length,
     totalExecutedTrades,
@@ -633,8 +742,8 @@ export function calculate1to1ExecutionTelemetry(
     winRateExScratchPct,
     totalRealizedR,
     avgRealizedR,
-    profitFactor,
-    maxDrawdownR,
+    profitFactor: netProfitFactor, // Net-first primary display
+    maxDrawdownR: netMaxDrawdownR, // Net-first primary drawdown
     vetoedBreakdown: {
       unretestedCount,
       concurrencyVetoCount,
@@ -643,6 +752,16 @@ export function calculate1to1ExecutionTelemetry(
     },
     annotatedSetups,
     executedTrades,
+
+    // 💰 Dual Gross / Net Performance Telemetry
+    makerFeePct: options.makerFeePct ?? 0.0000,
+    takerFeePct: options.takerFeePct ?? 0.0400,
+    totalFeesPaidR,
+    grossRealizedR: totalRealizedR,
+    netRealizedR,
+    grossProfitFactor,
+    netProfitFactor,
+    netMaxDrawdownR,
   };
 }
 
@@ -749,6 +868,8 @@ export interface CalculateCompoundingOptions {
   initialCapital?: number;       // default 1,000
   riskPerTradePct?: number;      // default 2.0
   compoundingMode?: 'DYNAMIC_COMPOUNDING' | 'FIXED_FRACTIONAL'; // default DYNAMIC_COMPOUNDING
+  makerFeePct?: number;          // default 0.0000%
+  takerFeePct?: number;          // default 0.0400%
 }
 
 export function calculateCompoundingMetrics(
@@ -861,18 +982,26 @@ export function calculateCompoundingMetrics(
   const theoreticalNetPnlUsd = parseFloat((theoreticalFinalEquity - initialCapital).toFixed(2));
   const theoreticalNetRoiPct = parseFloat(((theoreticalNetPnlUsd / initialCapital) * 100).toFixed(2));
 
+  const makerFeeRate = (options.makerFeePct ?? 0.0000) / 100;
+  const takerFeeRate = (options.takerFeePct ?? 0.0400) / 100;
+
   // 4. Approach B: Path-Dependent Sequential Walk
   const equityCurvePoints: SequentialEquityPoint[] = [];
 
   // Start point
   const firstTimestamp = trades[0].timestamp;
   const startTimestamp = firstTimestamp - 3600000; // 1 hour prior
-  let runningEquity = initialCapital;
+  let runningEquity = initialCapital; // Real Net Cash Equity
+  let runningNominalEquity = initialCapital; // Theoretical Gross Equity
   let peakEquity = initialCapital;
   let maxDrawdownPct = 0;
   let maxDrawdownUsd = 0;
   let grossProfitUsd = 0;
   let grossLossUsd = 0;
+  let totalNetProfitUsd = 0;
+  let totalNetLossUsd = 0;
+  let totalFeesPaidUsd = 0;
+  let totalFeesPaidR = 0;
 
   equityCurvePoints.push({
     tradeIndex: 0,
@@ -880,12 +1009,17 @@ export function calculateCompoundingMetrics(
     timestamp: startTimestamp,
     dateStr: formatCairoDateTime(startTimestamp),
     equity: runningEquity,
+    nominalEquity: runningNominalEquity,
     peakEquity,
     drawdownPct: 0,
     drawdownUsd: 0,
     riskUsd: 0,
     pnlUsd: 0,
+    grossPnlUsd: 0,
+    feeUsd: 0,
+    feeInR: 0,
     realizedR: 0,
+    netRealizedR: 0,
     isWin: false,
     isLoss: false,
     isScratch: false,
@@ -907,29 +1041,76 @@ export function calculateCompoundingMetrics(
     const trade = trades[i];
     const tradeIdx = i + 1;
 
-    // Calculate risk dollar allocation for trade i
+    // Calculate risk dollar allocation based on real running net cash equity
     const riskUsd = compoundingMode === 'DYNAMIC_COMPOUNDING'
       ? runningEquity * (riskPerTradePct / 100)
       : initialCapital * (riskPerTradePct / 100);
 
-    const pnlUsd = parseFloat((riskUsd * trade.realizedR).toFixed(2));
-    runningEquity = parseFloat(Math.max(0, runningEquity + pnlUsd).toFixed(2));
+    const nominalRiskUsd = compoundingMode === 'DYNAMIC_COMPOUNDING'
+      ? runningNominalEquity * (riskPerTradePct / 100)
+      : initialCapital * (riskPerTradePct / 100);
 
-    if (pnlUsd > 0) {
-      grossProfitUsd += pnlUsd;
+    // Stop distance and notional contract sizing
+    const stopDistance = Math.abs(trade.entryPrice - trade.stopLossPrice);
+    const effectiveStopDist = stopDistance > 0 ? stopDistance : (trade.entryPrice * 0.002);
+    const contractSize = riskUsd / effectiveStopDist;
+    const entryNotional = contractSize * trade.entryPrice;
+    const exitPrice = (trade.exitPrice !== null && trade.exitPrice !== undefined && trade.exitPrice > 0)
+      ? trade.exitPrice
+      : trade.entryPrice;
+    const exitNotional = contractSize * exitPrice;
+
+    // Determine exit fee rate (Limit TP = maker, SL / BE Scratch = taker)
+    const isWinner = trade.realizedR > 0;
+    const isScratch = trade.realizedR === 0 || trade.outcome === 'STAGE_1_SCRATCH' || trade.outcome === 'BE_SCRATCH_WIN';
+    const isLoss = trade.realizedR < 0 || trade.outcome === 'STOPPED_OUT';
+    const exitFeeRate = (isScratch || isLoss) ? takerFeeRate : makerFeeRate;
+
+    // Fee-Padded Breakeven Shield Check:
+    // If the trade was a fee-padded scratch, the market price appreciation covered the taker fee.
+    // Therefore, net out-of-pocket cash drag on the portfolio is $0.00.
+    const isShieldedScratch = isScratch && (trade.netRealizedR === 0 || trade.feeInR === 0 || trade.metadata?.isFeePaddedScratch);
+
+    const entryFeeUsd = entryNotional * makerFeeRate;
+    const exitFeeUsd = isWinner ? (exitNotional * makerFeeRate) : (exitNotional * exitFeeRate);
+    const tradeFeeUsd = isShieldedScratch ? 0 : parseFloat((entryFeeUsd + exitFeeUsd).toFixed(2));
+    totalFeesPaidUsd += tradeFeeUsd;
+
+    const feeInR = riskUsd > 0 ? tradeFeeUsd / riskUsd : 0;
+    totalFeesPaidR += feeInR;
+
+    // Gross PnL (before fees)
+    const grossPnlUsd = parseFloat((riskUsd * trade.realizedR).toFixed(2));
+    const nominalPnlUsd = parseFloat((nominalRiskUsd * trade.realizedR).toFixed(2));
+
+    // Net PnL (after fees)
+    const netPnlUsd = isShieldedScratch ? 0.00 : parseFloat((grossPnlUsd - tradeFeeUsd).toFixed(2));
+    const netRealizedR = isShieldedScratch ? 0.00 : parseFloat((trade.realizedR - feeInR).toFixed(4));
+
+    if (grossPnlUsd > 0) {
+      grossProfitUsd += grossPnlUsd;
+    } else if (grossPnlUsd < 0) {
+      grossLossUsd += Math.abs(grossPnlUsd);
+    }
+
+    if (netPnlUsd > 0) {
+      totalNetProfitUsd += netPnlUsd;
       currentWinStreak += 1;
       currentLossStreak = 0;
       if (currentWinStreak > longestWinStreak) longestWinStreak = currentWinStreak;
-    } else if (pnlUsd < 0) {
-      grossLossUsd += Math.abs(pnlUsd);
+    } else if (netPnlUsd < 0) {
+      totalNetLossUsd += Math.abs(netPnlUsd);
       currentLossStreak += 1;
       currentWinStreak = 0;
       if (currentLossStreak > longestLossStreak) longestLossStreak = currentLossStreak;
     } else {
-      // Breakeven / Scratch
       currentWinStreak = 0;
       currentLossStreak = 0;
     }
+
+    // Step-by-step compounding walk
+    runningEquity = parseFloat(Math.max(0, runningEquity + netPnlUsd).toFixed(2));
+    runningNominalEquity = parseFloat(Math.max(0, runningNominalEquity + nominalPnlUsd).toFixed(2));
 
     if (runningEquity > peakEquity) {
       peakEquity = runningEquity;
@@ -947,12 +1128,17 @@ export function calculateCompoundingMetrics(
       timestamp: trade.timestamp,
       dateStr: trade.dateStr,
       equity: runningEquity,
+      nominalEquity: runningNominalEquity,
       peakEquity,
       drawdownPct,
       drawdownUsd,
       riskUsd: parseFloat(riskUsd.toFixed(2)),
-      pnlUsd,
+      pnlUsd: netPnlUsd,
+      grossPnlUsd,
+      feeUsd: tradeFeeUsd,
+      feeInR: parseFloat(feeInR.toFixed(4)),
       realizedR: trade.realizedR,
+      netRealizedR,
       isWin: trade.isWin,
       isLoss: trade.isLoss,
       isScratch: trade.isScratch,
@@ -967,11 +1153,17 @@ export function calculateCompoundingMetrics(
   }
 
   const finalRealizedEquity = runningEquity;
+  const nominalFinalEquity = runningNominalEquity;
   const realizedNetPnlUsd = parseFloat((finalRealizedEquity - initialCapital).toFixed(2));
   const realizedNetRoiPct = parseFloat(((realizedNetPnlUsd / initialCapital) * 100).toFixed(2));
-  const profitFactor = grossLossUsd > 0
+
+  const grossProfitFactor = grossLossUsd > 0
     ? parseFloat((grossProfitUsd / grossLossUsd).toFixed(2))
     : grossProfitUsd > 0 ? 99.9 : 0;
+
+  const netProfitFactor = totalNetLossUsd > 0
+    ? parseFloat((totalNetProfitUsd / totalNetLossUsd).toFixed(2))
+    : totalNetProfitUsd > 0 ? 99.9 : 0;
 
   // Determine current active streak
   let currentStreakType: 'WIN' | 'LOSS' | 'NONE' = 'NONE';
@@ -1004,13 +1196,20 @@ export function calculateCompoundingMetrics(
     riskPerTradePct,
     compoundingMode,
     finalRealizedEquity,
+    nominalFinalEquity,
     realizedNetPnlUsd,
     realizedNetRoiPct,
     maxDrawdownPct: parseFloat(maxDrawdownPct.toFixed(2)),
     maxDrawdownUsd: parseFloat(maxDrawdownUsd.toFixed(2)),
     grossProfitUsd: parseFloat(grossProfitUsd.toFixed(2)),
     grossLossUsd: parseFloat(grossLossUsd.toFixed(2)),
-    profitFactor,
+    profitFactor: netProfitFactor, // Net-first!
+    grossProfitFactor,
+    netProfitFactor,
+    totalFeesPaidUsd: parseFloat(totalFeesPaidUsd.toFixed(2)),
+    totalFeesPaidR: parseFloat(totalFeesPaidR.toFixed(2)),
+    grossRealizedR: parseFloat(sumRealizedR.toFixed(2)),
+    netRealizedR: parseFloat((sumRealizedR - totalFeesPaidR).toFixed(2)),
     longestWinStreak,
     longestLossStreak,
     currentStreakType,

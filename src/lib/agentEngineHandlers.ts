@@ -734,6 +734,14 @@ export interface QuantBacktestOptions {
   risk_per_trade_pct?: number;
   /** Compounding calculation model */
   compounding_mode?: 'DYNAMIC_COMPOUNDING' | 'FIXED_FRACTIONAL';
+  /** Optional override for fee-padded breakeven toggle */
+  enable_fee_padded_breakeven?: boolean;
+  /** Optional override for fee-padded breakeven percentage */
+  breakeven_offset_pct?: number;
+  /** Optional override for Binance Maker fee % (default: 0.0000%) */
+  maker_fee_pct?: number;
+  /** Optional override for Binance Taker fee % (default: 0.0400%) */
+  taker_fee_pct?: number;
 }
 
 export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
@@ -831,6 +839,8 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
     enforceHtfBiasGuard: pConfig.enforceHtfBiasGuard ?? false,
     enableEarlyBreakeven: pConfig.enableEarlyBreakeven ?? true,
     earlyBreakevenMultiple: pConfig.earlyBreakevenMultiple ?? 0.40,
+    enableFeePaddedBreakeven: options.enable_fee_padded_breakeven !== undefined ? options.enable_fee_padded_breakeven : (pConfig.enableFeePaddedBreakeven ?? true),
+    breakevenOffsetPct: options.breakeven_offset_pct !== undefined ? options.breakeven_offset_pct : (pConfig.breakevenOffsetPct ?? 0.05),
     postLossCooldownMinutes: pConfig.postLossCooldownMinutes ?? 0,
   };
 
@@ -839,6 +849,9 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
   const { setups } = engine.scanHistoricalSetups(candles, bootstrap);
 
   // 7. Calculate Reconciled Execution Summary & Sequential Compounding
+  const makerFeePct = options.maker_fee_pct !== undefined ? options.maker_fee_pct : (pConfig.makerFeePct ?? 0.0000);
+  const takerFeePct = options.taker_fee_pct !== undefined ? options.taker_fee_pct : (pConfig.takerFeePct ?? 0.0400);
+
   const summary = calculate1to1ExecutionTelemetry(setups, {
     enforceSinglePositionWalk: true,
     enableWaveDeduplication: pConfig.enableWaveDeduplication ?? true,
@@ -846,7 +859,11 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
     enforceHtfBiasGuard: pConfig.enforceHtfBiasGuard ?? false,
     enableEarlyBreakeven: pConfig.enableEarlyBreakeven ?? true,
     earlyBreakevenMultiple: pConfig.earlyBreakevenMultiple ?? 0.40,
+    enableFeePaddedBreakeven: scanConfig.enableFeePaddedBreakeven,
+    breakevenOffsetPct: scanConfig.breakevenOffsetPct,
     postLossCooldownMinutes: pConfig.postLossCooldownMinutes ?? 0,
+    makerFeePct,
+    takerFeePct,
   });
 
   const initialCapital = options.initial_equity ?? 1000;
@@ -855,6 +872,8 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
     initialCapital,
     riskPerTradePct: riskPct,
     compoundingMode: options.compounding_mode ?? 'DYNAMIC_COMPOUNDING',
+    makerFeePct,
+    takerFeePct,
   });
 
   // Recent executed trades (last 10)
@@ -866,6 +885,8 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
     stop_loss: t.stopLossPrice,
     exit_price: t.exitPrice ?? null,
     realized_r: t.realizedR,
+    net_realized_r: t.netRealizedR ?? t.realizedR,
+    fee_in_r: t.feeInR ?? 0,
     outcome: t.outcome,
     label: t.label,
   }));
@@ -879,6 +900,10 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
       stage1_multiple: pConfig.stage1Multiple,
       stage2_multiple: pConfig.stage2Multiple,
       early_breakeven_multiple: pConfig.earlyBreakevenMultiple,
+      enable_fee_padded_breakeven: scanConfig.enableFeePaddedBreakeven,
+      breakeven_offset_pct: scanConfig.breakevenOffsetPct,
+      maker_fee_pct: makerFeePct,
+      taker_fee_pct: takerFeePct,
     },
     date_range: {
       start: new Date(startMs).toISOString(),
@@ -894,13 +919,21 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
       be_scratches: summary.totalBeScratches,
       win_rate_pct: summary.executionWinRatePct,
       win_rate_ex_scratch_pct: summary.winRateExScratchPct,
-      total_realized_r: summary.totalRealizedR,
+      // Dual Gross / Net Performance Mandate
+      gross_realized_r: summary.grossRealizedR ?? summary.totalRealizedR,
+      net_realized_r: summary.netRealizedR ?? summary.totalRealizedR,
+      total_fees_paid_r: summary.totalFeesPaidR ?? 0,
+      total_fees_paid_usd: compounding.totalFeesPaidUsd ?? 0,
+      total_realized_r: summary.netRealizedR ?? summary.totalRealizedR, // Net-First primary
       avg_realized_r: summary.avgRealizedR,
-      profit_factor: summary.profitFactor,
+      profit_factor: summary.profitFactor, // Net Profit Factor
+      gross_profit_factor: summary.grossProfitFactor ?? summary.profitFactor,
+      net_profit_factor: summary.netProfitFactor ?? summary.profitFactor,
       max_drawdown_r: summary.maxDrawdownR,
       max_drawdown_pct: compounding.maxDrawdownPct,
       initial_equity_usd: compounding.initialCapital,
-      final_equity_usd: parseFloat(compounding.finalRealizedEquity.toFixed(2)),
+      nominal_final_equity_usd: compounding.nominalFinalEquity ?? compounding.finalRealizedEquity,
+      final_equity_usd: parseFloat(compounding.finalRealizedEquity.toFixed(2)), // Net final equity
       net_pnl_usd: parseFloat(compounding.realizedNetPnlUsd.toFixed(2)),
       net_roi_pct: parseFloat(compounding.realizedNetRoiPct.toFixed(2)),
       longest_win_streak: compounding.longestWinStreak,
@@ -991,6 +1024,8 @@ export async function runGetTradeDiagnostics(options: TradeDiagnosticsOptions = 
     enforceHtfBiasGuard: false,
     enableEarlyBreakeven: true,
     earlyBreakevenMultiple: 0.40,
+    enableFeePaddedBreakeven: true,
+    breakevenOffsetPct: 0.05,
     postLossCooldownMinutes: 0,
   };
 

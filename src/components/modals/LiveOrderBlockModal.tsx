@@ -46,6 +46,10 @@ import {
   SweepReclaimPresetConfig,
 } from '@/lib/quantEngine/scannerPresets';
 import {
+  BinanceFeeTier,
+  BINANCE_USDC_FEE_SCHEDULES,
+} from '@/lib/quantEngine/strategyExecutionConfig';
+import {
   SweepReclaimEntryMode,
   getEntryModeLabel,
   getEntryModeDescription
@@ -163,7 +167,15 @@ function LiveOrderBlockModalContent({
     enforceHtfBiasGuard: srSettings?.enforceHtfBiasGuard ?? false,
     enableEarlyBreakeven: srSettings?.enableEarlyBreakeven ?? true,
     earlyBreakevenMultiple: srSettings?.earlyBreakevenMultiple ?? 0.40,
+    enableFeePaddedBreakeven: srSettings?.enableFeePaddedBreakeven ?? true,
+    breakevenOffsetPct: srSettings?.breakevenOffsetPct ?? 0.05,
     postLossCooldownMinutes: srSettings?.postLossCooldownMinutes ?? 0,
+
+    // 💰 Institutional Binance Fee Model (USDC-M Futures)
+    makerFeePct: srSettings?.makerFeePct ?? 0.0000,
+    takerFeePct: srSettings?.takerFeePct ?? 0.0400,
+    feeTierPreset: srSettings?.feeTierPreset || 'USDC_REGULAR_VIP1',
+    useBnbDiscount: srSettings?.useBnbDiscount ?? false,
   };
 
   const handleApplySrLivePreset = (preset: ScannerPreset) => {
@@ -207,7 +219,15 @@ function LiveOrderBlockModalContent({
       enforceHtfBiasGuard: cfg.enforceHtfBiasGuard === true,
       enableEarlyBreakeven: cfg.enableEarlyBreakeven === true,
       earlyBreakevenMultiple: typeof cfg.earlyBreakevenMultiple === 'number' ? cfg.earlyBreakevenMultiple : 0.40,
+      enableFeePaddedBreakeven: cfg.enableFeePaddedBreakeven !== false,
+      breakevenOffsetPct: typeof cfg.breakevenOffsetPct === 'number' ? cfg.breakevenOffsetPct : 0.05,
       postLossCooldownMinutes: typeof cfg.postLossCooldownMinutes === 'number' ? cfg.postLossCooldownMinutes : 0,
+
+      // 💰 Institutional Binance Fee Model (USDC-M Futures)
+      makerFeePct: typeof cfg.makerFeePct === 'number' ? cfg.makerFeePct : 0.0000,
+      takerFeePct: typeof cfg.takerFeePct === 'number' ? cfg.takerFeePct : 0.0400,
+      feeTierPreset: cfg.feeTierPreset || 'USDC_REGULAR_VIP1',
+      useBnbDiscount: cfg.useBnbDiscount === true,
     });
   };
 
@@ -1136,8 +1156,36 @@ function LiveOrderBlockModalContent({
                       onChange={(e) => updateSrSettings({ earlyBreakevenMultiple: parseFloat(e.target.value) })}
                       className="w-full accent-cyan-400"
                     />
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          id="live_fee_padded_be"
+                          checked={srSettings?.enableFeePaddedBreakeven ?? true}
+                          disabled={!(srSettings?.enableEarlyBreakeven ?? true)}
+                          onChange={(e) => updateSrSettings({ enableFeePaddedBreakeven: e.target.checked })}
+                          className="w-3.5 h-3.5 accent-cyan-400 cursor-pointer"
+                        />
+                        <label htmlFor="live_fee_padded_be" className="text-[9px] text-slate-300 cursor-pointer font-medium">
+                          Fee-Padded BE (Taker Shield)
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          max="0.20"
+                          disabled={!(srSettings?.enableEarlyBreakeven ?? true) || !(srSettings?.enableFeePaddedBreakeven ?? true)}
+                          value={srSettings?.breakevenOffsetPct ?? 0.05}
+                          onChange={(e) => updateSrSettings({ breakevenOffsetPct: parseFloat(e.target.value) || 0 })}
+                          className="w-14 px-1 py-0.5 text-right text-[9px] bg-slate-900 border border-slate-700 rounded text-cyan-300 focus:outline-none focus:border-cyan-500 font-mono"
+                        />
+                        <span className="text-[8.5px] text-slate-500 font-mono">%</span>
+                      </div>
+                    </div>
                     <span className="text-[8.5px] text-slate-400">
-                      Advances SL to Breakeven 0.0R at +{(srSettings?.earlyBreakevenMultiple ?? 0.40).toFixed(2)}R MFE before TP1.
+                      Advances SL to {(srSettings?.enableFeePaddedBreakeven ?? true) ? `Fee-Padded BE (+${((srSettings?.breakevenOffsetPct ?? 0.05)).toFixed(2)}%)` : 'Breakeven 0.0R'} at +{(srSettings?.earlyBreakevenMultiple ?? 0.40).toFixed(2)}R MFE before TP1.
                     </span>
                   </div>
 
@@ -1165,7 +1213,108 @@ function LiveOrderBlockModalContent({
                 </div>
               </div>
 
-              {/* 8. Advanced Institutional Geometry & ATR Controls Accordion Drawer */}
+              {/* 8. 💰 Binance USDC Futures Fee Schedule & Taker Friction Shield */}
+              <div className="bg-slate-900/40 p-3 rounded-lg border border-slate-800 flex flex-col gap-2.5">
+                <div className="font-bold text-slate-300 uppercase text-[10px] flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Percent className="w-3.5 h-3.5 text-cyan-400" />
+                    Binance USDC Fee Schedule (ETHUSDC Futures)
+                  </span>
+                  <span className="text-[9px] px-2 py-0.5 rounded bg-slate-950 text-cyan-400 border border-slate-800 font-mono font-bold">
+                    NET-FIRST ACCOUNTING
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[9px] font-mono">
+                  {/* Fee Tier Preset */}
+                  <div className="flex flex-col gap-1 p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                    <label className="text-[9px] uppercase font-semibold text-slate-400">
+                      Tier Preset (USDC-M)
+                    </label>
+                    <select
+                      value={srSettings?.feeTierPreset || 'USDC_REGULAR_VIP1'}
+                      onChange={(e) => {
+                        const tier = e.target.value as BinanceFeeTier;
+                        const sched = BINANCE_USDC_FEE_SCHEDULES[tier];
+                        if (sched && tier !== 'CUSTOM') {
+                          updateSrSettings({
+                            feeTierPreset: tier,
+                            makerFeePct: sched.makerFeePct,
+                            takerFeePct: sched.takerFeePct,
+                            useBnbDiscount: tier.endsWith('_BNB'),
+                            breakevenOffsetPct: sched.recommendedBreakevenOffsetPct,
+                          });
+                        } else {
+                          updateSrSettings({ feeTierPreset: tier });
+                        }
+                      }}
+                      className="w-full px-2 py-1 text-[9.5px] bg-slate-900 border border-slate-700 rounded text-slate-200 focus:outline-none focus:border-cyan-500 font-mono"
+                    >
+                      <option value="USDC_REGULAR_VIP1">Regular / VIP 1 (0.00% / 0.040%)</option>
+                      <option value="USDC_REGULAR_VIP1_BNB">Regular / VIP 1 + BNB (0.00% / 0.036%)</option>
+                      <option value="USDC_VIP2">VIP 2 (0.00% / 0.032%)</option>
+                      <option value="USDC_VIP2_BNB">VIP 2 + BNB (0.00% / 0.0288%)</option>
+                      <option value="USDC_VIP3">VIP 3 (0.00% / 0.0256%)</option>
+                      <option value="USDC_VIP3_BNB">VIP 3 + BNB (0.00% / 0.0230%)</option>
+                      <option value="CUSTOM">Custom Manual Input</option>
+                    </select>
+                  </div>
+
+                  {/* Maker Fee */}
+                  <div className="flex flex-col gap-1 p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                    <label className="text-[9px] uppercase font-semibold text-slate-400 flex items-center justify-between">
+                      <span>Maker Fee (Limits)</span>
+                      <span className="text-emerald-400 font-bold">{(srSettings?.makerFeePct ?? 0).toFixed(4)}%</span>
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        step="0.001"
+                        min="0.000"
+                        max="0.100"
+                        disabled={(srSettings?.feeTierPreset || 'USDC_REGULAR_VIP1') !== 'CUSTOM'}
+                        value={srSettings?.makerFeePct ?? 0.0000}
+                        onChange={(e) => updateSrSettings({ makerFeePct: parseFloat(e.target.value) || 0 })}
+                        className="w-full px-2 py-1 text-right text-[9.5px] bg-slate-900 border border-slate-700 rounded text-emerald-400 focus:outline-none focus:border-cyan-500 font-mono disabled:opacity-50"
+                      />
+                      <span className="text-[9px] text-slate-500 font-mono">%</span>
+                    </div>
+                  </div>
+
+                  {/* Taker Fee */}
+                  <div className="flex flex-col gap-1 p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                    <label className="text-[9px] uppercase font-semibold text-slate-400 flex items-center justify-between">
+                      <span>Taker Fee (Stops/Scratches)</span>
+                      <span className="text-rose-400 font-bold">{(srSettings?.takerFeePct ?? 0.04).toFixed(4)}%</span>
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="number"
+                        step="0.001"
+                        min="0.000"
+                        max="0.100"
+                        disabled={(srSettings?.feeTierPreset || 'USDC_REGULAR_VIP1') !== 'CUSTOM'}
+                        value={srSettings?.takerFeePct ?? 0.0400}
+                        onChange={(e) => {
+                          const val = parseFloat(e.target.value) || 0;
+                          updateSrSettings({
+                            takerFeePct: val,
+                            breakevenOffsetPct: parseFloat((val * 1.25).toFixed(2)),
+                          });
+                        }}
+                        className="w-full px-2 py-1 text-right text-[9.5px] bg-slate-900 border border-slate-700 rounded text-rose-400 focus:outline-none focus:border-cyan-500 font-mono disabled:opacity-50"
+                      />
+                      <span className="text-[9px] text-slate-500 font-mono">%</span>
+                    </div>
+                  </div>
+                </div>
+
+                <span className="text-[8.5px] text-slate-400">
+                  Deducts {(srSettings?.makerFeePct ?? 0).toFixed(4)}% on Limit entries/TPs and {(srSettings?.takerFeePct ?? 0.04).toFixed(4)}% on SL/BE scratches for 100% bit-for-bit live exchange execution parity.
+                </span>
+              </div>
+
+              {/* 9. Advanced Institutional Geometry & ATR Controls Accordion Drawer */}
               <div className="border-t border-slate-800 pt-2 flex flex-col gap-2">
                 <button
                   type="button"
