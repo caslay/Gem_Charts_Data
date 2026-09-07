@@ -35,6 +35,7 @@ import {
 import { useAlertSounds, AVAILABLE_ALERT_FILES } from "@/hooks/useAlertSounds";
 import { DEFAULT_THEME_SETTINGS } from "@/hooks/useMarketData";
 import { AVAILABLE_MODELS } from "@/lib/aiModels";
+import { updateSweepReclaimLiveSettings } from "@/lib/quantEngine/strategyExecutionConfig";
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 interface QuantSettings {
@@ -446,8 +447,13 @@ export default function SettingsPage() {
         }));
       }
 
-      // Proactively trigger a global data refresh so components update immediately
+      // 🛡️ Bi-directional sync: propagate committed risk to Sweep & Reclaim Cockpit settings
       if (typeof window !== "undefined") {
+        try {
+          updateSweepReclaimLiveSettings({ compoundingRiskPct: tradeRisk });
+        } catch (e) {
+          console.warn("[settings/page] Failed to sync Cockpit SR live settings:", e);
+        }
         window.dispatchEvent(new CustomEvent("trades-refresh"));
       }
 

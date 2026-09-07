@@ -1,8 +1,30 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.49
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.50
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-07 (V17.49 — Strict Zero-Popup MCP Protocol & Live Production V3 Fee Shield Validation)
+> **Last Updated:** 2026-09-07 (V17.50 — Unified Dual-Layer Risk Synchronization & Real-Time MCP Live Settings Telemetry)
+
+## 🆕 V17.50 Changelog — Unified Dual-Layer Risk Synchronization & Real-Time MCP Settings (2026-09-07)
+
+### Summary
+1. **Unified Dual-Layer Risk Synchronization Architecture (`useAutomatedStrategyExecution.ts`, `settings/page.tsx`, `/api/account/route.ts`):**
+   - **Resolution of Strategy vs Global Mismatch:** Resolved the architectural divergence where the Quegar Execution Cockpit modal (`LiveOrderBlockModal.tsx`, Layer 1) maintained tactical risk in client-side `localStorage` (`FLOW_STATE_SR_SETTINGS`), while the Global Risk Governor (`/settings`, Layer 2) persisted operational risk in Neon PostgreSQL (`trading_account.risk_per_trade_pct`).
+   - **Bi-Directional Event & API Bridge:**
+     - Moving the slider in the Cockpit modal automatically updates `FLOW_STATE_SR_SETTINGS`, dispatches `UPDATE_SETTINGS` to `daemon_commands.json` / `daemon_live_settings.json`, and dispatches a background POST to `/api/account` to update `trading_account.risk_per_trade_pct` in PostgreSQL and `GlobalRiskGovernor` static memory.
+     - Committing risk config in `/settings` automatically updates `FLOW_STATE_SR_SETTINGS` in `localStorage` via `updateSweepReclaimLiveSettings`, broadcasting `SR_SETTINGS_CHANGED_EVENT` to update the Cockpit slider instantaneously.
+2. **Safe Partial Database Updates (`src/app/api/account/route.ts`):**
+   - Refactored `/api/account` POST handler to pre-query existing account records, ensuring partial updates (e.g. updating solely `risk_per_trade_pct`) safely preserve existing `current_balance`, `initial_capital`, `max_daily_loss_pct`, and `max_consecutive_losses` without accidental fallback resets to arbitrary defaults.
+   - Atomically mirrors new risk settings to `run_logs/daemon_live_settings.json` and enqueues `UPDATE_SETTINGS` commands for the PM2 daemon.
+3. **Real-Time Active Settings Telemetry in Quegar-mcp (`agentEngineHandlers.ts` -> `runGetLiveDaemonStatus`):**
+   - Enhanced `get_live_daemon_status` tool in `Quegar-mcp` to return `active_live_settings` payload:
+     - `compounding_risk_pct`: Active risk percentage hot-reloaded in the live daemon.
+     - `risk_usd_per_trade`: Calculated dollar risk budget ($1.0R = `equity * risk_pct`).
+     - `global_risk_governor_pct`: Operational risk configured in PostgreSQL.
+     - `max_risk_limit_ceiling_pct`: Global risk governor single-trade hard ceiling.
+     - `stage1_multiple`, `stage2_multiple`, `breakeven_offset_pct`: Active harvest and fee-shield geometry.
+   - Provides instant, transparent verification of live risk parameters directly via MCP with zero guessing.
+
+---
 
 ## 🆕 V17.49 Changelog — Strict Zero-Popup MCP-First Protocol & Live V3 Validation (2026-09-07)
 
