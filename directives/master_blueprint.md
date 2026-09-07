@@ -1,8 +1,19 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.50
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.51
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-07 (V17.50 — Unified Dual-Layer Risk Synchronization & Real-Time MCP Live Settings Telemetry)
+> **Last Updated:** 2026-09-08 (V17.51 — Dynamic Risk Percentage Formatting & Outcome-Parity Reconciliation Scoring)
+
+## 🆕 V17.51 Changelog — Dynamic Risk Formatting & Exact-Outcome Parity Scoring (2026-09-08)
+
+### Summary
+1. **Dynamic Risk Percentage Formatting Across Telemetry Stack (`telegramNotifier.ts`, `telegramBotService.ts`, `AutomatedStrategyExecutionEngine.ts`, `AutomatedExecutionHUD.tsx`):**
+   - **Resolution of Static Text Bug:** Replaced legacy hardcoded string literals `(2.0% Compounded)` / `(2% Compounded)` with dynamic risk evaluation `${(pos.riskPct ?? 2.0).toFixed(1)}% Compounded` across all pending order alerts, fill confirmations, and HUD badges.
+   - Verified live execution math remained 100% physically accurate (e.g. `$1.56` risk budget on `$312.51` equity = exact 0.50% / 0.178 ETH contracts), eliminating cosmetic display confusion between actual executed risk and notification strings.
+2. **Quant Lab 1:1 Live Reconciliation Parity Scoring Enhancement (`telegramBotService.ts`):**
+   - **Outcome Parity Inclusion:** Updated reconciliation audit logic so that trades sharing identical physical market outcomes (`isExactOutcome === true`, e.g. both live trade and Quant Lab backtest exiting at `BREAKEVEN_SCRATCH` with $0.00 loss) contribute towards verified mathematical parity, even when minor entry price variance occurs due to intra-candle dynamic tick execution or version upgrades.
+
+---
 
 ## 🆕 V17.50 Changelog — Unified Dual-Layer Risk Synchronization & Real-Time MCP Settings (2026-09-07)
 
