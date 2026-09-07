@@ -150,10 +150,10 @@ function LiveOrderBlockModalContent({
     requireThreePillarDisplacement: srSettings?.requireThreePillarDisplacement ?? true,
     enforceDiscountPremiumGate: srSettings?.enforceDiscountPremiumGate ?? true,
     stage1Multiple: srSettings?.stage1Multiple ?? 1.0,
-    stage2Multiple: srSettings?.stage2Multiple ?? 1.4,
+    stage2Multiple: srSettings?.stage2Multiple ?? 1.30,
     stage3Multiple: srSettings?.stage3Multiple ?? 3.0,
-    stage1Ratio: srSettings?.stage1Ratio ?? 0.50,
-    stage2Ratio: srSettings?.stage2Ratio ?? 0.50,
+    stage1Ratio: srSettings?.stage1Ratio ?? 0.60,
+    stage2Ratio: srSettings?.stage2Ratio ?? 0.40,
     stage3Ratio: srSettings?.stage3Ratio ?? 0.00,
     entryMode: srSettings?.entryMode || 'FVG_CE',
     enableStructuralTrail: srSettings?.enableStructuralTrail ?? true,
@@ -168,7 +168,7 @@ function LiveOrderBlockModalContent({
     enableEarlyBreakeven: srSettings?.enableEarlyBreakeven ?? true,
     earlyBreakevenMultiple: srSettings?.earlyBreakevenMultiple ?? 0.40,
     enableFeePaddedBreakeven: srSettings?.enableFeePaddedBreakeven ?? true,
-    breakevenOffsetPct: srSettings?.breakevenOffsetPct ?? 0.05,
+    breakevenOffsetPct: srSettings?.breakevenOffsetPct ?? 0.015,
     postLossCooldownMinutes: srSettings?.postLossCooldownMinutes ?? 0,
 
     // 💰 Institutional Binance Fee Model (USDC-M Futures)
@@ -191,18 +191,18 @@ function LiveOrderBlockModalContent({
       entryMode: cfg.entryMode,
       enforceDiscountPremiumGate: cfg.enforceDiscountPremiumGate ?? true,
       volumeSmaPeriod: cfg.volumeSmaPeriod ?? 20,
-      volumeExpansionThreshold: cfg.volumeExpansionThreshold ?? 1.20,
+      volumeExpansionThreshold: cfg.volumeExpansionThreshold ?? 1.10,
       deltaDominanceThreshold: cfg.deltaDominanceThreshold ?? 52.0,
       bodyRatioThreshold: cfg.bodyRatioThreshold ?? 0.40,
       stage1Multiple: cfg.stage1Multiple ?? 1.0,
-      stage2Multiple: cfg.stage2Multiple ?? 1.4,
+      stage2Multiple: cfg.stage2Multiple ?? 1.30,
       stage3Multiple: cfg.stage3Multiple ?? 3.0,
-      stage1Ratio: cfg.stage1Ratio ?? 0.50,
-      stage2Ratio: cfg.stage2Ratio ?? 0.50,
+      stage1Ratio: cfg.stage1Ratio ?? 0.60,
+      stage2Ratio: cfg.stage2Ratio ?? 0.40,
       stage3Ratio: cfg.stage3Ratio ?? 0.00,
       enableStructuralTrail: cfg.enableStructuralTrail ?? true,
       enableProfitRatchet: cfg.enableProfitRatchet ?? false,
-      anchorTypes: liveAnchors.length > 0 ? liveAnchors : ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'],
+      anchorTypes: liveAnchors.length > 0 ? liveAnchors : ['SWING_PIVOT', 'ASIAN', 'DAILY'],
       lookbackMajor: cfg.lookbackMajor ?? 10,
       lookbackInternal: cfg.lookbackInternal ?? 5,
       maxBarsAnchorToSweep: cfg.maxBarsAnchorToSweep ?? 25,
@@ -451,7 +451,7 @@ function LiveOrderBlockModalContent({
                           <span className="text-slate-500 uppercase font-bold text-[9px]">Stage 2 Target</span>
                           <span className="text-purple-400 font-bold text-xs">${pos.stage2Target.toFixed(2)}</span>
                           <span className="text-[8.5px] text-slate-400 font-mono">
-                            {pos.isStage2Filled ? '✓ 40% Locked (+0.60R)' : `${(pos.stage2Multiple || 1.4).toFixed(1)}R Alpha Champion`}
+                            {pos.isStage2Filled ? '✓ 40% Locked (+0.52R)' : `${(pos.stage2Multiple || 1.3).toFixed(1)}R V3 Champion`}
                           </span>
                         </div>
                       </div>
@@ -991,7 +991,7 @@ function LiveOrderBlockModalContent({
                     <Target className="w-3.5 h-3.5 text-cyan-400" />
                     Multi-Stage Harvest & Risk Targets
                   </span>
-                  <span className="text-cyan-400 text-[9px] font-mono font-bold">50% / 50% 2-STAGE ALPHA CHAMPION</span>
+                  <span className="text-cyan-400 text-[9px] font-mono font-bold">60% / 40% 2-STAGE V3 CHAMPION</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[9px]">
@@ -1024,7 +1024,7 @@ function LiveOrderBlockModalContent({
                     <span className="text-slate-400 text-[8px] uppercase font-bold">Stage 2: Main Harvest</span>
                     <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
                       {[1.3, 1.4, 1.5, 1.6, 1.8, 2.0].map((val) => {
-                        const isSelected = (srSettings?.stage2Multiple ?? 1.4) === val;
+                        const isSelected = (srSettings?.stage2Multiple ?? 1.30) === val;
                         return (
                           <button
                             key={val}

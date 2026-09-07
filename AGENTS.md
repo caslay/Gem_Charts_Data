@@ -30,16 +30,33 @@ Quant Lab was engineered to test real strategies under real market conditions wi
 3. **No Guessing Allowed:** Always test every preset and strategy directly in Quant Lab across raw historical candles before presenting results or recommending setups to the trader.
 
 ## ⚡ ZERO-POPUP MCP-FIRST MANDATE (Quegar-mcp > Terminal Execution)
-Whenever querying market data, live PM2 daemon status, trade diagnostics, market structure, backtests, or quant decisions, ALWAYS use the specialized `Quegar-mcp` / `flow-state-quant-engine` MCP tools directly instead of executing terminal commands (`pm2 logs`, `curl`, `tsx`, `ssh`):
-1. **Zero Permission Delay:** Calling MCP tools runs in-memory and requires ZERO user terminal approval popups, avoiding unnecessary user friction and execution latency.
-2. **Dedicated Tool Coverage:**
-   - **Live Daemon State & In-Flight Positions:** Use `get_live_daemon_status`.
-   - **Forensic Setup & Displacement Diagnostics:** Use `get_trade_diagnostics`.
-   - **Level 2 Dealing Ranges & Market Structure:** Use `get_market_structure`.
-   - **Market Context (Orderbook, CVD, Funding):** Use `get_market_context`.
-   - **In-Memory Strategy Backtesting:** Use `run_quant_backtest`.
-   - **Quant Decision Submission:** Use `submit_quant_decision`.
-3. **Strict Terminal Fallback Boundary:** ONLY reach for terminal commands (`run_command`, SSH, PM2 process management) when performing actual server-level process administration (restarts, git pulls, builds, OS configuration) that MCP tools do not cover.
+Whenever querying market data, live PM2 daemon status, trade diagnostics, market structure, backtests, or trade reconciliation, you MUST ALWAYS use the specialized `Quegar-mcp` / `flow-state-quant-engine` MCP tools directly. **Running terminal commands (SSH, SCP, TSX scripts, curl, PM2 logs) for any capability covered by MCP tools is STRICTLY PROHIBITED.**
+
+### 🚫 Strict Terminal & VPS Prohibitions:
+- **DO NOT run `ssh` or `scp`** to pull session logs or inspect remote files. `get_live_daemon_status` already returns live in-flight positions, completed trades, active limits, and recent daemon events in-memory.
+- **DO NOT run `tsx scripts/reconcile-session.ts` or `tsx scripts/verify_quant_vs_pm2_parity.ts` via terminal.** Use `run_quant_backtest` (with `preset_id`, `start_date`, `end_date`, `initial_equity`) and `get_live_daemon_status` directly.
+- **DO NOT run terminal backtest scripts** (`run_fee_tournament`, `tsx scripts/...`). `run_quant_backtest` runs the full candle-by-candle simulation in memory across 1 to 365 days.
+- **DO NOT run curl or fetch scripts** to inspect market data or displacement. Use `get_market_context`, `get_market_structure`, and `get_trade_diagnostics`.
+
+### 🛡️ Why This Rule Exists:
+1. **Zero Permission Friction:** MCP tools run in-memory and require **ZERO terminal confirmation popups**, providing an immediate, seamless user experience without blocking execution.
+2. **Deterministic Parity:** `Quegar-mcp` tools instantiate the exact same engine classes (`SweepReclaimEngine`, `AutomatedStrategyExecutionEngine`) and fetch Binance Futures data with 100% bit-for-bit live parity.
+3. **Deep Forensic Precision:** MCP returns structured JSON (Volume expansion, Delta dominance, MFE/MAE excursions, exact anchor geometry) rather than plain terminal text strings.
+
+### 🎛️ Dedicated Tool Coverage Map:
+- **Live Daemon State, Completed Trades & In-Flight Positions:** Use `get_live_daemon_status`.
+- **Forensic Setup Breakdown & Displacement Diagnostics:** Use `get_trade_diagnostics` (specify `target_price`, `lookback_candles`, `timestamp`).
+- **Level 2 Dealing Ranges & Swing Market Structure:** Use `get_market_structure`.
+- **Live Market Microstructure (Orderbook, CVD, Funding Rate):** Use `get_market_context`.
+- **In-Memory Strategy Backtesting & Reconciliation:** Use `run_quant_backtest` (with `preset_id`, `start_date`, `end_date`).
+- **Quant Decision Submission:** Use `submit_quant_decision`.
+
+### 🛑 Strict Terminal Boundary:
+ONLY reach for terminal commands (`run_command`) when performing genuine OS-level server administration or code deployment that MCP tools cannot execute:
+- Local git management (`git status`, `git commit`, `git push`)
+- Production branch synchronization (`scripts/sync-prod.ts`)
+- TypeScript / Build verification (`npx tsc --noEmit`, `npm run build`)
+- Server restarts (`pm2 restart all`) when explicitly requested by the user.
 
 ## 🛑 TOKEN OPTIMIZATION RULE (Progressive Disclosure)
 Do NOT guess the project architecture or past logic. To save the context window, you must dynamically read the relevant documentation from the `directives/` folder based on your current task.

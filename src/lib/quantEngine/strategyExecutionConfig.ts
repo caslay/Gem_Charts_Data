@@ -488,10 +488,44 @@ export function getSweepReclaimLiveSettings(): SweepReclaimLiveSettings {
     const item = localStorage.getItem(STORAGE_KEY_SR_SETTINGS);
     if (!item) return { ...DEFAULT_SR_LIVE_SETTINGS };
     const parsed = JSON.parse(item);
-    return {
+
+    // 🔬 Auto-upgrade legacy V2 stored settings to crowned V3 Champion
+    let hasMigrated = false;
+    if (parsed.stage2Multiple === 1.4 && (parsed.stage2Ratio === 0.50 || parsed.stage1Ratio === 0.50)) {
+      parsed.stage2Multiple = 1.30;
+      parsed.stage1Ratio = 0.60;
+      parsed.stage2Ratio = 0.40;
+      hasMigrated = true;
+    }
+    if (parsed.breakevenOffsetPct === 0.05) {
+      parsed.breakevenOffsetPct = 0.015;
+      hasMigrated = true;
+    }
+    if (parsed.volumeExpansionThreshold === 1.20) {
+      parsed.volumeExpansionThreshold = 1.10;
+      hasMigrated = true;
+    }
+    if (parsed.maxBarsToRetest === 20) {
+      parsed.maxBarsToRetest = 15;
+      hasMigrated = true;
+    }
+    if (Array.isArray(parsed.anchorTypes) && !parsed.anchorTypes.includes('ASIAN')) {
+      parsed.anchorTypes = ['SWING_PIVOT', 'DAILY', 'ASIAN'];
+      hasMigrated = true;
+    }
+
+    const merged = {
       ...DEFAULT_SR_LIVE_SETTINGS,
       ...parsed,
     };
+
+    if (hasMigrated) {
+      try {
+        localStorage.setItem(STORAGE_KEY_SR_SETTINGS, JSON.stringify(merged));
+      } catch {}
+    }
+
+    return merged;
   } catch {
     return { ...DEFAULT_SR_LIVE_SETTINGS };
   }
