@@ -107,7 +107,7 @@ export default function SweepReclaimWorkspace({
 
   // Volumetric & Displacement Gating (3-Pillar Gatekeeper)
   const [volumeSmaPeriod, setVolumeSmaPeriod] = useState(20);
-  const [volumeExpansionThreshold, setVolumeExpansionThreshold] = useState(1.20);
+  const [volumeExpansionThreshold, setVolumeExpansionThreshold] = useState(1.10);
   const [deltaDominanceThreshold, setDeltaDominanceThreshold] = useState(52.0);
   const [bodyRatioThreshold, setBodyRatioThreshold] = useState(0.40);
   const [enforceDiscountPremiumGate, setEnforceDiscountPremiumGate] = useState(true);
@@ -115,7 +115,7 @@ export default function SweepReclaimWorkspace({
   // 3-Stage Harvest & Risk Controls
   const [entryMode, setEntryMode] = useState<SweepReclaimEntryMode>("FVG_CE");
   const [stage1Multiple, setStage1Multiple] = useState(1.0);
-  const [stage2Multiple, setStage2Multiple] = useState(1.4);
+  const [stage2Multiple, setStage2Multiple] = useState(1.30);
   const [stage3Multiple, setStage3Multiple] = useState(3.0);
   const [enableStructuralTrail, setEnableStructuralTrail] = useState(true);
   const [enableProfitRatchet, setEnableProfitRatchet] = useState(false);
@@ -127,7 +127,7 @@ export default function SweepReclaimWorkspace({
   const [enableEarlyBreakeven, setEnableEarlyBreakeven] = useState(true);
   const [earlyBreakevenMultiple, setEarlyBreakevenMultiple] = useState(0.40);
   const [enableFeePaddedBreakeven, setEnableFeePaddedBreakeven] = useState(true);
-  const [breakevenOffsetPct, setBreakevenOffsetPct] = useState(0.05);
+  const [breakevenOffsetPct, setBreakevenOffsetPct] = useState(0.015);
   const [postLossCooldownMinutes, setPostLossCooldownMinutes] = useState(0);
 
   // 💰 Real-World Binance Futures Fee Schedule (USDC Pairs)
@@ -316,7 +316,7 @@ export default function SweepReclaimWorkspace({
     setEnableEarlyBreakeven(cfg.enableEarlyBreakeven === true);
     setEarlyBreakevenMultiple(typeof cfg.earlyBreakevenMultiple === 'number' ? cfg.earlyBreakevenMultiple : 0.40);
     setEnableFeePaddedBreakeven(cfg.enableFeePaddedBreakeven !== false);
-    setBreakevenOffsetPct(typeof cfg.breakevenOffsetPct === 'number' ? cfg.breakevenOffsetPct : 0.05);
+    setBreakevenOffsetPct(typeof cfg.breakevenOffsetPct === 'number' ? cfg.breakevenOffsetPct : 0.015);
     setPostLossCooldownMinutes(typeof cfg.postLossCooldownMinutes === 'number' ? cfg.postLossCooldownMinutes : 0);
 
     // 💰 Real-World Binance Futures Fee Hydration

@@ -640,6 +640,11 @@ export function getActivePresetId(strategyType: ScannerStrategyType): string {
   if (typeof window === 'undefined') return fallback;
   try {
     const item = localStorage.getItem(`${STORAGE_KEY_ACTIVE_PRESET_PREFIX}${strategyType}`);
+    if (item === 'factory_sr_5m_fvg_ce_sniper_v2') {
+      // Auto-migrate legacy V2 preset to crowned V3 Champion
+      localStorage.setItem(`${STORAGE_KEY_ACTIVE_PRESET_PREFIX}${strategyType}`, fallback);
+      return fallback;
+    }
     return item || fallback;
   } catch {
     return fallback;
@@ -791,6 +796,11 @@ export function getArmedExecutionStatus(): ArmedExecutionStatus {
     const raw = localStorage.getItem(STORAGE_KEY_ARMED_EXECUTION);
     if (!raw) return defaultStatus;
     const parsed = JSON.parse(raw);
+    if (parsed.id === 'factory_sr_5m_fvg_ce_sniper_v2') {
+      // Auto-migrate legacy V2 armed status to crowned V3 Champion
+      localStorage.setItem(STORAGE_KEY_ARMED_EXECUTION, JSON.stringify(defaultStatus));
+      return defaultStatus;
+    }
     return {
       ...parsed,
       isAutoExecEnabled:
@@ -837,23 +847,23 @@ export function applyPresetToLiveExecution(preset: ScannerPreset): void {
       entryMode: cfg.entryMode,
       enforceDiscountPremiumGate: cfg.enforceDiscountPremiumGate ?? true,
       volumeSmaPeriod: cfg.volumeSmaPeriod ?? 20,
-      volumeExpansionThreshold: cfg.volumeExpansionThreshold ?? 1.20,
+      volumeExpansionThreshold: cfg.volumeExpansionThreshold ?? 1.10,
       deltaDominanceThreshold: cfg.deltaDominanceThreshold ?? 52.0,
       bodyRatioThreshold: cfg.bodyRatioThreshold ?? 0.40,
       stage1Multiple: cfg.stage1Multiple ?? 1.0,
-      stage2Multiple: cfg.stage2Multiple ?? 1.4,
+      stage2Multiple: cfg.stage2Multiple ?? 1.30,
       stage3Multiple: cfg.stage3Multiple ?? 3.0,
-      stage1Ratio: cfg.stage1Ratio ?? 0.50,
-      stage2Ratio: cfg.stage2Ratio ?? 0.50,
+      stage1Ratio: cfg.stage1Ratio ?? 0.60,
+      stage2Ratio: cfg.stage2Ratio ?? 0.40,
       stage3Ratio: cfg.stage3Ratio ?? 0.00,
       enableStructuralTrail: cfg.enableStructuralTrail ?? true,
       enableProfitRatchet: cfg.enableProfitRatchet ?? false,
-      anchorTypes: liveAnchors.length > 0 ? liveAnchors : ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'],
+      anchorTypes: liveAnchors.length > 0 ? liveAnchors : ['SWING_PIVOT', 'ASIAN', 'DAILY'],
       lookbackMajor: cfg.lookbackMajor ?? 10,
       lookbackInternal: cfg.lookbackInternal ?? 5,
       maxBarsAnchorToSweep: cfg.maxBarsAnchorToSweep ?? 25,
       maxBarsSweepToReclaim: cfg.maxBarsSweepToReclaim ?? 10,
-      maxBarsToRetest: cfg.maxBarsToRetest ?? 20,
+      maxBarsToRetest: cfg.maxBarsToRetest ?? 15,
       minSweepDepthAtrMultiplier: cfg.minSweepDepthAtrMultiplier ?? 0.10,
       slBufferAtrMultiplier: cfg.slBufferAtrMultiplier ?? 0.10,
       requireThreePillarDisplacement: cfg.requireThreePillarDisplacement ?? true,
