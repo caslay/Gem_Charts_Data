@@ -281,7 +281,7 @@ export default function AutomatedExecutionHUD({
                   <span className="text-white font-bold">${order.limitEntryPrice.toFixed(2)}</span>
                   <span className="text-slate-500">({order.symbol} {order.timeframe})</span>
                 </div>
-                <span className="text-cyan-400 font-bold">${order.riskUsd.toFixed(2)} Risk (2% Compounded)</span>
+                <span className="text-cyan-400 font-bold">${order.riskUsd.toFixed(2)} Risk (${(order.riskPct ?? 2.0).toFixed(1)}% Compounded)</span>
               </div>
             ))}
           </div>
