@@ -28,6 +28,8 @@ interface DaemonStateResponse {
   completedTrades: StrategyExecutionPosition[];
   allTodayTrades: any[];
   serverTime: number;
+  compoundingRiskPct?: number;
+  liveSettings?: Record<string, any>;
 }
 
 export async function GET(req: Request) {
@@ -130,6 +132,15 @@ export async function GET(req: Request) {
     const totalClosed = sessionLog.totalTrades || (winCount + lossCount);
     const winRatePct = totalClosed > 0 ? (winCount / totalClosed) * 100 : 0;
 
+    // Read active live settings from disk if available
+    const liveSettingsPath = path.join(rootDir, 'run_logs', 'daemon_live_settings.json');
+    let liveSettings: any = {};
+    if (fs.existsSync(liveSettingsPath)) {
+      try {
+        liveSettings = JSON.parse(fs.readFileSync(liveSettingsPath, 'utf8'));
+      } catch {}
+    }
+
     const response: DaemonStateResponse = {
       success: true,
       isDaemonActive,
@@ -143,6 +154,8 @@ export async function GET(req: Request) {
       winningTrades: winCount,
       losingTrades: lossCount,
       winRatePct,
+      compoundingRiskPct: liveSettings.compoundingRiskPct ?? 2.0,
+      liveSettings,
       activePositions: Array.from(activeMap.values()),
       pendingOrders: Array.from(pendingMap.values()),
       completedTrades: sessionLog.completedTrades || [],
