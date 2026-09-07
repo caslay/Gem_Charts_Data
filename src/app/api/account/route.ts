@@ -3,6 +3,8 @@ import { auth } from "@/auth";
 import { sql } from "@/lib/postgres";
 import { getBinanceAccountInfo } from "@/lib/binanceFuturesClient";
 import { GlobalRiskGovernor } from "@/lib/risk/GlobalRiskGovernor";
+import * as fs from "fs";
+import * as path from "path";
 
 // In-memory fallback account storage for offline mode / local development
 interface TradingAccountRecord {
@@ -216,12 +218,36 @@ export async function POST(req: Request) {
       max_daily_trades,
     } = body;
 
-    const riskLimit = max_risk_limit_pct !== undefined ? parseFloat(max_risk_limit_pct) : 3.0;
-    const tradeRisk = risk_per_trade_pct !== undefined ? parseFloat(risk_per_trade_pct) : 2.0;
-    const dailyLossPct = max_daily_loss_pct !== undefined ? parseFloat(max_daily_loss_pct) : 4.0;
-    const dailyLossUsd = max_daily_loss_usd !== undefined ? parseFloat(max_daily_loss_usd) : 400.0;
-    const maxConsecLosses = max_consecutive_losses !== undefined ? parseInt(max_consecutive_losses, 10) : 3;
-    const maxDailyTradesCount = max_daily_trades !== undefined ? parseInt(max_daily_trades, 10) : 6;
+    // Query existing record to support safe partial updates without overwriting untouched fields
+    await initAccountTable();
+    let existingRow: any = null;
+    try {
+      const existingRes = await sql`
+        SELECT * FROM trading_account WHERE user_id = ${userEmail} OR user_id = 'institutional_admin' ORDER BY updated_at DESC LIMIT 1
+      `;
+      if (existingRes.rows && existingRes.rows.length > 0) {
+        existingRow = existingRes.rows[0];
+      }
+    } catch {}
+
+    const riskLimit = max_risk_limit_pct !== undefined 
+      ? parseFloat(max_risk_limit_pct) 
+      : (existingRow?.max_risk_limit_pct ? parseFloat(existingRow.max_risk_limit_pct) : 3.0);
+    const tradeRisk = risk_per_trade_pct !== undefined 
+      ? parseFloat(risk_per_trade_pct) 
+      : (existingRow?.risk_per_trade_pct ? parseFloat(existingRow.risk_per_trade_pct) : 2.0);
+    const dailyLossPct = max_daily_loss_pct !== undefined 
+      ? parseFloat(max_daily_loss_pct) 
+      : (existingRow?.max_daily_loss_pct ? parseFloat(existingRow.max_daily_loss_pct) : 4.0);
+    const dailyLossUsd = max_daily_loss_usd !== undefined 
+      ? parseFloat(max_daily_loss_usd) 
+      : (existingRow?.max_daily_loss_usd ? parseFloat(existingRow.max_daily_loss_usd) : 400.0);
+    const maxConsecLosses = max_consecutive_losses !== undefined 
+      ? parseInt(max_consecutive_losses, 10) 
+      : (existingRow?.max_consecutive_losses ? parseInt(existingRow.max_consecutive_losses, 10) : 3);
+    const maxDailyTradesCount = max_daily_trades !== undefined 
+      ? parseInt(max_daily_trades, 10) 
+      : (existingRow?.max_daily_trades ? parseInt(existingRow.max_daily_trades, 10) : 6);
 
     if (isNaN(tradeRisk) || tradeRisk <= 0 || tradeRisk > 100) {
       return NextResponse.json(
@@ -237,7 +263,9 @@ export async function POST(req: Request) {
       );
     }
 
-    const capital = initial_capital !== undefined ? parseFloat(initial_capital) : 1000.0;
+    const capital = initial_capital !== undefined 
+      ? parseFloat(initial_capital) 
+      : (existingRow?.initial_capital ? parseFloat(existingRow.initial_capital) : (existingRow?.current_balance ? parseFloat(existingRow.current_balance) : 1000.0));
 
     // Update GlobalRiskGovernor static memory immediately
     await GlobalRiskGovernor.updateConfig(
@@ -255,6 +283,48 @@ export async function POST(req: Request) {
     // Reset circuit breaker on commit so new risk limits apply cleanly
     await GlobalRiskGovernor.resetCircuitBreaker(userEmail);
     await GlobalRiskGovernor.resetCircuitBreaker('institutional_admin');
+
+    // 🛡️ Atomically mirror active operational risk to daemon_live_settings.json & daemon_commands.json
+    try {
+      const rootDir = process.cwd();
+      const runLogsDir = path.join(rootDir, "run_logs");
+      if (!fs.existsSync(runLogsDir)) {
+        fs.mkdirSync(runLogsDir, { recursive: true });
+      }
+      const liveSettingsFile = path.join(runLogsDir, "daemon_live_settings.json");
+      let existingSettings: any = {};
+      if (fs.existsSync(liveSettingsFile)) {
+        try {
+          existingSettings = JSON.parse(fs.readFileSync(liveSettingsFile, "utf8"));
+        } catch {}
+      }
+      const updatedSettings = { ...existingSettings, compoundingRiskPct: tradeRisk, updatedAt: Date.now() };
+      fs.writeFileSync(liveSettingsFile, JSON.stringify(updatedSettings, null, 2), "utf8");
+
+      const commandFile = path.join(runLogsDir, "daemon_commands.json");
+      let commands: any[] = [];
+      if (fs.existsSync(commandFile)) {
+        try {
+          commands = JSON.parse(fs.readFileSync(commandFile, "utf8"));
+          if (!Array.isArray(commands)) commands = [];
+        } catch {
+          commands = [];
+        }
+      }
+      const now = Date.now();
+      const newCmd = {
+        id: `cmd_${now}_${Math.random().toString(36).substring(2, 7)}`,
+        action: "UPDATE_SETTINGS",
+        timestamp: now,
+        timeIso: new Date(now).toISOString(),
+        status: "PENDING",
+        metadata: { settings: { compoundingRiskPct: tradeRisk } },
+      };
+      commands = [...commands.slice(-49), newCmd];
+      fs.writeFileSync(commandFile, JSON.stringify(commands, null, 2), "utf8");
+    } catch (e) {
+      console.warn("[ACCOUNT API] Non-fatal daemon sync warning:", e);
+    }
 
     // In Live VPS mode with Binance active:
     if (process.env.BINANCE_API_KEY && process.env.BINANCE_API_SECRET) {
@@ -345,7 +415,7 @@ export async function POST(req: Request) {
             max_daily_loss_usd = ${dailyLossUsd},
             max_consecutive_losses = ${maxConsecLosses},
             max_daily_trades = ${maxDailyTradesCount},
-            current_balance = ${capital},
+            current_balance = ${initial_capital !== undefined ? capital : (existingRow?.current_balance ? parseFloat(existingRow.current_balance) : capital)},
             circuit_breaker_active = FALSE,
             circuit_breaker_reason = NULL,
             updated_at = CURRENT_TIMESTAMP

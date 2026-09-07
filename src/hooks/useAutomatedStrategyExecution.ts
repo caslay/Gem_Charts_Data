@@ -367,6 +367,19 @@ export function useAutomatedStrategyExecution(
       console.warn('[useAutomatedStrategyExecution] Failed to dispatch UPDATE_SETTINGS to daemon:', err);
     });
 
+    // 🛡️ Synchronize tactical Cockpit risk to Global Risk Governor (/api/account)
+    if (newSettings.compoundingRiskPct !== undefined) {
+      fetch('/api/account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          risk_per_trade_pct: newSettings.compoundingRiskPct,
+        }),
+      }).catch((err) => {
+        console.warn('[useAutomatedStrategyExecution] Failed to sync risk to Global Risk Governor (/api/account):', err);
+      });
+    }
+
     return next;
   }, []);
 

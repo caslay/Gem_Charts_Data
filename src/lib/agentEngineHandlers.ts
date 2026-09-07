@@ -55,6 +55,8 @@ import {
   SweepReclaimPresetConfig,
 } from '@/lib/quantEngine/scannerPresets';
 import { MarketStructureAPI } from '@/lib/quantEngine/MarketStructureAPI';
+import { DEFAULT_SR_LIVE_SETTINGS } from '@/lib/quantEngine/strategyExecutionConfig';
+import { GlobalRiskGovernor } from '@/lib/risk/GlobalRiskGovernor';
 import type { Candle } from '@/lib/fvgEngine';
 
 // ─── Supported primary timeframes for structure analysis ──────────────────────
@@ -1265,6 +1267,28 @@ export async function runGetLiveDaemonStatus(options: LiveDaemonStatusOptions = 
       }))
     : [];
 
+  // 🛡️ Hydrate active live settings from daemon_live_settings.json and GlobalRiskGovernor
+  let persistedLiveSettings: any = {};
+  const liveSettingsFile = path.join(sessionDir, 'daemon_live_settings.json');
+  if (fs.existsSync(liveSettingsFile)) {
+    try {
+      persistedLiveSettings = JSON.parse(fs.readFileSync(liveSettingsFile, 'utf8'));
+    } catch {}
+  }
+
+  let riskGovernorConfig: any = null;
+  try {
+    const { config } = await GlobalRiskGovernor.hydrateState('institutional_admin');
+    riskGovernorConfig = config;
+  } catch {}
+
+  const activeCompoundingRiskPct = persistedLiveSettings.compoundingRiskPct 
+    ?? riskGovernorConfig?.risk_per_trade_pct 
+    ?? DEFAULT_SR_LIVE_SETTINGS.compoundingRiskPct 
+    ?? 2.0;
+  const currentEquity = sessionLog.currentEquity || 1000.0;
+  const calculatedRiskUsd = parseFloat((currentEquity * (activeCompoundingRiskPct / 100)).toFixed(2));
+
   return {
     status: 'ACTIVE_SESSION_FOUND',
     session_file: logFileName,
@@ -1280,6 +1304,16 @@ export async function runGetLiveDaemonStatus(options: LiveDaemonStatusOptions = 
       total_trades: sessionLog.totalTrades,
       winning_trades: sessionLog.winningTrades,
       losing_trades: sessionLog.losingTrades,
+    },
+    active_live_settings: {
+      compounding_risk_pct: activeCompoundingRiskPct,
+      risk_usd_per_trade: calculatedRiskUsd,
+      global_risk_governor_pct: riskGovernorConfig?.risk_per_trade_pct ?? 2.0,
+      max_risk_limit_ceiling_pct: riskGovernorConfig?.max_risk_limit_pct ?? 3.0,
+      stage1_multiple: persistedLiveSettings.stage1Multiple ?? DEFAULT_SR_LIVE_SETTINGS.stage1Multiple ?? 1.0,
+      stage2_multiple: persistedLiveSettings.stage2Multiple ?? DEFAULT_SR_LIVE_SETTINGS.stage2Multiple ?? 1.30,
+      breakeven_offset_pct: persistedLiveSettings.breakevenOffsetPct ?? DEFAULT_SR_LIVE_SETTINGS.breakevenOffsetPct ?? 0.015,
+      active_preset_champion: "5m Sweep & Reclaim Fee Shield V3 Sniper",
     },
     active_in_flight_positions: activeInFlightPositions,
     active_pending_limit_orders: livePendingOrders,
