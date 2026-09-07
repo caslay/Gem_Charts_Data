@@ -464,7 +464,7 @@ export class TelegramBotService {
         `🎯 <b>TP1 (1.0R):</b> <code>$${ord.stage1Target.toFixed(2)}</code>\n` +
         `💰 <b>TP2 (${(ord.stage2Multiple ?? 1.30).toFixed(1)}R):</b> <code>$${ord.stage2Target.toFixed(2)}</code>\n` +
         `🚀 <b>TP3 (DOL):</b> <code>$${ord.stage3Target.toFixed(2)}</code>\n` +
-        `💵 <b>Risk USD:</b> <code>$${ord.riskUsd.toFixed(2)}</code> (2% Compounded)\n` +
+        `💵 <b>Risk USD:</b> <code>$${ord.riskUsd.toFixed(2)}</code> (${(ord.riskPct ?? 2.0).toFixed(1)}% Compounded)\n` +
         `🏛️ <b>Setup:</b> <i>${ord.anchorName || '5m Structural Liquidity'}</i>\n` +
         `<i>Awaiting market price pullback to execute fill.</i>`;
 
@@ -740,8 +740,12 @@ export class TelegramBotService {
           status = 'INTRA_WAVE_SUPERSEDED';
           intraWaveCount++;
           notes = 'Live intermediate fill executed prior to wider batch wave expansion';
-        } else if (isExactOutcome && slip < 0.50) {
-          status = 'EXACT_MATCH';
+        } else if (isExactOutcome) {
+          if (slip < 0.50) {
+            status = 'EXACT_MATCH';
+          } else {
+            status = 'SLIPPAGE_VARIANCE';
+          }
           exactMatches++;
         } else {
           status = 'SLIPPAGE_VARIANCE';

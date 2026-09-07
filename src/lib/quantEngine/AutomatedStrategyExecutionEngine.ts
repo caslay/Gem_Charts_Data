@@ -824,9 +824,10 @@ export class AutomatedStrategyExecutionEngine {
 
     // Always place fresh setups into the resting limit queue for true pullback retest execution
     this.pendingLimitOrders.push(newPosition);
+    const riskPctStr = (newPosition.riskPct ?? 2.0).toFixed(1);
     const msg = `⏳ [LIMIT_ORDER_PLACED] Resting Limit ${direction} placed @ $${limitEntryPrice.toFixed(
       2,
-    )} on ${symbol} (${timeframe}) | Risk: $${newPosition.riskUsd.toFixed(2)} (2% Compounded).`;
+    )} on ${symbol} (${timeframe}) | Risk: $${newPosition.riskUsd.toFixed(2)} (${riskPctStr}% Compounded).`;
     this.emit("LIMIT_ORDER_PLACED", msg, newPosition);
     return { success: true, position: newPosition, message: msg };
   }
@@ -903,9 +904,10 @@ export class AutomatedStrategyExecutionEngine {
           // ATOMIC QUEUE FLUSH: Immediately purge all competing pending limit orders
           this.pendingLimitOrders = [];
 
+          const riskPctStr = (order.riskPct ?? 2.0).toFixed(1);
           const msg = `🚀 [ORDER_FILLED] Limit ${order.direction} triggered on ${order.symbol} @ $${order.entryPrice.toFixed(
             2,
-          )} | Size: ${order.contractSize} ($${order.riskUsd.toFixed(2)} Risk, 2% Compounded).`;
+          )} | Size: ${order.contractSize} ($${order.riskUsd.toFixed(2)} Risk, ${riskPctStr}% Compounded).`;
           this.emit("ORDER_FILLED", msg, order);
           break;
         }

@@ -195,7 +195,7 @@ export class TelegramNotifier {
           `━━━━━━━━━━━━━━━━━━━━\n` +
           targetBlocks +
           `━━━━━━━━━━━━━━━━━━━━\n` +
-          `💵 <b>Risk USD:</b> <code>$${pos.riskUsd.toFixed(2)}</code> (2.0% Compounded)\n` +
+          `💵 <b>Risk USD:</b> <code>$${pos.riskUsd.toFixed(2)}</code> (${(pos.riskPct ?? 2.0).toFixed(1)}% Compounded)\n` +
           `📐 <b>Size:</b> <code>${pos.contractSize} contracts</code>\n` +
           `🏛️ <b>Anchor:</b> <i>${pos.anchorName || '5m Structural Liquidity'}</i>\n` +
           `⏰ <b>Time:</b> <code>${nowIso}</code>`
@@ -218,8 +218,8 @@ export class TelegramNotifier {
           `🧭 <b>Direction:</b> <b>${dirEmoji}</b>\n` +
           `🎯 <b>Unfilled Limit:</b> <code>$${pos.limitEntryPrice.toFixed(2)}</code>\n` +
           `🛑 <b>Stop Loss:</b> <code>$${pos.initialStopLoss.toFixed(2)}</code>\n` +
-          `🏛️ <b>Anchor:</b> <i>${pos.anchorName || '5m Structural Liquidity'}</i>\n` +
-          `ℹ️ <b>Status:</b> ${statusDetail}\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `ℹ️ <b>Reason:</b> <i>${statusDetail}</i>\n` +
           `⏰ <b>Time:</b> <code>${nowIso}</code>`
         );
       }
@@ -242,7 +242,7 @@ export class TelegramNotifier {
           `⚡ <b>Fill Price:</b> <code>$${pos.entryPrice.toFixed(2)}</code>\n` +
           `🛑 <b>Stop Loss:</b> <code>$${pos.activeStopLoss.toFixed(2)}</code>\n` +
           `📐 <b>Contract Size:</b> <code>${pos.contractSize} contracts</code>\n` +
-          `💵 <b>Initial Risk:</b> <code>$${pos.riskUsd.toFixed(2)}</code>\n` +
+          `💵 <b>Initial Risk:</b> <code>$${pos.riskUsd.toFixed(2)}</code> (${(pos.riskPct ?? 2.0).toFixed(1)}% Compounded)\n` +
           `━━━━━━━━━━━━━━━━━━━━\n` +
           targetBlocks +
           `⏰ <b>Time:</b> <code>${nowIso}</code>`
