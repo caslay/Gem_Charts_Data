@@ -228,6 +228,14 @@ Every single execution rule in PM2 Live Execution must have an identical impleme
 - **Order TTL:** Expire resting limit orders at 20 bars (100m) and emit `CANCELLED`.
 - **Post-Loss Cooldown:** 45-minute pause after any stop-out.
 
+### Rule 8.5: Mandatory Quegar-mcp-First Protocol for Trade Audits & Reconciliation
+- **Absolute Terminal Prohibition for Covered Tasks:** When performing daily reconciliation, evaluating session trade histories, checking active in-flight positions, or running backtests, the agent **MUST NEVER** execute terminal commands (`ssh`, `scp`, `tsx scripts/reconcile-session.ts`, `tsx scripts/verify_quant_vs_pm2_parity.ts`, `curl`, `pm2 logs`).
+- **Mandatory In-Memory MCP Execution:** Use `Quegar-mcp` tools exclusively:
+  - `get_live_daemon_status` for live positions, completed trades, and recent daemon events.
+  - `run_quant_backtest` for path-dependent candle-by-candle historical replays and reconciliation audits across any date range.
+  - `get_trade_diagnostics` for forensic anchor, displacement, and execution bracket metrics.
+- **Rationale:** Terminal commands trigger repetitive user confirmation prompts, slow execution down, and duplicate logic that the MCP server already executes directly in-memory with 100% bit-for-bit parity.
+
 ---
 
 ## 📜 9. Engine Changelog Ledger

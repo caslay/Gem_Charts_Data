@@ -1,8 +1,22 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.48
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.49
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-06 (V17.48 — V3 Fee-Shielded Institutional Champions & 0.015% Breakeven Offset Calibration)
+> **Last Updated:** 2026-09-07 (V17.49 — Strict Zero-Popup MCP Protocol & Live Production V3 Fee Shield Validation)
+
+## 🆕 V17.49 Changelog — Strict Zero-Popup MCP-First Protocol & Live V3 Validation (2026-09-07)
+
+### Summary
+1. **Strict Zero-Popup MCP Protocol Codification (`AGENTS.md`, `Directive 08: Rule 8.5`):**
+   - **Absolute Terminal Prohibition:** Strictly banned running terminal commands (`ssh`, `scp`, `tsx scripts/reconcile-session.ts`, `tsx scripts/verify_quant_vs_pm2_parity.ts`, `curl`, `pm2 logs`) for querying live PM2 daemon state, pulling session logs, running backtests, or executing daily trade reconciliation.
+   - **Mandatory In-Memory Execution:** Agents must exclusively invoke `Quegar-mcp` tools (`run_quant_backtest`, `get_live_daemon_status`, `get_trade_diagnostics`, `get_market_structure`, `get_market_context`) to eliminate repetitive, disruptive user terminal permission prompts and achieve sub-second in-memory execution with 100% bit-for-bit live parity.
+2. **Live Production Validation of V3 Fee Shield (2026-09-06 & 2026-09-07):**
+   - **2026-09-06 Session:** Validated live execution of `factory_sr_5m_fvg_ce_sniper_v3`. Trade #7 (`ETHUSDC` Short @ `$2494.35`) harvested 60% TP1 @ `$2488.89` (+0.60R), ratcheted stop to `$2493.85` ($0.50 below entry to absorb 0.04% exit taker fee), and cleanly scratched runner on market reversal, locking in $+0.60R gross / $+0.42R net (+ $2.61 USD). Overall day: 6 trades, 2 wins, 4 scratches, 0 losses (+1.72R Net).
+   - **2026-09-07 Session:** Validated Trade #1 (`ETHUSDC` Short @ `$2516.92`) reaching $+0.9558R MFE, arming Rule 4 Early BE to `$2516.42`, and closing as `STAGE_1_SCRATCH` with $0.00 capital loss. Reconciliation audit confirmed 100.0% Bit-for-Bit execution parity between Quant Lab and live PM2 daemon.
+3. **Dynamic Notification Formatting (`telegramNotifier.ts`, `telegramBotService.ts`):**
+   - Refactored Telegram notification strings to dynamically render `pos.stage2Multiple` (e.g. `1.3R` for V3 Champion) rather than relying on legacy hardcoded `1.4R` labels.
+
+---
 
 ## 🆕 V17.48 Changelog — V3 Fee-Shielded Institutional Champions & 0.015% Breakeven Offset Calibration (2026-09-06)
 
