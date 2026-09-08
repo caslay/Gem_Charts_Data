@@ -872,7 +872,7 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
     enableEarlyBreakeven: pConfig.enableEarlyBreakeven ?? true,
     earlyBreakevenMultiple: effectiveEarlyBE,
     enableFeePaddedBreakeven: options.enable_fee_padded_breakeven !== undefined ? options.enable_fee_padded_breakeven : (pConfig.enableFeePaddedBreakeven ?? true),
-    breakevenOffsetPct: options.breakeven_offset_pct !== undefined ? options.breakeven_offset_pct : (pConfig.breakevenOffsetPct ?? 0.05),
+    breakevenOffsetPct: options.breakeven_offset_pct !== undefined ? options.breakeven_offset_pct : (pConfig.breakevenOffsetPct ?? 0.015),
     postLossCooldownMinutes: pConfig.postLossCooldownMinutes ?? 0,
   };
 
@@ -1056,9 +1056,9 @@ export async function runGetTradeDiagnostics(options: TradeDiagnosticsOptions = 
     enforceHtfBiasGuard: false,
     enableEarlyBreakeven: true,
     earlyBreakevenMultiple: 0.40,
-    enableFeePaddedBreakeven: true,
-    breakevenOffsetPct: 0.05,
-    postLossCooldownMinutes: 0,
+    enableFeePaddedBreakeven: pConfig.enableFeePaddedBreakeven ?? true,
+    breakevenOffsetPct: pConfig.breakevenOffsetPct ?? 0.015,
+    postLossCooldownMinutes: pConfig.postLossCooldownMinutes ?? 0,
   };
 
   const engine = new SweepReclaimEngine(scanConfig);

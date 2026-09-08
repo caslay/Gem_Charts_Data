@@ -1,8 +1,30 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.51
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.52
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-08 (V17.51 — Dynamic Risk Percentage Formatting & Outcome-Parity Reconciliation Scoring)
+> **Last Updated:** 2026-09-08 (V17.52 — Permanent Quant Lab ≡ Live PM2 100% Bit-for-Bit Parity Hardening & Next-Bar Ratchet Rule Physical Realism)
+
+## 🆕 V17.52 Changelog — Permanent Quant Lab ≡ Live PM2 100% Bit-for-Bit Parity Hardening (2026-09-08)
+
+### Summary
+1. **Resolution of Entry-Bar Pre-Fill Sequence Illusion (`SweepReclaimEngine.ts`):**
+   - **Root Cause Forensic Discovery:** Previously on entry bar `i === retestIdx`, `maxFavorablePrice` unconditionally captured `high` (for longs) or `low` (for shorts). When price opened above entry and wicked up before plunging down into the resting buy limit order, `high` was pre-entry price action. Quant Lab credited this pre-fill wick as MFE, artificially triggered Rule 4 Early Breakeven, and erroneously converted real exchange stop-outs (e.g. 2026-09-08 08:50 Cairo trade `SR_BULL_SWING_PIVOT_2473.74`) into phantom `BE SCRATCH WIN 0R` trades.
+   - **Physical Candlestick Physics Fix:** When a bar opens above entry and closes underwater (`open > executionEntry && close <= executionEntry` for longs, or `open < executionEntry && close >= executionEntry` for shorts), the opposite extreme occurred strictly BEFORE the fill dip/rally. Post-fill favorable excursion on that bar is physically bounded by `executionEntry` (MFE = 0.00R). Full extreme-wick MFE tracking commences on bar `i > retestIdx`.
+   - **Parity Proof:** 2026-09-08 08:50 Cairo trade now registers as `STOPPED_OUT (-1.00R | -$1.56 USD)`, achieving 100% bit-for-bit mathematical identity with live PM2 execution.
+2. **Valuation Gate Boolean Inversion Guard (`AutomatedStrategyExecutionEngine.ts`):**
+   - Fixed `!settings.enforceDiscountPremiumGate` missing nullish coalescing. Replaced with `!(settings.enforceDiscountPremiumGate ?? true)`, preventing silent disabling of the Discount/Premium structural valuation gate when undefined.
+3. **Harmonized Fallback Defaults Across Telemetry Stack:**
+   - Unified conflicting defaults across 5 files (`SweepReclaimEngine.ts`, `AutomatedStrategyExecutionEngine.ts`, `headless-daemon.ts`, `LiveOrderBlockModal.tsx`, `SweepReclaimWorkspace.tsx`, `agentEngineHandlers.ts`):
+     - `maxBarsToRetest`: Standardized from legacy `12` and `20` to V3 Champion standard `15` bars (75-min TTL).
+     - `stage2Multiple`: Standardized from legacy `1.40` to V3 Champion standard `1.30`.
+     - `stage1Ratio` / `stage2Ratio`: Standardized from legacy `0.50 / 0.50` to V3 Champion standard `0.60 / 0.40`.
+     - `breakevenOffsetPct`: Standardized from legacy `0.05` to calibrated V3 Fee Shield standard `0.015%`.
+     - `volumeExpansionThreshold`: Standardized from `1.20` and `1.35` to V3 Champion standard `1.10x`.
+     - `bodyRatioThreshold`: Standardized from `0.50` to `0.40`.
+4. **Pre-Fill Missed TP1 Invalidation Priority (`SweepReclaimEngine.ts`):**
+   - In Phase 4 retest search, candles opening past Target 1 (`open >= target1` for longs, `open <= target1` for shorts) or Stop Loss are invalidated immediately before evaluating intra-candle entry touch, guaranteeing zero lookahead race conditions.
+
+---
 
 ## 🆕 V17.51 Changelog — Dynamic Risk Formatting & Exact-Outcome Parity Scoring (2026-09-08)
 
