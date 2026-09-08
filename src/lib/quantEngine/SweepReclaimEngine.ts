@@ -406,9 +406,9 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   lookbackInternal: 5,
   maxBarsAnchorToSweep: 25,
   maxBarsSweepToReclaim: 10,
-  maxBarsToRetest: 12,
+  maxBarsToRetest: 15,
   volumeSmaPeriod: 20,
-  volumeExpansionThreshold: 1.20,
+  volumeExpansionThreshold: 1.10,
   deltaDominanceThreshold: 52.0,
   bodyRatioThreshold: 0.40,
   requireThreePillarDisplacement: true,
@@ -422,16 +422,16 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   enforceSinglePositionConcurrency: true,
   pullbackExcursionThreshold: 0.5,
   stage1Multiple: 1.0,
-  stage2Multiple: 1.4,
+  stage2Multiple: 1.30,
   stage3Multiple: 3.0,
-  stage1Ratio: 0.50,
-  stage2Ratio: 0.50,
+  stage1Ratio: 0.60,
+  stage2Ratio: 0.40,
   stage3Ratio: 0.00,
-  entryMode: 'FVG_PROXIMAL',
+  entryMode: 'FVG_CE',
   enableStructuralTrail: true,
-  enableProfitRatchet: true,
+  enableProfitRatchet: false,
   enableFeePaddedBreakeven: true,
-  breakevenOffsetPct: 0.05,
+  breakevenOffsetPct: 0.015,
   minSweepDepthAtrMultiplier: 0.10,
   slBufferAtrMultiplier: 0.10,
 };
@@ -964,16 +964,16 @@ export class SweepReclaimEngine {
       }
     }
 
-    const volumeExpansionThreshold = this.config.volumeExpansionThreshold ?? 1.35;
+    const volumeExpansionThreshold = this.config.volumeExpansionThreshold ?? 1.10;
     const deltaDominanceThreshold = this.config.deltaDominanceThreshold ?? 52.0;
-    const bodyRatioThreshold = this.config.minBodyRatio ?? this.config.bodyRatioThreshold ?? 0.50;
+    const bodyRatioThreshold = this.config.minBodyRatio ?? this.config.bodyRatioThreshold ?? 0.40;
     const requireThreePillar = this.config.requireThreePillarDisplacement !== false;
     const enforceDiscountPremium = !!this.config.enforceDiscountPremiumGate;
 
     const stage1Multiple = this.config.stage1Multiple ?? 1.0;
-    const stage2Multiple = this.config.stage2Multiple ?? 1.4;
+    const stage2Multiple = this.config.stage2Multiple ?? 1.30;
     const stage3Multiple = this.config.stage3Multiple ?? 3.0;
-    const entryMode = this.config.entryMode ?? 'FVG_PROXIMAL';
+    const entryMode = this.config.entryMode ?? 'FVG_CE';
 
     // ── Phase 1, 2, 3: Extract and Evaluate All Candidate Setups Across History ──
     const allCandidateSetups: SweepReclaimSetup[] = [];
@@ -2001,7 +2001,7 @@ export class SweepReclaimEngine {
         continue;
       }
 
-      const effectiveMaxRetestIdx = Math.min(n - 1, reclaimIdx + (this.config.maxBarsToRetest ?? 12));
+      const effectiveMaxRetestIdx = Math.min(n - 1, reclaimIdx + (this.config.maxBarsToRetest ?? 15));
       let retestFound = false;
       let retestIdx: number | null = null;
       let retestPrice: number | null = null;
@@ -2018,6 +2018,20 @@ export class SweepReclaimEngine {
         const close = c.c ?? (c as any).close;
 
         if (isBullish) {
+          // 0. Gapped / opened past target or stop before any intra-candle ticks:
+          if (open >= target1) {
+            baseSetup.status = 'RECLAIMED_NO_RETEST';
+            baseSetup.simulated_outcome = 'NO_RETEST';
+            baseSetup.stage_exit_type = 'NO_RETEST';
+            break;
+          }
+          if (open <= stopLoss) {
+            baseSetup.status = 'INVALIDATED_AT_RETEST';
+            baseSetup.simulated_outcome = 'NO_RETEST';
+            baseSetup.stage_exit_type = 'NO_RETEST';
+            break;
+          }
+
           // 1. Retest Fill: If price dipped to or below limit entry on this candle, order fills!
           if (low <= executionEntry) {
             retestFound = true;
@@ -2030,7 +2044,7 @@ export class SweepReclaimEngine {
 
           // 2. Pre-fill target invalidation (MISSED_TP1_EXPANSION):
           // Only triggers if price reached target 1 WITHOUT touching entry (low > executionEntry)
-          if (open >= target1 || high >= target1) {
+          if (high >= target1) {
             baseSetup.status = 'RECLAIMED_NO_RETEST';
             baseSetup.simulated_outcome = 'NO_RETEST';
             baseSetup.stage_exit_type = 'NO_RETEST';
@@ -2038,13 +2052,27 @@ export class SweepReclaimEngine {
           }
 
           // 3. Pre-fill stop loss breach (price dumped past SL without touching entry)
-          if (open <= stopLoss || low <= stopLoss) {
+          if (low <= stopLoss) {
             baseSetup.status = 'INVALIDATED_AT_RETEST';
             baseSetup.simulated_outcome = 'NO_RETEST';
             baseSetup.stage_exit_type = 'NO_RETEST';
             break;
           }
         } else {
+          // 0. Gapped / opened past target or stop before any intra-candle ticks:
+          if (open <= target1) {
+            baseSetup.status = 'RECLAIMED_NO_RETEST';
+            baseSetup.simulated_outcome = 'NO_RETEST';
+            baseSetup.stage_exit_type = 'NO_RETEST';
+            break;
+          }
+          if (open >= stopLoss) {
+            baseSetup.status = 'INVALIDATED_AT_RETEST';
+            baseSetup.simulated_outcome = 'NO_RETEST';
+            baseSetup.stage_exit_type = 'NO_RETEST';
+            break;
+          }
+
           // 1. Retest Fill: If price rallied to or above limit entry on this candle, order fills!
           if (high >= executionEntry) {
             retestFound = true;
@@ -2057,7 +2085,7 @@ export class SweepReclaimEngine {
 
           // 2. Pre-fill target invalidation (MISSED_TP1_EXPANSION):
           // Only triggers if price reached target 1 WITHOUT touching entry (high < executionEntry)
-          if (open <= target1 || low <= target1) {
+          if (low <= target1) {
             baseSetup.status = 'RECLAIMED_NO_RETEST';
             baseSetup.simulated_outcome = 'NO_RETEST';
             baseSetup.stage_exit_type = 'NO_RETEST';
@@ -2065,7 +2093,7 @@ export class SweepReclaimEngine {
           }
 
           // 3. Pre-fill stop loss breach (price rallied past SL without touching entry)
-          if (open >= stopLoss || high >= stopLoss) {
+          if (high >= stopLoss) {
             baseSetup.status = 'INVALIDATED_AT_RETEST';
             baseSetup.simulated_outcome = 'NO_RETEST';
             baseSetup.stage_exit_type = 'NO_RETEST';
@@ -2142,33 +2170,46 @@ export class SweepReclaimEngine {
 
       const enableStructuralTrail = this.config.enableStructuralTrail !== false;
       const enableProfitRatchet = this.config.enableProfitRatchet !== false;
-      const w1 = typeof this.config.stage1Ratio === 'number' ? this.config.stage1Ratio : 0.50;
-      const w2 = typeof this.config.stage2Ratio === 'number' ? this.config.stage2Ratio : 0.50;
+      const w1 = typeof this.config.stage1Ratio === 'number' ? this.config.stage1Ratio : 0.60;
+      const w2 = typeof this.config.stage2Ratio === 'number' ? this.config.stage2Ratio : 0.40;
       const w3 = typeof this.config.stage3Ratio === 'number' ? this.config.stage3Ratio : 0.00;
 
       for (let i = retestIdx; i < n; i++) {
         if (!positionOpen) break;
 
         const c = candles[i];
+        const open = c.o ?? (c as any).open;
         const high = c.h ?? (c as any).high;
         const low = c.l ?? (c as any).low;
+        const close = c.c ?? (c as any).close;
 
         if (isBullish) {
-          if (high > maxFavorablePrice) maxFavorablePrice = high;
+          // 🔬 Physically Proven Next-Bar Entry Ratchet Rule:
+          // On bar i === retestIdx:
+          // - If candle opened above entry and closed underwater (open > executionEntry && close <= executionEntry),
+          //   the high wick occurred BEFORE the fill dip. Post-fill favorable excursion is zero (executionEntry).
+          // - If candle closed above entry (close > executionEntry), price recovered favorably after fill.
+          // Full high-wick tracking begins on bar i > retestIdx.
+          const isUnderwaterEntryBar = i === retestIdx && open > executionEntry && close <= executionEntry;
+          if (isUnderwaterEntryBar) {
+            maxFavorablePrice = executionEntry;
+          } else {
+            if (high > maxFavorablePrice) maxFavorablePrice = high;
+          }
           if (low < maxAdversePrice) maxAdversePrice = low;
 
           const initialBarSL = activeStopLoss;
-          const hitStage1 = high >= target1;
-          const hitStage2 = high >= target2;
-          const hitStage3 = target3 !== null && high >= target3;
+          const hitStage1 = isUnderwaterEntryBar ? false : (high >= target1);
+          const hitStage2 = isUnderwaterEntryBar ? false : (high >= target2);
+          const hitStage3 = target3 !== null && (isUnderwaterEntryBar ? false : (high >= target3));
 
           let stageFilledThisBar = false;
 
           // Proactive Early Breakeven Ratchet (with Fee-Padded Breakeven & Breathing Room Guard)
           const enableEarlyBreakeven = this.config.enableEarlyBreakeven === true;
-          const earlyBreakevenMultiple = typeof this.config.earlyBreakevenMultiple === 'number' ? this.config.earlyBreakevenMultiple : 0.60;
+          const earlyBreakevenMultiple = typeof this.config.earlyBreakevenMultiple === 'number' ? this.config.earlyBreakevenMultiple : 0.40;
           const enableFeePaddedBreakeven = this.config.enableFeePaddedBreakeven === true;
-          const breakevenOffsetPct = typeof this.config.breakevenOffsetPct === 'number' ? this.config.breakevenOffsetPct : 0.05;
+          const breakevenOffsetPct = typeof this.config.breakevenOffsetPct === 'number' ? this.config.breakevenOffsetPct : 0.015;
 
           const feeOffsetPoints = enableFeePaddedBreakeven ? executionEntry * (breakevenOffsetPct / 100) : 0;
           const targetBreakevenPrice = executionEntry + feeOffsetPoints;
@@ -2284,21 +2325,32 @@ export class SweepReclaimEngine {
             break;
           }
         } else {
-          if (low < maxFavorablePrice) maxFavorablePrice = low;
+          // 🔬 Physically Proven Next-Bar Entry Ratchet Rule:
+          // On bar i === retestIdx:
+          // - If candle opened below entry and closed underwater (open < executionEntry && close >= executionEntry),
+          //   the low wick occurred BEFORE the fill rally. Post-fill favorable excursion is zero (executionEntry).
+          // - If candle closed below entry (close < executionEntry), price recovered favorably after fill.
+          // Full low-wick tracking begins on bar i > retestIdx.
+          const isUnderwaterEntryBar = i === retestIdx && open < executionEntry && close >= executionEntry;
+          if (isUnderwaterEntryBar) {
+            maxFavorablePrice = executionEntry;
+          } else {
+            if (low < maxFavorablePrice) maxFavorablePrice = low;
+          }
           if (high > maxAdversePrice) maxAdversePrice = high;
 
           const initialBarSL = activeStopLoss;
-          const hitStage1 = low <= target1;
-          const hitStage2 = low <= target2;
-          const hitStage3 = target3 !== null && low <= target3;
+          const hitStage1 = isUnderwaterEntryBar ? false : (low <= target1);
+          const hitStage2 = isUnderwaterEntryBar ? false : (low <= target2);
+          const hitStage3 = target3 !== null && (isUnderwaterEntryBar ? false : (low <= target3));
 
           let stageFilledThisBar = false;
 
           // Proactive Early Breakeven Ratchet (with Fee-Padded Breakeven & Breathing Room Guard)
           const enableEarlyBreakeven = this.config.enableEarlyBreakeven === true;
-          const earlyBreakevenMultiple = typeof this.config.earlyBreakevenMultiple === 'number' ? this.config.earlyBreakevenMultiple : 0.60;
+          const earlyBreakevenMultiple = typeof this.config.earlyBreakevenMultiple === 'number' ? this.config.earlyBreakevenMultiple : 0.40;
           const enableFeePaddedBreakeven = this.config.enableFeePaddedBreakeven === true;
-          const breakevenOffsetPct = typeof this.config.breakevenOffsetPct === 'number' ? this.config.breakevenOffsetPct : 0.05;
+          const breakevenOffsetPct = typeof this.config.breakevenOffsetPct === 'number' ? this.config.breakevenOffsetPct : 0.015;
 
           const feeOffsetPoints = enableFeePaddedBreakeven ? executionEntry * (breakevenOffsetPct / 100) : 0;
           const targetBreakevenPrice = executionEntry - feeOffsetPoints;

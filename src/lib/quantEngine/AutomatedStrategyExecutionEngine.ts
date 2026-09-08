@@ -873,8 +873,8 @@ export class AutomatedStrategyExecutionEngine {
           continue;
         }
 
-        // 2. TTL Expiry Guard (matching Quant Lab maxBarsToRetest: 20 bars / 100 minutes)
-        const maxRetestBars = this.config.liveSettings?.maxBarsToRetest ?? 20;
+        // 2. TTL Expiry Guard (matching Quant Lab maxBarsToRetest: 15 bars / 75 minutes)
+        const maxRetestBars = this.config.liveSettings?.maxBarsToRetest ?? 15;
         const tfMinutes = order.timeframe === "1h" ? 60 : order.timeframe === "15m" ? 15 : 5;
         const maxTtlMs = maxRetestBars * tfMinutes * 60 * 1000;
         const isExpired = order.pendingTime > 0 && (now - order.pendingTime) >= maxTtlMs;
@@ -1700,7 +1700,7 @@ export class AutomatedStrategyExecutionEngine {
         lookbackInternal: settings.lookbackInternal ?? 5,
         maxBarsAnchorToSweep: settings.maxBarsAnchorToSweep ?? 25,
         maxBarsSweepToReclaim: settings.maxBarsSweepToReclaim ?? 10,
-        maxBarsToRetest: settings.maxBarsToRetest ?? 20,
+        maxBarsToRetest: settings.maxBarsToRetest ?? 15,
         minSweepDepthAtrMultiplier: settings.minSweepDepthAtrMultiplier ?? 0.10,
         slBufferAtrMultiplier:
           settings.slBufferAtrMultiplier ??
@@ -1712,18 +1712,18 @@ export class AutomatedStrategyExecutionEngine {
         stage1Multiple:
           settings.stage1Multiple ?? this.config.stage1Multiple ?? 1.0,
         stage2Multiple:
-          settings.stage2Multiple ?? this.config.stage2Multiple ?? 1.4,
+          settings.stage2Multiple ?? this.config.stage2Multiple ?? 1.30,
         stage3Multiple:
           settings.stage3Multiple ?? this.config.stage3Multiple ?? 3.0,
         enableStructuralTrail:
-          settings.enableStructuralTrail ?? this.config.enableStructuralTrail ?? false,
+          settings.enableStructuralTrail ?? this.config.enableStructuralTrail ?? true,
         enableProfitRatchet:
           settings.enableProfitRatchet ?? this.config.enableProfitRatchet ?? false,
 
         // 3-Pillar Displacement Gatekeeper Thresholds
         volumeSmaPeriod: settings.volumeSmaPeriod ?? 20,
-        volumeExpansionThreshold: settings.volumeExpansionThreshold ?? 1.20,
-        deltaDominanceThreshold: settings.deltaDominanceThreshold ?? 50.0,
+        volumeExpansionThreshold: settings.volumeExpansionThreshold ?? 1.10,
+        deltaDominanceThreshold: settings.deltaDominanceThreshold ?? 52.0,
         bodyRatioThreshold: settings.bodyRatioThreshold ?? 0.40,
         requireThreePillarDisplacement:
           settings.requireThreePillarDisplacement ?? true,
@@ -1901,7 +1901,7 @@ export class AutomatedStrategyExecutionEngine {
             ? (isBullish ? s.entry_price <= Number(structuralEq) : s.entry_price >= Number(structuralEq))
             : true;
 
-          const isValuationGatePassed = !settings.enforceDiscountPremiumGate ||
+          const isValuationGatePassed = !(settings.enforceDiscountPremiumGate ?? true) ||
             (s.is_valuation_aligned && isStructuralAligned);
 
           const isConfirmed =

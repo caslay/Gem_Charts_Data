@@ -157,7 +157,7 @@ export default function SweepReclaimWorkspace({
   const [lookbackInternal, setLookbackInternal] = useState(5);
   const [maxBarsAnchorToSweep, setMaxBarsAnchorToSweep] = useState(25);
   const [maxBarsSweepToReclaim, setMaxBarsSweepToReclaim] = useState(10);
-  const [maxBarsToRetest, setMaxBarsToRetest] = useState(20);
+  const [maxBarsToRetest, setMaxBarsToRetest] = useState(15);
   const [minSweepDepthAtr, setMinSweepDepthAtr] = useState(0.10);
   const [slBufferAtr, setSlBufferAtr] = useState(0.10);
   const [showAdvancedControls, setShowAdvancedControls] = useState(false);
