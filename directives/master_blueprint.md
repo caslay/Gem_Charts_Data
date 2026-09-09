@@ -1,10 +1,38 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.58
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.59
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-09 (V17.58 — Crowned 3m SFP Shelf-Snap Liquidity Hunter Platform Default & Parity Deployment)
+> **Last Updated:** 2026-09-09 (V17.59 — 3m Low-Timeframe Taker Fee Forensic, Institutional Champion Restoration & Deployment)
 
-## 🆕 V17.58 Changelog — Crowned 3m SFP Shelf-Snap Liquidity Hunter Platform Default & Parity Deployment (2026-09-09)
+## 🆕 V17.59 Changelog — 3m Low-Timeframe Taker Fee Forensic, Institutional Champion Restoration & Deployment (2026-09-09)
+
+### Summary
+1. **Microstructure & Parity Forensic Investigation (3m SFP vs Quant Lab Reality):**
+   - **Root Cause Forensic:** User reported that while an initial scratch study script showed high win rates, testing the 3m SFP preset (`factory_sr_3m_sfp_shelf_sniper`) in Quant Lab produced deep negative returns (-21.68R Net, 0.93 PF, -32.3% ROI across 12,000 candles).
+   - **Identified Failure Mechanisms:**
+     1. *Same-Bar Retest Sequence Illusion in Scratch Script:* The scratch script evaluated entry starting on bar $f = i$ (reclaim bar). Since the sweep breached the anchor on bar $i$, $c.l \le \text{anchor}$ was retroactively true, faking an immediate entry at the shelf. In real PM2 physics (`SweepReclaimEngine.ts`), resting limits can only be armed after bar $i$ closes ($i+1$). On future bars, 82% of setups never touched the shelf again, and the few that did plunged down through the stop loss.
+     2. *Taker Fee Grinder on 3m:* Tight 0.05 ATR stop wicks clamped to 0.15% minimum distance ($3.00 on ETH). Under 2% risk, effective leverage is $13.3\times$. Taker exit fee of 0.04% on notional equals $0.267\text{R}$ per loss! Across 273 losses, taker fees alone drained **67.31R ($868.05)**, turning a +45.63R gross return into a -21.68R net loss!
+     3. *Greed Drag / Breakeven Inversion:* Preset configured `stage1Multiple: 2.50`, `stage2Multiple: 5.00`, and `earlyBreakevenMultiple: 2.50`. Zero scratches occurred (`be_scratches: 0`). Reversals from +2.0R MFE were never protected and crashed into full $-1.27\text{R}$ stops.
+     4. *Micro-Pivot Noise:* 3m charts generated Level 0 `INNER` swing pivots (3-bar wiggles, 9 minutes wide). Over 80% of trades were stopped out on random noise wiggles rather than institutional liquidity pools.
+2. **Codebase Restoration & Hardening:**
+   - `src/lib/quantEngine/scannerPresets.ts`:
+     - Restored `factory_sr_5m_fvg_ce_sniper_v3` to Index 0 as the platform default champion.
+     - Added `factory_sr_15m_macro_sniper_v1` (15m Macro Champion: 70% TP1 @ 1.0R / 30% TP2 @ 1.35R, Early BE @ +0.35R, Rule 6 Dead Zone Filter) to Index 1.
+     - Demoted `factory_sr_3m_sfp_shelf_sniper` to experimental status with explicit fee drag warnings.
+     - Updated `getActivePresetId()` and `getArmedExecutionStatus()` to auto-migrate away from `factory_sr_3m_sfp_shelf_sniper` and fallback to `factory_sr_5m_fvg_ce_sniper_v3`.
+   - `src/lib/quantEngine/strategyExecutionConfig.ts`:
+     - Restored `DEFAULT_SR_LIVE_SETTINGS` to 5m V3 Champion (`enabledTimeframes: ['5m']`, `entryMode: 'FVG_CE'`, `stage1Multiple: 1.0`, `stage2Multiple: 1.30`, `slBufferAtrMultiplier: 0.10`, `earlyBreakevenMultiple: 0.40`, `breakevenOffsetPct: 0.015`).
+   - `src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`:
+     - Restored `DEFAULT_AUTOMATED_CONFIG` to 5m V3 Champion defaults.
+   - `src/components/quantLab/SweepReclaimWorkspace.tsx`:
+     - Restored default form states to 5m V3 Champion.
+     - Expanded `handleApplyPreset` timeframe typing to safely accept `'1m' | '3m' | '5m' | '15m' | '1h' | '4h'`.
+3. **Build, Deployment & MCP Parity Re-Verification:**
+   - 100% TypeScript type safety verified with `npx tsc --noEmit` (0 errors).
+   - Production bundle compiled with `npm run build` and synchronized to Tokyo VPS (`57.181.64.238`).
+   - PM2 daemon and server restarted online.
+   - Re-verified via `Quegar-mcp`: `factory_sr_15m_macro_sniper_v1` achieves **+34.52R Net Realized Return** (+132.5% 1-year ROI from $1,000 to $2,325.35 at 2% compounding risk, 59.3% ex-scratch win rate, only 39.84R fees across 365 days).
+
 
 ### Summary
 1. **Platform-Wide Default Deployment of 3m SFP Shelf-Snap Liquidity Hunter Champion:**
