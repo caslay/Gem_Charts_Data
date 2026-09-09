@@ -25,6 +25,9 @@ export const SUPPORTED_OB_TIMEFRAMES = ['5m', '15m', '1h'] as const;
 export type SupportedOBTimeframe = typeof SUPPORTED_OB_TIMEFRAMES[number];
 export const DEFAULT_ENABLED_TIMEFRAMES: SupportedOBTimeframe[] = ['5m', '15m', '1h'];
 
+export const SUPPORTED_SR_TIMEFRAMES = ['3m', '5m', '15m', '1h'] as const;
+export type SupportedSRTimeframe = typeof SUPPORTED_SR_TIMEFRAMES[number];
+
 export interface StrategyAutoExecState {
   isOrderBlockAutoExecEnabled: boolean;
   isSweepReclaimAutoExecEnabled: boolean;
@@ -41,7 +44,7 @@ export type LiveSessionKillzone = 'ASIAN' | 'LONDON' | 'NY';
 
 export interface SweepReclaimLiveSettings {
   compoundingRiskPct: number; // 1.0, 2.0, 3.0 (default: 2.0)
-  enabledTimeframes: SupportedOBTimeframe[]; // ['5m', '15m', '1h'] (default: ['5m', '15m', '1h'])
+  enabledTimeframes: SupportedSRTimeframe[]; // ['3m', '5m', '15m', '1h'] (default: ['3m'])
   anchorTypes: ('SWING_PIVOT' | 'ASIAN' | 'LONDON' | 'DAILY')[]; // default: ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY']
   entryMode: SweepReclaimEntryMode; // default: 'SWEEP_OB_MT'
   volumeSmaPeriod?: number; // default: 20 (lookback period for Volume SMA)
@@ -75,9 +78,22 @@ export interface SweepReclaimLiveSettings {
   minSweepDepthAtrMultiplier: number; // default: 0.10
   slBufferAtrMultiplier: number; // default: 0.10
 
+  // 🎯 Pillar 4 Dynamic Liquidity Targets & MSS Confirmation
+  targetMode?: 'FIXED_RR' | 'DYNAMIC_LIQUIDITY' | 'HYBRID_LIQUIDITY'; // default: 'FIXED_RR'
+  dynamicTp1Source?: 'DEALING_RANGE_EQ' | 'FIXED_RR'; // default: 'FIXED_RR'
+  dynamicTp2Source?: 'OPPOSING_LIQUIDITY' | 'FIXED_RR'; // default: 'FIXED_RR'
+  minDynamicTp1Multiple?: number; // Minimum R for TP1 when dynamic (default: 0.80)
+  maxDynamicTp1Multiple?: number; // Maximum R for TP1 when dynamic (default: 1.50)
+  minDynamicTp2Multiple?: number; // Minimum R for TP2 when dynamic (default: 1.30)
+  maxDynamicTp2Multiple?: number; // Maximum R for TP2 when dynamic (default: 3.50)
+  requireMssConfirmation?: boolean; // Require internal swing break before arming (default: false)
+  mssLookbackBars?: number; // Lookback bars to locate internal swing high/low to break (default: 15)
+  maxBarsSweepToMss?: number; // Max candles from sweep extreme to MSS close (default: 8)
+
   // 🛡️ Quant Shield & Loss Streak Protection Settings (5 Institutional Rules)
   enableWaveDeduplication: boolean; // Rule 1: Prune duplicate multi-anchor triggers on same candle wave (default: true)
   filterWeekend: boolean; // Rule 2: Mute trading Fri 22:00 - Sun 20:00 UTC (default: true)
+  filterDeadZones: boolean; // Rule 6: Mute trading 17:00-19:00 UTC & 00:00 UTC (default: false)
   enforceHtfBiasGuard: boolean; // Rule 3: Restrict to Daily Bias & 1H Structure alignment (default: false)
   enableEarlyBreakeven: boolean; // Rule 4: Advance SL to Breakeven once floating MFE reaches threshold (default: true)
   earlyBreakevenMultiple: number; // Rule 4: MFE R-Multiple threshold for early breakeven ratchet (default: 0.60)
@@ -155,20 +171,20 @@ export const BINANCE_USDC_FEE_SCHEDULES: Record<BinanceFeeTier, BinanceFeeSchedu
 
 export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   compoundingRiskPct: 2.0,
-  enabledTimeframes: ['5m'],
-  anchorTypes: ['SWING_PIVOT', 'DAILY', 'ASIAN'],
-  entryMode: 'FVG_CE',
+  enabledTimeframes: ['3m'],
+  anchorTypes: ['SWING_PIVOT', 'DAILY', 'ASIAN', 'LONDON'],
+  entryMode: 'SHELF_LEVEL',
   volumeSmaPeriod: 20,
-  volumeExpansionThreshold: 1.10,
+  volumeExpansionThreshold: 1.25,
   deltaDominanceThreshold: 52.0,
   bodyRatioThreshold: 0.40,
   enforceDiscountPremiumGate: true,
   enableStructuralTrail: true,
   enableProfitRatchet: false,
   enableTp1AutoBreakeven: true,
-  stage1Multiple: 1.0,
-  stage2Multiple: 1.30,
-  stage3Multiple: 3.0,
+  stage1Multiple: 2.50,
+  stage2Multiple: 5.00,
+  stage3Multiple: 0.00,
   stage1Ratio: 0.60,
   stage2Ratio: 0.40,
   stage3Ratio: 0.00,
@@ -178,24 +194,37 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   enableMomentumOverride: true,
   sessionGates: ['ASIAN', 'LONDON', 'NY'],
   directionalLock: 'DUAL',
-  lookbackMajor: 10,
-  lookbackInternal: 5,
-  maxBarsAnchorToSweep: 25,
+  lookbackMajor: 15,
+  lookbackInternal: 8,
+  maxBarsAnchorToSweep: 30,
   maxBarsSweepToReclaim: 10,
-  maxBarsToRetest: 15,
+  maxBarsToRetest: 10,
   requireThreePillarDisplacement: true,
-  minSweepDepthAtrMultiplier: 0.10,
-  slBufferAtrMultiplier: 0.10,
+  minSweepDepthAtrMultiplier: 0.15,
+  slBufferAtrMultiplier: 0.05,
 
-  // Quant Shield Defaults (FVG CE Fee Shield V3 All-Time Champion Verified)
+  // Quant Shield Defaults (3m SFP Shelf-Snap Liquidity Hunter Champion Verified)
   enableWaveDeduplication: true,
-  filterWeekend: false,
+  filterWeekend: true,
+  filterDeadZones: true,
   enforceHtfBiasGuard: false,
   enableEarlyBreakeven: true,
-  earlyBreakevenMultiple: 0.40,
+  earlyBreakevenMultiple: 2.50,
   enableFeePaddedBreakeven: true,
   breakevenOffsetPct: 0.015, // 🔬 Calibrated 0.015% Fee Shield
-  postLossCooldownMinutes: 0,
+  postLossCooldownMinutes: 45,
+
+  // 🎯 Dynamic Liquidity & MSS Confirmation Defaults
+  targetMode: 'FIXED_RR',
+  dynamicTp1Source: 'DEALING_RANGE_EQ',
+  dynamicTp2Source: 'OPPOSING_LIQUIDITY',
+  minDynamicTp1Multiple: 0.80,
+  maxDynamicTp1Multiple: 1.50,
+  minDynamicTp2Multiple: 1.30,
+  maxDynamicTp2Multiple: 3.50,
+  requireMssConfirmation: false,
+  mssLookbackBars: 15,
+  maxBarsSweepToMss: 8,
 
   // 💰 Institutional Binance Fee Model
   makerFeePct: 0.0000,
@@ -489,28 +518,31 @@ export function getSweepReclaimLiveSettings(): SweepReclaimLiveSettings {
     if (!item) return { ...DEFAULT_SR_LIVE_SETTINGS };
     const parsed = JSON.parse(item);
 
-    // 🔬 Auto-upgrade legacy V2 stored settings to crowned V3 Champion
+    // 🔬 Auto-upgrade legacy stored settings to crowned 3m SFP Champion
     let hasMigrated = false;
-    if (parsed.stage2Multiple === 1.4 && (parsed.stage2Ratio === 0.50 || parsed.stage1Ratio === 0.50)) {
-      parsed.stage2Multiple = 1.30;
+    if (parsed.entryMode === 'FVG_CE' || parsed.entryMode === 'FVG_PROXIMAL' || (parsed.enabledTimeframes && parsed.enabledTimeframes.includes('5m') && !parsed.enabledTimeframes.includes('3m'))) {
+      parsed.entryMode = 'SHELF_LEVEL';
+      parsed.enabledTimeframes = ['3m'];
+      parsed.stage1Multiple = 2.50;
+      parsed.stage2Multiple = 5.00;
       parsed.stage1Ratio = 0.60;
       parsed.stage2Ratio = 0.40;
+      parsed.stage3Ratio = 0.00;
+      parsed.earlyBreakevenMultiple = 2.50;
+      parsed.slBufferAtrMultiplier = 0.05;
+      parsed.minSweepDepthAtrMultiplier = 0.15;
+      parsed.volumeExpansionThreshold = 1.25;
+      parsed.lookbackMajor = 15;
+      parsed.lookbackInternal = 8;
+      parsed.maxBarsAnchorToSweep = 30;
+      parsed.maxBarsToRetest = 10;
+      parsed.postLossCooldownMinutes = 45;
+      parsed.filterWeekend = true;
+      parsed.filterDeadZones = true;
       hasMigrated = true;
     }
     if (parsed.breakevenOffsetPct === 0.05) {
       parsed.breakevenOffsetPct = 0.015;
-      hasMigrated = true;
-    }
-    if (parsed.volumeExpansionThreshold === 1.20) {
-      parsed.volumeExpansionThreshold = 1.10;
-      hasMigrated = true;
-    }
-    if (parsed.maxBarsToRetest === 20) {
-      parsed.maxBarsToRetest = 15;
-      hasMigrated = true;
-    }
-    if (Array.isArray(parsed.anchorTypes) && !parsed.anchorTypes.includes('ASIAN')) {
-      parsed.anchorTypes = ['SWING_PIVOT', 'DAILY', 'ASIAN'];
       hasMigrated = true;
     }
 
@@ -600,9 +632,9 @@ export function useSweepReclaimLiveSettings() {
     return next;
   }, []);
 
-  const toggleTimeframe = useCallback((tf: SupportedOBTimeframe) => {
+  const toggleTimeframe = useCallback((tf: SupportedSRTimeframe) => {
     const current = getSweepReclaimLiveSettings();
-    let nextTfs: SupportedOBTimeframe[];
+    let nextTfs: SupportedSRTimeframe[];
     if (current.enabledTimeframes.includes(tf)) {
       if (current.enabledTimeframes.length <= 1) return current.enabledTimeframes;
       nextTfs = current.enabledTimeframes.filter(t => t !== tf);

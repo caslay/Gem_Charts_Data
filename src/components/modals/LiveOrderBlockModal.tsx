@@ -48,6 +48,7 @@ import {
 import {
   BinanceFeeTier,
   BINANCE_USDC_FEE_SCHEDULES,
+  SupportedSRTimeframe,
 } from '@/lib/quantEngine/strategyExecutionConfig';
 import {
   SweepReclaimEntryMode,
@@ -92,9 +93,9 @@ function LiveOrderBlockModalContent({
   const [showAdvancedControls, setShowAdvancedControls] = useState(false);
 
   // Multi-Timeframe Stream Ingestion state
-  const enabledTimeframes = srSettings?.enabledTimeframes || ['5m', '15m', '1h'];
-  const toggleTimeframeStream = (tf: '5m' | '15m' | '1h') => {
-    let next: ('5m' | '15m' | '1h')[];
+  const enabledTimeframes = srSettings?.enabledTimeframes || ['3m', '5m', '15m', '1h'];
+  const toggleTimeframeStream = (tf: SupportedSRTimeframe) => {
+    let next: SupportedSRTimeframe[];
     if (enabledTimeframes.includes(tf)) {
       if (enabledTimeframes.length <= 1) return;
       next = enabledTimeframes.filter(t => t !== tf);
@@ -103,7 +104,7 @@ function LiveOrderBlockModalContent({
     }
     updateSrSettings({ enabledTimeframes: next });
   };
-  const isTimeframeStreamEnabled = (tf: '5m' | '15m' | '1h') => enabledTimeframes.includes(tf);
+  const isTimeframeStreamEnabled = (tf: SupportedSRTimeframe) => enabledTimeframes.includes(tf);
 
   // Stats calculation
   const winCount = closedTrades.filter(t => (t.realizedR || 0) > 0).length;

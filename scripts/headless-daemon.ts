@@ -71,7 +71,7 @@ async function main() {
   console.log(` Starting Equity: $${startingEquity.toFixed(2)} USD (2% Compounded Risk = $${riskPerTrade.toFixed(2)} / trade)`);
   console.log(` Exchange Link:   ${isBinanceLiveHydrated ? '🟢 BINANCE USDⓈ-M LIVE CONNECTED' : '⚪ VIRTUAL / SANDBOX'}`);
   console.log(` Execution Gate:  ${safetyGate.isAllowed ? '🔴 LIVE REAL EXECUTION ARMED' : '🧪 SHADOW SIMULATION (' + safetyGate.reason + ')'}`);
-  console.log(` Strategy:        5M Sweep & Reclaim Fee Shield V3 Sniper (60% TP1 @ 1.0R / 40% TP2 @ 1.3R · 0.015% Fee Shield)`);
+  console.log(` Strategy:        3m SFP Shelf-Snap Liquidity Hunter Champion (60% TP1 @ 2.5R / 40% TP2 @ 5.0R · SHELF_LEVEL)`);
   console.log(` Telegram Alerts: ${telegram.isEnabled() ? '✅ ACTIVE (Chat: ' + telegram.getConfig().chatId + ')' : '⚪ DISABLED'}`);
   console.log(` Mode:            ${isDryRun ? 'DRY-RUN (30s Diagnostic Validation)' : '24/7 LIVE BACKGROUND EXECUTION'}`);
   console.log(` Local Time:      ${new Date().toLocaleString()} (UTC: ${new Date().toISOString()})`);
@@ -83,10 +83,11 @@ async function main() {
     metadata: { isDryRun, initialEquity: startingEquity, isBinanceLive: isBinanceLiveHydrated },
   });
 
-  // 2. Cold-Start REST Bootstrap (1000 Historical 5m Candles for Extended Anchor Continuity)
+  // 2. Cold-Start REST Bootstrap (1000 Historical 3m Candles for SFP Liquidity Hunter)
   let bootstrapData;
   try {
     bootstrapData = await bootstrapHistoricalBuffers(symbolArg, {
+      '3m': 1000,
       '5m': 1000,
       '15m': 500,
       '1h': 500,
@@ -123,7 +124,7 @@ async function main() {
 
   const initialLiveSettings = {
     ...DEFAULT_SR_LIVE_SETTINGS,
-    enabledTimeframes: ['5m'] as any,
+    enabledTimeframes: ['3m'] as any,
     ...persistedLiveSettings,
   };
 
@@ -136,17 +137,20 @@ async function main() {
     stage1Ratio: initialLiveSettings.stage1Ratio ?? 0.60,
     stage2Ratio: initialLiveSettings.stage2Ratio ?? 0.40,
     stage3Ratio: initialLiveSettings.stage3Ratio ?? 0.00,
-    stage1Multiple: initialLiveSettings.stage1Multiple ?? 1.0,
-    stage2Multiple: initialLiveSettings.stage2Multiple ?? 1.30,
-    stage3Multiple: initialLiveSettings.stage3Multiple ?? 3.0,
+    stage1Multiple: initialLiveSettings.stage1Multiple ?? 2.50,
+    stage2Multiple: initialLiveSettings.stage2Multiple ?? 5.00,
+    stage3Multiple: initialLiveSettings.stage3Multiple ?? 0.00,
     enableStructuralTrail: initialLiveSettings.enableStructuralTrail ?? true,
     enableProfitRatchet: initialLiveSettings.enableProfitRatchet ?? false,
-    slBufferAtrMultiplier: initialLiveSettings.slBufferAtrMultiplier ?? 0.10,
+    slBufferAtrMultiplier: initialLiveSettings.slBufferAtrMultiplier ?? 0.05,
     enableWaveDeduplication: initialLiveSettings.enableWaveDeduplication ?? true,
     enableEarlyBreakeven: initialLiveSettings.enableEarlyBreakeven ?? true,
-    earlyBreakevenMultiple: initialLiveSettings.earlyBreakevenMultiple ?? 0.40,
+    earlyBreakevenMultiple: initialLiveSettings.earlyBreakevenMultiple ?? 2.50,
     enableFeePaddedBreakeven: initialLiveSettings.enableFeePaddedBreakeven ?? true,
     breakevenOffsetPct: initialLiveSettings.breakevenOffsetPct ?? 0.015,
+    postLossCooldownMinutes: initialLiveSettings.postLossCooldownMinutes ?? 45,
+    filterWeekend: initialLiveSettings.filterWeekend ?? true,
+    filterDeadZones: initialLiveSettings.filterDeadZones ?? true,
     makerFeePct: initialLiveSettings.makerFeePct ?? 0.0000,
     takerFeePct: initialLiveSettings.takerFeePct ?? 0.0400,
     liveSettings: initialLiveSettings,

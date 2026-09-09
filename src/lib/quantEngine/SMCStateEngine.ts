@@ -19,6 +19,7 @@ export class SMCStateEngine {
   public active_swing_high: number | null = null;
   public active_swing_low: number | null = null;
   public active_idm_level: number | null = null;
+  public last_processed_pivot_type: 'SWING_HIGH' | 'SWING_LOW' | null = null;
 
   // ─── Ephemeral Expansion Float State (Range Freeze Resolution) ────────────
   /** Live floating ceiling during BULLISH expansion (post-BOS, pre-fractal). */
@@ -56,6 +57,7 @@ export class SMCStateEngine {
       expansion_low_float: this.expansion_low_float,
       is_in_expansion: this.is_in_expansion,
       expansion_origin_price: this.expansion_origin_price,
+      last_processed_pivot_type: this.last_processed_pivot_type,
     };
   }
 
@@ -69,6 +71,7 @@ export class SMCStateEngine {
     this.expansion_low_float = snapshot.expansion_low_float;
     this.is_in_expansion = snapshot.is_in_expansion;
     this.expansion_origin_price = snapshot.expansion_origin_price;
+    this.last_processed_pivot_type = snapshot.last_processed_pivot_type ?? null;
   }
 
   /**
@@ -87,10 +90,12 @@ export class SMCStateEngine {
       // First major pivot is a low → market was rallying → start BULLISH
       this.current_trend_state = 'BULLISH_SWING';
       this.active_swing_low = firstConfirmed.price;
+      this.last_processed_pivot_type = 'SWING_LOW';
     } else {
       // First major pivot is a high → market was declining → start BEARISH
       this.current_trend_state = 'BEARISH_SWING';
       this.active_swing_high = firstConfirmed.price;
+      this.last_processed_pivot_type = 'SWING_HIGH';
     }
   }
 
@@ -112,6 +117,18 @@ export class SMCStateEngine {
 
     if (pivot.level === this.target_level) {
       if (pivot.type === 'SWING_HIGH') {
+        // ─── Alternation & Leg Extension Guard ───
+        // If consecutive swing high arrives without an intervening swing low:
+        if (this.last_processed_pivot_type === 'SWING_HIGH') {
+          if (this.active_swing_high !== null && pivot.price > this.active_swing_high) {
+            // Upward wave extension: new apex replaces interim peak
+            this.active_swing_high = pivot.price;
+          }
+          // If lower or equal, ignore internal pause
+          return;
+        }
+
+        this.last_processed_pivot_type = 'SWING_HIGH';
         this.active_swing_high = pivot.price;
         this.protected_low = this.active_swing_low; // Lock the bottom
 
@@ -124,6 +141,18 @@ export class SMCStateEngine {
         }
       } else {
         // SWING_LOW confirmed
+        // ─── Alternation & Leg Extension Guard ───
+        // If consecutive swing low arrives without an intervening swing high:
+        if (this.last_processed_pivot_type === 'SWING_LOW') {
+          if (this.active_swing_low !== null && pivot.price < this.active_swing_low) {
+            // Downward wave extension: new trough replaces interim bottom
+            this.active_swing_low = pivot.price;
+          }
+          // If higher or equal, ignore internal pause
+          return;
+        }
+
+        this.last_processed_pivot_type = 'SWING_LOW';
 
         // ─── PULLBACK UPGRADE: During active BULLISH expansion, immediately promote retrace low ───
         // This is the sponsoring structural floor for the expansion leg.
@@ -172,6 +201,7 @@ export class SMCStateEngine {
           });
           this.pending_breaks.push({ event_idx: idx, p_ref: this.active_swing_high, type: 'BOS', direction: 'BULLISH' });
           this.active_swing_high = null; // Wait for next Level 2 HIGH
+          this.last_processed_pivot_type = null;
         } else if (candle.high > this.active_swing_high) {
           this.registered_events.push({
             type: 'SWEEP', direction: 'BULLISH', level: this.active_swing_high, index: idx, timestamp: candle.t
@@ -197,6 +227,7 @@ export class SMCStateEngine {
           this.current_trend_state = 'BEARISH_SWING';
           this.protected_high = this.active_swing_high;
           this.active_swing_low = candle.low; // Candidate bottom
+          this.last_processed_pivot_type = null;
 
           // ─── BEARISH EXPANSION FLOAT ACTIVATION (MSS from BULLISH) ─────────
           // If this is a displaced MSS, activate the bearish expansion float.
@@ -235,6 +266,7 @@ export class SMCStateEngine {
           });
           this.pending_breaks.push({ event_idx: idx, p_ref: this.active_swing_low, type: 'BOS', direction: 'BEARISH' });
           this.active_swing_low = null; // Wait for next Level 2 LOW
+          this.last_processed_pivot_type = null;
         } else if (candle.low < this.active_swing_low) {
           this.registered_events.push({
             type: 'SWEEP', direction: 'BEARISH', level: this.active_swing_low, index: idx, timestamp: candle.t
@@ -259,6 +291,7 @@ export class SMCStateEngine {
           this.current_trend_state = 'BULLISH_SWING';
           this.protected_low = this.active_swing_low;
           this.active_swing_high = candle.high; // Candidate top
+          this.last_processed_pivot_type = null;
 
           // ─── BULLISH EXPANSION FLOAT ACTIVATION (MSS from BEARISH) ─────────
           if (is_displaced) {

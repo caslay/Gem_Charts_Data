@@ -245,6 +245,17 @@ export interface SweepReclaimSetup {
   bars_to_outcome: number | null;
   exit_time: number | null;
   exit_price: number | null;
+
+  // Dynamic Liquidity Targeting & Smart Money Metadata
+  target_mode?: 'FIXED_RR' | 'DYNAMIC_LIQUIDITY' | 'HYBRID_LIQUIDITY';
+  stage1_target_source?: 'DYNAMIC_EQ' | 'FIXED_RR';
+  stage2_target_source?: 'DYNAMIC_OPPOSING_LIQUIDITY' | 'FIXED_RR';
+  opposing_liquidity_anchor?: string | null;
+  opposing_liquidity_price?: number | null;
+  mss_confirmed?: boolean;
+  mss_level?: number | null;
+  mss_index?: number | null;
+  mss_time?: number | null;
 }
 
 export interface SweepReclaimScanConfig {
@@ -294,9 +305,24 @@ export interface SweepReclaimScanConfig {
   minSweepDepthAtrMultiplier?: number;        // Min sweep penetration in ATR (default: 0.10)
   slBufferAtrMultiplier?: number;             // Volatility buffer added behind sweep extreme (default: 0.15)
 
+  // 🎯 Institutional Dynamic Liquidity Targeting (Pillar 4)
+  targetMode?: 'FIXED_RR' | 'DYNAMIC_LIQUIDITY' | 'HYBRID_LIQUIDITY'; // default: 'FIXED_RR'
+  dynamicTp1Source?: 'DEALING_RANGE_EQ' | 'FIXED_RR'; // default: 'FIXED_RR'
+  dynamicTp2Source?: 'OPPOSING_LIQUIDITY' | 'FIXED_RR'; // default: 'FIXED_RR'
+  minDynamicTp1Multiple?: number;             // Minimum R for TP1 when dynamic (default: 0.80)
+  maxDynamicTp1Multiple?: number;             // Maximum R for TP1 when dynamic (default: 1.50)
+  minDynamicTp2Multiple?: number;             // Minimum R for TP2 when dynamic (default: 1.30)
+  maxDynamicTp2Multiple?: number;             // Maximum R for TP2 when dynamic (default: 3.50)
+
+  // ⚡ Confirmed Lower-Timeframe Market Structure Shift (MSS) Gate (Pillars 2 & 3)
+  requireMssConfirmation?: boolean;           // Require internal swing break before arming (default: false)
+  mssLookbackBars?: number;                   // Lookback bars to locate internal swing high/low to break (default: 15)
+  maxBarsSweepToMss?: number;                 // Max candles from sweep extreme to MSS close (default: 15)
+
   // 🛡️ Quant Shield & Loss Streak Protection Settings (5 Institutional Rules)
   enableWaveDeduplication?: boolean;          // Rule 1: Single-Position & Wave Anchor Deduplication (default: true)
   filterWeekend?: boolean;                    // Rule 2: Weekend Off-Liquidity Filter (Fri 22:00 - Sun 20:00 UTC) (default: true)
+  filterDeadZones?: boolean;                  // Rule 6: Dead Zone Filter (Mute 17:00-19:00 UTC & 00:00 UTC) (default: false)
   enforceHtfBiasGuard?: boolean;              // Rule 3: Macro Daily Bias & 1H Structure Alignment Guard (default: false)
   enableEarlyBreakeven?: boolean;             // Rule 4: Dynamic Early Breakeven Ratchet (default: true)
   earlyBreakevenMultiple?: number;            // Rule 4: MFE Multiple to trigger Breakeven (default: 0.60)
@@ -434,6 +460,23 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   breakevenOffsetPct: 0.015,
   minSweepDepthAtrMultiplier: 0.10,
   slBufferAtrMultiplier: 0.10,
+
+  // 🎯 Institutional Dynamic Liquidity Targeting (Pillar 4) Defaults
+  targetMode: 'FIXED_RR',
+  dynamicTp1Source: 'FIXED_RR',
+  dynamicTp2Source: 'FIXED_RR',
+  minDynamicTp1Multiple: 0.80,
+  maxDynamicTp1Multiple: 1.50,
+  minDynamicTp2Multiple: 1.30,
+  maxDynamicTp2Multiple: 3.50,
+
+  // ⚡ Confirmed Lower-Timeframe Market Structure Shift (MSS) Defaults
+  requireMssConfirmation: false,
+  mssLookbackBars: 15,
+  maxBarsSweepToMss: 15,
+
+  // 🛡️ Quant Shield Rule 6: Dead Zone Filter
+  filterDeadZones: false,
 };
 
 // ── Centralized Retest Price Resolver ────────────────────────────────────────
@@ -1375,6 +1418,40 @@ export class SweepReclaimEngine {
         return Math.max(0, v - getTakerBuyVol(ck));
       };
 
+      let mssConfirmed = false;
+      let mssLevel: number | null = null;
+      let mssIndex: number | null = null;
+      let mssTime: number | null = null;
+
+      const requireMss = this.config.requireMssConfirmation === true;
+      const mssLookback = this.config.mssLookbackBars ?? 15;
+      let internalReferencePrice: number | null = null;
+
+      if (requireMss && sweepIdx !== null) {
+        const searchStart = Math.max(0, sweepIdx - mssLookback);
+        if (isBullish) {
+          // For longs: find the recent local swing high before sweep low
+          let localMax = -Infinity;
+          for (let m = searchStart; m < sweepIdx; m++) {
+            const cmH = candles[m].h ?? (candles[m] as any).high;
+            if (cmH > localMax) localMax = cmH;
+          }
+          if (localMax > sweepExtremePrice && localMax < Infinity) {
+            internalReferencePrice = localMax;
+          }
+        } else {
+          // For shorts: find the recent local swing low before sweep high
+          let localMin = Infinity;
+          for (let m = searchStart; m < sweepIdx; m++) {
+            const cmL = candles[m].l ?? (candles[m] as any).low;
+            if (cmL < localMin) localMin = cmL;
+          }
+          if (localMin < sweepExtremePrice && localMin > -Infinity) {
+            internalReferencePrice = localMin;
+          }
+        }
+      }
+
       for (let i = sweepIdx; i <= maxReclaimIdx; i++) {
         const c = candles[i];
         const close = c.c ?? (c as any).close;
@@ -1387,7 +1464,9 @@ export class SweepReclaimEngine {
 
         if (isBullish) {
           // Reclaim: confirmed body close strictly ABOVE the anchor shelf
-          if (close > anchorLevel && close > open) {
+          // If requireMss is true, close must also exceed the internal reference swing high
+          const isMssSatisfied = !requireMss || internalReferencePrice === null || close > internalReferencePrice;
+          if (close > anchorLevel && close > open && isMssSatisfied) {
             // Multi-Candle Displacement Window: inspect [sweepIdx..i] for absorption + follow-through
             let maxVolExpInWindow = 0;
             let windowVolSum = 0;
@@ -1485,11 +1564,20 @@ export class SweepReclaimEngine {
               reclaimFvgBottom = null;
               reclaimFvgCe = anchorLevel;
             }
+
+            if (requireMss && internalReferencePrice !== null) {
+              mssConfirmed = true;
+              mssLevel = parseFloat(internalReferencePrice.toFixed(4));
+              mssIndex = i;
+              mssTime = c.t;
+            }
             break;
           }
         } else {
           // Bearish: confirmed body close strictly BELOW the anchor shelf
-          if (close < anchorLevel && close < open) {
+          // If requireMss is true, close must also break below the internal reference swing low
+          const isMssSatisfied = !requireMss || internalReferencePrice === null || close < internalReferencePrice;
+          if (close < anchorLevel && close < open && isMssSatisfied) {
             // Multi-Candle Displacement Window: inspect [sweepIdx..i] for absorption + follow-through
             let maxVolExpInWindow = 0;
             let windowVolSum = 0;
@@ -1583,6 +1671,13 @@ export class SweepReclaimEngine {
               reclaimFvgTop = null;
               reclaimFvgBottom = null;
               reclaimFvgCe = anchorLevel;
+            }
+
+            if (requireMss && internalReferencePrice !== null) {
+              mssConfirmed = true;
+              mssLevel = parseFloat(internalReferencePrice.toFixed(4));
+              mssIndex = i;
+              mssTime = c.t;
             }
             break;
           }
@@ -1775,15 +1870,100 @@ export class SweepReclaimEngine {
       const riskUsd = minStopLossDistance;
       const riskPct = (riskUsd / executionEntry) * 100;
 
-      const target1 = isBullish
-        ? executionEntry + stage1Multiple * riskUsd
-        : executionEntry - stage1Multiple * riskUsd;
+      // ── Dynamic Liquidity Target Resolver (Pillar 4) ────────────────────────
+      let target1: number;
+      let target2: number;
+      let target3: number;
+      let stage1TargetSource: 'DYNAMIC_EQ' | 'FIXED_RR' = 'FIXED_RR';
+      let stage2TargetSource: 'DYNAMIC_OPPOSING_LIQUIDITY' | 'FIXED_RR' = 'FIXED_RR';
+      let opposingAnchorName: string | null = null;
+      let opposingAnchorLevel: number | null = null;
 
-      const target2 = isBullish
-        ? executionEntry + stage2Multiple * riskUsd
-        : executionEntry - stage2Multiple * riskUsd;
+      const targetMode = this.config.targetMode ?? 'FIXED_RR';
+      const dynamicTp1 = this.config.dynamicTp1Source ?? 'FIXED_RR';
+      const dynamicTp2 = this.config.dynamicTp2Source ?? 'FIXED_RR';
+      const minTp1Mult = this.config.minDynamicTp1Multiple ?? 0.80;
+      const maxTp1Mult = this.config.maxDynamicTp1Multiple ?? 1.50;
+      const minTp2Mult = this.config.minDynamicTp2Multiple ?? 1.30;
+      const maxTp2Mult = this.config.maxDynamicTp2Multiple ?? 3.50;
 
-      const target3 = isBullish
+      // 1. Resolve Target 1 (TP1 - Dealing Range Equilibrium 50% vs Fixed)
+      if (
+        (targetMode === 'DYNAMIC_LIQUIDITY' || targetMode === 'HYBRID_LIQUIDITY') &&
+        dynamicTp1 === 'DEALING_RANGE_EQ' &&
+        dealingRangeEquilibrium !== null &&
+        riskUsd > 0
+      ) {
+        const eqDistR = isBullish
+          ? (dealingRangeEquilibrium - executionEntry) / riskUsd
+          : (executionEntry - dealingRangeEquilibrium) / riskUsd;
+
+        if (eqDistR >= minTp1Mult && eqDistR <= maxTp1Mult) {
+          target1 = parseFloat(dealingRangeEquilibrium.toFixed(4));
+          stage1TargetSource = 'DYNAMIC_EQ';
+        } else {
+          target1 = isBullish
+            ? executionEntry + stage1Multiple * riskUsd
+            : executionEntry - stage1Multiple * riskUsd;
+        }
+      } else {
+        target1 = isBullish
+          ? executionEntry + stage1Multiple * riskUsd
+          : executionEntry - stage1Multiple * riskUsd;
+      }
+
+      // 2. Resolve Target 2 (TP2 - Opposing External Liquidity Pool vs Fixed)
+      if (
+        (targetMode === 'DYNAMIC_LIQUIDITY' || targetMode === 'HYBRID_LIQUIDITY') &&
+        dynamicTp2 === 'OPPOSING_LIQUIDITY' &&
+        anchors &&
+        anchors.length > 0 &&
+        riskUsd > 0
+      ) {
+        const evalCutoffIdx = reclaimIdx ?? sweepIdx ?? anchorIdx;
+        const candidateAnchors = anchors.filter((a) => {
+          if (a.index > evalCutoffIdx) return false;
+          if (isBullish) {
+            return a.bias === 'BEARISH' && a.level > executionEntry;
+          } else {
+            return a.bias === 'BULLISH' && a.level < executionEntry;
+          }
+        });
+
+        // Sort candidates by proximity to entry (closest first)
+        candidateAnchors.sort((a, b) => {
+          return Math.abs(a.level - executionEntry) - Math.abs(b.level - executionEntry);
+        });
+
+        let chosenAnchor: (typeof candidateAnchors)[0] | null = null;
+        for (const cand of candidateAnchors) {
+          const rDist = isBullish
+            ? (cand.level - executionEntry) / riskUsd
+            : (executionEntry - cand.level) / riskUsd;
+          if (rDist >= minTp2Mult && rDist <= maxTp2Mult) {
+            chosenAnchor = cand;
+            break;
+          }
+        }
+
+        if (chosenAnchor) {
+          target2 = parseFloat(chosenAnchor.level.toFixed(4));
+          stage2TargetSource = 'DYNAMIC_OPPOSING_LIQUIDITY';
+          opposingAnchorName = chosenAnchor.name;
+          opposingAnchorLevel = chosenAnchor.level;
+        } else {
+          target2 = isBullish
+            ? executionEntry + stage2Multiple * riskUsd
+            : executionEntry - stage2Multiple * riskUsd;
+        }
+      } else {
+        target2 = isBullish
+          ? executionEntry + stage2Multiple * riskUsd
+          : executionEntry - stage2Multiple * riskUsd;
+      }
+
+      // 3. Resolve Target 3 (TP3 - Macro DOL Runner)
+      target3 = isBullish
         ? executionEntry + stage3Multiple * riskUsd
         : executionEntry - stage3Multiple * riskUsd;
 
@@ -1943,9 +2123,19 @@ export class SweepReclaimEngine {
         stage1_target: parseFloat(target1.toFixed(4)),
         stage2_target: parseFloat(target2.toFixed(4)),
         stage3_target: parseFloat(target3.toFixed(4)),
-        stage1_multiple: stage1Multiple,
-        stage2_multiple: stage2Multiple,
+        stage1_multiple: parseFloat((Math.abs(target1 - executionEntry) / riskUsd).toFixed(2)),
+        stage2_multiple: parseFloat((Math.abs(target2 - executionEntry) / riskUsd).toFixed(2)),
         stage3_multiple: stage3Multiple,
+
+        target_mode: targetMode,
+        stage1_target_source: stage1TargetSource,
+        stage2_target_source: stage2TargetSource,
+        opposing_liquidity_anchor: opposingAnchorName,
+        opposing_liquidity_price: opposingAnchorLevel,
+        mss_confirmed: mssConfirmed,
+        mss_level: mssLevel,
+        mss_index: mssIndex,
+        mss_time: mssTime,
 
         is_stage1_filled: false,
         is_stage2_filled: false,
@@ -2112,6 +2302,19 @@ export class SweepReclaimEngine {
         continue;
       }
 
+      // 🛡️ Quant Shield Rule 6: Precision Temporal Filter (Mute 00:00, 09:00, 13:00, 17:00-19:00, 21:00 UTC)
+      if (this.config.filterDeadZones && retestTime !== null) {
+        const d = new Date(retestTime);
+        const hr = d.getUTCHours();
+        if (hr === 0 || hr === 9 || hr === 13 || hr === 21 || (hr >= 17 && hr <= 19)) {
+          baseSetup.status = 'RECLAIMED_NO_RETEST';
+          baseSetup.simulated_outcome = 'NO_RETEST';
+          baseSetup.stage_exit_type = 'NO_RETEST';
+          detectedSetups.push(baseSetup);
+          continue;
+        }
+      }
+
       // Retest Freshness & Pullback Discrimination Classification
       const retestDelay = retestIdx - reclaimIdx;
       let retestFreshness: RetestFreshness = 'STANDARD';
@@ -2173,6 +2376,9 @@ export class SweepReclaimEngine {
       const w1 = typeof this.config.stage1Ratio === 'number' ? this.config.stage1Ratio : 0.60;
       const w2 = typeof this.config.stage2Ratio === 'number' ? this.config.stage2Ratio : 0.40;
       const w3 = typeof this.config.stage3Ratio === 'number' ? this.config.stage3Ratio : 0.00;
+
+      const effectiveStage1R = riskUsd > 0 ? parseFloat((Math.abs(target1 - executionEntry) / riskUsd).toFixed(4)) : stage1Multiple;
+      const effectiveStage2R = riskUsd > 0 ? parseFloat((Math.abs(target2 - executionEntry) / riskUsd).toFixed(4)) : stage2Multiple;
 
       for (let i = retestIdx; i < n; i++) {
         if (!positionOpen) break;
@@ -2256,7 +2462,7 @@ export class SweepReclaimEngine {
             stageFilledThisBar = true;
 
             if (w3 === 0) {
-              realizedRr = w1 * stage1Multiple + w2 * stage2Multiple;
+              realizedRr = w1 * effectiveStage1R + w2 * effectiveStage2R;
               outcome = 'FULL_TP2_WIN';
               stageExit = 'FULL_TP2_WIN';
               exitIdx = i;
@@ -2278,7 +2484,7 @@ export class SweepReclaimEngine {
             baseSetup.stage3_hit_time = c.t;
             baseSetup.stage3_hit_index = i;
 
-            realizedRr = w1 * stage1Multiple + w2 * stage2Multiple + w3 * stage3Multiple;
+            realizedRr = w1 * effectiveStage1R + w2 * effectiveStage2R + w3 * stage3Multiple;
             outcome = 'FULL_TP3_WIN';
             stageExit = 'FULL_TP3_WIN';
             exitIdx = i;
@@ -2297,12 +2503,12 @@ export class SweepReclaimEngine {
 
             if (baseSetup.is_stage2_filled && w3 > 0) {
               const runnerR = (checkSL - executionEntry) / riskUsd;
-              realizedRr = w1 * stage1Multiple + w2 * stage2Multiple + w3 * runnerR;
+              realizedRr = w1 * effectiveStage1R + w2 * effectiveStage2R + w3 * runnerR;
               outcome = 'FULL_TP2_WIN';
               stageExit = 'STAGE_2_WIN';
             } else if (baseSetup.is_stage1_filled) {
               const runnerR = (checkSL - executionEntry) / riskUsd;
-              realizedRr = w1 * stage1Multiple + (w2 + w3) * runnerR;
+              realizedRr = w1 * effectiveStage1R + (w2 + w3) * runnerR;
               if (realizedRr >= 0) {
                 outcome = 'BE_SCRATCH_WIN';
                 stageExit = 'STAGE_1_SCRATCH';
@@ -2397,7 +2603,7 @@ export class SweepReclaimEngine {
             stageFilledThisBar = true;
 
             if (w3 === 0) {
-              realizedRr = w1 * stage1Multiple + w2 * stage2Multiple;
+              realizedRr = w1 * effectiveStage1R + w2 * effectiveStage2R;
               outcome = 'FULL_TP2_WIN';
               stageExit = 'FULL_TP2_WIN';
               exitIdx = i;
@@ -2420,7 +2626,7 @@ export class SweepReclaimEngine {
             baseSetup.stage3_hit_time = c.t;
             baseSetup.stage3_hit_index = i;
 
-            realizedRr = w1 * stage1Multiple + w2 * stage2Multiple + w3 * stage3Multiple;
+            realizedRr = w1 * effectiveStage1R + w2 * effectiveStage2R + w3 * stage3Multiple;
             outcome = 'FULL_TP3_WIN';
             stageExit = 'FULL_TP3_WIN';
             exitIdx = i;
@@ -2440,12 +2646,12 @@ export class SweepReclaimEngine {
 
             if (baseSetup.is_stage2_filled) {
               const runnerR = (executionEntry - checkSL) / riskUsd;
-              realizedRr = w1 * stage1Multiple + w2 * stage2Multiple + w3 * runnerR;
+              realizedRr = w1 * effectiveStage1R + w2 * effectiveStage2R + w3 * runnerR;
               outcome = 'FULL_TP2_WIN';
               stageExit = 'STAGE_2_WIN';
             } else if (baseSetup.is_stage1_filled) {
               const runnerR = (executionEntry - checkSL) / riskUsd;
-              realizedRr = w1 * stage1Multiple + (w2 + w3) * runnerR;
+              realizedRr = w1 * effectiveStage1R + (w2 + w3) * runnerR;
               if (realizedRr >= 0) {
                 outcome = 'BE_SCRATCH_WIN';
                 stageExit = 'STAGE_1_SCRATCH';

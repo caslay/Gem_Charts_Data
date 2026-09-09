@@ -104,7 +104,7 @@ async function fetchPagedKlines(
  * Offline Mock Generator Fallback (Lesson #20 & #37)
  */
 function generateMockKlines(startMs: number, endMs: number, interval: string): Candle[] {
-  const intervalMs = interval === '4h' ? 14400000 : interval === '1h' ? 3600000 : interval === '15m' ? 900000 : 300000;
+  const intervalMs = interval === '4h' ? 14400000 : interval === '1h' ? 3600000 : interval === '15m' ? 900000 : interval === '3m' ? 180000 : interval === '1m' ? 60000 : 300000;
   const candles: Candle[] = [];
   let currentPrice = 3150.0;
   let t = Math.floor(startMs / intervalMs) * intervalMs;
@@ -186,8 +186,24 @@ export async function POST(req: Request) {
         const enforce_single_position_concurrency = (body.enforceSinglePositionConcurrency ?? body.enforce_single_position_concurrency) !== false;
         const pullback_excursion_threshold = Number(body.pullbackExcursionThreshold ?? body.pullback_excursion_threshold ?? 0.5);
         const stage1_multiple = Number(body.stage1Multiple ?? body.stage1_multiple ?? 1.0);
-        const stage2_multiple = Number(body.stage2Multiple ?? body.stage2_multiple ?? 1.4);
+        const stage2_multiple = Number(body.stage2Multiple ?? body.stage2_multiple ?? 1.35);
         const stage3_multiple = Number(body.stage3Multiple ?? body.stage3_multiple ?? 3.0);
+        const stage1_ratio = Number(body.stage1Ratio ?? body.stage1_ratio ?? 0.50);
+        const stage2_ratio = Number(body.stage2Ratio ?? body.stage2_ratio ?? 0.50);
+        const stage3_ratio = Number(body.stage3Ratio ?? body.stage3_ratio ?? 0.00);
+
+        const target_mode = body.targetMode ?? body.target_mode ?? 'FIXED_RR';
+        const dynamic_tp1_source = body.dynamicTp1Source ?? body.dynamic_tp1_source ?? 'FIXED_RR';
+        const dynamic_tp2_source = body.dynamicTp2Source ?? body.dynamic_tp2_source ?? 'FIXED_RR';
+        const min_dynamic_tp1_multiple = Number(body.minDynamicTp1Multiple ?? body.min_dynamic_tp1_multiple ?? 0.80);
+        const max_dynamic_tp1_multiple = Number(body.maxDynamicTp1Multiple ?? body.max_dynamic_tp1_multiple ?? 1.50);
+        const min_dynamic_tp2_multiple = Number(body.minDynamicTp2Multiple ?? body.min_dynamic_tp2_multiple ?? 1.30);
+        const max_dynamic_tp2_multiple = Number(body.maxDynamicTp2Multiple ?? body.max_dynamic_tp2_multiple ?? 3.50);
+
+        const require_mss_confirmation = (body.requireMssConfirmation ?? body.require_mss_confirmation) === true;
+        const mss_lookback_bars = Number(body.mssLookbackBars ?? body.mss_lookback_bars ?? 15);
+        const max_bars_sweep_to_mss = Number(body.maxBarsSweepToMss ?? body.max_bars_sweep_to_mss ?? 15);
+
         const rawEntryMode = String(body.entryMode ?? body.entry_mode ?? "FVG_PROXIMAL").toUpperCase();
         const validEntryModes: SweepReclaimEntryMode[] = [
           'SHELF_LEVEL',
@@ -207,15 +223,18 @@ export async function POST(req: Request) {
         const min_sweep_depth_atr = Number(body.minSweepDepthAtrMultiplier ?? body.min_sweep_depth_atr ?? 0.10);
         const sl_buffer_atr = Number(body.slBufferAtrMultiplier ?? body.sl_buffer_atr ?? 0.10);
 
-        // 🛡️ Quant Shield & 5 Anti-Loss Streak Parameters (Default to Champion FVG CE Preset)
+        // 🛡️ Quant Shield & 6 Anti-Loss Streak Parameters (Default to Champion FVG CE Preset)
         const enable_wave_deduplication = (body.enableWaveDeduplication ?? body.enable_wave_deduplication) !== undefined ? Boolean(body.enableWaveDeduplication ?? body.enable_wave_deduplication) : true;
         const filter_weekend = (body.filterWeekend ?? body.filter_weekend) !== undefined ? Boolean(body.filterWeekend ?? body.filter_weekend) : false;
+        const filter_dead_zones = (body.filterDeadZones ?? body.filter_dead_zones) !== undefined ? Boolean(body.filterDeadZones ?? body.filter_dead_zones) : false;
         const enforce_htf_bias_guard = (body.enforceHtfBiasGuard ?? body.enforce_htf_bias_guard) !== undefined ? Boolean(body.enforceHtfBiasGuard ?? body.enforce_htf_bias_guard) : false;
         const enable_early_breakeven = (body.enableEarlyBreakeven ?? body.enable_early_breakeven) !== undefined ? Boolean(body.enableEarlyBreakeven ?? body.enable_early_breakeven) : true;
         const early_breakeven_multiple = Number(body.earlyBreakevenMultiple ?? body.early_breakeven_multiple ?? 0.40);
         const enable_fee_padded_breakeven = (body.enableFeePaddedBreakeven ?? body.enable_fee_padded_breakeven) !== undefined ? Boolean(body.enableFeePaddedBreakeven ?? body.enable_fee_padded_breakeven) : true;
         const breakeven_offset_pct = Number(body.breakevenOffsetPct ?? body.breakeven_offset_pct ?? 0.05);
         const post_loss_cooldown_minutes = Number(body.postLossCooldownMinutes ?? body.post_loss_cooldown_minutes ?? 0);
+        const maker_fee_pct = Number(body.makerFeePct ?? body.maker_fee_pct ?? 0.0000);
+        const taker_fee_pct = Number(body.takerFeePct ?? body.taker_fee_pct ?? 0.0400);
 
         if (!start_date || !end_date) {
           sendChunk({ type: "error", error: "Missing required date range parameters: start_date and end_date are required." });
@@ -323,6 +342,19 @@ export async function POST(req: Request) {
           stage1Multiple: stage1_multiple,
           stage2Multiple: stage2_multiple,
           stage3Multiple: stage3_multiple,
+          stage1Ratio: stage1_ratio,
+          stage2Ratio: stage2_ratio,
+          stage3Ratio: stage3_ratio,
+          targetMode: target_mode,
+          dynamicTp1Source: dynamic_tp1_source,
+          dynamicTp2Source: dynamic_tp2_source,
+          minDynamicTp1Multiple: min_dynamic_tp1_multiple,
+          maxDynamicTp1Multiple: max_dynamic_tp1_multiple,
+          minDynamicTp2Multiple: min_dynamic_tp2_multiple,
+          maxDynamicTp2Multiple: max_dynamic_tp2_multiple,
+          requireMssConfirmation: require_mss_confirmation,
+          mssLookbackBars: mss_lookback_bars,
+          maxBarsSweepToMss: max_bars_sweep_to_mss,
           entryMode: entry_mode,
           enableStructuralTrail: enable_structural_trail,
           enableProfitRatchet: enable_profit_ratchet,
@@ -332,12 +364,15 @@ export async function POST(req: Request) {
           // 🛡️ Quant Shield Parameters
           enableWaveDeduplication: enable_wave_deduplication,
           filterWeekend: filter_weekend,
+          filterDeadZones: filter_dead_zones,
           enforceHtfBiasGuard: enforce_htf_bias_guard,
           enableEarlyBreakeven: enable_early_breakeven,
           earlyBreakevenMultiple: early_breakeven_multiple,
           enableFeePaddedBreakeven: enable_fee_padded_breakeven,
           breakevenOffsetPct: breakeven_offset_pct,
           postLossCooldownMinutes: post_loss_cooldown_minutes,
+          makerFeePct: maker_fee_pct,
+          takerFeePct: taker_fee_pct,
         };
 
         const engine = new SweepReclaimEngine(scanConfig);

@@ -381,7 +381,7 @@ export default function CapitalGrowthLedger({
 
               {/* Risk Preset Pills */}
               <div className="flex items-center gap-1 text-[9px]">
-                {[0.5, 1.0, 1.5, 2.0].map((r) => (
+                {[1.0, 2.0, 3.0, 4.0, 5.0].map((r) => (
                   <button
                     key={r}
                     type="button"

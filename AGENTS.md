@@ -100,6 +100,10 @@ Do NOT guess the project architecture or past logic. To save the context window,
    - **File:** `directives/09_institutional_quant_roadmap.md`
    - **When to read:** When planning, conducting, or evaluating quantitative backtests, parameter sweeps, hypothesis testing, or strategy optimization phases. Enforces the 4-pillar orthogonal factor architecture, the 3-strike hypothesis rejection rule, the benchmark hurdle rate against `factory_sr_5m_fvg_ce_sniper`, and the staged operational promotion protocol. Contains the live experiment tracking matrix and fine-tuning lessons ledger.
 
+10. **Strategy Failure Taxonomy, Post-Mortems & Anti-Pattern Protocol** 🛑
+   - **File:** `directives/10_strategy_failure_taxonomy_and_postmortems.md`
+   - **When to read:** When analyzing why a strategy fails, investigating live vs backtest discrepancies, debugging sequence illusions, resolving fee churn traps, or designing new quantitative setups. Codifies the 4 fatal failure categories and enforces the 7-point pre-flight promotion checklist.
+
 ## ⚠️ Execution Mandate
 Before writing any code or answering, output an internal thought process indicating WHICH directive file you need to read to complete the task accurately.
 

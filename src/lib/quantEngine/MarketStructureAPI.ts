@@ -63,19 +63,6 @@ export class MarketStructureAPI {
     const liquidityEngine = new LiquidityEngine();
     liquidityEngine.processCandlesForLiquidity(normalizedCandles);
 
-    const majorPivots = pivotEngine.pivots.filter(p => p.level === 2);
-    const majorSwings: StructuralSwing[] = majorPivots.map(pt => ({
-      t: pt.timestamp,
-      price: pt.price,
-      type: pt.type === 'SWING_HIGH' ? 'HIGH' : 'LOW',
-      grade: 'MAJOR',
-      colorValidated: pt.colorValidated ?? false,
-      candle_index: pt.index,
-      timestamp: new Date(pt.timestamp).toISOString(),
-      structure_type: 'MAJOR',
-      confirmed: pt.confirmed
-    }));
-    
     // We only really need to pass back the final dealing range state if we want it,
     // but the engine recomputes it dynamically anyway. Let's just capture snapshots.
     return {
@@ -171,49 +158,23 @@ export class MarketStructureAPI {
     const newCandlesForLiquidity = bootstrap ? normalizedCandles.filter(c => c.t >= bootstrap.warmupCutoffTs) : normalizedCandles;
     liquidityEngine.processCandlesForLiquidity(newCandlesForLiquidity);
 
-    // 4. Map to Downstream Data Contract
+    // 4. Map to Downstream Data Contract via Institutional Pruning & Hierarchy Classification
+    const lastN = normalizedCandles.slice(-14);
+    const atr14 = lastN.length > 0
+      ? lastN.reduce((sum, c) => sum + (c.high - c.low), 0) / lastN.length
+      : 1;
 
-    // Map MAJOR Swings (Level 2)
-    const majorPivots = pivotEngine.pivots.filter(p => p.level === 2);
-    const majorSwings: StructuralSwing[] = majorPivots.map(pt => ({
-      t: pt.timestamp,
-      price: pt.price,
-      type: pt.type === 'SWING_HIGH' ? 'HIGH' : 'LOW',
-      grade: 'MAJOR',
-      colorValidated: pt.colorValidated ?? false,
-      candle_index: pt.index,
-      timestamp: new Date(pt.timestamp).toISOString(),
-      structure_type: 'MAJOR',
-      confirmed: pt.confirmed
-    }));
-
-    // Map INTERNAL Swings (Level 1)
-    const internalPivots = pivotEngine.pivots.filter(p => p.level === 1);
-    const internalSwings: StructuralSwing[] = internalPivots.map(pt => ({
-      t: pt.timestamp,
-      price: pt.price,
-      type: pt.type === 'SWING_HIGH' ? 'HIGH' : 'LOW',
-      grade: 'INTERNAL',
-      colorValidated: pt.colorValidated ?? false,
-      candle_index: pt.index,
-      timestamp: new Date(pt.timestamp).toISOString(),
-      structure_type: 'INTERNAL',
-      confirmed: pt.confirmed
-    }));
-
-    // Map INNER Swings (Level 0)
-    const innerPivots = pivotEngine.pivots.filter(p => p.level === 0);
-    const innerSwingsRaw: StructuralSwing[] = innerPivots.map(pt => ({
-      t: pt.timestamp,
-      price: pt.price,
-      type: pt.type === 'SWING_HIGH' ? 'HIGH' : 'LOW',
-      grade: 'INNER',
-      colorValidated: pt.colorValidated ?? false,
-      candle_index: pt.index,
-      timestamp: new Date(pt.timestamp).toISOString(),
-      structure_type: 'INNER',
-      confirmed: pt.confirmed
-    }));
+    const {
+      majorSwings,
+      internalSwings,
+      innerSwings: innerSwingsRaw
+    } = this.pruneAndClassifySwings(
+      pivotEngine.pivots.filter(p => p.level === 2),
+      pivotEngine.pivots.filter(p => p.level === 1),
+      pivotEngine.pivots.filter(p => p.level === 0),
+      normalizedCandles,
+      atr14
+    );
 
     // Pass all swings to the UI layer in strict chronological order
     const swings = [...majorSwings, ...internalSwings, ...innerSwingsRaw].sort((a, b) => a.t - b.t);
@@ -267,12 +228,6 @@ export class MarketStructureAPI {
     }
 
     // ─── Expansion Telemetry ─────────────────────────────────────────────────
-    // Compute ATR estimate from last 14 candles for market_velocity (ATR-relative expansion speed)
-    const lastN = normalizedCandles.slice(-14);
-    const atr14 = lastN.length > 0
-      ? lastN.reduce((sum, c) => sum + (c.high - c.low), 0) / lastN.length
-      : 1;
-
     const is_in_expansion = stateEngine.is_in_expansion;
     const expansion_mode: 'NORMAL' | 'RUNAWAY' = is_in_expansion ? 'RUNAWAY' : 'NORMAL';
     const market_velocity = (is_in_expansion && stateEngine.expansion_origin_price !== null)
@@ -610,6 +565,148 @@ export class MarketStructureAPI {
       latestMSS: null,
       market_structure_shift: false,
       market_structure_shift_direction: null
+    };
+  }
+
+  /**
+   * Institutional Structure Pruning & Hierarchy Classification (SMC / Dow Theory Parity)
+   *
+   * Enforces 3 fundamental institutional principles:
+   * 1. Polarity Alternation (ZigZag): External Major swings MUST alternate HIGH <-> LOW.
+   *    Consecutive highs in the same wave are merged into the highest apex; lower interim highs are demoted to INTERNAL.
+   *    Consecutive lows in the same wave are merged into the lowest trough; higher interim lows are demoted to INTERNAL.
+   * 2. Minimum Structural Retracement Depth: An alternating swing must achieve at least 38.2% retracement
+   *    of the preceding major swing leg (or at least 1.5x ATR). Bounces smaller than this threshold
+   *    are classified as INTERNAL consolidation order flow, NEVER Major structure.
+   * 3. Parent Dealing Range Containment: Swings strictly bounded inside the active Dealing Range
+   *    that do not break market structure (BOS) are classified as INTERNAL (grade: 'INTERNAL', structure_type: 'INTERNAL').
+   */
+  private pruneAndClassifySwings(
+    rawMajorPivots: Pivot[],
+    rawInternalPivots: Pivot[],
+    rawInnerPivots: Pivot[],
+    candles: Candle[],
+    atr: number
+  ): {
+    majorSwings: StructuralSwing[];
+    internalSwings: StructuralSwing[];
+    innerSwings: StructuralSwing[];
+  } {
+    const minRetraceAtr = Math.max(0.5, atr * 1.5);
+
+    // 1. Inner Swings (Level 0)
+    const innerSwings: StructuralSwing[] = rawInnerPivots.map(pt => ({
+      t: pt.timestamp,
+      price: pt.price,
+      type: pt.type === 'SWING_HIGH' ? 'HIGH' : 'LOW',
+      grade: 'INNER' as const,
+      colorValidated: pt.colorValidated ?? false,
+      candle_index: pt.index,
+      timestamp: new Date(pt.timestamp).toISOString(),
+      structure_type: 'INNER' as const,
+      confirmed: pt.confirmed
+    }));
+
+    // 2. Base Internal Swings (Level 1)
+    const baseInternalSwings: StructuralSwing[] = rawInternalPivots.map(pt => ({
+      t: pt.timestamp,
+      price: pt.price,
+      type: pt.type === 'SWING_HIGH' ? 'HIGH' : 'LOW',
+      grade: 'INTERNAL' as const,
+      colorValidated: pt.colorValidated ?? false,
+      candle_index: pt.index,
+      timestamp: new Date(pt.timestamp).toISOString(),
+      structure_type: 'INTERNAL' as const,
+      confirmed: pt.confirmed
+    }));
+
+    const demotedToInternal: StructuralSwing[] = [];
+    const sortedMajorPivots = [...rawMajorPivots].sort((a, b) => a.timestamp - b.timestamp);
+
+    if (sortedMajorPivots.length === 0) {
+      return {
+        majorSwings: [],
+        internalSwings: baseInternalSwings.sort((a, b) => a.t - b.t),
+        innerSwings: innerSwings.sort((a, b) => a.t - b.t),
+      };
+    }
+
+    const mappedMajor: StructuralSwing[] = sortedMajorPivots.map(pt => ({
+      t: pt.timestamp,
+      price: pt.price,
+      type: pt.type === 'SWING_HIGH' ? 'HIGH' : 'LOW',
+      grade: 'MAJOR' as const,
+      colorValidated: pt.colorValidated ?? false,
+      candle_index: pt.index,
+      timestamp: new Date(pt.timestamp).toISOString(),
+      structure_type: 'MAJOR' as const,
+      confirmed: pt.confirmed
+    }));
+
+    const prunedMajor: StructuralSwing[] = [];
+    let currentSwing: StructuralSwing = { ...mappedMajor[0] };
+    let priorLegDelta = 0;
+
+    for (let i = 1; i < mappedMajor.length; i++) {
+      const next = mappedMajor[i];
+
+      if (next.type === currentSwing.type) {
+        // ─── Rule 1: Same Polarity (Consecutive Highs or Lows in same wave) ───
+        if (next.type === 'HIGH') {
+          if (Number(next.price) > Number(currentSwing.price)) {
+            // Wave extension higher: previous high was an interim apex
+            currentSwing.grade = 'INTERNAL';
+            currentSwing.structure_type = 'INTERNAL';
+            demotedToInternal.push(currentSwing);
+            currentSwing = { ...next };
+          } else {
+            // Lower high without intervening low: internal pullback pause
+            const demoted = { ...next, grade: 'INTERNAL' as const, structure_type: 'INTERNAL' as const };
+            demotedToInternal.push(demoted);
+          }
+        } else {
+          // LOW
+          if (Number(next.price) < Number(currentSwing.price)) {
+            // Wave extension lower: previous low was an interim trough
+            currentSwing.grade = 'INTERNAL';
+            currentSwing.structure_type = 'INTERNAL';
+            demotedToInternal.push(currentSwing);
+            currentSwing = { ...next };
+          } else {
+            // Higher low without intervening high: internal bounce pause
+            const demoted = { ...next, grade: 'INTERNAL' as const, structure_type: 'INTERNAL' as const };
+            demotedToInternal.push(demoted);
+          }
+        }
+      } else {
+        // ─── Rule 2: Alternating Polarity (High -> Low or Low -> High) ───
+        const delta = Math.abs(Number(next.price) - Number(currentSwing.price));
+        const requiredDepth = Math.max(minRetraceAtr, priorLegDelta * 0.382);
+
+        if (delta < requiredDepth) {
+          // Insufficient retracement depth: minor consolidation noise, demote to internal
+          const demoted = { ...next, grade: 'INTERNAL' as const, structure_type: 'INTERNAL' as const };
+          demotedToInternal.push(demoted);
+          // Keep currentSwing active at the previous major extreme
+        } else {
+          // Valid alternating major structural swing!
+          prunedMajor.push(currentSwing);
+          priorLegDelta = delta;
+          currentSwing = { ...next };
+        }
+      }
+    }
+
+    // Push the final confirmed active major swing
+    prunedMajor.push(currentSwing);
+
+    // Merge demoted swings with internal swings and sort chronologically
+    const mergedInternal = [...baseInternalSwings, ...demotedToInternal].sort((a, b) => a.t - b.t);
+
+    return {
+      majorSwings: prunedMajor,
+      internalSwings: mergedInternal,
+      innerSwings: innerSwings.sort((a, b) => a.t - b.t),
     };
   }
 }
