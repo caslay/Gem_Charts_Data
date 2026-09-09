@@ -293,7 +293,7 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
       targetMode: 'FIXED_RR',
       requireMssConfirmation: false,
       enableEarlyBreakeven: true,
-      earlyBreakevenMultiple: 2.50,
+      earlyBreakevenMultiple: 0.40,
       enableFeePaddedBreakeven: true,
       breakevenOffsetPct: 0.015,
       enableWaveDeduplication: true,
