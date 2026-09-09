@@ -686,27 +686,17 @@ export const structureLayer: ChartLayer = {
         // A7. Draw Equal Highs & Equal Lows levels
         smtLevels,
 
-        // B. Plot Major/Internal Swings (Hollow Circles at Level 2 Multi-Scale Swings)
+        // B1. Plot Major Swings (Hollow Circles at True Macro Turning Points)
         mappedSwings
           .filter((s) => {
-            if (s.grade !== 'MAJOR') return false;
+            if (s.grade !== 'MAJOR' || s.structure_type === 'INTERNAL') return false;
             if (s.confirmed === false) return false; // Hide candidate/unconfirmed circles
             if (s.x < -50 || s.x > rightX + 50) return false; // Viewport culling
-            const isInternal = s.structure_type === 'INTERNAL';
-            if (isInternal) {
-              return showInternalSwings && !isVolatilitySuppressed;
-            } else {
-              return showMajor;
-            }
+            return showMajor;
           })
           .map((pt, idx) => {
               const isConfirmed = pt.confirmed !== false;
-              const isInternal = pt.structure_type === 'INTERNAL';
-              const color = isConfirmed
-                ? (isInternal
-                    ? (pt.type === 'HIGH' ? swingHighInternalColor : swingLowInternalColor)
-                    : (pt.type === 'HIGH' ? swingHighColor : swingLowColor))
-                : (theme === 'dark' ? 'rgba(251, 191, 36, 0.85)' : 'rgba(217, 119, 6, 0.85)');
+              const color = pt.type === 'HIGH' ? swingHighColor : swingLowColor;
               return React.createElement('circle', {
                 key: `major-swing-${idx}`,
                 cx: pt.x,
@@ -717,6 +707,29 @@ export const structureLayer: ChartLayer = {
                   : (theme === 'dark' ? 'rgba(251, 191, 36, 0.85)' : 'rgba(217, 119, 6, 0.85)'),
                 strokeWidth: isConfirmed ? (pt.colorValidated ? 1.5 : 0.8) : 1.2,
                 strokeDasharray: isConfirmed ? undefined : '2,2',
+                fill: 'none',
+              });
+            }),
+
+        // B2. Plot Internal Swings (Subtle Dashed Circles for Internal Waves when enabled)
+        showInternalSwings && !isVolatilitySuppressed &&
+          mappedSwings
+            .filter((s) => {
+              if (s.grade !== 'INTERNAL' && s.structure_type !== 'INTERNAL') return false;
+              if (s.confirmed === false) return false;
+              if (s.x < -50 || s.x > rightX + 50) return false;
+              return true;
+            })
+            .map((pt, idx) => {
+              const color = pt.type === 'HIGH' ? swingHighInternalColor : swingLowInternalColor;
+              return React.createElement('circle', {
+                key: `internal-swing-${idx}`,
+                cx: pt.x,
+                cy: pt.y,
+                r: 2.8,
+                stroke: color,
+                strokeWidth: 0.9,
+                strokeDasharray: '2,2',
                 fill: 'none',
               });
             }),

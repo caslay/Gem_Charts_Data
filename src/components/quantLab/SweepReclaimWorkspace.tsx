@@ -93,7 +93,7 @@ export default function SweepReclaimWorkspace({
   // Scan Configuration Form State
   const [scanName, setScanName] = useState("Deep Sweep & Reclaim Scan");
   const [symbol, setSymbol] = useState("ETHUSDC");
-  const [timeframe, setTimeframe] = useState<"5m" | "15m" | "1h" | "4h">("5m");
+  const [timeframe, setTimeframe] = useState<"1m" | "3m" | "5m" | "15m" | "1h" | "4h">("3m");
   const [startDate, setStartDate] = useState("2026-03-01");
   const [endDate, setEndDate] = useState("2026-06-01");
 
@@ -107,28 +107,38 @@ export default function SweepReclaimWorkspace({
 
   // Volumetric & Displacement Gating (3-Pillar Gatekeeper)
   const [volumeSmaPeriod, setVolumeSmaPeriod] = useState(20);
-  const [volumeExpansionThreshold, setVolumeExpansionThreshold] = useState(1.10);
+  const [volumeExpansionThreshold, setVolumeExpansionThreshold] = useState(1.25);
   const [deltaDominanceThreshold, setDeltaDominanceThreshold] = useState(52.0);
   const [bodyRatioThreshold, setBodyRatioThreshold] = useState(0.40);
   const [enforceDiscountPremiumGate, setEnforceDiscountPremiumGate] = useState(true);
 
   // 3-Stage Harvest & Risk Controls
-  const [entryMode, setEntryMode] = useState<SweepReclaimEntryMode>("FVG_CE");
-  const [stage1Multiple, setStage1Multiple] = useState(1.0);
-  const [stage2Multiple, setStage2Multiple] = useState(1.30);
-  const [stage3Multiple, setStage3Multiple] = useState(3.0);
+  const [entryMode, setEntryMode] = useState<SweepReclaimEntryMode>("SHELF_LEVEL");
+  const [stage1Multiple, setStage1Multiple] = useState(2.50);
+  const [stage2Multiple, setStage2Multiple] = useState(5.00);
+  const [stage3Multiple, setStage3Multiple] = useState(0.00);
+  const [stage1Ratio, setStage1Ratio] = useState(0.60);
+  const [stage2Ratio, setStage2Ratio] = useState(0.40);
+  const [stage3Ratio, setStage3Ratio] = useState(0.00);
   const [enableStructuralTrail, setEnableStructuralTrail] = useState(true);
   const [enableProfitRatchet, setEnableProfitRatchet] = useState(false);
 
+  // 🎯 Target Mode & Dynamic Liquidity (Pillar 4)
+  const [targetMode, setTargetMode] = useState<'FIXED_RR' | 'DYNAMIC_LIQUIDITY' | 'HYBRID_LIQUIDITY'>('FIXED_RR');
+  const [dynamicTp1Source, setDynamicTp1Source] = useState<'DEALING_RANGE_EQ' | 'FIXED_RR'>('FIXED_RR');
+  const [dynamicTp2Source, setDynamicTp2Source] = useState<'OPPOSING_LIQUIDITY' | 'FIXED_RR'>('FIXED_RR');
+  const [requireMssConfirmation, setRequireMssConfirmation] = useState(false);
+
   // 🛡️ Quant Shield & Loss Streak Protection Controls (Champion Defaults)
   const [enableWaveDeduplication, setEnableWaveDeduplication] = useState(true);
-  const [filterWeekend, setFilterWeekend] = useState(false);
+  const [filterWeekend, setFilterWeekend] = useState(true);
+  const [filterDeadZones, setFilterDeadZones] = useState(true);
   const [enforceHtfBiasGuard, setEnforceHtfBiasGuard] = useState(false);
   const [enableEarlyBreakeven, setEnableEarlyBreakeven] = useState(true);
-  const [earlyBreakevenMultiple, setEarlyBreakevenMultiple] = useState(0.40);
+  const [earlyBreakevenMultiple, setEarlyBreakevenMultiple] = useState(2.50);
   const [enableFeePaddedBreakeven, setEnableFeePaddedBreakeven] = useState(true);
   const [breakevenOffsetPct, setBreakevenOffsetPct] = useState(0.015);
-  const [postLossCooldownMinutes, setPostLossCooldownMinutes] = useState(0);
+  const [postLossCooldownMinutes, setPostLossCooldownMinutes] = useState(45);
 
   // 💰 Real-World Binance Futures Fee Schedule (USDC Pairs)
   const [feeTierPreset, setFeeTierPreset] = useState<BinanceFeeTier>('USDC_REGULAR_VIP1');
@@ -227,15 +237,25 @@ export default function SweepReclaimWorkspace({
     stage1Multiple,
     stage2Multiple,
     stage3Multiple,
+    stage1Ratio,
+    stage2Ratio,
+    stage3Ratio,
     entryMode,
     enableStructuralTrail,
     enableProfitRatchet,
     minSweepDepthAtrMultiplier: minSweepDepthAtr,
     slBufferAtrMultiplier: slBufferAtr,
 
+    // 🎯 Target Mode & Dynamic Liquidity (Pillar 4)
+    targetMode,
+    dynamicTp1Source,
+    dynamicTp2Source,
+    requireMssConfirmation,
+
     // 🛡️ Quant Shield Parameters
     enableWaveDeduplication,
     filterWeekend,
+    filterDeadZones,
     enforceHtfBiasGuard,
     enableEarlyBreakeven,
     earlyBreakevenMultiple,
@@ -265,13 +285,21 @@ export default function SweepReclaimWorkspace({
     stage1Multiple,
     stage2Multiple,
     stage3Multiple,
+    stage1Ratio,
+    stage2Ratio,
+    stage3Ratio,
     entryMode,
     enableStructuralTrail,
     enableProfitRatchet,
     minSweepDepthAtr,
     slBufferAtr,
+    targetMode,
+    dynamicTp1Source,
+    dynamicTp2Source,
+    requireMssConfirmation,
     enableWaveDeduplication,
     filterWeekend,
+    filterDeadZones,
     enforceHtfBiasGuard,
     enableEarlyBreakeven,
     earlyBreakevenMultiple,
@@ -299,6 +327,13 @@ export default function SweepReclaimWorkspace({
     if (typeof cfg.stage1Multiple === 'number') setStage1Multiple(cfg.stage1Multiple);
     if (typeof cfg.stage2Multiple === 'number') setStage2Multiple(cfg.stage2Multiple);
     if (typeof cfg.stage3Multiple === 'number') setStage3Multiple(cfg.stage3Multiple);
+    if (typeof cfg.stage1Ratio === 'number') setStage1Ratio(cfg.stage1Ratio);
+    if (typeof cfg.stage2Ratio === 'number') setStage2Ratio(cfg.stage2Ratio);
+    if (typeof cfg.stage3Ratio === 'number') setStage3Ratio(cfg.stage3Ratio);
+    if (cfg.targetMode) setTargetMode(cfg.targetMode);
+    if (cfg.dynamicTp1Source) setDynamicTp1Source(cfg.dynamicTp1Source);
+    if (cfg.dynamicTp2Source) setDynamicTp2Source(cfg.dynamicTp2Source);
+    if (typeof cfg.requireMssConfirmation === 'boolean') setRequireMssConfirmation(cfg.requireMssConfirmation);
     if (typeof cfg.enableStructuralTrail === 'boolean') setEnableStructuralTrail(cfg.enableStructuralTrail);
     if (typeof cfg.enableProfitRatchet === 'boolean') setEnableProfitRatchet(cfg.enableProfitRatchet);
     if (typeof cfg.lookbackMajor === 'number') setLookbackMajor(cfg.lookbackMajor);
@@ -312,6 +347,7 @@ export default function SweepReclaimWorkspace({
     // 🛡️ Quant Shield Preset Hydration
     setEnableWaveDeduplication(cfg.enableWaveDeduplication === true);
     setFilterWeekend(cfg.filterWeekend === true);
+    setFilterDeadZones(cfg.filterDeadZones === true);
     setEnforceHtfBiasGuard(cfg.enforceHtfBiasGuard === true);
     setEnableEarlyBreakeven(cfg.enableEarlyBreakeven === true);
     setEarlyBreakevenMultiple(typeof cfg.earlyBreakevenMultiple === 'number' ? cfg.earlyBreakevenMultiple : 0.40);
@@ -375,6 +411,20 @@ export default function SweepReclaimWorkspace({
       stage2_multiple: stage2Multiple,
       stage3Multiple,
       stage3_multiple: stage3Multiple,
+      stage1Ratio,
+      stage1_ratio: stage1Ratio,
+      stage2Ratio,
+      stage2_ratio: stage2Ratio,
+      stage3Ratio,
+      stage3_ratio: stage3Ratio,
+      targetMode,
+      target_mode: targetMode,
+      dynamicTp1Source,
+      dynamic_tp1_source: dynamicTp1Source,
+      dynamicTp2Source,
+      dynamic_tp2_source: dynamicTp2Source,
+      requireMssConfirmation,
+      require_mss_confirmation: requireMssConfirmation,
       entryMode,
       entry_mode: entryMode,
       enableStructuralTrail,
@@ -389,6 +439,8 @@ export default function SweepReclaimWorkspace({
       // 🛡️ Quant Shield Scan Execution Parameters
       enableWaveDeduplication,
       filterWeekend,
+      filterDeadZones,
+      filter_dead_zones: filterDeadZones,
       enforceHtfBiasGuard,
       enableEarlyBreakeven,
       earlyBreakevenMultiple,
@@ -413,6 +465,7 @@ export default function SweepReclaimWorkspace({
           enforceSinglePositionWalk: true,
           enableWaveDeduplication,
           filterWeekend,
+          filterDeadZones,
           enforceHtfBiasGuard,
           enableEarlyBreakeven,
           earlyBreakevenMultiple,
@@ -427,6 +480,7 @@ export default function SweepReclaimWorkspace({
     selectedScan?.setups,
     enableWaveDeduplication,
     filterWeekend,
+    filterDeadZones,
     enforceHtfBiasGuard,
     enableEarlyBreakeven,
     earlyBreakevenMultiple,
@@ -640,6 +694,7 @@ export default function SweepReclaimWorkspace({
               onChange={(e) => setTimeframe(e.target.value as any)}
               className="text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-cyan-500 text-foreground dark:text-white outline-none rounded-lg shadow-xs transition cursor-pointer"
             >
+              <option value="3m">3m (High-Frequency SFP Sniper)</option>
               <option value="5m">5m (Intraday Micro)</option>
               <option value="15m">15m (Primary Institutional)</option>
               <option value="1h">1h (Macro Structural)</option>
@@ -863,6 +918,7 @@ export default function SweepReclaimWorkspace({
                 className="text-xs font-mono px-3 py-2 bg-card dark:bg-slate-950 border border-card-border dark:border-slate-800 focus:border-cyan-500 text-foreground dark:text-white outline-none rounded-lg shadow-xs transition cursor-pointer"
               >
                 <option value={1.3}>1.3R (Fast Scalp)</option>
+                <option value={1.35}>1.35R (15m Macro Champion Target)</option>
                 <option value={1.4}>1.4R (Quant Champion Target)</option>
                 <option value={1.5}>1.5R (Institutional Standard)</option>
                 <option value={1.6}>1.6R (Refined Sniper Target)</option>
@@ -870,13 +926,13 @@ export default function SweepReclaimWorkspace({
                 <option value={2.0}>2.0R (Full Macro)</option>
               </select>
               <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
-                Tranche 1: 50% @ 1.0R | Tranche 2: 50% @ {stage2Multiple}R
+                Tranche 1: {(stage1Ratio * 100).toFixed(0)}% @ {stage1Multiple}R | Tranche 2: {(stage2Ratio * 100).toFixed(0)}% @ {stage2Multiple}R
               </span>
             </div>
           </div>
         </div>
 
-        {/* ── 🛡️ Quant Shield & Loss Streak Protection Card (5 Anti-Loss Rules) ── */}
+        {/* ── 🛡️ Quant Shield & Loss Streak Protection Card (6 Anti-Loss Rules) ── */}
         <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-950/20 via-slate-900/40 to-purple-950/20 border border-cyan-500/30 shadow-xs mb-4">
           <div className="flex items-center justify-between pb-2 mb-3 border-b border-cyan-500/20">
             <div className="flex items-center gap-2">
@@ -885,10 +941,10 @@ export default function SweepReclaimWorkspace({
               </span>
               <div>
                 <h4 className="text-xs font-bold font-mono uppercase tracking-wider text-cyan-300">
-                  Quant Shield: 5 Anti-Loss Streak Protectors
+                  Quant Shield: 6 Anti-Loss Streak Protectors
                 </h4>
                 <span className="text-[9px] text-slate-400 font-mono">
-                  1-Year Backtest-Proven Rules to Eliminate 3–4 Consecutive Losses & Drawdown Cascades
+                  1-Year Backtest-Proven Rules to Eliminate 3–4 Consecutive Losses, Dead Zone Friction & Drawdown Cascades
                 </span>
               </div>
             </div>
@@ -932,6 +988,23 @@ export default function SweepReclaimWorkspace({
               </span>
             </div>
 
+            {/* Rule 6: Precision Temporal Filter */}
+            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col justify-between gap-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-white uppercase">Rule 6: Precision Temporal Filter</span>
+                <input
+                  type="checkbox"
+                  disabled={isScanning}
+                  checked={filterDeadZones}
+                  onChange={(e) => setFilterDeadZones(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-cyan-500 cursor-pointer"
+                />
+              </div>
+              <span className="text-[9px] text-slate-400">
+                Mutes 00:00 (rollover), 09:00 (London trap), 13:00 (pre-NY), 17–19 (NY lull), 21:00 UTC.
+              </span>
+            </div>
+
             {/* Rule 3: Macro Daily Bias Guard */}
             <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col justify-between gap-1.5">
               <div className="flex items-center justify-between">
@@ -949,8 +1022,31 @@ export default function SweepReclaimWorkspace({
               </span>
             </div>
 
+            {/* Rule 5: Post-Loss Cooldown */}
+            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col justify-between gap-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-white uppercase">Rule 5: Post-Loss Cooldown</span>
+                <span className="text-[10px] font-bold text-purple-400">
+                  {postLossCooldownMinutes === 0 ? "OFF (0m)" : `${postLossCooldownMinutes}m Lock`}
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="120"
+                step="5"
+                disabled={isScanning}
+                value={postLossCooldownMinutes}
+                onChange={(e) => setPostLossCooldownMinutes(parseInt(e.target.value, 10))}
+                className="w-full accent-purple-500"
+              />
+              <span className="text-[9px] text-slate-400">
+                Directional lock after stop out to prevent revenge trading.
+              </span>
+            </div>
+
             {/* Rule 4: Early Breakeven Protection */}
-            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col justify-between gap-1.5 col-span-1 sm:col-span-2 lg:col-span-2">
+            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col justify-between gap-1.5 col-span-1 sm:col-span-2 lg:col-span-1">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] font-bold text-slate-300 uppercase">Rule 4: Early Breakeven Ratchet</span>
@@ -968,7 +1064,7 @@ export default function SweepReclaimWorkspace({
               </div>
               <input
                 type="range"
-                min="0.40"
+                min="0.20"
                 max="0.90"
                 step="0.05"
                 disabled={isScanning || !enableEarlyBreakeven}
@@ -1009,31 +1105,8 @@ export default function SweepReclaimWorkspace({
               </span>
             </div>
 
-            {/* Rule 5: Post-Loss Cooldown */}
-            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col justify-between gap-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold text-white uppercase">Rule 5: Post-Loss Cooldown</span>
-                <span className="text-[10px] font-bold text-purple-400">
-                  {postLossCooldownMinutes === 0 ? "OFF (0m)" : `${postLossCooldownMinutes}m Lock`}
-                </span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="120"
-                step="5"
-                disabled={isScanning}
-                value={postLossCooldownMinutes}
-                onChange={(e) => setPostLossCooldownMinutes(parseInt(e.target.value, 10))}
-                className="w-full accent-purple-500"
-              />
-              <span className="text-[9px] text-slate-400">
-                Directional lock after stop out to prevent revenge trading.
-              </span>
-            </div>
-
             {/* 💰 Binance USDC Futures Fee Schedule & Friction Calibration */}
-            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col justify-between gap-1.5 col-span-1 sm:col-span-2 lg:col-span-2">
+            <div className="p-2.5 rounded-lg bg-slate-950/60 border border-slate-800 flex flex-col justify-between gap-1.5 col-span-1 sm:col-span-2 lg:col-span-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] font-bold text-amber-400 uppercase">Binance USDC Fee Schedule</span>
@@ -1473,9 +1546,16 @@ export default function SweepReclaimWorkspace({
                   <span className="text-[9px] uppercase font-mono text-muted dark:text-slate-500 block mb-1">
                     Execution Win Rate
                   </span>
-                  <span className="text-lg font-mono font-bold text-cyan-600 dark:text-cyan-400">
-                    {execution1to1Summary.executionWinRatePct}%
-                  </span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-lg font-mono font-bold text-cyan-600 dark:text-cyan-400">
+                      {execution1to1Summary.winRateExScratchPct}%
+                    </span>
+                    {execution1to1Summary.totalBeScratches > 0 && (
+                      <span className="text-[9px] font-mono text-muted dark:text-slate-400">
+                        ({execution1to1Summary.executionWinRatePct}% All)
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[9px] font-mono text-muted dark:text-slate-400 block mt-0.5">
                     {execution1to1Summary.totalWinningTrades}W / {execution1to1Summary.totalLosingTrades}L {execution1to1Summary.totalBeScratches > 0 ? `/ ${execution1to1Summary.totalBeScratches}BE` : ''}
                   </span>
@@ -1706,20 +1786,26 @@ export default function SweepReclaimWorkspace({
                   <Award className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
                   <span>2-Stage Dynamic Harvest Model</span>
                 </span>
-                <span className="text-[10px] text-purple-600 dark:text-purple-400">Position Scaling 50% / 50%</span>
+                <span className="text-[10px] text-purple-600 dark:text-purple-400">
+                  Position Scaling {(stage1Ratio * 100).toFixed(0)}% / {(stage2Ratio * 100).toFixed(0)}%
+                </span>
               </h3>
 
               <div className="grid grid-cols-2 gap-2 text-center mb-3">
                 {/* Stage 1 */}
                 <div className="p-2.5 rounded-lg bg-card dark:bg-slate-950/60 border border-card-border dark:border-slate-800">
-                  <span className="text-[8px] uppercase text-muted dark:text-slate-500 block">Stage 1 (50% @ 1.0R)</span>
+                  <span className="text-[8px] uppercase text-muted dark:text-slate-500 block">
+                    Stage 1 ({(stage1Ratio * 100).toFixed(0)}% @ {stage1Multiple}R)
+                  </span>
                   <span className="text-base font-bold text-cyan-600 dark:text-cyan-300">{telemetry.stage1_fill_count ?? 0}</span>
                   <span className="text-[9px] text-muted dark:text-slate-400 block">{telemetry.stage1_fill_pct ?? 0}% Fills</span>
                 </div>
 
                 {/* Stage 2 */}
                 <div className="p-2.5 rounded-lg bg-card dark:bg-slate-950/60 border border-card-border dark:border-slate-800">
-                  <span className="text-[8px] uppercase text-muted dark:text-slate-500 block">Stage 2 (50% @ {stage2Multiple}R)</span>
+                  <span className="text-[8px] uppercase text-muted dark:text-slate-500 block">
+                    Stage 2 ({(stage2Ratio * 100).toFixed(0)}% @ {stage2Multiple}R)
+                  </span>
                   <span className="text-base font-bold text-purple-600 dark:text-purple-300">{telemetry.stage2_fill_count ?? 0}</span>
                   <span className="text-[9px] text-muted dark:text-slate-400 block">{telemetry.stage2_fill_pct ?? 0}% Fills</span>
                 </div>

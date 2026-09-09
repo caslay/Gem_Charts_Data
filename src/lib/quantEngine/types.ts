@@ -196,6 +196,7 @@ export interface StructuralStateSnapshot {
   expansion_low_float: number | null;
   is_in_expansion: boolean;
   expansion_origin_price: number | null;
+  last_processed_pivot_type?: 'SWING_HIGH' | 'SWING_LOW' | null;
 }
 
 export interface StructuralBootstrapContext {

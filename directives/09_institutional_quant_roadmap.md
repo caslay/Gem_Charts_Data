@@ -185,11 +185,15 @@ This live ledger tracks every completed, active, and pending research experiment
 
 ### 📊 Master Progress Summary
 * **Current Operational Champion (Pre-Fee Baseline):** `factory_sr_5m_fvg_ce_sniper_v2` (+223.76R Net Nominal, 1.75 PF, -6.68R Max DD, $74,287 eq from $1,000)
-* **Crowned All-Time Champion (Post-Fee Optimized):** `factory_sr_5m_fvg_ce_sniper_v3` (**+186.18R Net**, **1.37 Net PF**, **29.0% Comp DD**, **$98,333.52 final eq from $1,000** under real Binance 0.04% taker fees — **+$79,413.88 / +420% more capital than V2 post-fee!**)
-* **Crowned Capital Shield Champion (Ultra-Low Drawdown):** `factory_sr_5m_alpha_shield_v3` (**+178.79R Net**, **1.37 Net PF**, **record-low 27.6% Comp DD**, **-16.94R Max DD**, **$83,235.49 final eq from $1,000**)
-* **Current Active Phase:** **Phases 1, 2, 3 & 4 (Fee-Resilience & Calibrated Shield) Completed · Live Deployment Next**
-* **Total Completed Experiments:** 41 Candle-by-Candle Path-Dependent Backtests
+* **Crowned All-Time Champion (Post-Fee Optimized, Aug 2023–Aug 2024):** `factory_sr_5m_fvg_ce_sniper_v3` (**+186.18R Net**, **1.37 Net PF**, **29.0% Comp DD**, **$98,333.52 final eq from $1,000** under real Binance 0.04% taker fees)
+* **Crowned Capital Shield Champion (Aug 2023–Aug 2024):** `factory_sr_5m_alpha_shield_v3` (**+178.79R Net**, **1.37 Net PF**, **record-low 27.6% Comp DD**, **-16.94R Max DD**, **$83,235.49 final eq from $1,000**)
+* **⚠️ NEW REGIME ALERT (Sep 2025–Sep 2026):** ALL V3 presets produce **Net PF 0.96–0.97** (below breakeven). Fee drag (-170.50R) exceeds gross profits (+148.43R) — **114.9% fee-to-gross ratio**. The underlying Sweep & Reclaim signal (PF 1.24 gross) is alive but inaccessible at 5m taker-fee frequency on the new compressed-ATR regime.
+* **⚠️ COOLDOWN BUG DETECTED:** `cooldownVetoCount: 0` across all new-regime backtests despite 612 stop-outs and 5-streak consecutive losses. Rule 5 Post-Loss Cooldown may be silently disabled. **Immediate mandatory verification: `scripts/test_risk_governor.ts`**.
+* **Current Active Phase:** **Phase 5 — Macro Regime Adaptation (HTF Timeframe Elevation + Maker-First Exit Engineering)**
+* **Total Completed Experiments:** 45 Candle-by-Candle Path-Dependent Backtests
 * **Total Factors Exhausted (3-Strike Rule):** 2 (Taker Delta Dominance > 52% locked; Delayed Early BE > +0.40R permanently locked)
+* **New Factor Status (5m Fee Regime):** NEAR-EXHAUSTED — All tested parameter combinations fail Net PF ≥ 1.35 on Sep 2025–Sep 2026 horizon
+
 
 ---
 
@@ -247,6 +251,11 @@ This live ledger tracks every completed, active, and pending research experiment
 | `EXP-SYN-05` | P4 | 0.020% Offset + Retest TTL 10b | 2,484 | 1,316 (53.0%) | +291.28R | +164.40R | -126.88R | 1.34 | **-16.94R** | **27.6%** | $63,242.60 | 🛡️ **LOWEST DRAWDOWN IN TOURNAMENT** |
 | `EXP-SYN-02b`| P4 | 0.015% Offset + TTL 10 Bars | 2,481 | 1,301 (52.4%) | +304.95R | **+178.79R** | -126.16R | **1.37** | **-16.94R** | **27.6%** | **$83,235.49** | 🛡️ **CROWNED ALPHA SHIELD V3** |
 | `EXP-SYN-03b`| P4 | 0.015% Offset + Asian Sessions | 2,572 | 1,348 (52.4%) | +315.82R | **+186.18R** | -129.64R | **1.37** | -20.90R | **29.0%** | **$98,333.52** | 🏆 **CROWNED ALL-TIME CHAMPION V3** |
+| `REGIME-NEW-V3-1Y` | NEW | V3 Champion (Sep 2025 – Sep 2026) | 2,340 | 930 (39.7%) | +148.43R | **-22.07R** | -170.50R | **0.97** | -49.19R | **48.16%** | **$1,353** | 🔴 **REGIME FAILURE (Fee > Gross)** |
+| `REGIME-NEW-AS-1Y` | NEW | Alpha Shield V3 (Sep 2025 – Sep 2026) | 2,258 | 900 (39.9%) | +139.10R | **-26.88R** | -165.98R | **0.96** | -48.76R | **46.43%** | **$1,203** | 🔴 **REGIME FAILURE (Fee > Gross)** |
+| `REGIME-NEW-V3-3M` | NEW | V3 Champion (Jun – Sep 2026 Sprint) | 630 | 252 (40.0%) | +46.25R | **-1.96R** | -48.21R | **0.99** | -18.92R | **28.54%** | **$1,180** | 🟡 **NEAR-BREAKEVEN (Best in New Regime)** |
+| `REGIME-NEW-AS-3M` | NEW | Alpha Shield V3 (Jun – Sep 2026 Sprint) | 607 | 242 (39.9%) | +39.02R | **-8.38R** | -47.40R | **0.96** | -18.91R | **28.48%** | **$1,032** | 🔴 REJECTED |
+
 
 ---
 
@@ -300,6 +309,46 @@ This live ledger tracks every completed, active, and pending research experiment
   5. Slashed Compounded Max Drawdown from **$37.2\% \to 29.0\%$** (and down to **$27.6\%$** in Alpha Shield model with 10-bar TTL).
   6. Multiplied $1,000 Starting Equity into **`$98,333.52`** vs V2 Baseline's **`$18,919.64`**, generating an astounding **`+$79,413.88` (+420%) post-fee capital edge**!
 * **Microstructure Rationale:** Binance USDⓈ-M Futures fee on limit entries is $0.0000\%$ (Maker). The only fee incurred on a scratch is the $0.0400\%$ taker fee on the exit order. A $+0.015\%$ price offset on ETH perfectly offsets the nominal dollar fee of the exit without pushing the physical stop order so far away from entry that natural 5m market noise wicks through it prematurely. The tighter offset allows early breakeven protection to engage with lower friction, converting dozens of threatened positions into protected scratches while allowing true institutional displacement moves to reach Target 1 ($1.0\text{R}$) and Target 2 ($1.30\text{R}$) uninterrupted.
+#### Entry 011 (2026-09-08) — The 15m Timeframe Elevation & Rule 6 Dead Zone Filter Breakthrough (+82.09R Net, 62.2% Win Rate, $17,002 to $29,987 Compounded)
+* **Finding:** When 100% bit-for-bit parity was enforced (eliminating underwater entry-bar lookahead illusions), Baseline V3 on 5m was revealed to be a fee churn trap (2,727 trades paying $-134.74\text{R}$ in fees, leaving only $+33.99\text{R}$ Net / $1,341.41). Elevating execution to **15m Major Swings (lookback 15/10)**, harvesting **70% @ 1.0R / 30% @ 1.35R**, and implementing **Rule 6 Dead Zone Filter (muting 17:00-19:00 UTC and 00:00 UTC)** achieved a transformative institutional breakthrough:
+  1. Annual trades dropped by $69.5\%$ (from $2,727 \to 832$).
+  2. Exchange taker fees dropped by **$79.4\%$** (from $-134.74\text{R} \to -27.71\text{R}$).
+  3. Execution Win Rate jumped to **$62.2\%$** (Wins: 527 | Losses/Scratches: 305).
+  4. Net Realized Return expanded by **$+141\%$** (from $+33.99\text{R} \to +82.09\text{R}$ Net).
+  5. Compounded Drawdown dropped from $47.75\% \to 30.51\%$.
+  6. $1,000 Initial Capital grew to **`$17,002.95`** at $4.0\%$ risk (+1,600% gain) and **`$29,987.35`** at $5.0\%$ risk (+2,898% gain) under real Binance $0.04\%$ taker fees!
+* **Microstructure Rationale:** In 5m execution, average stop loss distance on ETH is tiny ($\approx \$10$), forcing massive notional leverage ($\approx 250\times$) where every taker stop exit eats up to $0.15\text{R}$ in friction. On 15m, stops expand naturally to $\$35-\$50$, slashing leverage friction to $< 3\%$ of risk. Furthermore, forensic autopsy proved that $00:00\text{ UTC}$ (daily rollover/funding settlement) and $17:00-19:00\text{ UTC}$ (post-London close doldrums) suffer from erratic orderbook thinning with a sub-$45\%$ win rate. Muting entries during these 4 dead hours pruned 118 choppy losses without missing London or NY expansion moves.
 
+#### Entry 012 (2026-09-08) — The 5m "Smart Money Synthesis V1" Post-Mortem (-$70.35 Loss Bleed / -7.03%)
+* **Finding:** When `factory_sr_5m_smart_money_v1` was backtested across 1-year with dynamic liquidity targets and lower-timeframe MSS confirmation, it suffered a negative return of **$-70.35 (-7.03% to $929.65)** over 50 trades.
+* **Root Cause Microstructure Autopsy:**
+  1. **Disabled Early Breakeven (`enableEarlyBreakeven: false`):** Positions moving $+0.5\text{R}$ to $+0.8\text{R}$ into green profit were left completely unprotected. In 5m market noise, pullbacks tagged the original stop, turning what should have been breakeven scratches into full $-1.0\text{R}$ losses.
+  2. **Diluted Risk-to-Reward (`slBufferAtrMultiplier: 0.25`):** Expanding stop distance to 0.25 ATR without increasing target distances lowered the reward-to-risk ratio.
+  3. **MSS Confirmation Lag:** Waiting for lower-timeframe market structure shift on 5m candles caused severe entry lag, filtering valid momentum continuations down to only 50 trades in 12 months.
+  4. **Dynamic Liquidity Target Over-Reach:** Attempting to reach distant dealing range extremes in noisy 5m consolidation failed as price reversed before targets were hit.
+* **Permanent Mandate:** Bar combining MSS confirmation gates with disabled Early Breakeven on lower timeframes. All 5m setups require strict Rule 4 Early BE at $+0.35\text{R}$ to protect capital.
 
+#### Entry 014 (2026-09-09) — The Sep 2025–Sep 2026 Regime Discontinuity: When Fee Physics Break the Engine (114.9% Fee-to-Gross Ratio)
+* **Finding:** Full MCP backtest of both crowned V3 champions on the new Sep 2025–Sep 2026 1-year horizon (118,072 5m candles) revealed **Net PF 0.96–0.97** (below breakeven) for ALL registered factory presets. Fee drag of **-170.50R exceeds gross profits of +148.43R** across 2,340 trades — a **114.9% fee-to-gross ratio** vs the champion year's 41.4%. The 3-month sprint (Jun–Sep 2026) produces marginally better results (Net -1.96R, PF 0.99) as it avoids the catastrophic Sep–Dec 2025 ETH crash period.
+* **Exact MCP Results:**
+  - `factory_sr_5m_fvg_ce_sniper_v3` (1Y): 2,340 trades | Gross +148.43R | Net **-22.07R** | Fees **-170.50R** | PF **0.97** | Max DD -49.19R / **48.16%** | \$1k → \$1,353
+  - `factory_sr_5m_alpha_shield_v3` (1Y): 2,258 trades | Gross +139.10R | Net **-26.88R** | Fees **-165.98R** | PF **0.96** | Max DD -48.76R / **46.43%** | \$1k → \$1,203
+  - `factory_sr_5m_fvg_ce_sniper_v3` (3M sprint Jun–Sep 2026): 630 trades | Gross +46.25R | Net **-1.96R** | Fees **-48.21R** | PF **0.99** | Max DD -18.92R / **28.54%** | \$1k → \$1,180
+  - `factory_sr_5m_alpha_shield_v3` (3M sprint Jun–Sep 2026): 607 trades | Gross +39.02R | Net **-8.38R** | Fees **-47.40R** | PF **0.96** | Max DD -18.91R / **28.48%** | \$1k → \$1,032
+* **Root Cause:** Three concurrent regime factors: (1) ETH ADR compressed ~35% (lower ATR → higher notional leverage per R → larger % taker fee per trade), (2) post-crash choppy 2026 consolidation increases false reclaim rates and reduces BE-rescue rate from 52.4% → 39.7%, (3) gross PF compressed from 1.36 → 1.24 — not enough signal alpha to overcome fee drag at 6.4 trades/day.
+* **Anti-Tunnel Mandate:** The gross signal edge (+148R, PF 1.24) is real and alive. It is **physically inaccessible** at 5m taker-fee frequency. The only institutional path to positive net compounding requires timeframe elevation (15m/1H) or Maker-First algorithmic exits.
 
+#### Entry 015 (2026-09-09) — The Cooldown Veto Anomaly: Active Bug Detection (Zero Vetos Across 2,340 Trades + 612 Stop-Outs)
+* **Finding:** Across all new-regime backtests (2,340 trades, 612 stop-outs, 5-trade consecutive loss streaks), the `cooldownVetoCount` field returned **0** — zero trades suppressed by the mandatory 45-minute post-loss cooldown. This is statistically impossible if Rule 5 is correctly active, given consecutive 5-loss streaks occur multiple times per year.
+* **Systemic Risk:** If the cooldown rule is silently disabled in the live daemon, the engine is vulnerable to cascade loss clusters — the exact mechanism behind -49.19R Max Drawdown (48.16% compounded) in the new regime.
+* **Immediate Mandated Action:** Execute `scripts/test_risk_governor.ts`. Confirm 22/22 pass. Inspect `headless-daemon.ts` cooldown state machine for `postLossCooldownMinutes >= 45` enforcement after every `STOPPED_OUT` event. Verify `GlobalRiskGovernor.evaluatePostTradeRisk()` correctly stamps `lastLossTime` on stop-outs.
+
+#### Entry 013 (2026-09-08) — The "Tight Tunnel Trap" & The $8,259.68 Fee Burn (Anti-Tunnel Mandate)
+* **Finding:** While the 15m Macro Champion with Precision Temporal Filter generated $+3,134.35\%$ ($32,343.45$ final equity from $\$1,000$) at $5\%$ risk, it paid **$\$8,259.68$ in taker fees** to Binance across 615 trades! Over $10\%$ of gross returns were paid directly to the exchange.
+* **The "Tunnel" Diagnosis:**
+  1. **Curve-Fitting Hourly Windows:** Progressively muting hours (00, 09, 13, 17-19, 21 UTC) is an in-sample local optimization that masks the true underlying problem: trading a fast mean-reversion setup too frequently with tight targets.
+  2. **The High-Notional Taker Tax:** As portfolio equity compounds into tens of thousands of dollars, a 5% risk position requires $\$250,000+$ in notional futures contracts. Paying 0.0400% on market stop-outs costs $\$100+$ in cash per trade!
+* **The Strategic Pivot to Completely New Approaches:**
+  1. **Maker-First Algorithmic Execution:** Moving from Taker Market Stops to Post-Only Limit and algorithmic liquidity-providing exits on Binance USDC-M futures, where the maker fee is $0.0000\%$. Slashes fee drag by $100\%$ ($$8,259.68 \to \$0.00$), unlocking $\$127,453$ equity.
+  2. **BTC vs ETH Intermarket SMT Divergence:** Capitalizing on institutional lead-lag divergence between Bitcoin and Ethereum (proven 1.84 PF, -5.3R DD across 758 trades).
+  3. **Macro Timeframe Elevation (1H/4H Swing):** Compressing trade frequency down to $40-80$ high-conviction asymmetric swing trades per year (1:3R to 1:5R), slashing annual fee drag to $< \$300$.

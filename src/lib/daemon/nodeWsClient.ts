@@ -20,7 +20,7 @@ export interface NodeWsClientOptions {
 export type WSConnectionStatus = 'CONNECTING' | 'OPEN' | 'CLOSED' | 'ERROR' | 'RECONNECTING';
 
 export interface CandleClosedPayload {
-  interval: '5m' | '15m' | '1h';
+  interval: '3m' | '5m' | '15m' | '1h';
   candle: Candle;
   closedAt: number;
 }
@@ -48,10 +48,12 @@ export class NodeWsClient {
 
   // In-memory candle ring buffers
   private buffers: {
+    '3m': Candle[];
     '5m': Candle[];
     '15m': Candle[];
     '1h': Candle[];
   } = {
+    '3m': [],
     '5m': [],
     '15m': [],
     '1h': [],
@@ -76,20 +78,24 @@ export class NodeWsClient {
   /**
    * Seed existing historical buffers from REST bootstrap.
    */
-  public seedBuffers(buffers: { '5m': Candle[]; '15m': Candle[]; '1h': Candle[] }): void {
+  public seedBuffers(buffers: { '3m'?: Candle[]; '5m': Candle[]; '15m': Candle[]; '1h': Candle[] }): void {
+    if (buffers['3m']) {
+      this.buffers['3m'] = [...buffers['3m'].slice(-this.ringBufferSize)];
+    }
     this.buffers['5m'] = [...buffers['5m'].slice(-this.ringBufferSize)];
     this.buffers['15m'] = [...buffers['15m'].slice(-this.ringBufferSize)];
     this.buffers['1h'] = [...buffers['1h'].slice(-this.ringBufferSize)];
     console.log(
-      `[NODE_WS] 📦 Ring buffers seeded: 5m (${this.buffers['5m'].length}), 15m (${this.buffers['15m'].length}), 1h (${this.buffers['1h'].length})`
+      `[NODE_WS] 📦 Ring buffers seeded: ${this.buffers['3m'].length > 0 ? `3m (${this.buffers['3m'].length}), ` : ''}5m (${this.buffers['5m'].length}), 15m (${this.buffers['15m'].length}), 1h (${this.buffers['1h'].length})`
     );
   }
 
   /**
    * Retrieve clone of current ring buffers.
    */
-  public getRingBuffers(): { '5m': Candle[]; '15m': Candle[]; '1h': Candle[] } {
+  public getRingBuffers(): { '3m': Candle[]; '5m': Candle[]; '15m': Candle[]; '1h': Candle[] } {
     return {
+      '3m': [...this.buffers['3m']],
       '5m': [...this.buffers['5m']],
       '15m': [...this.buffers['15m']],
       '1h': [...this.buffers['1h']],
@@ -124,12 +130,14 @@ export class NodeWsClient {
     return this.status;
   }
 
-  public getActiveCandle(interval: '5m' | '15m' | '1h'): Candle | undefined {
+  public getActiveCandle(interval: '3m' | '5m' | '15m' | '1h'): Candle | undefined {
     return this.activeCandles[interval];
   }
 
   public getLatestPrice(): number {
     if (this.latestPrice > 0) return this.latestPrice;
+    const c3m = this.activeCandles['3m'] || this.buffers['3m'].slice(-1)[0];
+    if (c3m && c3m.c > 0) return c3m.c;
     const c5m = this.activeCandles['5m'] || this.buffers['5m'].slice(-1)[0];
     if (c5m && c5m.c > 0) return c5m.c;
     return 0;
@@ -156,6 +164,7 @@ export class NodeWsClient {
 
     const sym = this.symbol;
     const streams = [
+      `${sym}@kline_3m`,
       `${sym}@kline_5m`,
       `${sym}@kline_15m`,
       `${sym}@kline_1h`,
@@ -245,8 +254,8 @@ export class NodeWsClient {
       // ── B. Process Multi-Timeframe Kline Data ──
       if (data.e === 'kline' && data.k) {
         const k = data.k;
-        const interval = k.i as '5m' | '15m' | '1h';
-        if (!['5m', '15m', '1h'].includes(interval)) return;
+        const interval = k.i as '3m' | '5m' | '15m' | '1h';
+        if (!['3m', '5m', '15m', '1h'].includes(interval)) return;
 
         const volume = parseFloat(k.v);
         const taker_buy_vol = parseFloat(k.V || '0');

@@ -13,6 +13,7 @@ import { MarketStructureAPI } from '../quantEngine/MarketStructureAPI';
 const BINANCE_FAPI_BASE = 'https://fapi.binance.com/fapi/v1/klines';
 
 export interface BootstrapCandleBuffers {
+  '3m'?: Candle[];
   '5m': Candle[];
   '15m': Candle[];
   '1h': Candle[];
@@ -76,7 +77,7 @@ export function parseBinanceRestKlines(raw: unknown[][]): Candle[] {
  */
 export async function fetchHistoricalKlines(
   symbol: string = 'ETHUSDC',
-  interval: '5m' | '15m' | '1h' = '5m',
+  interval: '3m' | '5m' | '15m' | '1h' = '5m',
   limit: number = 500
 ): Promise<Candle[]> {
   const url = `${BINANCE_FAPI_BASE}?symbol=${symbol.toUpperCase()}&interval=${interval}&limit=${limit}`;
@@ -233,21 +234,22 @@ export function computeMacroContext(
  */
 export async function bootstrapHistoricalBuffers(
   symbol: string = 'ETHUSDC',
-  limits: { '5m': number; '15m': number; '1h': number } = { '5m': 500, '15m': 500, '1h': 500 }
+  limits: { '3m'?: number; '5m': number; '15m': number; '1h': number } = { '3m': 1000, '5m': 500, '15m': 500, '1h': 500 }
 ): Promise<{
   buffers: BootstrapCandleBuffers;
   macroContext: MacroStructuralContext;
 }> {
-  console.log(`[REST_BOOTSTRAP] 🚀 Fetching historical candles for ${symbol.toUpperCase()} (5m, 15m, 1h)...`);
+  console.log(`[REST_BOOTSTRAP] 🚀 Fetching historical candles for ${symbol.toUpperCase()} (${limits['3m'] ? '3m, ' : ''}5m, 15m, 1h)...`);
 
-  const [candles5m, candles15m, candles1h] = await Promise.all([
+  const [candles5m, candles15m, candles1h, candles3m] = await Promise.all([
     fetchHistoricalKlines(symbol, '5m', limits['5m']),
     fetchHistoricalKlines(symbol, '15m', limits['15m']),
     fetchHistoricalKlines(symbol, '1h', limits['1h']),
+    limits['3m'] ? fetchHistoricalKlines(symbol, '3m', limits['3m']) : Promise.resolve([] as Candle[]),
   ]);
 
   console.log(
-    `[REST_BOOTSTRAP] ✅ Received: 5m (${candles5m.length} bars), 15m (${candles15m.length} bars), 1h (${candles1h.length} bars).`
+    `[REST_BOOTSTRAP] ✅ Received: ${candles3m.length > 0 ? `3m (${candles3m.length} bars), ` : ''}5m (${candles5m.length} bars), 15m (${candles15m.length} bars), 1h (${candles1h.length} bars).`
   );
 
   const macroContext = computeMacroContext(candles1h, candles15m, candles5m);
@@ -257,6 +259,7 @@ export async function bootstrapHistoricalBuffers(
 
   return {
     buffers: {
+      ...(candles3m.length > 0 ? { '3m': candles3m } : {}),
       '5m': candles5m,
       '15m': candles15m,
       '1h': candles1h,

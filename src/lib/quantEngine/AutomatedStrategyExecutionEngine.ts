@@ -175,12 +175,25 @@ export interface AutomatedExecutionConfig {
   // 🛡️ Quant Shield & Loss Streak Protection Settings (5 Institutional Rules)
   enableWaveDeduplication?: boolean; // Rule 1: Single-Position & Wave Anchor Deduplication (default: true)
   filterWeekend?: boolean; // Rule 2: Weekend Off-Liquidity Filter (Fri 22:00 - Sun 20:00 UTC) (default: true)
+  filterDeadZones?: boolean; // Rule 6: Dead Zone Filter (Mute 17:00-19:00 UTC & 00:00 UTC) (default: false)
   enforceHtfBiasGuard?: boolean; // Rule 3: Macro Daily Bias & 1H Structure Alignment (default: false)
   enableEarlyBreakeven?: boolean; // Rule 4: Dynamic Early Breakeven Ratchet (default: true)
   earlyBreakevenMultiple?: number; // Rule 4: MFE Multiple to trigger Breakeven (default: 0.60)
   enableFeePaddedBreakeven?: boolean; // Rule 4: Fee-Padded Breakeven to offset Binance Taker fees (default: true)
   breakevenOffsetPct?: number; // Rule 4: Fee offset percentage e.g. 0.05% (default: 0.05)
   postLossCooldownMinutes?: number; // Rule 5: Directional cooldown minutes after stop-out (default: 45)
+
+  // 🎯 Pillar 4 Dynamic Liquidity Targets & MSS Confirmation
+  targetMode?: 'FIXED_RR' | 'DYNAMIC_LIQUIDITY' | 'HYBRID_LIQUIDITY';
+  dynamicTp1Source?: 'DEALING_RANGE_EQ' | 'FIXED_RR';
+  dynamicTp2Source?: 'OPPOSING_LIQUIDITY' | 'FIXED_RR';
+  minDynamicTp1Multiple?: number;
+  maxDynamicTp1Multiple?: number;
+  minDynamicTp2Multiple?: number;
+  maxDynamicTp2Multiple?: number;
+  requireMssConfirmation?: boolean;
+  mssLookbackBars?: number;
+  maxBarsSweepToMss?: number;
 
   // 💰 Real-World Binance Futures Fee Schedule (USDC Pairs)
   makerFeePct?: number; // default: 0.0000%
@@ -192,7 +205,7 @@ export interface AutomatedExecutionConfig {
 
 export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   symbol: "ETHUSDC",
-  timeframe: "5m",
+  timeframe: "3m",
   autoExecute: true,
   initialEquity: 1000.0,
   compoundingRiskPct: 2.0,
@@ -203,9 +216,9 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   lotPrecision: 3,
   tickSize: 0.01,
 
-  stage1Multiple: 1.0,
-  stage2Multiple: 1.30,
-  stage3Multiple: 3.0,
+  stage1Multiple: 2.50,
+  stage2Multiple: 5.00,
+  stage3Multiple: 0.0,
 
   stage1Ratio: 0.60,
   stage2Ratio: 0.40,
@@ -213,17 +226,30 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
 
   enableStructuralTrail: true,
   enableProfitRatchet: false,
-  slBufferAtrMultiplier: 0.10,
+  slBufferAtrMultiplier: 0.05,
 
-  // Quant Shield Defaults (Aligned with factory_sr_5m_fvg_ce_sniper_v3 champion)
+  // Quant Shield Defaults (Aligned with factory_sr_3m_sfp_shelf_sniper champion)
   enableWaveDeduplication: true,
-  filterWeekend: false,
+  filterWeekend: true,
+  filterDeadZones: true,
   enforceHtfBiasGuard: false,
   enableEarlyBreakeven: true,
-  earlyBreakevenMultiple: 0.40,
+  earlyBreakevenMultiple: 2.50,
   enableFeePaddedBreakeven: true,
   breakevenOffsetPct: 0.015,
-  postLossCooldownMinutes: 0,
+  postLossCooldownMinutes: 45,
+
+  // 🎯 Dynamic Liquidity & MSS Confirmation Defaults
+  targetMode: 'FIXED_RR',
+  dynamicTp1Source: 'DEALING_RANGE_EQ',
+  dynamicTp2Source: 'OPPOSING_LIQUIDITY',
+  minDynamicTp1Multiple: 0.80,
+  maxDynamicTp1Multiple: 1.50,
+  minDynamicTp2Multiple: 1.30,
+  maxDynamicTp2Multiple: 3.50,
+  requireMssConfirmation: false,
+  mssLookbackBars: 15,
+  maxBarsSweepToMss: 8,
 
   // Binance USDC Regular / VIP 1 Schedule
   makerFeePct: 0.0000,
@@ -308,6 +334,7 @@ export class AutomatedStrategyExecutionEngine {
       slBufferAtrMultiplier: mergedLive.slBufferAtrMultiplier ?? this.config.slBufferAtrMultiplier,
       enableWaveDeduplication: mergedLive.enableWaveDeduplication ?? this.config.enableWaveDeduplication,
       filterWeekend: mergedLive.filterWeekend ?? this.config.filterWeekend,
+      filterDeadZones: mergedLive.filterDeadZones ?? this.config.filterDeadZones,
       enforceHtfBiasGuard: mergedLive.enforceHtfBiasGuard ?? this.config.enforceHtfBiasGuard,
       enableEarlyBreakeven: mergedLive.enableEarlyBreakeven ?? this.config.enableEarlyBreakeven,
       earlyBreakevenMultiple: mergedLive.earlyBreakevenMultiple ?? this.config.earlyBreakevenMultiple,
@@ -470,6 +497,9 @@ export class AutomatedStrategyExecutionEngine {
     stopLossPrice: number;
     fvgCeLevel?: number | null;
     dynamicDolTarget?: number | null;
+    stage1Target?: number | null;
+    stage2Target?: number | null;
+    stage3Target?: number | null;
     setupId?: string;
     anchorName?: string;
     originZoneId?: string;
@@ -499,6 +529,9 @@ export class AutomatedStrategyExecutionEngine {
       stopLossPrice,
       fvgCeLevel,
       dynamicDolTarget,
+      stage1Target: customStage1Target,
+      stage2Target: customStage2Target,
+      stage3Target: customStage3Target,
       setupId,
       anchorName,
       originZoneId,
@@ -532,6 +565,17 @@ export class AutomatedStrategyExecutionEngine {
       const isWknd = (day === 5 && hr >= 22) || day === 6 || (day === 0 && hr < 20);
       if (isWknd) {
         const msg = `[WEEKEND_FILTER] Automated execution paused during weekend off-liquidity hours (Fri 22:00 - Sun 20:00 UTC).`;
+        this.emit("DIRECTIONAL_VETO", msg);
+        return { success: false, message: msg };
+      }
+    }
+
+    // ── Guardrail 1.6: 🛡️ Quant Shield Rule 6: Precision Temporal Filter (Mute 00, 09, 13, 17-19, 21 UTC) ──
+    const filterDeadZones = this.config.filterDeadZones ?? this.config.liveSettings?.filterDeadZones ?? false;
+    if (filterDeadZones) {
+      const hr = new Date().getUTCHours();
+      if (hr === 0 || hr === 9 || hr === 13 || hr === 21 || (hr >= 17 && hr <= 19)) {
+        const msg = `[DEAD_ZONE_FILTER] Automated execution paused during toxic dead zone hours (00:00, 09:00, 13:00, 17:00-19:00, and 21:00 UTC).`;
         this.emit("DIRECTIONAL_VETO", msg);
         return { success: false, message: msg };
       }
@@ -664,7 +708,9 @@ export class AutomatedStrategyExecutionEngine {
     // ── Derive 3-Stage Harvest Targets ──
     const riskDistance = sizing.distance;
 
-    const stage1Target = isLong
+    const stage1Target = typeof customStage1Target === 'number' && customStage1Target > 0
+      ? customStage1Target
+      : isLong
       ? parseFloat(
           (limitEntryPrice + riskDistance * this.config.stage1Multiple).toFixed(
             4,
@@ -676,7 +722,9 @@ export class AutomatedStrategyExecutionEngine {
           ),
         );
 
-    const stage2Target = isLong
+    const stage2Target = typeof customStage2Target === 'number' && customStage2Target > 0
+      ? customStage2Target
+      : isLong
       ? parseFloat(
           (limitEntryPrice + riskDistance * this.config.stage2Multiple).toFixed(
             4,
@@ -689,7 +737,9 @@ export class AutomatedStrategyExecutionEngine {
         );
 
     let stage3Target: number;
-    if (
+    if (typeof customStage3Target === 'number' && customStage3Target > 0) {
+      stage3Target = customStage3Target;
+    } else if (
       dynamicDolTarget &&
       ((isLong && dynamicDolTarget > stage2Target) ||
         (!isLong && dynamicDolTarget < stage2Target))
@@ -738,8 +788,8 @@ export class AutomatedStrategyExecutionEngine {
       stage1Ratio: this.config.stage1Ratio,
       stage2Ratio: this.config.stage2Ratio,
       stage3Ratio: this.config.stage3Ratio,
-      stage1Multiple: this.config.stage1Multiple,
-      stage2Multiple: this.config.stage2Multiple,
+      stage1Multiple: riskDistance > 0 ? parseFloat((Math.abs(stage1Target - limitEntryPrice) / riskDistance).toFixed(2)) : this.config.stage1Multiple,
+      stage2Multiple: riskDistance > 0 ? parseFloat((Math.abs(stage2Target - limitEntryPrice) / riskDistance).toFixed(2)) : this.config.stage2Multiple,
       stage3Multiple: this.config.stage3Multiple,
 
       riskUsd: sizing.riskUsd,
@@ -1637,7 +1687,7 @@ export class AutomatedStrategyExecutionEngine {
    * Runs SweepReclaimEngine detection across enabled timeframes and auto-routes confirmed setups.
    */
   public onMultiTimeframeCandles(
-    multiTfCandles: { "5m"?: Candle[]; "15m"?: Candle[]; "1h"?: Candle[] },
+    multiTfCandles: { "3m"?: Candle[]; "5m"?: Candle[]; "15m"?: Candle[]; "1h"?: Candle[] },
     macroContext?: {
       macroDailyBias?: "BULLISH" | "BEARISH" | "NEUTRAL";
       dolDirection?: "BULLISH" | "BEARISH" | "BALANCED";
@@ -1651,7 +1701,7 @@ export class AutomatedStrategyExecutionEngine {
     const enabledTfs =
       settings.enabledTimeframes && settings.enabledTimeframes.length > 0
         ? settings.enabledTimeframes
-        : ["5m", "15m", "1h"];
+        : ["3m", "5m", "15m", "1h"];
 
     const scanned: SweepReclaimSetup[] = [];
     const executed: SweepReclaimSetup[] = [];
@@ -1739,6 +1789,18 @@ export class AutomatedStrategyExecutionEngine {
               equilibrium: Number(macroContext.localDealingRange.equilibrium),
             }
           : null,
+
+        // 🎯 Pillar 4 Dynamic Liquidity Targets & MSS Confirmation
+        targetMode: settings.targetMode ?? this.config.targetMode ?? 'FIXED_RR',
+        dynamicTp1Source: settings.dynamicTp1Source ?? this.config.dynamicTp1Source ?? 'DEALING_RANGE_EQ',
+        dynamicTp2Source: settings.dynamicTp2Source ?? this.config.dynamicTp2Source ?? 'OPPOSING_LIQUIDITY',
+        minDynamicTp1Multiple: settings.minDynamicTp1Multiple ?? this.config.minDynamicTp1Multiple,
+        maxDynamicTp1Multiple: settings.maxDynamicTp1Multiple ?? this.config.maxDynamicTp1Multiple,
+        minDynamicTp2Multiple: settings.minDynamicTp2Multiple ?? this.config.minDynamicTp2Multiple,
+        maxDynamicTp2Multiple: settings.maxDynamicTp2Multiple ?? this.config.maxDynamicTp2Multiple,
+        requireMssConfirmation: settings.requireMssConfirmation ?? this.config.requireMssConfirmation ?? false,
+        mssLookbackBars: settings.mssLookbackBars ?? this.config.mssLookbackBars ?? 15,
+        maxBarsSweepToMss: settings.maxBarsSweepToMss ?? this.config.maxBarsSweepToMss ?? 8,
       };
 
       try {
@@ -2028,6 +2090,9 @@ export class AutomatedStrategyExecutionEngine {
               currentMarketPrice: latestPrice,
               fvgCeLevel: s.reclaim_fvg_ce,
               dynamicDolTarget: s.stage3_target,
+              stage1Target: s.stage1_target,
+              stage2Target: s.stage2_target,
+              stage3Target: s.stage3_target,
               setupId: s.id,
               anchorName: s.anchor_name,
               originZoneId: s.id,

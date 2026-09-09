@@ -165,6 +165,7 @@ export interface AdaptSweepReclaimOptions {
   enforceSinglePositionWalk?: boolean; // default true: 1:1 match with Live Daemon maxOpenPositions: 1
   enableWaveDeduplication?: boolean; // Rule 1: Multi-anchor wave deduplication (default true)
   filterWeekend?: boolean; // Rule 2: Weekend Off-Liquidity filter (default true)
+  filterDeadZones?: boolean; // Rule 6: Dead Zone Filter (Mute 17:00-19:00 UTC & 00:00 UTC) (default false)
   enforceHtfBiasGuard?: boolean; // Rule 3: Macro HTF Bias filter (default false)
   enableEarlyBreakeven?: boolean; // Early Breakeven Ratchet (default false)
   earlyBreakevenMultiple?: number; // MFE Multiple to trigger Breakeven (default 0.60)
@@ -219,6 +220,16 @@ export function adaptSweepReclaimSetupsToTrades(
       const hr = d.getUTCHours();
       const isWknd = (day === 5 && hr >= 22) || day === 6 || (day === 0 && hr < 20);
       return !isWknd;
+    });
+  }
+
+  // 🛡️ Quant Shield Rule 6: Precision Temporal Filter (Mute 00:00, 09:00, 13:00, 17:00-19:00, 21:00 UTC)
+  if (options.filterDeadZones) {
+    executedSetups = executedSetups.filter((s) => {
+      const t = s.retest_time || s.reclaim_time || s.sweep_time || s.anchor_time || 0;
+      const d = new Date(t);
+      const hr = d.getUTCHours();
+      return hr !== 0 && hr !== 9 && hr !== 13 && hr !== 21 && (hr < 17 || hr > 19);
     });
   }
 
