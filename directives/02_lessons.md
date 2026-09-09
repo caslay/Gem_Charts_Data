@@ -850,3 +850,49 @@ ew Date().toISOString() on the same millisecond tick when evaluated.
   2. **True Scratch Net Cash Accounting (`equityCalculator.ts` & `AutomatedStrategyExecutionEngine.ts`):** When Fee-Padded BE is active, scratch exits are recognized as shielded scratches where `netRealizedR = 0.00R`, `feeInR = 0.00R`, and `netPnlUsd = $0.00`.
   3. **Verified Real-World Edge:** With phantom fees eliminated, the Fee Shield delivers **`+184.81R Net`**, **`1.46 Net PF`**, and **`$98,615.79`** compounded equity ($19.5\%$ Max DD), outperforming unshielded Flat BE (`+52.27R Net`, `$6,621.00`, $32.4\%$ Max DD) by **`+132.54R Net`** and **`+$91,994.79`** in true capital growth.
 
+### 75. Cockpit Dynamic Risk Decoupling & Global Risk Governor Parity (Resolved in V17.50)
+- **The Bug:** Risk percentage displayed on the Cockpit HUD quick pills (`[0.5%, 1.0%, 1.5%, 2.0%]`) and account settings in `localStorage` was decoupled from the headless PM2 daemon's `GlobalRiskGovernor`. The UI rendered one risk size while live execution sized orders under different static baselines, creating capital allocation mismatches.
+- **The Causes:** `GlobalRiskGovernor` hydrated risk settings from PostgreSQL without broadcasting updates to client hooks; browser `localStorage` retained stale legacy settings; and `headless-daemon.ts` omitted active `compoundingRiskPct` from its state payload.
+- **The Fixes:**
+  1. **Telemetry Unification:** Exposed `compoundingRiskPct` dynamically in `/api/daemon/state`.
+  2. **Auto-Migration Pipeline:** Upgraded client `localStorage` loaders in `scannerPresets.ts` and `strategyExecutionConfig.ts` to automatically migrate legacy presets to the V3 Champion baseline.
+  3. **Bidirectional State Sync:** Ensured Cockpit and live daemon execute from the exact same dynamic compounding risk percentage.
+
+### 76. Quant Lab SSE API Parameter Dropping & Parity Disconnection (Resolved in V17.55)
+- **The Bug:** Running a backtest in Quant Lab with Rule 6 Dead Zone Filter and 70/30 position scaling produced severely degraded returns (`+37.15R Net`) compared to theoretical backtests (`+82.09R Net`).
+- **The Causes:** In `src/app/api/quant-lab/sweep-reclaim-scanner/route.ts`, the JSON request body parsing logic dropped `filterDeadZones`, `stage1Ratio`, `stage2Ratio`, `stage3Ratio`, `targetMode`, `dynamicTp1Source`, `dynamicTp2Source`, and `requireMssConfirmation`. The backend instantiated `SweepReclaimEngine` with `filterDeadZones = false` and default 50/50 ratios, executing choppy dead-zone trades during volatile rollover hours.
+- **The Fixes:**
+  1. **Strict Request Sanitization:** Added rigorous JSON extraction and default fallbacks for all Quant Shield and position harvest parameters in the scanner route.
+  2. **Rule 6 UI Integration:** Added the Rule 6 Dead Zone Filter card and toggle to `SweepReclaimWorkspace.tsx` in a 3x3 layout.
+  3. **Bit-for-Bit API Alignment:** Guaranteed 100% parameter parity between Quant Lab UI requests and PM2 headless daemon execution.
+
+### 77. Same-Bar Retest Sequence Illusion & Lookahead Bias in Low-TF Studies (Resolved in V17.59)
+- **The Bug:** A standalone 3m SFP scratch study reported +45.63R gross returns and a 59% win rate, but when the preset was loaded into Quant Lab (`SweepReclaimEngine.ts`), it collapsed into a -21.68R net loss and -32.3% ROI across 12,000 candles.
+- **The Causes:**
+  1. **Same-Bar Retest Lookahead Trap:** The scratch script tested candle low penetration starting on bar $f = i$ (the reclaim bar). Because the candle swept the anchor on bar $i$, its low was already below the anchor ($c.l \le \text{anchor}$), creating a retroactive fake limit fill. In real-world PM2 exchange physics, resting limit orders can only be placed *after* the reclaim bar closes ($i + 1$).
+  2. **Retest Reality:** On subsequent bars ($i+1$), 82% of setups exploded away without ever returning to the shelf; the 18% that did retest were aggressive momentum plunges that broke straight through the stop loss.
+- **The Fixes:**
+  1. **Next-Bar Limit Arming Rule:** Reaffirmed the strict requirement that limit orders can only be evaluated starting on bar $i + 1$.
+  2. **Mandatory Quant Engine Validation:** Permanently barred standalone simplified scripts from asserting strategy viability. All exploratory setups MUST be evaluated directly through `SweepReclaimEngine.ts` / `Quegar-mcp`.
+  3. **Demoted 3m SFP Preset:** Relegated the 3m SFP setup to experimental status with explicit warnings.
+
+### 78. Micro-Stop Taker Fee Meat-Grinder & Breakeven Inversion (+2.50R MFE Bug) (Resolved in V17.59)
+- **The Bug:** Ultra-tight stop losses on 3m candles ($0.05 \times \text{ATR}$, ~$3.00 ETH distance = 0.15%) resulted in catastrophic fee bleed, burning $67.31R ($868.05) across 273 losses. In addition, Early Breakeven was set to +2.50R MFE (matching TP1), causing exactly 0 trades to be scratched (`be_scratches: 0`) and leaving intraday reversals from +1.5R to +2.0R completely unprotected. In the UI, the Rule 4 slider overflowed its bounds and the Stage 2 dropdown falsely showed `1.3R (Fast Scalp)` while the state was `5.0R`.
+- **The Causes:**
+  1. **Leverage Fee Amplification:** Under 2% portfolio risk, a 0.15% stop distance forces $13.33\times$ notional leverage. Binance charges 0.04% taker fee on notional position size. Each stop-out cost $0.267\text{R}$ in fee drag, expanding a $-1.00\text{R}$ stop into a $-1.267\text{R}$ loss.
+  2. **Breakeven Inversion:** Early Breakeven is designed to protect capital *before* TP1 (at +0.35R to +0.40R). Setting it to +2.50R eliminated all defensive protection.
+  3. **UI Desynchronization:** HTML `<select>` lacked options above 2.0R, causing it to render the first option (`1.3R`), while the range slider had a static `max: 0.90`.
+- **The Fixes:**
+  1. **Preset Recalibration:** Fixed `earlyBreakevenMultiple` in `scannerPresets.ts` to `0.40`.
+  2. **Dynamic UI Controls:** Added dynamic custom option fallback to Stage 2 select dropdown and made the Rule 4 range slider dynamic (`max={Math.max(0.90, earlyBreakevenMultiple)}`).
+  3. **Restored Proven Champions:** Re-established the 5m Fee Shield Champion V3 (`factory_sr_5m_fvg_ce_sniper_v3`) and 15m Macro Swing Champion (`factory_sr_15m_macro_sniper_v1`) as the sole platform defaults.
+
+### 79. NextAuth ClientFetchError Caused by Server 500 HTML Error Responses (Resolved in V17.59)
+- **The Bug:** The browser console threw `ClientFetchError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON. Read more at https://errors.authjs.dev#autherror` on every page refresh in Next.js 16.2.4 (Webpack).
+- **The Causes:** When NextAuth initialized `/api/auth/session`, it imported `src/auth.ts`, which imported `@/lib/postgres.ts`, which imported `'pg'`. Because `node_modules/pg` was incomplete during an interrupted installation, Webpack threw `ERR_MODULE_NOT_FOUND: Cannot find module '.../pg/esm/index.mjs'`. Next.js rendered its default 500 HTML error page (`<!DOCTYPE html>...`). NextAuth's `useSession()` in the browser attempted `response.json()`, encountering the `<` character and failing JSON parsing.
+- **The Fixes:**
+  1. **Package Reinstallation:** Reinstalled `pg` into `node_modules` with complete ESM and CommonJS exports.
+  2. **Cache Invalidation:** Purged stale `.next` dev compilation directory.
+  3. **Clean Server Reboot:** Rebooted dev server and verified `/api/auth/session` returns valid JSON across both unauthenticated (`null`) and authenticated states (`200 OK`).
+
+

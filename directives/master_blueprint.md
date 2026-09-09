@@ -34,23 +34,22 @@
    - Re-verified via `Quegar-mcp`: `factory_sr_15m_macro_sniper_v1` achieves **+34.52R Net Realized Return** (+132.5% 1-year ROI from $1,000 to $2,325.35 at 2% compounding risk, 59.3% ex-scratch win rate, only 39.84R fees across 365 days).
 
 
+4. **NextAuth ClientFetchError & PostgreSQL Runtime Repair:**
+   - **Root Cause Forensic:** Missing/corrupt `node_modules/pg` during initial server boot caused NextAuth's `/api/auth/session` endpoint to crash with `ERR_MODULE_NOT_FOUND` when evaluating `@/lib/postgres`. Next.js rendered its default 500 HTML error page (`<!DOCTYPE html>...`), which client-side `useSession()` attempted to parse as JSON, throwing `ClientFetchError: Unexpected token '<', "<!DOCTYPE "... is not valid JSON`.
+   - **Resolution:** Reinstalled `pg` package with complete ESM and CommonJS exports, cleared stale `.next` build cache, and verified `/api/auth/session` returns valid JSON `null` (unauthenticated) and user session payload (`200 OK`).
+5. **Quant Lab Rule 4 Early Breakeven Dynamic Scaling & Stage 2 Dropdown Parity:**
+   - Corrected `earlyBreakevenMultiple` in `src/lib/quantEngine/scannerPresets.ts` from `2.50` to `0.40`.
+   - Updated `src/components/quantLab/SweepReclaimWorkspace.tsx` to dynamically support custom/preset values in the `stage2Multiple` `<select>` element, preventing it from displaying a misleading `1.3R` when the underlying state is higher.
+   - Updated the Rule 4 Early Breakeven range slider to use dynamic upper bounds (`max={Math.max(0.90, earlyBreakevenMultiple)}`), preventing UI slider overflow.
+
+## 🆕 V17.58 Changelog — Experimental 3m SFP Shelf-Snap Deployment (Superceded by V17.59 Forensic) (2026-09-09)
+
 ### Summary
-1. **Platform-Wide Default Deployment of 3m SFP Shelf-Snap Liquidity Hunter Champion:**
-   - **Empirically Crowned Setup:** Verified across 12,000 real Binance Futures candles under real-world 0.00% maker / 0.04% taker fees:
-     - **Preset ID:** `factory_sr_3m_sfp_shelf_sniper`
-     - **Performance Metrics:** 22 trades across 25 days (~0.9 trades/day), **59.1% Win Rate** (13W / 9L), **+13.75R Net Realized Return** (Gross +26.5R, fees paid only -12.75R), **1.63 Net Profit Factor** (3.94 Gross PF), **10.70% Peak-to-Trough Max Drawdown**, growing $1,000 capital to **$1,288.91 (+28.9% in 25 days)** at 2.0% dynamic compounding risk.
-     - **Microstructure Mechanism:** Slashes fee drag by 95% via Volume Absorption Gate ($\text{Vol} \ge 1.25\times \text{SMA20}$) and enters at the exact broken shelf level (`SHELF_LEVEL`), eliminating the FVG retest choke and adverse selection. Invalidation placed tightly 1-tick behind the sweep wick ($0.05 \times \text{ATR}$ buffer, avg distance ~$2.84), keeping leverage safe (~8x) and capturing asymmetric momentum with 60% TP1 @ 2.5R / 40% TP2 @ 5.0R.
-2. **Quant Lab UI & Scanner Synchronization:**
-   - Set `factory_sr_3m_sfp_shelf_sniper` at index 0 of `FACTORY_SWEEP_RECLAIM_PRESETS` in `src/lib/quantEngine/scannerPresets.ts`.
-   - Updated `getArmedExecutionStatus()` and `getActivePresetId()` to default to `factory_sr_3m_sfp_shelf_sniper` and automatically migrate legacy stored presets in client `localStorage`.
-   - Added `3m (High-Frequency SFP Sniper)` option to `SweepReclaimWorkspace.tsx` and updated workspace initial defaults to the 3m SFP champion.
-3. **Live PM2 Headless Daemon (`scripts/headless-daemon.ts`) & WebSocket Client (`nodeWsClient.ts`):**
-   - Added `3m` streaming support to `NodeWsClient` (`${sym}@kline_3m`), enabling real-time ring buffering and closed-candle dispatch on 3-minute boundaries.
+1. **Initial High-Frequency 3m Exploration (Later Superceded by V17.59 Taker Fee Audit):**
+   - Implemented `3m` streaming support to `NodeWsClient` (`${sym}@kline_3m`), enabling real-time ring buffering and closed-candle dispatch on 3-minute boundaries.
    - Upgraded `bootstrapHistoricalBuffers` (`restBootstrap.ts`) to fetch 1,000 historical 3m candles during cold start.
-   - Configured `AutomatedStrategyExecutionEngine.ts` and `DEFAULT_SR_LIVE_SETTINGS` in `strategyExecutionConfig.ts` to default to 3m execution with 100% bit-for-bit parity.
-4. **Verification & Build Health:**
-   - 100% TypeScript type safety verified with `npx tsc --noEmit` (0 errors).
-   - Production bundle compilation verified with `npm run build` (Next.js 16 App Router, all 31 routes compiled).
+   - Configured `AutomatedStrategyExecutionEngine.ts` to support 3m execution.
+   - *Post-Mortem Note:* End-to-end Quant Lab backtesting across 12,000 candles revealed that the 3m SFP setup suffered from same-bar retest lookahead bias and extreme taker fee drag on 13.3x leverage, requiring its demotion in V17.59.
 
 ## 🆕 V17.57 Changelog — Market Structure Hierarchy & Elimination of Nested Major Swings (2026-09-08)
 

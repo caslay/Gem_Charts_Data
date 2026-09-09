@@ -924,6 +924,9 @@ export default function SweepReclaimWorkspace({
                 <option value={1.6}>1.6R (Refined Sniper Target)</option>
                 <option value={1.8}>1.8R (Extended)</option>
                 <option value={2.0}>2.0R (Full Macro)</option>
+                {![1.3, 1.35, 1.4, 1.5, 1.6, 1.8, 2.0].includes(stage2Multiple) && (
+                  <option value={stage2Multiple}>{stage2Multiple}R (Custom / Preset)</option>
+                )}
               </select>
               <span className="text-[9px] text-muted dark:text-slate-500 font-mono">
                 Tranche 1: {(stage1Ratio * 100).toFixed(0)}% @ {stage1Multiple}R | Tranche 2: {(stage2Ratio * 100).toFixed(0)}% @ {stage2Multiple}R
@@ -1065,7 +1068,7 @@ export default function SweepReclaimWorkspace({
               <input
                 type="range"
                 min="0.20"
-                max="0.90"
+                max={Math.max(0.90, earlyBreakevenMultiple)}
                 step="0.05"
                 disabled={isScanning || !enableEarlyBreakeven}
                 value={earlyBreakevenMultiple}
