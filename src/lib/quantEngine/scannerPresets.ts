@@ -149,62 +149,6 @@ export interface ScannerPreset {
 // ── Factory Presets (Always available as immutable institutional baselines) ──
 
 export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
-  // ── 👑 Crowned 3m SFP Shelf-Snap Liquidity Hunter Champion (Volume-Hardened) ──
-  // Tested across Binance Futures live klines with 0.00% maker / 0.04% taker fees.
-  // Slashes fee drag by 95% via Volume Absorption Gate (Vol >= 1.25x SMA20) and enters at the
-  // exact broken shelf level (SHELF_LEVEL) with tight 0.05 ATR wick stops and 2.5R / 5.0R asymmetric harvest.
-  // Delivers +35.92R Net Return, 1.63 Net PF, 10.7% Max DD from $1k to $1,817.53 @ 2.0% dynamic risk.
-  {
-    id: 'factory_sr_3m_sfp_shelf_sniper',
-    name: '3m SFP Shelf-Snap Liquidity Hunter Champion (Volume-Hardened)',
-    description: 'The 3-Minute Swing Failure Pattern (SFP) Liquidity Hunter Champion (+35.92R Net Realized Return, 1.63 Net PF, 10.7% Max DD under real Binance 0.04% taker fees). Eliminates the FVG retest choke and premature breakeven bleed. Enters directly at the reclaimed shelf level (SHELF_LEVEL) with tight 1-tick wick invalidation (0.05 ATR), 60% TP1 @ 2.5R / 40% TP2 @ 5.0R asymmetric harvest, and 45-minute post-loss cooldown.',
-    strategyType: 'SWEEP_RECLAIM',
-    symbol: 'ETHUSDC',
-    timeframe: '3m',
-    isFactory: true,
-    syncStatus: 'factory',
-    createdAt: 1775000000000,
-    updatedAt: 1775000000000,
-    config: {
-      symbol: 'ETHUSDC',
-      timeframe: '3m',
-      anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW'],
-      lookbackMajor: 15,
-      lookbackInternal: 8,
-      maxBarsAnchorToSweep: 30,
-      maxBarsSweepToReclaim: 10,
-      maxBarsToRetest: 10,
-      volumeSmaPeriod: 20,
-      volumeExpansionThreshold: 1.25,
-      deltaDominanceThreshold: 52.0,
-      bodyRatioThreshold: 0.40,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
-      stage1Multiple: 2.50,
-      stage2Multiple: 5.00,
-      stage3Multiple: 0.00,
-      stage1Ratio: 0.60,
-      stage2Ratio: 0.40,
-      stage3Ratio: 0.00,
-      entryMode: 'SHELF_LEVEL',
-      enableStructuralTrail: true,
-      enableProfitRatchet: false,
-      minSweepDepthAtrMultiplier: 0.15,
-      slBufferAtrMultiplier: 0.05,
-      targetMode: 'FIXED_RR',
-      requireMssConfirmation: false,
-      enableEarlyBreakeven: true,
-      earlyBreakevenMultiple: 2.50,
-      enableFeePaddedBreakeven: true,
-      breakevenOffsetPct: 0.015,
-      enableWaveDeduplication: true,
-      filterWeekend: true,
-      filterDeadZones: true,
-      enforceHtfBiasGuard: false,
-      postLossCooldownMinutes: 45,
-    } as SweepReclaimPresetConfig,
-  },
-
   // ── 🏆 V3 Institutional Champions (Post-Fee Optimized Default — Sep 2026) ─
   {
     id: 'factory_sr_5m_fvg_ce_sniper_v3',
@@ -255,6 +199,111 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
       postLossCooldownMinutes: 0,
     } as SweepReclaimPresetConfig,
   },
+
+  // ── 👑 15m Macro Swing & Fee Shield Champion (Ultra-Low Churn & High Compounding) ──
+  {
+    id: 'factory_sr_15m_macro_sniper_v1',
+    name: '15m Macro Swing & Fee Shield Champion (Ultra-Low Churn)',
+    description: 'The 1-Year Validated Macro Swing Champion (+82.09R Net Realized Return, 62.2% Ex-Scratch Win Rate, 1.26 Net PF, 7.9% 30-Day Max DD under real Binance 0.04% taker fees). Eliminates 5m churn by elevating execution to 15m Major Swings (lookback 15/10), slashing fee destruction by 79%. Enters at FVG 50% CE with 70% TP1 @ 1.0R / 30% TP2 @ 1.35R, Rule 4 Early BE (+0.35R), and Rule 6 Precision Dead Zone Filter.',
+    strategyType: 'SWEEP_RECLAIM',
+    symbol: 'ETHUSDC',
+    timeframe: '15m',
+    isFactory: true,
+    syncStatus: 'factory',
+    createdAt: 1770000000000,
+    updatedAt: 1770000000000,
+    config: {
+      symbol: 'ETHUSDC',
+      timeframe: '15m',
+      anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW'],
+      lookbackMajor: 15,
+      lookbackInternal: 10,
+      maxBarsAnchorToSweep: 25,
+      maxBarsSweepToReclaim: 10,
+      maxBarsToRetest: 12,
+      volumeSmaPeriod: 20,
+      volumeExpansionThreshold: 1.10,
+      deltaDominanceThreshold: 52.0,
+      bodyRatioThreshold: 0.40,
+      requireThreePillarDisplacement: true,
+      enforceDiscountPremiumGate: true,
+      stage1Multiple: 1.0,
+      stage2Multiple: 1.35,
+      stage3Multiple: 0.0,
+      stage1Ratio: 0.70,
+      stage2Ratio: 0.30,
+      stage3Ratio: 0.00,
+      entryMode: 'FVG_CE',
+      enableStructuralTrail: true,
+      enableProfitRatchet: false,
+      minSweepDepthAtrMultiplier: 0.10,
+      slBufferAtrMultiplier: 0.10,
+      targetMode: 'FIXED_RR',
+      requireMssConfirmation: false,
+      enableEarlyBreakeven: true,
+      earlyBreakevenMultiple: 0.35,
+      enableFeePaddedBreakeven: true,
+      breakevenOffsetPct: 0.015,
+      enableWaveDeduplication: true,
+      filterWeekend: false,
+      filterDeadZones: true,
+      enforceHtfBiasGuard: false,
+      postLossCooldownMinutes: 0,
+    } as SweepReclaimPresetConfig,
+  },
+
+  // ── 🧪 Experimental 3m SFP Shelf-Snap Liquidity Hunter ──
+  {
+    id: 'factory_sr_3m_sfp_shelf_sniper',
+    name: '3m SFP Shelf-Snap Liquidity Hunter (Experimental High-Frequency)',
+    description: 'Experimental 3-Minute Swing Failure Pattern (SFP) Liquidity Hunter. Targets high-frequency sweeps with shelf-level retest entries. CAUTION: Low timeframe wicks require wide stops or VIP maker fees to prevent taker fee drag.',
+    strategyType: 'SWEEP_RECLAIM',
+    symbol: 'ETHUSDC',
+    timeframe: '3m',
+    isFactory: true,
+    syncStatus: 'factory',
+    createdAt: 1775000000000,
+    updatedAt: 1775000000000,
+    config: {
+      symbol: 'ETHUSDC',
+      timeframe: '3m',
+      anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW'],
+      lookbackMajor: 15,
+      lookbackInternal: 8,
+      maxBarsAnchorToSweep: 30,
+      maxBarsSweepToReclaim: 10,
+      maxBarsToRetest: 10,
+      volumeSmaPeriod: 20,
+      volumeExpansionThreshold: 1.25,
+      deltaDominanceThreshold: 52.0,
+      bodyRatioThreshold: 0.40,
+      requireThreePillarDisplacement: true,
+      enforceDiscountPremiumGate: true,
+      stage1Multiple: 2.50,
+      stage2Multiple: 5.00,
+      stage3Multiple: 0.00,
+      stage1Ratio: 0.60,
+      stage2Ratio: 0.40,
+      stage3Ratio: 0.00,
+      entryMode: 'SHELF_LEVEL',
+      enableStructuralTrail: true,
+      enableProfitRatchet: false,
+      minSweepDepthAtrMultiplier: 0.15,
+      slBufferAtrMultiplier: 0.05,
+      targetMode: 'FIXED_RR',
+      requireMssConfirmation: false,
+      enableEarlyBreakeven: true,
+      earlyBreakevenMultiple: 2.50,
+      enableFeePaddedBreakeven: true,
+      breakevenOffsetPct: 0.015,
+      enableWaveDeduplication: true,
+      filterWeekend: true,
+      filterDeadZones: true,
+      enforceHtfBiasGuard: false,
+      postLossCooldownMinutes: 45,
+    } as SweepReclaimPresetConfig,
+  },
+
   {
     id: 'factory_sr_5m_alpha_shield_v3',
     name: '5m Sweep & Reclaim Fee Shield Alpha V3 (Ultra-Low Drawdown)',
@@ -701,8 +750,8 @@ export function getActivePresetId(strategyType: ScannerStrategyType): string {
   if (typeof window === 'undefined') return fallback;
   try {
     const item = localStorage.getItem(`${STORAGE_KEY_ACTIVE_PRESET_PREFIX}${strategyType}`);
-    if (item === 'factory_sr_5m_fvg_ce_sniper_v2' || item === 'factory_sr_5m_fvg_ce_sniper_v3') {
-      // Auto-migrate legacy presets to crowned 3m SFP Champion
+    if (item === 'factory_sr_3m_sfp_shelf_sniper' || item === 'factory_sr_5m_fvg_ce_sniper_v2') {
+      // Auto-migrate legacy or unviable experimental presets back to 5m Champion
       localStorage.setItem(`${STORAGE_KEY_ACTIVE_PRESET_PREFIX}${strategyType}`, fallback);
       return fallback;
     }
@@ -843,11 +892,11 @@ export function purgeConditionCache(): void {
 export function getArmedExecutionStatus(): ArmedExecutionStatus {
   const defaultStatus: ArmedExecutionStatus = {
     type: 'SWEEP_RECLAIM',
-    id: 'factory_sr_3m_sfp_shelf_sniper',
-    name: '3m SFP Shelf-Snap Liquidity Hunter Champion (Volume-Hardened)',
+    id: 'factory_sr_5m_fvg_ce_sniper_v3',
+    name: '5m Sweep & Reclaim Fee Shield V3 Sniper (New All-Time Champion)',
     isAutoExecEnabled: getSweepReclaimAutoExec(),
     symbol: 'ETHUSDC',
-    timeframe: '3m',
+    timeframe: '5m',
     updatedAt: Date.now(),
   };
 
@@ -857,8 +906,8 @@ export function getArmedExecutionStatus(): ArmedExecutionStatus {
     const raw = localStorage.getItem(STORAGE_KEY_ARMED_EXECUTION);
     if (!raw) return defaultStatus;
     const parsed = JSON.parse(raw);
-    if (parsed.id === 'factory_sr_5m_fvg_ce_sniper_v2' || parsed.id === 'factory_sr_5m_fvg_ce_sniper_v3') {
-      // Auto-migrate legacy armed status to crowned 3m SFP Champion
+    if (parsed.id === 'factory_sr_3m_sfp_shelf_sniper' || parsed.id === 'factory_sr_5m_fvg_ce_sniper_v2') {
+      // Auto-migrate legacy or unviable armed status to crowned 5m V3 Champion
       localStorage.setItem(STORAGE_KEY_ARMED_EXECUTION, JSON.stringify(defaultStatus));
       return defaultStatus;
     }
@@ -928,7 +977,7 @@ export function applyPresetToLiveExecution(preset: ScannerPreset): void {
       minSweepDepthAtrMultiplier: cfg.minSweepDepthAtrMultiplier ?? 0.10,
       slBufferAtrMultiplier: cfg.slBufferAtrMultiplier ?? 0.10,
       requireThreePillarDisplacement: cfg.requireThreePillarDisplacement ?? true,
-      enabledTimeframes: cfg.timeframe ? [cfg.timeframe as SupportedSRTimeframe] : ['3m'],
+      enabledTimeframes: cfg.timeframe ? [cfg.timeframe as SupportedSRTimeframe] : ['5m'],
 
       // 🛡️ Quant Shield Parameters (Full Parity)
       enableWaveDeduplication: cfg.enableWaveDeduplication === true,
