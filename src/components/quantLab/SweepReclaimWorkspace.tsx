@@ -93,7 +93,7 @@ export default function SweepReclaimWorkspace({
   // Scan Configuration Form State
   const [scanName, setScanName] = useState("Deep Sweep & Reclaim Scan");
   const [symbol, setSymbol] = useState("ETHUSDC");
-  const [timeframe, setTimeframe] = useState<"1m" | "3m" | "5m" | "15m" | "1h" | "4h">("3m");
+  const [timeframe, setTimeframe] = useState<"1m" | "3m" | "5m" | "15m" | "1h" | "4h">("5m");
   const [startDate, setStartDate] = useState("2026-03-01");
   const [endDate, setEndDate] = useState("2026-06-01");
 
@@ -107,15 +107,15 @@ export default function SweepReclaimWorkspace({
 
   // Volumetric & Displacement Gating (3-Pillar Gatekeeper)
   const [volumeSmaPeriod, setVolumeSmaPeriod] = useState(20);
-  const [volumeExpansionThreshold, setVolumeExpansionThreshold] = useState(1.25);
+  const [volumeExpansionThreshold, setVolumeExpansionThreshold] = useState(1.10);
   const [deltaDominanceThreshold, setDeltaDominanceThreshold] = useState(52.0);
   const [bodyRatioThreshold, setBodyRatioThreshold] = useState(0.40);
   const [enforceDiscountPremiumGate, setEnforceDiscountPremiumGate] = useState(true);
 
   // 3-Stage Harvest & Risk Controls
-  const [entryMode, setEntryMode] = useState<SweepReclaimEntryMode>("SHELF_LEVEL");
-  const [stage1Multiple, setStage1Multiple] = useState(2.50);
-  const [stage2Multiple, setStage2Multiple] = useState(5.00);
+  const [entryMode, setEntryMode] = useState<SweepReclaimEntryMode>("FVG_CE");
+  const [stage1Multiple, setStage1Multiple] = useState(1.0);
+  const [stage2Multiple, setStage2Multiple] = useState(1.30);
   const [stage3Multiple, setStage3Multiple] = useState(0.00);
   const [stage1Ratio, setStage1Ratio] = useState(0.60);
   const [stage2Ratio, setStage2Ratio] = useState(0.40);
@@ -131,14 +131,14 @@ export default function SweepReclaimWorkspace({
 
   // 🛡️ Quant Shield & Loss Streak Protection Controls (Champion Defaults)
   const [enableWaveDeduplication, setEnableWaveDeduplication] = useState(true);
-  const [filterWeekend, setFilterWeekend] = useState(true);
-  const [filterDeadZones, setFilterDeadZones] = useState(true);
+  const [filterWeekend, setFilterWeekend] = useState(false);
+  const [filterDeadZones, setFilterDeadZones] = useState(false);
   const [enforceHtfBiasGuard, setEnforceHtfBiasGuard] = useState(false);
   const [enableEarlyBreakeven, setEnableEarlyBreakeven] = useState(true);
-  const [earlyBreakevenMultiple, setEarlyBreakevenMultiple] = useState(2.50);
+  const [earlyBreakevenMultiple, setEarlyBreakevenMultiple] = useState(0.40);
   const [enableFeePaddedBreakeven, setEnableFeePaddedBreakeven] = useState(true);
   const [breakevenOffsetPct, setBreakevenOffsetPct] = useState(0.015);
-  const [postLossCooldownMinutes, setPostLossCooldownMinutes] = useState(45);
+  const [postLossCooldownMinutes, setPostLossCooldownMinutes] = useState(0);
 
   // 💰 Real-World Binance Futures Fee Schedule (USDC Pairs)
   const [feeTierPreset, setFeeTierPreset] = useState<BinanceFeeTier>('USDC_REGULAR_VIP1');
@@ -317,7 +317,7 @@ export default function SweepReclaimWorkspace({
     const cfg = preset.config as SweepReclaimPresetConfig;
 
     if (cfg.symbol) setSymbol(cfg.symbol);
-    if (cfg.timeframe) setTimeframe(cfg.timeframe as "5m" | "15m" | "1h" | "4h");
+    if (cfg.timeframe) setTimeframe(cfg.timeframe as "1m" | "3m" | "5m" | "15m" | "1h" | "4h");
     if (cfg.entryMode) setEntryMode(cfg.entryMode);
     if (typeof cfg.volumeSmaPeriod === 'number') setVolumeSmaPeriod(cfg.volumeSmaPeriod);
     if (typeof cfg.volumeExpansionThreshold === 'number') setVolumeExpansionThreshold(cfg.volumeExpansionThreshold);
