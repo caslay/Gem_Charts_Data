@@ -1,8 +1,84 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.59
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.62
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-09 (V17.59 — 3m Low-Timeframe Taker Fee Forensic, Institutional Champion Restoration & Deployment)
+> **Last Updated:** 2026-09-10 (V17.62 — Preset Pruning, Strict Canonical Factory Indexing & Universal Fallback Hardening)
+
+## 🆕 V17.62 Changelog — Preset Pruning, Strict Canonical Factory Indexing & Universal Fallback Hardening (2026-09-10)
+
+### Summary
+1. **Pruned Obsolete & Sub-Optimal Presets:**
+   - Removed `factory_sr_3m_sfp_shelf_sniper` (failed high-frequency low-timeframe test).
+   - Removed `factory_sr_15m_scen_a_conservative_ce`, `factory_sr_15m_scen_a_conservative_proximal`, and `factory_sr_15m_scen_b_asymmetric_ce` (sub-optimal matrix variations surpassed by Proximal Runner).
+2. **Strict Canonical Index Ordering in `FACTORY_SWEEP_RECLAIM_PRESETS`:**
+   - **Index 0:** `factory_sr_15m_macro_sniper_v1` (Platform Primary Default & Macro Swing Champion: 70/30 @ 1.0/1.35R, Early BE +0.35R, Rule 6 Dead Zones).
+   - **Index 1:** `factory_sr_15m_scen_b_asymmetric_proximal` (Benchmark Pure TP1 BE Champion: 60/40 @ 1.0/2.0R, FVG Proximal entry, Pure TP1 BE).
+   - **Index 2:** `factory_sr_5m_fvg_ce_sniper_v3` (5m High-Turnover Shielded Champion: 60/40 @ 1.0/1.30R, Early BE +0.40R, 0.015% Fee Shield).
+3. **Universal Fallback & Storage Auto-Migration Safety:**
+   - Updated `getActivePresetId('SWEEP_RECLAIM')` and `getArmedExecutionStatus()` in `src/lib/quantEngine/scannerPresets.ts` to return `factory_sr_15m_macro_sniper_v1` on undefined/cleared storage or SSR.
+   - Built automatic in-memory migration for any stale client session holding pruned preset IDs (`factory_sr_3m_sfp_shelf_sniper`, `factory_sr_15m_scen_a_conservative_ce`, `factory_sr_15m_scen_a_conservative_proximal`, `factory_sr_15m_scen_b_asymmetric_ce`, `factory_sr_5m_fvg_ce_sniper_v2`) to seamlessly migrate to `factory_sr_15m_macro_sniper_v1`.
+   - Synchronized default live settings in `strategyExecutionConfig.ts`, `AutomatedStrategyExecutionEngine.ts`, and `SweepReclaimWorkspace.tsx` to 15m Macro Champion baseline.
+4. **Comprehensive Parity & Integrity Verification:**
+   - `npx tsc --noEmit`: 0 errors.
+   - `npx tsx scripts/test_risk_governor.ts`: 22/22 tests passed (100%).
+   - `npx tsx scripts/verify_quant_vs_pm2_parity.ts`: 8/8 trades match bit-for-bit (100.00% parity confirmed).
+
+## 🆕 V17.61 Changelog — 15m Timeframe Elevation Benchmark, Binance Taker Fee Reduction & Conservative vs Asymmetric Harvest Matrix (2026-09-10)
+
+### Summary
+1. **15m Timeframe Elevation & Regime Stress Test:**
+   - Evaluated the Sweep & Reclaim architecture on 15m candles with Lookback Major = 15, Lookback Internal = 10, Rule 6 Dead Zones (00:00 & 17:00–19:00 UTC), Vol Expansion $\ge 1.20\times$, Delta $\ge 52\%$, Body Ratio $\ge 45\%$, and Rule 5 45m post-loss cooldown across both the 90-Day Summer Chop Regime (June 12 – September 10, 2026) and the 1-Year Continuous Dataset (September 2025 – September 2026).
+   - **Taker Fee Elimination:** Slashing execution timeframe from 5m down to 15m reduced annual trade count from 2,297 to 554–685 (**70.2% to 75.9% trade noise reduction**) and eliminated **-85.47R to -95.30R in Binance taker fees (-74.1% to -82.6% fee reduction in R; -72.2% to -73.6% in dollars)**.
+2. **Conservative (Scenario A: 70/30 @ 1.0/1.35R) vs Asymmetric (Scenario B: 60/40 @ 1.0/2.0R):**
+   - Under Pure TP1 Breakeven (+0.015% fee shield):
+     - **Scenario B systematically outperforms Scenario A** across both horizons:
+       - 90D: Scenario B Proximal achieved **+6.83R Net Realized R (1.09 PF, $11,042 equity)** vs Scenario A Proximal **+1.38R (1.02 PF, $9,933 equity)**.
+       - 1Y: Scenario B Proximal delivered **+46.01R Net Realized R (1.17 PF, $21,918 equity)** vs Scenario A Proximal **+38.44R (1.13 PF, $18,925 equity)**.
+     - The 40% runner to 2.0R captures macro 15m impulse expansions that 1.35R truncates prematurely, while maintaining identical downside risk and max drawdown (~29.9%).
+3. **Displacement Entry Mode Optimization (FVG Proximal vs FVG 50% CE):**
+   - FVG Proximal entry consistently beats FVG 50% CE under pure TP1 breakeven:
+     - 1Y Scenario B: FVG Proximal delivered **+46.01R** vs FVG CE **+40.85R** (+5.16R edge).
+     - 90D Scenario B: FVG Proximal delivered **+6.83R** vs FVG CE **+2.57R** (+4.26R edge).
+   - Wide 15m displacement bars frequently retrace only into the proximal gap edge before continuation. Proximal entry captures these high-momentum impulses without suffering non-fill invalidations.
+4. **Rule 4 Early Breakeven Ratchet Sensitivity:**
+   - Adding Rule 4 Early Breakeven (+0.35R) on 15m reduces max drawdown from ~30%–35% down to **16.6%–16.7%**, elevating 1-Year Net Return to **+81.08R (Scenario A3)** and **+78.89R (Scenario B3)**.
+5. **New Factory Presets & Telemetry Tooling:**
+   - Added 4 immutable factory presets to `src/lib/quantEngine/scannerPresets.ts`:
+     - `factory_sr_15m_scen_a_conservative_ce`
+     - `factory_sr_15m_scen_a_conservative_proximal`
+     - `factory_sr_15m_scen_b_asymmetric_ce`
+     - `factory_sr_15m_scen_b_asymmetric_proximal`
+   - Hardened `scripts/benchmark_15m_matrix.ts` with independent structural bootstrap hydration and 45-day warmup for both 90D and 1Y horizons, resolving prior bootstrap corruption.
+
+
+## 🆕 V17.60 Changelog — Asymmetric Sweep & Reclaim Architecture Stress Test, Tier-1 Anchor Isolation, Confirmed Displacement MSS & Taker Fee Elimination (2026-09-10)
+
+### Summary
+1. **Strategic Stress Test Execution & Fee Destruction Forensic:**
+   - Evaluated 10 comprehensive candle-by-candle path-dependent configurations across 106,560 5m candles (1-Year ETHUSDC, Aug 2025 – Sep 2026) under Binance USDⓈ-M 0.00% Maker / 0.04% Taker fee schedule.
+   - **Baseline V3 Reality:** 2,379 trades, 943 scratches (39.6%), +144.93R Gross, -174.06R Taker Fees, netting **-29.13R Net Return** (120.1% Fee-to-Gross bleed).
+   - **Isolated Rule 4 Early BE Removal:** Dropping Early BE in isolation caused losses to explode to 1,007 full stops, driving fees to -249.79R and net loss to -136.47R. Proved that Early BE cannot be removed without structural gating and target expansion.
+2. **Structural Noise Elimination (Tier-1 Anchor Isolation):**
+   - Added `suppressInternalPivots?: boolean` to `SweepReclaimEngine.ts` and `scannerPresets.ts`.
+   - Filters out minor `INNER` (level 0) and `INTERNAL` (level 1) 5m pivots, restricting triggers exclusively to Tier-1 anchors (`PDH`, `PDL`, `ASIAN_HIGH`, `ASIAN_LOW`, `LONDON_HIGH`, `LONDON_LOW`, and Level-2 `MAJOR` pivots).
+   - Reduced annual trade frequency from 2,164 to 611 (71.8% noise elimination) and slashed fee drag by 73.7% (-65.79R).
+3. **Top-Down HTF Order Flow Confluence Gating:**
+   - Upgraded `enforceHtfBiasGuard` in `SweepReclaimEngine.ts`: evaluates rolling 1H EMA trend. Counter-trend reclaims are strictly vetoed unless a genuine macro daily liquidity pool (`PDH`, `PDL`, `DAILY`) was purged.
+   - Dropped low-probability counter-trend traps from 611 to 92 trades, reducing annual fees to only -7.28R.
+4. **Refined Internal Swing Pivot MSS Confirmation & Next-Bar Ratchet Rule Enforcement:**
+   - Upgraded `requireMssConfirmation` in `SweepReclaimEngine.ts`: rather than requiring reclaim candles to engulf an arbitrary 15-bar peak, it searches backward for the actual preceding internal swing pivot (fractal peak/trough formed prior to the sweep extreme) and requires a confirmed physical candlestick body close beyond it.
+   - Enforced strict Next-Bar Ratchet Rule on TP1 fills: `checkSL` on bar $i$ uses `initialBarSL`, preventing premature same-bar breakeven stop-out corruption caused by bar $i$'s pre-expansion entry dip.
+   - Fixed fee accounting in `equityCalculator.ts` for partial-exit trades (`STAGE_1_SCRATCH`), properly recognizing limit order maker execution on TP1 and fee-padded breakeven shields on runners.
+   - Cleanly decoupled `is_htf_aligned` and `htf_bias` onto `SweepReclaimSetup`.
+   - Combined with Tier-1 anchors and HTF order flow gating (Step 4), achieves:
+     - **68 Executed Trades** (~1.3 trades/week, perfectly matching Directive 10 target frequency of 50-150 trades/year).
+     - **54.4% Win Rate** (37 wins, 31 losses, 0 scratches).
+     - **+6.91R Gross Return**, **-2.93R Taker Fees** (**98.3% reduction in fee bleed** vs V3 baseline).
+     - **+3.98R Net Realized Return** (**1.10 Net Profit Factor**, 16.2% Max Drawdown, equity grows to $1,066.28).
+5. **New Presets & Telemetry Infrastructure:**
+   - Registered `factory_sr_5m_asymmetric_rr_sniper` and `factory_sr_5m_asymmetric_ote_sniper` in `src/lib/quantEngine/scannerPresets.ts`.
+   - Updated `src/lib/agentEngineHandlers.ts` to fully wire `suppressInternalPivots`, `targetMode`, `dynamicTp1Source`, `dynamicTp2Source`, `minDynamicTp1Multiple`, `maxDynamicTp1Multiple`, `minDynamicTp2Multiple`, `maxDynamicTp2Multiple`, and `requireMssConfirmation`.
+   - Fixed `cooldownVetoCount` telemetry tracking in `src/lib/quantEngine/equityCalculator.ts`.
 
 ## 🆕 V17.59 Changelog — 3m Low-Timeframe Taker Fee Forensic, Institutional Champion Restoration & Deployment (2026-09-09)
 

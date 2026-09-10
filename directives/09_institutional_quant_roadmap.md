@@ -17,9 +17,9 @@ In systematic quantitative finance, researchers frequently succumb to the **"Tig
 
 ### 🛡️ The Anti-Tunnel Mandate
 * **Immutable Physical Anchor:** The core trading logic remains **Sweep & Reclaim** (liquidity resting above/below structural swing pivots or session extremes swept and aggressively reclaimed).
-* **Orthogonal Factor Exploration:** Features are tested strictly across **4 independent, non-overlapping pillars**. We never test combinations blindly.
-* **Hypothesis-Driven Science:** Every test must begin with an explicit market microstructure hypothesis grounded in order flow physics (e.g. buyer exhaustion, limit order absorption, maker replenishment).
-* **The Zero-Guessing Parity Mandate:** All hypotheses are evaluated candle-by-candle across the full 1-Year historical dataset (106,560 5m bars) in Quant Lab under 100% bit-for-bit parity with the PM2 Headless Daemon.
+* **~~Orthogonal Factor Exploration~~** ~~Features are tested strictly across 4 independent, non-overlapping pillars. We never test combinations blindly.~~ **[UNLOCKED — 2026-09-09]** Cross-pillar feature synthesis is now permitted. Dormant features from any pillar can be freely combined with active parameters in a single hypothesis. No isolation constraint.
+* **Hypothesis-Driven Science:** Every test must begin with an explicit market microstructure hypothesis grounded in order flow physics. Hypotheses may now draw from **any combination** of Pillars 1–4 simultaneously.
+* **The Zero-Guessing Parity Mandate:** All hypotheses are evaluated candle-by-candle across the full 1-Year historical dataset in Quant Lab under 100% bit-for-bit parity with the PM2 Headless Daemon.
 
 ---
 

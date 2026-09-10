@@ -11,7 +11,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import { Pool, QueryResult, QueryResultRow } from 'pg';
+import type { Pool, QueryResult, QueryResultRow } from 'pg';
 
 let poolInstance: Pool | null = null;
 
@@ -22,20 +22,26 @@ export function getDbPool(): Pool {
       process.env.DATABASE_URL ||
       'postgres://quegar_admin:bc1205f23ebf49e5140aa5408b72bc75@127.0.0.1:5432/quegar_db';
 
-    poolInstance = new Pool({
+    // Lazy load pg at server runtime to prevent Webpack client bundle resolution errors
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Pool: PgPool } = require('pg');
+
+    const pool = new PgPool({
       connectionString,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
       ssl: connectionString.includes('sslmode=require') ? { rejectUnauthorized: false } : false,
-    });
+    }) as Pool;
 
-    poolInstance.on('error', (err) => {
+    pool.on('error', (err: Error) => {
       console.error('[POSTGRES_POOL_ERROR] Unexpected error on idle client:', err);
     });
+
+    poolInstance = pool;
   }
 
-  return poolInstance;
+  return poolInstance!;
 }
 
 export interface SqlQueryResult<T extends QueryResultRow = any> {

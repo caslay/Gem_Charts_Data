@@ -171,8 +171,8 @@ export const BINANCE_USDC_FEE_SCHEDULES: Record<BinanceFeeTier, BinanceFeeSchedu
 
 export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   compoundingRiskPct: 2.0,
-  enabledTimeframes: ['5m'],
-  anchorTypes: ['SWING_PIVOT', 'DAILY', 'ASIAN'],
+  enabledTimeframes: ['15m'],
+  anchorTypes: ['SWING_PIVOT', 'DAILY', 'ASIAN', 'LONDON'],
   entryMode: 'FVG_CE',
   volumeSmaPeriod: 20,
   volumeExpansionThreshold: 1.10,
@@ -183,10 +183,10 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   enableProfitRatchet: false,
   enableTp1AutoBreakeven: true,
   stage1Multiple: 1.0,
-  stage2Multiple: 1.30,
-  stage3Multiple: 3.0,
-  stage1Ratio: 0.60,
-  stage2Ratio: 0.40,
+  stage2Multiple: 1.35,
+  stage3Multiple: 0.0,
+  stage1Ratio: 0.70,
+  stage2Ratio: 0.30,
   stage3Ratio: 0.00,
   routeRunnerToHtfDol: true,
   executionTiming: 'INSTANT',
@@ -194,24 +194,24 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   enableMomentumOverride: true,
   sessionGates: ['ASIAN', 'LONDON', 'NY'],
   directionalLock: 'DUAL',
-  lookbackMajor: 10,
-  lookbackInternal: 5,
+  lookbackMajor: 15,
+  lookbackInternal: 10,
   maxBarsAnchorToSweep: 25,
   maxBarsSweepToReclaim: 10,
-  maxBarsToRetest: 15,
+  maxBarsToRetest: 12,
   requireThreePillarDisplacement: true,
   minSweepDepthAtrMultiplier: 0.10,
   slBufferAtrMultiplier: 0.10,
 
-  // Quant Shield Defaults (5m V3 All-Time Champion Verified)
+  // Quant Shield Defaults (15m Macro Champion Verified)
   enableWaveDeduplication: true,
   filterWeekend: false,
-  filterDeadZones: false,
+  filterDeadZones: true,
   enforceHtfBiasGuard: false,
   enableEarlyBreakeven: true,
-  earlyBreakevenMultiple: 0.40,
+  earlyBreakevenMultiple: 0.35,
   enableFeePaddedBreakeven: true,
-  breakevenOffsetPct: 0.015, // 🔬 Calibrated 0.015% Fee Shield
+  breakevenOffsetPct: 0.015,
   postLossCooldownMinutes: 0,
 
   // 🎯 Dynamic Liquidity & MSS Confirmation Defaults

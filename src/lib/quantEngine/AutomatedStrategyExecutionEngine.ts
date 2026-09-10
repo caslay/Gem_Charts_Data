@@ -205,7 +205,7 @@ export interface AutomatedExecutionConfig {
 
 export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   symbol: "ETHUSDC",
-  timeframe: "5m",
+  timeframe: "15m",
   autoExecute: true,
   initialEquity: 1000.0,
   compoundingRiskPct: 2.0,
@@ -217,24 +217,24 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   tickSize: 0.01,
 
   stage1Multiple: 1.0,
-  stage2Multiple: 1.30,
-  stage3Multiple: 3.0,
+  stage2Multiple: 1.35,
+  stage3Multiple: 0.0,
 
-  stage1Ratio: 0.60,
-  stage2Ratio: 0.40,
+  stage1Ratio: 0.70,
+  stage2Ratio: 0.30,
   stage3Ratio: 0.0,
 
   enableStructuralTrail: true,
   enableProfitRatchet: false,
   slBufferAtrMultiplier: 0.10,
 
-  // Quant Shield Defaults (Aligned with factory_sr_5m_fvg_ce_sniper_v3 champion)
+  // Quant Shield Defaults (Aligned with factory_sr_15m_macro_sniper_v1 champion)
   enableWaveDeduplication: true,
   filterWeekend: false,
-  filterDeadZones: false,
+  filterDeadZones: true,
   enforceHtfBiasGuard: false,
   enableEarlyBreakeven: true,
-  earlyBreakevenMultiple: 0.40,
+  earlyBreakevenMultiple: 0.35,
   enableFeePaddedBreakeven: true,
   breakevenOffsetPct: 0.015,
   postLossCooldownMinutes: 0,

@@ -187,6 +187,8 @@ export interface SweepReclaimSetup {
   // Dealing Range & Valuation Gating
   dealing_range_equilibrium: number | null;
   is_valuation_aligned: boolean;
+  is_htf_aligned?: boolean;
+  htf_bias?: 'BULLISH' | 'BEARISH';
   market_regime_at_entry?: MarketRegimeState;
   valuation_gate_mode?: ValuationGateMode;
   local_wave_equilibrium?: number | null;
@@ -262,6 +264,7 @@ export interface SweepReclaimScanConfig {
   symbol?: string;
   timeframe?: string;
   anchorTypes?: SweepReclaimAnchorType[];     // Selected anchor types to scan (default: all)
+  suppressInternalPivots?: boolean;           // Suppress minor internal / inner 5m swing pivots (Tier-1 Major pivots only)
   lookbackMajor?: number;                     // Pivot engine major lookback (default: 15)
   lookbackInternal?: number;                  // Pivot engine internal lookback (default: 5)
   maxBarsAnchorToSweep?: number;              // Max candles between anchor and sweep (default: 30)
@@ -477,6 +480,7 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
 
   // 🛡️ Quant Shield Rule 6: Dead Zone Filter
   filterDeadZones: false,
+  suppressInternalPivots: false,
 };
 
 // ── Centralized Retest Price Resolver ────────────────────────────────────────
@@ -792,6 +796,9 @@ export class SweepReclaimEngine {
       }
 
       for (const p of uniquePivotsMap.values()) {
+        if (this.config.suppressInternalPivots && (p.level ?? 0) < 2) {
+          continue; // Suppress minor internal (level 1) and inner (level 0) swing pivots
+        }
         const isBull = p.type === 'SWING_LOW';
         const grade = p.level === 2 ? 'MAJOR' : p.level === 1 ? 'INTERNAL' : 'INNER';
         anchors.push({
@@ -1428,27 +1435,55 @@ export class SweepReclaimEngine {
       let internalReferencePrice: number | null = null;
 
       if (requireMss && sweepIdx !== null) {
-        const searchStart = Math.max(0, sweepIdx - mssLookback);
+        const searchStart = Math.max(1, sweepIdx - mssLookback);
         if (isBullish) {
-          // For longs: find the recent local swing high before sweep low
-          let localMax = -Infinity;
-          for (let m = searchStart; m < sweepIdx; m++) {
-            const cmH = candles[m].h ?? (candles[m] as any).high;
-            if (cmH > localMax) localMax = cmH;
+          // For longs: find the most recent internal swing high pivot before sweep low
+          let foundPivotPrice: number | null = null;
+          for (let m = sweepIdx - 1; m >= searchStart; m--) {
+            const prevH = candles[m - 1].h ?? (candles[m - 1] as any).high;
+            const curH = candles[m].h ?? (candles[m] as any).high;
+            const nextH = candles[m + 1]?.h ?? (candles[m + 1] as any)?.high ?? curH;
+            if (curH > prevH && curH >= nextH && curH > sweepExtremePrice) {
+              foundPivotPrice = curH;
+              break;
+            }
           }
-          if (localMax > sweepExtremePrice && localMax < Infinity) {
-            internalReferencePrice = localMax;
+          if (foundPivotPrice === null) {
+            let localMax = -Infinity;
+            const shortStart = Math.max(0, sweepIdx - Math.min(5, mssLookback));
+            for (let m = shortStart; m < sweepIdx; m++) {
+              const cmH = candles[m].h ?? (candles[m] as any).high;
+              if (cmH > localMax) localMax = cmH;
+            }
+            if (localMax > sweepExtremePrice && localMax < Infinity) {
+              foundPivotPrice = localMax;
+            }
           }
+          internalReferencePrice = foundPivotPrice;
         } else {
-          // For shorts: find the recent local swing low before sweep high
-          let localMin = Infinity;
-          for (let m = searchStart; m < sweepIdx; m++) {
-            const cmL = candles[m].l ?? (candles[m] as any).low;
-            if (cmL < localMin) localMin = cmL;
+          // For shorts: find the most recent internal swing low pivot before sweep high
+          let foundPivotPrice: number | null = null;
+          for (let m = sweepIdx - 1; m >= searchStart; m--) {
+            const prevL = candles[m - 1].l ?? (candles[m - 1] as any).low;
+            const curL = candles[m].l ?? (candles[m] as any).low;
+            const nextL = candles[m + 1]?.l ?? (candles[m + 1] as any)?.low ?? curL;
+            if (curL < prevL && curL <= nextL && curL < sweepExtremePrice) {
+              foundPivotPrice = curL;
+              break;
+            }
           }
-          if (localMin < sweepExtremePrice && localMin > -Infinity) {
-            internalReferencePrice = localMin;
+          if (foundPivotPrice === null) {
+            let localMin = Infinity;
+            const shortStart = Math.max(0, sweepIdx - Math.min(5, mssLookback));
+            for (let m = shortStart; m < sweepIdx; m++) {
+              const cmL = candles[m].l ?? (candles[m] as any).low;
+              if (cmL < localMin) localMin = cmL;
+            }
+            if (localMin < sweepExtremePrice && localMin > -Infinity) {
+              foundPivotPrice = localMin;
+            }
           }
+          internalReferencePrice = foundPivotPrice;
         }
       }
 
@@ -1465,7 +1500,7 @@ export class SweepReclaimEngine {
         if (isBullish) {
           // Reclaim: confirmed body close strictly ABOVE the anchor shelf
           // If requireMss is true, close must also exceed the internal reference swing high
-          const isMssSatisfied = !requireMss || internalReferencePrice === null || close > internalReferencePrice;
+          const isMssSatisfied = !requireMss || (internalReferencePrice !== null && close > internalReferencePrice);
           if (close > anchorLevel && close > open && isMssSatisfied) {
             // Multi-Candle Displacement Window: inspect [sweepIdx..i] for absorption + follow-through
             let maxVolExpInWindow = 0;
@@ -1576,7 +1611,7 @@ export class SweepReclaimEngine {
         } else {
           // Bearish: confirmed body close strictly BELOW the anchor shelf
           // If requireMss is true, close must also break below the internal reference swing low
-          const isMssSatisfied = !requireMss || internalReferencePrice === null || close < internalReferencePrice;
+          const isMssSatisfied = !requireMss || (internalReferencePrice !== null && close < internalReferencePrice);
           if (close < anchorLevel && close < open && isMssSatisfied) {
             // Multi-Candle Displacement Window: inspect [sweepIdx..i] for absorption + follow-through
             let maxVolExpInWindow = 0;
@@ -1837,6 +1872,35 @@ export class SweepReclaimEngine {
         isValuationAligned = isBullish
           ? executionEntry <= eq
           : executionEntry >= eq;
+      }
+
+      // 🛡️ Quant Shield Rule 3: Top-Down HTF Order Flow Gate (1H/15m Trend Confluence)
+      let isHtfAligned = true;
+      let htfBias: 'BULLISH' | 'BEARISH' = 'BULLISH';
+      if (this.config.enforceHtfBiasGuard) {
+        const lookbackHtf = Math.min(120, evalIdx);
+        let htfEma = candles[evalIdx - lookbackHtf]?.c ?? (candles[evalIdx - lookbackHtf] as any)?.close ?? anchorLevel;
+        const kEma = 2 / (24 + 1); // 24 bars on 5m = 2 hours
+        for (let m = evalIdx - lookbackHtf; m <= evalIdx; m++) {
+          const cClose = candles[m].c ?? (candles[m] as any).close;
+          htfEma = cClose * kEma + htfEma * (1 - kEma);
+        }
+        const curClose = candles[evalIdx].c ?? (candles[evalIdx] as any).close;
+        htfBias = curClose >= htfEma ? 'BULLISH' : 'BEARISH';
+
+        const isCounterTrend = (isBullish && htfBias === 'BEARISH') || (!isBullish && htfBias === 'BULLISH');
+        if (isCounterTrend) {
+          const isMacroDailyPool =
+            anchorGrade === 'DAILY' ||
+            anchorType === 'PDH' ||
+            anchorType === 'PDL';
+
+          if (!isMacroDailyPool) {
+            // Veto counter-trend reclaims unless an HTF macro daily liquidity pool has been purged
+            isHtfAligned = false;
+            isValuationAligned = false; // preserve backward compatibility with legacy valuation checks
+          }
+        }
       }
 
       // ── Wave Fingerprint Generation for Multi-Anchor Deduplication ────────────
@@ -2104,6 +2168,8 @@ export class SweepReclaimEngine {
 
         dealing_range_equilibrium: dealingRangeEquilibrium,
         is_valuation_aligned: isValuationAligned,
+        is_htf_aligned: isHtfAligned,
+        htf_bias: htfBias,
         market_regime_at_entry: marketRegime,
         valuation_gate_mode: valuationGateMode,
         local_wave_equilibrium: localWaveEquilibrium,
@@ -2170,6 +2236,13 @@ export class SweepReclaimEngine {
       }
 
       if (enforceDiscountPremium && !isValuationAligned) {
+        baseSetup.status = 'RECLAIMED_NO_RETEST';
+        baseSetup.simulated_outcome = 'INVALIDATED';
+        detectedSetups.push(baseSetup);
+        continue;
+      }
+
+      if (this.config.enforceHtfBiasGuard && !isHtfAligned) {
         baseSetup.status = 'RECLAIMED_NO_RETEST';
         baseSetup.simulated_outcome = 'INVALIDATED';
         detectedSetups.push(baseSetup);
@@ -2494,7 +2567,9 @@ export class SweepReclaimEngine {
             break;
           }
 
-          const checkSL = stageFilledThisBar ? activeStopLoss : initialBarSL;
+          // 🔬 Next-Bar Ratchet Rule: Ratchets triggered on bar i (such as TP1 BE ratchet)
+          // take effect strictly on bar i + 1, preventing same-bar entry-dip stop-out corruption.
+          const checkSL = initialBarSL;
           if (low <= checkSL) {
             exitIdx = i;
             exitPrice = checkSL;
@@ -2636,8 +2711,9 @@ export class SweepReclaimEngine {
             break;
           }
 
-          // Stop Loss / Ratchet Violation Check
-          const checkSL = stageFilledThisBar ? activeStopLoss : initialBarSL;
+          // 🔬 Next-Bar Ratchet Rule: Ratchets triggered on bar i (such as TP1 BE ratchet)
+          // take effect strictly on bar i + 1, preventing same-bar entry-dip stop-out corruption.
+          const checkSL = initialBarSL;
           if (high >= checkSL) {
             exitIdx = i;
             exitPrice = checkSL;
