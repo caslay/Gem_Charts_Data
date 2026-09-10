@@ -93,7 +93,7 @@ export default function SweepReclaimWorkspace({
   // Scan Configuration Form State
   const [scanName, setScanName] = useState("Deep Sweep & Reclaim Scan");
   const [symbol, setSymbol] = useState("ETHUSDC");
-  const [timeframe, setTimeframe] = useState<"1m" | "3m" | "5m" | "15m" | "1h" | "4h">("5m");
+  const [timeframe, setTimeframe] = useState<"1m" | "3m" | "5m" | "15m" | "1h" | "4h">("15m");
   const [startDate, setStartDate] = useState("2026-03-01");
   const [endDate, setEndDate] = useState("2026-06-01");
 
@@ -115,10 +115,10 @@ export default function SweepReclaimWorkspace({
   // 3-Stage Harvest & Risk Controls
   const [entryMode, setEntryMode] = useState<SweepReclaimEntryMode>("FVG_CE");
   const [stage1Multiple, setStage1Multiple] = useState(1.0);
-  const [stage2Multiple, setStage2Multiple] = useState(1.30);
+  const [stage2Multiple, setStage2Multiple] = useState(1.35);
   const [stage3Multiple, setStage3Multiple] = useState(0.00);
-  const [stage1Ratio, setStage1Ratio] = useState(0.60);
-  const [stage2Ratio, setStage2Ratio] = useState(0.40);
+  const [stage1Ratio, setStage1Ratio] = useState(0.70);
+  const [stage2Ratio, setStage2Ratio] = useState(0.30);
   const [stage3Ratio, setStage3Ratio] = useState(0.00);
   const [enableStructuralTrail, setEnableStructuralTrail] = useState(true);
   const [enableProfitRatchet, setEnableProfitRatchet] = useState(false);
@@ -129,13 +129,13 @@ export default function SweepReclaimWorkspace({
   const [dynamicTp2Source, setDynamicTp2Source] = useState<'OPPOSING_LIQUIDITY' | 'FIXED_RR'>('FIXED_RR');
   const [requireMssConfirmation, setRequireMssConfirmation] = useState(false);
 
-  // 🛡️ Quant Shield & Loss Streak Protection Controls (Champion Defaults)
+  // 🛡️ Quant Shield & Loss Streak Protection Controls (15m Macro Champion Defaults)
   const [enableWaveDeduplication, setEnableWaveDeduplication] = useState(true);
   const [filterWeekend, setFilterWeekend] = useState(false);
-  const [filterDeadZones, setFilterDeadZones] = useState(false);
+  const [filterDeadZones, setFilterDeadZones] = useState(true);
   const [enforceHtfBiasGuard, setEnforceHtfBiasGuard] = useState(false);
   const [enableEarlyBreakeven, setEnableEarlyBreakeven] = useState(true);
-  const [earlyBreakevenMultiple, setEarlyBreakevenMultiple] = useState(0.40);
+  const [earlyBreakevenMultiple, setEarlyBreakevenMultiple] = useState(0.35);
   const [enableFeePaddedBreakeven, setEnableFeePaddedBreakeven] = useState(true);
   const [breakevenOffsetPct, setBreakevenOffsetPct] = useState(0.015);
   const [postLossCooldownMinutes, setPostLossCooldownMinutes] = useState(0);
@@ -163,11 +163,11 @@ export default function SweepReclaimWorkspace({
   };
 
   // Structural Pivot Lookbacks & Advanced Geometry
-  const [lookbackMajor, setLookbackMajor] = useState(10);
-  const [lookbackInternal, setLookbackInternal] = useState(5);
+  const [lookbackMajor, setLookbackMajor] = useState(15);
+  const [lookbackInternal, setLookbackInternal] = useState(10);
   const [maxBarsAnchorToSweep, setMaxBarsAnchorToSweep] = useState(25);
   const [maxBarsSweepToReclaim, setMaxBarsSweepToReclaim] = useState(10);
-  const [maxBarsToRetest, setMaxBarsToRetest] = useState(15);
+  const [maxBarsToRetest, setMaxBarsToRetest] = useState(12);
   const [minSweepDepthAtr, setMinSweepDepthAtr] = useState(0.10);
   const [slBufferAtr, setSlBufferAtr] = useState(0.10);
   const [showAdvancedControls, setShowAdvancedControls] = useState(false);

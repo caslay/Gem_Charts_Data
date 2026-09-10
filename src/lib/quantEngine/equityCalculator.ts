@@ -236,7 +236,7 @@ export function adaptSweepReclaimSetupsToTrades(
   // 🛡️ Quant Shield Rule 3: Macro HTF Bias Guard
   if (options.enforceHtfBiasGuard) {
     executedSetups = executedSetups.filter((s) => {
-      return s.is_valuation_aligned !== false;
+      return (s as any).is_htf_aligned !== false && s.is_valuation_aligned !== false;
     });
   }
 
@@ -397,7 +397,8 @@ export function adaptSweepReclaimSetupsToTrades(
     // 💰 Institutional Fee Accounting per Trade
     const stopDistance = Math.abs(s.entry_price - s.stop_loss);
     const exitPrice = s.exit_price || s.entry_price;
-    const isExitTaker = isLoss || isScratch || outcome === 'STOPPED_OUT' || outcome === 'BE_SCRATCH_WIN' || outcome === 'STAGE_1_SCRATCH';
+    const isStage1Scratch = outcome === 'STAGE_1_SCRATCH' || (s.is_stage1_filled && !s.is_stage2_filled && realizedR > 0);
+    const isExitTaker = isLoss || isScratch || outcome === 'STOPPED_OUT' || outcome === 'BE_SCRATCH_WIN';
     const exitFeeRate = isExitTaker ? takerFeeRate : makerFeeRate;
 
     // Fee-Padded Breakeven Shield Check:
@@ -405,12 +406,25 @@ export function adaptSweepReclaimSetupsToTrades(
     // the stop was ratcheted to (Entry ± offset) specifically to cover the exit fee.
     // The market price appreciation paid the exchange taker fee, resulting in exactly $0.00 / 0.00R net cost.
     const isFeePaddedScratch = isScratch && (options.enableFeePaddedBreakeven !== false);
+    const isFeePaddedStage1 = isStage1Scratch && (options.enableFeePaddedBreakeven !== false);
 
     let feeInR = 0;
     if (stopDistance > 0 && !isPending) {
       if (isFeePaddedScratch) {
         // Shield active: net fee drag on trader is 0.00R (covered by price offset)
         feeInR = 0;
+      } else if (isFeePaddedStage1) {
+        // Stage 1 executed via resting limit order (0.00% maker fee).
+        // Runner tranche exited at fee-padded breakeven (offset covered taker fee).
+        const entryFeeR = (s.entry_price / stopDistance) * makerFeeRate;
+        feeInR = parseFloat(entryFeeR.toFixed(4));
+      } else if (isStage1Scratch) {
+        // Unshielded stage 1 scratch: TP1 tranche exited via maker limit, runner tranche via taker
+        const w1 = typeof (s as any).stage1_ratio === 'number' ? (s as any).stage1_ratio : 0.50;
+        const w2 = 1 - w1;
+        const entryFeeR = (s.entry_price / stopDistance) * makerFeeRate;
+        const exitFeeR = (exitPrice / stopDistance) * (w1 * makerFeeRate + w2 * takerFeeRate);
+        feeInR = parseFloat((entryFeeR + exitFeeR).toFixed(4));
       } else {
         const entryFeeR = (s.entry_price / stopDistance) * makerFeeRate;
         const exitFeeR = (exitPrice / stopDistance) * exitFeeRate;
@@ -643,7 +657,24 @@ export function calculate1to1ExecutionTelemetry(
       };
     }
 
-    // Default concurrency / cooldown veto
+    // Check if vetoed by post-loss cooldown
+    const cooldownMs = (typeof options.postLossCooldownMinutes === 'number' ? options.postLossCooldownMinutes : 0) * 60 * 1000;
+    const lastPriorTrade = [...executedTrades].reverse().find((t) => (t.metadata?.exitTime ?? t.timestamp) <= sTime);
+    if (cooldownMs > 0 && lastPriorTrade && lastPriorTrade.isLoss) {
+      const exitT = lastPriorTrade.metadata?.exitTime ?? lastPriorTrade.timestamp;
+      if (sTime < exitT + cooldownMs) {
+        cooldownVetoCount++;
+        return {
+          setup: s,
+          disposition: 'VETOED_COOLDOWN',
+          reason: `Guardrail 4: Blocked by Rule 5 post-loss cooldown (${options.postLossCooldownMinutes}m streak protection)`,
+          badgeLabel: 'VETO: COOLDOWN',
+          badgeColor: 'amber',
+        };
+      }
+    }
+
+    // Default concurrency veto
     concurrencyVetoCount++;
     return {
       setup: s,
@@ -1095,8 +1126,8 @@ export function calculateCompoundingMetrics(
     const nominalPnlUsd = parseFloat((nominalRiskUsd * trade.realizedR).toFixed(2));
 
     // Net PnL (after fees)
-    const netPnlUsd = isShieldedScratch ? 0.00 : parseFloat((grossPnlUsd - tradeFeeUsd).toFixed(2));
-    const netRealizedR = isShieldedScratch ? 0.00 : parseFloat((trade.realizedR - feeInR).toFixed(4));
+    const netPnlUsd = parseFloat((grossPnlUsd - tradeFeeUsd).toFixed(2));
+    const netRealizedR = parseFloat((trade.realizedR - feeInR).toFixed(4));
 
     if (grossPnlUsd > 0) {
       grossProfitUsd += grossPnlUsd;

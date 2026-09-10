@@ -1,6 +1,5 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
-import { sql } from "@/lib/postgres";
 
 const googleClientId =
   process.env.AUTH_GOOGLE_ID ||
@@ -61,6 +60,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         try {
+          const { sql } = await import("@/lib/postgres");
+
           // Self-healing: Ensure whitelisted_users table exists
           await sql`
             CREATE TABLE IF NOT EXISTS whitelisted_users (

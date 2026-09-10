@@ -111,3 +111,10 @@ Before writing any code or answering, output an internal thought process indicat
 After completing any **CODEBASE or SYSTEM ARCHITECTURE** update (e.g. Next.js code, API routes, DB schemas, UI components, Quant engine logic), you MUST update the master blueprint file at `directives/master_blueprint.md` to ensure system documentation remains fully synchronized. 
 
 ⚠️ **STRICT SCOPE BOUNDARY:** Do NOT include daily trade logs, trade setup reviews (`/eth-quant-sop review`), analytical skill outputs, or daily tracker entries in `directives/master_blueprint.md`. Trade tracking and SOP logs belong strictly in `directives/ETHUSDC_Daily_Tracker.md` and `directives/ETHUSDC_Daily_Tracker.json`.
+
+## Multi-Model Execution & Quota Policy
+
+- **Primary Planning & Audit Model:** Claude Opus 4.6 (Thinking).
+- **Primary Code Implementation Model:** Gemini 3.8 (High).
+- **Deployment & Housekeeping Model:** Gemini 3.8 (Medium).
+- **Fallback Rule:** If Claude Opus 4.6 encounters a rate limit (429), quota exhaustion, or fails to respond, automatically switch that stage to `Gemini 3.8 (High)`. Never stall the pipeline waiting for Claude resets.
