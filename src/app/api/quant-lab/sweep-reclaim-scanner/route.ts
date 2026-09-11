@@ -11,6 +11,7 @@ import {
   SweepReclaimAnchorType,
   SweepReclaimEntryMode,
 } from "@/lib/quantEngine/SweepReclaimEngine";
+import { TrendContinuationEngine } from "@/lib/quantEngine/TrendContinuationEngine";
 
 // Base URL for Binance Futures REST API
 const BINANCE_REST = 'https://fapi.binance.com/fapi/v1/klines';
@@ -374,6 +375,101 @@ export async function POST(req: Request) {
           makerFeePct: maker_fee_pct,
           takerFeePct: taker_fee_pct,
         };
+
+        const strategy_type = body.strategyType ?? body.strategy_type ?? "SWEEP_RECLAIM";
+        if (strategy_type === "TREND_CONTINUATION") {
+          const tcEngine = new TrendContinuationEngine({
+            symbol,
+            timeframe,
+            lookbackMajor: lookback_major,
+            lookbackInternal: lookback_internal,
+            emaPeriod: Number(body.emaPeriod ?? body.ema_period ?? 120),
+            enforceHtfTrendLock: (body.enforceHtfTrendLock ?? body.enforce_htf_trend_lock) !== false,
+            volumeSmaPeriod: volume_sma_period,
+            volumeExpansionThreshold: volume_expansion_threshold,
+            deltaDominanceThreshold: delta_dominance_threshold,
+            bodyRatioThreshold: body_ratio_threshold,
+            requireThreePillarDisplacement: require_three_pillar_displacement,
+            maxBarsToRetest: max_bars_to_retest,
+            maxOriginLookbackBars: Number(body.maxOriginLookbackBars ?? body.max_origin_lookback_bars ?? 32),
+            slBufferAtrMultiplier: sl_buffer_atr,
+            entryMode: entry_mode === 'FVG_CE' ? 'FVG_CE' : 'FVG_PROXIMAL',
+            stage1Ratio: stage1_ratio,
+            stage2Ratio: stage2_ratio,
+            stage1Multiple: stage1_multiple,
+            stage2Multiple: stage2_multiple,
+            dynamicTp2Source: (body.dynamicTp2Source ?? body.dynamic_tp2_source ?? "OPPOSING_LIQUIDITY") as "OPPOSING_LIQUIDITY" | "FIXED_RR",
+            minDynamicTp2Multiple: Number(body.minDynamicTp2Multiple ?? body.min_dynamic_tp2_multiple ?? 3.00),
+            maxDynamicTp2Multiple: Number(body.maxDynamicTp2Multiple ?? body.max_dynamic_tp2_multiple ?? 5.00),
+            enableM15StructuralTrail: (body.enableM15StructuralTrail ?? body.enable_m15_structural_trail) !== false,
+            enableFeePaddedBreakeven: enable_fee_padded_breakeven,
+            breakevenOffsetPct: breakeven_offset_pct,
+            enableDynamicProfitFloor: (body.enableDynamicProfitFloor ?? body.enable_dynamic_profit_floor) !== false,
+            postLossCooldownMinutes: post_loss_cooldown_minutes,
+            enforceSinglePositionConcurrency: true,
+            enforceValueAreaGate: (body.enforceValueAreaGate ?? body.enforce_value_area_gate) !== false,
+            valueAreaLookbackBars: Number(body.valueAreaLookbackBars ?? body.value_area_lookback_bars ?? 96),
+            valueAreaMode: (body.valueAreaMode ?? body.value_area_mode ?? "PREVIOUS_DAY_DEVELOPING") as "PREVIOUS_DAY_DEVELOPING" | "ROLLING_HISTOGRAM",
+            pocBandPct: Number(body.pocBandPct ?? body.poc_band_pct ?? 0.0020),
+            enforceOlsValidation: (body.enforceOlsValidation ?? body.enforce_ols_validation) !== false,
+            enforceOiSponsorship: (body.enforceOiSponsorship ?? body.enforce_oi_sponsorship) !== false,
+            enforceSmtGate: (body.enforceSmtGate ?? body.enforce_smt_gate) !== false,
+            smtLookbackBars: Number(body.smtLookbackBars ?? body.smt_lookback_bars ?? 15),
+            enforceToxicWindowBlacklist: (body.enforceToxicWindowBlacklist ?? body.enforce_toxic_window_blacklist) !== false,
+            enforceRolloverFreeze: (body.enforceRolloverFreeze ?? body.enforce_rollover_freeze) !== false,
+            enforceNewsFreeze: (body.enforceNewsFreeze ?? body.enforce_news_freeze) !== false,
+            makerFeePct: maker_fee_pct,
+            takerFeePct: taker_fee_pct,
+            initialEquity: Number(body.initialEquity ?? body.initial_equity ?? 10000),
+            compoundingRiskPct: Number(body.compoundingRiskPct ?? body.compounding_risk_pct ?? body.riskPerTradePct ?? 2.0),
+          });
+          const { setups: tcSetups, telemetry: tcTelemetry } = tcEngine.scanHistoricalSetups(candles, bootstrap);
+
+          sendChunk({
+            type: "progress",
+            phase: "ANALYSIS_COMPLETE",
+            message: `Identified ${tcSetups.length} Trend Continuation setups across ${candles.length} candles.`,
+            detectedCount: tcSetups.length,
+            executedCount: tcTelemetry.retestedTradesCount,
+            winRate: tcTelemetry.executionWinRatePct,
+            netRealizedR: tcTelemetry.netRealizedR,
+          });
+
+          const scanId = crypto.randomUUID();
+          const scanRecord = {
+            id: scanId,
+            scan_name,
+            symbol,
+            timeframe,
+            start_date: new Date(startMs).toISOString(),
+            end_date: new Date(endMs).toISOString(),
+            total_detected: tcTelemetry.totalBosDetected,
+            retested_trades_count: tcTelemetry.retestedTradesCount,
+            execution_win_rate_pct: tcTelemetry.executionWinRatePct,
+            net_realized_r: tcTelemetry.netRealizedR,
+            profit_factor: tcTelemetry.netProfitFactor,
+            telemetry_summary: tcTelemetry,
+            setups: tcSetups,
+            created_at: new Date().toISOString(),
+          };
+
+          try {
+            await saveLocalSrScan(scanRecord as any);
+          } catch (saveErr) {
+            console.error("[SR SCANNER LOCAL] Failed to persist scan record:", saveErr);
+          }
+
+          sendChunk({
+            type: "complete",
+            scan: scanRecord,
+            telemetry: tcTelemetry,
+            setups: tcSetups,
+            total_candles: candles.length,
+          });
+
+          controller.close();
+          return;
+        }
 
         const engine = new SweepReclaimEngine(scanConfig);
         const { setups, telemetry } = engine.scanHistoricalSetups(candles, bootstrap);

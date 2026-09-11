@@ -21,6 +21,7 @@ async function run() {
     autoExecute: true,
     compoundingRiskPct: 2.0,
     maxOpenPositions: 1,
+    filterWeekend: false,
     liveSettings: {
       maxBarsToRetest: 20, // 20 bars = 100 minutes TTL on 5m
       enabledTimeframes: ['5m'],

@@ -282,7 +282,21 @@ export function generatePotentialTrades(
 
   // Parse Gemini AI Analysis Payload if available
   const parsedAi = aiAnalysisRaw ? safeParseAiJson(aiAnalysisRaw) : null;
-  const aiBiasSignal = parsedAi && typeof parsedAi.bias_signal === 'number' ? Number(parsedAi.bias_signal) : null;
+  const lastDecision = (data as any)?.lastAgentDecision || (data as any)?.last_agent_decision;
+  const rawBiasSignal = parsedAi?.bias_signal ?? lastDecision?.bias_signal;
+
+  let aiBiasSignal: number | null = null;
+  if (typeof rawBiasSignal === 'number') {
+    aiBiasSignal = Number(rawBiasSignal);
+  } else if (typeof rawBiasSignal === 'string') {
+    const sigUpper = rawBiasSignal.trim().toUpperCase();
+    if (sigUpper.includes('BULL') || sigUpper === 'LONG' || sigUpper === 'BUY') {
+      aiBiasSignal = 1;
+    } else if (sigUpper.includes('BEAR') || sigUpper === 'SHORT' || sigUpper === 'SELL') {
+      aiBiasSignal = -1;
+    }
+  }
+
   const sopReport = parsedAi?.sop_report;
 
   // Extract recent candles for dynamic live structure detection

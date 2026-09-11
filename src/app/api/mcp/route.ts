@@ -132,6 +132,40 @@ All data is fetched fresh from Binance Futures on every call. No stale cache.`,
     );
 
     // ── Tool 2: submit_quant_decision ─────────────────────────────────────
+    const permissiveNumber = z
+      .unknown()
+      .nullish()
+      .transform((val) => {
+        if (val === null || val === undefined) return undefined;
+        if (typeof val === 'number') return isFinite(val) && !isNaN(val) ? val : undefined;
+        if (typeof val === 'string') {
+          const cleaned = val.replace(/[$, ]/g, '').trim();
+          if (cleaned === '') return undefined;
+          const parsed = Number(cleaned);
+          return isFinite(parsed) && !isNaN(parsed) ? parsed : undefined;
+        }
+        return undefined;
+      });
+
+    const normalizeBias = (input: unknown): string => {
+      if (input === null || input === undefined) return 'NEUTRAL';
+      if (typeof input === 'number') {
+        if (input > 0) return 'CONFIRMED_BULLISH';
+        if (input < 0) return 'CONFIRMED_BEARISH';
+        return 'NEUTRAL';
+      }
+      const upper = String(input).trim().toUpperCase().replace(/[\s-]+/g, '_');
+      if (!upper) return 'NEUTRAL';
+      if (upper === '1' || upper === '+1') return 'CONFIRMED_BULLISH';
+      if (upper === '-1') return 'CONFIRMED_BEARISH';
+      if (upper === '0') return 'NEUTRAL';
+      if (upper === 'BULLISH' || upper === 'LONG' || upper === 'BUY' || upper === 'BULL') return 'CONFIRMED_BULLISH';
+      if (upper === 'BEARISH' || upper === 'SHORT' || upper === 'SELL' || upper === 'BEAR') return 'CONFIRMED_BEARISH';
+      if (upper === 'COUNTER_TREND' || upper === 'RETRACEMENT') return 'COUNTER_TREND_RETRACEMENT';
+      if (upper === 'ABORT' || upper === 'CANCEL' || upper === 'EXIT') return 'ABORT';
+      return upper;
+    };
+
     server.registerTool(
       'submit_quant_decision',
       {
@@ -150,52 +184,82 @@ On invalidation breach, returns error code 'INVALIDATION_BREACHED' with breach d
 The decision is stored with status 'ACTIVE' and can later be updated via the REST PATCH endpoint at /api/agent/context.`,
         inputSchema: z.object({
           agent_id: z
-            .string()
+            .unknown()
+            .nullish()
+            .default('external-agent')
+            .transform((val) => {
+              if (val === null || val === undefined) return 'external-agent';
+              const s = String(val).trim();
+              return s || 'external-agent';
+            })
             .describe(
-              "Unique identifier for the calling agent (e.g. 'gemini-spark-v1', 'claude-3-5-sonnet'). Used for audit trail."
+              "Unique identifier for the calling agent (e.g. 'gemini-spark-v1', 'claude-3-5-sonnet'). Defaults to 'external-agent'."
             ),
           symbol: z
-            .string()
+            .unknown()
+            .nullish()
             .default('ETHUSDC')
-            .describe("Trading pair symbol. Must match the symbol used in get_market_context."),
+            .transform((val) => {
+              if (val === null || val === undefined) return 'ETHUSDC';
+              const s = String(val).trim().toUpperCase().replace(/[-_/]/g, '');
+              return s || 'ETHUSDC';
+            })
+            .describe("Trading pair symbol (e.g. 'ETHUSDC'). Defaults to 'ETHUSDC'."),
           bias_signal: z
-            .enum([
-              'CONFIRMED_BULLISH',
-              'CONFIRMED_BEARISH',
-              'NEUTRAL',
-              'ABORT',
-              'COUNTER_TREND_RETRACEMENT',
-            ])
+            .unknown()
+            .nullish()
+            .default('NEUTRAL')
+            .transform(normalizeBias)
+            .pipe(
+              z.enum([
+                'CONFIRMED_BULLISH',
+                'CONFIRMED_BEARISH',
+                'NEUTRAL',
+                'ABORT',
+                'COUNTER_TREND_RETRACEMENT',
+              ])
+            )
             .describe(
-              "Macro directional bias. Use 'ABORT' if no valid setup exists. Use 'COUNTER_TREND_RETRACEMENT' for pullback trades in the direction of HTF structure."
+              "Macro directional bias: 'CONFIRMED_BULLISH', 'CONFIRMED_BEARISH', 'NEUTRAL', 'ABORT', 'COUNTER_TREND_RETRACEMENT'. Accepts standard uppercase, lowercase, shorthands, numeric signals (+1, -1, 0), or null (defaults to NEUTRAL)."
             ),
-          entry_range_low: z
-            .number()
-            .optional()
-            .describe('Lower bound of the entry zone (price level). Optional.'),
-          entry_range_high: z
-            .number()
-            .optional()
-            .describe('Upper bound of the entry zone (price level). Optional.'),
-          invalidation_level: z
-            .number()
-            .optional()
-            .describe(
-              'Hard stop level. Pre-flight guard: decision is REJECTED if live price has already breached this level in the adverse direction. For BULLISH: floor. For BEARISH: ceiling.'
-            ),
-          target_1: z
-            .number()
-            .optional()
-            .describe('First profit target (TP1) price level.'),
-          target_2: z
-            .number()
-            .optional()
-            .describe('Second profit target (TP2) price level. Typically a macro liquidity level.'),
+          entry_range_low: permissiveNumber.describe(
+            'Lower bound of the entry zone (price level). Accepts numbers, numeric strings, or null.'
+          ),
+          entry_range_high: permissiveNumber.describe(
+            'Upper bound of the entry zone (price level). Accepts numbers, numeric strings, or null.'
+          ),
+          invalidation_level: permissiveNumber.describe(
+            'Hard stop level. Pre-flight guard: decision is REJECTED if live price has already breached this level in the adverse direction. For BULLISH: floor. For BEARISH: ceiling. Accepts numbers, numeric strings, or null.'
+          ),
+          target_1: permissiveNumber.describe(
+            'First profit target (TP1) price level. Accepts numbers, numeric strings, or null.'
+          ),
+          target_2: permissiveNumber.describe(
+            'Second profit target (TP2) price level. Accepts numbers, numeric strings, or null.'
+          ),
           narrative: z
-            .string()
-            .optional()
+            .unknown()
+            .nullish()
+            .transform((val) => {
+              if (val === null || val === undefined) return undefined;
+              if (typeof val === 'string') {
+                const trimmed = val.trim();
+                return trimmed === '' ? undefined : trimmed;
+              }
+              if (typeof val === 'number' || typeof val === 'boolean') {
+                return String(val);
+              }
+              if (typeof val === 'object') {
+                try {
+                  return JSON.stringify(val);
+                } catch {
+                  return String(val);
+                }
+              }
+              return undefined;
+            })
             .describe(
-              'Agent SOP reasoning narrative. Document the ICT confluences, displacement status, SMT context, and session timing that led to this decision. Stored as-is for audit.'
+              'Agent SOP reasoning narrative. Document the ICT confluences, displacement status, SMT context, and session timing that led to this decision. Stored as-is for audit. Accepts string, object, number, or null.'
             ),
         }),
       },
@@ -258,12 +322,12 @@ Eliminates terminal scripts. Automatically:
             .describe("Trading pair symbol (e.g. 'ETHUSDC'). Default: 'ETHUSDC'."),
           timeframe: z
             .string()
-            .default('5m')
-            .describe("Primary execution timeframe (e.g. '5m', '15m'). Default: '5m'."),
+            .default('15m')
+            .describe("Primary execution timeframe (e.g. '5m', '15m'). Default: '15m'."),
           preset_id: z
             .string()
-            .default('factory_sr_5m_fvg_ce_sniper_v3')
-            .describe("Strategy preset ID (e.g. 'factory_sr_5m_fvg_ce_sniper_v3', 'factory_sr_5m_fvg_ce_sniper_v2', 'factory_sr_5m_alpha_shield_v3'). Default: Champion V3."),
+            .default('factory_sr_15m_asymmetric_macro_sniper')
+            .describe("Strategy preset ID (e.g. 'factory_sr_15m_asymmetric_macro_sniper', 'factory_sr_15m_institutional_confluence'). Default: Institutional Asymmetric Champion."),
           days_lookback: z
             .number()
             .default(30)
@@ -341,8 +405,8 @@ Provides 100% PM2 execution parity breakdown:
             .describe("Trading pair symbol. Default: 'ETHUSDC'."),
           timeframe: z
             .string()
-            .default('5m')
-            .describe("Candle timeframe (e.g. '5m', '15m'). Default: '5m'."),
+            .default('15m')
+            .describe("Candle timeframe (e.g. '5m', '15m'). Default: '15m'."),
           target_price: z
             .number()
             .optional()
@@ -455,8 +519,8 @@ Reads directly from run_logs/live_session_YYYY-MM-DD.json and directives/ETHUSDC
             .describe("Trading pair symbol. Default: 'ETHUSDC'."),
           timeframe: z
             .enum(['1m', '5m', '15m', '1h'])
-            .default('5m')
-            .describe("Timeframe resolution for structure analysis. Default: '5m'."),
+            .default('15m')
+            .describe("Timeframe resolution for structure analysis. Default: '15m'."),
           lookback_candles: z
             .number()
             .default(250)
@@ -574,6 +638,13 @@ async function normalizeMcpRequest(req: Request): Promise<Request> {
         headersModified = true;
       } else if (body.method === 'resources/read' && body.params?.uri && !headers.get('mcp-name')) {
         headers.set('Mcp-Name', String(body.params.uri));
+        headersModified = true;
+      }
+
+      // 3. Inject / normalize Accept header to satisfy MCP StreamableHTTP transport requirement
+      const accept = headers.get('accept') || '';
+      if (!accept.includes('text/event-stream') || !accept.includes('application/json')) {
+        headers.set('Accept', 'application/json, text/event-stream');
         headersModified = true;
       }
 

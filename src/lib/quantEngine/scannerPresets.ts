@@ -24,8 +24,8 @@ import {
   BinanceFeeTier,
 } from './strategyExecutionConfig';
 
-export type ScannerStrategyType = 'SWEEP_RECLAIM' | 'ORDER_BLOCK';
-export type StrategyArmedType = 'SWEEP_RECLAIM' | 'ORDER_BLOCK' | 'CUSTOM_STRATEGY';
+export type ScannerStrategyType = 'SWEEP_RECLAIM' | 'ORDER_BLOCK' | 'TREND_CONTINUATION';
+export type StrategyArmedType = 'SWEEP_RECLAIM' | 'ORDER_BLOCK' | 'TREND_CONTINUATION' | 'CUSTOM_STRATEGY';
 
 export const STORAGE_KEY_SCANNER_PRESETS = 'FLOW_STATE_SCANNER_PRESETS';
 export const STORAGE_KEY_ACTIVE_PRESET_PREFIX = 'FLOW_STATE_ACTIVE_PRESET_';
@@ -82,6 +82,8 @@ export interface SweepReclaimPresetConfig {
   minDynamicTp2Multiple?: number;
   maxDynamicTp2Multiple?: number;
   requireMssConfirmation?: boolean;
+  mssLookbackBars?: number;
+  maxBarsSweepToMss?: number;
 
   // 🛡️ Quant Shield & Loss Streak Protection Settings (5 Institutional Rules)
   enableWaveDeduplication?: boolean; // Rule 1: Single-Position & Wave Anchor Deduplication (default: true)
@@ -99,6 +101,18 @@ export interface SweepReclaimPresetConfig {
   takerFeePct?: number;
   feeTierPreset?: BinanceFeeTier;
   useBnbDiscount?: boolean;
+
+  // 🏛️ Institutional Confluence Architecture (ICT + AMT + Wyckoff + SMT)
+  enforceValueAreaGate?: boolean;
+  valueAreaLookbackBars?: number;
+  pocExclusionBandPct?: number;
+  enforceSmtGate?: boolean;
+  smtLookbackBars?: number;
+  enforceInstitutionalKillzones?: boolean;
+  institutionalKillzoneCutoffHourUtc?: number;
+  institutionalKillzoneCutoffMinuteUtc?: number;
+  enforcePreNewsFreeze?: boolean;
+  enableM15StructuralTrail?: boolean;
 }
 
 export interface OrderBlockPresetConfig {
@@ -137,6 +151,51 @@ export interface OrderBlockPresetConfig {
   targetRr: number;
 }
 
+export interface TrendContinuationPresetConfig {
+  symbol: string;
+  timeframe: string;
+  lookbackMajor: number;
+  lookbackInternal: number;
+  emaPeriod: number;
+  enforceHtfTrendLock: boolean;
+  volumeSmaPeriod: number;
+  volumeExpansionThreshold: number;
+  deltaDominanceThreshold: number;
+  bodyRatioThreshold: number;
+  requireThreePillarDisplacement: boolean;
+  maxBarsToRetest: number;
+  maxOriginLookbackBars?: number;
+  slBufferAtrMultiplier: number;
+  entryMode: 'FVG_PROXIMAL' | 'FVG_CE';
+  stage1Ratio: number;
+  stage2Ratio: number;
+  stage1Multiple: number;
+  stage2Multiple: number;
+  dynamicTp2Source: 'OPPOSING_LIQUIDITY' | 'FIXED_RR';
+  minDynamicTp2Multiple: number;
+  maxDynamicTp2Multiple: number;
+  enableM15StructuralTrail: boolean;
+  enableFeePaddedBreakeven: boolean;
+  breakevenOffsetPct: number;
+  postLossCooldownMinutes: number;
+  makerFeePct: number;
+  takerFeePct: number;
+  feeTierPreset?: BinanceFeeTier;
+  useBnbDiscount?: boolean;
+  enforceValueAreaGate?: boolean;
+  valueAreaLookbackBars?: number;
+  valueAreaMode?: 'PREVIOUS_DAY_DEVELOPING' | 'ROLLING_HISTOGRAM';
+  pocBandPct?: number;
+  enforceOlsValidation?: boolean;
+  enforceOiSponsorship?: boolean;
+  enforceSmtGate?: boolean;
+  smtLookbackBars?: number;
+  enableDynamicProfitFloor?: boolean;
+  enforceToxicWindowBlacklist?: boolean;
+  enforceRolloverFreeze?: boolean;
+  enforceNewsFreeze?: boolean;
+}
+
 export interface ScannerPreset {
   id: string;
   name: string;
@@ -148,80 +207,104 @@ export interface ScannerPreset {
   syncStatus: 'synced' | 'local_only' | 'pending_sync' | 'factory';
   createdAt: number;
   updatedAt: number;
-  config: SweepReclaimPresetConfig | OrderBlockPresetConfig;
+  config: SweepReclaimPresetConfig | OrderBlockPresetConfig | TrendContinuationPresetConfig;
 }
 
 // ── Factory Presets (Always available as immutable institutional baselines) ──
 
 export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
-  // ── 👑 Index 0: 15m Macro Swing & Fee Shield Champion (Platform Primary Default) ──
+  // ── 🏛️ Index 0: 15m Institutional Asymmetric Macro Sniper (Platform Primary Champion) ──
   {
-    id: 'factory_sr_15m_macro_sniper_v1',
-    name: '15m Macro Swing & Fee Shield Champion (Ultra-Low Churn)',
-    description: 'The 1-Year Validated Macro Swing Champion (+92.38R Net Realized Return, 63.6% Ex-Scratch Win Rate, 1.51 Net PF, 16.7% Max DD under real Binance 0.04% taker fees). Eliminates 5m churn by elevating execution to 15m Major Swings (lookback 15/10), slashing fee destruction by 80%. Enters at FVG 50% CE with 70% TP1 @ 1.0R / 30% TP2 @ 1.35R, Rule 4 Early BE (+0.35R), and Rule 6 Precision Dead Zone Filter.',
+    id: 'factory_sr_15m_asymmetric_macro_sniper',
+    name: '15m Institutional Asymmetric Macro Sniper (SMT + AMT + FVG Proximal + 1:3-1:5R DOL)',
+    description: 'The Income-Grade Institutional Asymmetric Engine engineered for aggressive capital compounding. Standardized on 15m structural baseline, limit entries at FVG Proximal (outer shelf boundary) with 12-bar TTL, gated by mandatory Intermarket BTC SMT Divergence, Auction Market Theory Value Area profile (Discount below VAL / Premium above VAH with POC exclusion), 0-90m Institutional Killzones (London 07:00-08:30 & NY AM 13:00-14:30 UTC with strict 16:30 Cairo hard cutoff), Rollover (00:00 UTC) and Pre-News Freezes, and Two-Stage Asymmetric Harvest (40-50% @ 1.2-1.5R Dealing Range EQ with Next-Bar BE +0.015% Fee Shield, remaining 50-60% runner trailing 15m 3-bar swing structure to 1:3.0-1:5.0R Opposing External Liquidity, 45m post-loss cooldown).',
     strategyType: 'SWEEP_RECLAIM',
     symbol: 'ETHUSDC',
     timeframe: '15m',
     isFactory: true,
     syncStatus: 'factory',
-    createdAt: 1770000000000,
-    updatedAt: 1770000000000,
+    createdAt: 1789100000000,
+    updatedAt: 1789100000000,
     config: {
       symbol: 'ETHUSDC',
       timeframe: '15m',
       anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW'],
+      suppressInternalPivots: true,
       lookbackMajor: 15,
       lookbackInternal: 10,
       maxBarsAnchorToSweep: 25,
       maxBarsSweepToReclaim: 10,
-      maxBarsToRetest: 12,
+      maxBarsToRetest: 12, // 12-bar TTL
       volumeSmaPeriod: 20,
-      volumeExpansionThreshold: 1.10,
+      volumeExpansionThreshold: 1.20,
       deltaDominanceThreshold: 52.0,
-      bodyRatioThreshold: 0.40,
+      bodyRatioThreshold: 0.45,
       requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
-      stage1Multiple: 1.0,
-      stage2Multiple: 1.35,
+      enforceDiscountPremiumGate: false,
+      enforceValueAreaGate: true,
+      valueAreaLookbackBars: 96,
+      pocExclusionBandPct: 0.0015,
+      enforceSmtGate: true,
+      smtLookbackBars: 15,
+      enforceInstitutionalKillzones: true,
+      institutionalKillzoneCutoffHourUtc: 14,
+      institutionalKillzoneCutoffMinuteUtc: 30,
+      enforcePreNewsFreeze: true,
+      stage1Multiple: 1.30,
+      stage2Multiple: 3.50,
       stage3Multiple: 0.0,
-      stage1Ratio: 0.70,
-      stage2Ratio: 0.30,
+      stage1Ratio: 0.50,
+      stage2Ratio: 0.50,
       stage3Ratio: 0.00,
-      entryMode: 'FVG_CE',
+      entryMode: 'FVG_PROXIMAL', // Outer shelf boundary
       enableStructuralTrail: true,
+      enableM15StructuralTrail: true,
       enableProfitRatchet: false,
       minSweepDepthAtrMultiplier: 0.10,
       slBufferAtrMultiplier: 0.10,
-      targetMode: 'FIXED_RR',
+      targetMode: 'DYNAMIC_LIQUIDITY',
+      dynamicTp1Source: 'DEALING_RANGE_EQ',
+      dynamicTp2Source: 'OPPOSING_LIQUIDITY',
+      minDynamicTp1Multiple: 1.20,
+      maxDynamicTp1Multiple: 1.50,
+      minDynamicTp2Multiple: 3.00,
+      maxDynamicTp2Multiple: 5.00,
       requireMssConfirmation: false,
-      enableEarlyBreakeven: true,
-      earlyBreakevenMultiple: 0.35,
+      mssLookbackBars: 15,
+      maxBarsSweepToMss: 10,
+      enableEarlyBreakeven: false, // Next-bar ratchet strictly on bar i+1 after TP1 fills
+      earlyBreakevenMultiple: 0.40,
       enableFeePaddedBreakeven: true,
       breakevenOffsetPct: 0.015,
       enableWaveDeduplication: true,
-      filterWeekend: false,
-      filterDeadZones: true,
+      filterWeekend: true,
+      filterDeadZones: false,
       enforceHtfBiasGuard: false,
-      postLossCooldownMinutes: 0,
+      postLossCooldownMinutes: 45,
+      makerFeePct: 0.0000,
+      takerFeePct: 0.0400,
+      feeTierPreset: 'USDC_REGULAR_VIP1',
+      useBnbDiscount: false,
     } as SweepReclaimPresetConfig,
   },
 
-  // ── 🏹 Index 1: 15m Asymmetric Runner (Pure TP1 BE Benchmark Champion) ──
+  // ── 🏛️ Index 1: 15m Institutional Confluence Champion (ICT + AMT + Wyckoff + SMT) ──
   {
-    id: 'factory_sr_15m_scen_b_asymmetric_proximal',
-    name: '15m Asymmetric Runner FVG Proximal (60/40 @ 1.0/2.0R)',
-    description: '15m Sweep & Reclaim with Asymmetric Runner (60% @ 1.0R / 40% @ 2.0R), entering at FVG Proximal with Pure TP1 Breakeven (+0.015% fee shield), 45m post-loss cooldown, and Rule 6 dead zone filter (+46.01R Net 1Y, 1.17 PF, $21,918 equity from $10k).',
+    id: 'factory_sr_15m_institutional_confluence',
+    name: '15m Institutional Confluence Champion (ICT + AMT + Wyckoff + SMT)',
+    description: 'The Income-Grade Institutional Confluence Architecture for ETHUSDC.p on 15m timeframe. Combines ICT 2022 Deep Mitigation, Auction Market Theory Value Area gating (Discount below VAL / Premium above VAH, POC exclusion), Wyckoff Phase D SOS/SOW confirmed MSS body close with 3-pillar volumetric sponsorship (>=1.20x Vol, >=52% Delta, >=45% Body), Intermarket BTC SMT Divergence gatekeeper, 0-90m Institutional Killzones (London 07:00-08:30 & NY AM 13:00-14:30 UTC with strict 14:30 UTC cutoff), and Two-Stage Asymmetric Harvest (50% @ 1.2-1.5R EQ with Next-Bar BE +0.015% Fee Shield, 50% runner trailing M15 structure to opposing liquidity at 1:3.0-1:5.0R with 45m post-loss cooldown).',
     strategyType: 'SWEEP_RECLAIM',
     symbol: 'ETHUSDC',
     timeframe: '15m',
     isFactory: true,
     syncStatus: 'factory',
-    createdAt: 1789070000000,
-    updatedAt: 1789070000000,
+    createdAt: 1789100000000,
+    updatedAt: 1789100000000,
     config: {
       symbol: 'ETHUSDC',
       timeframe: '15m',
       anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW'],
+      suppressInternalPivots: true,
       lookbackMajor: 15,
       lookbackInternal: 10,
       maxBarsAnchorToSweep: 25,
@@ -233,631 +316,48 @@ export const FACTORY_SWEEP_RECLAIM_PRESETS: ScannerPreset[] = [
       bodyRatioThreshold: 0.45,
       requireThreePillarDisplacement: true,
       enforceDiscountPremiumGate: true,
-      stage1Multiple: 1.0,
-      stage2Multiple: 2.0,
+      enforceValueAreaGate: true,
+      valueAreaLookbackBars: 96,
+      pocExclusionBandPct: 0.0015,
+      enforceSmtGate: true,
+      smtLookbackBars: 15,
+      enforceInstitutionalKillzones: true,
+      institutionalKillzoneCutoffHourUtc: 14,
+      institutionalKillzoneCutoffMinuteUtc: 30,
+      enforcePreNewsFreeze: true,
+      stage1Multiple: 1.30,
+      stage2Multiple: 3.50,
       stage3Multiple: 0.0,
-      stage1Ratio: 0.60,
-      stage2Ratio: 0.40,
+      stage1Ratio: 0.50,
+      stage2Ratio: 0.50,
       stage3Ratio: 0.00,
       entryMode: 'FVG_PROXIMAL',
       enableStructuralTrail: true,
+      enableM15StructuralTrail: true,
       enableProfitRatchet: false,
       minSweepDepthAtrMultiplier: 0.10,
       slBufferAtrMultiplier: 0.10,
-      targetMode: 'FIXED_RR',
-      requireMssConfirmation: false,
-      enableEarlyBreakeven: false,
-      earlyBreakevenMultiple: 0.35,
-      enableFeePaddedBreakeven: true,
-      breakevenOffsetPct: 0.015,
-      enableWaveDeduplication: true,
-      filterWeekend: false,
-      filterDeadZones: true,
-      enforceHtfBiasGuard: false,
-      postLossCooldownMinutes: 45,
-    } as SweepReclaimPresetConfig,
-  },
-
-  // ── 🏆 Index 2: 5m Sweep & Reclaim Fee Shield V3 Sniper (5m High-Turnover Champion) ──
-  {
-    id: 'factory_sr_5m_fvg_ce_sniper_v3',
-    name: '5m Sweep & Reclaim Fee Shield V3 Sniper (5m High-Turnover Champion)',
-    description: 'The 1-Year Validated All-Time Post-Fee Champion (+186.18R Net Realized Return, 1.37 Net PF, 29.0% Max DD, +9,733% Compounded Return from $1k to $98,333.52 under real Binance 0.04% taker fees). Outperforms V2 by +$79,413.88 (+420% more capital). Enters at FVG 50% CE with Swings + Daily + Asian session anchors, 1.10x Vol, 15-bar TTL, 60% TP1 @ 1.0R / 40% TP2 @ 1.30R, Rule 4 Early BE (+0.40R), and the Calibrated 0.015% Fee Shield.',
-    strategyType: 'SWEEP_RECLAIM',
-    symbol: 'ETHUSDC',
-    timeframe: '5m',
-    isFactory: true,
-    syncStatus: 'factory',
-    createdAt: 1770000000000,
-    updatedAt: 1770000000000,
-    config: {
-      symbol: 'ETHUSDC',
-      timeframe: '5m',
-      anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL', 'ASIAN_HIGH', 'ASIAN_LOW'],
-      lookbackMajor: 10,
-      lookbackInternal: 5,
-      maxBarsAnchorToSweep: 25,
-      maxBarsSweepToReclaim: 10,
-      maxBarsToRetest: 15,
-      volumeSmaPeriod: 20,
-      volumeExpansionThreshold: 1.10,
-      deltaDominanceThreshold: 52.0,
-      bodyRatioThreshold: 0.40,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
-      stage1Multiple: 1.0,
-      stage2Multiple: 1.30,
-      stage3Multiple: 3.0,
-      stage1Ratio: 0.60,
-      stage2Ratio: 0.40,
-      stage3Ratio: 0.00,
-      entryMode: 'FVG_CE',
-      enableStructuralTrail: true,
-      enableProfitRatchet: false,
-      minSweepDepthAtrMultiplier: 0.10,
-      slBufferAtrMultiplier: 0.10,
-
-      // 🛡️ Quant Shield Hardened Parameters (Calibrated 0.015% Fee Shield)
-      enableEarlyBreakeven: true,
-      earlyBreakevenMultiple: 0.40,
-      enableFeePaddedBreakeven: true,
-      breakevenOffsetPct: 0.015,
-      enableWaveDeduplication: true,
-      filterWeekend: false,
-      enforceHtfBiasGuard: false,
-      postLossCooldownMinutes: 0,
-    } as SweepReclaimPresetConfig,
-  },
-
-  {
-    id: 'factory_sr_5m_alpha_shield_v3',
-    name: '5m Sweep & Reclaim Fee Shield Alpha V3 (Ultra-Low Drawdown)',
-    description: 'The 1-Year Validated Ultra-Low Drawdown Post-Fee Champion (+178.79R Net Realized Return, 1.37 Net PF, record-low 27.6% Compounded Max DD, -16.94R DD, +8,223% Compounded Return from $1k to $83,235.49). Tight 10-bar retest window eliminates stale order fills in chop while the 0.015% Fee Shield protects equity.',
-    strategyType: 'SWEEP_RECLAIM',
-    symbol: 'ETHUSDC',
-    timeframe: '5m',
-    isFactory: true,
-    syncStatus: 'factory',
-    createdAt: 1770000000000,
-    updatedAt: 1770000000000,
-    config: {
-      symbol: 'ETHUSDC',
-      timeframe: '5m',
-      anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL'],
-      lookbackMajor: 10,
-      lookbackInternal: 5,
-      maxBarsAnchorToSweep: 25,
-      maxBarsSweepToReclaim: 10,
-      maxBarsToRetest: 10, // 🔬 Retest Freshness Gate: 10 bars (50 min)
-      volumeSmaPeriod: 20,
-      volumeExpansionThreshold: 1.10,
-      deltaDominanceThreshold: 52.0,
-      bodyRatioThreshold: 0.40,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
-      stage1Multiple: 1.0,
-      stage2Multiple: 1.30,
-      stage3Multiple: 3.0,
-      stage1Ratio: 0.60,
-      stage2Ratio: 0.40,
-      stage3Ratio: 0.00,
-      entryMode: 'FVG_CE',
-      enableStructuralTrail: true,
-      enableProfitRatchet: false,
-      minSweepDepthAtrMultiplier: 0.10,
-      slBufferAtrMultiplier: 0.10,
-
-      // 🛡️ Quant Shield Hardened Parameters (Calibrated 0.015% Fee Shield)
-      enableEarlyBreakeven: true,
-      earlyBreakevenMultiple: 0.40,
-      enableFeePaddedBreakeven: true,
-      breakevenOffsetPct: 0.015,
-      enableWaveDeduplication: true,
-      filterWeekend: false,
-      enforceHtfBiasGuard: false,
-      postLossCooldownMinutes: 0,
-    } as SweepReclaimPresetConfig,
-  },
-
-  // ── 🏛️ V2 Legacy Champions (Pre-Fee Baselines — Preserved) ─────────────────
-  {
-    id: 'factory_sr_5m_fvg_ce_sniper_v2',
-    name: '5m Sweep & Reclaim FVG 50% CE Sniper V2 (Pre-Fee Baseline)',
-    description: 'The 1-Year Validated Institutional Pre-Fee Baseline (+223.8R Net Nominal Return, 1.75 PF, -6.68R Max DD, +7,328% Compounded Return from $1k to $74,287, 14/14 Winning Months). Enters at FVG 50% Consequent Encroachment (CE) with purified Swing Pivots + Daily anchors, 1.10x Volume expansion, 15-bar TTL, 60% TP1 @ 1.0R / 40% TP2 @ 1.30R, and Rule 4 Early Breakeven (+0.40R).',
-    strategyType: 'SWEEP_RECLAIM',
-    symbol: 'ETHUSDC',
-    timeframe: '5m',
-    isFactory: true,
-    syncStatus: 'factory',
-    createdAt: 1770000000000,
-    updatedAt: 1770000000000,
-    config: {
-      symbol: 'ETHUSDC',
-      timeframe: '5m',
-      anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL'],
-      lookbackMajor: 10,
-      lookbackInternal: 5,
-      maxBarsAnchorToSweep: 25,
-      maxBarsSweepToReclaim: 10,
-      maxBarsToRetest: 15,
-      volumeSmaPeriod: 20,
-      volumeExpansionThreshold: 1.10,
-      deltaDominanceThreshold: 52.0,
-      bodyRatioThreshold: 0.40,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
-      stage1Multiple: 1.0,
-      stage2Multiple: 1.30,
-      stage3Multiple: 3.0,
-      stage1Ratio: 0.60,
-      stage2Ratio: 0.40,
-      stage3Ratio: 0.00,
-      entryMode: 'FVG_CE',
-      enableStructuralTrail: true,
-      enableProfitRatchet: false,
-      minSweepDepthAtrMultiplier: 0.10,
-      slBufferAtrMultiplier: 0.10,
-
-      // 🛡️ Quant Shield Hardened Parameters (1-Year Tested)
-      enableEarlyBreakeven: true,
-      earlyBreakevenMultiple: 0.40,
-      enableFeePaddedBreakeven: true,
-      breakevenOffsetPct: 0.05,
-      enableWaveDeduplication: true,
-      filterWeekend: false,
-      enforceHtfBiasGuard: false,
-      postLossCooldownMinutes: 0,
-    } as SweepReclaimPresetConfig,
-  },
-  {
-    id: 'factory_sr_5m_alpha_shield_v2',
-    name: '5m Sweep & Reclaim Alpha Shield V2 (Pre-Fee Capital Shield)',
-    description: 'The 1-Year Validated Low-Drawdown Capital Shield Pre-Fee Baseline (+206.8R Net Realized Return, 1.70 PF, ultra-low -5.75R Max DD, 11.3% Compounded DD, +5,182% Compounded Return from $1k to $52,821, 14/14 Winning Months). Enters at FVG 50% CE with Swing Pivots + Daily anchors, 1.10x Volume, 15-bar TTL, 50% TP1 @ 1.0R / 50% TP2 @ 1.50R, and Rule 4 Early Breakeven (+0.40R).',
-    strategyType: 'SWEEP_RECLAIM',
-    symbol: 'ETHUSDC',
-    timeframe: '5m',
-    isFactory: true,
-    syncStatus: 'factory',
-    createdAt: 1770000000000,
-    updatedAt: 1770000000000,
-    config: {
-      symbol: 'ETHUSDC',
-      timeframe: '5m',
-      anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL'],
-      lookbackMajor: 10,
-      lookbackInternal: 5,
-      maxBarsAnchorToSweep: 25,
-      maxBarsSweepToReclaim: 10,
-      maxBarsToRetest: 15,
-      volumeSmaPeriod: 20,
-      volumeExpansionThreshold: 1.10,
-      deltaDominanceThreshold: 52.0,
-      bodyRatioThreshold: 0.40,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
-      stage1Multiple: 1.0,
-      stage2Multiple: 1.50,
-      stage3Multiple: 3.0,
-      stage1Ratio: 0.50,
-      stage2Ratio: 0.50,
-      stage3Ratio: 0.00,
-      entryMode: 'FVG_CE',
-      enableStructuralTrail: true,
-      enableProfitRatchet: false,
-      minSweepDepthAtrMultiplier: 0.10,
-      slBufferAtrMultiplier: 0.10,
-
-      // 🛡️ Quant Shield Hardened Parameters (1-Year Tested)
-      enableEarlyBreakeven: true,
-      earlyBreakevenMultiple: 0.40,
-      enableFeePaddedBreakeven: true,
-      breakevenOffsetPct: 0.05,
-      enableWaveDeduplication: true,
-      filterWeekend: false,
-      enforceHtfBiasGuard: false,
-      postLossCooldownMinutes: 0,
-    } as SweepReclaimPresetConfig,
-  },
-
-  // ── 🧪 User Custom Optimization Base: "ETHUSDC 5m - Custom Setup" ──
-  {
-    id: 'custom_sr_5m_user_base_v1',
-    name: 'ETHUSDC 5m - Custom Setup (User Base V1)',
-    description: 'User-created custom preset with stricter body ratio (0.55), all 7 anchor types, HTF Bias Guard, Dead Zone filter, and 10-bar retest TTL. Serves as the base for iterative optimization.',
-    strategyType: 'SWEEP_RECLAIM',
-    symbol: 'ETHUSDC',
-    timeframe: '5m',
-    isFactory: true,
-    syncStatus: 'factory',
-    createdAt: 1788954079006,
-    updatedAt: 1788954079044,
-    config: {
-      symbol: 'ETHUSDC',
-      timeframe: '5m',
-      anchorTypes: ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL'],
-      lookbackMajor: 10,
-      lookbackInternal: 5,
-      maxBarsAnchorToSweep: 25,
-      maxBarsSweepToReclaim: 10,
-      maxBarsToRetest: 10,
-      volumeSmaPeriod: 20,
-      volumeExpansionThreshold: 1.10,
-      deltaDominanceThreshold: 52.0,
-      bodyRatioThreshold: 0.55,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
-      stage1Multiple: 1.0,
-      stage2Multiple: 1.30,
-      stage3Multiple: 3.0,
-      stage1Ratio: 0.60,
-      stage2Ratio: 0.40,
-      stage3Ratio: 0.00,
-      entryMode: 'FVG_CE',
-      enableStructuralTrail: true,
-      enableProfitRatchet: false,
-      minSweepDepthAtrMultiplier: 0.10,
-      slBufferAtrMultiplier: 0.10,
-      targetMode: 'FIXED_RR',
-      requireMssConfirmation: false,
-      enableEarlyBreakeven: true,
-      earlyBreakevenMultiple: 0.40,
-      enableFeePaddedBreakeven: true,
-      breakevenOffsetPct: 0.015,
-      enableWaveDeduplication: true,
-      filterWeekend: false,
-      filterDeadZones: true,
-      enforceHtfBiasGuard: true,
-      postLossCooldownMinutes: 0,
-      makerFeePct: 0,
-      takerFeePct: 0.04,
-      feeTierPreset: 'USDC_REGULAR_VIP1',
-      useBnbDiscount: false,
-    } as SweepReclaimPresetConfig,
-  },
-  // ── 🧪 Test 2: 15m + HTF Bias Guard (User Custom Feature) ──
-  {
-    id: 'opt_test2_15m_htf_guard',
-    name: 'Opt Test 2: 15m + HTF Bias Guard',
-    description: 'Test 2: 15m base + enforceHtfBiasGuard to filter counter-trend trades.',
-    strategyType: 'SWEEP_RECLAIM',
-    symbol: 'ETHUSDC',
-    timeframe: '15m',
-    isFactory: true,
-    syncStatus: 'factory',
-    createdAt: 1788954079006,
-    updatedAt: 1788954079006,
-    config: {
-      symbol: 'ETHUSDC',
-      timeframe: '15m',
-      anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW'],
-      lookbackMajor: 15,
-      lookbackInternal: 10,
-      maxBarsAnchorToSweep: 25,
-      maxBarsSweepToReclaim: 10,
-      maxBarsToRetest: 12,
-      volumeSmaPeriod: 20,
-      volumeExpansionThreshold: 1.10,
-      deltaDominanceThreshold: 52.0,
-      bodyRatioThreshold: 0.40,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
-      stage1Multiple: 1.0,
-      stage2Multiple: 1.35,
-      stage3Multiple: 0.0,
-      stage1Ratio: 0.70,
-      stage2Ratio: 0.30,
-      stage3Ratio: 0.00,
-      entryMode: 'FVG_CE',
-      enableStructuralTrail: true,
-      enableProfitRatchet: false,
-      minSweepDepthAtrMultiplier: 0.10,
-      slBufferAtrMultiplier: 0.10,
-      targetMode: 'FIXED_RR',
-      requireMssConfirmation: false,
-      enableEarlyBreakeven: true,
-      earlyBreakevenMultiple: 0.35,
-      enableFeePaddedBreakeven: true,
-      breakevenOffsetPct: 0.015,
-      enableWaveDeduplication: true,
-      filterWeekend: false,
-      filterDeadZones: true,
-      enforceHtfBiasGuard: true,
-      postLossCooldownMinutes: 0,
-      makerFeePct: 0,
-      takerFeePct: 0.04,
-      feeTierPreset: 'USDC_REGULAR_VIP1',
-      useBnbDiscount: false,
-    } as SweepReclaimPresetConfig,
-  },
-
-  // ── 🧪 Test 3: 15m + HTF Guard + Body Ratio 0.55 ──
-  {
-    id: 'opt_test3_15m_htf_body055',
-    name: 'Opt Test 3: 15m + HTF Guard + Body 0.55',
-    description: 'Test 3: 15m + HTF Bias Guard + stricter body ratio 0.55 for displacement quality.',
-    strategyType: 'SWEEP_RECLAIM',
-    symbol: 'ETHUSDC',
-    timeframe: '15m',
-    isFactory: true,
-    syncStatus: 'factory',
-    createdAt: 1788954079006,
-    updatedAt: 1788954079006,
-    config: {
-      symbol: 'ETHUSDC',
-      timeframe: '15m',
-      anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW'],
-      lookbackMajor: 15,
-      lookbackInternal: 10,
-      maxBarsAnchorToSweep: 25,
-      maxBarsSweepToReclaim: 10,
-      maxBarsToRetest: 12,
-      volumeSmaPeriod: 20,
-      volumeExpansionThreshold: 1.10,
-      deltaDominanceThreshold: 52.0,
-      bodyRatioThreshold: 0.55,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
-      stage1Multiple: 1.0,
-      stage2Multiple: 1.35,
-      stage3Multiple: 0.0,
-      stage1Ratio: 0.70,
-      stage2Ratio: 0.30,
-      stage3Ratio: 0.00,
-      entryMode: 'FVG_CE',
-      enableStructuralTrail: true,
-      enableProfitRatchet: false,
-      minSweepDepthAtrMultiplier: 0.10,
-      slBufferAtrMultiplier: 0.10,
-      targetMode: 'FIXED_RR',
-      requireMssConfirmation: false,
-      enableEarlyBreakeven: true,
-      earlyBreakevenMultiple: 0.35,
-      enableFeePaddedBreakeven: true,
-      breakevenOffsetPct: 0.015,
-      enableWaveDeduplication: true,
-      filterWeekend: false,
-      filterDeadZones: true,
-      enforceHtfBiasGuard: true,
-      postLossCooldownMinutes: 0,
-      makerFeePct: 0,
-      takerFeePct: 0.04,
-      feeTierPreset: 'USDC_REGULAR_VIP1',
-      useBnbDiscount: false,
-    } as SweepReclaimPresetConfig,
-  },
-
-  // ── 🧪 Test 4: 15m + HTF Guard + Body 0.55 + Wider Sweep Window (35 bars) ──
-  {
-    id: 'opt_test4_15m_wider_sweep',
-    name: 'Opt Test 4: 15m + Wider Sweep (35 bars)',
-    description: 'Test 4: Wider anchor-to-sweep window (35 bars) to capture more institutional setups on 15m.',
-    strategyType: 'SWEEP_RECLAIM',
-    symbol: 'ETHUSDC',
-    timeframe: '15m',
-    isFactory: true,
-    syncStatus: 'factory',
-    createdAt: 1788954079006,
-    updatedAt: 1788954079006,
-    config: {
-      symbol: 'ETHUSDC',
-      timeframe: '15m',
-      anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW'],
-      lookbackMajor: 15,
-      lookbackInternal: 10,
-      maxBarsAnchorToSweep: 35,
-      maxBarsSweepToReclaim: 10,
-      maxBarsToRetest: 12,
-      volumeSmaPeriod: 20,
-      volumeExpansionThreshold: 1.10,
-      deltaDominanceThreshold: 52.0,
-      bodyRatioThreshold: 0.55,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
-      stage1Multiple: 1.0,
-      stage2Multiple: 1.35,
-      stage3Multiple: 0.0,
-      stage1Ratio: 0.70,
-      stage2Ratio: 0.30,
-      stage3Ratio: 0.00,
-      entryMode: 'FVG_CE',
-      enableStructuralTrail: true,
-      enableProfitRatchet: false,
-      minSweepDepthAtrMultiplier: 0.10,
-      slBufferAtrMultiplier: 0.10,
-      targetMode: 'FIXED_RR',
-      requireMssConfirmation: false,
-      enableEarlyBreakeven: true,
-      earlyBreakevenMultiple: 0.35,
-      enableFeePaddedBreakeven: true,
-      breakevenOffsetPct: 0.015,
-      enableWaveDeduplication: true,
-      filterWeekend: false,
-      filterDeadZones: true,
-      enforceHtfBiasGuard: true,
-      postLossCooldownMinutes: 0,
-      makerFeePct: 0,
-      takerFeePct: 0.04,
-      feeTierPreset: 'USDC_REGULAR_VIP1',
-      useBnbDiscount: false,
-    } as SweepReclaimPresetConfig,
-  },
-
-  // ── 🧪 Test 5: Best of Phase A + Relaxed Body (0.40) to maximize trade count ──
-  {
-    id: 'opt_test5_15m_relaxed_body',
-    name: 'Opt Test 5: 15m + HTF Guard + Body 0.40 + Wider Sweep',
-    description: 'Test 5: Same as Test 4 but with relaxed body ratio 0.40 to increase trade count while keeping HTF guard.',
-    strategyType: 'SWEEP_RECLAIM',
-    symbol: 'ETHUSDC',
-    timeframe: '15m',
-    isFactory: true,
-    syncStatus: 'factory',
-    createdAt: 1788954079006,
-    updatedAt: 1788954079006,
-    config: {
-      symbol: 'ETHUSDC',
-      timeframe: '15m',
-      anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW'],
-      lookbackMajor: 15,
-      lookbackInternal: 10,
-      maxBarsAnchorToSweep: 35,
-      maxBarsSweepToReclaim: 10,
-      maxBarsToRetest: 12,
-      volumeSmaPeriod: 20,
-      volumeExpansionThreshold: 1.10,
-      deltaDominanceThreshold: 52.0,
-      bodyRatioThreshold: 0.40,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
-      stage1Multiple: 1.0,
-      stage2Multiple: 1.35,
-      stage3Multiple: 0.0,
-      stage1Ratio: 0.70,
-      stage2Ratio: 0.30,
-      stage3Ratio: 0.00,
-      entryMode: 'FVG_CE',
-      enableStructuralTrail: true,
-      enableProfitRatchet: false,
-      minSweepDepthAtrMultiplier: 0.10,
-      slBufferAtrMultiplier: 0.10,
-      targetMode: 'FIXED_RR',
-      requireMssConfirmation: false,
-      enableEarlyBreakeven: true,
-      earlyBreakevenMultiple: 0.35,
-      enableFeePaddedBreakeven: true,
-      breakevenOffsetPct: 0.015,
-      enableWaveDeduplication: true,
-      filterWeekend: false,
-      filterDeadZones: true,
-      enforceHtfBiasGuard: true,
-      postLossCooldownMinutes: 0,
-      makerFeePct: 0,
-      takerFeePct: 0.04,
-      feeTierPreset: 'USDC_REGULAR_VIP1',
-      useBnbDiscount: false,
-    } as SweepReclaimPresetConfig,
-  },
-
-  // ── 🏹 Asymmetric 1:2 to 1:3 R:R Architecture (No Rule 4 Early BE Churn) ──
-  {
-    id: 'factory_sr_5m_asymmetric_rr_sniper',
-    name: '5m Sweep & Reclaim Asymmetric 1:2-1:3 R:R Sniper (No Early BE)',
-    description: 'Strategic Asymmetric Structure eliminating Rule 4 Early BE fee drag. Operates exclusively on Tier-1 Anchors (Asian/London, PDH/PDL, Major level-2 pivots), gates top-down HTF order flow, requires confirmed LTF displacement body close beyond preceding internal swing (MSS), enters at FVG 50% CE with pinned SL beyond sweep wick, routes TP1 to Dealing Range 50% EQ, TP2 to Opposing External Liquidity (min 1:2 R:R constraint), advances SL to BE strictly after TP1, and enforces Rule 5 45m post-loss cooldown.',
-    strategyType: 'SWEEP_RECLAIM',
-    symbol: 'ETHUSDC',
-    timeframe: '5m',
-    isFactory: true,
-    syncStatus: 'factory',
-    createdAt: 1789000000000,
-    updatedAt: 1789000000000,
-    config: {
-      symbol: 'ETHUSDC',
-      timeframe: '5m',
-      anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW'],
-      suppressInternalPivots: true,
-      lookbackMajor: 15,
-      lookbackInternal: 5,
-      maxBarsAnchorToSweep: 35,
-      maxBarsSweepToReclaim: 12,
-      maxBarsToRetest: 15,
-      volumeSmaPeriod: 20,
-      volumeExpansionThreshold: 1.20,
-      deltaDominanceThreshold: 52.0,
-      bodyRatioThreshold: 0.40,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
-      enforceHtfBiasGuard: true,
-      requireMssConfirmation: true,
-      entryMode: 'FVG_CE',
-      slBufferAtrMultiplier: 0.10,
-      minSweepDepthAtrMultiplier: 0.10,
-      enableStructuralTrail: true,
-      enableProfitRatchet: false,
       targetMode: 'DYNAMIC_LIQUIDITY',
       dynamicTp1Source: 'DEALING_RANGE_EQ',
       dynamicTp2Source: 'OPPOSING_LIQUIDITY',
-      minDynamicTp1Multiple: 1.0,
-      maxDynamicTp1Multiple: 1.5,
-      minDynamicTp2Multiple: 2.0,
-      maxDynamicTp2Multiple: 3.5,
-      stage1Multiple: 1.0,
-      stage2Multiple: 2.0,
-      stage3Multiple: 0.0,
-      stage1Ratio: 0.50,
-      stage2Ratio: 0.50,
-      stage3Ratio: 0.00,
-      enableEarlyBreakeven: false,
-      earlyBreakevenMultiple: 0.40,
-      enableFeePaddedBreakeven: true,
-      breakevenOffsetPct: 0.015,
-      enableWaveDeduplication: true,
-      filterWeekend: false,
-      filterDeadZones: false,
-      postLossCooldownMinutes: 45,
-      makerFeePct: 0.0,
-      takerFeePct: 0.04,
-      feeTierPreset: 'USDC_REGULAR_VIP1',
-      useBnbDiscount: false,
-    } as SweepReclaimPresetConfig,
-  },
-
-  {
-    id: 'factory_sr_5m_asymmetric_ote_sniper',
-    name: '5m Sweep & Reclaim Asymmetric OTE Deep Mitigation Sniper (No Early BE)',
-    description: 'Same as Asymmetric 1:2-1:3 R:R Sniper but utilizing 62% Optimal Trade Entry (OTE) retracement mitigation entry.',
-    strategyType: 'SWEEP_RECLAIM',
-    symbol: 'ETHUSDC',
-    timeframe: '5m',
-    isFactory: true,
-    syncStatus: 'factory',
-    createdAt: 1789000000000,
-    updatedAt: 1789000000000,
-    config: {
-      symbol: 'ETHUSDC',
-      timeframe: '5m',
-      anchorTypes: ['SWING_PIVOT', 'PDH', 'PDL', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW'],
-      suppressInternalPivots: true,
-      lookbackMajor: 15,
-      lookbackInternal: 5,
-      maxBarsAnchorToSweep: 35,
-      maxBarsSweepToReclaim: 12,
-      maxBarsToRetest: 15,
-      volumeSmaPeriod: 20,
-      volumeExpansionThreshold: 1.20,
-      deltaDominanceThreshold: 52.0,
-      bodyRatioThreshold: 0.40,
-      requireThreePillarDisplacement: true,
-      enforceDiscountPremiumGate: true,
-      enforceHtfBiasGuard: true,
+      minDynamicTp1Multiple: 1.20,
+      maxDynamicTp1Multiple: 1.50,
+      minDynamicTp2Multiple: 3.00,
+      maxDynamicTp2Multiple: 5.00,
       requireMssConfirmation: true,
-      entryMode: 'OTE_62',
-      slBufferAtrMultiplier: 0.10,
-      minSweepDepthAtrMultiplier: 0.10,
-      enableStructuralTrail: true,
-      enableProfitRatchet: false,
-      targetMode: 'DYNAMIC_LIQUIDITY',
-      dynamicTp1Source: 'DEALING_RANGE_EQ',
-      dynamicTp2Source: 'OPPOSING_LIQUIDITY',
-      minDynamicTp1Multiple: 1.0,
-      maxDynamicTp1Multiple: 1.5,
-      minDynamicTp2Multiple: 2.0,
-      maxDynamicTp2Multiple: 3.5,
-      stage1Multiple: 1.0,
-      stage2Multiple: 2.0,
-      stage3Multiple: 0.0,
-      stage1Ratio: 0.50,
-      stage2Ratio: 0.50,
-      stage3Ratio: 0.00,
+      mssLookbackBars: 15,
+      maxBarsSweepToMss: 10,
       enableEarlyBreakeven: false,
       earlyBreakevenMultiple: 0.40,
       enableFeePaddedBreakeven: true,
       breakevenOffsetPct: 0.015,
       enableWaveDeduplication: true,
-      filterWeekend: false,
+      filterWeekend: true,
       filterDeadZones: false,
+      enforceHtfBiasGuard: false,
       postLossCooldownMinutes: 45,
-      makerFeePct: 0.0,
-      takerFeePct: 0.04,
+      makerFeePct: 0.0000,
+      takerFeePct: 0.0400,
       feeTierPreset: 'USDC_REGULAR_VIP1',
       useBnbDiscount: false,
     } as SweepReclaimPresetConfig,
@@ -987,8 +487,68 @@ export const FACTORY_ORDER_BLOCK_PRESETS: ScannerPreset[] = [
   },
 ];
 
+export const FACTORY_TREND_CONTINUATION_PRESETS: ScannerPreset[] = [
+  {
+    id: 'factory_tc_15m_trend_expansion_champion',
+    name: '15m Institutional Trend Expansion Champion (HTF Lock + BOS + 30/70 Asymmetric Model)',
+    description: 'Engine 2: Institutional Trend-Following & BOS Expansion Engine. Enforces 24/7 crypto liquidity flow scanning across all global sessions (Asia, London, New York, Weekends) with strict negative filtering toxic window blacklist (23:50-00:10 UTC funding rollover, ±20m US macro CPI/PPI/FOMC) and zero 14:30 entry curfew; Previous Day / Developing Daily Value Area macro anchor alignment with expansion mode preservation; strict HTF Trend Lock (1H/4H rolling Level-2 swings + 120 EMA directional lock); Level-2 Major confirmed physical body close Break of Structure (BOS) with 3-pillar displacement (>=1.25x Vol, >=52% Delta, >=50% Body); resting limit entries at FVG Proximal Edge with 12-bar TTL; and Inverted 30/70 Asymmetric Harvest (30% @ 1.5R de-risking tranche with Next-Bar BE +0.015% fee shield, 70% macro runner trailing 15m 3-bar swing pivots to 3.0R-5.0R opposing liquidity or Asian SD expansions, +1.0R dynamic profit floor @ +2.0R MFE, 45m post-loss cooldown).',
+    strategyType: 'TREND_CONTINUATION',
+    symbol: 'ETHUSDC',
+    timeframe: '15m',
+    isFactory: true,
+    syncStatus: 'factory',
+    createdAt: 1789100000000,
+    updatedAt: 1789100000000,
+    config: {
+      symbol: 'ETHUSDC',
+      timeframe: '15m',
+      lookbackMajor: 15,
+      lookbackInternal: 10,
+      emaPeriod: 120,
+      enforceHtfTrendLock: true,
+      volumeSmaPeriod: 20,
+      volumeExpansionThreshold: 1.25,
+      deltaDominanceThreshold: 52.0,
+      bodyRatioThreshold: 0.50,
+      requireThreePillarDisplacement: true,
+      maxBarsToRetest: 12,
+      maxOriginLookbackBars: 32,
+      slBufferAtrMultiplier: 0.10,
+      entryMode: 'FVG_PROXIMAL',
+      stage1Ratio: 0.30,
+      stage2Ratio: 0.70,
+      stage1Multiple: 1.50,
+      stage2Multiple: 4.00,
+      dynamicTp2Source: 'OPPOSING_LIQUIDITY',
+      minDynamicTp2Multiple: 3.00,
+      maxDynamicTp2Multiple: 5.00,
+      enableM15StructuralTrail: true,
+      enableFeePaddedBreakeven: true,
+      breakevenOffsetPct: 0.015,
+      postLossCooldownMinutes: 45,
+      makerFeePct: 0.0000,
+      takerFeePct: 0.0400,
+      feeTierPreset: 'USDC_REGULAR_VIP1',
+      useBnbDiscount: false,
+      enforceValueAreaGate: true,
+      valueAreaLookbackBars: 96,
+      valueAreaMode: 'PREVIOUS_DAY_DEVELOPING',
+      pocBandPct: 0.0020,
+      enforceOlsValidation: true,
+      enforceOiSponsorship: true,
+      enforceSmtGate: true,
+      smtLookbackBars: 15,
+      enableDynamicProfitFloor: true,
+      enforceToxicWindowBlacklist: true,
+      enforceRolloverFreeze: true,
+      enforceNewsFreeze: true,
+    } as TrendContinuationPresetConfig,
+  },
+];
+
 export const ALL_FACTORY_PRESETS: ScannerPreset[] = [
   ...FACTORY_SWEEP_RECLAIM_PRESETS,
+  ...FACTORY_TREND_CONTINUATION_PRESETS,
   ...FACTORY_ORDER_BLOCK_PRESETS,
 ];
 
@@ -1155,16 +715,28 @@ export function getPresetById(id: string): ScannerPreset | null {
 export function getActivePresetId(strategyType: ScannerStrategyType): string {
   const fallback = strategyType === 'SWEEP_RECLAIM' 
     ? FACTORY_SWEEP_RECLAIM_PRESETS[0].id 
-    : FACTORY_ORDER_BLOCK_PRESETS[0].id;
+    : strategyType === 'TREND_CONTINUATION'
+      ? FACTORY_TREND_CONTINUATION_PRESETS[0].id
+      : FACTORY_ORDER_BLOCK_PRESETS[0].id;
   if (typeof window === 'undefined') return fallback;
   try {
     const item = localStorage.getItem(`${STORAGE_KEY_ACTIVE_PRESET_PREFIX}${strategyType}`);
     if (
+      !item ||
       item === 'factory_sr_3m_sfp_shelf_sniper' ||
       item === 'factory_sr_5m_fvg_ce_sniper_v2' ||
+      item === 'factory_sr_5m_fvg_ce_sniper_v3' ||
+      item === 'factory_sr_5m_alpha_shield_v2' ||
+      item === 'factory_sr_5m_alpha_shield_v3' ||
+      item === 'factory_sr_5m_asymmetric_rr_sniper' ||
+      item === 'factory_sr_5m_asymmetric_ote_sniper' ||
+      item === 'factory_sr_15m_macro_sniper_v1' ||
       item === 'factory_sr_15m_scen_a_conservative_ce' ||
       item === 'factory_sr_15m_scen_a_conservative_proximal' ||
-      item === 'factory_sr_15m_scen_b_asymmetric_ce'
+      item === 'factory_sr_15m_scen_b_asymmetric_ce' ||
+      item === 'factory_sr_15m_scen_b_asymmetric_proximal' ||
+      item.startsWith('opt_test') ||
+      item.startsWith('custom_sr_5m')
     ) {
       // Auto-migrate legacy or unviable experimental presets back to primary Champion
       localStorage.setItem(`${STORAGE_KEY_ACTIVE_PRESET_PREFIX}${strategyType}`, fallback);
@@ -1307,8 +879,8 @@ export function purgeConditionCache(): void {
 export function getArmedExecutionStatus(): ArmedExecutionStatus {
   const defaultStatus: ArmedExecutionStatus = {
     type: 'SWEEP_RECLAIM',
-    id: 'factory_sr_15m_macro_sniper_v1',
-    name: '15m Macro Swing & Fee Shield Champion (Ultra-Low Churn)',
+    id: FACTORY_SWEEP_RECLAIM_PRESETS[0].id,
+    name: FACTORY_SWEEP_RECLAIM_PRESETS[0].name,
     isAutoExecEnabled: getSweepReclaimAutoExec(),
     symbol: 'ETHUSDC',
     timeframe: '15m',
@@ -1322,13 +894,23 @@ export function getArmedExecutionStatus(): ArmedExecutionStatus {
     if (!raw) return defaultStatus;
     const parsed = JSON.parse(raw);
     if (
+      !parsed.id ||
       parsed.id === 'factory_sr_3m_sfp_shelf_sniper' ||
       parsed.id === 'factory_sr_5m_fvg_ce_sniper_v2' ||
+      parsed.id === 'factory_sr_5m_fvg_ce_sniper_v3' ||
+      parsed.id === 'factory_sr_5m_alpha_shield_v2' ||
+      parsed.id === 'factory_sr_5m_alpha_shield_v3' ||
+      parsed.id === 'factory_sr_5m_asymmetric_rr_sniper' ||
+      parsed.id === 'factory_sr_5m_asymmetric_ote_sniper' ||
+      parsed.id === 'factory_sr_15m_macro_sniper_v1' ||
       parsed.id === 'factory_sr_15m_scen_a_conservative_ce' ||
       parsed.id === 'factory_sr_15m_scen_a_conservative_proximal' ||
-      parsed.id === 'factory_sr_15m_scen_b_asymmetric_ce'
+      parsed.id === 'factory_sr_15m_scen_b_asymmetric_ce' ||
+      parsed.id === 'factory_sr_15m_scen_b_asymmetric_proximal' ||
+      parsed.id.startsWith('opt_test') ||
+      parsed.id.startsWith('custom_sr_5m')
     ) {
-      // Auto-migrate legacy or pruned armed status to 15m Macro Champion
+      // Auto-migrate legacy or pruned armed status to 15m Asymmetric Macro Champion
       localStorage.setItem(STORAGE_KEY_ARMED_EXECUTION, JSON.stringify(defaultStatus));
       return defaultStatus;
     }
@@ -1376,39 +958,63 @@ export function applyPresetToLiveExecution(preset: ScannerPreset): void {
 
     updateSweepReclaimLiveSettings({
       entryMode: cfg.entryMode,
-      enforceDiscountPremiumGate: cfg.enforceDiscountPremiumGate ?? true,
+      enforceDiscountPremiumGate: cfg.enforceDiscountPremiumGate ?? false,
       volumeSmaPeriod: cfg.volumeSmaPeriod ?? 20,
-      volumeExpansionThreshold: cfg.volumeExpansionThreshold ?? 1.10,
+      volumeExpansionThreshold: cfg.volumeExpansionThreshold ?? 1.20,
       deltaDominanceThreshold: cfg.deltaDominanceThreshold ?? 52.0,
-      bodyRatioThreshold: cfg.bodyRatioThreshold ?? 0.40,
-      stage1Multiple: cfg.stage1Multiple ?? 1.0,
-      stage2Multiple: cfg.stage2Multiple ?? 1.30,
-      stage3Multiple: cfg.stage3Multiple ?? 3.0,
-      stage1Ratio: cfg.stage1Ratio ?? 0.60,
-      stage2Ratio: cfg.stage2Ratio ?? 0.40,
+      bodyRatioThreshold: cfg.bodyRatioThreshold ?? 0.45,
+      stage1Multiple: cfg.stage1Multiple ?? 1.30,
+      stage2Multiple: cfg.stage2Multiple ?? 3.50,
+      stage3Multiple: cfg.stage3Multiple ?? 0.0,
+      stage1Ratio: cfg.stage1Ratio ?? 0.50,
+      stage2Ratio: cfg.stage2Ratio ?? 0.50,
       stage3Ratio: cfg.stage3Ratio ?? 0.00,
       enableStructuralTrail: cfg.enableStructuralTrail ?? true,
       enableProfitRatchet: cfg.enableProfitRatchet ?? false,
-      anchorTypes: liveAnchors.length > 0 ? liveAnchors : ['SWING_PIVOT', 'ASIAN', 'DAILY'],
-      lookbackMajor: cfg.lookbackMajor ?? 10,
-      lookbackInternal: cfg.lookbackInternal ?? 5,
+      anchorTypes: liveAnchors.length > 0 ? liveAnchors : ['SWING_PIVOT', 'ASIAN', 'LONDON', 'DAILY'],
+      lookbackMajor: cfg.lookbackMajor ?? 15,
+      lookbackInternal: cfg.lookbackInternal ?? 10,
       maxBarsAnchorToSweep: cfg.maxBarsAnchorToSweep ?? 25,
       maxBarsSweepToReclaim: cfg.maxBarsSweepToReclaim ?? 10,
-      maxBarsToRetest: cfg.maxBarsToRetest ?? 15,
+      maxBarsToRetest: cfg.maxBarsToRetest ?? 12,
       minSweepDepthAtrMultiplier: cfg.minSweepDepthAtrMultiplier ?? 0.10,
       slBufferAtrMultiplier: cfg.slBufferAtrMultiplier ?? 0.10,
       requireThreePillarDisplacement: cfg.requireThreePillarDisplacement ?? true,
-      enabledTimeframes: cfg.timeframe ? [cfg.timeframe as SupportedSRTimeframe] : ['5m'],
+      enabledTimeframes: cfg.timeframe ? [cfg.timeframe as SupportedSRTimeframe] : ['15m'],
 
       // 🛡️ Quant Shield Parameters (Full Parity)
-      enableWaveDeduplication: cfg.enableWaveDeduplication === true,
-      filterWeekend: cfg.filterWeekend === true,
+      enableWaveDeduplication: cfg.enableWaveDeduplication !== false,
+      filterWeekend: cfg.filterWeekend !== false,
       enforceHtfBiasGuard: cfg.enforceHtfBiasGuard === true,
       enableEarlyBreakeven: cfg.enableEarlyBreakeven === true,
       earlyBreakevenMultiple: typeof cfg.earlyBreakevenMultiple === 'number' ? cfg.earlyBreakevenMultiple : 0.40,
-      enableFeePaddedBreakeven: cfg.enableFeePaddedBreakeven === true,
-      breakevenOffsetPct: typeof cfg.breakevenOffsetPct === 'number' ? cfg.breakevenOffsetPct : 0.05,
-      postLossCooldownMinutes: typeof cfg.postLossCooldownMinutes === 'number' ? cfg.postLossCooldownMinutes : 0,
+      enableFeePaddedBreakeven: cfg.enableFeePaddedBreakeven !== false,
+      breakevenOffsetPct: typeof cfg.breakevenOffsetPct === 'number' ? cfg.breakevenOffsetPct : 0.015,
+      postLossCooldownMinutes: typeof cfg.postLossCooldownMinutes === 'number' ? cfg.postLossCooldownMinutes : 45,
+
+      // 🎯 Pillar 4 Dynamic Liquidity Targets & MSS Confirmation
+      targetMode: cfg.targetMode ?? 'DYNAMIC_LIQUIDITY',
+      dynamicTp1Source: cfg.dynamicTp1Source ?? 'DEALING_RANGE_EQ',
+      dynamicTp2Source: cfg.dynamicTp2Source ?? 'OPPOSING_LIQUIDITY',
+      minDynamicTp1Multiple: cfg.minDynamicTp1Multiple ?? 1.20,
+      maxDynamicTp1Multiple: cfg.maxDynamicTp1Multiple ?? 1.50,
+      minDynamicTp2Multiple: cfg.minDynamicTp2Multiple ?? 3.00,
+      maxDynamicTp2Multiple: cfg.maxDynamicTp2Multiple ?? 5.00,
+      requireMssConfirmation: cfg.requireMssConfirmation ?? false,
+      mssLookbackBars: (cfg as any).mssLookbackBars ?? 15,
+      maxBarsSweepToMss: (cfg as any).maxBarsSweepToMss ?? 10,
+
+      // 🏛️ Institutional Confluence Architecture (ICT + AMT + Wyckoff + SMT)
+      enforceValueAreaGate: cfg.enforceValueAreaGate ?? true,
+      valueAreaLookbackBars: cfg.valueAreaLookbackBars ?? 96,
+      pocExclusionBandPct: cfg.pocExclusionBandPct ?? 0.0015,
+      enforceSmtGate: cfg.enforceSmtGate ?? true,
+      smtLookbackBars: cfg.smtLookbackBars ?? 15,
+      enforceInstitutionalKillzones: cfg.enforceInstitutionalKillzones ?? true,
+      institutionalKillzoneCutoffHourUtc: cfg.institutionalKillzoneCutoffHourUtc ?? 14,
+      institutionalKillzoneCutoffMinuteUtc: cfg.institutionalKillzoneCutoffMinuteUtc ?? 30,
+      enforcePreNewsFreeze: cfg.enforcePreNewsFreeze ?? true,
+      enableM15StructuralTrail: cfg.enableM15StructuralTrail ?? true,
 
       // 💰 Institutional Binance Fee Model
       makerFeePct: typeof cfg.makerFeePct === 'number' ? cfg.makerFeePct : 0.0000,
@@ -1433,6 +1039,17 @@ export function applyPresetToLiveExecution(preset: ScannerPreset): void {
       id: preset.id,
       name: preset.name,
       isAutoExecEnabled: getOrderBlockAutoExec(),
+      symbol: cfg.symbol || 'ETHUSDC',
+      timeframe: cfg.timeframe || '15m',
+      updatedAt: Date.now(),
+    });
+  } else if (preset.strategyType === 'TREND_CONTINUATION') {
+    const cfg = preset.config as TrendContinuationPresetConfig;
+    setArmedExecutionStatus({
+      type: 'TREND_CONTINUATION',
+      id: preset.id,
+      name: preset.name,
+      isAutoExecEnabled: true,
       symbol: cfg.symbol || 'ETHUSDC',
       timeframe: cfg.timeframe || '15m',
       updatedAt: Date.now(),

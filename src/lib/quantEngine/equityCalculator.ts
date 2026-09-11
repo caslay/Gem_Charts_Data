@@ -979,6 +979,7 @@ export function calculateCompoundingMetrics(
       longestLossStreak: 0,
       currentStreakType: 'NONE',
       currentStreakCount: 0,
+      totalFeesPaidUsd: 0,
       equityCurvePoints: [startPoint],
     };
   }

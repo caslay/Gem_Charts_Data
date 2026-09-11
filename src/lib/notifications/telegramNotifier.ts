@@ -27,6 +27,334 @@ export interface TelegramConfig {
   chatId: string;
   enabled: boolean;
   persistedRegistryPath?: string;
+  ephemeralRegistry?: boolean;
+}
+
+export type SparkLifecycleMilestone =
+  | 'SIGNAL_RECEIVED'
+  | 'ORDER_ARMED'
+  | 'ORDER_FILLED'
+  | 'TP1_SCALE_RATCHET'
+  | 'TRADE_CLOSED';
+
+export interface SparkSignalReceivedPayload {
+  id?: number | string;
+  decisionId?: number | string;
+  symbol: string;
+  direction: 'LONG' | 'SHORT' | string;
+  entryRangeLow?: number | null;
+  entryRangeHigh?: number | null;
+  limitEntryPrice?: number | null;
+  invalidationLevel?: number | null;
+  target1?: number | null;
+  target2?: number | null;
+  riskUsd: number;
+  riskPct: number;
+  contractSize?: number;
+  narrative?: string | null;
+  timestamp?: number;
+  mode?: 'STANDBY' | 'PAPER_TRADING' | 'LIVE_BINANCE';
+}
+
+export interface SparkOrderArmedPayload {
+  tradeId?: string;
+  positionId?: string;
+  setupId?: string;
+  mode: 'PAPER_TRADING' | 'LIVE_BINANCE' | 'STANDBY';
+  symbol: string;
+  direction: 'LONG' | 'SHORT';
+  limitEntryPrice: number;
+  stopLossPrice: number;
+  contractSize: number;
+  notionalValue?: number;
+  riskUsd: number;
+  riskPct: number;
+  ttlBars?: number;
+  timestamp?: number;
+}
+
+export interface SparkOrderFilledPayload {
+  tradeId?: string;
+  positionId?: string;
+  mode: 'PAPER_TRADING' | 'LIVE_BINANCE';
+  symbol: string;
+  direction: 'LONG' | 'SHORT';
+  executionPrice: number;
+  contractSize: number;
+  notionalValue?: number;
+  activeStopLoss: number;
+  stage1Target: number;
+  stage2Target?: number;
+  timestamp?: number;
+}
+
+export interface SparkTp1RatchetPayload {
+  tradeId?: string;
+  positionId?: string;
+  mode: 'PAPER_TRADING' | 'LIVE_BINANCE';
+  symbol: string;
+  direction: 'LONG' | 'SHORT';
+  stage1Target: number;
+  stage1Ratio: number;
+  bankedR: number;
+  bankedUsd: number;
+  newStopLoss: number;
+  feeShieldOffsetPct?: number;
+  remainingAllocationPct?: number;
+  stage2Target?: number;
+  timestamp?: number;
+}
+
+export interface SparkTradeClosedPayload {
+  tradeId?: string;
+  positionId?: string;
+  mode: 'PAPER_TRADING' | 'LIVE_BINANCE';
+  symbol: string;
+  direction: 'LONG' | 'SHORT';
+  exitPrice: number;
+  exitReason: string;
+  holdingDurationMs?: number;
+  holdingDurationStr?: string;
+  netRealizedR: number;
+  netRealizedUsd: number;
+  feeUsd?: number;
+  timestamp?: number;
+}
+
+export function formatHoldingDuration(ms: number): string {
+  if (!ms || ms <= 0) return '0s';
+  const totalSecs = Math.floor(ms / 1000);
+  const hrs = Math.floor(totalSecs / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
+  if (hrs > 0) return `${hrs}h ${mins}m ${secs}s`;
+  if (mins > 0) return `${mins}m ${secs}s`;
+  return `${secs}s`;
+}
+
+export function sanitizeMarkdownText(text?: string | null): string {
+  if (!text) return '';
+  return String(text).replace(/[*_`\[\]()]/g, '');
+}
+
+export function validateTelegramMarkdown(text: string): { isValid: boolean; error?: string } {
+  const withoutPre = text.replace(/```[\s\S]*?```/g, '');
+  const withoutCode = withoutPre.replace(/`[^`]*`/g, '');
+
+  const asterisks = (withoutCode.match(/\*/g) || []).length;
+  if (asterisks % 2 !== 0) {
+    return { isValid: false, error: `Unbalanced bold asterisks (${asterisks})` };
+  }
+
+  const underscores = (withoutCode.match(/_/g) || []).length;
+  if (underscores % 2 !== 0) {
+    return { isValid: false, error: `Unbalanced italic underscores (${underscores})` };
+  }
+
+  const backticks = (text.match(/`/g) || []).length;
+  if (backticks % 2 !== 0) {
+    return { isValid: false, error: `Unbalanced backticks (${backticks})` };
+  }
+
+  return { isValid: true };
+}
+
+export function formatSparkSignalReceivedMarkdown(payload: SparkSignalReceivedPayload): string {
+  const isLong = payload.direction === 'LONG' || payload.direction === 'BULLISH';
+  const dirEmoji = isLong ? '🟢 LONG' : '🔴 SHORT';
+  const timeIso = new Date(payload.timestamp || Date.now())
+    .toISOString()
+    .replace('T', ' ')
+    .substring(0, 19) + ' UTC';
+  const cleanNarrative = sanitizeMarkdownText(
+    payload.narrative || 'Institutional signal validated by Global Risk Governor.'
+  );
+
+  const entryRangeStr =
+    typeof payload.entryRangeLow === 'number' && typeof payload.entryRangeHigh === 'number'
+      ? `$${payload.entryRangeLow.toFixed(2)} – $${payload.entryRangeHigh.toFixed(2)}`
+      : typeof payload.limitEntryPrice === 'number'
+        ? `$${payload.limitEntryPrice.toFixed(2)}`
+        : 'Market / Dynamic';
+
+  const slStr = typeof payload.invalidationLevel === 'number' ? `$${payload.invalidationLevel.toFixed(2)}` : 'N/A';
+  const t1Str = typeof payload.target1 === 'number' && payload.target1 > 0 ? `🎯 *Target 1 (TP1):* \`$${payload.target1.toFixed(2)}\`\n` : '';
+  const t2Str = typeof payload.target2 === 'number' && payload.target2 > 0 ? `💰 *Target 2 (TP2):* \`$${payload.target2.toFixed(2)}\`\n` : '';
+  const riskUsd = typeof payload.riskUsd === 'number' ? payload.riskUsd.toFixed(2) : '0.00';
+  const riskPct = typeof payload.riskPct === 'number' ? payload.riskPct.toFixed(1) : '2.0';
+
+  return (
+    `📥 *[SPARK SIGNAL RECEIVED]*\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `📊 *Pair:* \`${payload.symbol}\`\n` +
+    `🧭 *Bias:* *${dirEmoji}*\n` +
+    `🎯 *Entry Range:* \`${entryRangeStr}\`\n` +
+    `🛑 *Invalidation Stop:* \`${slStr}\`\n` +
+    t1Str +
+    t2Str +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `💵 *Risk Size:* \`$${riskUsd}\` (1.0R | ${riskPct}% Compounded)\n` +
+    (typeof payload.contractSize === 'number' && payload.contractSize > 0 ? `📐 *Projected Size:* \`${payload.contractSize} contracts\`\n` : '') +
+    (payload.mode ? `⚙️ *Assigned Mode:* \`[${payload.mode}]\`\n` : '') +
+    `🧠 *Spark Narrative:*\n` +
+    `_${cleanNarrative}_\n` +
+    `⏰ *Time:* \`${timeIso}\``
+  );
+}
+
+export function formatSparkOrderArmedMarkdown(payload: SparkOrderArmedPayload): string {
+  const dirEmoji = payload.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
+  const timeIso = new Date(payload.timestamp || Date.now())
+    .toISOString()
+    .replace('T', ' ')
+    .substring(0, 19) + ' UTC';
+  const ttlBars = payload.ttlBars ?? 12;
+  const limitPriceStr = typeof payload.limitEntryPrice === 'number' ? payload.limitEntryPrice.toFixed(2) : '0.00';
+  const slStr = typeof payload.stopLossPrice === 'number' ? payload.stopLossPrice.toFixed(2) : '0.00';
+  const contractSize = typeof payload.contractSize === 'number' ? payload.contractSize : 0;
+  const notional = typeof payload.notionalValue === 'number'
+    ? payload.notionalValue
+    : (typeof payload.limitEntryPrice === 'number' ? contractSize * payload.limitEntryPrice : 0);
+  const notionalStr = notional > 0 ? ` (Notional: \`$${notional.toFixed(2)}\`)` : '';
+  const riskUsd = typeof payload.riskUsd === 'number' ? payload.riskUsd.toFixed(2) : '0.00';
+  const riskPct = typeof payload.riskPct === 'number' ? payload.riskPct.toFixed(1) : '2.0';
+
+  return (
+    `🎯 *[ORDER ARMED / QUEUED]*\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `⚙️ *Mode:* \`[${payload.mode}]\`\n` +
+    `📊 *Pair:* \`${payload.symbol}\`\n` +
+    `🧭 *Direction:* *${dirEmoji}*\n` +
+    `🎯 *Limit Entry:* \`$${limitPriceStr}\` (Resting Maker)\n` +
+    `🛑 *Stop Loss:* \`$${slStr}\` (0.15% Clamped)\n` +
+    `⏳ *TTL Expiry:* \`${ttlBars} Bars (${ttlBars * 5}m)\`\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `💵 *Committed Risk:* \`$${riskUsd}\` (${riskPct}%)\n` +
+    `📐 *Contract Size:* \`${contractSize} contracts\`${notionalStr}\n` +
+    `⏰ *Armed At:* \`${timeIso}\``
+  );
+}
+
+export function formatSparkOrderFilledMarkdown(payload: SparkOrderFilledPayload): string {
+  const dirEmoji = payload.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
+  const timeIso = new Date(payload.timestamp || Date.now())
+    .toISOString()
+    .replace('T', ' ')
+    .substring(0, 19) + ' UTC';
+  const execPrice = typeof payload.executionPrice === 'number' ? payload.executionPrice.toFixed(2) : '0.00';
+  const contractSize = typeof payload.contractSize === 'number' ? payload.contractSize : 0;
+  const notional = typeof payload.notionalValue === 'number'
+    ? payload.notionalValue
+    : (typeof payload.executionPrice === 'number' ? contractSize * payload.executionPrice : 0);
+  const notionalStr = notional > 0 ? ` (Notional: \`$${notional.toFixed(2)}\`)` : '';
+  const activeSl = typeof payload.activeStopLoss === 'number' ? payload.activeStopLoss.toFixed(2) : '0.00';
+  const t1Str = typeof payload.stage1Target === 'number' && payload.stage1Target > 0
+    ? `🎯 *TP1 Target:* \`$${payload.stage1Target.toFixed(2)}\`\n`
+    : '';
+  const t2Str = typeof payload.stage2Target === 'number' && payload.stage2Target > 0
+    ? `💰 *TP2 Target:* \`$${payload.stage2Target.toFixed(2)}\`\n`
+    : '';
+
+  return (
+    `⚡ *[ORDER FILLED]*\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `⚙️ *Mode:* \`[${payload.mode}]\`\n` +
+    `📊 *Pair:* \`${payload.symbol}\`\n` +
+    `🧭 *Direction:* *${dirEmoji}*\n` +
+    `⚡ *Execution Price:* \`$${execPrice}\`\n` +
+    `📐 *Position Size:* \`${contractSize} contracts\`${notionalStr}\n` +
+    `🛑 *Active Stop Loss:* \`$${activeSl}\`\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    t1Str +
+    t2Str +
+    `⏰ *Fill Time:* \`${timeIso}\``
+  );
+}
+
+export function formatSparkTp1RatchetMarkdown(payload: SparkTp1RatchetPayload): string {
+  const timeIso = new Date(payload.timestamp || Date.now())
+    .toISOString()
+    .replace('T', ' ')
+    .substring(0, 19) + ' UTC';
+  const s1Ratio = typeof payload.stage1Ratio === 'number' ? payload.stage1Ratio : 0.5;
+  const pctStr = (s1Ratio * 100).toFixed(0);
+  const targetStr = typeof payload.stage1Target === 'number' ? payload.stage1Target.toFixed(2) : '0.00';
+  const bankedR = typeof payload.bankedR === 'number' ? payload.bankedR.toFixed(2) : '0.00';
+  const bankedUsd = typeof payload.bankedUsd === 'number' ? payload.bankedUsd.toFixed(2) : '0.00';
+  const newSl = typeof payload.newStopLoss === 'number' ? payload.newStopLoss.toFixed(2) : '0.00';
+  const offsetPct = payload.feeShieldOffsetPct ?? 0.015;
+  const runnerPct = payload.remainingAllocationPct ?? (100 - parseFloat(pctStr));
+  const t2Str = typeof payload.stage2Target === 'number' && payload.stage2Target > 0
+    ? ` targeting TP2 (\`$${payload.stage2Target.toFixed(2)}\`)`
+    : '';
+
+  return (
+    `🛡️ *[TP1 SCALE & RATCHET]*\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `⚙️ *Mode:* \`[${payload.mode}]\`\n` +
+    `📊 *Pair:* \`${payload.symbol}\`\n` +
+    `📦 *Tranche Banked:* \`${pctStr}% @ $${targetStr}\`\n` +
+    `🔒 *Banked Profit:* *+${bankedR}R (+$${bankedUsd} USD)*\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `🛡️ *Stop Loss Ratchet:* Advanced to *Breakeven + ${offsetPct}% Fee Shield* (\`$${newSl}\`)\n` +
+    `⚖️ *Ratchet Law:* Next-Bar Ratchet Rule Active (Bar i+1)\n` +
+    `📦 *Remaining Runner:* \`${runnerPct}%\`${t2Str}\n` +
+    `⏰ *Time:* \`${timeIso}\``
+  );
+}
+
+export function formatSparkTradeClosedMarkdown(payload: SparkTradeClosedPayload): string {
+  const dirEmoji = payload.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
+  const timeIso = new Date(payload.timestamp || Date.now())
+    .toISOString()
+    .replace('T', ' ')
+    .substring(0, 19) + ' UTC';
+  const exitPriceStr = typeof payload.exitPrice === 'number' ? payload.exitPrice.toFixed(2) : '0.00';
+  const safeExitReason = payload.exitReason ? String(payload.exitReason).replace(/[`]/g, '') : 'CLOSED';
+  const durationStr =
+    payload.holdingDurationStr ||
+    (typeof payload.holdingDurationMs === 'number' ? formatHoldingDuration(payload.holdingDurationMs) : 'N/A');
+  const netR = typeof payload.netRealizedR === 'number' ? payload.netRealizedR : 0;
+  const netUsd = typeof payload.netRealizedUsd === 'number' ? payload.netRealizedUsd : 0;
+  const signR = netR >= 0 ? '+' : '';
+  const signUsd = netUsd >= 0 ? '+' : '';
+  const feeStr =
+    typeof payload.feeUsd === 'number' ? `-$${Math.abs(payload.feeUsd).toFixed(2)} USD` : '0.00 USD';
+
+  return (
+    `🏁 *[TRADE CLOSED]*\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `⚙️ *Mode:* \`[${payload.mode}]\`\n` +
+    `📊 *Pair:* \`${payload.symbol}\` (${dirEmoji})\n` +
+    `⚡ *Exit Price:* \`$${exitPriceStr}\`\n` +
+    `🏷️ *Exit Trigger:* \`${safeExitReason}\`\n` +
+    `⏱️ *Holding Duration:* \`${durationStr}\`\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `📊 *Net Realized R:* *${signR}${netR.toFixed(2)}R*\n` +
+    `💵 *Net PnL:* *${signUsd}$${netUsd.toFixed(2)} USD* (after fees)\n` +
+    `💰 *Simulated Fees:* \`${feeStr}\` (Maker 0.0000% / Taker 0.0400%)\n` +
+    `⏰ *Close Time:* \`${timeIso}\``
+  );
+}
+
+export function formatSparkLifecycleMarkdown(
+  milestone: SparkLifecycleMilestone,
+  payload: any
+): string {
+  switch (milestone) {
+    case 'SIGNAL_RECEIVED':
+      return formatSparkSignalReceivedMarkdown(payload);
+    case 'ORDER_ARMED':
+      return formatSparkOrderArmedMarkdown(payload);
+    case 'ORDER_FILLED':
+      return formatSparkOrderFilledMarkdown(payload);
+    case 'TP1_SCALE_RATCHET':
+      return formatSparkTp1RatchetMarkdown(payload);
+    case 'TRADE_CLOSED':
+      return formatSparkTradeClosedMarkdown(payload);
+    default:
+      return '';
+  }
 }
 
 export class TelegramNotifier {
@@ -68,10 +396,13 @@ export class TelegramNotifier {
       chatId: chatId.trim(),
       enabled,
       persistedRegistryPath: this.registryFilePath,
+      ephemeralRegistry: config?.ephemeralRegistry ?? false,
     };
 
-    // Load persisted deduplication registry
-    this.loadDeduplicationRegistry();
+    // Load persisted deduplication registry if not in ephemeral mode
+    if (!this.config.ephemeralRegistry) {
+      this.loadDeduplicationRegistry();
+    }
   }
 
   /**
@@ -107,6 +438,7 @@ export class TelegramNotifier {
    * Load sent event keys from disk to prevent duplicate notifications on daemon restart.
    */
   private loadDeduplicationRegistry(): void {
+    if (this.config?.ephemeralRegistry) return;
     try {
       if (fs.existsSync(this.registryFilePath)) {
         const raw = fs.readFileSync(this.registryFilePath, 'utf8');
@@ -125,14 +457,45 @@ export class TelegramNotifier {
   }
 
   /**
-   * Persist sent event keys to disk.
+   * Persist sent event keys to disk atomically.
    */
   private flushDeduplicationRegistry(): void {
+    if (this.config?.ephemeralRegistry) return;
     try {
       const arr = Array.from(this.sentEventKeys).slice(-5000);
-      fs.writeFileSync(this.registryFilePath, JSON.stringify(arr, null, 2), 'utf8');
+      const tmpPath = `${this.registryFilePath}.${process.pid}.${Date.now()}.tmp`;
+      fs.writeFileSync(tmpPath, JSON.stringify(arr, null, 2), 'utf8');
+      fs.renameSync(tmpPath, this.registryFilePath);
     } catch (err) {
       console.error('[TELEGRAM] Error saving deduplication registry:', err);
+    }
+  }
+
+  /**
+   * Clears the deduplication cache in memory and optionally on disk.
+   */
+  public clearDeduplicationRegistry(clearPersisted: boolean = true): void {
+    this.sentEventKeys.clear();
+    if (clearPersisted && !this.config.ephemeralRegistry) {
+      try {
+        if (fs.existsSync(this.registryFilePath)) {
+          const tmpPath = `${this.registryFilePath}.${process.pid}.${Date.now()}.tmp`;
+          fs.writeFileSync(tmpPath, JSON.stringify([], null, 2), 'utf8');
+          fs.renameSync(tmpPath, this.registryFilePath);
+        }
+      } catch (err) {
+        console.warn('[TELEGRAM] Warning clearing deduplication registry file:', err);
+      }
+    }
+  }
+
+  /**
+   * Removes a specific event key from the deduplication cache.
+   */
+  public removeEventKey(eventKey: string): void {
+    this.sentEventKeys.delete(eventKey);
+    if (!this.config.ephemeralRegistry) {
+      this.flushDeduplicationRegistry();
     }
   }
 
@@ -163,6 +526,78 @@ export class TelegramNotifier {
    */
   public formatMessage(event: ExecutionEvent): string | null {
     const pos = event.position;
+    const isSpark = Boolean(pos?.strategyId?.startsWith('SPARK_') || pos?.executionMode);
+    const mode = (pos?.executionMode || 'PAPER_TRADING') as 'PAPER_TRADING' | 'LIVE_BINANCE';
+
+    if (isSpark && pos) {
+      switch (event.type) {
+        case 'LIMIT_ORDER_PLACED':
+          return formatSparkOrderArmedMarkdown({
+            mode,
+            symbol: pos.symbol,
+            direction: pos.direction,
+            limitEntryPrice: pos.limitEntryPrice,
+            stopLossPrice: pos.initialStopLoss,
+            contractSize: pos.contractSize,
+            notionalValue: pos.contractSize * pos.limitEntryPrice,
+            riskUsd: pos.riskUsd,
+            riskPct: pos.riskPct ?? 2.0,
+            ttlBars: pos.maxRetestBars ?? 12,
+            timestamp: event.timestamp,
+          });
+
+        case 'ORDER_FILLED':
+          return formatSparkOrderFilledMarkdown({
+            mode,
+            symbol: pos.symbol,
+            direction: pos.direction,
+            executionPrice: pos.entryPrice,
+            contractSize: pos.contractSize,
+            notionalValue: pos.contractSize * pos.entryPrice,
+            activeStopLoss: pos.activeStopLoss,
+            stage1Target: pos.stage1Target,
+            stage2Target: pos.stage2Target,
+            timestamp: event.timestamp,
+          });
+
+        case 'STAGE_1_HARVEST': {
+          const s1Ratio = pos.stage1Ratio ?? 0.5;
+          const s1Mult = pos.stage1Multiple ?? 1.0;
+          const bankedR = s1Ratio * s1Mult;
+          return formatSparkTp1RatchetMarkdown({
+            mode,
+            symbol: pos.symbol,
+            direction: pos.direction,
+            stage1Target: pos.stage1Target,
+            stage1Ratio: s1Ratio,
+            bankedR,
+            bankedUsd: bankedR * pos.riskUsd,
+            newStopLoss: pos.activeStopLoss,
+            feeShieldOffsetPct: 0.015,
+            remainingAllocationPct: Math.round(pos.remainingAllocation * 100),
+            stage2Target: pos.stage2Target,
+            timestamp: event.timestamp,
+          });
+        }
+
+        case 'POSITION_CLOSED': {
+          const durationMs = pos.closeTime && pos.openTime ? pos.closeTime - pos.openTime : 0;
+          return formatSparkTradeClosedMarkdown({
+            mode,
+            symbol: pos.symbol,
+            direction: pos.direction,
+            exitPrice: pos.exitPrice || pos.activeStopLoss,
+            exitReason: pos.exitReason || 'CLOSED',
+            holdingDurationMs: durationMs,
+            netRealizedR: pos.netRealizedR ?? pos.realizedR ?? 0,
+            netRealizedUsd: pos.netRealizedUsd ?? pos.realizedUsd ?? 0,
+            feeUsd: pos.feeUsd ?? 0,
+            timestamp: event.timestamp,
+          });
+        }
+      }
+    }
+
     const nowIso = new Date(event.timestamp || Date.now())
       .toISOString()
       .replace('T', ' ')
@@ -370,9 +805,13 @@ export class TelegramNotifier {
     this.sentEventKeys.add(eventKey);
     this.flushDeduplicationRegistry();
 
-    const success = await this.sendRawMessage(text);
+    const pos = event.position;
+    const isSpark = Boolean(pos?.strategyId?.startsWith('SPARK_') || pos?.executionMode);
+    const parseMode = isSpark ? 'Markdown' : 'HTML';
+
+    const success = await this.sendRawMessage(text, { parseMode });
     if (success) {
-      console.log(`[TELEGRAM] 📲 Notification sent for event: ${eventKey}`);
+      console.log(`[TELEGRAM] 📲 Notification sent for event: ${eventKey} (Mode: ${parseMode})`);
     } else {
       console.warn(`[TELEGRAM] ⚠️ Failed to deliver notification for: ${eventKey}`);
     }
@@ -381,11 +820,112 @@ export class TelegramNotifier {
   }
 
   /**
-   * Low-level raw HTML message sender via Telegram HTTP Bot API.
+   * Generates a deterministic deduplication key for a Spark trade lifecycle milestone event.
+   * Scopes strictly by trade/decision ID when available, or milestone-specific discriminator
+   * values to guarantee zero false-positive suppression across distinct trades.
+   */
+  public generateSparkEventKey(
+    milestone: SparkLifecycleMilestone,
+    payload: any
+  ): string | null {
+    if (!payload?.symbol || !milestone) return null;
+
+    const uniqueId =
+      payload.decisionId ??
+      payload.id ??
+      payload.tradeId ??
+      payload.positionId ??
+      payload.setupId;
+
+    if (uniqueId !== undefined && uniqueId !== null && String(uniqueId).trim() !== '') {
+      return `evt_SPARK_${milestone}_${payload.symbol}_${uniqueId}`;
+    }
+
+    switch (milestone) {
+      case 'SIGNAL_RECEIVED': {
+        const price = payload.limitEntryPrice ?? payload.entryRangeLow ?? '';
+        const dir = payload.direction ? `_${payload.direction}` : '';
+        const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
+        return `evt_SPARK_SIGNAL_${payload.symbol}${dir}_${price}${ts}`;
+      }
+      case 'ORDER_ARMED': {
+        const price = payload.limitEntryPrice ?? '';
+        const dir = payload.direction ? `_${payload.direction}` : '';
+        const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
+        return `evt_SPARK_ARMED_${payload.symbol}${dir}_${price}${ts}`;
+      }
+      case 'ORDER_FILLED': {
+        const price = payload.executionPrice ?? '';
+        const dir = payload.direction ? `_${payload.direction}` : '';
+        const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
+        return `evt_SPARK_FILLED_${payload.symbol}${dir}_${price}${ts}`;
+      }
+      case 'TP1_SCALE_RATCHET': {
+        const target = payload.stage1Target ?? '';
+        const newSl = payload.newStopLoss ?? '';
+        const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
+        return `evt_SPARK_TP1_${payload.symbol}_${target}_${newSl}${ts}`;
+      }
+      case 'TRADE_CLOSED': {
+        const exitPrice = payload.exitPrice ?? '';
+        const reason = payload.exitReason ?? '';
+        const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
+        return `evt_SPARK_CLOSED_${payload.symbol}_${exitPrice}_${reason}${ts}`;
+      }
+      default:
+        return `evt_SPARK_${milestone}_${payload.symbol}_${Date.now()}`;
+    }
+  }
+
+  /**
+   * Broadcasts a Spark trade lifecycle milestone institutional card.
+   * Guarantees strict single-dispatch deduplication across parallel event hooks.
+   */
+  public async broadcastSparkMilestone(
+    milestone: SparkLifecycleMilestone,
+    payload: any,
+    options?: { targetChatId?: string; parseMode?: 'Markdown' | 'HTML'; eventKey?: string }
+  ): Promise<boolean> {
+    if (!this.config.enabled || !this.config.botToken || !this.config.chatId) {
+      return false;
+    }
+
+    const eventKey =
+      options?.eventKey ||
+      this.generateSparkEventKey(milestone, payload);
+
+    if (eventKey && this.isAlreadyNotified(eventKey)) {
+      console.log(`[TELEGRAM] 🛡️ Milestone ${milestone} already notified (${eventKey}). Skipping duplicate.`);
+      return true;
+    }
+
+    const text = formatSparkLifecycleMarkdown(milestone, payload);
+    if (!text) return false;
+
+    const val = validateTelegramMarkdown(text);
+    if (!val.isValid) {
+      console.warn(`[TELEGRAM] ⚠️ Markdown validation warning for ${milestone}:`, val.error);
+    }
+
+    const success = await this.sendRawMessage(text, {
+      targetChatId: options?.targetChatId,
+      parseMode: options?.parseMode || 'Markdown',
+    });
+
+    if (success && eventKey) {
+      this.sentEventKeys.add(eventKey);
+      this.flushDeduplicationRegistry();
+    }
+
+    return success;
+  }
+
+  /**
+   * Low-level raw message sender via Telegram HTTP Bot API.
    */
   public async sendRawMessage(
-    htmlText: string,
-    options?: { replyMarkup?: any; targetChatId?: string }
+    messageText: string,
+    options?: { replyMarkup?: any; targetChatId?: string; parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2' }
   ): Promise<boolean> {
     const chatId = options?.targetChatId || this.config.chatId;
     if (!this.config.enabled || !this.config.botToken || !chatId) {
@@ -395,8 +935,8 @@ export class TelegramNotifier {
     const url = `https://api.telegram.org/bot${this.config.botToken}/sendMessage`;
     const payload: any = {
       chat_id: chatId,
-      text: htmlText,
-      parse_mode: 'HTML',
+      text: messageText,
+      parse_mode: options?.parseMode || 'HTML',
       disable_web_page_preview: true,
     };
 

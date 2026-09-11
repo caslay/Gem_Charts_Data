@@ -22,6 +22,11 @@ import {
   getAnchorPriority,
 } from "./SweepReclaimEngine";
 import {
+  TrendContinuationEngine,
+  TrendContinuationSetup,
+  TrendContinuationConfig,
+} from "./TrendContinuationEngine";
+import {
   SweepReclaimLiveSettings,
   DEFAULT_SR_LIVE_SETTINGS,
   SupportedOBTimeframe,
@@ -44,6 +49,7 @@ export type TradeExitReason =
   | "BREAKEVEN_SCRATCH"
   | "STAGE_1_SCRATCH"
   | "STAGE_2_WIN"
+  | "PROFIT_FLOOR_WIN"
   | "FULL_TP2_WIN"
   | "STAGE_2_PROFIT_PROTECTION"
   | "FULL_TP3_WIN"
@@ -134,6 +140,10 @@ export interface StrategyExecutionPosition {
   threePillarsPassed?: boolean;
   displacementCandles?: DisplacementCandleAudit[];
   isRehydrated?: boolean;
+  executionMode?: 'STANDBY' | 'PAPER_TRADING' | 'LIVE_BINANCE';
+  maxRetestBars?: number;
+  stage1BarTime?: number | null;
+  ratchetEffectiveTime?: number | null;
 
   // Binance Live Exchange Execution Tracking
   binanceOrderId?: number | null;
@@ -148,6 +158,7 @@ export interface AutomatedExecutionConfig {
   symbol: string;
   timeframe: string;
   autoExecute: boolean;
+  enableAutonomousScan?: boolean; // When false, internal candle scanning (S&R and Trend Continuation) is on standby — no autonomous orders are generated from candle closes (default: false)
   initialEquity?: number; // Portfolio equity baseline for dynamic compounding (default: 1000.0)
   compoundingRiskPct: number; // default: 2.0% ($1.0R = Equity * 0.02)
   maxOpenPositions: number; // default: 1 (Strict Single-Position Cap)
@@ -207,6 +218,7 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   symbol: "ETHUSDC",
   timeframe: "15m",
   autoExecute: true,
+  enableAutonomousScan: false, // Default: Standby (autonomous candle order triggers silenced for Spark Ingestion Dispatcher)
   initialEquity: 1000.0,
   compoundingRiskPct: 2.0,
   maxOpenPositions: 1,
@@ -216,40 +228,40 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   lotPrecision: 3,
   tickSize: 0.01,
 
-  stage1Multiple: 1.0,
-  stage2Multiple: 1.35,
+  stage1Multiple: 1.30,
+  stage2Multiple: 3.50,
   stage3Multiple: 0.0,
 
-  stage1Ratio: 0.70,
-  stage2Ratio: 0.30,
+  stage1Ratio: 0.50,
+  stage2Ratio: 0.50,
   stage3Ratio: 0.0,
 
   enableStructuralTrail: true,
   enableProfitRatchet: false,
   slBufferAtrMultiplier: 0.10,
 
-  // Quant Shield Defaults (Aligned with factory_sr_15m_macro_sniper_v1 champion)
+  // Quant Shield Defaults (Aligned with factory_sr_15m_asymmetric_macro_sniper champion)
   enableWaveDeduplication: true,
-  filterWeekend: false,
-  filterDeadZones: true,
+  filterWeekend: true,
+  filterDeadZones: false,
   enforceHtfBiasGuard: false,
-  enableEarlyBreakeven: true,
-  earlyBreakevenMultiple: 0.35,
+  enableEarlyBreakeven: false,
+  earlyBreakevenMultiple: 0.40,
   enableFeePaddedBreakeven: true,
   breakevenOffsetPct: 0.015,
-  postLossCooldownMinutes: 0,
+  postLossCooldownMinutes: 45,
 
   // 🎯 Dynamic Liquidity & MSS Confirmation Defaults
-  targetMode: 'FIXED_RR',
+  targetMode: 'DYNAMIC_LIQUIDITY',
   dynamicTp1Source: 'DEALING_RANGE_EQ',
   dynamicTp2Source: 'OPPOSING_LIQUIDITY',
-  minDynamicTp1Multiple: 0.80,
+  minDynamicTp1Multiple: 1.20,
   maxDynamicTp1Multiple: 1.50,
-  minDynamicTp2Multiple: 1.30,
-  maxDynamicTp2Multiple: 3.50,
+  minDynamicTp2Multiple: 3.00,
+  maxDynamicTp2Multiple: 5.00,
   requireMssConfirmation: false,
   mssLookbackBars: 15,
-  maxBarsSweepToMss: 8,
+  maxBarsSweepToMss: 10,
 
   // Binance USDC Regular / VIP 1 Schedule
   makerFeePct: 0.0000,
@@ -286,7 +298,7 @@ export type ExecutionEventListener = (event: ExecutionEvent) => void;
  * Core Automated Strategy Execution & Risk Management Engine.
  */
 export class AutomatedStrategyExecutionEngine {
-  private config: AutomatedExecutionConfig;
+  public config: AutomatedExecutionConfig;
   private activePositions: StrategyExecutionPosition[] = [];
   private pendingLimitOrders: StrategyExecutionPosition[] = [];
   private closedPositionsHistory: StrategyExecutionPosition[] = [];
@@ -358,6 +370,30 @@ export class AutomatedStrategyExecutionEngine {
 
   public getAccountEquity(): number {
     return this.currentAccountEquity;
+  }
+
+  public getLastLossClosedTimestamp(): number {
+    return this.lastLossClosedTimestamp;
+  }
+
+  public setLastLossClosedTimestamp(ts: number): void {
+    this.lastLossClosedTimestamp = ts;
+  }
+
+  public isPostLossCooldownActive(): { isActive: boolean; remainingMinutes: number } {
+    const now = Date.now();
+    const cooldownMinutes = this.config.postLossCooldownMinutes ?? 0;
+    const effectiveCooldownMs = cooldownMinutes * 60 * 1000;
+    if (
+      effectiveCooldownMs > 0 &&
+      this.lastLossClosedTimestamp > 0 &&
+      (now - this.lastLossClosedTimestamp) < effectiveCooldownMs
+    ) {
+      const elapsed = now - this.lastLossClosedTimestamp;
+      const remainingMinutes = Math.ceil((effectiveCooldownMs - elapsed) / 60000);
+      return { isActive: true, remainingMinutes };
+    }
+    return { isActive: false, remainingMinutes: 0 };
   }
 
   public subscribe(listener: ExecutionEventListener): () => void {
@@ -500,6 +536,12 @@ export class AutomatedStrategyExecutionEngine {
     stage1Target?: number | null;
     stage2Target?: number | null;
     stage3Target?: number | null;
+    stage1Ratio?: number;
+    stage2Ratio?: number;
+    stage3Ratio?: number;
+    stage1Multiple?: number;
+    stage2Multiple?: number;
+    stage3Multiple?: number;
     setupId?: string;
     anchorName?: string;
     originZoneId?: string;
@@ -514,6 +556,9 @@ export class AutomatedStrategyExecutionEngine {
     currentMarketPrice?: number;
     activeEquity?: number;
     overrideRiskPct?: number;
+    executionMode?: 'STANDBY' | 'PAPER_TRADING' | 'LIVE_BINANCE';
+    maxRetestBars?: number;
+    bypassWeekendFilter?: boolean;
   }): {
     success: boolean;
     message: string;
@@ -532,6 +577,12 @@ export class AutomatedStrategyExecutionEngine {
       stage1Target: customStage1Target,
       stage2Target: customStage2Target,
       stage3Target: customStage3Target,
+      stage1Ratio: customStage1Ratio,
+      stage2Ratio: customStage2Ratio,
+      stage3Ratio: customStage3Ratio,
+      stage1Multiple: customStage1Multiple,
+      stage2Multiple: customStage2Multiple,
+      stage3Multiple: customStage3Multiple,
       setupId,
       anchorName,
       originZoneId,
@@ -546,6 +597,9 @@ export class AutomatedStrategyExecutionEngine {
       currentMarketPrice,
       activeEquity,
       overrideRiskPct,
+      executionMode,
+      maxRetestBars,
+      bypassWeekendFilter,
     } = params;
 
     // ── Guardrail 1: Auto-Execute Flag ──
@@ -557,7 +611,7 @@ export class AutomatedStrategyExecutionEngine {
     }
 
     // ── Guardrail 1.5: 🛡️ Quant Shield Rule 2: Weekend Off-Liquidity Filter (Fri 22:00 - Sun 20:00 UTC) ──
-    const filterWeekend = this.config.filterWeekend ?? this.config.liveSettings?.filterWeekend ?? true;
+    const filterWeekend = !bypassWeekendFilter && (this.config.filterWeekend ?? this.config.liveSettings?.filterWeekend ?? true);
     if (filterWeekend) {
       const d = new Date();
       const day = d.getUTCDay();
@@ -785,12 +839,12 @@ export class AutomatedStrategyExecutionEngine {
       stage3Target,
       dynamicDolTarget: dynamicDolTarget ?? null,
       fvgCeLevel: fvgCeLevel ?? null,
-      stage1Ratio: this.config.stage1Ratio,
-      stage2Ratio: this.config.stage2Ratio,
-      stage3Ratio: this.config.stage3Ratio,
-      stage1Multiple: riskDistance > 0 ? parseFloat((Math.abs(stage1Target - limitEntryPrice) / riskDistance).toFixed(2)) : this.config.stage1Multiple,
-      stage2Multiple: riskDistance > 0 ? parseFloat((Math.abs(stage2Target - limitEntryPrice) / riskDistance).toFixed(2)) : this.config.stage2Multiple,
-      stage3Multiple: this.config.stage3Multiple,
+      stage1Ratio: typeof customStage1Ratio === 'number' ? customStage1Ratio : this.config.stage1Ratio,
+      stage2Ratio: typeof customStage2Ratio === 'number' ? customStage2Ratio : this.config.stage2Ratio,
+      stage3Ratio: typeof customStage3Ratio === 'number' ? customStage3Ratio : this.config.stage3Ratio,
+      stage1Multiple: typeof customStage1Multiple === 'number' ? customStage1Multiple : (riskDistance > 0 ? parseFloat((Math.abs(stage1Target - limitEntryPrice) / riskDistance).toFixed(2)) : this.config.stage1Multiple),
+      stage2Multiple: typeof customStage2Multiple === 'number' ? customStage2Multiple : (riskDistance > 0 ? parseFloat((Math.abs(stage2Target - limitEntryPrice) / riskDistance).toFixed(2)) : this.config.stage2Multiple),
+      stage3Multiple: typeof customStage3Multiple === 'number' ? customStage3Multiple : this.config.stage3Multiple,
 
       riskUsd: sizing.riskUsd,
       riskPerContract: riskDistance,
@@ -831,6 +885,10 @@ export class AutomatedStrategyExecutionEngine {
       bodyRatio,
       threePillarsPassed,
       displacementCandles,
+      executionMode: executionMode || 'PAPER_TRADING',
+      maxRetestBars,
+      stage1BarTime: null,
+      ratchetEffectiveTime: null,
     };
 
     if (originZoneId) {
@@ -923,8 +981,8 @@ export class AutomatedStrategyExecutionEngine {
           continue;
         }
 
-        // 2. TTL Expiry Guard (matching Quant Lab maxBarsToRetest: 15 bars / 75 minutes)
-        const maxRetestBars = this.config.liveSettings?.maxBarsToRetest ?? 15;
+        // 2. TTL Expiry Guard (matching Quant Lab / Spark 12-bar TTL: 12 bars on 5m = 60 minutes)
+        const maxRetestBars = order.maxRetestBars ?? this.config.liveSettings?.maxBarsToRetest ?? 12;
         const tfMinutes = order.timeframe === "1h" ? 60 : order.timeframe === "15m" ? 15 : 5;
         const maxTtlMs = maxRetestBars * tfMinutes * 60 * 1000;
         const isExpired = order.pendingTime > 0 && (now - order.pendingTime) >= maxTtlMs;
@@ -993,7 +1051,7 @@ export class AutomatedStrategyExecutionEngine {
       const enableEarlyBE = this.config.enableEarlyBreakeven ?? this.config.liveSettings?.enableEarlyBreakeven ?? false;
       const earlyBEMultiple = this.config.earlyBreakevenMultiple ?? this.config.liveSettings?.earlyBreakevenMultiple ?? 0.40;
       const enableFeePaddedBE = this.config.enableFeePaddedBreakeven ?? this.config.liveSettings?.enableFeePaddedBreakeven ?? true;
-      const beOffsetPct = this.config.breakevenOffsetPct ?? this.config.liveSettings?.breakevenOffsetPct ?? 0.05;
+      const beOffsetPct = this.config.breakevenOffsetPct ?? this.config.liveSettings?.breakevenOffsetPct ?? 0.015;
 
       const feeOffsetPoints = enableFeePaddedBE ? pos.entryPrice * (beOffsetPct / 100) : 0;
       const targetBreakevenPrice = isLong
@@ -1013,12 +1071,48 @@ export class AutomatedStrategyExecutionEngine {
         }
       }
 
-      // ── B.1: Check Stop Loss Violation ──
+      // ── B.0b: Evaluate +1.0R Dynamic Profit Floor Ratchet at +2.0R MFE ──
+      if (
+        pos.mfeR >= 2.0 &&
+        pos.trailingSlSource !== "PROFIT_RATCHET_FLOOR"
+      ) {
+        const oneRPrice = isLong
+          ? parseFloat((pos.entryPrice + riskPerContract * 1.0).toFixed(4))
+          : parseFloat((pos.entryPrice - riskPerContract * 1.0).toFixed(4));
+
+        const isBetter = isLong ? oneRPrice > pos.activeStopLoss : oneRPrice < pos.activeStopLoss;
+        if (isBetter) {
+          pos.activeStopLoss = oneRPrice;
+          pos.activeRatchetFloor = oneRPrice;
+          pos.trailingSlSource = "PROFIT_RATCHET_FLOOR";
+          const msg = `🛡️ [+1.0R PROFIT FLOOR LOCKED] Position on ${pos.symbol} reached +${pos.mfeR.toFixed(2)}R MFE (>= +2.0R)! Stop loss ratcheted to lock guaranteed +1.0R profit floor ($${oneRPrice.toFixed(2)}).`;
+          this.emit("EARLY_BREAKEVEN", msg, pos);
+        }
+      }
+
+      // ── B.1: Check Stop Loss Violation (Enforcing Next-Bar Ratchet Rule) ──
+      // Ratchets triggered on bar i (such as TP1 BE ratchet) take effect strictly on bar i + 1,
+      // preventing same-bar entry-dip stop-out corruption.
+      let effectiveStopLoss = pos.activeStopLoss;
+      if (
+        pos.isStage1Filled &&
+        pos.stage1BarTime &&
+        pos.trailingSlSource !== "PROFIT_RATCHET_FLOOR"
+      ) {
+        const isNextBar = currentCandle
+          ? currentCandle.t > pos.stage1BarTime
+          : (pos.ratchetEffectiveTime ? now >= pos.ratchetEffectiveTime : true);
+        if (!isNextBar) {
+          // Same-bar protection: stay at initial stop loss during bar i
+          effectiveStopLoss = pos.initialStopLoss;
+        }
+      }
+
       const isStopped = isLong
-        ? livePrice <= pos.activeStopLoss
-        : livePrice >= pos.activeStopLoss;
+        ? livePrice <= effectiveStopLoss
+        : livePrice >= effectiveStopLoss;
       if (isStopped) {
-        this.closePosition(i, pos.activeStopLoss, "STOPPED_OUT", now);
+        this.closePosition(i, effectiveStopLoss, "STOPPED_OUT", now);
         continue;
       }
 
@@ -1030,6 +1124,9 @@ export class AutomatedStrategyExecutionEngine {
         if (isStage1Hit) {
           pos.isStage1Filled = true;
           pos.stage1HitTime = now;
+          pos.stage1BarTime = currentCandle?.t ?? now;
+          const tfMinutes = pos.timeframe === "1h" ? 60 : pos.timeframe === "15m" ? 15 : 5;
+          pos.ratchetEffectiveTime = (currentCandle?.t ? currentCandle.t + tfMinutes * 60 * 1000 : now + tfMinutes * 60 * 1000);
           pos.status = "STAGE_1_FILLED";
 
           const stage1Ratio = pos.stage1Ratio ?? this.config.stage1Ratio;
@@ -1043,14 +1140,18 @@ export class AutomatedStrategyExecutionEngine {
             Math.max(0, pos.remainingAllocation - stage1Ratio).toFixed(2),
           );
 
-          // Advance SL to Displacement FVG 50% CE or Breakeven (capping runner risk so net P&L >= 0.0R)
+          // Advance SL to Displacement FVG 50% CE or Breakeven (+0.015% fee-shield offset)
+          let newSl = targetBreakevenPrice;
+          let newSlSource: "INITIAL" | "BREAKEVEN" | "FVG_CE" | "PROFIT_RATCHET_FLOOR" = "BREAKEVEN";
           if (this.config.enableStructuralTrail && pos.fvgCeLevel) {
             const isFvgBetter = isLong ? pos.fvgCeLevel >= targetBreakevenPrice : pos.fvgCeLevel <= targetBreakevenPrice;
-            pos.activeStopLoss = isFvgBetter ? pos.fvgCeLevel : targetBreakevenPrice;
-            pos.trailingSlSource = isFvgBetter ? "FVG_CE" : "BREAKEVEN";
-          } else {
-            pos.activeStopLoss = targetBreakevenPrice;
-            pos.trailingSlSource = "BREAKEVEN";
+            newSl = isFvgBetter ? pos.fvgCeLevel : targetBreakevenPrice;
+            newSlSource = isFvgBetter ? "FVG_CE" : "BREAKEVEN";
+          }
+          const isTightening = isLong ? newSl > pos.activeStopLoss : newSl < pos.activeStopLoss;
+          if (isTightening) {
+            pos.activeStopLoss = newSl;
+            pos.trailingSlSource = newSlSource;
           }
 
           const pctLabel = (stage1Ratio * 100).toFixed(0);
@@ -1181,9 +1282,17 @@ export class AutomatedStrategyExecutionEngine {
         pos.realizedR = -1.0;
         pos.realizedUsd = -pos.riskUsd;
       } else if (pos.isStage1Filled && !pos.isStage2Filled) {
-        // Stopped out after Stage 1 (Break-even / scratch)
-        // 40% locked at +1.0R (+0.40R). Remaining 60% stopped out at FVG CE / BE.
-        pos.exitReason = "STAGE_1_SCRATCH";
+        if (pos.trailingSlSource === "PROFIT_RATCHET_FLOOR") {
+          // Stopped out after Stage 1 at +1.0R Dynamic Profit Floor!
+          const remainingR = (pos.remainingAllocation || 0.5) * 1.0;
+          pos.realizedR = parseFloat((pos.realizedR + remainingR).toFixed(4));
+          pos.realizedUsd = parseFloat((pos.realizedR * pos.riskUsd).toFixed(2));
+          pos.exitReason = "PROFIT_FLOOR_WIN";
+        } else {
+          // Stopped out after Stage 1 (Break-even / scratch)
+          // Stage 1 harvested (e.g. 50% @ 1.0R = +0.50R). Remaining 50% stopped out at FVG CE / BE.
+          pos.exitReason = "STAGE_1_SCRATCH";
+        }
       } else if (pos.isStage2Filled) {
         // Stopped out after Stage 2 (+1.0R ratchet floor exit)
         // 40% @ 1.0R (+0.40R) + 40% @ 1.5R (+0.60R) + 20% @ +1.0R floor (+0.20R) = +1.20R net!
@@ -1622,18 +1731,19 @@ export class AutomatedStrategyExecutionEngine {
     return false;
   }
 
-  public cancelPendingLimitOrder(posId: string): boolean {
+  public cancelPendingLimitOrder(posId: string, cancelReason?: string): boolean {
     const idx = this.pendingLimitOrders.findIndex(
       (p) => p.id === posId || p.dbTradeId === posId,
     );
     if (idx !== -1) {
       const order = this.pendingLimitOrders[idx];
       order.status = "CANCELLED";
+      const reasonDetail = cancelReason ? ` (${cancelReason})` : ' manually cancelled.';
       this.emit(
         "LIMIT_ORDER_CANCELLED",
         `⌛ [LIMIT_ORDER_CANCELLED] Resting ${order.direction} limit @ $${order.limitEntryPrice.toFixed(
           2,
-        )} manually cancelled.`,
+        )}${reasonDetail}`,
         order,
       );
       this.pendingLimitOrders.splice(idx, 1);
@@ -1745,12 +1855,12 @@ export class AutomatedStrategyExecutionEngine {
         anchorTypes:
           mappedAnchorTypes.length > 0 ? mappedAnchorTypes : undefined,
 
-        // Quant Lab Structural Alignment Parameters (5m Winner Default)
-        lookbackMajor: settings.lookbackMajor ?? 10,
-        lookbackInternal: settings.lookbackInternal ?? 5,
+        // Quant Lab Structural Alignment Parameters (15m Institutional Champion)
+        lookbackMajor: settings.lookbackMajor ?? 15,
+        lookbackInternal: settings.lookbackInternal ?? 10,
         maxBarsAnchorToSweep: settings.maxBarsAnchorToSweep ?? 25,
         maxBarsSweepToReclaim: settings.maxBarsSweepToReclaim ?? 10,
-        maxBarsToRetest: settings.maxBarsToRetest ?? 15,
+        maxBarsToRetest: settings.maxBarsToRetest ?? 12,
         minSweepDepthAtrMultiplier: settings.minSweepDepthAtrMultiplier ?? 0.10,
         slBufferAtrMultiplier:
           settings.slBufferAtrMultiplier ??
@@ -1758,13 +1868,13 @@ export class AutomatedStrategyExecutionEngine {
           0.10,
 
         // Target Multiples & Execution
-        entryMode: settings.entryMode ?? "FVG_CE",
+        entryMode: settings.entryMode ?? "FVG_PROXIMAL",
         stage1Multiple:
-          settings.stage1Multiple ?? this.config.stage1Multiple ?? 1.0,
+          settings.stage1Multiple ?? this.config.stage1Multiple ?? 1.30,
         stage2Multiple:
-          settings.stage2Multiple ?? this.config.stage2Multiple ?? 1.30,
+          settings.stage2Multiple ?? this.config.stage2Multiple ?? 3.50,
         stage3Multiple:
-          settings.stage3Multiple ?? this.config.stage3Multiple ?? 3.0,
+          settings.stage3Multiple ?? this.config.stage3Multiple ?? 0.0,
         enableStructuralTrail:
           settings.enableStructuralTrail ?? this.config.enableStructuralTrail ?? true,
         enableProfitRatchet:
@@ -1772,16 +1882,16 @@ export class AutomatedStrategyExecutionEngine {
 
         // 3-Pillar Displacement Gatekeeper Thresholds
         volumeSmaPeriod: settings.volumeSmaPeriod ?? 20,
-        volumeExpansionThreshold: settings.volumeExpansionThreshold ?? 1.10,
+        volumeExpansionThreshold: settings.volumeExpansionThreshold ?? 1.20,
         deltaDominanceThreshold: settings.deltaDominanceThreshold ?? 52.0,
-        bodyRatioThreshold: settings.bodyRatioThreshold ?? 0.40,
+        bodyRatioThreshold: settings.bodyRatioThreshold ?? 0.45,
         requireThreePillarDisplacement:
           settings.requireThreePillarDisplacement ?? true,
         enableWaveDeduplication:
           settings.enableWaveDeduplication ?? true,
 
         // Valuation Gating
-        enforceDiscountPremiumGate: settings.enforceDiscountPremiumGate ?? true,
+        enforceDiscountPremiumGate: settings.enforceDiscountPremiumGate ?? false,
         structuralDealingRange: macroContext?.localDealingRange && Number.isFinite(macroContext.localDealingRange.equilibrium)
           ? {
               high: Number(macroContext.localDealingRange.high),
@@ -1791,16 +1901,28 @@ export class AutomatedStrategyExecutionEngine {
           : null,
 
         // 🎯 Pillar 4 Dynamic Liquidity Targets & MSS Confirmation
-        targetMode: settings.targetMode ?? this.config.targetMode ?? 'FIXED_RR',
+        targetMode: settings.targetMode ?? this.config.targetMode ?? 'DYNAMIC_LIQUIDITY',
         dynamicTp1Source: settings.dynamicTp1Source ?? this.config.dynamicTp1Source ?? 'DEALING_RANGE_EQ',
         dynamicTp2Source: settings.dynamicTp2Source ?? this.config.dynamicTp2Source ?? 'OPPOSING_LIQUIDITY',
-        minDynamicTp1Multiple: settings.minDynamicTp1Multiple ?? this.config.minDynamicTp1Multiple,
-        maxDynamicTp1Multiple: settings.maxDynamicTp1Multiple ?? this.config.maxDynamicTp1Multiple,
-        minDynamicTp2Multiple: settings.minDynamicTp2Multiple ?? this.config.minDynamicTp2Multiple,
-        maxDynamicTp2Multiple: settings.maxDynamicTp2Multiple ?? this.config.maxDynamicTp2Multiple,
+        minDynamicTp1Multiple: settings.minDynamicTp1Multiple ?? this.config.minDynamicTp1Multiple ?? 1.20,
+        maxDynamicTp1Multiple: settings.maxDynamicTp1Multiple ?? this.config.maxDynamicTp1Multiple ?? 1.50,
+        minDynamicTp2Multiple: settings.minDynamicTp2Multiple ?? this.config.minDynamicTp2Multiple ?? 3.00,
+        maxDynamicTp2Multiple: settings.maxDynamicTp2Multiple ?? this.config.maxDynamicTp2Multiple ?? 5.00,
         requireMssConfirmation: settings.requireMssConfirmation ?? this.config.requireMssConfirmation ?? false,
         mssLookbackBars: settings.mssLookbackBars ?? this.config.mssLookbackBars ?? 15,
-        maxBarsSweepToMss: settings.maxBarsSweepToMss ?? this.config.maxBarsSweepToMss ?? 8,
+        maxBarsSweepToMss: settings.maxBarsSweepToMss ?? this.config.maxBarsSweepToMss ?? 10,
+
+        // 🏛️ Institutional Confluence Architecture (ICT + AMT + Wyckoff + SMT)
+        enforceValueAreaGate: settings.enforceValueAreaGate ?? true,
+        valueAreaLookbackBars: settings.valueAreaLookbackBars ?? 96,
+        pocExclusionBandPct: settings.pocExclusionBandPct ?? 0.0015,
+        enforceSmtGate: settings.enforceSmtGate ?? true,
+        smtLookbackBars: settings.smtLookbackBars ?? 15,
+        enforceInstitutionalKillzones: settings.enforceInstitutionalKillzones ?? true,
+        institutionalKillzoneCutoffHourUtc: settings.institutionalKillzoneCutoffHourUtc ?? 14,
+        institutionalKillzoneCutoffMinuteUtc: settings.institutionalKillzoneCutoffMinuteUtc ?? 30,
+        enforcePreNewsFreeze: settings.enforcePreNewsFreeze ?? true,
+        enableM15StructuralTrail: settings.enableM15StructuralTrail ?? true,
       };
 
       try {
@@ -1971,9 +2093,12 @@ export class AutomatedStrategyExecutionEngine {
             s.three_pillar_displacement_passed &&
             isValuationGatePassed;
 
+          const isAutonomousScanEnabled = this.config.enableAutonomousScan === true;
+
           if (
             isConfirmed &&
             this.config.autoExecute &&
+            isAutonomousScanEnabled &&
             !this.processedSetupIds.has(s.id)
           ) {
             // One-Active-Position-Per-Structural-Wave Concurrency Lock
@@ -2124,4 +2249,95 @@ export class AutomatedStrategyExecutionEngine {
     this.latestScannedSetups = scanned;
     return { scannedSetups: scanned, executedSetups: executed };
   }
+
+  /**
+   * Ingests candles to evaluate Engine 2: Trend Continuation & BOS Expansion.
+   * Runs TrendContinuationEngine detection and auto-routes confirmed setups into pending limit orders.
+   */
+  public evaluateTrendContinuation(
+    candles: Candle[],
+    customConfig?: Partial<TrendContinuationConfig>,
+    macroContext?: {
+      macroDailyBias?: "BULLISH" | "BEARISH" | "NEUTRAL";
+      dolDirection?: "BULLISH" | "BEARISH" | "BALANCED";
+      localDealingRange?: any;
+      restingLiquidityPools?: { BSL_Magnets?: number[]; SSL_Magnets?: number[] };
+    }
+  ): {
+    scanned: TrendContinuationSetup[];
+    executed: TrendContinuationSetup[];
+  } {
+    const scanned: TrendContinuationSetup[] = [];
+    const executed: TrendContinuationSetup[] = [];
+
+    if (!candles || candles.length < 25) return { scanned, executed };
+
+    const engine = new TrendContinuationEngine({
+      symbol: this.config.symbol,
+      timeframe: this.config.timeframe,
+      makerFeePct: this.config.makerFeePct,
+      takerFeePct: this.config.takerFeePct,
+      initialEquity: this.currentAccountEquity,
+      compoundingRiskPct: this.config.compoundingRiskPct,
+      structuralDealingRange: macroContext?.localDealingRange && Number.isFinite(macroContext.localDealingRange.equilibrium)
+        ? {
+            high: Number(macroContext.localDealingRange.high),
+            low: Number(macroContext.localDealingRange.low),
+            equilibrium: Number(macroContext.localDealingRange.equilibrium),
+          }
+        : undefined,
+      restingLiquidityPools: macroContext?.restingLiquidityPools,
+      ...customConfig,
+    });
+
+    const result = engine.scanHistoricalSetups(candles);
+    const setups = result.setups || [];
+    const isAutonomousScanEnabled = this.config.enableAutonomousScan === true;
+
+    for (const s of setups) {
+      scanned.push(s);
+
+      // Standby / Silenced check: do not route orders unless autonomous scanning is explicitly enabled
+      if (!isAutonomousScanEnabled || !this.config.autoExecute) continue;
+
+      // Only attempt to route setups that are fresh
+      const latestIdx = candles.length - 1;
+      const barsSinceBos = latestIdx - s.bos_candle_index;
+      if (barsSinceBos > (customConfig?.maxBarsToRetest ?? 12)) continue;
+
+      if (this.activePositions.length > 0) continue;
+
+      const orderResult = this.submitStrategyOrder({
+        strategyId: 'TREND_CONTINUATION',
+        strategyName: 'Trend Continuation BOS Expansion',
+        symbol: s.symbol,
+        timeframe: s.timeframe,
+        direction: s.type === 'BULLISH' ? 'LONG' : 'SHORT',
+        limitEntryPrice: s.entry_price,
+        stopLossPrice: s.stop_loss,
+        stage1Target: s.stage1_target,
+        stage2Target: s.stage2_target,
+        stage1Ratio: s.stage1_ratio,
+        stage2Ratio: s.stage2_ratio,
+        stage1Multiple: s.stage1_multiple,
+        stage2Multiple: s.stage2_multiple,
+        setupId: s.id,
+        anchorName: `BOS_${s.broken_pivot_type}_${s.broken_pivot_level}`,
+        originZoneId: s.wave_fingerprint,
+        originAnchorLevel: s.broken_pivot_level,
+        volExpansion: s.bos_volume_expansion,
+        deltaDominance: s.bos_delta_dominance_pct,
+        bodyRatio: s.bos_body_ratio,
+        threePillarsPassed: s.three_pillar_displacement_passed,
+        displacementCandles: s.displacement_candles,
+      });
+
+      if (orderResult.success) {
+        executed.push(s);
+      }
+    }
+
+    return { scanned, executed };
+  }
 }
+
