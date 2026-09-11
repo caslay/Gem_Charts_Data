@@ -106,6 +106,18 @@ export interface SweepReclaimLiveSettings {
   takerFeePct: number; // Taker fee percentage for Stop-Market / Taker orders (default: 0.0400%)
   feeTierPreset: BinanceFeeTier; // Active Binance Fee Tier Preset (default: 'USDC_REGULAR_VIP1')
   useBnbDiscount: boolean; // 10% fee discount using BNB balance (default: false)
+
+  // 🏛️ Institutional Confluence Architecture (ICT + AMT + Wyckoff + SMT)
+  enforceValueAreaGate?: boolean;
+  valueAreaLookbackBars?: number;
+  pocExclusionBandPct?: number;
+  enforceSmtGate?: boolean;
+  smtLookbackBars?: number;
+  enforceInstitutionalKillzones?: boolean;
+  institutionalKillzoneCutoffHourUtc?: number;
+  institutionalKillzoneCutoffMinuteUtc?: number;
+  enforcePreNewsFreeze?: boolean;
+  enableM15StructuralTrail?: boolean;
 }
 
 export type BinanceFeeTier =
@@ -173,64 +185,76 @@ export const DEFAULT_SR_LIVE_SETTINGS: SweepReclaimLiveSettings = {
   compoundingRiskPct: 2.0,
   enabledTimeframes: ['15m'],
   anchorTypes: ['SWING_PIVOT', 'DAILY', 'ASIAN', 'LONDON'],
-  entryMode: 'FVG_CE',
+  entryMode: 'FVG_PROXIMAL',
   volumeSmaPeriod: 20,
-  volumeExpansionThreshold: 1.10,
+  volumeExpansionThreshold: 1.20,
   deltaDominanceThreshold: 52.0,
-  bodyRatioThreshold: 0.40,
-  enforceDiscountPremiumGate: true,
+  bodyRatioThreshold: 0.45,
+  enforceDiscountPremiumGate: false,
   enableStructuralTrail: true,
   enableProfitRatchet: false,
   enableTp1AutoBreakeven: true,
-  stage1Multiple: 1.0,
-  stage2Multiple: 1.35,
+  stage1Multiple: 1.30,
+  stage2Multiple: 3.50,
   stage3Multiple: 0.0,
-  stage1Ratio: 0.70,
-  stage2Ratio: 0.30,
+  stage1Ratio: 0.50,
+  stage2Ratio: 0.50,
   stage3Ratio: 0.00,
   routeRunnerToHtfDol: true,
   executionTiming: 'INSTANT',
   olsSensitivity: 'RELAXED',
   enableMomentumOverride: true,
-  sessionGates: ['ASIAN', 'LONDON', 'NY'],
+  sessionGates: ['LONDON', 'NY'],
   directionalLock: 'DUAL',
   lookbackMajor: 15,
   lookbackInternal: 10,
   maxBarsAnchorToSweep: 25,
   maxBarsSweepToReclaim: 10,
-  maxBarsToRetest: 12,
+  maxBarsToRetest: 12, // 12-bar TTL
   requireThreePillarDisplacement: true,
   minSweepDepthAtrMultiplier: 0.10,
   slBufferAtrMultiplier: 0.10,
 
-  // Quant Shield Defaults (15m Macro Champion Verified)
+  // Quant Shield Defaults (15m Institutional Asymmetric Champion)
   enableWaveDeduplication: true,
-  filterWeekend: false,
-  filterDeadZones: true,
+  filterWeekend: true,
+  filterDeadZones: false,
   enforceHtfBiasGuard: false,
-  enableEarlyBreakeven: true,
-  earlyBreakevenMultiple: 0.35,
+  enableEarlyBreakeven: false, // Next-bar ratchet strictly on bar i+1 after TP1 fills
+  earlyBreakevenMultiple: 0.40,
   enableFeePaddedBreakeven: true,
   breakevenOffsetPct: 0.015,
-  postLossCooldownMinutes: 0,
+  postLossCooldownMinutes: 45,
 
   // 🎯 Dynamic Liquidity & MSS Confirmation Defaults
-  targetMode: 'FIXED_RR',
+  targetMode: 'DYNAMIC_LIQUIDITY',
   dynamicTp1Source: 'DEALING_RANGE_EQ',
   dynamicTp2Source: 'OPPOSING_LIQUIDITY',
-  minDynamicTp1Multiple: 0.80,
+  minDynamicTp1Multiple: 1.20,
   maxDynamicTp1Multiple: 1.50,
-  minDynamicTp2Multiple: 1.30,
-  maxDynamicTp2Multiple: 3.50,
+  minDynamicTp2Multiple: 3.00,
+  maxDynamicTp2Multiple: 5.00,
   requireMssConfirmation: false,
   mssLookbackBars: 15,
-  maxBarsSweepToMss: 8,
+  maxBarsSweepToMss: 10,
 
   // 💰 Institutional Binance Fee Model
   makerFeePct: 0.0000,
   takerFeePct: 0.0400,
   feeTierPreset: 'USDC_REGULAR_VIP1',
   useBnbDiscount: false,
+
+  // 🏛️ Institutional Confluence Architecture Defaults
+  enforceValueAreaGate: true,
+  valueAreaLookbackBars: 96,
+  pocExclusionBandPct: 0.0015,
+  enforceSmtGate: true,
+  smtLookbackBars: 15,
+  enforceInstitutionalKillzones: true,
+  institutionalKillzoneCutoffHourUtc: 14,
+  institutionalKillzoneCutoffMinuteUtc: 30,
+  enforcePreNewsFreeze: true,
+  enableM15StructuralTrail: true,
 };
 
 // Master Reversible Pause Switch for Order Block & Breaker Pipeline

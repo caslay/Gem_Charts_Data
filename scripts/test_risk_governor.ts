@@ -184,6 +184,157 @@ async function runTests() {
     freqAssessment.reason.includes('Daily trade cap reached'),
     'Rejection reason notes daily trade cap'
   );
+  // Test 9: Emergency Equity Floor Circuit Breaker
+  console.log('\n--- Test 9: Emergency Equity Floor Circuit Breaker ---');
+  // 9a. Depleted equity (<= 0)
+  const zeroEquityAssessment = await GlobalRiskGovernor.evaluatePreTradeRisk({
+    symbol: 'ETHUSDC',
+    direction: 'LONG',
+    entryPrice: 2100.0,
+    stopLossPrice: 2090.0,
+    currentEquity: 0.0,
+    currentOpenPositionsCount: 0,
+    userEmail: testUser,
+  });
+  assert(!zeroEquityAssessment.isApproved, 'Trade rejected when equity is depleted (0)');
+  assert(
+    zeroEquityAssessment.reason.includes('Emergency Equity Floor breached'),
+    'Rejection cites Emergency Equity Floor breach'
+  );
+  assert(
+    zeroEquityAssessment.violationTier === 'EMERGENCY_EQUITY_FLOOR_BREACH',
+    'Violation tier is EMERGENCY_EQUITY_FLOOR_BREACH'
+  );
+
+  // 9b. Breaching configured emergency equity floor
+  const floorAssessment = await GlobalRiskGovernor.evaluatePreTradeRisk({
+    symbol: 'ETHUSDC',
+    direction: 'LONG',
+    entryPrice: 2100.0,
+    stopLossPrice: 2090.0,
+    currentEquity: 350.0,
+    emergencyEquityFloor: 500.0,
+    currentOpenPositionsCount: 0,
+    userEmail: testUser,
+  });
+  assert(!floorAssessment.isApproved, 'Trade rejected when equity is below emergency equity floor cutoff');
+  assert(
+    floorAssessment.reason.includes('breached the global cutoff of $500.00'),
+    'Rejection cites global cutoff of $500.00'
+  );
+
+  // Test 10: Post-Loss Cooldown Circuit Breaker (Rule 5)
+  console.log('\n--- Test 10: Post-Loss Cooldown Circuit Breaker (Rule 5) ---');
+  const recentLossTime = Date.now() - 10 * 60 * 1000; // 10 minutes ago
+  const cooldownAssessment = await GlobalRiskGovernor.evaluatePreTradeRisk({
+    symbol: 'ETHUSDC',
+    direction: 'LONG',
+    entryPrice: 2100.0,
+    stopLossPrice: 2090.0,
+    currentEquity: 10000.0,
+    currentOpenPositionsCount: 0,
+    lastLossTimestamp: recentLossTime,
+    cooldownMinutes: 45,
+    userEmail: testUser,
+  });
+  assert(!cooldownAssessment.isApproved, 'Trade rejected when engine is serving active post-loss cooldown');
+  assert(
+    cooldownAssessment.reason.includes('Post-loss cooldown active (Rule 5)'),
+    'Rejection correctly cites Post-loss cooldown (Rule 5)'
+  );
+  assert(
+    cooldownAssessment.violationTier === 'COOLDOWN_ACTIVE',
+    'Violation tier is COOLDOWN_ACTIVE'
+  );
+
+  // Cooldown expired
+  const expiredLossTime = Date.now() - 50 * 60 * 1000; // 50 minutes ago (> 45 min cooldown)
+  GlobalRiskGovernor._setTestState({ daily_trades_count: 0 }); // Reset trade count from test 8
+  const unblockedCooldownAssessment = await GlobalRiskGovernor.evaluatePreTradeRisk({
+    symbol: 'ETHUSDC',
+    direction: 'LONG',
+    entryPrice: 2100.0,
+    stopLossPrice: 2090.0,
+    currentEquity: 10000.0,
+    currentOpenPositionsCount: 0,
+    lastLossTimestamp: expiredLossTime,
+    cooldownMinutes: 45,
+    userEmail: testUser,
+  });
+  assert(unblockedCooldownAssessment.isApproved, 'Trade approved after post-loss cooldown expires');
+
+  // Test 11: Concurrency Lock Check with Custom maxOpenPositions
+  console.log('\n--- Test 11: Concurrency Lock with Custom maxOpenPositions ---');
+  const concAssessment = await GlobalRiskGovernor.evaluatePreTradeRisk({
+    symbol: 'ETHUSDC',
+    direction: 'LONG',
+    entryPrice: 2100.0,
+    stopLossPrice: 2090.0,
+    currentEquity: 10000.0,
+    currentOpenPositionsCount: 2,
+    maxOpenPositions: 2,
+    userEmail: testUser,
+  });
+  assert(!concAssessment.isApproved, 'Trade rejected when max concurrent open positions (2) reached');
+  assert(
+    concAssessment.violationTier === 'CONCURRENCY_LOCK',
+    'Violation tier is CONCURRENCY_LOCK'
+  );
+
+  // Test 12: Rule 5 Cooldown Resolution from Risk Governor State (Engine Cold Start with param=0)
+  console.log('\n--- Test 12: Rule 5 Cooldown on Engine Cold-Start (param=0) ---');
+  GlobalRiskGovernor._setTestState({
+    last_loss_timestamp: Date.now() - 15 * 60 * 1000, // 15 mins ago (within 45 min cooldown)
+    circuit_breaker_active: false,
+    daily_trades_count: 0,
+    consecutive_losses_count: 0,
+  });
+
+  const coldStartAssessment = await GlobalRiskGovernor.evaluatePreTradeRisk({
+    symbol: 'ETHUSDC',
+    direction: 'LONG',
+    entryPrice: 2100.0,
+    stopLossPrice: 2090.0,
+    currentEquity: 10000.0,
+    currentOpenPositionsCount: 0,
+    lastLossTimestamp: 0, // Engine cold start has 0
+    cooldownMinutes: 45,
+    userEmail: testUser,
+  });
+  assert(!coldStartAssessment.isApproved, 'Trade rejected when engine timestamp is 0 but RiskGovernor state has active cooldown');
+  assert(
+    coldStartAssessment.reason.includes('Post-loss cooldown active (Rule 5)'),
+    'Cold start rejection cites Rule 5 Post-loss cooldown'
+  );
+  assert(
+    coldStartAssessment.violationTier === 'COOLDOWN_ACTIVE',
+    'Cold start violation tier is COOLDOWN_ACTIVE'
+  );
+
+  // Reset state
+  GlobalRiskGovernor._setTestState({ last_loss_timestamp: null });
+
+  // Test 13: Daily Drawdown Limit Non-Negative Bounds
+  console.log('\n--- Test 13: Daily Drawdown Non-Negative Bounds ---');
+  GlobalRiskGovernor._setTestState({
+    current_balance: 100.0,
+    initial_capital: 1000.0,
+    daily_realized_pnl: -50.0,
+    circuit_breaker_active: false,
+  });
+  const ddAssessment = await GlobalRiskGovernor.evaluatePreTradeRisk({
+    symbol: 'ETHUSDC',
+    direction: 'LONG',
+    entryPrice: 2100.0,
+    stopLossPrice: 2090.0,
+    currentEquity: 100.0,
+    currentOpenPositionsCount: 0,
+    userEmail: testUser,
+  });
+  // With equity 100, 4% is $4.00 max loss, cumulative loss is -$50 -> tripped
+  assert(!ddAssessment.isApproved, 'Trade rejected when loss breaches 4% of equity');
+  assert(!ddAssessment.reason.includes('-$-'), 'Drawdown reason does not format negative currency (-$-)');
+  assert(ddAssessment.violationTier === 'DAILY_DRAWDOWN_BREACH', 'Violation tier is DAILY_DRAWDOWN_BREACH');
 
   console.log('\n===============================================================');
   console.log(`Institutional Test Suite Finished: ${passedCount} PASSED, ${failedCount} FAILED`);

@@ -12,6 +12,7 @@ export interface RiskGovernorConfig {
   max_daily_loss_usd: number; // Hard USD loss stop e.g. $400.00
   max_consecutive_losses: number; // Streak protection limit e.g. 3
   max_daily_trades: number; // Anti-churn frequency cap e.g. 6
+  emergency_equity_floor?: number; // Global cutoff balance, e.g. $100.00
 }
 
 export interface RiskGovernorState {
@@ -24,6 +25,7 @@ export interface RiskGovernorState {
   circuit_breaker_reason: string | null;
   circuit_breaker_tripped_at: string | null;
   circuit_breaker_reset_at: string | null;
+  last_loss_timestamp?: number | null;
 }
 
 export type RiskViolationTier =
@@ -33,7 +35,10 @@ export type RiskViolationTier =
   | 'DAILY_FREQUENCY_BREACH'
   | 'CEILING_VIOLATION'
   | 'INSUFFICIENT_MARGIN'
-  | 'DIRECTIONAL_LOCK';
+  | 'DIRECTIONAL_LOCK'
+  | 'EMERGENCY_EQUITY_FLOOR_BREACH'
+  | 'CONCURRENCY_LOCK'
+  | 'COOLDOWN_ACTIVE';
 
 export interface PreTradeAssessment {
   isApproved: boolean;

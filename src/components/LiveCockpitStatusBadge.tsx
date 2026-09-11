@@ -15,11 +15,11 @@ import {
 
 const DEFAULT_SERVER_STATUS: ArmedExecutionStatus = {
   type: 'SWEEP_RECLAIM',
-  id: 'factory_sr_5m_fvg_ce_sniper_v3',
-  name: '5m Sweep & Reclaim Fee Shield V3 Sniper (New All-Time Champion)',
+  id: 'factory_sr_15m_asymmetric_macro_sniper',
+  name: '15m Institutional Asymmetric Macro Sniper (Platform Champion)',
   isAutoExecEnabled: true,
   symbol: 'ETHUSDC',
-  timeframe: '5m',
+  timeframe: '15m',
   updatedAt: 0,
 };
 

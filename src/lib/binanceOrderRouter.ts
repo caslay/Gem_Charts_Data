@@ -47,12 +47,16 @@ export interface SafetyGateEvaluation {
  * Triple-Lock Safety Gate
  * Evaluates 5 independent environment checks to prevent accidental real execution.
  */
-export function evaluateExecutionSafetyGate(): SafetyGateEvaluation {
+export function evaluateExecutionSafetyGate(executionModeOverride?: string): SafetyGateEvaluation {
   const isProductionEnvironment =
     process.env.NODE_ENV === 'production' || process.env.IS_VPS_PRODUCTION === 'true';
   const isVpsProduction =
     process.env.IS_LIVE_VPS === 'true' || process.env.IS_VPS_PRODUCTION === 'true';
-  const isExecutionModeLive = process.env.EXECUTION_MODE === 'LIVE_BINANCE';
+  const normalizedOverride = executionModeOverride ? String(executionModeOverride).trim().toUpperCase() : null;
+  const isExecutionModeLive =
+    normalizedOverride === 'LIVE' ||
+    normalizedOverride === 'LIVE_BINANCE' ||
+    process.env.EXECUTION_MODE === 'LIVE_BINANCE';
   const isExplicitlyArmed = process.env.ENABLE_REAL_EXCHANGE_ORDERS === 'true';
   const hasValidCredentials =
     Boolean(process.env.BINANCE_API_KEY) && Boolean(process.env.BINANCE_API_SECRET);

@@ -104,7 +104,8 @@ export type SweepReclaimEntryMode =
   | 'FVG_DISTAL'
   | 'OB_PROXIMAL'
   | 'SWEEP_OB_MT'
-  | 'OTE_62';
+  | 'OTE_62'
+  | 'OTE_705';
 
 export interface DisplacementCandleAudit {
   label: string;
@@ -258,6 +259,16 @@ export interface SweepReclaimSetup {
   mss_level?: number | null;
   mss_index?: number | null;
   mss_time?: number | null;
+
+  // Institutional Confluence Architecture Metadata (ICT + AMT + Wyckoff + SMT)
+  is_killzone_qualified?: boolean;
+  killzone_name?: string | null;
+  value_area_vah?: number | null;
+  value_area_val?: number | null;
+  value_area_poc?: number | null;
+  is_value_area_aligned?: boolean;
+  smt_status?: 'BULLISH_SMT' | 'BEARISH_SMT' | 'SYMMETRIC' | 'OPPOSING_CASCADE' | 'UNKNOWN';
+  is_smt_aligned?: boolean;
 }
 
 export interface SweepReclaimScanConfig {
@@ -336,6 +347,19 @@ export interface SweepReclaimScanConfig {
   // 💰 Institutional Binance Fee Model (USDC-M Futures)
   makerFeePct?: number;                       // Maker fee percentage for Limit orders (default: 0.0000%)
   takerFeePct?: number;                       // Taker fee percentage for Stop-Market / Taker orders (default: 0.0400%)
+
+  // 🏛️ Institutional Confluence Architecture (ICT + AMT + Wyckoff + SMT)
+  enforceValueAreaGate?: boolean;              // AMT Gate: Longs below VAL, Shorts above VAH (default: false)
+  valueAreaLookbackBars?: number;             // Lookback bars for rolling Value Area profile (default: 96)
+  pocExclusionBandPct?: number;               // Exclusion band around balanced POC (default: 0.0015)
+  enforceSmtGate?: boolean;                   // Intermarket SMT Divergence Gatekeeper (ETH vs BTC) (default: false)
+  smtLookbackBars?: number;                   // SMT swing lookback bars (default: 15)
+  btcCandles?: Candle[];                      // Optional BTC candles series (auto-loaded in Node if absent)
+  enforceInstitutionalKillzones?: boolean;    // Temporal Gating: Restrict to 0-90m London (07:00-08:30) & NY AM (13:00-14:30 UTC) (default: false)
+  institutionalKillzoneCutoffHourUtc?: number;// Daily initiation cutoff hour UTC (default: 14)
+  institutionalKillzoneCutoffMinuteUtc?: number; // Daily initiation cutoff minute UTC (default: 30)
+  enforcePreNewsFreeze?: boolean;             // 20-min macro news (CPI/PPI/FOMC) & rollover freeze (default: false)
+  enableM15StructuralTrail?: boolean;         // Two-stage runner: Trail 30% runner along M15 structural higher lows/lower highs (default: false)
 }
 
 export interface SweepReclaimTelemetrySummary {
@@ -429,19 +453,19 @@ export interface SweepReclaimTelemetrySummary {
 
 export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   symbol: 'ETHUSDC',
-  timeframe: '5m',
+  timeframe: '15m',
   anchorTypes: ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL'],
-  lookbackMajor: 10,
-  lookbackInternal: 5,
+  lookbackMajor: 15,
+  lookbackInternal: 10,
   maxBarsAnchorToSweep: 25,
   maxBarsSweepToReclaim: 10,
-  maxBarsToRetest: 15,
+  maxBarsToRetest: 12,
   volumeSmaPeriod: 20,
-  volumeExpansionThreshold: 1.10,
+  volumeExpansionThreshold: 1.20,
   deltaDominanceThreshold: 52.0,
-  bodyRatioThreshold: 0.40,
+  bodyRatioThreshold: 0.45,
   requireThreePillarDisplacement: true,
-  enforceDiscountPremiumGate: true,
+  enforceDiscountPremiumGate: false,
   enableRegimeAdaptiveEQ: true,
   runawayVelocityThreshold: 2.0,
   transitionalVelocityThreshold: 1.0,
@@ -450,13 +474,13 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   enableInScannerWaveDedup: true,
   enforceSinglePositionConcurrency: true,
   pullbackExcursionThreshold: 0.5,
-  stage1Multiple: 1.0,
-  stage2Multiple: 1.30,
-  stage3Multiple: 3.0,
-  stage1Ratio: 0.60,
-  stage2Ratio: 0.40,
+  stage1Multiple: 1.30,
+  stage2Multiple: 3.50,
+  stage3Multiple: 0.0,
+  stage1Ratio: 0.50,
+  stage2Ratio: 0.50,
   stage3Ratio: 0.00,
-  entryMode: 'FVG_CE',
+  entryMode: 'FVG_PROXIMAL',
   enableStructuralTrail: true,
   enableProfitRatchet: false,
   enableFeePaddedBreakeven: true,
@@ -465,22 +489,34 @@ export const DEFAULT_SWEEP_RECLAIM_CONFIG: SweepReclaimScanConfig = {
   slBufferAtrMultiplier: 0.10,
 
   // 🎯 Institutional Dynamic Liquidity Targeting (Pillar 4) Defaults
-  targetMode: 'FIXED_RR',
-  dynamicTp1Source: 'FIXED_RR',
-  dynamicTp2Source: 'FIXED_RR',
-  minDynamicTp1Multiple: 0.80,
+  targetMode: 'DYNAMIC_LIQUIDITY',
+  dynamicTp1Source: 'DEALING_RANGE_EQ',
+  dynamicTp2Source: 'OPPOSING_LIQUIDITY',
+  minDynamicTp1Multiple: 1.20,
   maxDynamicTp1Multiple: 1.50,
-  minDynamicTp2Multiple: 1.30,
-  maxDynamicTp2Multiple: 3.50,
+  minDynamicTp2Multiple: 3.00,
+  maxDynamicTp2Multiple: 5.00,
 
   // ⚡ Confirmed Lower-Timeframe Market Structure Shift (MSS) Defaults
   requireMssConfirmation: false,
   mssLookbackBars: 15,
-  maxBarsSweepToMss: 15,
+  maxBarsSweepToMss: 10,
 
   // 🛡️ Quant Shield Rule 6: Dead Zone Filter
   filterDeadZones: false,
   suppressInternalPivots: false,
+
+  // 🏛️ Institutional Confluence Architecture Defaults
+  enforceValueAreaGate: false,
+  valueAreaLookbackBars: 96,
+  pocExclusionBandPct: 0.0015,
+  enforceSmtGate: false,
+  smtLookbackBars: 15,
+  enforceInstitutionalKillzones: false,
+  institutionalKillzoneCutoffHourUtc: 14,
+  institutionalKillzoneCutoffMinuteUtc: 30,
+  enforcePreNewsFreeze: false,
+  enableM15StructuralTrail: false,
 };
 
 // ── Centralized Retest Price Resolver ────────────────────────────────────────
@@ -584,6 +620,23 @@ export function resolveRetestEntryPrice(params: RetestPriceResolverParams): numb
       }
       return parseFloat(anchorLevel.toFixed(4));
 
+    case 'OTE_705':
+      if (
+        displacementExtremes &&
+        Number.isFinite(displacementExtremes.impulseHigh) &&
+        Number.isFinite(displacementExtremes.impulseLow) &&
+        displacementExtremes.impulseHigh > displacementExtremes.impulseLow
+      ) {
+        const range = displacementExtremes.impulseHigh - displacementExtremes.impulseLow;
+        // Bullish: 70.5% retracement from peak down toward sweep low
+        // Bearish: 70.5% retracement from trough up toward sweep high
+        const otePrice = isBullish
+          ? displacementExtremes.impulseHigh - 0.705 * range
+          : displacementExtremes.impulseLow + 0.705 * range;
+        return parseFloat(otePrice.toFixed(4));
+      }
+      return parseFloat(anchorLevel.toFixed(4));
+
     default:
       return parseFloat(anchorLevel.toFixed(4));
   }
@@ -606,6 +659,8 @@ export function getEntryModeLabel(mode: SweepReclaimEntryMode): string {
       return 'Displacement FVG Distal';
     case 'OTE_62':
       return '62% OTE Retracement';
+    case 'OTE_705':
+      return '70.5% OTE Retracement';
     case 'SHELF_LEVEL':
     case 'RECLAIM_LEVEL':
       return 'Reclaimed Shelf Level';
@@ -631,6 +686,8 @@ export function getEntryModeDescription(mode: SweepReclaimEntryMode): string {
       return 'Deepest boundary edge of the Fair Value Gap prior to full fill/invalidation';
     case 'OTE_62':
       return '62% Fibonacci Retracement of the displacement impulse wave from sweep to reclaim';
+    case 'OTE_705':
+      return '70.5% Optimal Trade Entry (OTE) Deep Mitigation retracement of the displacement impulse wave';
     case 'SHELF_LEVEL':
     case 'RECLAIM_LEVEL':
       return 'Exact price level of the reclaimed structural pivot / session anchor shelf';
@@ -749,14 +806,473 @@ export function classifyMarketRegime(
   return { regime: 'ROTATIONAL_AUCTION', direction: 'NEUTRAL', velocity: parseFloat(velocity.toFixed(2)) };
 }
 
+// ── Institutional Confluence Architecture Helpers (ICT + AMT + Wyckoff + SMT) ──
+
+export interface ValueAreaProfile {
+  vah: number;
+  val: number;
+  poc: number;
+  totalVolume: number;
+}
+
+/**
+ * Calculates Auction Market Theory (AMT) Value Area Profile (VAH, VAL, POC)
+ * using a rolling histogram over completed candles strictly up to endIndex.
+ */
+export function calculateValueAreaProfile(
+  candles: Candle[],
+  endIndex: number,
+  lookbackBars: number = 96
+): ValueAreaProfile | null {
+  const startIdx = Math.max(0, endIndex - lookbackBars + 1);
+  if (startIdx >= endIndex || endIndex >= candles.length) return null;
+
+  let minP = Infinity;
+  let maxP = -Infinity;
+
+  for (let k = startIdx; k <= endIndex; k++) {
+    const c = candles[k];
+    const h = Number.isFinite(c.h) ? Number(c.h) : Number((c as any).high ?? 0);
+    const l = Number.isFinite(c.l) ? Number(c.l) : Number((c as any).low ?? 0);
+    if (h > maxP) maxP = h;
+    if (l < minP && l > 0) minP = l;
+  }
+
+  if (minP === Infinity || maxP === -Infinity || minP >= maxP) return null;
+
+  const bins = 30;
+  const step = (maxP - minP) / bins;
+  if (step <= 0) return null;
+
+  const profile = new Array(bins).fill(0);
+  let totalVol = 0;
+
+  for (let k = startIdx; k <= endIndex; k++) {
+    const c = candles[k];
+    const price = Number.isFinite(c.c) ? Number(c.c) : Number((c as any).close ?? ((minP + maxP) / 2));
+    const vol = Number.isFinite(c.v) ? Number(c.v) : 1;
+    const binIdx = Math.min(bins - 1, Math.max(0, Math.floor((price - minP) / step)));
+    profile[binIdx] += vol;
+    totalVol += vol;
+  }
+
+  if (totalVol <= 0) return null;
+
+  let maxIdx = 0;
+  for (let b = 1; b < bins; b++) {
+    if (profile[b] > profile[maxIdx]) {
+      maxIdx = b;
+    }
+  }
+
+  const poc = minP + (maxIdx + 0.5) * step;
+
+  let vaVol = profile[maxIdx];
+  let up = maxIdx;
+  let down = maxIdx;
+  const targetVaVol = totalVol * 0.70;
+
+  while (vaVol < targetVaVol && (up < bins - 1 || down > 0)) {
+    const nextUp = up < bins - 1 ? profile[up + 1] : 0;
+    const nextDown = down > 0 ? profile[down - 1] : 0;
+
+    if (nextUp >= nextDown && up < bins - 1) {
+      up++;
+      vaVol += profile[up];
+    } else if (down > 0) {
+      down--;
+      vaVol += profile[down];
+    } else if (up < bins - 1) {
+      up++;
+      vaVol += profile[up];
+    } else {
+      break;
+    }
+  }
+
+  const vah = minP + (up + 1) * step;
+  const val = minP + down * step;
+
+  return {
+    vah: parseFloat(vah.toFixed(4)),
+    val: parseFloat(val.toFixed(4)),
+    poc: parseFloat(poc.toFixed(4)),
+    totalVolume: totalVol,
+  };
+}
+
+export interface KillzoneCheckResult {
+  isQualified: boolean;
+  killzoneName: 'LONDON_OPEN' | 'NY_AM_OPEN' | 'NONE';
+  reason?: string;
+}
+
+/**
+ * Evaluates whether a given timestamp qualifies within institutional killzone windows:
+ *  - London Open: 07:00 - 08:30 UTC (09:00 - 10:30 Cairo)
+ *  - NY AM Open:  13:00 - 14:30 UTC (15:00 - 16:30 Cairo)
+ *  - Hard Cutoff: 14:30 UTC (16:30 Cairo) hard cutoff on new trade initiations
+ *  - Rollover Freeze: 23:50 - 00:10 UTC (00:00 UTC funding rate rollover)
+ *  - Macro News Freeze: 20-min window around CPI/PPI (12:20-12:40 UTC) or FOMC (17:50-18:10 UTC)
+ */
+export function isInstitutionalKillzone(
+  timestamp: number,
+  options?: {
+    cutoffHourUtc?: number;
+    cutoffMinuteUtc?: number;
+    enforceRolloverFreeze?: boolean;
+    enforceNewsFreeze?: boolean;
+  }
+): KillzoneCheckResult {
+  const d = new Date(timestamp);
+  const hr = d.getUTCHours();
+  const min = d.getUTCMinutes();
+  const timeInMinutes = hr * 60 + min;
+
+  // 1. Funding Rollover Freeze: 23:50 to 00:10 UTC
+  if (options?.enforceRolloverFreeze !== false) {
+    if (timeInMinutes >= 23 * 60 + 50 || timeInMinutes <= 10) {
+      return { isQualified: false, killzoneName: 'NONE', reason: 'FUNDING_ROLLOVER_FREEZE' };
+    }
+  }
+
+  // 2. Pre-News Freeze: 20 mins around high-impact macro releases
+  if (options?.enforceNewsFreeze) {
+    if (
+      (timeInMinutes >= 12 * 60 + 20 && timeInMinutes <= 12 * 60 + 40) ||
+      (timeInMinutes >= 17 * 60 + 50 && timeInMinutes <= 18 * 60 + 10)
+    ) {
+      return { isQualified: false, killzoneName: 'NONE', reason: 'MACRO_NEWS_FREEZE' };
+    }
+  }
+
+  // 3. London Open: 07:00 - 08:30 UTC
+  if (timeInMinutes >= 7 * 60 && timeInMinutes <= 8 * 60 + 30) {
+    return { isQualified: true, killzoneName: 'LONDON_OPEN' };
+  }
+
+  // 4. NY AM Open: 13:00 - 14:30 UTC
+  if (timeInMinutes >= 13 * 60 && timeInMinutes <= 14 * 60 + 30) {
+    return { isQualified: true, killzoneName: 'NY_AM_OPEN' };
+  }
+
+  // 5. Hard Cutoff: Any trade initiated outside the 0–90m institutional windows or past 14:30 UTC
+  const cutoffHour = options?.cutoffHourUtc ?? 14;
+  const cutoffMin = options?.cutoffMinuteUtc ?? 30;
+  const cutoffMinutes = cutoffHour * 60 + cutoffMin;
+
+  if (timeInMinutes > cutoffMinutes) {
+    return { isQualified: false, killzoneName: 'NONE', reason: 'POST_NY_AM_HARD_CUTOFF' };
+  }
+
+  return { isQualified: false, killzoneName: 'NONE', reason: 'OUTSIDE_INSTITUTIONAL_KILLZONE' };
+}
+
+export interface TradeInitiationCheckResult {
+  isAllowed: boolean;
+  reason?: string;
+}
+
+/**
+ * Evaluates whether trade execution / limit fill can be initiated at the given timestamp.
+ * In Institutional Confluence Architecture:
+ *  - Strict 16:30 Cairo (14:30 UTC) Hard Cutoff on new trade initiations
+ *  - Funding Rollover Freeze: 23:50 to 00:10 UTC (00:00 UTC rollover)
+ *  - Macro News Freeze: 20-min window around CPI/PPI (12:20-12:40 UTC) or FOMC (17:50-18:10 UTC)
+ */
+export function isTradeInitiationAllowed(
+  timestamp: number,
+  options?: {
+    cutoffHourUtc?: number;
+    cutoffMinuteUtc?: number;
+    enforceRolloverFreeze?: boolean;
+    enforceNewsFreeze?: boolean;
+  }
+): TradeInitiationCheckResult {
+  const d = new Date(timestamp);
+  const hr = d.getUTCHours();
+  const min = d.getUTCMinutes();
+  const timeInMinutes = hr * 60 + min;
+
+  // 1. Funding Rollover Freeze: 23:50 to 00:10 UTC (00:00 UTC funding rate rollover)
+  if (options?.enforceRolloverFreeze !== false) {
+    if (timeInMinutes >= 23 * 60 + 50 || timeInMinutes <= 10) {
+      return { isAllowed: false, reason: 'FUNDING_ROLLOVER_FREEZE' };
+    }
+  }
+
+  // 2. Pre-News Freeze: 20 mins around high-impact macro releases
+  if (options?.enforceNewsFreeze) {
+    if (
+      (timeInMinutes >= 12 * 60 + 20 && timeInMinutes <= 12 * 60 + 40) ||
+      (timeInMinutes >= 17 * 60 + 50 && timeInMinutes <= 18 * 60 + 10)
+    ) {
+      return { isAllowed: false, reason: 'MACRO_NEWS_FREEZE' };
+    }
+  }
+
+  // 3. Strict 16:30 Cairo (14:30 UTC) Hard Cutoff on trade initiation
+  const cutoffHour = options?.cutoffHourUtc ?? 14;
+  const cutoffMin = options?.cutoffMinuteUtc ?? 30;
+  const cutoffMinutes = cutoffHour * 60 + cutoffMin;
+
+  if (timeInMinutes > cutoffMinutes) {
+    return { isAllowed: false, reason: 'POST_NY_AM_HARD_CUTOFF' };
+  }
+
+  return { isAllowed: true };
+}
+
 // ── SweepReclaimEngine Implementation ────────────────────────────────────────
 
 export class SweepReclaimEngine {
   public config: SweepReclaimScanConfig;
   private confirmedPivots: any[] = [];
+  private btcCandlesList: Candle[] | null = null;
+  private btcCandlesMap: Map<number, { candle: Candle; index: number }> | null = null;
 
   constructor(config: SweepReclaimScanConfig = {}) {
     this.config = { ...DEFAULT_SWEEP_RECLAIM_CONFIG, ...config };
+    if (config.btcCandles && config.btcCandles.length > 0) {
+      this.btcCandlesList = config.btcCandles;
+    }
+  }
+
+  /**
+   * Lazily loads BTC candles for Intermarket SMT Divergence analysis.
+   */
+  private getBtcCandles(): Candle[] | null {
+    if (this.btcCandlesList && this.btcCandlesList.length > 0) {
+      return this.btcCandlesList;
+    }
+    if (typeof window === 'undefined') {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const candidatePaths = [
+          path.join(process.cwd(), 'data', 'historical', 'BTCUSDT_15m_1y.json'),
+          path.join(process.cwd(), 'scratch', 'cached_BTCUSDT_5m_1y_1756512000000_1788480000000.json'),
+        ];
+        for (const p of candidatePaths) {
+          if (fs.existsSync(p)) {
+            const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
+            if (Array.isArray(raw) && raw.length > 0) {
+              this.btcCandlesList = raw;
+              return this.btcCandlesList;
+            }
+          }
+        }
+      } catch {
+        // Fallback gracefully
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Builds an indexed map of BTC candles for instant timestamp lookup.
+   */
+  private getBtcMap(): Map<number, { candle: Candle; index: number }> | null {
+    if (this.btcCandlesMap) return this.btcCandlesMap;
+    const btcCandles = this.getBtcCandles();
+    if (!btcCandles || btcCandles.length === 0) return null;
+    const map = new Map<number, { candle: Candle; index: number }>();
+    for (let i = 0; i < btcCandles.length; i++) {
+      map.set(btcCandles[i].t, { candle: btcCandles[i], index: i });
+    }
+    this.btcCandlesMap = map;
+    return map;
+  }
+
+  /**
+   * Evaluates Intermarket SMT Divergence (ETH vs BTC) at sweep extreme timestamp
+   * cross-referenced with the anchor timestamp.
+   *
+   * Institutional SMT Mechanics:
+   *  - Bullish SMT: ETH swept anchor low while BTC held a relative higher low (or BTC printed bullish displacement).
+   *    Only veto longs if BTC is breaking down with active directional volume (OPPOSING_CASCADE).
+   *  - Bearish SMT: ETH swept anchor high while BTC held a relative lower high (or BTC printed bearish displacement).
+   *    Only veto shorts if BTC is breaking out with active directional volume (OPPOSING_CASCADE).
+   */
+  private evaluateSmtDivergence(
+    isBullish: boolean,
+    sweepTime: number,
+    anchorTime?: number,
+    anchorType?: SweepReclaimAnchorType
+  ): {
+    isAligned: boolean;
+    status: 'BULLISH_SMT' | 'BEARISH_SMT' | 'SYMMETRIC' | 'OPPOSING_CASCADE' | 'UNKNOWN';
+    reason?: string;
+  } {
+    const btcCandles = this.getBtcCandles();
+    const btcMap = this.getBtcMap();
+    if (!btcCandles || !btcMap || btcCandles.length === 0) {
+      return { isAligned: true, status: 'UNKNOWN' };
+    }
+
+    const findBtcEntry = (targetTime: number): { candle: Candle; index: number } | null => {
+      const exact = btcMap.get(targetTime);
+      if (exact) return exact;
+
+      // Binary search for closest candle within 15 minutes (900,000 ms)
+      let low = 0;
+      let high = btcCandles.length - 1;
+      let closest: { candle: Candle; index: number } | null = null;
+      let minDiff = 900000;
+
+      while (low <= high) {
+        const mid = (low + high) >> 1;
+        const diff = btcCandles[mid].t - targetTime;
+        const absDiff = Math.abs(diff);
+        if (absDiff < minDiff) {
+          minDiff = absDiff;
+          closest = { candle: btcCandles[mid], index: mid };
+        }
+        if (diff < 0) low = mid + 1;
+        else if (diff > 0) high = mid - 1;
+        else break;
+      }
+      return closest;
+    };
+
+    const sweepBtc = findBtcEntry(sweepTime);
+    if (!sweepBtc) {
+      return { isAligned: true, status: 'UNKNOWN' };
+    }
+
+    const anchorBtc = anchorTime ? findBtcEntry(anchorTime) : null;
+    const lookback = this.config.smtLookbackBars ?? 15;
+
+    let btcAnchorLow: number;
+    let btcAnchorHigh: number;
+
+    if (anchorTime && (anchorType === 'ASIAN_HIGH' || anchorType === 'ASIAN_LOW')) {
+      // BTC Asian Session: 00:00 to 07:00 UTC on the date of anchorTime
+      const anchorDate = new Date(anchorTime);
+      const dayStart = Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth(), anchorDate.getUTCDate(), 0, 0, 0, 0);
+      const dayEnd = Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth(), anchorDate.getUTCDate(), 7, 0, 0, 0);
+      const sessionCandles = btcCandles.filter((c) => c.t >= dayStart && c.t < dayEnd);
+      if (sessionCandles.length > 0) {
+        btcAnchorLow = Math.min(...sessionCandles.map((c) => Number(c.l ?? (c as any).low)));
+        btcAnchorHigh = Math.max(...sessionCandles.map((c) => Number(c.h ?? (c as any).high)));
+      } else {
+        btcAnchorLow = -Infinity;
+        btcAnchorHigh = Infinity;
+      }
+    } else if (anchorTime && (anchorType === 'LONDON_HIGH' || anchorType === 'LONDON_LOW')) {
+      // BTC London Session: 07:00 to 12:00 UTC on the date of anchorTime
+      const anchorDate = new Date(anchorTime);
+      const dayStart = Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth(), anchorDate.getUTCDate(), 7, 0, 0, 0);
+      const dayEnd = Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth(), anchorDate.getUTCDate(), 12, 0, 0, 0);
+      const sessionCandles = btcCandles.filter((c) => c.t >= dayStart && c.t < dayEnd);
+      if (sessionCandles.length > 0) {
+        btcAnchorLow = Math.min(...sessionCandles.map((c) => Number(c.l ?? (c as any).low)));
+        btcAnchorHigh = Math.max(...sessionCandles.map((c) => Number(c.h ?? (c as any).high)));
+      } else {
+        btcAnchorLow = -Infinity;
+        btcAnchorHigh = Infinity;
+      }
+    } else if (anchorTime && (anchorType === 'PDH' || anchorType === 'PDL')) {
+      // BTC Previous Day: 00:00 to 24:00 UTC of previous day
+      const anchorDate = new Date(anchorTime);
+      const prevDayStart = Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth(), anchorDate.getUTCDate() - 1, 0, 0, 0, 0);
+      const prevDayEnd = Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth(), anchorDate.getUTCDate(), 0, 0, 0, 0);
+      const dayCandles = btcCandles.filter((c) => c.t >= prevDayStart && c.t < prevDayEnd);
+      if (dayCandles.length > 0) {
+        btcAnchorLow = Math.min(...dayCandles.map((c) => Number(c.l ?? (c as any).low)));
+        btcAnchorHigh = Math.max(...dayCandles.map((c) => Number(c.h ?? (c as any).high)));
+      } else {
+        btcAnchorLow = -Infinity;
+        btcAnchorHigh = Infinity;
+      }
+    } else if (anchorBtc && anchorBtc.index < sweepBtc.index) {
+      // 3-bar window around anchor timestamp to capture local swing extreme
+      const wStart = Math.max(0, anchorBtc.index - 1);
+      const wEnd = Math.min(btcCandles.length, anchorBtc.index + 2);
+      const anchorWindow = btcCandles.slice(wStart, wEnd);
+      btcAnchorLow = Math.min(...anchorWindow.map((c) => Number(c.l ?? (c as any).low)));
+      btcAnchorHigh = Math.max(...anchorWindow.map((c) => Number(c.h ?? (c as any).high)));
+    } else {
+      // Fallback to recent lookback window before sweep
+      if (sweepBtc.index < lookback + 1) {
+        return { isAligned: true, status: 'UNKNOWN' };
+      }
+      const prevWindow = btcCandles.slice(sweepBtc.index - lookback, sweepBtc.index);
+      btcAnchorLow = Math.min(...prevWindow.map((c) => Number(c.l ?? (c as any).low)));
+      btcAnchorHigh = Math.max(...prevWindow.map((c) => Number(c.h ?? (c as any).high)));
+    }
+
+    const targetBtc = sweepBtc.candle;
+    const targetLow = Number(targetBtc.l ?? (targetBtc as any).low);
+    const targetHigh = Number(targetBtc.h ?? (targetBtc as any).high);
+    const targetOpen = Number(targetBtc.o ?? (targetBtc as any).open);
+    const targetClose = Number(targetBtc.c ?? (targetBtc as any).close);
+    const targetVol = Number(targetBtc.v ?? (targetBtc as any).volume ?? 0);
+    const targetRange = Math.max(0.0001, targetHigh - targetLow);
+
+    // Compute BTC 20-bar volume SMA preceding the sweep
+    const volWindowStart = Math.max(0, sweepBtc.index - 20);
+    const volWindow = btcCandles.slice(volWindowStart, sweepBtc.index);
+    const btcAvgVol = volWindow.length > 0
+      ? volWindow.reduce((acc, c) => acc + Number(c.v ?? (c as any).volume ?? 0), 0) / volWindow.length
+      : targetVol;
+    const isElevatedVol = btcAvgVol > 0 ? targetVol >= 1.20 * btcAvgVol : false;
+
+    // Taker sell/buy dominance if available
+    const takerBuyVol = Number((targetBtc as any).taker_buy_vol ?? 0);
+    const takerSellVol = Number((targetBtc as any).taker_sell_vol ?? 0);
+    const takerSellPct = targetVol > 0 && takerSellVol > 0 ? (takerSellVol / targetVol) * 100 : 50;
+    const takerBuyPct = targetVol > 0 && takerBuyVol > 0 ? (takerBuyVol / targetVol) * 100 : 50;
+
+    if (isBullish) {
+      // ETH swept anchor low.
+      // 1. Bullish SMT: BTC held a relative higher low OR printed bullish displacement
+      const btcHeldHigherLow = targetLow >= btcAnchorLow;
+      const btcBullishDisplacement = targetClose > targetOpen && (targetClose - targetOpen) / targetRange >= 0.40;
+
+      if (btcHeldHigherLow || btcBullishDisplacement) {
+        return { isAligned: true, status: 'BULLISH_SMT' };
+      }
+
+      // 2. Active breakdown check: only veto if BTC is actively breaking down with directional volume
+      const isStrongBearBody = targetClose < targetOpen && (targetOpen - targetClose) / targetRange >= 0.40;
+      const isDirectionalVolume = isElevatedVol || takerSellPct >= 52.0;
+
+      if (targetLow < btcAnchorLow && isStrongBearBody && isDirectionalVolume) {
+        return {
+          isAligned: false,
+          status: 'OPPOSING_CASCADE',
+          reason: 'BTC_BREAKING_DOWN_ACTIVE_VOLUME',
+        };
+      }
+
+      // 3. Otherwise, symmetric move without aggressive breakdown -> permit trade
+      return { isAligned: true, status: 'SYMMETRIC' };
+    } else {
+      // Bearish setup: ETH swept anchor high.
+      // 1. Bearish SMT: BTC held a relative lower high OR printed bearish displacement
+      const btcHeldLowerHigh = targetHigh <= btcAnchorHigh;
+      const btcBearishDisplacement = targetClose < targetOpen && (targetOpen - targetClose) / targetRange >= 0.40;
+
+      if (btcHeldLowerHigh || btcBearishDisplacement) {
+        return { isAligned: true, status: 'BEARISH_SMT' };
+      }
+
+      // 2. Active breakout check: only veto if BTC is actively breaking out upward with directional volume
+      const isStrongBullBody = targetClose > targetOpen && (targetClose - targetOpen) / targetRange >= 0.40;
+      const isDirectionalVolume = isElevatedVol || takerBuyPct >= 52.0;
+
+      if (targetHigh > btcAnchorHigh && isStrongBullBody && isDirectionalVolume) {
+        return {
+          isAligned: false,
+          status: 'OPPOSING_CASCADE',
+          reason: 'BTC_BREAKING_OUT_ACTIVE_VOLUME',
+        };
+      }
+
+      // 3. Otherwise, symmetric move without aggressive breakout -> permit trade
+      return { isAligned: true, status: 'SYMMETRIC' };
+    }
   }
 
   /**
@@ -1071,8 +1587,10 @@ export class SweepReclaimEngine {
       if (isBullish) {
         let localMinLow = Infinity;
         let localMinIdx = -1;
+        const sweepStartIdx =
+          anchorGrade === 'SESSION' || anchorGrade === 'DAILY' ? anchorIdx : anchorIdx + 1;
 
-        for (let i = anchorIdx + 1; i <= maxSweepIdx; i++) {
+        for (let i = sweepStartIdx; i <= maxSweepIdx; i++) {
           const c = candles[i];
           const low = c.l ?? (c as any).low;
           const close = c.c ?? (c as any).close;
@@ -1130,8 +1648,10 @@ export class SweepReclaimEngine {
         // Bearish: Price violates above the anchor high shelf
         let localMaxHigh = -Infinity;
         let localMaxIdx = -1;
+        const sweepStartIdx =
+          anchorGrade === 'SESSION' || anchorGrade === 'DAILY' ? anchorIdx : anchorIdx + 1;
 
-        for (let i = anchorIdx + 1; i <= maxSweepIdx; i++) {
+        for (let i = sweepStartIdx; i <= maxSweepIdx; i++) {
           const c = candles[i];
           const high = c.h ?? (c as any).high;
           const close = c.c ?? (c as any).close;
@@ -1384,6 +1904,84 @@ export class SweepReclaimEngine {
         continue;
       }
 
+      // ─── Phase 2.5: Intermarket SMT Divergence Gatekeeper (ETH vs BTC) ─────
+      let isSmtAligned = true;
+      let smtStatus: 'BULLISH_SMT' | 'BEARISH_SMT' | 'SYMMETRIC' | 'OPPOSING_CASCADE' | 'UNKNOWN' = 'UNKNOWN';
+      if (this.config.enforceSmtGate && sweepExtremeTime !== null) {
+        const smtRes = this.evaluateSmtDivergence(isBullish, sweepExtremeTime, anchorTime, anchorType);
+        isSmtAligned = smtRes.isAligned;
+        smtStatus = smtRes.status;
+        if (!isSmtAligned) {
+          const smtVetoSetup: SweepReclaimSetup = {
+            id: setupId,
+            type: isBullish ? 'BULLISH' : 'BEARISH',
+            symbol: this.config.symbol || 'ETHUSDC',
+            timeframe: this.config.timeframe || '15m',
+            phase: 'SWEEP',
+            status: 'SWEPT_NO_RECLAIM',
+            anchor_type: anchorType,
+            anchor_name: anchorName,
+            anchor_level: parseFloat(anchorLevel.toFixed(4)),
+            anchor_index: anchorIdx,
+            anchor_time: anchorTime,
+            anchor_swing_type: isBullish ? 'SWING_LOW' : 'SWING_HIGH',
+            anchor_swing_grade: anchorGrade,
+            anchor_color_validated: anchor.colorValidated,
+            sweep_price: sweepExtremePrice,
+            sweep_index: sweepIdx,
+            sweep_time: sweepExtremeTime,
+            sweep_depth: sweepDepth,
+            sweep_depth_pct: sweepDepthPct,
+            sweep_volume_ratio: sweepVolRatio,
+            sweep_wick_ratio: sweepWickRatio,
+            is_wick_rejection_sweep: isWickRejection,
+            sweep_ob_mt: sweepObMt,
+            sweep_ob_proximal: null,
+            bars_anchor_to_sweep: sweepIdx - anchorIdx,
+            reclaim_index: null, reclaim_time: null, reclaim_close_price: null,
+            reclaim_volume_expansion: null, reclaim_body_ratio: null,
+            reclaim_delta_dominance_pct: null, reclaim_fvg_created: false,
+            reclaim_fvg_top: null, reclaim_fvg_bottom: null, reclaim_fvg_ce: null,
+            reclaim_fvg_proximal: null, reclaim_fvg_distal: null,
+            displacement_impulse_high: null, displacement_impulse_low: null,
+            ote_62_price: null, bars_sweep_to_reclaim: null, is_reclaimed: false,
+            pillar1_volume_ratio_passed: false, pillar2_delta_dominance_passed: false,
+            pillar3_body_ratio_passed: false, three_pillar_displacement_passed: false,
+            retest_index: null, retest_time: null, retest_price: null,
+            bars_reclaim_to_retest: null, is_retested: false, is_immediate_fill: false,
+            max_retest_index: null, is_expired: false, body_defense_passed: false,
+            dealing_range_equilibrium: null, is_valuation_aligned: false,
+            market_regime_at_entry: 'ROTATIONAL_AUCTION',
+            valuation_gate_mode: 'STRUCTURAL_EQ',
+            wave_fingerprint: `${anchorTime}_${isBullish ? 'BULLISH' : 'BEARISH'}`,
+            is_wave_champion: true,
+            wave_cluster_size: 1,
+            stacking_discount_applied: false,
+            entry_mode: entryMode,
+            entry_price: parseFloat(anchorLevel.toFixed(4)),
+            stop_loss: parseFloat((isBullish ? anchorLevel - anchorLevel * 0.0015 : anchorLevel + anchorLevel * 0.0015).toFixed(4)),
+            risk_usd: parseFloat((anchorLevel * 0.0015).toFixed(4)),
+            risk_pct: 0.15,
+            stage1_target: parseFloat((isBullish ? anchorLevel + stage1Multiple * (anchorLevel * 0.0015) : anchorLevel - stage1Multiple * (anchorLevel * 0.0015)).toFixed(4)),
+            stage2_target: parseFloat((isBullish ? anchorLevel + stage2Multiple * (anchorLevel * 0.0015) : anchorLevel - stage2Multiple * (anchorLevel * 0.0015)).toFixed(4)),
+            stage3_target: parseFloat((isBullish ? anchorLevel + stage3Multiple * (anchorLevel * 0.0015) : anchorLevel - stage3Multiple * (anchorLevel * 0.0015)).toFixed(4)),
+            stage1_multiple: stage1Multiple, stage2_multiple: stage2Multiple, stage3_multiple: stage3Multiple,
+            is_stage1_filled: false, is_stage2_filled: false, is_stage3_filled: false,
+            stage1_hit_time: null, stage1_hit_index: null, stage2_hit_time: null,
+            stage2_hit_index: null, stage3_hit_time: null, stage3_hit_index: null,
+            active_trailing_sl: parseFloat((isBullish ? anchorLevel - 1.0 : anchorLevel + 1.0).toFixed(4)),
+            active_ratchet_floor: null, trailing_sl_source: 'INITIAL',
+            is_be_scratch: false, is_structural_scratch: false,
+            simulated_outcome: 'INVALIDATED', stage_exit_type: 'INVALIDATED',
+            realized_rr: 0, mfe_r: 0, mfe_usd: 0, mae_r: 0, mae_usd: 0,
+            bars_to_outcome: null, exit_time: null, exit_price: null,
+            smt_status: smtStatus, is_smt_aligned: false,
+          };
+          detectedSetups.push(smtVetoSetup);
+          continue;
+        }
+      }
+
       // ─── Phase 3: 3-Pillar Volumetric Displacement Reclaim Confirmation ──────
       const maxReclaimIdx = Math.min(n - 1, sweepIdx + (this.config.maxBarsSweepToReclaim ?? 12));
       let reclaimFound = false;
@@ -1449,15 +2047,10 @@ export class SweepReclaimEngine {
             }
           }
           if (foundPivotPrice === null) {
-            let localMax = -Infinity;
-            const shortStart = Math.max(0, sweepIdx - Math.min(5, mssLookback));
-            for (let m = shortStart; m < sweepIdx; m++) {
-              const cmH = candles[m].h ?? (candles[m] as any).high;
-              if (cmH > localMax) localMax = cmH;
-            }
-            if (localMax > sweepExtremePrice && localMax < Infinity) {
-              foundPivotPrice = localMax;
-            }
+            // Direct cascade without 3-bar fractal: preceding candle high that initiated the sweep wick
+            const prevIdx = Math.max(0, sweepIdx - 1);
+            const prevH = candles[prevIdx].h ?? (candles[prevIdx] as any).high;
+            foundPivotPrice = prevH > sweepExtremePrice ? prevH : (candles[sweepIdx].h ?? (candles[sweepIdx] as any).high);
           }
           internalReferencePrice = foundPivotPrice;
         } else {
@@ -1473,21 +2066,17 @@ export class SweepReclaimEngine {
             }
           }
           if (foundPivotPrice === null) {
-            let localMin = Infinity;
-            const shortStart = Math.max(0, sweepIdx - Math.min(5, mssLookback));
-            for (let m = shortStart; m < sweepIdx; m++) {
-              const cmL = candles[m].l ?? (candles[m] as any).low;
-              if (cmL < localMin) localMin = cmL;
-            }
-            if (localMin < sweepExtremePrice && localMin > -Infinity) {
-              foundPivotPrice = localMin;
-            }
+            // Direct cascade without 3-bar fractal: preceding candle low that initiated the sweep wick
+            const prevIdx = Math.max(0, sweepIdx - 1);
+            const prevL = candles[prevIdx].l ?? (candles[prevIdx] as any).low;
+            foundPivotPrice = prevL < sweepExtremePrice ? prevL : (candles[sweepIdx].l ?? (candles[sweepIdx] as any).low);
           }
           internalReferencePrice = foundPivotPrice;
         }
       }
 
-      for (let i = sweepIdx; i <= maxReclaimIdx; i++) {
+      const reclaimStartIdx = requireMss ? sweepIdx + 1 : sweepIdx;
+      for (let i = reclaimStartIdx; i <= maxReclaimIdx; i++) {
         const c = candles[i];
         const close = c.c ?? (c as any).close;
         const open = c.o ?? (c as any).open;
@@ -1500,7 +2089,7 @@ export class SweepReclaimEngine {
         if (isBullish) {
           // Reclaim: confirmed body close strictly ABOVE the anchor shelf
           // If requireMss is true, close must also exceed the internal reference swing high
-          const isMssSatisfied = !requireMss || (internalReferencePrice !== null && close > internalReferencePrice);
+          const isMssSatisfied = !requireMss || (internalReferencePrice !== null && (close > internalReferencePrice || candles.slice(sweepIdx, i + 1).some((ck) => (ck.c ?? (ck as any).close) > internalReferencePrice!)));
           if (close > anchorLevel && close > open && isMssSatisfied) {
             // Multi-Candle Displacement Window: inspect [sweepIdx..i] for absorption + follow-through
             let maxVolExpInWindow = 0;
@@ -1611,7 +2200,7 @@ export class SweepReclaimEngine {
         } else {
           // Bearish: confirmed body close strictly BELOW the anchor shelf
           // If requireMss is true, close must also break below the internal reference swing low
-          const isMssSatisfied = !requireMss || (internalReferencePrice !== null && close < internalReferencePrice);
+          const isMssSatisfied = !requireMss || (internalReferencePrice !== null && (close < internalReferencePrice || candles.slice(sweepIdx, i + 1).some((ck) => (ck.c ?? (ck as any).close) < internalReferencePrice!)));
           if (close < anchorLevel && close < open && isMssSatisfied) {
             // Multi-Candle Displacement Window: inspect [sweepIdx..i] for absorption + follow-through
             let maxVolExpInWindow = 0;
@@ -1798,8 +2387,8 @@ export class SweepReclaimEngine {
 
       // Directional geometry fields
       const sweepObProximal = sweepCandleData ? (isBullish ? sweepCandleData.high : sweepCandleData.low) : null;
-      const reclaimFvgProximal = fvgData ? (isBullish ? fvgData.bottom : fvgData.top) : null;
-      const reclaimFvgDistal = fvgData ? (isBullish ? fvgData.top : fvgData.bottom) : null;
+      const reclaimFvgProximal = fvgData ? (isBullish ? fvgData.top : fvgData.bottom) : null;
+      const reclaimFvgDistal = fvgData ? (isBullish ? fvgData.bottom : fvgData.top) : null;
       const ote62Price = displacementData ? resolveRetestEntryPrice({
         mode: 'OTE_62',
         isBullish,
@@ -2096,6 +2685,48 @@ export class SweepReclaimEngine {
         });
       }
 
+      // 🏛️ Institutional Killzone Qualification
+      let isKillzoneQualified = true;
+      let qualifiedKillzoneName: string | null = null;
+      if (this.config.enforceInstitutionalKillzones && reclaimTime !== null) {
+        const kz = isInstitutionalKillzone(reclaimTime, {
+          enforceNewsFreeze: this.config.enforcePreNewsFreeze,
+          cutoffHourUtc: this.config.institutionalKillzoneCutoffHourUtc,
+          cutoffMinuteUtc: this.config.institutionalKillzoneCutoffMinuteUtc,
+        });
+        const sweepKz = sweepExtremeTime !== null
+          ? isInstitutionalKillzone(sweepExtremeTime, {
+              enforceNewsFreeze: this.config.enforcePreNewsFreeze,
+              cutoffHourUtc: this.config.institutionalKillzoneCutoffHourUtc,
+              cutoffMinuteUtc: this.config.institutionalKillzoneCutoffMinuteUtc,
+            })
+          : null;
+
+        isKillzoneQualified = kz.isQualified || (sweepKz?.isQualified ?? false);
+        qualifiedKillzoneName = kz.isQualified ? kz.killzoneName : (sweepKz?.killzoneName ?? 'NONE');
+      }
+
+      // 🏛️ Auction Market Theory (AMT) Value Area Profile Gating
+      let valueAreaProfile: ValueAreaProfile | null = null;
+      let isValueAreaAligned = true;
+      if (reclaimIdx !== null) {
+        valueAreaProfile = calculateValueAreaProfile(
+          candles,
+          reclaimIdx,
+          this.config.valueAreaLookbackBars ?? 96
+        );
+        if (valueAreaProfile) {
+          const isValDiscount = sweepExtremePrice <= valueAreaProfile.val || anchorLevel <= valueAreaProfile.val || executionEntry <= valueAreaProfile.val;
+          const isVahPremium = sweepExtremePrice >= valueAreaProfile.vah || anchorLevel >= valueAreaProfile.vah || executionEntry >= valueAreaProfile.vah;
+          const pocBand = (this.config.pocExclusionBandPct ?? 0.0015) * valueAreaProfile.poc;
+          const isInsidePocBand = Math.abs(executionEntry - valueAreaProfile.poc) <= pocBand;
+
+          isValueAreaAligned = isBullish
+            ? (isValDiscount && !isInsidePocBand)
+            : (isVahPremium && !isInsidePocBand);
+        }
+      }
+
       const baseSetup: SweepReclaimSetup = {
         id: setupId,
         type: isBullish ? 'BULLISH' : 'BEARISH',
@@ -2203,6 +2834,16 @@ export class SweepReclaimEngine {
         mss_index: mssIndex,
         mss_time: mssTime,
 
+        // Institutional Confluence Architecture Metadata (ICT + AMT + Wyckoff + SMT)
+        is_killzone_qualified: isKillzoneQualified,
+        killzone_name: qualifiedKillzoneName,
+        value_area_vah: valueAreaProfile ? valueAreaProfile.vah : null,
+        value_area_val: valueAreaProfile ? valueAreaProfile.val : null,
+        value_area_poc: valueAreaProfile ? valueAreaProfile.poc : null,
+        is_value_area_aligned: isValueAreaAligned,
+        smt_status: smtStatus,
+        is_smt_aligned: isSmtAligned,
+
         is_stage1_filled: false,
         is_stage2_filled: false,
         is_stage3_filled: false,
@@ -2231,6 +2872,20 @@ export class SweepReclaimEngine {
       };
 
       if (!reclaimFound || reclaimIdx === null) {
+        detectedSetups.push(baseSetup);
+        continue;
+      }
+
+      if (this.config.enforceInstitutionalKillzones && !isKillzoneQualified) {
+        baseSetup.status = 'SWEPT_NO_RECLAIM';
+        baseSetup.simulated_outcome = 'INVALIDATED';
+        detectedSetups.push(baseSetup);
+        continue;
+      }
+
+      if (this.config.enforceValueAreaGate && !isValueAreaAligned) {
+        baseSetup.status = 'RECLAIMED_NO_RETEST';
+        baseSetup.simulated_outcome = 'INVALIDATED';
         detectedSetups.push(baseSetup);
         continue;
       }
@@ -2388,6 +3043,22 @@ export class SweepReclaimEngine {
         }
       }
 
+      // 🏛️ Institutional Trade Initiation Check on Retest Fill (Strict Hard Cutoff at 14:30 UTC / 16:30 Cairo, Rollover & News Freezes):
+      if (this.config.enforceInstitutionalKillzones && retestTime !== null) {
+        const initCheck = isTradeInitiationAllowed(retestTime, {
+          enforceNewsFreeze: this.config.enforcePreNewsFreeze,
+          cutoffHourUtc: this.config.institutionalKillzoneCutoffHourUtc,
+          cutoffMinuteUtc: this.config.institutionalKillzoneCutoffMinuteUtc,
+        });
+        if (!initCheck.isAllowed) {
+          baseSetup.status = 'RECLAIMED_NO_RETEST';
+          baseSetup.simulated_outcome = 'NO_RETEST';
+          baseSetup.stage_exit_type = 'NO_RETEST';
+          detectedSetups.push(baseSetup);
+          continue;
+        }
+      }
+
       // Retest Freshness & Pullback Discrimination Classification
       const retestDelay = retestIdx - reclaimIdx;
       let retestFreshness: RetestFreshness = 'STANDARD';
@@ -2525,6 +3196,21 @@ export class SweepReclaimEngine {
               activeStopLoss = targetBreakevenPrice;
               baseSetup.active_trailing_sl = parseFloat(targetBreakevenPrice.toFixed(4));
               baseSetup.trailing_sl_source = 'BREAKEVEN';
+            }
+          }
+
+          // 🏛️ Two-Stage Structural Trailing: Trail 30% runner along confirmed M15 structural higher lows
+          if (this.config.enableM15StructuralTrail && baseSetup.is_stage1_filled && i > (baseSetup.stage1_hit_index ?? retestIdx)) {
+            if (i >= 3) {
+              const cPrev2L = Number.isFinite(candles[i - 2]?.l) ? Number(candles[i - 2].l) : Number((candles[i - 2] as any)?.low ?? 0);
+              const cPrev3L = Number.isFinite(candles[i - 3]?.l) ? Number(candles[i - 3].l) : Number((candles[i - 3] as any)?.low ?? 0);
+              const cPrev1L = Number.isFinite(candles[i - 1]?.l) ? Number(candles[i - 1].l) : Number((candles[i - 1] as any)?.low ?? 0);
+              const isSwingLow = cPrev2L < cPrev3L && cPrev2L <= cPrev1L;
+              if (isSwingLow && cPrev2L > activeStopLoss && cPrev2L >= targetBreakevenPrice) {
+                activeStopLoss = cPrev2L;
+                baseSetup.active_trailing_sl = parseFloat(activeStopLoss.toFixed(4));
+                baseSetup.trailing_sl_source = 'SWING_TRAIL';
+              }
             }
           }
 
@@ -2668,6 +3354,21 @@ export class SweepReclaimEngine {
               activeStopLoss = targetBreakevenPrice;
               baseSetup.active_trailing_sl = parseFloat(targetBreakevenPrice.toFixed(4));
               baseSetup.trailing_sl_source = 'BREAKEVEN';
+            }
+          }
+
+          // 🏛️ Two-Stage Structural Trailing: Trail 30% runner along confirmed M15 structural lower highs
+          if (this.config.enableM15StructuralTrail && baseSetup.is_stage1_filled && i > (baseSetup.stage1_hit_index ?? retestIdx)) {
+            if (i >= 3) {
+              const cPrev2H = Number.isFinite(candles[i - 2]?.h) ? Number(candles[i - 2].h) : Number((candles[i - 2] as any)?.high ?? 0);
+              const cPrev3H = Number.isFinite(candles[i - 3]?.h) ? Number(candles[i - 3].h) : Number((candles[i - 3] as any)?.high ?? 0);
+              const cPrev1H = Number.isFinite(candles[i - 1]?.h) ? Number(candles[i - 1].h) : Number((candles[i - 1] as any)?.high ?? 0);
+              const isSwingHigh = cPrev2H > cPrev3H && cPrev2H >= cPrev1H;
+              if (isSwingHigh && cPrev2H < activeStopLoss && cPrev2H <= targetBreakevenPrice) {
+                activeStopLoss = cPrev2H;
+                baseSetup.active_trailing_sl = parseFloat(activeStopLoss.toFixed(4));
+                baseSetup.trailing_sl_source = 'SWING_TRAIL';
+              }
             }
           }
 

@@ -147,7 +147,7 @@ export class GlobalRiskGovernor {
 
   /**
    * Pre-Trade Risk Evaluation Gate.
-   * Runs all 5 institutional safety checks before any order can be placed.
+   * Runs all institutional safety checks before any order can be placed.
    */
   public static async evaluatePreTradeRisk(params: {
     symbol: string;
@@ -157,6 +157,10 @@ export class GlobalRiskGovernor {
     currentEquity?: number;
     currentOpenPositionsCount?: number;
     currentOpenPositionsFloatingPnl?: number;
+    maxOpenPositions?: number;
+    emergencyEquityFloor?: number;
+    lastLossTimestamp?: number;
+    cooldownMinutes?: number;
     userEmail?: string;
   }): Promise<PreTradeAssessment> {
     const { config, state } = await this.hydrateState(params.userEmail);
@@ -172,6 +176,26 @@ export class GlobalRiskGovernor {
         calculatedRiskUsd: 0,
         contractSize: 0,
         violationTier: 'CEILING_VIOLATION',
+      };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CHECK 0: Emergency Equity Floor Circuit Breaker
+    // ─────────────────────────────────────────────────────────────────────────
+    const emergencyFloor = params.emergencyEquityFloor !== undefined
+      ? params.emergencyEquityFloor
+      : (config.emergency_equity_floor || 0);
+
+    if (equity <= 0 || (emergencyFloor > 0 && equity <= emergencyFloor)) {
+      const reason = equity <= 0
+        ? `Emergency Equity Floor breached: Account equity ($${equity.toFixed(2)}) is depleted (<= $0.00). Trading halted.`
+        : `Emergency Equity Floor breached: Account equity ($${equity.toFixed(2)}) has breached the global cutoff of $${emergencyFloor.toFixed(2)}. Trading halted for capital preservation.`;
+      return {
+        isApproved: false,
+        reason,
+        calculatedRiskUsd: 0,
+        contractSize: 0,
+        violationTier: 'EMERGENCY_EQUITY_FLOOR_BREACH',
       };
     }
 
@@ -193,12 +217,15 @@ export class GlobalRiskGovernor {
     // ─────────────────────────────────────────────────────────────────────────
     const floatingLoss = Math.min(0, params.currentOpenPositionsFloatingPnl || 0);
     const cumulativeLoss = Math.min(0, state.daily_realized_pnl) + floatingLoss;
-    const maxDrawdownUsd = Math.min(
-      (config.max_daily_loss_pct / 100) * equity,
-      config.max_daily_loss_usd
+    const maxDrawdownUsd = Math.max(
+      0,
+      Math.min(
+        (config.max_daily_loss_pct / 100) * Math.max(0, equity),
+        config.max_daily_loss_usd
+      )
     );
 
-    if (Math.abs(cumulativeLoss) >= maxDrawdownUsd) {
+    if (maxDrawdownUsd > 0 && Math.abs(cumulativeLoss) >= maxDrawdownUsd) {
       const reason = `Daily drawdown limit breached: Cumulative loss -$${Math.abs(cumulativeLoss).toFixed(2)} reached cap of -$${maxDrawdownUsd.toFixed(2)} (${config.max_daily_loss_pct}%).`;
       await this.tripCircuitBreaker(reason, 24, params.userEmail);
       return {
@@ -226,6 +253,29 @@ export class GlobalRiskGovernor {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // CHECK 3.5: Post-Loss Cooldown (Rule 5)
+    // ─────────────────────────────────────────────────────────────────────────
+    const lastLossTime = Math.max(
+      params.lastLossTimestamp || 0,
+      state.last_loss_timestamp || 0
+    );
+    const cooldownMin = params.cooldownMinutes !== undefined ? params.cooldownMinutes : 0;
+    if (lastLossTime && lastLossTime > 0 && cooldownMin > 0) {
+      const elapsedMs = Date.now() - lastLossTime;
+      const cooldownMs = cooldownMin * 60 * 1000;
+      if (elapsedMs < cooldownMs) {
+        const remainingMin = Math.ceil((cooldownMs - elapsedMs) / 60000);
+        return {
+          isApproved: false,
+          reason: `Post-loss cooldown active (Rule 5): Engine serving ${remainingMin}m remaining cooldown following recent stop-out.`,
+          calculatedRiskUsd: 0,
+          contractSize: 0,
+          violationTier: 'COOLDOWN_ACTIVE',
+        };
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // CHECK 4: Daily Trade Frequency Cap
     // ─────────────────────────────────────────────────────────────────────────
     if (state.daily_trades_count >= config.max_daily_trades) {
@@ -239,15 +289,16 @@ export class GlobalRiskGovernor {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // CHECK 5: Single-Position Cap
+    // CHECK 5: Concurrency Lock (Single-Position Cap)
     // ─────────────────────────────────────────────────────────────────────────
-    if ((params.currentOpenPositionsCount || 0) >= 1) {
+    const maxAllowedPositions = params.maxOpenPositions !== undefined ? params.maxOpenPositions : 1;
+    if ((params.currentOpenPositionsCount || 0) >= maxAllowedPositions) {
       return {
         isApproved: false,
-        reason: `Max concurrent open positions (1) reached. New setup rejected.`,
+        reason: `Max concurrent open positions (${maxAllowedPositions}) reached. New setup rejected by Concurrency Lock.`,
         calculatedRiskUsd: 0,
         contractSize: 0,
-        violationTier: 'DIRECTIONAL_LOCK',
+        violationTier: 'CONCURRENCY_LOCK',
       };
     }
 
@@ -297,12 +348,20 @@ export class GlobalRiskGovernor {
       this.inMemoryState.consecutive_losses_count = 0;
     } else if (outcome.realizedR < 0) {
       this.inMemoryState.consecutive_losses_count += 1;
+      this.inMemoryState.last_loss_timestamp = outcome.timestamp || Date.now();
     }
 
     // Automatic Circuit Breaker Evaluation upon trade completion
-    const maxDrawdownUsd = Math.min(
-      (this.inMemoryConfig.max_daily_loss_pct / 100) * this.inMemoryState.current_balance,
-      this.inMemoryConfig.max_daily_loss_usd
+    const baselineEquity = Math.max(
+      0,
+      this.inMemoryState.initial_capital || this.inMemoryState.current_balance
+    );
+    const maxDrawdownUsd = Math.max(
+      0,
+      Math.min(
+        (this.inMemoryConfig.max_daily_loss_pct / 100) * baselineEquity,
+        this.inMemoryConfig.max_daily_loss_usd
+      )
     );
 
     if (this.inMemoryState.consecutive_losses_count >= this.inMemoryConfig.max_consecutive_losses) {
@@ -311,7 +370,7 @@ export class GlobalRiskGovernor {
         6,
         userEmail
       );
-    } else if (Math.abs(Math.min(0, this.inMemoryState.daily_realized_pnl)) >= maxDrawdownUsd) {
+    } else if (maxDrawdownUsd > 0 && Math.abs(Math.min(0, this.inMemoryState.daily_realized_pnl)) >= maxDrawdownUsd) {
       await this.tripCircuitBreaker(
         `Daily drawdown limit breached: Cumulative loss -$${Math.abs(this.inMemoryState.daily_realized_pnl).toFixed(2)} reached cap of -$${maxDrawdownUsd.toFixed(2)}.`,
         24,
@@ -378,6 +437,7 @@ export class GlobalRiskGovernor {
     this.inMemoryState.circuit_breaker_reset_at = null;
     this.inMemoryState.consecutive_losses_count = 0;
     this.inMemoryState.daily_realized_pnl = 0.0;
+    this.inMemoryState.last_loss_timestamp = null;
 
     console.log('[RISK_GOVERNOR] 🔓 Circuit breaker successfully reset. Operational status restored.');
 

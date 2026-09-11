@@ -34,9 +34,14 @@ const nextConfig: NextConfig = {
 
     // Server‑side externals – tell webpack not to bundle `pg`
     if (isServer) {
-      config.externals = config.externals || {};
-      // Use CommonJS external so Node can require it at runtime
-      config.externals['pg'] = 'commonjs pg';
+      if (Array.isArray(config.externals)) {
+        config.externals.push({ pg: 'commonjs pg', 'pg-native': 'commonjs pg-native' });
+      } else if (config.externals && typeof config.externals === 'object') {
+        config.externals['pg'] = 'commonjs pg';
+        config.externals['pg-native'] = 'commonjs pg-native';
+      } else {
+        config.externals = [{ pg: 'commonjs pg', 'pg-native': 'commonjs pg-native' }];
+      }
     }
     return config;
   },

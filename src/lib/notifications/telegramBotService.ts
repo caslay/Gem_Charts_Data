@@ -21,7 +21,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { TelegramNotifier, TelegramConfig } from './telegramNotifier';
+import { TelegramNotifier, TelegramConfig, SparkLifecycleMilestone } from './telegramNotifier';
 import { AutomatedStrategyExecutionEngine } from '../quantEngine/AutomatedStrategyExecutionEngine';
 import { DaemonLedger } from '../daemon/daemonLedger';
 import { NodeWsClient } from '../daemon/nodeWsClient';
@@ -114,6 +114,38 @@ export class TelegramBotService {
       this.abortController = null;
     }
     console.log(`[TELEGRAM_BOT] 🛑 Interactive bot commands stopped.`);
+  }
+
+  /**
+   * Broadcasts a Spark trade lifecycle milestone institutional card.
+   */
+  public async broadcastSparkMilestone(
+    milestone: SparkLifecycleMilestone,
+    payload: any,
+    options?: { targetChatId?: string; parseMode?: 'Markdown' | 'HTML'; eventKey?: string }
+  ): Promise<boolean> {
+    return await this.notifier.broadcastSparkMilestone(milestone, payload, options);
+  }
+
+  /**
+   * Returns underlying TelegramNotifier instance.
+   */
+  public getNotifier(): TelegramNotifier {
+    return this.notifier;
+  }
+
+  /**
+   * Clears the deduplication cache in memory and optionally on disk.
+   */
+  public clearDeduplicationRegistry(clearPersisted: boolean = true): void {
+    this.notifier.clearDeduplicationRegistry(clearPersisted);
+  }
+
+  /**
+   * Removes a specific event key from the deduplication cache.
+   */
+  public removeEventKey(eventKey: string): void {
+    this.notifier.removeEventKey(eventKey);
   }
 
   /**

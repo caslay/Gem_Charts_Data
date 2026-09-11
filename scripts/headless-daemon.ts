@@ -20,6 +20,7 @@ import { DEFAULT_SR_LIVE_SETTINGS } from '../src/lib/quantEngine/strategyExecuti
 import { bootstrapHistoricalBuffers, computeMacroContext } from './lib/restBootstrap';
 import { NodeWsClient, CandleClosedPayload, MarketTickPayload } from './lib/nodeWsClient';
 import { DaemonLedger } from './lib/daemonLedger';
+import { SparkIngestionDispatcher, normalizeExecutionMode } from './lib/sparkIngestionDispatcher';
 import { TelegramNotifier } from '../src/lib/notifications/telegramNotifier';
 import { TelegramBotService } from '../src/lib/notifications/telegramBotService';
 import { getBinanceAccountInfo } from '../src/lib/binanceFuturesClient';
@@ -41,6 +42,11 @@ const args = process.argv.slice(2);
 const isDryRun = args.includes('--dry-run');
 const symbolArg = args.find((a) => a.startsWith('--symbol='))?.split('=')[1] || 'ETHUSDC';
 const initialEquityArg = parseFloat(args.find((a) => a.startsWith('--equity='))?.split('=')[1] || '1000.0');
+const modeArg = args.find((a) => a.startsWith('--mode='))?.split('=')[1];
+const cliExecutionMode = normalizeExecutionMode(modeArg);
+if (cliExecutionMode) {
+  process.env.EXECUTION_MODE = cliExecutionMode;
+}
 
 async function main() {
   const telegram = new TelegramNotifier();
@@ -70,10 +76,11 @@ async function main() {
   console.log(` Asset:           ${symbolArg.toUpperCase()} (Binance Futures)`);
   console.log(` Starting Equity: $${startingEquity.toFixed(2)} USD (2% Compounded Risk = $${riskPerTrade.toFixed(2)} / trade)`);
   console.log(` Exchange Link:   ${isBinanceLiveHydrated ? '🟢 BINANCE USDⓈ-M LIVE CONNECTED' : '⚪ VIRTUAL / SANDBOX'}`);
-  console.log(` Execution Gate:  ${safetyGate.isAllowed ? '🔴 LIVE REAL EXECUTION ARMED' : '🧪 SHADOW SIMULATION (' + safetyGate.reason + ')'}`);
-  console.log(` Strategy:        3m SFP Shelf-Snap Liquidity Hunter Champion (60% TP1 @ 2.5R / 40% TP2 @ 5.0R · SHELF_LEVEL)`);
+  console.log(` Strategy:        SPARK INBOUND DISPATCHER (Autonomous S&R: STANDBY)`);
+  console.log(` Execution Mode:  ${cliExecutionMode ? `🎯 ${cliExecutionMode} (CLI Override)` : '⚙️ DYNAMIC (STANDBY default / Hot-reloadable via UI)'}`);
+  console.log(` Spark Listener:  🟢 ACTIVE (Monitoring agent_decision_log for 'ACTIVE' records)`);
   console.log(` Telegram Alerts: ${telegram.isEnabled() ? '✅ ACTIVE (Chat: ' + telegram.getConfig().chatId + ')' : '⚪ DISABLED'}`);
-  console.log(` Mode:            ${isDryRun ? 'DRY-RUN (30s Diagnostic Validation)' : '24/7 LIVE BACKGROUND EXECUTION'}`);
+  console.log(` Daemon Mode:     ${isDryRun ? 'DRY-RUN (30s Diagnostic Validation)' : '24/7 LIVE BACKGROUND EXECUTION'}`);
   console.log(` Local Time:      ${new Date().toLocaleString()} (UTC: ${new Date().toISOString()})`);
   console.log(`===============================================================\n`);
 
@@ -134,6 +141,7 @@ async function main() {
     compoundingRiskPct: initialLiveSettings.compoundingRiskPct ?? initialRiskConfig.risk_per_trade_pct,
     maxOpenPositions: 1,
     autoExecute: true,
+    enableAutonomousScan: false, // 🛑 Standby: autonomous candle order triggers silenced for Spark Ingestion Dispatcher
     stage1Ratio: initialLiveSettings.stage1Ratio ?? 0.60,
     stage2Ratio: initialLiveSettings.stage2Ratio ?? 0.40,
     stage3Ratio: initialLiveSettings.stage3Ratio ?? 0.00,
@@ -162,7 +170,7 @@ async function main() {
   // 4. Pre-run historical candle scan & mark cold-start setups as PROCESSED
   const initialScan = engine.onMultiTimeframeCandles(bootstrapData.buffers, bootstrapData.macroContext);
   console.log(
-    `[DAEMON] 🔍 Historical scan completed: ${initialScan.scannedSetups.length} setups in history indexed. Cold-start guard active.`
+    `[DAEMON] 🔍 Historical scan completed: ${initialScan.scannedSetups.length} setups in history indexed for telemetry. Autonomous scanning: STANDBY.`
   );
 
   // 4b. Rehydrate any active in-flight positions from today's session ledger
@@ -215,15 +223,21 @@ async function main() {
               return;
             }
 
-            // Route limit order to Binance (armed on VPS production)
-            routeLimitOrderPlacement(pos).catch((err) => {
-              console.error('[ORDER_ROUTER_ERROR] Failed routing limit order placement:', err);
-            });
+            // Route limit order to Binance (armed on VPS production only for LIVE_BINANCE)
+            if (pos.executionMode === 'LIVE_BINANCE') {
+              routeLimitOrderPlacement(pos).catch((err) => {
+                console.error('[ORDER_ROUTER_ERROR] Failed routing limit order placement:', err);
+              });
+            } else {
+              console.log(`[DAEMON] 🧪 Limit order armed in ${pos.executionMode || 'PAPER_TRADING'} mode (in-daemon simulation, zero exchange margin).`);
+            }
           }).catch((err) => {
             console.error('[RISK_GOVERNOR_ERROR]', err);
-            routeLimitOrderPlacement(pos).catch((rErr) => {
-              console.error('[ORDER_ROUTER_ERROR] Failed routing limit order placement:', rErr);
-            });
+            if (pos.executionMode === 'LIVE_BINANCE') {
+              routeLimitOrderPlacement(pos).catch((rErr) => {
+                console.error('[ORDER_ROUTER_ERROR] Failed routing limit order placement:', rErr);
+              });
+            }
           });
         }
         ledger.logEvent('LIMIT_ORDER_PLACED', event.message, { position: pos });
@@ -232,10 +246,12 @@ async function main() {
       case 'LIMIT_ORDER_CANCELLED':
         console.log(`\n⌛ [${now}] [LIMIT_ORDER_CANCELLED] ${event.message}`);
         if (pos) {
-          // Cancel order on Binance order book
-          routeLimitOrderCancellation(pos, event.message).catch((err) => {
-            console.error('[ORDER_ROUTER_ERROR] Failed routing limit order cancellation:', err);
-          });
+          // Cancel order on Binance order book only for LIVE_BINANCE
+          if (pos.executionMode === 'LIVE_BINANCE') {
+            routeLimitOrderCancellation(pos, event.message).catch((err) => {
+              console.error('[ORDER_ROUTER_ERROR] Failed routing limit order cancellation:', err);
+            });
+          }
         }
         ledger.logEvent('LIMIT_ORDER_CANCELLED', event.message, { position: pos });
         break;
@@ -246,10 +262,14 @@ async function main() {
           console.log(
             `   ➔ Direction: ${pos.direction} | Fill Price: $${pos.entryPrice.toFixed(2)} | Size: ${pos.contractSize} contracts ($${pos.riskUsd.toFixed(2)} Risk)`
           );
-          // Arm native exchange Stop Loss and Stage 1 TP limit orders on Binance
-          routeOrderFilledBracket(pos).catch((err) => {
-            console.error('[ORDER_ROUTER_ERROR] Failed routing bracket orders:', err);
-          });
+          // Arm native exchange Stop Loss and Stage 1 TP limit orders on Binance only for LIVE_BINANCE
+          if (pos.executionMode === 'LIVE_BINANCE') {
+            routeOrderFilledBracket(pos).catch((err) => {
+              console.error('[ORDER_ROUTER_ERROR] Failed routing bracket orders:', err);
+            });
+          } else {
+            console.log(`[DAEMON] 🧪 Bracket orders active in ${pos.executionMode || 'PAPER_TRADING'} mode (in-daemon simulation).`);
+          }
         }
         ledger.logEvent('ORDER_FILLED', event.message, { position: pos });
         break;
@@ -258,10 +278,12 @@ async function main() {
         console.log(`\n🎯 [${now}] [STAGE_1_HARVEST] ${event.message}`);
         if (pos) {
           console.log(`   ➔ Locked: +0.50R | Stop Loss advanced to Breakeven ($${pos.activeStopLoss.toFixed(2)})`);
-          // Ratchet Stop Loss to Breakeven on Binance & submit Stage 2 TP limit
-          routeStage1HarvestUpdate(pos).catch((err) => {
-            console.error('[ORDER_ROUTER_ERROR] Failed routing Stage 1 harvest update:', err);
-          });
+          // Ratchet Stop Loss to Breakeven on Binance & submit Stage 2 TP limit only for LIVE_BINANCE
+          if (pos.executionMode === 'LIVE_BINANCE') {
+            routeStage1HarvestUpdate(pos).catch((err) => {
+              console.error('[ORDER_ROUTER_ERROR] Failed routing Stage 1 harvest update:', err);
+            });
+          }
         }
         ledger.logEvent('STAGE_1_HARVEST', event.message, { position: pos });
         break;
@@ -299,6 +321,7 @@ async function main() {
           }).catch((err) => console.warn('[DAEMON] Failed recording outcome to RiskGovernor:', err));
 
           // 2. Permanent PostgreSQL trade audit persistence
+          const finalExecutionMode = pos.executionMode || (process.env.IS_LIVE_VPS === 'true' ? 'LIVE_BINANCE' : 'PAPER_TRADING');
           sql`
             INSERT INTO trades (
               trade_id, symbol, direction, entry_price, exit_price, stop_loss,
@@ -314,7 +337,7 @@ async function main() {
               ${new Date(pos.openTime || Date.now())}, ${new Date(pos.closeTime || Date.now())},
               ${JSON.stringify({ riskUsd: pos.riskUsd, contractSize: pos.contractSize, setupId: pos.setupId })},
               ${pos.binanceOrderId || null}, ${pos.binanceClientOrderId || null},
-              ${process.env.IS_LIVE_VPS === 'true' ? 'LIVE_BINANCE' : 'SHADOW_SIMULATION'},
+              ${finalExecutionMode},
               ${pos.anchorName || null}
             )
             ON CONFLICT (trade_id) DO UPDATE SET
@@ -325,10 +348,12 @@ async function main() {
               exit_time = EXCLUDED.exit_time;
           `.catch((err) => console.warn('[DAEMON] DB trade insert skipped (offline fallback):', err?.message || err));
         }
-        // Purge lingering open orders on Binance to ensure zero orphans
-        routePositionClosedCleanup(symbolArg).catch((err) => {
-          console.error('[ORDER_ROUTER_ERROR] Failed cleaning up open orders:', err);
-        });
+        // Purge lingering open orders on Binance to ensure zero orphans only for LIVE_BINANCE
+        if (pos && pos.executionMode === 'LIVE_BINANCE') {
+          routePositionClosedCleanup(symbolArg).catch((err) => {
+            console.error('[ORDER_ROUTER_ERROR] Failed cleaning up open orders:', err);
+          });
+        }
         ledger.logEvent('POSITION_CLOSED', event.message, { position: pos });
         break;
     }
@@ -449,11 +474,13 @@ async function main() {
     // Recompute macro context on closed candles (5m, 15m, 1h)
     currentMacroContext = computeMacroContext(buffers['1h'], buffers['15m'], buffers['5m']);
 
-    // Trigger strategy candidate scan
+    // Strategy candidate scan (autonomous order triggers silenced; HUD/telemetry preserved)
     const scanResult = engine.onMultiTimeframeCandles(buffers, currentMacroContext);
+    const tcResult = engine.evaluateTrendContinuation(buffers['15m'] || buffers['5m'], undefined, currentMacroContext);
     latestScannedSetups = scanResult.scannedSetups || [];
-    if (scanResult.scannedSetups.length > 0) {
-      console.log(`   ➔ Scanned ${scanResult.scannedSetups.length} valid structural setups.`);
+    const totalScanned = (scanResult.scannedSetups?.length || 0) + (tcResult.scanned?.length || 0);
+    if (totalScanned > 0) {
+      console.log(`   ➔ [STANDBY] Scanned ${scanResult.scannedSetups.length} S&R + ${tcResult.scanned.length} Trend Continuation setups for telemetry (autonomous execution silenced for Spark Dispatcher).`);
     }
 
     // 🛡️ Dynamic Risk Hot-Reload from GlobalRiskGovernor / PostgreSQL
@@ -493,10 +520,26 @@ async function main() {
   );
   botService.startPolling();
 
+  // 6.6. Start Dedicated Spark Inbound Ingestion Dispatcher
+  const sparkDispatcher = new SparkIngestionDispatcher({
+    engine,
+    getCurrentPrice: (sym: string) => {
+      if (sym.toUpperCase() === symbolArg.toUpperCase()) {
+        return wsClient.getLatestPrice();
+      }
+      return null;
+    },
+    pollIntervalMs: 2000,
+    telegram,
+    ledger,
+    cliMode: cliExecutionMode ?? undefined,
+  });
+  sparkDispatcher.start();
+
   // Connect WebSocket
   await wsClient.connect();
 
-  console.log(`\n[DAEMON] 🟢 Quegar Engine is actively monitoring live market order flow.\n`);
+  console.log(`\n[DAEMON] 🟢 Quegar Engine is actively monitoring live market order flow and Spark decisions.\n`);
 
   // 7. Handle Dry-Run Timer or Keep-Alive
   if (isDryRun) {
@@ -509,6 +552,7 @@ async function main() {
       console.log(` 5m Ring Buffer Bars:    ${wsClient.getRingBuffers()['5m'].length}`);
       console.log(` Session Log Saved:      ${ledger.getRunLogPath()}`);
       console.log(`===============================================================\n`);
+      sparkDispatcher.stop();
       botService.stop();
       wsClient.stop();
       process.exit(0);
@@ -518,6 +562,7 @@ async function main() {
   // Graceful Shutdown
   const shutdown = () => {
     console.log(`\n\n[DAEMON] 🛑 Stopping Quegar Headless Daemon...`);
+    sparkDispatcher.stop();
     ledger.logEvent('HEARTBEAT', `Daemon stopped cleanly.`);
     botService.stop();
     wsClient.stop();

@@ -89,7 +89,7 @@ function invertMatrix(A: number[][]): number[][] | null {
   return inv;
 }
 
-function runRegression(recentCandles: Candle[]): {
+export interface OLSStatisticalValidationResult {
   t_statistic: number;
   p_value: number;
   confidence_level: 'HIGH' | 'MEDIUM_HIGH' | 'MEDIUM' | 'LOW';
@@ -99,11 +99,38 @@ function runRegression(recentCandles: Candle[]): {
   confidence_interval_95_strict: boolean;
   confidence_interval_90: boolean;
   confidence_interval_85: boolean;
-} {
+}
+
+function getCandleTakerBuy(c: Candle): number {
+  if (typeof c.taker_buy_vol === 'number' && Number.isFinite(c.taker_buy_vol) && c.taker_buy_vol > 0) return c.taker_buy_vol;
+  if (typeof (c as any).takerBuyBaseAssetVolume === 'number' && Number.isFinite((c as any).takerBuyBaseAssetVolume) && (c as any).takerBuyBaseAssetVolume > 0) {
+    return (c as any).takerBuyBaseAssetVolume;
+  }
+  const vol = Number.isFinite(c.v) ? Number(c.v) : 0;
+  const close = Number(c.c ?? (c as any).close ?? 0);
+  const low = Number(c.l ?? (c as any).low ?? 0);
+  const high = Number(c.h ?? (c as any).high ?? 0);
+  const range = Math.max(0.0001, high - low);
+  const conviction = Math.min(1.0, Math.max(0.0, (close - low) / range));
+  return conviction * vol;
+}
+
+function getCandleTakerSell(c: Candle): number {
+  if (typeof c.taker_sell_vol === 'number' && Number.isFinite(c.taker_sell_vol) && c.taker_sell_vol > 0) return c.taker_sell_vol;
+  const vol = Number.isFinite(c.v) ? Number(c.v) : 0;
+  const buy = getCandleTakerBuy(c);
+  return Math.max(0, vol - buy);
+}
+
+export function runRegression(recentCandles: Candle[]): OLSStatisticalValidationResult {
   const N = recentCandles.length;
 
-  const volumes = recentCandles.map(c => c.v !== undefined ? c.v : ((c.taker_buy_vol || 0) + (c.taker_sell_vol || 0)));
-  const volumeDeltas = recentCandles.map(c => (c.taker_buy_vol || 0) - (c.taker_sell_vol || 0));
+  const volumes = recentCandles.map(c => {
+    if (typeof c.v === 'number' && Number.isFinite(c.v) && c.v > 0) return c.v;
+    return getCandleTakerBuy(c) + getCandleTakerSell(c);
+  });
+  const volumeDeltas = recentCandles.map(c => getCandleTakerBuy(c) - getCandleTakerSell(c));
+  const hasDeltaVariance = volumeDeltas.some(d => Math.abs(d - volumeDeltas[0]) > 1e-4);
   
   const rollingVols = new Array<number>(N);
   for (let i = 0; i < N; i++) {
@@ -159,11 +186,10 @@ function runRegression(recentCandles: Candle[]): {
   const X: number[][] = [];
   const y: number[] = [];
   for (let i = 14; i < N - 3; i++) {
-    if (hasDeadZoneVariance) {
-      X.push([1, anomalyMultipliers[i], volumeDeltas[i], deadZones[i]]);
-    } else {
-      X.push([1, anomalyMultipliers[i], volumeDeltas[i]]);
-    }
+    const row = [1, anomalyMultipliers[i]];
+    if (hasDeltaVariance) row.push(volumeDeltas[i]);
+    if (hasDeadZoneVariance) row.push(deadZones[i]);
+    X.push(row);
     y.push(futureReturns[i]);
   }
 

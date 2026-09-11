@@ -243,28 +243,33 @@ export interface AgentContextPayload {
  * POST /api/agent/context.
  */
 export interface AgentDecisionPayload {
-  /** Identifies the agent that submitted this decision (e.g. 'gemini-spark-v1'). */
-  agent_id: string;
-  symbol: string;
-  /** The directional bias determined by the agent. */
-  bias_signal:
+  /** Identifies the agent that submitted this decision (e.g. 'gemini-spark-v1'). Defaults to 'external-agent'. Accepts string, number, or null. */
+  agent_id?: string | number | null;
+  /** Trading pair symbol. Defaults to 'ETHUSDC'. Accepts string, number, or null. */
+  symbol?: string | number | null;
+  /** The directional bias determined by the agent. Accepts canonical enums, strings (BUY/SELL/LONG/SHORT), numeric signals (+1, -1, 0), or null. */
+  bias_signal?:
     | 'CONFIRMED_BULLISH'
     | 'CONFIRMED_BEARISH'
     | 'NEUTRAL'
     | 'ABORT'
-    | 'COUNTER_TREND_RETRACEMENT';
-  /** Entry price range for limit order placement. */
-  entry_range_low?: number;
-  entry_range_high?: number;
+    | 'COUNTER_TREND_RETRACEMENT'
+    | (string & {})
+    | number
+    | null;
+  /** Entry price range for limit order placement. Accepts number, numeric string, or null. */
+  entry_range_low?: number | string | null;
+  entry_range_high?: number | string | null;
   /**
    * The price level that INVALIDATES this decision.
-   * Pre-flight check: if live_price has already breached this, the POST is rejected.
+   * Pre-flight check: if live_price has already breached this, the submission is rejected.
+   * Accepts number, numeric string, or null.
    */
-  invalidation_level?: number;
-  target_1?: number;
-  target_2?: number;
-  /** Free-form narrative rationale from the agent's reasoning pass. */
-  narrative?: string;
+  invalidation_level?: number | string | null;
+  target_1?: number | string | null;
+  target_2?: number | string | null;
+  /** Free-form narrative rationale from the agent's reasoning pass. Accepts string, object, number, or null. */
+  narrative?: any;
 }
 
 // ─── PATCH Request Payload ────────────────────────────────────────────────────
@@ -272,7 +277,21 @@ export interface AgentDecisionPayload {
 export interface AgentDecisionPatchPayload {
   /** Must reference an existing agent_decision_log.id */
   id: number;
-  status?: 'PENDING' | 'ACTIVE' | 'INVALIDATED' | 'COMPLETED';
+  status?:
+    | 'PENDING'
+    | 'ACTIVE'
+    | 'QUEUED'
+    | 'STAGED'
+    | 'LOGGED_STANDBY'
+    | 'PAPER_ACTIVE'
+    | 'PAPER_FILLED'
+    | 'PAPER_CLOSED'
+    | 'EXECUTED'
+    | 'REJECTED'
+    | 'REJECTED_BY_RISK_GOVERNOR'
+    | 'STAND_DOWN'
+    | 'INVALIDATED'
+    | 'COMPLETED';
   narrative?: string;
   target_1?: number;
   target_2?: number;
@@ -292,7 +311,21 @@ export interface AgentDecisionRecord {
   target_1: number | null;
   target_2: number | null;
   narrative: string | null;
-  status: 'PENDING' | 'ACTIVE' | 'INVALIDATED' | 'COMPLETED';
+  status:
+    | 'PENDING'
+    | 'ACTIVE'
+    | 'QUEUED'
+    | 'STAGED'
+    | 'LOGGED_STANDBY'
+    | 'PAPER_ACTIVE'
+    | 'PAPER_FILLED'
+    | 'PAPER_CLOSED'
+    | 'EXECUTED'
+    | 'REJECTED'
+    | 'REJECTED_BY_RISK_GOVERNOR'
+    | 'STAND_DOWN'
+    | 'INVALIDATED'
+    | 'COMPLETED';
   live_price_at_submission: number | null;
   submitted_at: number;
   invalidated_at: number | null;

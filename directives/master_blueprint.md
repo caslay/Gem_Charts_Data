@@ -1,8 +1,276 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.62
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.72
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-10 (V17.62 — Preset Pruning, Strict Canonical Factory Indexing & Universal Fallback Hardening)
+> **Last Updated:** 2026-09-12 (V17.72 — Phase 3: Tri-State Execution Router [STANDBY / PAPER_TRADING / LIVE_BINANCE], In-Daemon Paper Trading Simulator & Real-Time Telegram Broadcast Pipeline)
+
+## 🆕 V17.72 Changelog — Tri-State Execution Router, In-Daemon Paper Trading Simulator & Real-Time Telegram Broadcast Pipeline (2026-09-12)
+
+### Summary
+1. **Tri-State Execution Mode Router (`sparkIngestionDispatcher.ts` & `agentTypes.ts`):**
+   - Implemented dynamic execution mode routing (`STANDBY`, `PAPER_TRADING`, `LIVE_BINANCE`) with hierarchical precedence:
+     `modeOverride` $\rightarrow$ CLI `--mode=` $\rightarrow$ `daemon_live_settings.json` $\rightarrow$ `EXECUTION_MODE` env $\rightarrow$ default (`STANDBY`).
+   - Extended `AgentDecisionRecord.status` with `'LOGGED_STANDBY'`, `'PAPER_ACTIVE'`, `'PAPER_FILLED'`, and `'PAPER_CLOSED'`.
+   - **Mode 1 (`STANDBY`):** Decisions passing Risk Governor transition to `LOGGED_STANDBY`, logged to `DaemonLedger` (`SPARK_DECISION_STANDBY`), and broadcast via Telegram without queueing engine orders or committing margin.
+   - **Mode 2 (`PAPER_TRADING`):** Decisions transition to `PAPER_ACTIVE`, queued into the in-daemon engine with `executionMode: 'PAPER_TRADING'`, resting 12-bar TTL, maker touch fill simulation, Next-Bar Breakeven ratchet (+0.015% fee shield), +1.0R dynamic profit floor at +2.0R MFE, and complete maker (0.0000%) / taker (0.0400%) fee deduction parity.
+   - **Mode 3 (`LIVE_BINANCE`):** Evaluates `evaluateExecutionSafetyGate('LIVE_BINANCE')`. Physically blocks execution on local sandbox environments (`REJECTED` with audit trail) and routes to Binance REST API only on verified production VPS.
+2. **In-Daemon Lifecycle Synchronization & Quant Accounting Parity:**
+   - `SparkIngestionDispatcher` subscribes to engine events (`ORDER_FILLED`, `LIMIT_ORDER_CANCELLED`, `STAGE_1_HARVEST`, `POSITION_CLOSED`) to atomically transition `agent_decision_log` and `DaemonLedger` records on paper fills (`PAPER_FILLED`), TP1 harvests (`SPARK_DECISION_TP1_HARVEST`), and exits (`PAPER_CLOSED`) with full realized R and USD metrics.
+   - **Quant Accounting Fix for Profit Floor Stop-Out:** When a position is stopped out at the +1.0R floor (`trailingSlSource === 'PROFIT_RATCHET_FLOOR'`), the remaining allocation's +1.0R profit is credited (`realizedR += remainingAllocation * 1.0`) with exit reason `'PROFIT_FLOOR_WIN'` (rather than zero-profit `'STAGE_1_SCRATCH'`).
+   - **Next-Bar Ratchet Rule Preservation:** Excluded `PROFIT_RATCHET_FLOOR` from same-bar demotion back to `initialStopLoss`, and enforced monotonicity (`isTightening`) to prevent ratcheting a +1.0R floor back to entry/breakeven.
+   - Engine event handlers in `scripts/headless-daemon.ts` explicitly guard exchange order router calls (`routeLimitOrderPlacement`, `routeLimitOrderCancellation`, `routeOrderFilledBracket`, `routeStage1HarvestUpdate`, `routePositionClosedCleanup`) to run **strictly when `pos.executionMode === 'LIVE_BINANCE'`**, guaranteeing zero accidental exchange margin on paper trades.
+   - Trade audit table (`trades`) records `execution_mode` explicitly (`PAPER_TRADING` vs `LIVE_BINANCE`).
+3. **Institutional Confluence Score Integration (`quantTradeEngine.ts`):**
+   - Normalized `aiBiasSignal` parser to accept string signals (`'CONFIRMED_BULLISH'` / `'CONFIRMED_BEARISH'`) in addition to numeric (`1` / `-1`), and added fallback to `agent_decision_log` so `LOGGED_STANDBY` setups reliably receive the institutional +20pt confluence score boost.
+4. **Real-Time Telegram Broadcast Pipeline & Deduplication Registry (`telegramNotifier.ts` & `telegramBotService.ts`):**
+   - Formatted institutional Markdown cards across all 5 Spark lifecycle milestones:
+     1. `SIGNAL_RECEIVED`: Intake alert with direction, entry range, invalidation, targets, explicit `1.0R | ${riskPct}% Compounded` notation, and execution mode badge.
+     2. `ORDER_ARMED`: Resting maker limit queue alert with 12-bar (60m) TTL window, clamped SL, and contract sizing.
+     3. `ORDER_FILLED`: Maker fill alert with execution price, notional value, active stop loss, and target ladder (with defensive null checks for optional targets).
+     4. `TP1_SCALE_RATCHET`: 60% tranche banked alert with realized R/USD, Breakeven +0.015% fee-shield ratchet, and Next-Bar Ratchet Law note.
+     5. `TRADE_CLOSED`: Full exit alert with exit reason badge, holding duration, net realized R/USD, and simulated fee breakdown.
+   - Robust Markdown sanitizer (`sanitizeMarkdownText`) and syntax validator (`validateTelegramMarkdown`) preventing Telegram parse errors. Guarded all number formatters against undefined/NaN values, eliminating `toFixed` crashes on partial payloads.
+   - **Deduplication Protection & Multi-Trade Isolation:** Implemented `generateSparkEventKey` scoping milestone keys by `tradeId`/`decisionId` or milestone-specific discriminator values. Fixed a critical flaw where `TRADE_CLOSED` and `TP1_SCALE_RATCHET` previously collapsed into static symbol-level keys that permanently suppressed subsequent trade closures. Equipped `TelegramNotifier` and `TelegramBotService` with `clearDeduplicationRegistry()`, `removeEventKey()`, and atomic temp-file registry persistence to eliminate multi-process file corruption.
+5. **Deterministic Testing & Weekend Filter Normalization:**
+   - Ensured all integration and unit test engines explicitly pass `filterWeekend: false` (and Spark orders pass `bypassWeekendFilter: true`), ensuring 100% deterministic test execution on all days.
+6. **Comprehensive Verification Suite:**
+   - `npx tsc --noEmit`: 0 errors.
+   - `scripts/test_tri_state_execution_and_telegram.ts`: 88/88 tests passed (100%).
+   - `scripts/test_spark_ingestion_dispatcher.ts`: 99/99 tests passed (100%).
+   - `scripts/test_ttl_and_parity.ts`: 5/5 tests passed (100%).
+   - `scripts/test_risk_governor.ts`: 39/39 tests passed (100%).
+
+## 🆕 V17.71 Changelog — Spark Inbound Ingestion Dispatcher Phase 2 Hardening & Audit Fixes (2026-09-11)
+
+### Summary
+1. **Dynamic Risk Parameter Hydration Precedence (`sparkIngestionDispatcher.ts`):**
+   - Corrected hydration precedence for `accountEquity` so live settings files (`run_logs/daemon_live_settings.json`) and PostgreSQL `trading_account.current_balance` strictly override stale in-memory engine initial values (`customSettings` $\rightarrow$ `persistedLiveSettings` $\rightarrow$ `riskGovState.current_balance` $\rightarrow$ `engine.getAccountEquity()` $\rightarrow$ default).
+2. **Pre-Queued Setup Ingestion & Atomic Polling Parity (`sparkIngestionDispatcher.ts`):**
+   - Fixed atomic queue claim logic to seamlessly ingest records with `status = 'QUEUED'` (preventing false `ALREADY_CLAIMED` errors when processing queued setups) and expanded poller query to monitor `(status = 'ACTIVE' OR status = 'QUEUED')`.
+   - Updated invalidation and stand-down status updates to preserve state transitions from both `ACTIVE` and `QUEUED`.
+3. **Rule 5 Cooldown Persistence on Cold Start (`GlobalRiskGovernor.ts`):**
+   - Fixed timestamp resolution in `evaluatePreTradeRisk` to evaluate `Math.max(params.lastLossTimestamp || 0, state.last_loss_timestamp || 0)`, preventing cooldown bypass when a freshly booted engine passes `lastLossTimestamp: 0` while the risk governor state holds a recent stop-out.
+4. **Non-Negative Daily Drawdown Boundary Math (`GlobalRiskGovernor.ts`):**
+   - Bounded `maxDrawdownUsd` with `Math.max(0, ...)` against baseline equity (`initial_capital` or `current_balance`), eliminating negative drawdown ceiling calculations (`-$-4.00`) during deep drawdown or account exhaustion states.
+5. **Strict Input Validations in Sizing Engine (`calculateSparkPositionSizing`):**
+   - Added explicit boundary guards rejecting non-positive or excessive risk percentages (`compoundingRiskPct <= 0 || compoundingRiskPct > 100`) and invalid directions (`direction !== 'LONG' && direction !== 'SHORT'`).
+6. **Dispatcher-Level Staging Mode & Type Parity:**
+   - Added `stageOnly?: boolean` option to `SparkIngestionDispatcherOptions`, enabling daemon instances to be configured permanently in staging-only review mode.
+   - Expanded `AgentDecisionRecord.status` union in `src/types/agentTypes.ts` to include all Phase 1/2 lifecycle states (`QUEUED`, `STAGED`, `EXECUTED`, `REJECTED`, `REJECTED_BY_RISK_GOVERNOR`, `STAND_DOWN`).
+7. **Expanded Test Suite Coverage:**
+   - `scripts/test_risk_governor.ts`: 39/39 tests passing (100%), adding Tests 12 and 13.
+   - `scripts/test_spark_ingestion_dispatcher.ts`: 99/99 tests passing (100%), adding Tests 16, 17, 18, and 19.
+   - `scripts/test_ttl_and_parity.ts`: 5/5 tests passing (100%).
+   - Zero TypeScript compiler errors (`npx tsc --noEmit`).
+
+## 🆕 V17.70 Changelog — Spark Inbound Ingestion Dispatcher Phase 2: Dynamic Compounding Position Sizing & Global Risk Governor Gatekeepers (2026-09-11)
+
+### Summary
+1. **Dynamic Risk Parameter Hydration (`sparkIngestionDispatcher.ts` & `GlobalRiskGovernor.ts`):**
+   - Wired the inbound ingestion dispatcher to dynamically hydrate active portfolio risk settings (`compoundingRiskPct`, `maxOpenPositions`, `accountEquity`, `emergencyEquityFloor`) from `trading_account` PostgreSQL table with disk fallback to `run_logs/daemon_live_settings.json` and in-memory defaults.
+   - Hot-reloads live risk parameters directly into the execution engine instance (`engine.updateConfig({ compoundingRiskPct, maxOpenPositions })`) upon setup ingestion without requiring a daemon process reboot.
+2. **Dynamic Position Sizing & Microstructure Clamps (`calculateSparkPositionSizing`):**
+   - Programmatically derives exact contract position sizing from active account equity and Spark signal geometry:
+     $$\text{Raw Stop Distance} = |\text{entryPrice} - \text{invalidationLevel}|$$
+   - Enforces a mandatory **0.15% minimum stop-loss distance clamp** ($\text{clampedStopDistance} = \max(\text{rawStopDistance}, \text{entryPrice} \times 0.0015)$), mathematically bounding maximum theoretical leverage to $13.33\times$ at 2.0% risk and permanently preventing margin exhaustion from narrow sub-tick stop wicks.
+   - Enforces contract sizing equation:
+     $$\text{Position Size} = \text{roundStep}\left(\frac{\text{Account Equity} \times \text{Risk \%}}{\text{Clamped Stop Distance}}, \text{lotStep}\right)$$
+   - Conforms strictly to Binance USDⓈ-M Futures lot size boundaries (`minQty: 0.001`, `maxQty: 10000`, `stepSize: 0.001`) and minimum notional clamping ($\ge \$5.00$).
+   - Calculates effective leverage ($\text{Notional} / \text{Equity}$) and logs forensic sizing diagnostics.
+3. **Global Risk Governor Pre-Flight Circuit Breakers:**
+   - **Emergency Equity Floor (CHECK 0):** Blocks execution if current account equity drops below the configured floor (`emergency_equity_floor` / 70% high-water mark default).
+   - **Daily Drawdown Cap (CHECK 2):** Vetoes execution if daily realized losses exceed maximum daily loss limit (`max_daily_loss_usd`).
+   - **Rule 5 Post-Loss Cooldown (CHECK 3.5):** Enforces a mandatory 45-minute execution freeze following any realized loss, vetoing immediate revenge-trade setups.
+   - **Concurrency Lock (CHECK 5):** Evaluates live open and staged positions against `maxOpenPositions` (default 1), preventing over-allocation or dual-exposure traps.
+4. **State Machine Transitions & Atomic Audit Logging:**
+   - Added `SPARK_DECISION_STAGED` event to `DaemonLedger`.
+   - Setup state transitions:
+     - `QUEUED` $\rightarrow$ `STAGED` (attaching computed `rawStopLossPrice`, `clampedStopLossPrice`, `clampedStopDistance`, `positionSize`, `dollarRisk`, `riskPct`, and `effectiveLeverage` payload into decision metadata).
+     - `STAGED` $\rightarrow$ `EXECUTED` upon successful order submission to execution engine.
+     - `QUEUED` / `STAGED` $\rightarrow$ `REJECTED_BY_RISK_GOVERNOR` with detailed veto reason when any pre-flight circuit breaker trips.
+5. **Comprehensive Verification & Parity:**
+   - Zero TypeScript compiler errors (`npx tsc --noEmit` exited code 0).
+   - 33/33 tests passed in `scripts/test_risk_governor.ts` (100%).
+   - 83/83 tests passed in `scripts/test_spark_ingestion_dispatcher.ts` (100%).
+   - 5/5 tests passed in `scripts/test_ttl_and_parity.ts` (100%).
+
+## 🆕 V17.69 Changelog — Autonomous Strategy Scanning Silence & Spark Inbound Ingestion Dispatcher (Phase 1) (2026-09-11)
+
+### Summary
+1. **Autonomous Internal Candle Scanning Standby (`AutomatedStrategyExecutionEngine.ts`):**
+   - Added `enableAutonomousScan?: boolean` to `AutomatedExecutionConfig`, defaulting to `false` in `DEFAULT_AUTOMATED_CONFIG`.
+   - Placed periodic autonomous scan order generation from candle closes on standby across both Engine 1 (Sweep & Reclaim) and Engine 2 (Trend Continuation).
+   - Preserved full candle buffer ingestion, macro context computation, and setup indexing so UI telemetry, Quant Lab backtesting, and Telegram Bot command center (`/setups`) operate with zero disruption.
+   - Kept WebSocket live price streaming, order tracking, and bracket trade management fully active to manage in-flight positions and trailing ratchets.
+2. **Spark Inbound Ingestion Dispatcher (`src/lib/daemon/sparkIngestionDispatcher.ts` & `scripts/lib/sparkIngestionDispatcher.ts`):**
+   - Implemented dedicated background ingestion poller that monitors `agent_decision_log` for newly inserted `'ACTIVE'` records submitted by Gemini Spark via Quegar MCP.
+   - **Invalidation Pre-Flight Gate:** Evaluates live Binance price against `invalidation_level` prior to queueing. If price already breached the invalidation level, the record is immediately updated to `'INVALIDATED'` (with `invalidated_at` timestamp) and the dispatcher stands down.
+   - **Atomic Queue Claim:** Atomically updates record status to `'QUEUED'` (`UPDATE agent_decision_log SET status = 'QUEUED' WHERE id = ... AND status = 'ACTIVE'`) to permanently eliminate duplicate execution race conditions.
+   - **Structured Parsing:** Robustly extracts and normalizes symbol (`ETHUSDC`), directional intent (`LONG` / `SHORT`), entry range boundaries (`entry_range_low`, `entry_range_high`), invalidation stop loss, and Stage 1/Stage 2 targets.
+   - **Pre-Trade Pipeline Handover:** Dispatches parsed setup directly to `AutomatedStrategyExecutionEngine.submitStrategyOrder()`, enforcing all 7 execution guardrails (concurrency lock, directional lock, cooldown, resting-side check, and dynamic 2% compounding risk sizing).
+   - **Full Audit Ledger Integration:** Updates `agent_decision_log` status to `'EXECUTED'` or `'REJECTED'` with forensic veto notes, and logs atomic events (`SPARK_DECISION_EXECUTED`, `SPARK_DECISION_INVALIDATED`, `SPARK_DECISION_REJECTED`) to `DaemonLedger`.
+3. **Headless PM2 Daemon Integration (`scripts/headless-daemon.ts`):**
+   - Armed `SparkIngestionDispatcher` to poll every 2000ms.
+   - Updated cold-start and closed candle logs to clearly reflect that autonomous strategy scanning is on standby while the Spark listener is actively monitoring.
+   - Wired clean lifecycle shutdown and dry-run teardown.
+4. **Verification & Parity:**
+   - Zero TypeScript compiler errors (`npx tsc --noEmit` exited code 0).
+   - 22/22 tests passed in `test_risk_governor.ts`.
+   - 100% tests passed in `test_ttl_and_parity.ts`.
+   - 42/42 tests passed in `test_spark_ingestion_dispatcher.ts` (covering non-directional immunity from target fallbacks, exact invalidation touch boundaries, missed expansion detection, entry range boundary physics, cross-asset symbol isolation, and offline fallback).
+
+## 🆕 V17.68 Changelog — Remote MCP Server Inbound Decision Readiness & Pre-Flight Invalidation Hardening (2026-09-11)
+
+### Summary
+1. **Permissive Inbound Tool Schemas (`submit_quant_decision`):**
+   - Eliminated strict typing crashes on external agent JSON numbers and strings.
+   - Updated Zod validation schemas and MCP tool JSON declarations in `.gemini/antigravity/mcp/` to accept numbers, strings, and explicit `null`s across all parameters (`symbol`, `bias_signal`, `entry_range_low`, `entry_range_high`, `invalidation_level`, `target_1`, `target_2`, `narrative`).
+   - Added support for numeric bias signals (`+1` / `1` for `CONFIRMED_BULLISH`, `-1` for `CONFIRMED_BEARISH`, `0` for `NEUTRAL`) and standard shorthands (`BUY`, `SELL`, `LONG`, `SHORT`).
+   - Made `narrative` accept complex JSON objects/arrays (auto-serialized via `JSON.stringify`) without strict type rejections.
+2. **Pre-Flight Invalidation Hardening & Counter-Trend Bug Fix:**
+   - Fixed critical bug in `runInvalidationCheck` where `COUNTER_TREND_RETRACEMENT` setups without `target_1` defaulted to bearish, causing legitimate long retracements above stop to be falsely breached and rejected.
+   - Enhanced directional inference: checks `target_1`, `target_2`, `entry_range_low`, and `entry_range_high` relative to `invalidation_level`. If directional intent cannot be resolved, decisions pass safely without false rejection.
+   - Made live exchange price fetching resilient: network hiccups or unlisted symbols gracefully return `null` and log `{ checked: false, note: 'LIVE_PRICE_UNAVAILABLE' }` while persisting decisions with status `'ACTIVE'`.
+3. **MCP StreamableHTTP Transport Normalization:**
+   - Enhanced `normalizeMcpRequest` in `/api/mcp` route to automatically inject `Accept: application/json, text/event-stream` if missing or standard `application/json`, preventing HTTP 406 Not Acceptable errors for external webhook and LLM clients.
+4. **Verified Parity & Test Suite:**
+   - 41/41 unit and integration checks passed across live Binance Futures pricing, pre-flight invalidation checks, standard MCP JSON-RPC `tools/call`, permissive schemas, shorthand biases, breach rejections, and PostgreSQL persistence to `agent_decision_log`.
+   - Full cleanup confirmed (0 lingering test rows) and `npx tsc --noEmit` compiles with zero errors.
+
+## 🆕 V17.67 Changelog — 24/7 Crypto Flow Liberation & Macro Value Area Expansion Alignment (2026-09-11)
+
+### Summary
+1. **Lifting the Temporal Straightjacket (24/7 Crypto Liquidity Flow):**
+   - Permanently eliminated narrow 0–90m equity killzone whitelists and removed the 14:30 UTC entry curfew from Engine 2 (`TrendContinuationEngine.ts` and `factory_tc_15m_trend_expansion_champion`).
+   - Authorized continuous 24/7 setup scanning across all global sessions (Asia, London, New York, and Weekends).
+   - Implemented strict "Negative Filtering" (Toxic Window Blacklist) only:
+     * Daily funding settlement & rollover freeze: 23:50–00:10 UTC.
+     * High-impact US macroeconomic releases freeze ($\pm 20$ minutes): CPI / PPI 12:20–12:40 UTC, FOMC 17:50–18:10 UTC.
+2. **Elimination of the Rolling Value Area Migration Trap:**
+   - Decoupled Engine 2's Anti-Chop Gate from the sliding 96-bar rolling histogram.
+   - Anchored VAH, VAL, and POC to the Previous Day / Developing Daily session profile (`calculateValueAreaProfileFromCandles`).
+   - Implemented Multi-Day Invalidation State Retention: Once a valid BOS confirms above Previous Day VAH (longs) or below Previous Day VAL (shorts), the engine remains in EXPANSION mode across days rather than re-absorbing into an HVN, until invalidated by price closing below Previous Day VAL (longs) or above Previous Day VAH (shorts).
+3. **Clamping Origin Swing Launch Window (`maxOriginLookbackBars: 32`):**
+   - Clamped the origin swing search window to $\max(0, \max(\text{brokenPivotIndex}, i - \text{maxOriginBars}))$ (default 32 bars = 8 hours).
+   - Eradicated zombie trades that held 15%–21% stop losses spanning months, unlocking 57 legitimate setups that were previously suppressed under single-position concurrency.
+4. **Preserved All 8 Statistical & Asymmetric Protections:**
+   - Confirmed 15m Level-2 fractal swing BOS body close.
+   - 3-pillar displacement (Vol $\ge 1.25\times$ SMA20, Delta $\ge 52\%$, Body/Range $\ge 50\%$).
+   - OLS Statistical Validation (95% confidence, $p < 0.05$, $|t\text{-stat}| \ge 1.96$).
+   - Open Interest buyer/seller sponsorship and Intermarket BTC SMT gate.
+   - Resting limit entry at FVG Proximal with 12-bar TTL.
+   - Inverted 30/70 asymmetric harvest model with Next-Bar BE ($+0.015\%$ fee shield) on bar $i+1$ and $+1.0\text{R}$ dynamic profit floor at $+2.0\text{R}$ MFE.
+   - Rule 5 45m post-loss cooldown.
+5. **Verified Comparative Backtest Telemetry (Strict 1:1 Bit-for-Bit Parity):**
+   - **Horizon A (90-Day Summer Regime: Jun 12 – Sep 10, 2026):**
+     * *Engine 1 (S&R Baseline):* 13 trades (1.01/wk) | 46.2% WR | -0.59R Net | 0.93 PF | -4.43R DD (8.58%) | $9,841.67 (-1.6%)
+     * *Engine 2 (Trend Champion):* 12 trades (0.93/wk) | 41.7% WR (45.5% Ex-Scratch) | 1.56x Asymmetry | +1.78R Gross | 0.44R Fees ($88) | **+1.34R Net Realized R** | **1.21 Net Profit Factor** | **-4.15R Max DD (8.05% Comp DD)** | **$10,234.38 (+2.3% Net ROI)**.
+   - **Horizon B (1-Year Macro Benchmark: Sep 10, 2025 – Sep 10, 2026):**
+     * *Engine 1 (S&R Baseline):* 45 trades (0.86/wk) | 42.2% WR | -0.46R Gross | 2.90R Fees ($596) | -3.36R Net | 0.88 PF | -12.68R DD (22.70%) | $9,208.80 (-7.9%)
+     * *Engine 2 (Trend Champion):* 52 trades (1.00/wk) | 46.2% WR (47.1% Ex-Scratch) | 1.63x Asymmetry | +12.14R Gross | 1.45R Fees ($291) | **+10.69R Net Realized R** | **1.38 Net Profit Factor** | **-4.37R Max DD (8.49% Comp DD)** | **$12,143.91 (+21.4% Net ROI)**.
+
+## 🆕 V17.66 Changelog — Engine 2 HUD Statistical Integration & Dynamic Profit Floor (2026-09-11)
+
+### Summary
+1. **Direct Ingestion of Quant HUD Telemetry into Engine 2 (`TrendContinuationEngine.ts`):**
+   - **AMT Value Area & HVN Anti-Chop Gate:** Evaluates 96-bar rolling Value Area (`calculateValueAreaProfile`). Forbids trend continuation breakouts if market state is `VALUE ACCEPTANCE (HVN)` or if price resides within the POC consensus band ($\pm 0.20\%$ of POC). Authorizes Longs strictly on Value Area Rejection / Expansion above VAH (`curClose > VAH`); Shorts strictly on Expansion below VAL (`curClose < VAL`).
+   - **OLS Statistical Validation:** Breakout displacement legs require OLS regression verification (`runRegression` with forward returns over 3 candles, 95% Confidence: $p\text{-value} < 0.05$ and $|t\text{-stat}| \ge 1.96$). Robustly handles Binance taker volumes and guards against collinear / zero-variance feature matrices.
+   - **Open Interest / Order Flow State Machine:** Long breakouts strictly require active Buyer Sponsorship (`RISING_WITH_PRICE` or `FALLING_AGAINST_PRICE`). Vetoes passive drift (`FLAT`, `NEUTRAL`) and long liquidation (`FALLING_WITH_PRICE`). Shorts strictly require Seller Sponsorship (`RISING_AGAINST_PRICE` or `FALLING_WITH_PRICE`).
+   - **BTC SMT Gatekeeper Integration:** Cross-references BTC structure; requires `AUTHORIZED` status before queuing resting limits. Vetoes entries if BTC displays opposing directional taker volume ($\ge 52\%$) or aggressive momentum cascade.
+2. **Dynamic Target Routing & Profit Floor Ratchet:**
+   - **Target 1 (30% position):** Dynamically routed to $\min(1.5\text{R}, \text{Dealing Range EQ})$ for Longs, $\max(1.5\text{R}, \text{Dealing Range EQ})$ for Shorts. Banks 30% to pay taker fees (0.0400%) and advances SL to Breakeven ($+0.015\%$ shield) strictly on bar $i+1$ (Next-Bar Ratchet Rule).
+   - **Target 2 & Macro Runner (70% position):** Dynamically routed across Order Book Resting Liquidity Magnets (BSL/SSL), Asian Range Standard Deviation targets ($+1.5\text{ SD} / +2.0\text{ SD}$), and Opposing Major Swings within $[3.0\text{R}, 5.0\text{R}]$.
+   - **+1.0R Dynamic Profit Floor Ratchet:** When floating MFE crosses $+2.0\text{R}$, immediately ratchets runner Stop Loss to lock in guaranteed $+1.0\text{R}$ net profit floor, preventing $+2.0\text{R}$ runners from collapsing back to Breakeven scratch. Trades stopped at $\ge +0.90\text{R}$ map to `'STAGE_2_WIN'` (netting $\ge +1.15\text{R}$). Structural trailing continues behind confirmed 15m 3-bar swing pivots.
+3. **Updated Benchmark Telemetry (Strict 1:1 Bit-for-Bit Parity):**
+   - **Horizon A (90-Day Summer Regime: Jun 12 – Sep 10, 2026):**
+     * 7 executed trades (0.54/wk) | 5 Wins | 1 Loss | 1 Scratch | 71.4% WR (83.3% Ex-Scratch) | 1.42x Asymmetry | +6.10R Gross | 0.07R Fees ($14.28) | **+6.03R Net Realized R** | **6.63 Net Profit Factor** | -1.01R Max DD (2.03%) | Final Equity **$11,257.48 (+12.6% Net ROI)**.
+     * AMT anti-chop filter and OLS statistical gating completely eradicate false HVN breakout whipsaws, turning a previously negative summer chop period (+6.03R vs -5.34R) into a high-win-rate, low-drawdown harvesting regime.
+   - **Horizon B (1-Year Macro Benchmark: Sep 10, 2025 – Sep 10, 2026):**
+     * 13 executed trades (0.25/wk) | 4 Wins | 8 Losses | 1 Scratch | 30.8% WR (33.3% Ex-Scratch) | 1.51x Asymmetry | -1.95R Gross | 0.10R Fees ($19.48) | -2.04R Net Realized R | 0.75 Net Profit Factor | -3.04R Max DD (5.96%) | Final Equity $9,563.81 (-4.4% Net ROI).
+     * Dramatically reduces fee drag and drawdown over 1-year macro conditions (-3.04R / 5.96% max DD vs -6.29R / 12.05% previously, and vs Engine 1's -12.68R / 22.70% max DD). Shows strong selective institutional expansion capture.
+
+## 🆕 V17.65 Changelog — Dual-Engine Standard & Trend Continuation Expansion Engine (2026-09-11)
+
+### Summary
+1. **Codification of the Dual-Engine Standard:**
+   - Permanently eradicated counter-trend scalp tunnel thinking while preserving verified mean-reversion alpha.
+   - **Engine 1: Sweep & Reclaim (`SweepReclaimEngine.ts` — Mean Reversion - Preserved):**
+     - SFP / Liquidity sweep and reclaim on 15m structural baseline.
+     - Intermarket SMT Gatekeeper, AMT Value Area, 0–90m Killzones, FVG Proximal 12-bar TTL limit order routing.
+     - Two-stage harvest: 40%–50% @ 1.2R–1.5R EQ, 50%–60% runner to 1:3.0R–1:5.0R Opposing DOL.
+   - **Engine 2: Trend Continuation (`TrendContinuationEngine.ts` — BOS Momentum Expansion):**
+     - Purpose: Aggressive trend-continuation architecture engineered for 1:3.0R to 1:5.0R macro expansion delivery.
+     - Phase 1 HTF Trend Lock: 1H/4H directional order flow using rolling structural swing highs/lows + 120 EMA lock (Long-Only in bull flow, Short-Only in bear flow). Strictly zero counter-trend knife catches.
+     - Phase 2 Confirmed Break of Structure (BOS): 15m Level-2 Major fractal swing break confirmed by physical body close + 3-pillar displacement (Vol $\ge 1.25\times$ SMA20, Taker Delta $\ge 52\%$, Body Ratio $\ge 50\%$).
+     - Phase 3 Mitigation Retest Entry: FVG Proximal edge resting limit order with 12-bar TTL; Hard SL pinned beyond origin swing with standard volatility buffer.
+     - Phase 4 Inverted Asymmetric Harvest (30/70 Model): Target 1 (30% position) at 1.5R (fee-clearing de-risking tranche + Next-Bar BE +0.015% shield on bar i+1); Target 2 (70% runner) running for 3.0R–5.0R macro expansion along confirmed 15m 3-bar swing pivots, with 45m post-loss cooldown.
+2. **Canonical Trend Champion Preset Registration:**
+   - Added `factory_tc_15m_trend_expansion_champion` to `scannerPresets.ts` under canonical factory presets.
+3. **Quant Lab API & Live Execution Engine Integration:**
+   - Unified scanning API and execution hooks supporting both S&R and Trend Continuation seamlessly.
+4. **Verified Comparative Backtest Telemetry (Strict 1:1 Parity):**
+   - **Horizon A (90-Day Summer Chop: Jun 12 – Sep 10, 2026):**
+     * *Engine 1 (S&R Baseline):* 13 trades (1.01/wk) | 46.2% WR | 1.22x Asymmetry | +0.31R Gross | -0.59R Net Realized R | 0.93 PF | -4.43R DD (8.58%) | Final Equity $9,841.67 (-1.6% Net ROI)
+     * *Engine 2 (Trend Champion):* 26 trades (2.02/wk) | 26.9% WR (31.8% Ex-Scratch) | 1.42x Asymmetry | -5.04R Gross | -5.34R Net Realized R | 0.65 PF | -6.34R DD (12.32%) | Final Equity $8,930.25 (-10.7% Net ROI)
+   - **Horizon B (1-Year Benchmark: Sep 10, 2025 – Sep 10, 2026):**
+     * *Engine 1 (S&R Baseline):* 45 trades (0.86/wk) | 42.2% WR | 1.34x Asymmetry | -0.46R Gross | -3.36R Net Realized R | 0.88 PF | -12.68R DD (22.70%) | Final Equity $9,208.80 (-7.9% Net ROI)
+     * *Engine 2 (Trend Champion):* 34 trades (0.65/wk) | 41.2% WR (42.4% Ex-Scratch) | 1.62x Asymmetry | +3.62R Gross | +3.37R Net Realized R | 1.18 PF | -6.29R DD (12.05%) | Final Equity $10,563.40 (+5.6% Net ROI)
+   - *Key Takeaway:* Over the 1-Year macro benchmark (Horizon B), Engine 2 achieves positive net alpha (+3.37R Net / 1.18 PF / +5.6% ROI) while Engine 1 suffers negative drift (-3.36R Net / 0.88 PF / -7.9% ROI). Engine 2 cuts 1-year max drawdown by nearly half (12.05% vs 22.70%) and slashes exchange fee drag by 91.5% ($50.60 vs $595.82). During low-volatility range-bound summer chop (Horizon A), the trend engine faces expected choppy whipsaws (-5.34R Net / 12.32% DD), validating the architectural necessity of the Dual-Engine Standard where Engine 1 (Mean Reversion) and Engine 2 (Trend Expansion) complement distinct market regimes.
+
+
+## 🆕 V17.64 Changelog — Institutional Asymmetry Engine Architectural Reset (2026-09-11)
+
+### Summary
+1. **Permanent Elimination of Legacy Scalp Tunnel Thinking:**
+   - Purged fixed 1.0R / 1.35R target ceilings and tight 0.35R early breakeven stops that caused high-frequency fee drag and premature stop-outs.
+   - Codified new baseline: "Institutional Asymmetry (15m Execution, Intermarket SMT, FVG Proximal Retest, Dynamic 1:3R–1:5R DOL Targets)".
+   - Eliminated hyper-restrictive redundant filter stacking (MSS confirmation double-filtering and dealing range EQ duplicate gating removed from champion baseline).
+2. **Purge of Dead & Obsolete Presets:**
+   - Deleted obsolete presets (`factory_sr_3m_sfp_shelf_sniper`, legacy V1/V2 drafts, interim test configs `opt_test...`, and legacy 5m scalpers).
+   - Standardized canonical presets in `FACTORY_SWEEP_RECLAIM_PRESETS`:
+     - **Index 0 (Primary Champion):** `factory_sr_15m_asymmetric_macro_sniper` (15m Baseline, FVG Proximal 12-bar TTL, Intermarket SMT, AMT Value Area, 0-90m Killzones, Dynamic 1:3R-1:5R DOL).
+     - **Index 1 (Confluence Model):** `factory_sr_15m_institutional_confluence` (Adds Wyckoff Phase D MSS confirmation and dealing range conjunction).
+   - Updated storage fallback resolvers (`getActivePresetId`, `getArmedExecutionStatus`) and live execution configs strictly to `factory_sr_15m_asymmetric_macro_sniper`.
+3. **Execution Anchor & Entry Mechanics:**
+   - 15m structural baseline with `FVG_PROXIMAL` (outer shelf boundary) to capture institutional expansions with 12-bar TTL limit orders.
+4. **Intermarket SMT Gatekeeper (Inviolable Entry Law):**
+   - Mandatory SMT Divergence module: ETH anchor sweeps cross-referenced against BTC structure; forbids longs if BTC breaks down with directional taker volume.
+5. **Auction Market Theory & Temporal Discipline:**
+   - Value Area Profile: Longs strictly below VAL in Discount; Shorts strictly above VAH in Premium; POC exclusion band $\pm 0.15\%$.
+   - 0–90m Killzone qualification: London Open (07:00–08:30 UTC) and NY AM Open (13:00–14:30 UTC).
+   - Strict 16:30 Cairo (14:30 UTC) Hard Cutoff on new trade initiations. Rollover (00:00 UTC) and macro pre-news freeze ($\pm 20$m).
+6. **Two-Stage Asymmetric Harvest:**
+   - Target 1 (Risk De-risking): Offload 40%–50% at 1.2R–1.5R Dealing Range EQ; advance SL to Breakeven (+0.015% taker fee shield) strictly on bar $i+1$.
+   - Target 2 & Runner: 50%–60% held for 1:3.0R–1:5.0R Opposing External Liquidity, trailing confirmed 15m structural 3-bar swing pivots with Rule 5 45m post-loss cooldown.
+
+## 🆕 V17.63 Changelog — Institutional Confluence Architecture (ICT 2022 + AMT + Wyckoff + SMT) (2026-09-11)
+
+### Summary
+1. **Temporal & Session Gating Refactoring:**
+   - Operating Timeframe: 15m structural baseline.
+   - Restricts setup qualification exclusively to the 0–90m institutional windows: London Open (07:00–08:30 UTC / 09:00–10:30 Cairo) and NY AM Open (13:00–14:30 UTC / 15:00–16:30 Cairo).
+   - Strict 14:30 UTC (16:30 Cairo) hard cutoff on new trade initiations: order flow post-cutoff is reserved for position management and harvesting.
+   - Rollover & Macro News Freeze: Execution muted 23:50–00:10 UTC (00:00 UTC funding rollover) and 20 minutes around major US macro releases (CPI/PPI 12:20–12:40, FOMC 17:50–18:10 UTC).
+   - **Retest Fill Bug Resolved:** Decoupled setup qualification (`isInstitutionalKillzone`) from execution entry limit fills by implementing `isTradeInitiationAllowed(retestTime)` in `SweepReclaimEngine.ts`. Restored valid limit order fills within 12-bar TTL prior to the 14:30 UTC cutoff.
+2. **Macro Anchor & Spatial Gating (Auction Market Theory):**
+   - Tier-1 Macro Anchors: Asian Session High/Low, London Session High/Low, and Previous Day High/Low (PDH/PDL), suppressing level 0/1 internal micro-pivots.
+   - Value Area Profile (96-bar lookback): Longs gated strictly when the sweep occurs in Discount below Value Area Low (VAL); shorts strictly in Premium above Value Area High (VAH).
+   - Point of Control (POC) Exclusion: Forbids trade initiation within $\pm 0.15\%$ of the balanced POC.
+3. **Intermarket SMT Gatekeeper (ETH vs. BTC):**
+   - Cross-references ETH anchor sweeps with BTC structure at both anchor and sweep timestamps via chronological binary search.
+   - Confirms Bullish SMT when ETH sweeps its anchor low while BTC holds a relative higher low or displays bullish displacement ($\ge 40\%$ body expansion).
+   - Active directional volume veto: Only vetoes longs if BTC breaks down below anchor low with strong bearish body ($\ge 40\%$) and active directional volume ($\ge 1.20\times$ SMA20 or $\ge 52\%$ taker sell dominance).
+4. **Wyckoff Phase D MSS & 3-Pillar Deep Mitigation Entry:**
+   - Requires confirmed physical candlestick body close beyond the preceding internal swing pivot that formed the sweep wick.
+   - 3-Pillar Volumetric Sponsorship: Volume Expansion $\ge 1.20\times$ SMA20, Taker Delta Dominance $\ge 52\%$, Body-to-Range Ratio $\ge 45\%$.
+   - Entry geometry queues resting limit order at FVG 50% CE with 12-bar TTL; Hard SL pinned beyond absolute sweep wick.
+5. **Two-Stage Trailing Stop & 70/30 Harvest Model:**
+   - Stage 1: TP1 at Dealing Range Equilibrium ($\ge 1.0\text{R}$), banking 70% cash profit.
+   - Stage 2: Stop Loss ratchets to Breakeven (+0.015% taker shield) strictly on bar $i+1$, trailing the 30% runner along confirmed M15 structural higher lows toward opposing external liquidity ($\ge 2.0\text{R}$), with 45m post-loss cooldown.
+6. **Parity Verification & Telemetry Validation:**
+   - Zero TypeScript compiler errors (`npx tsc --noEmit`).
+   - Hardened `equityCalculator.ts` and `scripts/verify_institutional_confluence.ts` against undefined fee telemetry on zero-trade scenarios.
+   - Comparative backtest across 90D Summer Chop Regime and 1Y Continuous Benchmark.
 
 ## 🆕 V17.62 Changelog — Preset Pruning, Strict Canonical Factory Indexing & Universal Fallback Hardening (2026-09-10)
 
@@ -4266,9 +4534,10 @@ Engineered a fully compliant **Remote MCP (Model Context Protocol) Server** at `
   - FVG detection pairs primary TF with lower supporting TF.
 
 - **Tool 2: `submit_quant_decision`:**
-  - Parameters: `agent_id`, `symbol`, `bias_signal` (enum), optional `entry_range_low/high`, `invalidation_level`, `target_1/2`, `narrative`.
-  - Pre-flight invalidation guard fetches live Binance price; rejects with `INVALIDATION_BREACHED` if breached.
-  - Persists validated decision to `agent_decision_log` with `status: 'ACTIVE'`.
+  - Parameters: `agent_id` (string/null, defaults 'external-agent'), `symbol` (string/null, defaults 'ETHUSDC'), `bias_signal` (normalized enum, supports case-insensitivity & shorthands), optional `entry_range_low/high` (number, numeric string, or null), `invalidation_level` (number, numeric string, or null), `target_1/2` (number, numeric string, or null), `narrative` (string, number, or null).
+  - Permissive Zod schema transforms strings to numbers, handles nulls/omitted fields gracefully, preventing typing validation crashes for external agents.
+  - Pre-flight invalidation guard fetches live Binance Futures price; fails safely if network hiccups (logging warning and proceeding with `live_price_at_submission: null` and `invalidation_guard.checked: false`). Rejects with `INVALIDATION_BREACHED` if already breached.
+  - Persists validated decision to `agent_decision_log` with `status: 'ACTIVE'`, verifies columns (`status`, `live_price_at_submission`, `submitted_at`, `invalidated_at`), and supports both `quegar_admin` and `quegar_readonly` access.
 
 - **Shared Engine Handlers (`src/lib/agentEngineHandlers.ts`):**
   - Extracted all quant engine orchestration logic from `/api/agent/context` into a pure shared lib.

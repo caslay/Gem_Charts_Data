@@ -52,8 +52,15 @@ import {
 } from '@/lib/quantEngine/equityCalculator';
 import {
   FACTORY_SWEEP_RECLAIM_PRESETS,
+  ALL_FACTORY_PRESETS,
   SweepReclaimPresetConfig,
+  TrendContinuationPresetConfig,
 } from '@/lib/quantEngine/scannerPresets';
+import {
+  TrendContinuationEngine,
+  TrendContinuationConfig,
+  TrendContinuationSetup,
+} from '@/lib/quantEngine/TrendContinuationEngine';
 import { MarketStructureAPI } from '@/lib/quantEngine/MarketStructureAPI';
 import { DEFAULT_SR_LIVE_SETTINGS } from '@/lib/quantEngine/strategyExecutionConfig';
 import { GlobalRiskGovernor } from '@/lib/risk/GlobalRiskGovernor';
@@ -70,48 +77,58 @@ let isSchemaInitialized = false;
 export async function ensureAgentDecisionTableInitialized(): Promise<void> {
   if (isSchemaInitialized) return;
   try {
-    await sql`
-      CREATE TABLE IF NOT EXISTS agent_decision_log (
-        id                      SERIAL PRIMARY KEY,
-        symbol                  VARCHAR(32)   NOT NULL,
-        agent_id                VARCHAR(128)  NOT NULL,
-        bias_signal             VARCHAR(64)   NOT NULL,
-        entry_range_low         NUMERIC(16,4),
-        entry_range_high        NUMERIC(16,4),
-        invalidation_level      NUMERIC(16,4),
-        target_1                NUMERIC(16,4),
-        target_2                NUMERIC(16,4),
-        narrative               TEXT,
-        status                  VARCHAR(32)   NOT NULL DEFAULT 'PENDING',
-        live_price_at_submission NUMERIC(16,4),
-        submitted_at            BIGINT        NOT NULL,
-        invalidated_at          BIGINT,
-        created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
+    const check = await sql`
+      SELECT 1 FROM information_schema.tables 
+      WHERE table_name = 'agent_decision_log' LIMIT 1
     `;
-    await sql`
-      CREATE INDEX IF NOT EXISTS idx_agent_decision_symbol_status
-        ON agent_decision_log(symbol, status, submitted_at DESC);
-    `;
+    if (check.rows.length === 0) {
+      await sql`
+        CREATE TABLE IF NOT EXISTS agent_decision_log (
+          id                      SERIAL PRIMARY KEY,
+          symbol                  VARCHAR(32)   NOT NULL,
+          agent_id                VARCHAR(128)  NOT NULL,
+          bias_signal             VARCHAR(64)   NOT NULL,
+          entry_range_low         NUMERIC(16,4),
+          entry_range_high        NUMERIC(16,4),
+          invalidation_level      NUMERIC(16,4),
+          target_1                NUMERIC(16,4),
+          target_2                NUMERIC(16,4),
+          narrative               TEXT,
+          status                  VARCHAR(32)   NOT NULL DEFAULT 'PENDING',
+          live_price_at_submission NUMERIC(16,4),
+          submitted_at            BIGINT        NOT NULL,
+          invalidated_at          BIGINT,
+          created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `;
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_agent_decision_symbol_status
+          ON agent_decision_log(symbol, status, submitted_at DESC);
+      `;
+    }
     isSchemaInitialized = true;
   } catch (error: any) {
-    console.warn(`[agentEngineHandlers] ⚠️ Schema init fallback: ${error.message || error}`);
+    isSchemaInitialized = true;
+    console.debug(`[agentEngineHandlers] Schema init check: ${error.message || error}`);
   }
 }
 
 // ─── Internal Helpers ─────────────────────────────────────────────────────────
 
-/** Fetch live Binance Futures price. Returns null on failure. */
+/** Fetch live Binance Futures price. Returns null on failure without throwing. */
 export async function fetchLivePrice(symbol: string): Promise<number | null> {
   try {
+    let cleanSymbol = (symbol || 'ETHUSDC').trim().toUpperCase().replace(/[-_/]/g, '');
+    if (cleanSymbol === 'ETH') cleanSymbol = 'ETHUSDC';
+    if (cleanSymbol === 'BTC') cleanSymbol = 'BTCUSDC';
     const res = await fetch(
-      `https://fapi.binance.com/fapi/v1/ticker/price?symbol=${symbol}`,
+      `https://fapi.binance.com/fapi/v1/ticker/price?symbol=${cleanSymbol}`,
       { signal: AbortSignal.timeout(5000) }
     );
     if (!res.ok) return null;
     const data = await res.json();
-    const price = parseFloat(data.price);
-    return isNaN(price) ? null : price;
+    const price = parseFloat(data?.price);
+    return isFinite(price) && !isNaN(price) ? price : null;
   } catch {
     return null;
   }
@@ -281,12 +298,43 @@ export interface InvalidationCheckResult {
 export function runInvalidationCheck(
   invalidationLevel: number,
   livePrice: number,
-  biasSignal: string
+  biasSignal: string,
+  target1?: number | null,
+  entryRangeLow?: number | null,
+  entryRangeHigh?: number | null,
+  target2?: number | null
 ): InvalidationCheckResult {
-  if (biasSignal === 'NEUTRAL' || biasSignal === 'ABORT' || !invalidationLevel) {
+  if (
+    biasSignal === 'NEUTRAL' ||
+    biasSignal === 'ABORT' ||
+    !invalidationLevel ||
+    isNaN(invalidationLevel) ||
+    !livePrice ||
+    isNaN(livePrice)
+  ) {
     return { breached: false, live_price: livePrice, invalidation_level: invalidationLevel, breach_direction: null };
   }
-  const isBullish = biasSignal.includes('BULLISH');
+
+  let isBullish: boolean | null = null;
+  if (biasSignal.includes('BULL')) {
+    isBullish = true;
+  } else if (biasSignal.includes('BEAR')) {
+    isBullish = false;
+  } else if (target1 != null && isFinite(target1) && target1 !== invalidationLevel) {
+    isBullish = target1 > invalidationLevel;
+  } else if (target2 != null && isFinite(target2) && target2 !== invalidationLevel) {
+    isBullish = target2 > invalidationLevel;
+  } else if (entryRangeLow != null && isFinite(entryRangeLow) && entryRangeLow !== invalidationLevel) {
+    isBullish = entryRangeLow > invalidationLevel;
+  } else if (entryRangeHigh != null && isFinite(entryRangeHigh) && entryRangeHigh !== invalidationLevel) {
+    isBullish = entryRangeHigh > invalidationLevel;
+  }
+
+  // If directional intent cannot be resolved, do not falsely flag a breach
+  if (isBullish === null) {
+    return { breached: false, live_price: livePrice, invalidation_level: invalidationLevel, breach_direction: null };
+  }
+
   let breached = false;
   let breach_direction: 'ABOVE' | 'BELOW' | null = null;
   if (isBullish && livePrice < invalidationLevel) {
@@ -602,7 +650,49 @@ export interface SubmitQuantDecisionResult {
     checked: boolean;
     live_price?: number | null;
     passed?: boolean;
+    note?: string;
   };
+}
+
+/** Normalizes bias signal to one of the 5 canonical enums or returns null. */
+function normalizeBiasSignal(input: unknown): string | null {
+  if (input === null || input === undefined) return 'NEUTRAL';
+  if (typeof input === 'number') {
+    if (input > 0) return 'CONFIRMED_BULLISH';
+    if (input < 0) return 'CONFIRMED_BEARISH';
+    return 'NEUTRAL';
+  }
+  const str = String(input).trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (!str) return 'NEUTRAL';
+  if (str === '1' || str === '+1') return 'CONFIRMED_BULLISH';
+  if (str === '-1') return 'CONFIRMED_BEARISH';
+  if (str === '0') return 'NEUTRAL';
+  if (str === 'BULLISH' || str === 'LONG' || str === 'BUY' || str === 'BULL') return 'CONFIRMED_BULLISH';
+  if (str === 'BEARISH' || str === 'SHORT' || str === 'SELL' || str === 'BEAR') return 'CONFIRMED_BEARISH';
+  if (str === 'COUNTER_TREND' || str === 'RETRACEMENT' || str === 'COUNTER_TREND_RETRACEMENT') return 'COUNTER_TREND_RETRACEMENT';
+  if (str === 'NEUTRAL') return 'NEUTRAL';
+  if (str === 'ABORT' || str === 'CANCEL' || str === 'EXIT') return 'ABORT';
+  const valid = [
+    'CONFIRMED_BULLISH',
+    'CONFIRMED_BEARISH',
+    'NEUTRAL',
+    'ABORT',
+    'COUNTER_TREND_RETRACEMENT',
+  ];
+  return valid.includes(str) ? str : null;
+}
+
+/** Sanitizes number | string | null | undefined into a valid number or null. */
+function sanitizeNumericField(val: unknown): number | null {
+  if (val === null || val === undefined) return null;
+  if (typeof val === 'number') return isFinite(val) && !isNaN(val) ? val : null;
+  if (typeof val === 'string') {
+    const cleaned = val.replace(/[$, ]/g, '').trim();
+    if (cleaned === '') return null;
+    const parsed = Number(cleaned);
+    return isFinite(parsed) && !isNaN(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 /**
@@ -619,56 +709,91 @@ export interface SubmitQuantDecisionResult {
 export async function runSubmitQuantDecision(
   payload: AgentDecisionPayload
 ): Promise<SubmitQuantDecisionResult> {
-  const { agent_id, symbol, bias_signal, invalidation_level } = payload;
+  // ── Sanitization & Validation ─────────────────────────────────────────────
+  const agent_id =
+    payload.agent_id != null && String(payload.agent_id).trim()
+      ? String(payload.agent_id).trim()
+      : 'external-agent';
 
-  // ── Validation ────────────────────────────────────────────────────────────
-  if (!agent_id || typeof agent_id !== 'string') {
-    throw Object.assign(new Error('Missing or invalid field: agent_id.'), { code: 'VALIDATION_ERROR', status: 400 });
-  }
-  if (!symbol || typeof symbol !== 'string') {
-    throw Object.assign(new Error('Missing or invalid field: symbol.'), { code: 'VALIDATION_ERROR', status: 400 });
-  }
-  if (!bias_signal || typeof bias_signal !== 'string') {
-    throw Object.assign(new Error('Missing or invalid field: bias_signal.'), { code: 'VALIDATION_ERROR', status: 400 });
-  }
+  const rawSymbol =
+    payload.symbol != null && String(payload.symbol).trim()
+      ? String(payload.symbol).trim()
+      : 'ETHUSDC';
+  let cleanSymbol = rawSymbol.toUpperCase().replace(/[-_/]/g, '');
+  if (cleanSymbol === 'ETH') cleanSymbol = 'ETHUSDC';
+  if (cleanSymbol === 'BTC') cleanSymbol = 'BTCUSDC';
+  const symbol = cleanSymbol || 'ETHUSDC';
 
-  const validBiasSignals = [
-    'CONFIRMED_BULLISH', 'CONFIRMED_BEARISH', 'NEUTRAL', 'ABORT', 'COUNTER_TREND_RETRACEMENT',
-  ];
-  if (!validBiasSignals.includes(bias_signal)) {
+  const normalizedBias = normalizeBiasSignal(payload.bias_signal);
+  if (!normalizedBias) {
     throw Object.assign(
-      new Error(`Invalid bias_signal. Must be one of: ${validBiasSignals.join(', ')}.`),
+      new Error(
+        `Invalid or missing bias_signal. Must be one of: CONFIRMED_BULLISH, CONFIRMED_BEARISH, NEUTRAL, ABORT, COUNTER_TREND_RETRACEMENT.`
+      ),
       { code: 'VALIDATION_ERROR', status: 400 }
     );
   }
 
+  const entryRangeLow = sanitizeNumericField(payload.entry_range_low);
+  const entryRangeHigh = sanitizeNumericField(payload.entry_range_high);
+  const invalidationLevel = sanitizeNumericField(payload.invalidation_level);
+  const target1 = sanitizeNumericField(payload.target_1);
+  const target2 = sanitizeNumericField(payload.target_2);
+  let narrative: string | null = null;
+  if (payload.narrative != null) {
+    if (typeof payload.narrative === 'string') {
+      const trimmed = payload.narrative.trim();
+      narrative = trimmed === '' ? null : trimmed;
+    } else if (typeof payload.narrative === 'object') {
+      try {
+        narrative = JSON.stringify(payload.narrative);
+      } catch {
+        narrative = String(payload.narrative);
+      }
+    } else {
+      narrative = String(payload.narrative);
+    }
+  }
+
   // ── Pre-flight invalidation guard ─────────────────────────────────────────
   let livePriceAtSubmission: number | null = null;
+  let invalidationGuard: SubmitQuantDecisionResult['invalidation_guard'] = { checked: false };
 
-  if (invalidation_level !== undefined && invalidation_level !== null) {
-    const livePrice = await fetchLivePrice(symbol.toUpperCase());
-
-    if (livePrice !== null) {
-      livePriceAtSubmission = livePrice;
-      const check = runInvalidationCheck(invalidation_level, livePrice, bias_signal);
+  const livePrice = await fetchLivePrice(symbol);
+  if (livePrice !== null) {
+    livePriceAtSubmission = livePrice;
+    if (invalidationLevel !== null) {
+      const check = runInvalidationCheck(
+        invalidationLevel,
+        livePrice,
+        normalizedBias,
+        target1,
+        entryRangeLow,
+        entryRangeHigh,
+        target2
+      );
 
       if (check.breached) {
         throw Object.assign(
           new Error(
-            `INVALIDATION_BREACHED: Live price (${livePrice}) has already breached the submitted invalidation level (${invalidation_level}) in direction: ${check.breach_direction}. Decision rejected.`
+            `INVALIDATION_BREACHED: Live price (${livePrice}) has already breached the submitted invalidation level (${invalidationLevel}) in direction: ${check.breach_direction}. Decision rejected.`
           ),
           {
             code: 'INVALIDATION_BREACHED',
             status: 409,
             live_price: livePrice,
-            invalidation_level,
+            invalidation_level: invalidationLevel,
             breach_direction: check.breach_direction,
           }
         );
       }
+      invalidationGuard = { checked: true, live_price: livePrice, passed: true };
     } else {
-      console.warn('[agentEngineHandlers] Could not fetch live price for invalidation check. Proceeding without guard.');
+      invalidationGuard = { checked: false, note: 'NO_INVALIDATION_LEVEL_PROVIDED' };
     }
+  } else {
+    console.warn('[agentEngineHandlers] Could not fetch live price for invalidation check. Proceeding safely without guard.');
+    invalidationGuard = { checked: false, note: 'LIVE_PRICE_UNAVAILABLE' };
   }
 
   // ── DB persist ────────────────────────────────────────────────────────────
@@ -682,15 +807,15 @@ export async function runSubmitQuantDecision(
       target_1, target_2, narrative,
       status, live_price_at_submission, submitted_at
     ) VALUES (
-      ${symbol.toUpperCase()},
+      ${symbol},
       ${agent_id},
-      ${bias_signal},
-      ${payload.entry_range_low ?? null},
-      ${payload.entry_range_high ?? null},
-      ${invalidation_level ?? null},
-      ${payload.target_1 ?? null},
-      ${payload.target_2 ?? null},
-      ${payload.narrative ?? null},
+      ${normalizedBias},
+      ${entryRangeLow},
+      ${entryRangeHigh},
+      ${invalidationLevel},
+      ${target1},
+      ${target2},
+      ${narrative},
       'ACTIVE',
       ${livePriceAtSubmission},
       ${now}
@@ -701,7 +826,7 @@ export async function runSubmitQuantDecision(
   const inserted = result.rows[0];
 
   console.log(
-    `[agentEngineHandlers] ✅ Decision persisted. id=${inserted.id} agent=${agent_id} bias=${bias_signal} symbol=${symbol}`
+    `[agentEngineHandlers] ✅ Decision persisted. id=${inserted.id} agent=${agent_id} bias=${normalizedBias} symbol=${symbol}`
   );
 
   return {
@@ -710,9 +835,7 @@ export async function runSubmitQuantDecision(
     status: inserted.status,
     submitted_at: inserted.submitted_at,
     live_price: livePriceAtSubmission,
-    invalidation_guard: invalidation_level !== undefined
-      ? { checked: true, live_price: livePriceAtSubmission, passed: true }
-      : { checked: false },
+    invalidation_guard: invalidationGuard,
   };
 }
 
@@ -721,9 +844,9 @@ export async function runSubmitQuantDecision(
 export interface QuantBacktestOptions {
   /** Symbol to backtest. Default: 'ETHUSDC' */
   symbol?: string;
-  /** Primary candle resolution. Default: '5m' */
+  /** Primary candle resolution. Default: '15m' */
   timeframe?: string;
-  /** Strategy preset ID. Default: 'factory_sr_5m_fvg_ce_sniper_v3' */
+  /** Strategy preset ID. Default: 'factory_sr_15m_asymmetric_macro_sniper' */
   preset_id?: string;
   /** Historical lookback in days. Default: 30, max: 365 */
   days_lookback?: number;
@@ -766,7 +889,7 @@ export interface QuantBacktestOptions {
 
 export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
   const symbol = (options.symbol ?? 'ETHUSDC').toUpperCase();
-  const timeframe = options.timeframe ?? '5m';
+  const timeframe = options.timeframe ?? '15m';
   const daysLookback = Math.min(365, Math.max(1, options.days_lookback ?? 30));
 
   let startMs: number;
@@ -782,8 +905,151 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
 
   // 1. Resolve preset configuration
   const preset =
-    FACTORY_SWEEP_RECLAIM_PRESETS.find((p) => p.id === options.preset_id) ||
+    ALL_FACTORY_PRESETS.find((p) => p.id === options.preset_id) ||
     FACTORY_SWEEP_RECLAIM_PRESETS[0];
+
+  // 1b. Direct Branching for Engine 2: Trend Continuation
+  if (preset.strategyType === 'TREND_CONTINUATION') {
+    const pConfig = preset.config as TrendContinuationPresetConfig;
+    const { warmupStartMs, bootstrap } = await computeStructuralBootstrap(symbol, timeframe, startMs, {
+      lookbackMajor: pConfig.lookbackMajor ?? 15,
+      lookbackInternal: pConfig.lookbackInternal ?? 10,
+    });
+
+    const candles = await fetchPagedKlines(symbol, timeframe, warmupStartMs, endMs);
+    if (candles.length === 0) {
+      throw new Error(`No candles fetched from Binance for ${symbol} on ${timeframe}. Check network connection.`);
+    }
+
+    const makerFeePct = options.maker_fee_pct !== undefined ? options.maker_fee_pct : (pConfig.makerFeePct ?? 0.0000);
+    const takerFeePct = options.taker_fee_pct !== undefined ? options.taker_fee_pct : (pConfig.takerFeePct ?? 0.0400);
+    const initialCapital = options.initial_equity ?? 1000;
+    const riskPct = options.risk_per_trade_pct ?? 2.0;
+
+    const tcConfig: TrendContinuationConfig = {
+      symbol,
+      timeframe,
+      lookbackMajor: pConfig.lookbackMajor ?? 15,
+      lookbackInternal: pConfig.lookbackInternal ?? 10,
+      emaPeriod: pConfig.emaPeriod ?? 120,
+      enforceHtfTrendLock: pConfig.enforceHtfTrendLock ?? true,
+      volumeSmaPeriod: pConfig.volumeSmaPeriod ?? 20,
+      volumeExpansionThreshold: options.volume_expansion_threshold ?? pConfig.volumeExpansionThreshold ?? 1.25,
+      deltaDominanceThreshold: pConfig.deltaDominanceThreshold ?? 52.0,
+      bodyRatioThreshold: options.body_ratio_threshold ?? pConfig.bodyRatioThreshold ?? 0.50,
+      requireThreePillarDisplacement: pConfig.requireThreePillarDisplacement ?? true,
+      maxBarsToRetest: options.max_bars_to_retest ?? pConfig.maxBarsToRetest ?? 12,
+      maxOriginLookbackBars: pConfig.maxOriginLookbackBars ?? 32,
+      slBufferAtrMultiplier: pConfig.slBufferAtrMultiplier ?? 0.10,
+      entryMode: pConfig.entryMode ?? 'FVG_PROXIMAL',
+      stage1Ratio: options.stage_ratios?.[0] ?? pConfig.stage1Ratio ?? 0.30,
+      stage2Ratio: options.stage_ratios?.[1] ?? pConfig.stage2Ratio ?? 0.70,
+      stage1Multiple: pConfig.stage1Multiple ?? 1.50,
+      stage2Multiple: options.stage2_multiple ?? pConfig.stage2Multiple ?? 4.00,
+      dynamicTp2Source: pConfig.dynamicTp2Source ?? 'OPPOSING_LIQUIDITY',
+      minDynamicTp2Multiple: pConfig.minDynamicTp2Multiple ?? 3.00,
+      maxDynamicTp2Multiple: pConfig.maxDynamicTp2Multiple ?? 5.00,
+      enableM15StructuralTrail: pConfig.enableM15StructuralTrail ?? true,
+      enableFeePaddedBreakeven: options.enable_fee_padded_breakeven !== undefined ? options.enable_fee_padded_breakeven : (pConfig.enableFeePaddedBreakeven ?? true),
+      breakevenOffsetPct: options.breakeven_offset_pct !== undefined ? options.breakeven_offset_pct : (pConfig.breakevenOffsetPct ?? 0.015),
+      postLossCooldownMinutes: pConfig.postLossCooldownMinutes ?? 45,
+      enforceSinglePositionConcurrency: true,
+      enforceValueAreaGate: pConfig.enforceValueAreaGate ?? true,
+      valueAreaLookbackBars: pConfig.valueAreaLookbackBars ?? 96,
+      valueAreaMode: pConfig.valueAreaMode ?? 'PREVIOUS_DAY_DEVELOPING',
+      pocBandPct: pConfig.pocBandPct ?? 0.0020,
+      enforceOlsValidation: pConfig.enforceOlsValidation ?? true,
+      enforceOiSponsorship: pConfig.enforceOiSponsorship ?? true,
+      enforceSmtGate: pConfig.enforceSmtGate ?? true,
+      smtLookbackBars: pConfig.smtLookbackBars ?? 15,
+      enableDynamicProfitFloor: pConfig.enableDynamicProfitFloor ?? true,
+      enforceToxicWindowBlacklist: pConfig.enforceToxicWindowBlacklist ?? true,
+      enforceRolloverFreeze: pConfig.enforceRolloverFreeze ?? true,
+      enforceNewsFreeze: pConfig.enforceNewsFreeze ?? true,
+      makerFeePct,
+      takerFeePct,
+      initialEquity: initialCapital,
+      compoundingRiskPct: riskPct,
+    };
+
+    const engine = new TrendContinuationEngine(tcConfig);
+    const { setups, telemetry } = engine.scanHistoricalSetups(candles, bootstrap);
+
+    const executedSetups = setups.filter(
+      (s) => s.is_retested && s.simulated_outcome !== 'NO_RETEST' && s.simulated_outcome !== 'INVALIDATED'
+    );
+
+    const recentTrades = executedSetups.slice(-10).map((t) => ({
+      id: t.id,
+      date_cairo: formatCairoDateTime(t.retest_time ?? t.bos_candle_time),
+      direction: t.type === 'BULLISH' ? 'LONG' : 'SHORT',
+      entry_price: t.entry_price,
+      stop_loss: t.stop_loss,
+      exit_price: t.exit_price ?? null,
+      realized_r: t.realized_rr,
+      net_realized_r: t.net_realized_rr ?? t.realized_rr,
+      fee_in_r: t.fee_in_r ?? 0,
+      outcome: t.simulated_outcome,
+      label: `${t.type} BOS Retest (${t.stage_exit_type})`,
+    }));
+
+    return {
+      status: 'SUCCESS',
+      preset: {
+        id: preset.id,
+        name: preset.name,
+        entry_mode: pConfig.entryMode,
+        stage1_multiple: pConfig.stage1Multiple,
+        stage2_multiple: pConfig.stage2Multiple,
+        early_breakeven_multiple: 1.5,
+        enable_fee_padded_breakeven: tcConfig.enableFeePaddedBreakeven,
+        breakevenOffsetPct: tcConfig.breakevenOffsetPct,
+        maker_fee_pct: makerFeePct,
+        taker_fee_pct: takerFeePct,
+      },
+      date_range: {
+        start: new Date(startMs).toISOString(),
+        end: new Date(endMs).toISOString(),
+        days: Math.round((endMs - startMs) / (24 * 60 * 60 * 1000)),
+        total_candles: candles.length,
+      },
+      performance: {
+        total_scanned_setups: setups.length,
+        total_executed_trades: telemetry.retestedTradesCount,
+        winning_trades: telemetry.winningTradesCount,
+        losing_trades: telemetry.losingTradesCount,
+        be_scratches: telemetry.scratchTradesCount,
+        win_rate_pct: telemetry.executionWinRatePct,
+        win_rate_ex_scratch_pct: telemetry.exScratchWinRatePct,
+        gross_realized_r: telemetry.grossRealizedR,
+        net_realized_r: telemetry.netRealizedR,
+        total_fees_paid_r: telemetry.totalFeesR,
+        total_fees_paid_usd: telemetry.totalFeesUsd,
+        total_realized_r: telemetry.netRealizedR,
+        avg_realized_r: telemetry.retestedTradesCount > 0 ? parseFloat((telemetry.netRealizedR / telemetry.retestedTradesCount).toFixed(2)) : 0,
+        profit_factor: telemetry.netProfitFactor,
+        gross_profit_factor: telemetry.netProfitFactor,
+        net_profit_factor: telemetry.netProfitFactor,
+        max_drawdown_r: telemetry.maxDrawdownR,
+        max_drawdown_pct: telemetry.maxCompoundedDrawdownPct,
+        initial_equity_usd: telemetry.initialEquity,
+        nominal_final_equity_usd: telemetry.finalEquity,
+        final_equity_usd: telemetry.finalEquity,
+        net_pnl_usd: parseFloat((telemetry.finalEquity - telemetry.initialEquity).toFixed(2)),
+        net_roi_pct: parseFloat((((telemetry.finalEquity - telemetry.initialEquity) / telemetry.initialEquity) * 100).toFixed(2)),
+        longest_win_streak: 0,
+        longest_loss_streak: 0,
+      },
+      vetoed_breakdown: {
+        htf_bias_vetoed: setups.filter((s) => !s.is_htf_aligned).length,
+        three_pillar_vetoed: setups.filter((s) => !s.three_pillar_displacement_passed).length,
+        no_retest_vetoed: setups.filter((s) => s.status === 'BOS_NO_RETEST' || s.status === 'EXPIRED').length,
+        concurrency_vetoed: setups.filter((s) => s.simulated_outcome === 'INVALIDATED').length,
+      },
+      recent_trades: recentTrades,
+    };
+  }
+
   const pConfig = preset.config as SweepReclaimPresetConfig;
 
   // 2. T-Zero Structural Seed / Bootstrap Warmup
@@ -851,7 +1117,7 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
     bodyRatioThreshold: effectiveBodyRatio,
     minBodyRatio: effectiveBodyRatio,
     requireThreePillarDisplacement: pConfig.requireThreePillarDisplacement,
-    enforceDiscountPremiumGate: pConfig.enforceDiscountPremiumGate,
+    enforceDiscountPremiumGate: pConfig.enforceDiscountPremiumGate ?? false,
     enableRegimeAdaptiveEQ: true,
     enableInScannerWaveDedup: pConfig.enableWaveDeduplication ?? true,
     enforceSinglePositionConcurrency: true,
@@ -868,22 +1134,36 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
     minSweepDepthAtrMultiplier: pConfig.minSweepDepthAtrMultiplier,
     slBufferAtrMultiplier: pConfig.slBufferAtrMultiplier,
     enableWaveDeduplication: pConfig.enableWaveDeduplication ?? true,
-    filterWeekend: pConfig.filterWeekend ?? false,
+    filterWeekend: pConfig.filterWeekend ?? true,
     filterDeadZones: pConfig.filterDeadZones ?? false,
     enforceHtfBiasGuard: pConfig.enforceHtfBiasGuard ?? false,
-    enableEarlyBreakeven: pConfig.enableEarlyBreakeven ?? true,
+    enableEarlyBreakeven: pConfig.enableEarlyBreakeven ?? false,
     earlyBreakevenMultiple: effectiveEarlyBE,
     enableFeePaddedBreakeven: options.enable_fee_padded_breakeven !== undefined ? options.enable_fee_padded_breakeven : (pConfig.enableFeePaddedBreakeven ?? true),
     breakevenOffsetPct: options.breakeven_offset_pct !== undefined ? options.breakeven_offset_pct : (pConfig.breakevenOffsetPct ?? 0.015),
-    postLossCooldownMinutes: pConfig.postLossCooldownMinutes ?? 0,
-    targetMode: pConfig.targetMode ?? 'FIXED_RR',
-    dynamicTp1Source: pConfig.dynamicTp1Source ?? 'FIXED_RR',
-    dynamicTp2Source: pConfig.dynamicTp2Source ?? 'FIXED_RR',
-    minDynamicTp1Multiple: pConfig.minDynamicTp1Multiple ?? 0.80,
+    postLossCooldownMinutes: pConfig.postLossCooldownMinutes ?? 45,
+    targetMode: pConfig.targetMode ?? 'DYNAMIC_LIQUIDITY',
+    dynamicTp1Source: pConfig.dynamicTp1Source ?? 'DEALING_RANGE_EQ',
+    dynamicTp2Source: pConfig.dynamicTp2Source ?? 'OPPOSING_LIQUIDITY',
+    minDynamicTp1Multiple: pConfig.minDynamicTp1Multiple ?? 1.20,
     maxDynamicTp1Multiple: pConfig.maxDynamicTp1Multiple ?? 1.50,
-    minDynamicTp2Multiple: pConfig.minDynamicTp2Multiple ?? 1.30,
-    maxDynamicTp2Multiple: pConfig.maxDynamicTp2Multiple ?? 3.50,
+    minDynamicTp2Multiple: pConfig.minDynamicTp2Multiple ?? 3.00,
+    maxDynamicTp2Multiple: pConfig.maxDynamicTp2Multiple ?? 5.00,
     requireMssConfirmation: pConfig.requireMssConfirmation ?? false,
+    mssLookbackBars: pConfig.mssLookbackBars ?? 15,
+    maxBarsSweepToMss: pConfig.maxBarsSweepToMss ?? 10,
+
+    // 🏛️ Institutional Confluence Architecture (ICT + AMT + Wyckoff + SMT)
+    enforceValueAreaGate: pConfig.enforceValueAreaGate ?? true,
+    valueAreaLookbackBars: pConfig.valueAreaLookbackBars ?? 96,
+    pocExclusionBandPct: pConfig.pocExclusionBandPct ?? 0.0015,
+    enforceSmtGate: pConfig.enforceSmtGate ?? true,
+    smtLookbackBars: pConfig.smtLookbackBars ?? 15,
+    enforceInstitutionalKillzones: pConfig.enforceInstitutionalKillzones ?? true,
+    institutionalKillzoneCutoffHourUtc: pConfig.institutionalKillzoneCutoffHourUtc ?? 14,
+    institutionalKillzoneCutoffMinuteUtc: pConfig.institutionalKillzoneCutoffMinuteUtc ?? 30,
+    enforcePreNewsFreeze: pConfig.enforcePreNewsFreeze ?? true,
+    enableM15StructuralTrail: pConfig.enableM15StructuralTrail ?? true,
   };
 
   // 6. Execute Sweep & Reclaim Engine
@@ -897,14 +1177,14 @@ export async function runQuantBacktest(options: QuantBacktestOptions = {}) {
   const summary = calculate1to1ExecutionTelemetry(setups, {
     enforceSinglePositionWalk: true,
     enableWaveDeduplication: pConfig.enableWaveDeduplication ?? true,
-    filterWeekend: pConfig.filterWeekend ?? false,
+    filterWeekend: pConfig.filterWeekend ?? true,
     filterDeadZones: pConfig.filterDeadZones ?? false,
     enforceHtfBiasGuard: pConfig.enforceHtfBiasGuard ?? false,
-    enableEarlyBreakeven: scanConfig.enableEarlyBreakeven ?? true,
+    enableEarlyBreakeven: scanConfig.enableEarlyBreakeven ?? false,
     earlyBreakevenMultiple: pConfig.earlyBreakevenMultiple ?? 0.40,
     enableFeePaddedBreakeven: scanConfig.enableFeePaddedBreakeven,
     breakevenOffsetPct: scanConfig.breakevenOffsetPct,
-    postLossCooldownMinutes: pConfig.postLossCooldownMinutes ?? 0,
+    postLossCooldownMinutes: pConfig.postLossCooldownMinutes ?? 45,
     makerFeePct,
     takerFeePct,
   });
