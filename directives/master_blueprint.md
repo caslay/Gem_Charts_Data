@@ -1,8 +1,47 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.72
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.73
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-12 (V17.72 — Phase 3: Tri-State Execution Router [STANDBY / PAPER_TRADING / LIVE_BINANCE], In-Daemon Paper Trading Simulator & Real-Time Telegram Broadcast Pipeline)
+> **Last Updated:** 2026-09-12 (V17.73 — Asynchronous Armed Intent & Proximity Radar Pipeline, Two-Stage Execution Engine & Dynamic State Synchronization)
+
+## 🆕 V17.73 Changelog — Asynchronous Armed Intent & Proximity Radar Pipeline (2026-09-12)
+
+### Summary
+1. **Two-Stage Execution Architecture (`ProximityRadarEngine`, `src/lib/daemon/proximityRadar.ts`):**
+   - **Stage 1 (Armed Intent):** External AI agents (Gemini Spark, GrokBot) evaluate 15m/30m macro market context and define setup geometry, Point of Interest (POI) action zone boundaries, and structural trigger criteria (`MSS_BODY_CLOSE_ABOVE`, `MSS_BODY_CLOSE_BELOW`, `SWEEP_AND_RECLAIM`) via remote MCP (`submit_quant_decision`). Quegar persists intent into `agent_decision_log` in `ARMED_WATCHING_TRIGGER` status.
+   - **Stage 2 (Deterministic Execution):** Proximity Radar monitors real-time sub-second WebSocket ticks. When price penetrates the POI zone (with 20% outer boundary buffer), radar monitoring status elevates from `DORMANT` to `PROXIMITY_ELEVATED` (inspecting micro-candles) with a 50% anti-oscillation hysteresis zone.
+   - **Trigger Confirmation & Volumetric Displacement:** Evaluates closed candles for exact physical confirmation (e.g. candle close beyond trigger level with minimum body ratio $\ge 0.25$ or taker delta dominance conviction).
+   - **Resting Limit Price Resolution:** Automatically resolves resting maker entry prices via `FVG_PROXIMAL`, `POI_MIDPOINT`, `ANCHOR_PRICE`, or `LIMIT_EXACT`.
+   - **Atomic Invalidation & TTL Expiration:** Enforces atomic 12-bar TTL expiration or early Target 1 touch cancellation (Missed Expansion) before fill, immediately flushing the intent and disarming pending queues.
+2. **Spark Ingestion Dispatcher & Headless Daemon Integration (`sparkIngestionDispatcher.ts`, `scripts/headless-daemon.ts`):**
+   - Wired `ProximityRadarEngine` into `SparkIngestionDispatcher`. Poller actively monitors `ARMED_WATCHING_TRIGGER` and `ARMED_PENDING` records in `agent_decision_log` and registers them into radar.
+   - Headless PM2 daemon forwards real-time WebSocket ticks (`onMarketTick`) and closed candle boundaries (`onCandleClosed`) directly to `sparkDispatcher`.
+   - Heartbeat console ticker reflects live daemon state machine (`SEARCHING`, `ARMED_WATCHING_TRIGGER`, `ORDER_RESTING`, `ACTIVE_TRADE`) and active armed intent count.
+   - Upon trigger confirmation, `executeTriggeredIntent()` computes dynamic 2% compounding position sizing with 0.15% clamp, clears Global Risk Governor pre-flight circuit breakers, places resting maker limit orders in the engine, transitions DB status to `ORDER_RESTING`, and updates `DaemonLedger`.
+3. **PostgreSQL Schema Migration & Self-Healing Initialization (`agentEngineHandlers.ts`):**
+   - Added 15 new columns to `agent_decision_log`: `execution_mode`, `trigger_timeframe`, `trigger_condition`, `trigger_price`, `poi_zone_low`, `poi_zone_high`, `limit_offset_rule`, `ttl_bars`, `bars_elapsed`, `limit_entry_price`, `target_3`, `stage1_ratio`, `stage2_ratio`, `stage3_ratio`, `radar_status`.
+   - Implemented self-healing `ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS ...` migration in `ensureAgentDecisionTableInitialized` covering `bars_elapsed INTEGER DEFAULT 0` and `limit_entry_price NUMERIC(16,4)`.
+4. **Multi-Timeframe Micro-Candle WebSocket Stream (`nodeWsClient.ts`):**
+   - Subscribed native WebSocket client to `${sym}@kline_1m` alongside 3m, 5m, 15m, and 1h streams.
+   - Implemented 1m ring buffer seeding and maintenance, and updated `CandleClosedPayload` type definitions.
+   - Enforced structural trigger timeframe gating (micro-candles only evaluate intra-candle invalidations and TP1 hits when elevated, requiring the primary timeframe candle close for MSS structural confirmation).
+5. **Remote MCP Protocol & Tool Exposure (`src/app/api/mcp/route.ts`, `src/lib/agentEngineHandlers.ts`):**
+   - Extended `submit_quant_decision` tool input schema to support all conditional execution modes (`IMMEDIATE_LIMIT` vs `TRIGGER_ON_CONFIRMATION`), trigger parameters, POI boundaries, limit offset rules, target ladder (`target_1`, `target_2`, `target_3`), and scale-out ratios.
+   - Updated `runGetLiveDaemonStatus` to query active armed intents from DB/ledger, merge in-memory radar state (`bars_elapsed`, `radar_status`, `stage`), expose `daemon_state`, `armed_intents_count`, `armed_intents`, and tag positions with `IN_FLIGHT_STAGE_1` / `IN_FLIGHT_STAGE_2` / `IN_FLIGHT_STAGE_3` and pending orders with `ORDER_RESTING`.
+   - Updated `/api/daemon/state` endpoint to filter armed intents by active stages (`ARMED_PENDING` / `PROXIMITY_ELEVATED`) when resolving `daemonState`.
+6. **State Machine Robustness & Error Handling (`sparkIngestionDispatcher.ts`):**
+   - Ensured `executeTriggeredIntent` cleanly transitions `intent.stage = 'INVALIDATED'` with documented reason and broadcasts `ARMED_INTENT_INVALIDATED` to Telegram upon sizing calculation failure, Global Risk Governor veto, live execution environment blocks, or order submission failure.
+   - Seamlessly transitioned `intent.stage = 'COMPLETED'` on STANDBY mode execution.
+   - Handled resting maker limit cancellations (`LIMIT_ORDER_CANCELLED`) with automatic Telegram broadcasts (`ARMED_INTENT_EXPIRED` for TTL, `ARMED_INTENT_INVALIDATED` for Target 1 / Stop breach).
+7. **Telegram Real-Time Milestone Notifications (`telegramNotifier.ts`):**
+   - Added 4 new armed lifecycle milestones: `ARMED_INTENT_REGISTERED`, `ARMED_INTENT_TRIGGERED`, `ARMED_INTENT_EXPIRED`, `ARMED_INTENT_INVALIDATED`.
+   - Formatted institutional Markdown cards with setup details, execution mode, resting limit entry, and deduplication keys.
+8. **Comprehensive Verification Suite (`scripts/test_armed_intent_pipeline.ts`):**
+   - 81/81 tests passed in `scripts/test_armed_intent_pipeline.ts` (100%).
+   - 99/99 tests passed in `scripts/test_spark_ingestion_dispatcher.ts` (100%).
+   - 88/88 tests passed in `scripts/test_tri_state_execution_and_telegram.ts` (100%).
+   - 5/5 tests passed in `scripts/test_ttl_and_parity.ts` (100%).
+   - Zero TypeScript compiler errors (`npx tsc --noEmit`).
 
 ## 🆕 V17.72 Changelog — Tri-State Execution Router, In-Daemon Paper Trading Simulator & Real-Time Telegram Broadcast Pipeline (2026-09-12)
 

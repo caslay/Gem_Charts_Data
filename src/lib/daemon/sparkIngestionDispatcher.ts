@@ -39,8 +39,17 @@ import { DaemonLedger } from './daemonLedger';
 import { GlobalRiskGovernor } from '../risk/GlobalRiskGovernor';
 import { PreTradeAssessment, RiskGovernorConfig, RiskGovernorState } from '../risk/types';
 import { evaluateExecutionSafetyGate } from '../binanceOrderRouter';
-
 import { TelegramBotService } from '../notifications/telegramBotService';
+import {
+  ProximityRadarEngine,
+  ArmedIntent,
+  DaemonStateMachineState,
+  TriggerEvaluationResult,
+  InvalidationEvaluationResult,
+  ProximityEvaluationResult,
+  CandleEvaluationOutput,
+} from './proximityRadar';
+import { Candle } from '../fvgEngine';
 
 export type TriStateExecutionMode = 'STANDBY' | 'PAPER_TRADING' | 'LIVE_BINANCE';
 
@@ -140,6 +149,8 @@ export interface ProcessDecisionResult {
     | 'REJECTED_BY_RISK_GOVERNOR'
     | 'STAND_DOWN'
     | 'ALREADY_CLAIMED'
+    | 'ARMED_WATCHING_TRIGGER'
+    | 'ORDER_RESTING'
     | 'ERROR';
   executionMode?: TriStateExecutionMode;
   reason?: string;
@@ -541,6 +552,7 @@ export class SparkIngestionDispatcher {
   private isPolling = false;
   private isRunning = false;
   private hasWarnedDbOffline = false;
+  private radar: ProximityRadarEngine;
 
   constructor(options: SparkIngestionDispatcherOptions) {
     this.engine = options.engine;
@@ -553,6 +565,7 @@ export class SparkIngestionDispatcher {
     this.getRiskSettingsCallback = options.getRiskSettings;
     this.stageOnly = options.stageOnly ?? false;
     this.cliMode = options.cliMode;
+    this.radar = new ProximityRadarEngine();
     if (options.executionMode) {
       this.executionMode = options.executionMode;
     }
@@ -569,28 +582,101 @@ export class SparkIngestionDispatcher {
       const isPaper = pos.executionMode === 'PAPER_TRADING';
 
       if (event.type === 'ORDER_FILLED') {
+        const intent = this.radar.getIntent(decisionId);
+        if (intent) {
+          intent.stage = 'IN_FLIGHT_STAGE_1';
+          this.ledger?.setArmedIntents(this.radar.getAllIntents());
+          this.ledger?.setDaemonState(this.getDaemonState());
+        }
         if (isPaper) {
           try {
             await sql`
               UPDATE agent_decision_log
               SET status = 'PAPER_FILLED',
                   narrative = COALESCE(narrative, '') || ' [SPARK_PAPER_FILLED: Maker fill @ $' || ${pos.entryPrice.toFixed(2)} || ']'
-              WHERE id = ${decisionId} AND (status = 'PAPER_ACTIVE' OR status = 'STAGED' OR status = 'QUEUED')
+              WHERE id = ${decisionId} AND (status = 'PAPER_ACTIVE' OR status = 'STAGED' OR status = 'QUEUED' OR status = 'ORDER_RESTING')
             `;
           } catch {}
           this.ledger?.logEvent('SPARK_DECISION_PAPER_FILLED', `Paper order #${decisionId} filled at $${pos.entryPrice.toFixed(2)}`, {
             position: pos,
             metadata: { decisionId, fillPrice: pos.entryPrice },
           });
+        } else {
+          try {
+            await sql`
+              UPDATE agent_decision_log
+              SET status = 'ACTIVE',
+                  narrative = COALESCE(narrative, '') || ' [SPARK_LIVE_FILLED: Maker fill @ $' || ${pos.entryPrice.toFixed(2)} || ']'
+              WHERE id = ${decisionId} AND (status = 'EXECUTED' OR status = 'STAGED' OR status = 'QUEUED' OR status = 'ORDER_RESTING')
+            `;
+          } catch {}
+          this.ledger?.logEvent('SPARK_DECISION_EXECUTED', `Live order #${decisionId} filled at $${pos.entryPrice.toFixed(2)}`, {
+            position: pos,
+            metadata: { decisionId, fillPrice: pos.entryPrice },
+          });
         }
       } else if (event.type === 'LIMIT_ORDER_CANCELLED') {
         const cancelReason = event.message || 'Cancelled';
+        const intent = this.radar.getIntent(decisionId);
+        const isTtl =
+          cancelReason.toLowerCase().includes('ttl') ||
+          cancelReason.toLowerCase().includes('retest') ||
+          cancelReason.toLowerCase().includes('expired');
+        const nextStage = isTtl ? 'EXPIRED' : 'INVALIDATED';
+        const nextStatus = isTtl ? 'EXPIRED' : 'REJECTED';
+
+        if (intent) {
+          intent.stage = nextStage;
+          intent.invalidationReason = cancelReason;
+          intent.invalidatedAt = Date.now();
+          this.ledger?.setArmedIntents(this.radar.getAllIntents());
+          this.ledger?.setDaemonState(this.getDaemonState());
+
+          // 📡 Broadcast cancellation/expiry to Telegram
+          if (this.telegram) {
+            if (isTtl) {
+              const eventKey = `evt_ARMED_INTENT_EXPIRED_${intent.symbol}_${decisionId}`;
+              this.telegram
+                .broadcastSparkMilestone(
+                  'ARMED_INTENT_EXPIRED',
+                  {
+                    id: decisionId,
+                    symbol: intent.symbol,
+                    direction: intent.direction,
+                    triggerCondition: intent.triggerCondition,
+                    triggerPrice: intent.triggerPrice,
+                    triggerTimeframe: intent.triggerTimeframe,
+                    ttlBars: intent.ttlBars,
+                    timestamp: Date.now(),
+                  },
+                  { eventKey }
+                )
+                .catch(() => {});
+            } else {
+              const eventKey = `evt_ARMED_INTENT_INVALIDATED_${intent.symbol}_${decisionId}`;
+              this.telegram
+                .broadcastSparkMilestone(
+                  'ARMED_INTENT_INVALIDATED',
+                  {
+                    id: decisionId,
+                    symbol: intent.symbol,
+                    direction: intent.direction,
+                    reason: cancelReason,
+                    invalidationLevel: intent.invalidationLevel,
+                    timestamp: Date.now(),
+                  },
+                  { eventKey }
+                )
+                .catch(() => {});
+            }
+          }
+        }
         try {
           await sql`
             UPDATE agent_decision_log
-            SET status = 'REJECTED',
+            SET status = ${nextStatus},
                 narrative = COALESCE(narrative, '') || ' [SPARK_ORDER_CANCELLED: ' || ${cancelReason} || ']'
-            WHERE id = ${decisionId} AND (status = 'PAPER_ACTIVE' OR status = 'QUEUED' OR status = 'STAGED')
+            WHERE id = ${decisionId} AND (status = 'PAPER_ACTIVE' OR status = 'QUEUED' OR status = 'STAGED' OR status = 'ORDER_RESTING')
           `;
         } catch {}
         if (isPaper) {
@@ -600,6 +686,12 @@ export class SparkIngestionDispatcher {
           });
         }
       } else if (event.type === 'STAGE_1_HARVEST') {
+        const intent = this.radar.getIntent(decisionId);
+        if (intent) {
+          intent.stage = 'IN_FLIGHT_STAGE_2';
+          this.ledger?.setArmedIntents(this.radar.getAllIntents());
+          this.ledger?.setDaemonState(this.getDaemonState());
+        }
         const s1Price = pos.stage1Target ? `$${pos.stage1Target.toFixed(2)}` : 'Target';
         const s1Narrative = ` [SPARK_TP1_HARVEST: Stage 1 filled @ ${s1Price}, SL ratcheted to $${pos.activeStopLoss.toFixed(2)}]`;
         try {
@@ -615,7 +707,20 @@ export class SparkIngestionDispatcher {
             metadata: { decisionId, stage1Target: pos.stage1Target, newStopLoss: pos.activeStopLoss },
           });
         }
+      } else if (event.type === 'STAGE_2_HARVEST') {
+        const intent = this.radar.getIntent(decisionId);
+        if (intent) {
+          intent.stage = 'IN_FLIGHT_STAGE_3';
+          this.ledger?.setArmedIntents(this.radar.getAllIntents());
+          this.ledger?.setDaemonState(this.getDaemonState());
+        }
       } else if (event.type === 'POSITION_CLOSED') {
+        const intent = this.radar.getIntent(decisionId);
+        if (intent) {
+          intent.stage = 'COMPLETED';
+          this.ledger?.setArmedIntents(this.radar.getAllIntents());
+          this.ledger?.setDaemonState(this.getDaemonState());
+        }
         const nextStatus = isPaper ? 'PAPER_CLOSED' : 'EXECUTED';
         const sign = (pos.realizedR || 0) >= 0 ? '+' : '';
         const closeNarrative = ` [SPARK_${pos.executionMode || 'TRADE'}_CLOSED: ${pos.exitReason || 'CLOSED'} @ $${(pos.exitPrice || pos.activeStopLoss).toFixed(2)}, R=${sign}${(pos.realizedR || 0).toFixed(2)}R]`;
@@ -635,6 +740,27 @@ export class SparkIngestionDispatcher {
         }
       }
     });
+  }
+
+  /**
+   * Returns the internal Proximity Radar instance.
+   */
+  public getProximityRadar(): ProximityRadarEngine {
+    return this.radar;
+  }
+
+  /**
+   * Resolves the overall Daemon state machine state:
+   * ACTIVE_TRADE | ORDER_RESTING | ARMED_WATCHING_TRIGGER | SEARCHING
+   */
+  public getDaemonState(): DaemonStateMachineState {
+    const activePositions = this.engine.getActivePositions();
+    const pendingOrders = this.engine.getPendingLimitOrders();
+    return this.radar.resolveDaemonState(
+      activePositions.length,
+      pendingOrders.length,
+      this.engine.config.symbol
+    );
   }
 
   /**
@@ -828,10 +954,14 @@ export class SparkIngestionDispatcher {
       const symbol = this.engine.config.symbol;
       const baseAsset = symbol.replace(/USDC|USDT/g, '');
 
+      // 1. Immediate Execution Queue (status = ACTIVE or QUEUED)
       const result = await sql`
         SELECT id, symbol, agent_id, bias_signal, entry_range_low, entry_range_high,
                invalidation_level, target_1, target_2, narrative, status,
-               live_price_at_submission, submitted_at, invalidated_at
+               live_price_at_submission, submitted_at, invalidated_at,
+               execution_mode, trigger_timeframe, trigger_condition, trigger_price,
+               poi_zone_low, poi_zone_high, limit_offset_rule, ttl_bars, bars_elapsed,
+               target_3, stage1_ratio, stage2_ratio, stage3_ratio, limit_entry_price
         FROM agent_decision_log
         WHERE (status = 'ACTIVE' OR status = 'QUEUED') 
           AND (
@@ -845,6 +975,99 @@ export class SparkIngestionDispatcher {
       for (const row of result.rows) {
         await this.processDecision(row);
         processedCount++;
+      }
+
+      // 2. Proximity Radar Armed Queue (status = ARMED_WATCHING_TRIGGER or ARMED_PENDING)
+      const armedResult = await sql`
+        SELECT id, symbol, agent_id, bias_signal, execution_mode,
+               trigger_condition, trigger_price, trigger_timeframe,
+               poi_zone_low, poi_zone_high, limit_offset_rule,
+               ttl_bars, bars_elapsed, invalidation_level,
+               target_1, target_2, target_3, stage1_ratio, stage2_ratio, stage3_ratio,
+               limit_entry_price, narrative, status, radar_status, submitted_at
+        FROM agent_decision_log
+        WHERE (status = 'ARMED_WATCHING_TRIGGER' OR status = 'ARMED_PENDING')
+          AND (
+            UPPER(REPLACE(REPLACE(symbol, '-', ''), '/', '')) = ${symbol.toUpperCase()}
+            OR UPPER(symbol) = ${baseAsset.toUpperCase()}
+          )
+        ORDER BY submitted_at ASC
+        LIMIT 10
+      `;
+
+      let armedCountChanged = false;
+      for (const row of armedResult.rows) {
+        const intentId = Number(row.id);
+        const existing = this.radar.getIntent(intentId);
+        if (!existing) {
+          let direction: 'LONG' | 'SHORT' = 'LONG';
+          const bias = String(row.bias_signal || '').toUpperCase();
+          if (bias.includes('BEAR') || bias === 'SHORT' || bias === 'SELL') {
+            direction = 'SHORT';
+          } else if (bias.includes('BULL') || bias === 'LONG' || bias === 'BUY') {
+            direction = 'LONG';
+          } else if (row.target_1 && row.invalidation_level) {
+            direction = Number(row.target_1) > Number(row.invalidation_level) ? 'LONG' : 'SHORT';
+          }
+
+          const armedIntent: ArmedIntent = {
+            id: intentId,
+            symbol: row.symbol || symbol,
+            agentId: row.agent_id || 'unknown_agent',
+            direction,
+            executionMode: row.execution_mode || 'TRIGGER_ON_CONFIRMATION',
+            triggerCondition: row.trigger_condition || 'MSS_BODY_CLOSE_ABOVE',
+            triggerPrice: parseFloat(String(row.trigger_price || 0)),
+            triggerTimeframe: row.trigger_timeframe || '5m',
+            poiZoneLow: parseFloat(String(row.poi_zone_low || 0)),
+            poiZoneHigh: parseFloat(String(row.poi_zone_high || 0)),
+            limitOffsetRule: row.limit_offset_rule || 'FVG_PROXIMAL',
+            ttlBars: row.ttl_bars ? Number(row.ttl_bars) : 12,
+            barsElapsed: row.bars_elapsed ? Number(row.bars_elapsed) : 0,
+            invalidationLevel: parseFloat(String(row.invalidation_level || 0)),
+            target1: row.target_1 ? parseFloat(String(row.target_1)) : null,
+            target2: row.target_2 ? parseFloat(String(row.target_2)) : null,
+            target3: row.target_3 ? parseFloat(String(row.target_3)) : null,
+            stage1Ratio: row.stage1_ratio ? parseFloat(String(row.stage1_ratio)) : undefined,
+            stage2Ratio: row.stage2_ratio ? parseFloat(String(row.stage2_ratio)) : undefined,
+            stage3Ratio: row.stage3_ratio ? parseFloat(String(row.stage3_ratio)) : undefined,
+            limitEntryPrice: row.limit_entry_price ? parseFloat(String(row.limit_entry_price)) : null,
+            narrative: row.narrative,
+            radarStatus: (row.radar_status === 'PROXIMITY_ELEVATED' ? 'PROXIMITY_ELEVATED' : 'DORMANT') as any,
+            stage: (row.radar_status === 'PROXIMITY_ELEVATED' ? 'PROXIMITY_ELEVATED' : 'ARMED_PENDING') as any,
+            armedAt: row.submitted_at ? new Date(row.submitted_at).getTime() : Date.now(),
+          };
+          this.radar.registerIntent(armedIntent);
+          armedCountChanged = true;
+          processedCount++;
+          console.log(
+            `[SPARK_DISPATCHER] 📡 Radar registered armed intent #${intentId} (${armedIntent.symbol} ${armedIntent.direction} ${armedIntent.triggerCondition} @ $${armedIntent.triggerPrice})`
+          );
+        }
+      }
+
+      // 3. Synchronize external cancellations or invalidations from DB
+      const activeRadarIntents = this.radar.getActiveIntents(symbol);
+      for (const activeIntent of activeRadarIntents) {
+        try {
+          const dbRecord = await sql`
+            SELECT status, narrative FROM agent_decision_log WHERE id = ${activeIntent.id} LIMIT 1
+          `;
+          if (dbRecord.rows.length > 0) {
+            const st = dbRecord.rows[0].status;
+            if (st === 'INVALIDATED' || st === 'REJECTED' || st === 'STAND_DOWN' || st === 'EXPIRED') {
+              activeIntent.stage = st === 'EXPIRED' ? 'EXPIRED' : 'INVALIDATED';
+              activeIntent.invalidationReason = dbRecord.rows[0].narrative || `External status update: ${st}`;
+              activeIntent.invalidatedAt = Date.now();
+              armedCountChanged = true;
+            }
+          }
+        } catch {}
+      }
+
+      if (armedCountChanged) {
+        this.ledger?.setArmedIntents(this.radar.getAllIntents());
+        this.ledger?.setDaemonState(this.getDaemonState());
       }
     } catch (err: any) {
       if (!this.hasWarnedDbOffline) {
@@ -962,6 +1185,70 @@ export class SparkIngestionDispatcher {
       return {
         status: 'STAND_DOWN',
         reason: `Non-directional bias: ${parsed.biasSignal}`,
+        parsed,
+      };
+    }
+
+    // 4.5 Armed Intent Routing: If record is conditional or armed, register directly into Proximity Radar
+    if (
+      record.execution_mode === 'TRIGGER_ON_CONFIRMATION' ||
+      record.status === 'ARMED_WATCHING_TRIGGER' ||
+      record.status === 'ARMED_PENDING'
+    ) {
+      const armedIntent: ArmedIntent = {
+        id,
+        symbol: parsed.symbol,
+        agentId: parsed.agentId,
+        direction: parsed.direction!,
+        executionMode: 'TRIGGER_ON_CONFIRMATION',
+        triggerCondition:
+          record.trigger_condition ||
+          (parsed.direction === 'LONG' ? 'MSS_BODY_CLOSE_ABOVE' : 'MSS_BODY_CLOSE_BELOW'),
+        triggerPrice: record.trigger_price
+          ? parseFloat(String(record.trigger_price))
+          : (parsed.limitEntryPrice || livePrice || 0),
+        triggerTimeframe: record.trigger_timeframe || '5m',
+        poiZoneLow:
+          record.poi_zone_low !== undefined && record.poi_zone_low !== null
+            ? parseFloat(String(record.poi_zone_low))
+            : (parsed.entryRangeLow || 0),
+        poiZoneHigh:
+          record.poi_zone_high !== undefined && record.poi_zone_high !== null
+            ? parseFloat(String(record.poi_zone_high))
+            : (parsed.entryRangeHigh || 0),
+        limitOffsetRule: record.limit_offset_rule || 'FVG_PROXIMAL',
+        ttlBars: record.ttl_bars ? Number(record.ttl_bars) : 12,
+        barsElapsed: record.bars_elapsed ? Number(record.bars_elapsed) : 0,
+        invalidationLevel: parsed.invalidationLevel || 0,
+        target1: parsed.stage1Target,
+        target2: parsed.stage2Target,
+        target3: record.target_3 ? parseFloat(String(record.target_3)) : null,
+        stage1Ratio: record.stage1_ratio ? parseFloat(String(record.stage1_ratio)) : undefined,
+        stage2Ratio: record.stage2_ratio ? parseFloat(String(record.stage2_ratio)) : undefined,
+        stage3Ratio: record.stage3_ratio ? parseFloat(String(record.stage3_ratio)) : undefined,
+        limitEntryPrice: parsed.limitEntryPrice,
+        narrative: parsed.rawRecord?.narrative,
+        radarStatus: 'DORMANT',
+        stage: 'ARMED_PENDING',
+        armedAt: record.submitted_at ? new Date(record.submitted_at).getTime() : Date.now(),
+      };
+
+      this.radar.registerIntent(armedIntent);
+      this.ledger?.setArmedIntents(this.radar.getAllIntents());
+      this.ledger?.setDaemonState(this.getDaemonState());
+
+      // Atomically transition status from ACTIVE to ARMED_WATCHING_TRIGGER in DB to prevent infinite polling loops
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET status = 'ARMED_WATCHING_TRIGGER'
+          WHERE id = ${id} AND status = 'ACTIVE'
+        `;
+      } catch {}
+
+      return {
+        status: 'ARMED_WATCHING_TRIGGER',
+        reason: 'Registered armed intent in Proximity Radar awaiting trigger confirmation',
         parsed,
       };
     }
@@ -1469,5 +1756,662 @@ export class SparkIngestionDispatcher {
       riskAssessment,
       sizing,
     };
+  }
+
+  /**
+   * Evaluates incoming real-time market ticks:
+   * 1. Detects POI zone penetration and elevates radar monitoring to PROXIMITY_ELEVATED.
+   * 2. Detects tick-level adverse invalidation breaches or early Target 1 touches.
+   */
+  public async onMarketTick(
+    livePrice: number,
+    symbol: string = this.engine.config.symbol
+  ): Promise<{
+    elevated: ProximityEvaluationResult[];
+    deElevated: ProximityEvaluationResult[];
+    invalidated: InvalidationEvaluationResult[];
+  }> {
+    const result = this.radar.onMarketTick(livePrice, symbol);
+
+    // Handle proximity elevations
+    for (const elev of result.elevated) {
+      console.log(
+        `[SPARK_DISPATCHER] 📡 Proximity elevated for intent #${elev.intent.id} (${elev.intent.symbol} ${elev.intent.direction}): ${elev.reason}`
+      );
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET radar_status = 'PROXIMITY_ELEVATED'
+          WHERE id = ${elev.intent.id} AND (status = 'ARMED_WATCHING_TRIGGER' OR status = 'ARMED_PENDING')
+        `;
+      } catch {}
+      this.ledger?.logEvent(
+        'ARMED_INTENT_PROXIMITY_ELEVATED',
+        `Armed intent #${elev.intent.id} elevated to PROXIMITY_ELEVATED: ${elev.reason}`,
+        {
+          livePrice,
+          metadata: {
+            intentId: elev.intent.id,
+            symbol: elev.intent.symbol,
+            poiZone: [elev.intent.poiZoneLow, elev.intent.poiZoneHigh],
+            status: elev.currentStatus,
+          },
+        }
+      );
+    }
+
+    // Handle de-elevations back to DORMANT
+    for (const deElev of result.deElevated) {
+      console.log(
+        `[SPARK_DISPATCHER] 📡 Proximity de-elevated for intent #${deElev.intent.id} (${deElev.intent.symbol}): ${deElev.reason}`
+      );
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET radar_status = 'DORMANT'
+          WHERE id = ${deElev.intent.id} AND (status = 'ARMED_WATCHING_TRIGGER' OR status = 'ARMED_PENDING')
+        `;
+      } catch {}
+    }
+
+    // Handle tick-level invalidations (adverse stop-loss breach or early Target 1 hit)
+    for (const inv of result.invalidated) {
+      console.warn(
+        `[SPARK_DISPATCHER] 🛑 Armed intent #${inv.intent.id} invalidated on tick: ${inv.reason}`
+      );
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET status = 'INVALIDATED',
+              invalidated_at = ${inv.timestamp},
+              narrative = COALESCE(narrative, '') || ' [RADAR_TICK: ' || ${inv.reason} || ']'
+          WHERE id = ${inv.intent.id}
+        `;
+      } catch (err: any) {
+        console.warn(`[SPARK_DISPATCHER] DB update error for invalidated intent #${inv.intent.id}:`, err?.message || err);
+      }
+
+      this.ledger?.logEvent(
+        'ARMED_INTENT_INVALIDATED',
+        `Armed intent #${inv.intent.id} invalidated: ${inv.reason}`,
+        {
+          livePrice,
+          metadata: {
+            intentId: inv.intent.id,
+            symbol: inv.intent.symbol,
+            reason: inv.reason,
+            breachPrice: inv.breachPrice,
+          },
+        }
+      );
+
+      if (this.telegram) {
+        const eventKey = `evt_ARMED_INTENT_INVALIDATED_${inv.intent.symbol}_${inv.intent.id}`;
+        this.telegram
+          .broadcastSparkMilestone(
+            'ARMED_INTENT_INVALIDATED',
+            {
+              id: inv.intent.id,
+              symbol: inv.intent.symbol,
+              direction: inv.intent.direction,
+              reason: inv.reason,
+              invalidationLevel: inv.intent.invalidationLevel,
+              breachPrice: inv.breachPrice,
+              timestamp: inv.timestamp,
+            },
+            { eventKey }
+          )
+          .catch(() => {});
+      }
+    }
+
+    if (result.elevated.length > 0 || result.deElevated.length > 0 || result.invalidated.length > 0) {
+      this.ledger?.setArmedIntents(this.radar.getAllIntents());
+      this.ledger?.setDaemonState(this.getDaemonState());
+    }
+
+    return result;
+  }
+
+  /**
+   * Evaluates closed candle boundaries:
+   * 1. Increments TTL bars elapsed and evaluates 12-bar TTL expiration.
+   * 2. Evaluates intra-candle invalidation or target 1 hits.
+   * 3. Confirms structural triggers (MSS body close, sweep & reclaim with volumetric displacement).
+   * 4. Dispatches triggered intents to resting limit order placement.
+   */
+  public async onCandleClosed(
+    candleTimeframe: string,
+    candle: Candle,
+    symbol: string = this.engine.config.symbol
+  ): Promise<CandleEvaluationOutput> {
+    const output = this.radar.onCandleClosed(candleTimeframe, candle, symbol);
+
+    // 1. Handle Expired Intents (TTL reached)
+    for (const exp of output.expired) {
+      console.log(
+        `[SPARK_DISPATCHER] ⌛ Armed intent #${exp.id} reached TTL expiration (${exp.barsElapsed}/${exp.ttlBars} bars on ${exp.triggerTimeframe}).`
+      );
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET status = 'EXPIRED',
+              bars_elapsed = ${exp.barsElapsed},
+              invalidated_at = ${exp.invalidatedAt || Date.now()},
+              narrative = COALESCE(narrative, '') || ' [RADAR_CANDLE: ' || ${exp.invalidationReason || 'TTL Expired'} || ']'
+          WHERE id = ${exp.id}
+        `;
+      } catch (err: any) {
+        console.warn(`[SPARK_DISPATCHER] DB update error for expired intent #${exp.id}:`, err?.message || err);
+      }
+
+      this.ledger?.logEvent(
+        'ARMED_INTENT_EXPIRED',
+        `Armed intent #${exp.id} expired after ${exp.barsElapsed} bars`,
+        {
+          livePrice: candle.c,
+          metadata: {
+            intentId: exp.id,
+            symbol: exp.symbol,
+            barsElapsed: exp.barsElapsed,
+            ttlBars: exp.ttlBars,
+            triggerTimeframe: exp.triggerTimeframe,
+          },
+        }
+      );
+
+      if (this.telegram) {
+        const eventKey = `evt_ARMED_INTENT_EXPIRED_${exp.symbol}_${exp.id}`;
+        this.telegram
+          .broadcastSparkMilestone(
+            'ARMED_INTENT_EXPIRED',
+            {
+              id: exp.id,
+              symbol: exp.symbol,
+              direction: exp.direction,
+              triggerCondition: exp.triggerCondition,
+              triggerPrice: exp.triggerPrice,
+              triggerTimeframe: exp.triggerTimeframe,
+              ttlBars: exp.ttlBars,
+              timestamp: exp.invalidatedAt || Date.now(),
+            },
+            { eventKey }
+          )
+          .catch(() => {});
+      }
+    }
+
+    // 2. Handle Invalidated Intents (intra-candle breach or early target 1)
+    for (const inv of output.invalidated) {
+      console.warn(
+        `[SPARK_DISPATCHER] 🛑 Armed intent #${inv.intent.id} invalidated on candle close: ${inv.reason}`
+      );
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET status = 'INVALIDATED',
+              invalidated_at = ${inv.timestamp},
+              narrative = COALESCE(narrative, '') || ' [RADAR_CANDLE: ' || ${inv.reason} || ']'
+          WHERE id = ${inv.intent.id}
+        `;
+      } catch (err: any) {
+        console.warn(`[SPARK_DISPATCHER] DB update error for invalidated intent #${inv.intent.id}:`, err?.message || err);
+      }
+
+      this.ledger?.logEvent(
+        'ARMED_INTENT_INVALIDATED',
+        `Armed intent #${inv.intent.id} invalidated: ${inv.reason}`,
+        {
+          livePrice: candle.c,
+          metadata: {
+            intentId: inv.intent.id,
+            symbol: inv.intent.symbol,
+            reason: inv.reason,
+            breachPrice: inv.breachPrice,
+          },
+        }
+      );
+
+      if (this.telegram) {
+        const eventKey = `evt_ARMED_INTENT_INVALIDATED_${inv.intent.symbol}_${inv.intent.id}`;
+        this.telegram
+          .broadcastSparkMilestone(
+            'ARMED_INTENT_INVALIDATED',
+            {
+              id: inv.intent.id,
+              symbol: inv.intent.symbol,
+              direction: inv.intent.direction,
+              reason: inv.reason,
+              invalidationLevel: inv.intent.invalidationLevel,
+              breachPrice: inv.breachPrice,
+              timestamp: inv.timestamp,
+            },
+            { eventKey }
+          )
+          .catch(() => {});
+      }
+    }
+
+    // 3. Handle Triggered Intents (Physical structural confirmation + volumetric displacement)
+    for (const trig of output.triggered) {
+      await this.executeTriggeredIntent(trig);
+    }
+
+    if (
+      output.expired.length > 0 ||
+      output.invalidated.length > 0 ||
+      output.triggered.length > 0
+    ) {
+      this.ledger?.setArmedIntents(this.radar.getAllIntents());
+      this.ledger?.setDaemonState(this.getDaemonState());
+    }
+
+    return output;
+  }
+
+  /**
+   * Executes an armed intent that has passed structural trigger confirmation:
+   * 1. Hydrates dynamic 2% compounding risk parameters and applies 0.15% clamp.
+   * 2. Validates setup through GlobalRiskGovernor pre-flight gatekeeper.
+   * 3. Routes to Tri-State execution mode (STANDBY / PAPER_TRADING / LIVE_BINANCE).
+   * 4. Enforces maker resting limit placement with 12-bar TTL and notifies Telegram.
+   */
+  public async executeTriggeredIntent(
+    trig: TriggerEvaluationResult,
+    options?: { modeOverride?: TriStateExecutionMode }
+  ): Promise<ProcessDecisionResult> {
+    const intent = trig.intent;
+    const id = intent.id;
+    console.log(
+      `[SPARK_DISPATCHER] 🚀 Executing triggered armed intent #${id} (${intent.symbol} ${intent.direction} ${intent.triggerCondition} @ $${intent.triggerPrice.toFixed(2)}, resolved entry: $${trig.resolvedEntryPrice.toFixed(2)})`
+    );
+
+    // 1. Dynamic Risk Parameter Hydration
+    const activeRisk = await this.getActiveRiskParameters();
+
+    // 2. Dynamic Position Sizing & Anti-Micro-Friction Clamp (0.15% floor)
+    const sizing = calculateSparkPositionSizing({
+      accountEquity: activeRisk.accountEquity,
+      compoundingRiskPct: activeRisk.compoundingRiskPct,
+      entryPrice: trig.resolvedEntryPrice,
+      invalidationLevel: intent.invalidationLevel,
+      direction: intent.direction,
+      lotPrecision: this.engine.config.lotPrecision ?? 3,
+      minLotSize: this.engine.config.minLotSize ?? 0.001,
+      maxLotSize: this.engine.config.maxLotSize ?? 100.0,
+    });
+
+    if (!sizing.isValid) {
+      const rejectReason = sizing.error || 'Position sizing calculation failed';
+      intent.stage = 'INVALIDATED';
+      intent.invalidationReason = rejectReason;
+      intent.invalidatedAt = Date.now();
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET status = 'REJECTED',
+              narrative = COALESCE(narrative, '') || ' [TRIGGER_SIZING_ERROR: ' || ${rejectReason} || ']'
+          WHERE id = ${id}
+        `;
+      } catch {}
+
+      this.ledger?.setArmedIntents(this.radar.getAllIntents());
+      this.ledger?.setDaemonState(this.getDaemonState());
+
+      if (this.telegram) {
+        const eventKey = `evt_ARMED_INTENT_INVALIDATED_${intent.symbol}_${id}`;
+        this.telegram
+          .broadcastSparkMilestone(
+            'ARMED_INTENT_INVALIDATED',
+            {
+              id,
+              symbol: intent.symbol,
+              direction: intent.direction,
+              reason: rejectReason,
+              invalidationLevel: intent.invalidationLevel,
+              timestamp: Date.now(),
+            },
+            { eventKey }
+          )
+          .catch(() => {});
+      }
+
+      return {
+        status: 'REJECTED',
+        reason: rejectReason,
+        sizing,
+      };
+    }
+
+    // 3. Global Risk Governor Pre-Flight Gatekeeper
+    const normalizeSym = (s: string) => {
+      const clean = String(s || '').trim().toUpperCase().replace(/[-_/]/g, '');
+      if (clean === 'ETH') return 'ETHUSDC';
+      if (clean === 'BTC') return 'BTCUSDC';
+      return clean;
+    };
+    const activePositionsForSymbol = this.engine
+      .getActivePositions()
+      .filter((p) => normalizeSym(p.symbol) === normalizeSym(intent.symbol)).length;
+
+    const lastLossTs =
+      typeof this.engine.getLastLossClosedTimestamp === 'function'
+        ? this.engine.getLastLossClosedTimestamp()
+        : ((this.engine as any).lastLossClosedTimestamp || 0);
+
+    const riskAssessment = await GlobalRiskGovernor.evaluatePreTradeRisk({
+      symbol: intent.symbol,
+      direction: intent.direction,
+      entryPrice: trig.resolvedEntryPrice,
+      stopLossPrice: sizing.clampedStopLoss,
+      currentEquity: activeRisk.accountEquity,
+      currentOpenPositionsCount: activePositionsForSymbol,
+      maxOpenPositions: activeRisk.maxOpenPositions,
+      emergencyEquityFloor: activeRisk.emergencyEquityFloor,
+      lastLossTimestamp: lastLossTs,
+      cooldownMinutes: this.engine.config.postLossCooldownMinutes ?? 45,
+      userEmail: this.userEmail,
+    });
+
+    if (!riskAssessment.isApproved) {
+      const vetoReason = riskAssessment.reason || 'Vetoed by Global Risk Governor';
+      intent.stage = 'INVALIDATED';
+      intent.invalidationReason = vetoReason;
+      intent.invalidatedAt = Date.now();
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET status = 'REJECTED_BY_RISK_GOVERNOR',
+              narrative = COALESCE(narrative, '') || ' [VETO_RISK_GOVERNOR: ' || ${vetoReason} || ']'
+          WHERE id = ${id}
+        `;
+      } catch (err: any) {
+        console.warn(`[SPARK_DISPATCHER] Could not update record #${id} to REJECTED_BY_RISK_GOVERNOR:`, err?.message || err);
+      }
+
+      this.ledger?.setArmedIntents(this.radar.getAllIntents());
+      this.ledger?.setDaemonState(this.getDaemonState());
+
+      if (this.telegram) {
+        const eventKey = `evt_ARMED_INTENT_INVALIDATED_${intent.symbol}_${id}`;
+        this.telegram
+          .broadcastSparkMilestone(
+            'ARMED_INTENT_INVALIDATED',
+            {
+              id,
+              symbol: intent.symbol,
+              direction: intent.direction,
+              reason: vetoReason,
+              invalidationLevel: intent.invalidationLevel,
+              timestamp: Date.now(),
+            },
+            { eventKey }
+          )
+          .catch(() => {});
+      }
+
+      console.warn(`[SPARK_DISPATCHER] 🛡️ Triggered intent #${id} rejected by Global Risk Governor: ${vetoReason}`);
+      this.ledger?.logEvent(
+        'SPARK_DECISION_REJECTED',
+        `Triggered intent #${id} rejected by Risk Governor: ${vetoReason}`,
+        {
+          livePrice: trig.triggerCandle.c,
+          metadata: {
+            decisionId: id,
+            violationTier: riskAssessment.violationTier,
+            reason: vetoReason,
+            sizing,
+          },
+        }
+      );
+
+      return {
+        status: 'REJECTED_BY_RISK_GOVERNOR',
+        reason: vetoReason,
+        riskAssessment,
+        sizing,
+      };
+    }
+
+    const activeMode = this.resolveExecutionMode(options?.modeOverride);
+
+    // 4. Tri-State Execution Mode Routing
+    if (activeMode === 'STANDBY') {
+      intent.stage = 'COMPLETED';
+      intent.invalidationReason = 'Routed to STANDBY mode (paper/live trading bypass)';
+      const standbyNarrative = ` [ROUTED: STANDBY (Logged to UI Cockpit, no orders queued or margin committed)]`;
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET status = 'LOGGED_STANDBY',
+              narrative = COALESCE(narrative, '') || ${standbyNarrative}
+          WHERE id = ${id}
+        `;
+      } catch {}
+
+      this.ledger?.setArmedIntents(this.radar.getAllIntents());
+      this.ledger?.setDaemonState(this.getDaemonState());
+
+      this.ledger?.logEvent('SPARK_DECISION_STANDBY', `Triggered intent #${id} logged to STANDBY mode`, {
+        livePrice: trig.triggerCandle.c,
+        metadata: { decisionId: id, sizing, riskAssessment },
+      });
+
+      return {
+        status: 'LOGGED_STANDBY',
+        executionMode: 'STANDBY',
+        reason: 'Triggered intent routed to STANDBY mode',
+        riskAssessment,
+        sizing,
+      };
+    }
+
+    if (activeMode === 'LIVE_BINANCE') {
+      const safetyGate = evaluateExecutionSafetyGate('LIVE_BINANCE');
+      if (!safetyGate.isAllowed) {
+        const vetoReason = `LIVE_BINANCE execution physically blocked outside verified production VPS: ${safetyGate.reason}`;
+        intent.stage = 'INVALIDATED';
+        intent.invalidationReason = vetoReason;
+        intent.invalidatedAt = Date.now();
+        try {
+          await sql`
+            UPDATE agent_decision_log
+            SET status = 'REJECTED',
+                narrative = COALESCE(narrative, '') || ' [ENVIRONMENT_ISOLATION_VETO: ' || ${vetoReason} || ']'
+            WHERE id = ${id}
+          `;
+        } catch {}
+
+        this.ledger?.setArmedIntents(this.radar.getAllIntents());
+        this.ledger?.setDaemonState(this.getDaemonState());
+
+        if (this.telegram) {
+          const eventKey = `evt_ARMED_INTENT_INVALIDATED_${intent.symbol}_${id}`;
+          this.telegram
+            .broadcastSparkMilestone(
+              'ARMED_INTENT_INVALIDATED',
+              {
+                id,
+                symbol: intent.symbol,
+                direction: intent.direction,
+                reason: vetoReason,
+                invalidationLevel: intent.invalidationLevel,
+                timestamp: Date.now(),
+              },
+              { eventKey }
+            )
+            .catch(() => {});
+        }
+
+        return {
+          status: 'REJECTED',
+          executionMode: 'LIVE_BINANCE',
+          reason: vetoReason,
+          riskAssessment,
+          sizing,
+        };
+      }
+    }
+
+    // 5. Submit resting limit order to engine (PAPER_TRADING or LIVE_BINANCE)
+    const submitRes = this.engine.submitStrategyOrder({
+      strategyId: `SPARK_${id}`,
+      strategyName: `Spark Armed Intent #${id} (${intent.agentId})`,
+      symbol: intent.symbol,
+      timeframe: intent.triggerTimeframe || '5m',
+      direction: intent.direction,
+      limitEntryPrice: parseFloat(trig.resolvedEntryPrice.toFixed(4)),
+      stopLossPrice: parseFloat(sizing.clampedStopLoss.toFixed(4)),
+      stage1Target: intent.target1 ? parseFloat(intent.target1.toFixed(4)) : undefined,
+      stage2Target: intent.target2 ? parseFloat(intent.target2.toFixed(4)) : undefined,
+      stage3Target: intent.target3 ? parseFloat(intent.target3.toFixed(4)) : undefined,
+      stage1Ratio: intent.stage1Ratio,
+      stage2Ratio: intent.stage2Ratio,
+      stage3Ratio: intent.stage3Ratio,
+      currentMarketPrice: trig.triggerCandle.c,
+      activeEquity: activeRisk.accountEquity,
+      overrideRiskPct: activeRisk.compoundingRiskPct,
+      setupId: `spark_decision_${id}`,
+      anchorName: `Armed Intent (${intent.agentId})`,
+      originZoneId: `spark_zone_${id}`,
+      originAnchorLevel: trig.resolvedEntryPrice,
+      executionMode: activeMode,
+      maxRetestBars: intent.ttlBars || 12,
+      bypassWeekendFilter: true,
+    });
+
+    if (submitRes.success) {
+      intent.stage = 'ORDER_RESTING';
+      intent.associatedPositionId = submitRes.position?.id;
+
+      const restingNarrative = ` [ARMED_INTENT_TRIGGERED: Resting limit @ $${trig.resolvedEntryPrice.toFixed(2)}, SL @ $${sizing.clampedStopLoss.toFixed(2)}, Mode: ${activeMode}]`;
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET status = 'ORDER_RESTING',
+              limit_entry_price = ${trig.resolvedEntryPrice},
+              narrative = COALESCE(narrative, '') || ${restingNarrative}
+          WHERE id = ${id}
+        `;
+      } catch (err: any) {
+        console.warn(`[SPARK_DISPATCHER] DB update error for triggered intent #${id}:`, err?.message || err);
+      }
+
+      this.ledger?.logEvent(
+        'ARMED_INTENT_TRIGGERED',
+        `Armed intent #${id} triggered: Resting limit placed @ $${trig.resolvedEntryPrice.toFixed(2)} (${activeMode})`,
+        {
+          livePrice: trig.triggerCandle.c,
+          position: submitRes.position,
+          metadata: {
+            decisionId: id,
+            resolvedEntryPrice: trig.resolvedEntryPrice,
+            condition: intent.triggerCondition,
+            sizing,
+          },
+        }
+      );
+
+      this.ledger?.setArmedIntents(this.radar.getAllIntents());
+      this.ledger?.setDaemonState(this.getDaemonState());
+
+      // 📡 Telegram Milestone: ARMED_INTENT_TRIGGERED
+      if (this.telegram) {
+        const trigEventKey = `evt_ARMED_INTENT_TRIGGERED_${intent.symbol}_${id}`;
+        this.telegram
+          .broadcastSparkMilestone(
+            'ARMED_INTENT_TRIGGERED',
+            {
+              id,
+              symbol: intent.symbol,
+              direction: intent.direction,
+              triggerCondition: intent.triggerCondition,
+              triggerPrice: intent.triggerPrice,
+              triggerTimeframe: intent.triggerTimeframe,
+              limitEntryPrice: trig.resolvedEntryPrice,
+              stopLossPrice: sizing.clampedStopLoss,
+              contractSize: sizing.contractSize,
+              riskUsd: sizing.dollarRisk,
+              riskPct: sizing.compoundingRiskPct,
+              target1: intent.target1,
+              timestamp: Date.now(),
+            },
+            { eventKey: trigEventKey }
+          )
+          .catch(() => {});
+
+        // Also broadcast ORDER_ARMED milestone
+        const armedEventKey = submitRes.position?.id ? `evt_${submitRes.position.id}_LIMIT_ORDER_PLACED` : undefined;
+        this.telegram
+          .broadcastSparkMilestone(
+            'ORDER_ARMED',
+            {
+              mode: activeMode,
+              symbol: intent.symbol,
+              direction: intent.direction,
+              limitEntryPrice: trig.resolvedEntryPrice,
+              stopLossPrice: sizing.clampedStopLoss,
+              contractSize: sizing.contractSize,
+              notionalValue: sizing.notionalValue,
+              riskUsd: sizing.dollarRisk,
+              riskPct: sizing.compoundingRiskPct,
+              ttlBars: intent.ttlBars || 12,
+              timestamp: Date.now(),
+            },
+            { eventKey: armedEventKey }
+          )
+          .catch(() => {});
+      }
+
+      return {
+        status: activeMode === 'PAPER_TRADING' ? 'PAPER_ACTIVE' : 'EXECUTED',
+        executionMode: activeMode,
+        position: submitRes.position,
+        riskAssessment,
+        sizing,
+      };
+    } else {
+      const rejectReason = submitRes.message || 'Order submission failed';
+      intent.stage = 'INVALIDATED';
+      intent.invalidationReason = rejectReason;
+      intent.invalidatedAt = Date.now();
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET status = 'REJECTED',
+              narrative = COALESCE(narrative, '') || ' [SUBMISSION_FAILED: ' || ${rejectReason} || ']'
+          WHERE id = ${id}
+        `;
+      } catch {}
+
+      this.ledger?.setArmedIntents(this.radar.getAllIntents());
+      this.ledger?.setDaemonState(this.getDaemonState());
+
+      if (this.telegram) {
+        const eventKey = `evt_ARMED_INTENT_INVALIDATED_${intent.symbol}_${id}`;
+        this.telegram
+          .broadcastSparkMilestone(
+            'ARMED_INTENT_INVALIDATED',
+            {
+              id,
+              symbol: intent.symbol,
+              direction: intent.direction,
+              reason: rejectReason,
+              invalidationLevel: intent.invalidationLevel,
+              timestamp: Date.now(),
+            },
+            { eventKey }
+          )
+          .catch(() => {});
+      }
+
+      return {
+        status: 'REJECTED',
+        executionMode: activeMode,
+        reason: rejectReason,
+        riskAssessment,
+        sizing,
+      };
+    }
   }
 }

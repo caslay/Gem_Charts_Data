@@ -23,8 +23,10 @@ interface DaemonStateResponse {
   winningTrades: number;
   losingTrades: number;
   winRatePct: number;
-  activePositions: StrategyExecutionPosition[];
-  pendingOrders: StrategyExecutionPosition[];
+  daemonState?: 'SEARCHING' | 'ARMED_WATCHING_TRIGGER' | 'ORDER_RESTING' | 'ACTIVE_TRADE' | string;
+  armedIntents?: any[];
+  activePositions: any[];
+  pendingOrders: any[];
   completedTrades: StrategyExecutionPosition[];
   allTodayTrades: any[];
   serverTime: number;
@@ -141,11 +143,47 @@ export async function GET(req: Request) {
       } catch {}
     }
 
+    // Stage-tagged positions
+    const stageTaggedPositions = Array.from(activeMap.values()).map((p: any) => {
+      let stageTag = 'IN_FLIGHT_STAGE_1';
+      if (p.isStage2Filled) {
+        stageTag = 'IN_FLIGHT_STAGE_3';
+      } else if (p.isStage1Filled) {
+        stageTag = 'IN_FLIGHT_STAGE_2';
+      }
+      return { ...p, stage: stageTag };
+    });
+
+    // Stage-tagged pending orders
+    const stageTaggedPendingOrders = Array.from(pendingMap.values()).map((po: any) => ({
+      ...po,
+      stage: 'ORDER_RESTING',
+    }));
+
+    const armedIntents = Array.isArray(sessionLog.armedIntents) ? sessionLog.armedIntents : [];
+    const activeArmedIntents = armedIntents.filter(
+      (i: any) => i.stage === 'ARMED_PENDING' || i.stage === 'PROXIMITY_ELEVATED'
+    );
+
+    let daemonState: 'SEARCHING' | 'ARMED_WATCHING_TRIGGER' | 'ORDER_RESTING' | 'ACTIVE_TRADE' =
+      'SEARCHING';
+    if (stageTaggedPositions.length > 0) {
+      daemonState = 'ACTIVE_TRADE';
+    } else if (stageTaggedPendingOrders.length > 0) {
+      daemonState = 'ORDER_RESTING';
+    } else if (activeArmedIntents.length > 0) {
+      daemonState = 'ARMED_WATCHING_TRIGGER';
+    } else if (sessionLog.daemonState) {
+      daemonState = sessionLog.daemonState as any;
+    }
+
     const response: DaemonStateResponse = {
       success: true,
       isDaemonActive,
       lastHeartbeatTime: lastHeartbeat,
       lastEvent: lastEvt,
+      daemonState,
+      armedIntents,
       symbol: sessionLog.symbol || symbol,
       equity: sessionLog.currentEquity || 1000.0,
       initialEquity: sessionLog.initialEquity || 1000.0,
@@ -156,8 +194,8 @@ export async function GET(req: Request) {
       winRatePct,
       compoundingRiskPct: liveSettings.compoundingRiskPct ?? 2.0,
       liveSettings,
-      activePositions: Array.from(activeMap.values()),
-      pendingOrders: Array.from(pendingMap.values()),
+      activePositions: stageTaggedPositions,
+      pendingOrders: stageTaggedPendingOrders,
       completedTrades: sessionLog.completedTrades || [],
       allTodayTrades,
       serverTime: now,

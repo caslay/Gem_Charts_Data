@@ -36,6 +36,11 @@ export interface DaemonSessionEvent {
     | 'SPARK_DECISION_INVALIDATED'
     | 'SPARK_DECISION_REJECTED'
     | 'SPARK_DECISION_STAND_DOWN'
+    | 'ARMED_INTENT_REGISTERED'
+    | 'ARMED_INTENT_PROXIMITY_ELEVATED'
+    | 'ARMED_INTENT_TRIGGERED'
+    | 'ARMED_INTENT_EXPIRED'
+    | 'ARMED_INTENT_INVALIDATED'
     | 'ERROR';
   timestamp: number;
   timeIso: string;
@@ -59,6 +64,8 @@ export interface DaemonSessionLog {
   totalTrades: number;
   winningTrades: number;
   losingTrades: number;
+  daemonState?: 'SEARCHING' | 'ARMED_WATCHING_TRIGGER' | 'ORDER_RESTING' | 'ACTIVE_TRADE' | string;
+  armedIntents?: any[];
   events: DaemonSessionEvent[];
   completedTrades: StrategyExecutionPosition[];
 }
@@ -311,13 +318,26 @@ export class DaemonLedger {
   }
 
   /**
-   * Flush in-memory session log to disk.
+   * Update active armed intents in session log and flush to disk.
    */
-  private flushToDisk(): void {
+  public setArmedIntents(intents: any[]): void {
+    this.sessionLog.armedIntents = intents;
+    this.flushToDisk();
+  }
+
+  /**
+   * Update current daemon state machine status and flush to disk.
+   */
+  public setDaemonState(state: string): void {
+    this.sessionLog.daemonState = state;
+    this.flushToDisk();
+  }
+
+  public flushToDisk(): void {
     try {
       fs.writeFileSync(this.runLogPath, JSON.stringify(this.sessionLog, null, 2), 'utf8');
     } catch (err) {
-      console.error('[DAEMON_LEDGER] Error saving session log to disk:', err);
+      console.warn('[DAEMON_LEDGER] Warning saving session log to disk:', err);
     }
   }
 

@@ -35,7 +35,11 @@ export type SparkLifecycleMilestone =
   | 'ORDER_ARMED'
   | 'ORDER_FILLED'
   | 'TP1_SCALE_RATCHET'
-  | 'TRADE_CLOSED';
+  | 'TRADE_CLOSED'
+  | 'ARMED_INTENT_REGISTERED'
+  | 'ARMED_INTENT_TRIGGERED'
+  | 'ARMED_INTENT_EXPIRED'
+  | 'ARMED_INTENT_INVALIDATED';
 
 export interface SparkSignalReceivedPayload {
   id?: number | string;
@@ -337,6 +341,148 @@ export function formatSparkTradeClosedMarkdown(payload: SparkTradeClosedPayload)
   );
 }
 
+export interface ArmedIntentRegisteredPayload {
+  id: number | string;
+  symbol: string;
+  direction: 'LONG' | 'SHORT' | string;
+  triggerCondition: string;
+  triggerPrice: number;
+  triggerTimeframe: string;
+  poiZoneLow: number;
+  poiZoneHigh: number;
+  invalidationLevel: number;
+  target1?: number | null;
+  target2?: number | null;
+  target3?: number | null;
+  ttlBars?: number;
+  limitOffsetRule?: string;
+  timestamp?: number;
+  narrative?: string | null;
+}
+
+export interface ArmedIntentTriggeredPayload {
+  id: number | string;
+  symbol: string;
+  direction: 'LONG' | 'SHORT' | string;
+  triggerCondition: string;
+  triggerPrice: number;
+  triggerTimeframe: string;
+  limitEntryPrice: number;
+  stopLossPrice: number;
+  contractSize?: number;
+  riskUsd?: number;
+  riskPct?: number;
+  target1?: number | null;
+  timestamp?: number;
+}
+
+export interface ArmedIntentExpiredPayload {
+  id: number | string;
+  symbol: string;
+  direction: 'LONG' | 'SHORT' | string;
+  triggerCondition: string;
+  triggerPrice: number;
+  triggerTimeframe: string;
+  ttlBars: number;
+  timestamp?: number;
+}
+
+export interface ArmedIntentInvalidatedPayload {
+  id: number | string;
+  symbol: string;
+  direction: 'LONG' | 'SHORT' | string;
+  reason: string;
+  invalidationLevel?: number;
+  breachPrice?: number;
+  timestamp?: number;
+}
+
+export function formatArmedIntentRegisteredMarkdown(payload: ArmedIntentRegisteredPayload): string {
+  const dirEmoji = payload.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
+  const timeIso = new Date(payload.timestamp || Date.now())
+    .toISOString()
+    .replace('T', ' ')
+    .substring(0, 19) + ' UTC';
+  const ttlBars = payload.ttlBars ?? 12;
+  const t1Str = payload.target1 ? `$${payload.target1.toFixed(2)}` : 'Open';
+  const t2Str = payload.target2 ? ` | TP2: \`$${payload.target2.toFixed(2)}\`` : '';
+  const t3Str = payload.target3 ? ` | TP3: \`$${payload.target3.toFixed(2)}\`` : '';
+  const cleanNarrative = sanitizeMarkdownText(payload.narrative);
+
+  return (
+    `🎯 *[ARMED INTENT REGISTERED & RADAR ACTIVE]*\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `📊 *Pair:* \`${payload.symbol}\`\n` +
+    `🧭 *Direction:* *${dirEmoji}*\n` +
+    `⚡ *Trigger:* \`${payload.triggerCondition}\` @ \`$${payload.triggerPrice.toFixed(2)}\` (${payload.triggerTimeframe})\n` +
+    `🎯 *POI Zone:* \`$${payload.poiZoneLow.toFixed(2)} — $${payload.poiZoneHigh.toFixed(2)}\`\n` +
+    `🛑 *Stop Loss:* \`$${payload.invalidationLevel.toFixed(2)}\`\n` +
+    `🎯 *Target Ladder:* TP1: \`${t1Str}\`${t2Str}${t3Str}\n` +
+    `⏳ *TTL Window:* \`${ttlBars} Bars (${ttlBars * 5}m)\`\n` +
+    `📡 *Radar Mode:* \`[PROXIMITY RADAR ARMED]\`\n` +
+    (cleanNarrative ? `📝 *Setup Note:* _${cleanNarrative}_\n` : '') +
+    `⏰ *Armed At:* \`${timeIso}\``
+  );
+}
+
+export function formatArmedIntentTriggeredMarkdown(payload: ArmedIntentTriggeredPayload): string {
+  const dirEmoji = payload.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
+  const timeIso = new Date(payload.timestamp || Date.now())
+    .toISOString()
+    .replace('T', ' ')
+    .substring(0, 19) + ' UTC';
+  const sizeStr = payload.contractSize ? `\n📐 *Position Size:* \`${payload.contractSize} contracts\`` : '';
+  const riskStr = payload.riskUsd && payload.riskPct ? `\n💵 *Committed Risk:* \`$${payload.riskUsd.toFixed(2)}\` (${payload.riskPct.toFixed(1)}%)` : '';
+
+  return (
+    `🚀 *[ARMED INTENT TRIGGERED & ORDER RESTING]*\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `📊 *Pair:* \`${payload.symbol}\` (${dirEmoji})\n` +
+    `⚡ *Trigger Confirmed:* \`${payload.triggerCondition}\` on ${payload.triggerTimeframe} @ \`$${payload.triggerPrice.toFixed(2)}\`\n` +
+    `🎯 *Resting Limit:* \`$${payload.limitEntryPrice.toFixed(2)}\` (Resting Maker)\n` +
+    `🛑 *Stop Loss:* \`$${payload.stopLossPrice.toFixed(2)}\`` +
+    riskStr +
+    sizeStr +
+    `\n⏰ *Trigger Time:* \`${timeIso}\``
+  );
+}
+
+export function formatArmedIntentExpiredMarkdown(payload: ArmedIntentExpiredPayload): string {
+  const dirEmoji = payload.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
+  const timeIso = new Date(payload.timestamp || Date.now())
+    .toISOString()
+    .replace('T', ' ')
+    .substring(0, 19) + ' UTC';
+
+  return (
+    `⌛ *[ARMED INTENT EXPIRED]*\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `📊 *Pair:* \`${payload.symbol}\` (${dirEmoji})\n` +
+    `⚡ *Awaited Trigger:* \`${payload.triggerCondition}\` @ \`$${payload.triggerPrice.toFixed(2)}\`\n` +
+    `⏳ *Reason:* \`TTL Expired (${payload.ttlBars} bars elapsed without trigger confirmation)\`\n` +
+    `🛑 *Action:* Intent disarmed & pending queue flushed.\n` +
+    `⏰ *Expiry Time:* \`${timeIso}\``
+  );
+}
+
+export function formatArmedIntentInvalidatedMarkdown(payload: ArmedIntentInvalidatedPayload): string {
+  const dirEmoji = payload.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
+  const timeIso = new Date(payload.timestamp || Date.now())
+    .toISOString()
+    .replace('T', ' ')
+    .substring(0, 19) + ' UTC';
+  const safeReason = sanitizeMarkdownText(payload.reason);
+
+  return (
+    `🛑 *[ARMED INTENT INVALIDATED]*\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `📊 *Pair:* \`${payload.symbol}\` (${dirEmoji})\n` +
+    `⚠️ *Reason:* _${safeReason}_\n` +
+    `🛑 *Action:* Armed intent cancelled. Zero exchange exposure.\n` +
+    `⏰ *Invalidated At:* \`${timeIso}\``
+  );
+}
+
 export function formatSparkLifecycleMarkdown(
   milestone: SparkLifecycleMilestone,
   payload: any
@@ -352,6 +498,14 @@ export function formatSparkLifecycleMarkdown(
       return formatSparkTp1RatchetMarkdown(payload);
     case 'TRADE_CLOSED':
       return formatSparkTradeClosedMarkdown(payload);
+    case 'ARMED_INTENT_REGISTERED':
+      return formatArmedIntentRegisteredMarkdown(payload);
+    case 'ARMED_INTENT_TRIGGERED':
+      return formatArmedIntentTriggeredMarkdown(payload);
+    case 'ARMED_INTENT_EXPIRED':
+      return formatArmedIntentExpiredMarkdown(payload);
+    case 'ARMED_INTENT_INVALIDATED':
+      return formatArmedIntentInvalidatedMarkdown(payload);
     default:
       return '';
   }
@@ -871,6 +1025,26 @@ export class TelegramNotifier {
         const reason = payload.exitReason ?? '';
         const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
         return `evt_SPARK_CLOSED_${payload.symbol}_${exitPrice}_${reason}${ts}`;
+      }
+      case 'ARMED_INTENT_REGISTERED': {
+        const trig = payload.triggerPrice ?? '';
+        const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
+        return `evt_SPARK_ARMED_INTENT_${payload.symbol}_${trig}${ts}`;
+      }
+      case 'ARMED_INTENT_TRIGGERED': {
+        const entry = payload.limitEntryPrice ?? '';
+        const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
+        return `evt_SPARK_INTENT_TRIGGERED_${payload.symbol}_${entry}${ts}`;
+      }
+      case 'ARMED_INTENT_EXPIRED': {
+        const trig = payload.triggerPrice ?? '';
+        const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
+        return `evt_SPARK_INTENT_EXPIRED_${payload.symbol}_${trig}${ts}`;
+      }
+      case 'ARMED_INTENT_INVALIDATED': {
+        const reason = payload.reason ? `_${String(payload.reason).substring(0, 10)}` : '';
+        const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
+        return `evt_SPARK_INTENT_INVALIDATED_${payload.symbol}${reason}${ts}`;
       }
       default:
         return `evt_SPARK_${milestone}_${payload.symbol}_${Date.now()}`;

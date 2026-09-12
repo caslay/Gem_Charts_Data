@@ -237,6 +237,83 @@ The decision is stored with status 'ACTIVE' and can later be updated via the RES
           target_2: permissiveNumber.describe(
             'Second profit target (TP2) price level. Accepts numbers, numeric strings, or null.'
           ),
+          target_3: permissiveNumber.describe(
+            'Third profit target (TP3 / DOL runner) price level. Accepts numbers, numeric strings, or null.'
+          ),
+          stage1_ratio: permissiveNumber.describe(
+            'Stage 1 TP harvest ratio (e.g. 0.50 for 50%, 0.40 for 40%).'
+          ),
+          stage2_ratio: permissiveNumber.describe(
+            'Stage 2 TP harvest ratio (e.g. 0.50 for 50%, 0.40 for 40%).'
+          ),
+          stage3_ratio: permissiveNumber.describe(
+            'Stage 3 TP harvest ratio (e.g. 0.00 or 0.20).'
+          ),
+          execution_mode: z
+            .unknown()
+            .nullish()
+            .default('IMMEDIATE_LIMIT')
+            .transform((val) => {
+              if (!val) return 'IMMEDIATE_LIMIT';
+              const s = String(val).trim().toUpperCase();
+              if (
+                s === 'TRIGGER' ||
+                s === 'TRIGGER_ON_CONFIRMATION' ||
+                s === 'CONDITIONAL' ||
+                s === 'ARMED'
+              ) {
+                return 'TRIGGER_ON_CONFIRMATION';
+              }
+              return 'IMMEDIATE_LIMIT';
+            })
+            .pipe(z.enum(['IMMEDIATE_LIMIT', 'TRIGGER_ON_CONFIRMATION']))
+            .describe(
+              "Execution mode: 'IMMEDIATE_LIMIT' (execute limit order immediately if criteria pass) or 'TRIGGER_ON_CONFIRMATION' (arm intent & proximity radar, execute when structural trigger confirms). Defaults to 'IMMEDIATE_LIMIT'."
+            ),
+          trigger_timeframe: z
+            .unknown()
+            .nullish()
+            .default('5m')
+            .transform((val) => {
+              if (!val) return '5m';
+              const s = String(val).trim().toLowerCase();
+              if (['1m', '3m', '5m', '15m', '1h'].includes(s)) return s;
+              return '5m';
+            })
+            .describe(
+              "Structural trigger candle timeframe ('1m', '3m', '5m', '15m'). Defaults to '5m'."
+            ),
+          trigger_condition: z
+            .unknown()
+            .nullish()
+            .transform((val) => {
+              if (!val) return undefined;
+              const s = String(val).trim().toUpperCase().replace(/[\s-]+/g, '_');
+              return s || undefined;
+            })
+            .describe(
+              "Trigger condition: 'MSS_BODY_CLOSE_ABOVE', 'MSS_BODY_CLOSE_BELOW', 'SWEEP_AND_RECLAIM'."
+            ),
+          trigger_price: permissiveNumber.describe(
+            'Price level to evaluate trigger condition against (e.g. body close above this level).'
+          ),
+          poi_zone_low: permissiveNumber.describe(
+            'Point of Interest (POI) action zone floor. If omitted, falls back to entry_range_low.'
+          ),
+          poi_zone_high: permissiveNumber.describe(
+            'Point of Interest (POI) action zone ceiling. If omitted, falls back to entry_range_high.'
+          ),
+          limit_offset_rule: z
+            .string()
+            .nullish()
+            .default('FVG_PROXIMAL')
+            .describe(
+              "Resting limit entry offset rule: 'FVG_PROXIMAL' (default), 'ANCHOR_PRICE', 'POI_MIDPOINT', 'LIMIT_EXACT'."
+            ),
+          ttl_bars: permissiveNumber
+            .transform((v) => (v && v > 0 ? Math.round(v) : 12))
+            .default(12)
+            .describe('Time-To-Live expiration window in bars (default: 12 bars).'),
           narrative: z
             .unknown()
             .nullish()
