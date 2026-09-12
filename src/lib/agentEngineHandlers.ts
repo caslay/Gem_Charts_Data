@@ -93,11 +93,26 @@ export async function ensureAgentDecisionTableInitialized(): Promise<void> {
           invalidation_level      NUMERIC(16,4),
           target_1                NUMERIC(16,4),
           target_2                NUMERIC(16,4),
+          target_3                NUMERIC(16,4),
+          stage1_ratio            NUMERIC(5,2),
+          stage2_ratio            NUMERIC(5,2),
+          stage3_ratio            NUMERIC(5,2),
           narrative               TEXT,
           status                  VARCHAR(32)   NOT NULL DEFAULT 'PENDING',
           live_price_at_submission NUMERIC(16,4),
           submitted_at            BIGINT        NOT NULL,
           invalidated_at          BIGINT,
+          execution_mode          VARCHAR(64)   DEFAULT 'IMMEDIATE_LIMIT',
+          trigger_timeframe       VARCHAR(16)   DEFAULT '5m',
+          trigger_condition       VARCHAR(64),
+          trigger_price           NUMERIC(16,4),
+          poi_zone_low            NUMERIC(16,4),
+          poi_zone_high           NUMERIC(16,4),
+          ttl_bars                INTEGER       DEFAULT 12,
+          bars_elapsed            INTEGER       DEFAULT 0,
+          limit_entry_price       NUMERIC(16,4),
+          triggered_at            BIGINT,
+          radar_status            VARCHAR(64)   DEFAULT 'DORMANT',
           created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
       `;
@@ -106,6 +121,29 @@ export async function ensureAgentDecisionTableInitialized(): Promise<void> {
           ON agent_decision_log(symbol, status, submitted_at DESC);
       `;
     }
+
+    // Self-healing schema migration for existing deployments
+    try {
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS execution_mode VARCHAR(64) DEFAULT 'IMMEDIATE_LIMIT'`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS trigger_timeframe VARCHAR(16) DEFAULT '5m'`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS trigger_condition VARCHAR(64)`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS trigger_price NUMERIC(16,4)`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS poi_zone_low NUMERIC(16,4)`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS poi_zone_high NUMERIC(16,4)`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS limit_offset_rule VARCHAR(64) DEFAULT 'FVG_PROXIMAL'`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS ttl_bars INTEGER DEFAULT 12`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS bars_elapsed INTEGER DEFAULT 0`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS limit_entry_price NUMERIC(16,4)`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS target_3 NUMERIC(16,4)`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS stage1_ratio NUMERIC(5,2)`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS stage2_ratio NUMERIC(5,2)`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS stage3_ratio NUMERIC(5,2)`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS triggered_at BIGINT`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS radar_status VARCHAR(64) DEFAULT 'DORMANT'`;
+    } catch {
+      // Ignored if read-only sandbox or columns already present
+    }
+
     isSchemaInitialized = true;
   } catch (error: any) {
     isSchemaInitialized = true;
@@ -644,6 +682,11 @@ export interface SubmitQuantDecisionResult {
   success: boolean;
   id?: number;
   status?: string;
+  execution_mode?: string;
+  trigger_condition?: string;
+  trigger_price?: number | null;
+  trigger_timeframe?: string;
+  poi_zone?: { low: number | null; high: number | null };
   submitted_at?: number;
   live_price: number | null;
   invalidation_guard: {
@@ -739,6 +782,44 @@ export async function runSubmitQuantDecision(
   const invalidationLevel = sanitizeNumericField(payload.invalidation_level);
   const target1 = sanitizeNumericField(payload.target_1);
   const target2 = sanitizeNumericField(payload.target_2);
+  const target3 = sanitizeNumericField(payload.target_3);
+  const stage1Ratio = sanitizeNumericField(payload.stage1_ratio) ?? 0.50;
+  const stage2Ratio = sanitizeNumericField(payload.stage2_ratio) ?? 0.50;
+  const stage3Ratio = sanitizeNumericField(payload.stage3_ratio) ?? 0.00;
+
+  // ── Mode & Trigger Resolution ─────────────────────────────────────────────
+  const rawMode = String(payload.execution_mode || '').trim().toUpperCase();
+  const isTriggerOnConfirmation =
+    rawMode === 'TRIGGER' ||
+    rawMode === 'TRIGGER_ON_CONFIRMATION' ||
+    rawMode === 'CONDITIONAL' ||
+    rawMode === 'ARMED' ||
+    Boolean(payload.trigger_condition);
+
+  const executionMode = isTriggerOnConfirmation ? 'TRIGGER_ON_CONFIRMATION' : 'IMMEDIATE_LIMIT';
+  const triggerTimeframe = payload.trigger_timeframe
+    ? String(payload.trigger_timeframe).trim().toLowerCase()
+    : '5m';
+
+  const triggerCondition = payload.trigger_condition
+    ? String(payload.trigger_condition).trim().toUpperCase().replace(/[\s-]+/g, '_')
+    : (isTriggerOnConfirmation
+        ? (normalizedBias.includes('BULLISH') ? 'MSS_BODY_CLOSE_ABOVE' : 'MSS_BODY_CLOSE_BELOW')
+        : null);
+
+  const triggerPrice =
+    sanitizeNumericField(payload.trigger_price) ??
+    (normalizedBias.includes('BULLISH') ? entryRangeHigh : entryRangeLow);
+
+  const poiZoneLow = sanitizeNumericField(payload.poi_zone_low) ?? entryRangeLow;
+  const poiZoneHigh = sanitizeNumericField(payload.poi_zone_high) ?? entryRangeHigh;
+  const limitOffsetRule = payload.limit_offset_rule
+    ? String(payload.limit_offset_rule).trim().toUpperCase()
+    : 'FVG_PROXIMAL';
+  const ttlBars = sanitizeNumericField(payload.ttl_bars)
+    ? Math.round(Number(payload.ttl_bars))
+    : 12;
+
   let narrative: string | null = null;
   if (payload.narrative != null) {
     if (typeof payload.narrative === 'string') {
@@ -800,12 +881,17 @@ export async function runSubmitQuantDecision(
   await ensureAgentDecisionTableInitialized();
 
   const now = Date.now();
+  const initialStatus = isTriggerOnConfirmation ? 'ARMED_WATCHING_TRIGGER' : 'ACTIVE';
+
   const result = await sql`
     INSERT INTO agent_decision_log (
       symbol, agent_id, bias_signal,
       entry_range_low, entry_range_high, invalidation_level,
-      target_1, target_2, narrative,
-      status, live_price_at_submission, submitted_at
+      target_1, target_2, target_3,
+      stage1_ratio, stage2_ratio, stage3_ratio,
+      narrative, status, live_price_at_submission, submitted_at,
+      execution_mode, trigger_timeframe, trigger_condition, trigger_price,
+      poi_zone_low, poi_zone_high, limit_offset_rule, ttl_bars, radar_status
     ) VALUES (
       ${symbol},
       ${agent_id},
@@ -815,10 +901,23 @@ export async function runSubmitQuantDecision(
       ${invalidationLevel},
       ${target1},
       ${target2},
+      ${target3},
+      ${stage1Ratio},
+      ${stage2Ratio},
+      ${stage3Ratio},
       ${narrative},
-      'ACTIVE',
+      ${initialStatus},
       ${livePriceAtSubmission},
-      ${now}
+      ${now},
+      ${executionMode},
+      ${triggerTimeframe},
+      ${triggerCondition},
+      ${triggerPrice},
+      ${poiZoneLow},
+      ${poiZoneHigh},
+      ${limitOffsetRule},
+      ${ttlBars},
+      'DORMANT'
     )
     RETURNING id, submitted_at, status
   `;
@@ -826,13 +925,51 @@ export async function runSubmitQuantDecision(
   const inserted = result.rows[0];
 
   console.log(
-    `[agentEngineHandlers] ✅ Decision persisted. id=${inserted.id} agent=${agent_id} bias=${normalizedBias} symbol=${symbol}`
+    `[agentEngineHandlers] ✅ Decision persisted. id=${inserted.id} agent=${agent_id} bias=${normalizedBias} symbol=${symbol} mode=${executionMode} status=${initialStatus}`
   );
+
+  // 📡 Telegram Notification: Armed Intent Registered
+  if (isTriggerOnConfirmation) {
+    try {
+      const { TelegramNotifier } = await import('@/lib/notifications/telegramNotifier');
+      const telegram = new TelegramNotifier();
+      telegram
+        .broadcastSparkMilestone('ARMED_INTENT_REGISTERED', {
+          id: inserted.id,
+          decisionId: inserted.id,
+          symbol,
+          direction: normalizedBias.includes('BULLISH')
+            ? 'LONG'
+            : normalizedBias.includes('BEARISH')
+            ? 'SHORT'
+            : 'NEUTRAL',
+          triggerCondition: triggerCondition || 'MSS_BODY_CLOSE_ABOVE',
+          triggerPrice: triggerPrice ?? (poiZoneHigh ?? poiZoneLow ?? livePriceAtSubmission ?? 0),
+          triggerTimeframe,
+          poiZoneLow: poiZoneLow ?? 0,
+          poiZoneHigh: poiZoneHigh ?? 0,
+          invalidationLevel: invalidationLevel ?? 0,
+          target1,
+          target2,
+          target3,
+          ttlBars,
+          limitOffsetRule,
+          narrative,
+          timestamp: now,
+        })
+        .catch(() => {});
+    } catch {}
+  }
 
   return {
     success: true,
     id: inserted.id,
     status: inserted.status,
+    execution_mode: executionMode,
+    trigger_condition: triggerCondition ?? undefined,
+    trigger_price: triggerPrice,
+    trigger_timeframe: triggerTimeframe,
+    poi_zone: { low: poiZoneLow, high: poiZoneHigh },
     submitted_at: inserted.submitted_at,
     live_price: livePriceAtSubmission,
     invalidation_guard: invalidationGuard,
@@ -1580,9 +1717,141 @@ export async function runGetLiveDaemonStatus(options: LiveDaemonStatusOptions = 
   const currentEquity = sessionLog.currentEquity || 1000.0;
   const calculatedRiskUsd = parseFloat((currentEquity * (activeCompoundingRiskPct / 100)).toFixed(2));
 
+  // Query active armed intents from DB (agent_decision_log)
+  let activeArmedIntents: any[] = [];
+  try {
+    const armedRes = await sql`
+      SELECT id, symbol, agent_id, bias_signal, entry_range_low, entry_range_high,
+             invalidation_level, target_1, target_2, target_3, status, radar_status,
+             execution_mode, trigger_timeframe, trigger_condition, trigger_price,
+             poi_zone_low, poi_zone_high, limit_offset_rule, ttl_bars, bars_elapsed,
+             limit_entry_price, submitted_at
+      FROM agent_decision_log
+      WHERE status IN ('ARMED_WATCHING_TRIGGER', 'ARMED_PENDING')
+        AND (
+          UPPER(REPLACE(REPLACE(symbol, '-', ''), '/', '')) = ${symbol}
+          OR UPPER(symbol) = ${symbol.replace(/USDC|USDT/g, '')}
+        )
+      ORDER BY submitted_at DESC
+      LIMIT 10
+    `;
+    activeArmedIntents = armedRes.rows.map((row: any) => ({
+      id: row.id,
+      symbol: row.symbol,
+      agent_id: row.agent_id,
+      direction: row.bias_signal.includes('BULLISH')
+        ? 'LONG'
+        : row.bias_signal.includes('BEARISH')
+        ? 'SHORT'
+        : 'NEUTRAL',
+      stage:
+        row.radar_status === 'PROXIMITY_ELEVATED'
+          ? 'PROXIMITY_ELEVATED'
+          : 'ARMED_PENDING',
+      radar_status: row.radar_status || 'DORMANT',
+      trigger_condition: row.trigger_condition || 'MSS_BODY_CLOSE_ABOVE',
+      trigger_price: row.trigger_price ? Number(row.trigger_price) : null,
+      trigger_timeframe: row.trigger_timeframe || '5m',
+      poi_zone: {
+        low: row.poi_zone_low
+          ? Number(row.poi_zone_low)
+          : row.entry_range_low
+          ? Number(row.entry_range_low)
+          : null,
+        high: row.poi_zone_high
+          ? Number(row.poi_zone_high)
+          : row.entry_range_high
+          ? Number(row.entry_range_high)
+          : null,
+      },
+      limit_offset_rule: row.limit_offset_rule || 'FVG_PROXIMAL',
+      ttl_bars: row.ttl_bars || 12,
+      bars_elapsed: row.bars_elapsed !== null && row.bars_elapsed !== undefined ? Number(row.bars_elapsed) : 0,
+      limit_entry_price: row.limit_entry_price ? Number(row.limit_entry_price) : null,
+      invalidation_level: row.invalidation_level
+        ? Number(row.invalidation_level)
+        : null,
+      target_1: row.target_1 ? Number(row.target_1) : null,
+      target_2: row.target_2 ? Number(row.target_2) : null,
+      target_3: row.target_3 ? Number(row.target_3) : null,
+      armed_at: row.submitted_at,
+    }));
+  } catch {
+    if (Array.isArray(sessionLog?.armedIntents)) {
+      activeArmedIntents = sessionLog.armedIntents;
+    }
+  }
+
+  // Fallback to in-memory sessionLog if DB returned 0 active intents
+  if (activeArmedIntents.length === 0 && Array.isArray(sessionLog?.armedIntents)) {
+    activeArmedIntents = sessionLog.armedIntents;
+  }
+
+  // Merge live in-memory updates from sessionLog.armedIntents (e.g. real-time barsElapsed, radarStatus)
+  if (Array.isArray(sessionLog?.armedIntents) && sessionLog.armedIntents.length > 0) {
+    const memMap = new Map<number, any>();
+    for (const mem of sessionLog.armedIntents) {
+      if (mem && mem.id !== undefined) memMap.set(Number(mem.id), mem);
+    }
+    for (const item of activeArmedIntents) {
+      const live = memMap.get(Number(item.id));
+      if (live) {
+        if (live.barsElapsed !== undefined) item.bars_elapsed = live.barsElapsed;
+        if (live.radarStatus) item.radar_status = live.radarStatus;
+        if (live.stage) item.stage = live.stage;
+        if (live.resolvedEntryPrice) item.resolved_entry_price = live.resolvedEntryPrice;
+      }
+    }
+  }
+
+  // Tag active in-flight positions with clear stage tags
+  const stageTaggedPositions = activeInFlightPositions.map((p: any) => {
+    let stageTag: string = 'IN_FLIGHT_STAGE_1';
+    if (p.isStage2Filled) {
+      stageTag = 'IN_FLIGHT_STAGE_3';
+    } else if (p.isStage1Filled) {
+      stageTag = 'IN_FLIGHT_STAGE_2';
+    }
+    return {
+      ...p,
+      stage: stageTag,
+    };
+  });
+
+  // Tag pending limit orders with stage: ORDER_RESTING
+  const stageTaggedPendingOrders = livePendingOrders.map((po: any) => ({
+    ...po,
+    stage: 'ORDER_RESTING',
+  }));
+
+  // Resolve active armed intents for daemon state machine
+  const pendingArmedIntents = activeArmedIntents.filter(
+    (i: any) =>
+      i.stage === 'ARMED_PENDING' ||
+      i.stage === 'PROXIMITY_ELEVATED' ||
+      i.status === 'ARMED_WATCHING_TRIGGER' ||
+      i.status === 'ARMED_PENDING'
+  );
+
+  // Resolve overall daemon state machine status
+  let daemonState: 'SEARCHING' | 'ARMED_WATCHING_TRIGGER' | 'ORDER_RESTING' | 'ACTIVE_TRADE' =
+    'SEARCHING';
+  if (stageTaggedPositions.length > 0) {
+    daemonState = 'ACTIVE_TRADE';
+  } else if (stageTaggedPendingOrders.length > 0) {
+    daemonState = 'ORDER_RESTING';
+  } else if (pendingArmedIntents.length > 0) {
+    daemonState = 'ARMED_WATCHING_TRIGGER';
+  } else if (sessionLog.daemonState) {
+    daemonState = sessionLog.daemonState as any;
+  }
+
   return {
     status: 'ACTIVE_SESSION_FOUND',
     session_file: logFileName,
+    daemon_state: daemonState,
+    armed_intents_count: activeArmedIntents.length,
+    armed_intents: activeArmedIntents,
     session: {
       session_id: sessionLog.sessionId,
       date_str: sessionLog.dateStr,
@@ -1606,8 +1875,8 @@ export async function runGetLiveDaemonStatus(options: LiveDaemonStatusOptions = 
       breakeven_offset_pct: persistedLiveSettings.breakevenOffsetPct ?? DEFAULT_SR_LIVE_SETTINGS.breakevenOffsetPct ?? 0.015,
       active_preset_champion: "5m Sweep & Reclaim Fee Shield V3 Sniper",
     },
-    active_in_flight_positions: activeInFlightPositions,
-    active_pending_limit_orders: livePendingOrders,
+    active_in_flight_positions: stageTaggedPositions,
+    active_pending_limit_orders: stageTaggedPendingOrders,
     recent_events: recentEvents,
     today_completed_trades: (sessionLog.completedTrades || []).slice(-5),
     daily_tracker_last_trades: recentTrackerTrades,

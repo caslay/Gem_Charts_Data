@@ -268,8 +268,40 @@ export interface AgentDecisionPayload {
   invalidation_level?: number | string | null;
   target_1?: number | string | null;
   target_2?: number | string | null;
+  target_3?: number | string | null;
+  stage1_ratio?: number | string | null;
+  stage2_ratio?: number | string | null;
+  stage3_ratio?: number | string | null;
   /** Free-form narrative rationale from the agent's reasoning pass. Accepts string, object, number, or null. */
   narrative?: any;
+
+  // ─── Asynchronous Armed Intent & Proximity Radar Parameters ──────────────
+  /**
+   * Execution mode selector:
+   * - 'IMMEDIATE_LIMIT': Places or stages limit order immediately (default, backwards compatible).
+   * - 'TRIGGER_ON_CONFIRMATION': Arms intent & proximity radar; places limit order only upon structural trigger confirmation.
+   */
+  execution_mode?: 'IMMEDIATE_LIMIT' | 'TRIGGER_ON_CONFIRMATION' | (string & {}) | null;
+  /** Primary trigger resolution timeframe (e.g. '1m', '3m', '5m', '15m'). Defaults to '5m'. */
+  trigger_timeframe?: '1m' | '3m' | '5m' | '15m' | '1h' | (string & {}) | null;
+  /** Structural trigger condition: 'MSS_BODY_CLOSE_ABOVE', 'MSS_BODY_CLOSE_BELOW', 'SWEEP_AND_RECLAIM', 'NONE'. */
+  trigger_condition?:
+    | 'MSS_BODY_CLOSE_ABOVE'
+    | 'MSS_BODY_CLOSE_BELOW'
+    | 'SWEEP_AND_RECLAIM'
+    | 'NONE'
+    | (string & {})
+    | null;
+  /** Price level to evaluate structural trigger against (e.g. body close above this level). */
+  trigger_price?: number | string | null;
+  /** Point of Interest (POI) action zone floor. If omitted, falls back to entry_range_low. */
+  poi_zone_low?: number | string | null;
+  /** Point of Interest (POI) action zone ceiling. If omitted, falls back to entry_range_high. */
+  poi_zone_high?: number | string | null;
+  /** Resting limit offset rule: 'FVG_PROXIMAL' (default), 'ANCHOR_PRICE', 'POI_MIDPOINT', 'LIMIT_EXACT'. */
+  limit_offset_rule?: 'FVG_PROXIMAL' | 'ANCHOR_PRICE' | 'POI_MIDPOINT' | 'LIMIT_EXACT' | (string & {}) | null;
+  /** Time-To-Live (TTL) expiration window in bars (default: 12 bars). */
+  ttl_bars?: number | string | null;
 }
 
 // ─── PATCH Request Payload ────────────────────────────────────────────────────
@@ -280,6 +312,9 @@ export interface AgentDecisionPatchPayload {
   status?:
     | 'PENDING'
     | 'ACTIVE'
+    | 'ARMED_WATCHING_TRIGGER'
+    | 'ARMED_PENDING'
+    | 'ORDER_RESTING'
     | 'QUEUED'
     | 'STAGED'
     | 'LOGGED_STANDBY'
@@ -291,10 +326,12 @@ export interface AgentDecisionPatchPayload {
     | 'REJECTED_BY_RISK_GOVERNOR'
     | 'STAND_DOWN'
     | 'INVALIDATED'
+    | 'EXPIRED'
     | 'COMPLETED';
   narrative?: string;
   target_1?: number;
   target_2?: number;
+  target_3?: number;
 }
 
 // ─── DB Row Shape ─────────────────────────────────────────────────────────────
@@ -310,10 +347,17 @@ export interface AgentDecisionRecord {
   invalidation_level: number | null;
   target_1: number | null;
   target_2: number | null;
+  target_3?: number | null;
+  stage1_ratio?: number | null;
+  stage2_ratio?: number | null;
+  stage3_ratio?: number | null;
   narrative: string | null;
   status:
     | 'PENDING'
     | 'ACTIVE'
+    | 'ARMED_WATCHING_TRIGGER'
+    | 'ARMED_PENDING'
+    | 'ORDER_RESTING'
     | 'QUEUED'
     | 'STAGED'
     | 'LOGGED_STANDBY'
@@ -325,11 +369,26 @@ export interface AgentDecisionRecord {
     | 'REJECTED_BY_RISK_GOVERNOR'
     | 'STAND_DOWN'
     | 'INVALIDATED'
+    | 'EXPIRED'
     | 'COMPLETED';
   live_price_at_submission: number | null;
   submitted_at: number;
   invalidated_at: number | null;
   created_at: string;
+
+  // ─── Armed Intent & Radar Database Columns ────────────────────────────────
+  execution_mode?: 'IMMEDIATE_LIMIT' | 'TRIGGER_ON_CONFIRMATION' | string;
+  trigger_timeframe?: string | null;
+  trigger_condition?: string | null;
+  trigger_price?: number | null;
+  poi_zone_low?: number | null;
+  poi_zone_high?: number | null;
+  limit_offset_rule?: string | null;
+  ttl_bars?: number | null;
+  bars_elapsed?: number | null;
+  limit_entry_price?: number | null;
+  triggered_at?: number | null;
+  radar_status?: 'DORMANT' | 'PROXIMITY_ELEVATED' | 'TRIGGERED' | string | null;
 }
 
 // ─── Invalidation Guard Result ────────────────────────────────────────────────

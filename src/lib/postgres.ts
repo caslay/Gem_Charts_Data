@@ -11,7 +11,7 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-import type { Pool, QueryResult, QueryResultRow } from 'pg';
+import pg, { type Pool, type QueryResult, type QueryResultRow } from 'pg';
 
 let poolInstance: Pool | null = null;
 
@@ -22,9 +22,7 @@ export function getDbPool(): Pool {
       process.env.DATABASE_URL ||
       'postgres://quegar_admin:bc1205f23ebf49e5140aa5408b72bc75@127.0.0.1:5432/quegar_db';
 
-    // Lazy load pg at server runtime to prevent Webpack client bundle resolution errors
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { Pool: PgPool } = require('pg');
+    const PgPool = pg.Pool || (pg as any);
 
     const pool = new PgPool({
       connectionString,

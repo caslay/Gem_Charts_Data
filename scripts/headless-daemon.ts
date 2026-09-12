@@ -374,6 +374,22 @@ async function main() {
   // Seed buffers from REST bootstrap
   wsClient.seedBuffers(bootstrapData.buffers);
 
+  // 6.1. Start Dedicated Spark Inbound Ingestion Dispatcher & Proximity Radar
+  const sparkDispatcher = new SparkIngestionDispatcher({
+    engine,
+    getCurrentPrice: (sym: string) => {
+      if (sym.toUpperCase() === symbolArg.toUpperCase()) {
+        return wsClient.getLatestPrice();
+      }
+      return null;
+    },
+    pollIntervalMs: 2000,
+    telegram,
+    ledger,
+    cliMode: cliExecutionMode ?? undefined,
+  });
+  sparkDispatcher.start();
+
   let tickCount = 0;
   let lastPriceLogTime = 0;
   let currentMacroContext = bootstrapData.macroContext;
@@ -444,6 +460,11 @@ async function main() {
     ledger.checkAndPerformDateRollover(tick.timestamp || now);
     engine.processMarketTick(tick.price);
 
+    // Forward real-time market tick to Proximity Radar
+    sparkDispatcher.onMarketTick(tick.price, tick.symbol || symbolArg).catch((err) => {
+      console.warn('[SPARK_DISPATCHER_TICK_ERROR]', err?.message || err);
+    });
+
     // Poll for UI commands every 1 second
     if (now - lastCommandCheckTime > 1000) {
       lastCommandCheckTime = now;
@@ -455,8 +476,10 @@ async function main() {
       lastPriceLogTime = now;
       const activeCount = engine.getActivePositions().length;
       const pendingCount = engine.getPendingLimitOrders().length;
+      const radarState = sparkDispatcher.getDaemonState();
+      const armedCount = sparkDispatcher.getProximityRadar().getActiveIntents(symbolArg).length;
       process.stdout.write(
-        `\r[${new Date().toLocaleTimeString()}] 📊 Live Price: $${tick.price.toFixed(2)} | Active: ${activeCount} | Pending: ${pendingCount} | Ticks: ${tickCount} `
+        `\r[${new Date().toLocaleTimeString()}] 📊 Live: $${tick.price.toFixed(2)} | Radar: [${radarState}] (Armed: ${armedCount}) | Active: ${activeCount} | Pending: ${pendingCount} | Ticks: ${tickCount} `
       );
     }
   });
@@ -465,6 +488,11 @@ async function main() {
   wsClient.onCandleClosed((payload: CandleClosedPayload) => {
     const candleTime = payload.candle.t || Date.now();
     ledger.checkAndPerformDateRollover(candleTime);
+
+    // Forward closed candle to Proximity Radar trigger evaluator
+    sparkDispatcher.onCandleClosed(payload.interval, payload.candle, symbolArg).catch((err) => {
+      console.warn('[SPARK_DISPATCHER_CANDLE_ERROR]', err?.message || err);
+    });
 
     const timeStr = new Date(payload.candle.t).toISOString().substring(11, 16);
     console.log(`\n[${new Date().toLocaleTimeString()}] 🕯️ [${payload.interval.toUpperCase()} Candle Closed @ ${timeStr} UTC] O:$${payload.candle.o} H:$${payload.candle.h} L:$${payload.candle.l} C:$${payload.candle.c} Vol:${payload.candle.v.toFixed(1)}`);
@@ -519,22 +547,6 @@ async function main() {
     telegram
   );
   botService.startPolling();
-
-  // 6.6. Start Dedicated Spark Inbound Ingestion Dispatcher
-  const sparkDispatcher = new SparkIngestionDispatcher({
-    engine,
-    getCurrentPrice: (sym: string) => {
-      if (sym.toUpperCase() === symbolArg.toUpperCase()) {
-        return wsClient.getLatestPrice();
-      }
-      return null;
-    },
-    pollIntervalMs: 2000,
-    telegram,
-    ledger,
-    cliMode: cliExecutionMode ?? undefined,
-  });
-  sparkDispatcher.start();
 
   // Connect WebSocket
   await wsClient.connect();
