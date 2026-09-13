@@ -20,6 +20,12 @@ import {
   DEFAULT_ACTIVE_END,
   DEFAULT_TIMEZONE,
 } from '@/lib/operationalSchedule';
+import {
+  getNextCandleCloseTimestamp,
+  calculateCurrentKillzone,
+  buildLiveSessionContext,
+  type LiveSessionContext,
+} from '@/lib/sessionContext';
 export type { Candle, AutoScanScheduleMode, ScheduleEvaluationResult };
 
 export interface SignalAlerts {
@@ -408,6 +414,7 @@ export interface MarketDataPayload {
   ticker: string;
   timestamp?: string;
   timezone: string;
+  session_context?: LiveSessionContext;
   open_interest: number;
   candles_limit?: number; // Dynamic limit from Neon SQL
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -428,6 +435,7 @@ export interface MarketDataPayload {
 export interface MarketDataDeltaPayload {
   isDelta: true;
   timestamp: string;
+  session_context?: LiveSessionContext;
   open_interest: number;
   risk_management?: any;
   correlation_data: {
@@ -481,8 +489,14 @@ export function mergeDeltaPayload(
   validDeltaCandles.forEach(c => candleMap.set(c.t, c));
   const mergedCandles = Array.from(candleMap.values()).sort((a, b) => a.t - b.t);
 
+  const now = new Date();
+  const sessionContext = delta.session_context || buildLiveSessionContext(now, lastKnownClose || null);
+  const currentKillzone = sessionContext.current_killzone;
+
   return {
     ...prev,
+    timestamp: delta.timestamp || now.toISOString(),
+    session_context: sessionContext,
     open_interest: delta.open_interest,
     risk_management: delta.risk_management || prev?.risk_management,
     correlation_data: {
@@ -491,6 +505,8 @@ export function mergeDeltaPayload(
     },
     ipda_metrics: {
       ...prev?.ipda_metrics,
+      current_time_window: currentKillzone,
+      session_context: sessionContext,
       order_flow_engine: {
         ...prev?.ipda_metrics?.order_flow_engine,
         ...delta.order_flow_engine,
@@ -891,7 +907,10 @@ export function useMarketData(
       const latestPrice = liveCandleRef.current?.close || (currentActiveCandles.length > 0 ? currentActiveCandles[currentActiveCandles.length - 1].c : undefined);
       const fallbackParam = (latestPrice && isFinite(latestPrice) && latestPrice > 0) ? `&fallbackPrice=${latestPrice}&lastPrice=${latestPrice}` : '';
 
-      const res = await fetch(`/api/market-data?interval=${selectedInterval}${pollParam}${timeframeGatedParam}${activeIntervalParam}${initParam}${limitParams}${featureParams}${fallbackParam}`);
+      const res = await fetch(
+        `/api/market-data?interval=${selectedInterval}${pollParam}${timeframeGatedParam}${activeIntervalParam}${initParam}${limitParams}${featureParams}${fallbackParam}`,
+        { cache: 'no-store' }
+      );
       if (!res.ok) {
         if (isPolling) {
           console.warn(`[MarketData] Polling request returned status ${res.status}. Retaining existing state.`);
@@ -1305,7 +1324,10 @@ export function useMarketData(
 
     setIsFetchingMore(true);
     try {
-      const res = await fetch(`/api/market-data?interval=${selectedInterval}&endTime=${oldestTimestamp}&fallbackPrice=${oldestPrice}`);
+      const res = await fetch(
+        `/api/market-data?interval=${selectedInterval}&endTime=${oldestTimestamp}&fallbackPrice=${oldestPrice}`,
+        { cache: 'no-store' }
+      );
       if (!res.ok) throw new Error('Failed to fetch more history');
 
       const newBatch: MarketDataPayload = await res.json();
@@ -1386,11 +1408,12 @@ export function useMarketData(
   const [isAutoScanActive, setIsAutoScanActive] = useState<boolean>(true);
   const [isTurboActive, setIsTurboActive] = useState<boolean>(false);
   const [nextScanTimestamp, setNextScanTimestamp] = useState<number>(() => {
-    const initEval = evaluateOperationalSchedule(scheduleConfig, Date.now());
+    const now = Date.now();
+    const initEval = evaluateOperationalSchedule(scheduleConfig, now);
     if (!initEval.isWithinActiveSchedule && initEval.nextSessionOpenTimestamp) {
       return initEval.nextSessionOpenTimestamp;
     }
-    return Date.now() + baseIntervalMs;
+    return getNextCandleCloseTimestamp(baseIntervalMinutes, now);
   });
   const nextScanTimestampRef = useRef<number>(nextScanTimestamp);
 
@@ -1417,11 +1440,11 @@ export function useMarketData(
       setNextScanTimestamp(curEval.nextSessionOpenTimestamp);
     } else if (curEval.isWithinActiveSchedule && wasSleepingRef.current) {
       wasSleepingRef.current = false;
-      const initialTarget = now + baseIntervalMsRef.current;
+      const initialTarget = getNextCandleCloseTimestamp(baseIntervalMinutes, now);
       nextScanTimestampRef.current = initialTarget;
       setNextScanTimestamp(initialTarget);
     }
-  }, [scheduleConfig]);
+  }, [scheduleConfig, baseIntervalMinutes]);
 
   // Sync with localStorage on client mount (supporting both new key and legacy key)
   useEffect(() => {
@@ -1430,21 +1453,43 @@ export function useMarketData(
       if (stored !== null) {
         setIsAutoScanActive(stored === 'true');
       }
+      const storedLast = Number(localStorage.getItem('gem_last_scan_dispatch_time') || 0);
+      if (storedLast > 0) {
+        lastScanDispatchTimeRef.current = storedLast;
+      }
     } catch {
       // Ignore localStorage errors
     }
+  }, []);
+
+  // Synchronize last scan dispatch time across open tabs in real-time
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'gem_last_scan_dispatch_time' && e.newValue) {
+        const val = Number(e.newValue);
+        if (!isNaN(val) && val > lastScanDispatchTimeRef.current) {
+          lastScanDispatchTimeRef.current = val;
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
   const toggleAutoScan = useCallback(() => {
     setIsAutoScanActive((prev) => {
       const next = !prev;
       if (next) {
-        // Reset countdown target on re-enable so it starts fresh
+        // Reset countdown target on re-enable aligned strictly to next upcoming candle close
         const now = Date.now();
         const curEval = evaluateOperationalSchedule(scheduleConfigRef.current, now);
         setScheduleEvaluation(curEval);
         wasSleepingRef.current = !curEval.isWithinActiveSchedule;
-        let nextTime = now + (isTurboActiveRef.current ? 5 * 60 * 1000 : baseIntervalMsRef.current);
+        let nextTime = getNextCandleCloseTimestamp(
+          isTurboActiveRef.current ? 5 : baseIntervalMinutes,
+          now
+        );
         if (!curEval.isWithinActiveSchedule && curEval.nextSessionOpenTimestamp) {
           nextTime = curEval.nextSessionOpenTimestamp;
         }
@@ -1576,12 +1621,15 @@ export function useMarketData(
     isTurboActiveRef.current = willBeTurbo;
     setIsTurboActive(willBeTurbo);
 
-    const nextIntervalMs = willBeTurbo ? 5 * 60 * 1000 : baseIntervalMsRef.current;
+    const targetCadence = willBeTurbo ? 5 : baseIntervalMinutes;
     const nextTime = !curEval.isWithinActiveSchedule && curEval.nextSessionOpenTimestamp
       ? curEval.nextSessionOpenTimestamp
-      : now + nextIntervalMs;
+      : getNextCandleCloseTimestamp(targetCadence, now);
     nextScanTimestampRef.current = nextTime;
     setNextScanTimestamp(nextTime);
+    try {
+      localStorage.setItem('gem_last_scan_dispatch_time', String(now));
+    } catch {}
 
     const isDataPayload = arg1 && typeof arg1 === 'object' && ('data_payload' in arg1 || 'ticker' in arg1);
     const targetData = isDataPayload ? (arg1 as MarketDataPayload) : dataRef.current;
@@ -1589,19 +1637,17 @@ export function useMarketData(
 
     // Manual overrides: clicking "Synthesize Live Data" remains active regardless of schedule state
     return triggerScanRef.current(targetData, alertMetadata);
-  }, [evaluateProximityState]);
+  }, [evaluateProximityState, baseIntervalMinutes]);
 
   // If base interval setting changes, adjust countdown accordingly if not in turbo and within active schedule
   useEffect(() => {
     if (!isTurboActiveRef.current && scheduleEvaluation.isWithinActiveSchedule) {
-      const currentRemaining = nextScanTimestampRef.current - Date.now();
-      if (currentRemaining > baseIntervalMs) {
-        const adjusted = Date.now() + baseIntervalMs;
-        nextScanTimestampRef.current = adjusted;
-        setNextScanTimestamp(adjusted);
-      }
+      const now = Date.now();
+      const target = getNextCandleCloseTimestamp(baseIntervalMinutes, now);
+      nextScanTimestampRef.current = target;
+      setNextScanTimestamp(target);
     }
-  }, [baseIntervalMs, scheduleEvaluation.isWithinActiveSchedule]);
+  }, [baseIntervalMinutes, scheduleEvaluation.isWithinActiveSchedule]);
 
   // Dynamic Cadence Polling Worker: evaluates schedule, proximity, throttles, and triggers automated scans
   useEffect(() => {
@@ -1630,14 +1676,12 @@ export function useMarketData(
       // Transition from sleeping -> active schedule window
       if (wasSleepingRef.current) {
         wasSleepingRef.current = false;
-        const baseMs = baseIntervalMsRef.current;
-        const initialTarget = now + baseMs;
+        const initialTarget = getNextCandleCloseTimestamp(baseIntervalMinutes, now);
         nextScanTimestampRef.current = initialTarget;
         setNextScanTimestamp(initialTarget);
       }
 
       const { inZone, isInvalidated } = evaluateProximityState();
-      const baseMs = baseIntervalMsRef.current;
 
       // Check Turbo eligibility
       const burnoutReached = turboScanCountRef.current >= 4;
@@ -1647,11 +1691,11 @@ export function useMarketData(
         // Elevate to TURBO_IN_ZONE (5m)
         isTurboActiveRef.current = true;
         setIsTurboActive(true);
-        // Clamp remaining time to max 5 minutes (300s)
-        const maxTurboTarget = now + 5 * 60 * 1000;
-        if (nextScanTimestampRef.current > maxTurboTarget) {
-          nextScanTimestampRef.current = maxTurboTarget;
-          setNextScanTimestamp(maxTurboTarget);
+        // Clamp remaining time to the upcoming 5m candle close
+        const next5mTarget = getNextCandleCloseTimestamp(5, now);
+        if (nextScanTimestampRef.current > next5mTarget) {
+          nextScanTimestampRef.current = next5mTarget;
+          setNextScanTimestamp(next5mTarget);
         }
       } else if (!shouldBeTurbo && isTurboActiveRef.current) {
         // Relax back to Base Interval
@@ -1661,18 +1705,29 @@ export function useMarketData(
         if (!inZone || isInvalidated) {
           turboScanCountRef.current = 0;
         }
-        const baseTarget = now + baseMs;
-        if (nextScanTimestampRef.current < baseTarget) {
-          nextScanTimestampRef.current = baseTarget;
-          setNextScanTimestamp(baseTarget);
+        const nextBaseTarget = getNextCandleCloseTimestamp(baseIntervalMinutes, now);
+        if (nextScanTimestampRef.current < nextBaseTarget) {
+          nextScanTimestampRef.current = nextBaseTarget;
+          setNextScanTimestamp(nextBaseTarget);
         }
       }
 
       // Check if timer elapsed
       if (now >= nextScanTimestampRef.current) {
+        // Sync with cross-tab last dispatch timestamp if set
+        try {
+          const storedLastDispatch = Number(localStorage.getItem('gem_last_scan_dispatch_time') || 0);
+          if (storedLastDispatch > lastScanDispatchTimeRef.current) {
+            lastScanDispatchTimeRef.current = storedLastDispatch;
+          }
+        } catch {}
+
         // Enforce minimum 180-second debounce between consecutive automated scans
         if (now - lastScanDispatchTimeRef.current >= 180 * 1000) {
           lastScanDispatchTimeRef.current = now;
+          try {
+            localStorage.setItem('gem_last_scan_dispatch_time', String(now));
+          } catch {}
 
           if (isTurboActiveRef.current) {
             turboScanCountRef.current += 1;
@@ -1680,28 +1735,35 @@ export function useMarketData(
               // Burnout reached: relax back to base interval
               isTurboActiveRef.current = false;
               setIsTurboActive(false);
-              const nextTime = now + baseMs;
+              const nextTime = getNextCandleCloseTimestamp(baseIntervalMinutes, now);
               nextScanTimestampRef.current = nextTime;
               setNextScanTimestamp(nextTime);
             } else {
-              const nextTime = now + 5 * 60 * 1000;
+              const nextTime = getNextCandleCloseTimestamp(5, now);
               nextScanTimestampRef.current = nextTime;
               setNextScanTimestamp(nextTime);
             }
           } else {
             turboScanCountRef.current = 0;
-            const nextTime = now + baseMs;
+            const nextTime = getNextCandleCloseTimestamp(baseIntervalMinutes, now);
             nextScanTimestampRef.current = nextTime;
             setNextScanTimestamp(nextTime);
           }
 
           triggerScanRef.current(dataRef.current);
+        } else {
+          // Debounce active (< 180s): advance nextScanTimestamp to the next upcoming candle close
+          // to maintain clock alignment and avoid mid-candle triggering
+          const targetCadence = isTurboActiveRef.current ? 5 : baseIntervalMinutes;
+          const nextTime = getNextCandleCloseTimestamp(targetCadence, now);
+          nextScanTimestampRef.current = nextTime;
+          setNextScanTimestamp(nextTime);
         }
       }
     }, 5000);
 
     return () => clearInterval(timer);
-  }, [isAutoScanActive, evaluateProximityState]);
+  }, [isAutoScanActive, evaluateProximityState, baseIntervalMinutes]);
 
   return useMemo(() => ({
     data,

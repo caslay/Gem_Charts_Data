@@ -9,6 +9,7 @@ import { auth } from '@/auth';
 import { sql } from '@/lib/postgres';
 import { resolveTripleVectorBias } from '@/lib/quantEngine/BiasEngine';
 import { annotateCandlesWithVolumetricSignals } from '@/utils/generateChartMarkers';
+import { buildLiveSessionContext, calculateCurrentKillzone } from '@/lib/sessionContext';
 
 // NOTE: getStructuralDealingRange() removed — V10.13 Refactor.
 // All structural analysis is now centralized in src/lib/structureEngine.ts
@@ -30,7 +31,7 @@ async function fetchLargeHistory(symbol: string, interval: string, totalLimit: n
     const suffix = currentEndTime ? `&endTime=${currentEndTime}` : '';
     const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limitToFetch}${suffix}`;
     
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) {
       throw new Error(`[fetchLargeHistory] Failed to fetch batch: HTTP ${res.status} ${res.statusText}`);
     }
@@ -265,7 +266,7 @@ export async function GET(req: Request) {
       // Bypasses SMT, risk, orderflow pools, database transactions, and unnecessary HTF fetches.
       const urlBinance = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${visualInterval}&limit=${visualLimit}&endTime=${endTime}`;
       try {
-        const resBinance = await fetch(urlBinance);
+        const resBinance = await fetch(urlBinance, { cache: 'no-store' });
         if (!resBinance.ok) {
           throw new Error(`Binance API error: ${resBinance.statusText}`);
         }
@@ -364,7 +365,7 @@ export async function GET(req: Request) {
 
     try {
       const fetchJson = async (url: string) => {
-        const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        const res = await fetch(url, { signal: AbortSignal.timeout(5000), cache: 'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
         return res.json();
       };
@@ -822,26 +823,7 @@ export async function GET(req: Request) {
     }
 
     // 9. Killzone Clock (Current Time Window - UTC hours)
-    const getCurrentKillzone = () => {
-      const now = new Date();
-      
-      // NY Lunch Dead Zone Preemption (12:00 PM – 1:30 PM New York Time)
-      const nyTimeStr = now.toLocaleString("en-US", { timeZone: "America/New_York" });
-      const nyDate = new Date(nyTimeStr);
-      const nyHour = nyDate.getHours();
-      const nyMin = nyDate.getMinutes();
-      if (nyHour === 12 || (nyHour === 13 && nyMin <= 30)) {
-        return "DEAD_ZONE";
-      }
-
-      const hour = now.getUTCHours();
-
-      if (hour >= 0 && hour <= 3) return "ASIAN_RANGE";
-      if (hour >= 6 && hour <= 8) return "LONDON_AM_KILLZONE";
-      if (hour >= 12 && hour <= 14) return "NY_AM_KILLZONE";
-      if (hour >= 17 && hour <= 18) return "NY_PM_KILLZONE";
-      return "DEAD_ZONE";
-    };
+    const getCurrentKillzone = () => calculateCurrentKillzone();
 
     // 11. Local Dealing Range & Dual-Pricing Context (V8.2)
     const todayDayStr = `${currentYear}-${currentMonth}-${currentDate}`;
@@ -1343,9 +1325,13 @@ export async function GET(req: Request) {
 
       const state_timeline = OrderFlowStateTracker.getTimelineSummary(symbol);
 
+      const now = new Date();
+      const session_context = buildLiveSessionContext(now, currentLivePrice);
+
       const deltaPayload = {
         isDelta: true,
-        timestamp: new Date().toISOString(),
+        timestamp: now.toISOString(),
+        session_context,
         open_interest: parseFloat(dataOi.openInterest),
         risk_management: null, // Bypassed for delta tick to let client preserve risk settings
         correlation_data: {
@@ -1361,7 +1347,9 @@ export async function GET(req: Request) {
         },
       };
 
-      return NextResponse.json(deltaPayload);
+      return NextResponse.json(deltaPayload, {
+        headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' },
+      });
     }
 
     // Annotate historical candle arrays with volumetric signal highlights before slicing
@@ -1373,10 +1361,14 @@ export async function GET(req: Request) {
       annotateCandlesWithVolumetricSignals(dynamicVisualCandles);
     }
 
+    const now = new Date();
+    const session_context = buildLiveSessionContext(now, currentLivePrice);
+
     const payload = {
       ticker: "ETHUSDC.p",
-      timestamp: new Date().toISOString(),
+      timestamp: now.toISOString(),
       timezone: "UTC",
+      session_context,
       candles_limit: visualLimit,
       ipda_metrics,
       risk_management,
@@ -1398,9 +1390,14 @@ export async function GET(req: Request) {
       },
     };
 
-    return NextResponse.json(payload);
+    return NextResponse.json(payload, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate' },
+    });
   } catch (error: any) {
     console.error(`Error fetching market data: ${error.message || error}`);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Internal Server Error' },
+      { status: 500, headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+    );
   }
 }

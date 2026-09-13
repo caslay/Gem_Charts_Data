@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
 import { safeParseAiJson } from '@/lib/aiJsonParser';
 import type { AiExecutionTelemetry, AiAnalysisRecord } from '@/lib/aiCascadeEngine';
+import { buildLiveSessionContext } from '@/lib/sessionContext';
 
 export interface UseAIAnalysisReturn {
   aiAnalysis: string | null;
@@ -34,7 +35,9 @@ export function useAIAnalysis(): UseAIAnalysisReturn {
       if (options?.page) params.set('page', String(options.page));
       if (options?.status) params.set('status', options.status);
 
-      const res = await fetch(`/api/quant-analyze?${params.toString()}`);
+      const res = await fetch(`/api/quant-analyze?${params.toString()}`, {
+        cache: 'no-store',
+      });
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.data)) {
@@ -77,9 +80,34 @@ export function useAIAnalysis(): UseAIAnalysisReturn {
     setAiAnalysis(null);
     setAiBias(null);
 
-    // Create the pruned AI payload to prevent "Lost in the Middle" syndrome
+    const executionNow = new Date();
+    // Extract live price from most granular candle available
+    let livePrice: number | null = null;
+    const dp = data.data_payload;
+    if (dp) {
+      const priorities = [dp.candles_5m, dp.candles_15m, dp.candles_1h, dp.candles_4h];
+      for (const arr of priorities) {
+        if (Array.isArray(arr) && arr.length > 0) {
+          const last = arr[arr.length - 1];
+          if (last?.c != null && typeof last.c === 'number') {
+            livePrice = last.c;
+            break;
+          }
+        }
+      }
+    }
+    const sessionContext = buildLiveSessionContext(executionNow, livePrice);
+
+    // Create the pruned AI payload with dynamic live timestamp & session context
     const ai_payload = {
       ...data,
+      timestamp: executionNow.toISOString(),
+      session_context: sessionContext,
+      ipda_metrics: data.ipda_metrics ? {
+        ...data.ipda_metrics,
+        current_time_window: sessionContext.current_killzone,
+        session_context: sessionContext,
+      } : undefined,
       data_payload: {
         candles_4h: data.data_payload?.candles_4h?.slice(-30) ?? [],
         candles_1h: data.data_payload?.candles_1h?.slice(-30) ?? [],
@@ -93,7 +121,8 @@ export function useAIAnalysis(): UseAIAnalysisReturn {
       const response = await fetch('/api/quant-analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(ai_payload)
+        body: JSON.stringify(ai_payload),
+        cache: 'no-store',
       });
 
       const result = await response.json();

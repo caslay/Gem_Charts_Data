@@ -3,6 +3,7 @@ import { sql } from '@/lib/postgres';
 import { safeParseAiJson } from '@/lib/aiJsonParser';
 import { autoLogSopSetup } from '@/lib/sopTrackerLogger';
 import { getFallbackCascadePool, isLiteWorkhorseModel, DEFAULT_MODEL } from '@/lib/aiModels';
+import { buildLiveSessionContext, type LiveSessionContext } from '@/lib/sessionContext';
 
 export interface AiAttemptTelemetry {
   model: string;
@@ -198,9 +199,14 @@ export async function runAiCascadeEvaluation(
   const totalStartTime = Date.now();
   const genAI = new GoogleGenerativeAI(apiKey);
 
-  // ── Construct prompt ──
+  // ── Construct prompt with live execution timestamps and session context ──
+  const liveContext: LiveSessionContext =
+    (payload?.session_context as LiveSessionContext) ||
+    buildLiveSessionContext(new Date(), typeof payload?.live_price === 'number' ? payload.live_price : null);
+  const sessionHeader = `=== [LIVE EXECUTION TIMESTAMPS & SESSION CONTEXT] ===\n- System Clock UTC: ${liveContext.timestamp_utc} (${liveContext.current_time_utc})\n- Localized Cairo Time: ${liveContext.timestamp_cairo} (${liveContext.current_time_cairo})\n- Active Institutional Killzone: ${liveContext.current_killzone}\n- In-Flight Live Price: ${liveContext.live_price != null ? `$${Number(liveContext.live_price).toFixed(2)}` : 'N/A'}\n- Millisecond Stamp: ${liveContext.execution_millisecond}\n\n`;
+
   const memorySection = `\n\n=== [HISTORICAL MEMORY (CURRENT STATE)] ===\n${JSON.stringify(historicalState, null, 2)}`;
-  const prompt = `${systemPrompt}\n\n=== MARKET DATA PAYLOAD ===\n${JSON.stringify(payload, null, 2)}${memorySection}`;
+  const prompt = `${systemPrompt}\n\n${sessionHeader}=== MARKET DATA PAYLOAD ===\n${JSON.stringify(payload, null, 2)}${memorySection}`;
 
   // ── Build cascade pool: starts with requested model, falls back to remaining Flash models, then 500 RPD Lite models ──
   const cascadePool = getFallbackCascadePool(requestedModel);

@@ -46,7 +46,7 @@ export default function AiAnalysisHistoryModal({
   const fetchHistory = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/quant-analyze?limit=50');
+      const res = await fetch('/api/quant-analyze?limit=50', { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.data)) {
