@@ -302,6 +302,13 @@ export interface AgentDecisionPayload {
   limit_offset_rule?: 'FVG_PROXIMAL' | 'ANCHOR_PRICE' | 'POI_MIDPOINT' | 'LIMIT_EXACT' | (string & {}) | null;
   /** Time-To-Live (TTL) expiration window in bars (default: 12 bars). */
   ttl_bars?: number | string | null;
+
+  // ─── Cascade & Telemetry Tracking ──────────────────────────────────────────
+  requested_model?: string | null;
+  resolved_model?: string | null;
+  latency_ms?: number | null;
+  was_fallback?: boolean | null;
+  fallback_reason?: string | null;
 }
 
 // ─── PATCH Request Payload ────────────────────────────────────────────────────
@@ -389,6 +396,13 @@ export interface AgentDecisionRecord {
   limit_entry_price?: number | null;
   triggered_at?: number | null;
   radar_status?: 'DORMANT' | 'PROXIMITY_ELEVATED' | 'TRIGGERED' | string | null;
+
+  // ─── Cascade & Telemetry Columns ──────────────────────────────────────────
+  requested_model?: string | null;
+  resolved_model?: string | null;
+  latency_ms?: number | null;
+  was_fallback?: boolean | null;
+  fallback_reason?: string | null;
 }
 
 // ─── Invalidation Guard Result ────────────────────────────────────────────────

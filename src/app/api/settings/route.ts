@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { sql } from "@/lib/postgres";
+import { DEFAULT_MODEL } from "@/lib/aiModels";
 
 /**
  * Settings API — Command Center Backend
@@ -161,11 +162,11 @@ export async function GET() {
 
       // Self-seed ACTIVE_MODEL if not present
       if (!settings.ACTIVE_MODEL) {
-        settings.ACTIVE_MODEL = "gemini-3.5-flash";
+        settings.ACTIVE_MODEL = DEFAULT_MODEL;
         try {
           await sql`
             INSERT INTO system_settings (key_name, key_value)
-            VALUES ('ACTIVE_MODEL', 'gemini-3.5-flash')
+            VALUES ('ACTIVE_MODEL', ${DEFAULT_MODEL})
             ON CONFLICT (key_name) DO NOTHING;
           `;
         } catch (seedErr) {
@@ -258,7 +259,7 @@ export async function GET() {
     } catch (dbErr: any) {
       console.warn("[SETTINGS API] Database query failed or quota exceeded (HTTP 402/Offline fallback):", dbErr?.message || dbErr);
       return NextResponse.json({
-        settings: { ACTIVE_MODEL: "gemini-3.5-flash" },
+        settings: { ACTIVE_MODEL: DEFAULT_MODEL },
         terminalSettings: defaultTerminalSettings,
         isOffline: true,
       });
