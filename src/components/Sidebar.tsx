@@ -24,12 +24,14 @@ import {
   Shield,
   Layers,
   Target,
-  History
+  History,
+  Cpu,
 } from 'lucide-react';
 import HudModal from './modals/HudModal';
 import PotentialTradesModal from './modals/PotentialTradesModal';
 import SelfCorrectionModal from './modals/SelfCorrectionModal';
 import OrderFlowTimelineModal from './modals/OrderFlowTimelineModal';
+import AiAnalysisHistoryModal from './modals/AiAnalysisHistoryModal';
 import { MTFStatusRadar } from './MTFStatusRadar';
 import { getStateMetadata, formatDuration, getUnifiedTimelineSegments } from './OrderFlowTimelineRibbon';
 import type { MarketDataPayload } from '@/hooks/useMarketData';
@@ -599,6 +601,9 @@ const Sidebar = memo(function Sidebar({
   const {
     isAnalyzing,
     aiAnalysis,
+    aiTelemetry,
+    setAiAnalysis,
+    setAiTelemetry,
     triggerAiAnalysisScan,
     wsInterval,
     setWsInterval,
@@ -613,6 +618,7 @@ const Sidebar = memo(function Sidebar({
   const [isJsonDrawerOpen, setIsJsonDrawerOpen] = useState(false);
   const [isHudModalOpen, setIsHudModalOpen] = useState(false);
   const [isTradesModalOpen, setIsTradesModalOpen] = useState(false);
+  const [isAiHistoryOpen, setIsAiHistoryOpen] = useState(false);
   const [isSelfCorrectionModalOpen, setIsSelfCorrectionModalOpen] = useState(false);
   const [isOrderFlowModalOpen, setIsOrderFlowModalOpen] = useState(false);
   const [copyState, setCopyState] = useState<'idle' | 'copied'>('idle');
@@ -1201,11 +1207,29 @@ const Sidebar = memo(function Sidebar({
                 onClick={() => toggleCard('synthesis')}
                 className="p-3 border-b border-card-border bg-card/45 flex items-center justify-between shrink-0 cursor-pointer select-none hover:bg-card-hover/20 transition-colors"
               >
-                <div className="flex items-center gap-2">
-                  <Terminal size={12} className="text-accent" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Synthesis Console</span>
+                <div className="flex items-center gap-1.5 truncate">
+                  <Terminal size={12} className="text-accent shrink-0" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground truncate">Synthesis</span>
+                  {aiTelemetry && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[8px] font-mono font-bold text-accent px-1.5 py-0.2 rounded bg-accent/10 border border-accent/20 truncate max-w-[100px]" title={aiTelemetry.resolved_model}>
+                        {aiTelemetry.resolved_model}
+                      </span>
+                      {aiTelemetry.was_fallback && (
+                        <span className="text-[7.5px] font-black px-1 py-0.2 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center gap-0.5 animate-pulse" title={aiTelemetry.fallback_reason || 'Cascade fallback active'}>
+                          <Zap size={7} />
+                          FALLBACK
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  {aiTelemetry && (
+                    <span className="text-[8px] font-mono text-muted-foreground hidden sm:inline">
+                      {aiTelemetry.execution_latency_ms}ms
+                    </span>
+                  )}
                   <button
                     onClick={() => setIsHudModalOpen(true)}
                     className="text-muted hover:text-foreground transition-colors p-1 rounded-full hover:bg-card cursor-pointer"
@@ -1227,6 +1251,42 @@ const Sidebar = memo(function Sidebar({
               {cardOpenState.synthesis && (
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden animate-[fade-in_0.15s_ease-out]">
                   <div className="flex-1 p-3 overflow-y-auto bg-background/25 font-mono scrollbar-thin scrollbar-thumb-card-border">
+                    {/* Live Cascade Telemetry HUD Bar */}
+                    {aiTelemetry && (
+                      <div className="mb-3 p-2 rounded-lg bg-card/80 border border-card-border flex items-center justify-between gap-2 text-[9px] font-mono shadow-sm">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <Cpu size={11} className="text-accent shrink-0" />
+                          <span className="font-bold text-foreground truncate" title={aiTelemetry.resolved_model}>
+                            {aiTelemetry.resolved_model}
+                          </span>
+                          {aiTelemetry.was_fallback ? (
+                            <span
+                              className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold uppercase tracking-wider text-[8px] shrink-0 flex items-center gap-0.5 animate-pulse"
+                              title={aiTelemetry.fallback_reason || 'Cascade triggered'}
+                            >
+                              <Zap size={8} />
+                              FALLBACK
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold uppercase tracking-wider text-[8px] shrink-0">
+                              DIRECT
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-muted-foreground">{aiTelemetry.execution_latency_ms}ms</span>
+                          <button
+                            onClick={() => setIsAiHistoryOpen(true)}
+                            className="text-accent hover:underline cursor-pointer font-bold flex items-center gap-0.5"
+                            title="View Cascade Details & Historical Runs"
+                          >
+                            <span>History</span>
+                            <ChevronRight size={10} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {aiAnalysis ? (
                       hudData ? (
                         <div className="space-y-4">
@@ -1336,21 +1396,30 @@ const Sidebar = memo(function Sidebar({
                       )}
                     </button>
 
-                    <div className="grid grid-cols-2 gap-1.5">
+                    <div className="grid grid-cols-3 gap-1.5">
                       <button
                         onClick={() => setIsTradesModalOpen(true)}
-                        className="py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer rounded-full"
+                        className="py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[8.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer rounded-full"
+                        title="Open Potential Trades"
                       >
-                        <BarChart3 size={11} />
+                        <BarChart3 size={10} />
                         <span>Trades</span>
                       </button>
                       <button
+                        onClick={() => setIsAiHistoryOpen(true)}
+                        className="py-1.5 bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30 text-[8.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer rounded-full shadow-sm"
+                        title="Open AI Analysis Telemetry & History"
+                      >
+                        <History size={10} />
+                        <span>History</span>
+                      </button>
+                      <button
                         onClick={() => setIsSelfCorrectionModalOpen(true)}
-                        className="py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer rounded-full"
+                        className="py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 text-[8.5px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer rounded-full"
                         title="Open Self-Correction & AI Learning Window"
                       >
-                        <Brain size={11} />
-                        <span>Self-Correction</span>
+                        <Brain size={10} />
+                        <span>Correct</span>
                       </button>
                     </div>
                   </div>
@@ -1461,6 +1530,7 @@ const Sidebar = memo(function Sidebar({
         aiNote={aiNote}
         tvAlerts={tvAlerts}
         aiAnalysis={aiAnalysis}
+        aiTelemetry={aiTelemetry}
         isAnalyzing={isAnalyzing}
         onSynthesize={handleLiveSynthesis}
         copyText={data ? AI_PROMPT_PREFIX + JSON.stringify(slicePayloadByLookback(data, counts), null, 2) : ''}
@@ -1484,6 +1554,35 @@ const Sidebar = memo(function Sidebar({
         onClose={() => setIsOrderFlowModalOpen(false)}
         timeline={orderFlow?.state_timeline}
         symbol="ETHUSDC.p"
+      />
+
+      {/* AI Analysis Telemetry & Historical Ledger Modal */}
+      <AiAnalysisHistoryModal
+        isOpen={isAiHistoryOpen}
+        onClose={() => setIsAiHistoryOpen(false)}
+        onApplyAnalysis={(record) => {
+          setAiAnalysis(record.narrative);
+          let attempts: any[] = [];
+          if (record.telemetry_data) {
+            try {
+              const td = typeof record.telemetry_data === 'string'
+                ? JSON.parse(record.telemetry_data)
+                : record.telemetry_data;
+              if (Array.isArray(td?.attempts)) attempts = td.attempts;
+            } catch {
+              attempts = [];
+            }
+          }
+          setAiTelemetry({
+            requested_model: record.requested_model,
+            resolved_model: record.resolved_model,
+            was_fallback: record.was_fallback,
+            fallback_reason: record.fallback_reason,
+            execution_latency_ms: record.execution_latency_ms,
+            timestamp: record.created_at,
+            attempts,
+          });
+        }}
       />
     </>
   );

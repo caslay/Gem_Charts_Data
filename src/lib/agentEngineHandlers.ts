@@ -140,6 +140,11 @@ export async function ensureAgentDecisionTableInitialized(): Promise<void> {
       await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS stage3_ratio NUMERIC(5,2)`;
       await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS triggered_at BIGINT`;
       await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS radar_status VARCHAR(64) DEFAULT 'DORMANT'`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS requested_model VARCHAR(64)`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS resolved_model VARCHAR(64)`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS latency_ms INTEGER`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS was_fallback BOOLEAN DEFAULT FALSE`;
+      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS fallback_reason TEXT`;
     } catch {
       // Ignored if read-only sandbox or columns already present
     }
@@ -891,7 +896,8 @@ export async function runSubmitQuantDecision(
       stage1_ratio, stage2_ratio, stage3_ratio,
       narrative, status, live_price_at_submission, submitted_at,
       execution_mode, trigger_timeframe, trigger_condition, trigger_price,
-      poi_zone_low, poi_zone_high, limit_offset_rule, ttl_bars, radar_status
+      poi_zone_low, poi_zone_high, limit_offset_rule, ttl_bars, radar_status,
+      requested_model, resolved_model, latency_ms, was_fallback, fallback_reason
     ) VALUES (
       ${symbol},
       ${agent_id},
@@ -917,7 +923,12 @@ export async function runSubmitQuantDecision(
       ${poiZoneHigh},
       ${limitOffsetRule},
       ${ttlBars},
-      'DORMANT'
+      'DORMANT',
+      ${payload.requested_model ?? null},
+      ${payload.resolved_model ?? null},
+      ${payload.latency_ms ?? null},
+      ${payload.was_fallback ?? false},
+      ${payload.fallback_reason ?? null}
     )
     RETURNING id, submitted_at, status
   `;

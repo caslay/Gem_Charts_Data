@@ -8,6 +8,7 @@ interface HudModalProps {
   aiNote: { title: string; text: string } | null;
   tvAlerts: any[];
   aiAnalysis: string | null;
+  aiTelemetry?: any;
   isAnalyzing: boolean;
   onSynthesize: () => void;
   copyText: string;
@@ -20,6 +21,7 @@ const HudModal: React.FC<HudModalProps> = ({
   aiNote,
   tvAlerts,
   aiAnalysis,
+  aiTelemetry,
   isAnalyzing,
   onSynthesize,
   copyText,
@@ -64,6 +66,19 @@ const HudModal: React.FC<HudModalProps> = ({
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 bg-[#d1bcff] rounded-none animate-pulse" />
             <h3 className="text-xs font-bold tracking-[0.15em] uppercase text-white">SYNTHESIS DISPATCH CONSOLE</h3>
+            {aiTelemetry && (
+              <div className="hidden sm:flex items-center gap-1.5 ml-2 font-mono text-[9px]">
+                <span className="px-1.5 py-0.2 rounded bg-purple-500/20 border border-purple-500/40 text-purple-300 font-bold">
+                  {aiTelemetry.resolved_model}
+                </span>
+                <span className="text-zinc-400 font-bold">{aiTelemetry.execution_latency_ms}ms</span>
+                {aiTelemetry.was_fallback && (
+                  <span className="px-1 py-0.2 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 font-black" title={aiTelemetry.fallback_reason || 'Cascade fallback'}>
+                    ⚡ CASCADE
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <button
             onClick={onClose}

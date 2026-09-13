@@ -1,8 +1,29 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.73
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.74
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-12 (V17.73 — Asynchronous Armed Intent & Proximity Radar Pipeline, Two-Stage Execution Engine & Dynamic State Synchronization)
+> **Last Updated:** 2026-09-13 (V17.74 — Resilient Multi-Model AI Cascade, Centralized Model Registry, Database Telemetry Logging & Frontend HUD Audit Trail)
+
+## 🆕 V17.74 Changelog — Resilient Multi-Model AI Cascade & Visual Telemetry Tracking (2026-09-13)
+
+### Summary
+1. **Centralized Model Registry (`src/lib/aiModels.ts`):**
+   - Registered all active Gemini models categorized into tiers:
+     - **Apex Reasoning (20 RPD Free Quota):** Gemini 3.8 Flash, Gemini 3.7 Flash, Gemini 3.6 Flash, Gemini 3.5 Flash, Gemini 3 Flash, Gemini 2.5 Flash.
+     - **High-Quota Lite Workhorse (500 RPD Capacity):** Gemini 3.5 Flash Lite, Gemini 3.1 Flash Lite.
+   - Built `getFallbackCascadePool()` providing progressive downward cascading from the requested model through subsequent Flash tiers down to 500 RPD Lite models to prevent scan interruption during automated intraday scanning.
+2. **Resilient Failover & Fallback Engine (`src/lib/aiCascadeEngine.ts`):**
+   - Categorized errors with `isRecoverableAiError`: catches 429 Quota Exceeded and 503 Service Overloaded, and halts immediately on fatal 401/403/400 errors.
+   - Wraps evaluations in a progressive cascade loop across candidate models.
+   - Captures attempt-by-attempt telemetry: `requested_model`, `resolved_model`, `was_fallback`, `fallback_reason`, `execution_latency_ms`, and `attempts[]`.
+   - Parses structured institutional outputs (bias, direction, entry range, invalidation, TP ladder, status).
+3. **Database Persistence & Telemetry Audit Trail (`ai_analysis_log` & `agent_decision_log`):**
+   - Self-healing table creation for `ai_analysis_log` with indexes on `created_at DESC` and `(symbol, status, created_at DESC)`.
+   - Self-healing schema migration adding `requested_model`, `resolved_model`, `latency_ms`, `was_fallback`, `fallback_reason` to `agent_decision_log`.
+   - Exposes GET `/api/quant-analyze` and GET `/api/quant-analyze/history` with pagination, symbol, and status bounds.
+4. **Frontend HUD Tracking & Inspection Modal (`AiAnalysisHistoryModal.tsx`, `Sidebar.tsx`, `HudModal.tsx`):**
+   - Synthesis HUD card displays resolved model name, execution latency, and `DIRECT` vs `⚡ FALLBACK` badge.
+   - Dual-pane `AiAnalysisHistoryModal` provides chronological stream of evaluations, status badges (`ACTIVE_SETUP`, `NEUTRAL`, `INVALIDATED`, `FALLBACK`), search, multi-model execution sequence inspection, and one-click "Load to HUD".
 
 ## 🆕 V17.73 Changelog — Asynchronous Armed Intent & Proximity Radar Pipeline (2026-09-12)
 
@@ -8333,6 +8354,8 @@ To maintain Flow-State visual aesthetics and avoid nested UI clutter, the compon
 | `system_settings` | `key_name` (UNIQUE) | Stores `GEMINI_LIVE_KEY`, `ACTIVE_MODEL`, `SYSTEM_PROMPT` |
 | `terminal_settings` | `user_id` (UNIQUE) | Stores audio alerts mapping, lookback candle counts, and stream features toggles |
 | `ai_trade_state` | `id = 1` (singleton) | Stores the AI's `state_json` and `updated_at` |
+| `ai_analysis_log` | `id` (SERIAL PRIMARY KEY) | Stores full chronological telemetry, resolved model, failover cascade logs, and narratives |
+| `agent_decision_log` | `id` (SERIAL PRIMARY KEY) | Stores agent trade decisions and execution intents with cascade telemetry |
 | `custom_strategies` | `id` (UUID PRIMARY KEY) | Stores user custom strategy equations and logic rules |
 | `paper_trades` | `id` (UUID PRIMARY KEY) | Stores active and completed paper trade execution logs |
 | `trading_account` | `id` (UUID PRIMARY KEY) | Stores persistent user capital balance, initial capital, and risk limit (V8.4) |
@@ -8645,20 +8668,25 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
      │    ├── Fetch state from ai_trade_state
      │    ├── Check Invalidation Guard (breach? → reset to SEARCHING)
      │    ├── Inject system prompt + payload + memory
-     │    └── Call Gemini API
+     │    ├── Run Multi-Model Cascade Loop (Apex Flash → 500 RPD Lite Workhorse)
+     │    │    ├── Primary attempt (e.g. gemini-3.8-flash)
+     │    │    └── On 429 (Quota) or 503 (Overloaded) → Instant fallback to next model
+     │    ├── Persist execution telemetry to ai_analysis_log
+     │    └── Upsert next_database_state → ai_trade_state
      │
      ▼
 [14] Gemini returns structured JSON:
      │    ├── diagnostics: { master_bias, target_status }
      │    ├── execution: { signal, risk_mode, entry, SL, TP[] }
      │    ├── next_database_state: { status, direction, invalidation, condition }
+     │    ├── telemetry: { requested_model, resolved_model, was_fallback, latency_ms }
      │    └── narrative: explanation of decision
      │
      ▼
-[15] Upsert next_database_state → Vercel Postgres
+[15] Render in Sidebar Synthesis Console (Model badge, Latency, Cascade status)
      │
      ▼
-[16] Render in Sidebar Synthesis Console (HUD table / JSON view)
+[16] Inspect via AI Analysis History Modal (/api/quant-analyze?limit=20)
 ```
 
 ---
@@ -8683,18 +8711,89 @@ The system extracts `next_database_state` from Gemini's JSON response and `UPDAT
 
 ### `POST /api/quant-analyze`
 
-**Purpose:** Sends the market data to Gemini for AI synthesis, manages stateful memory.
+**Purpose:** Executes real-time institutional AI evaluation with an automated, resilient multi-model cascade loop (Apex Flash -> 500 RPD Lite Workhorses) upon 429 quota exhaustion or 503 service overload, logging comprehensive telemetry to `ai_analysis_log`.
 
-**Request Body:** The full market data payload (same as GET response), optionally with `alert_metadata`.
+**Request Body:** The full market data payload, optionally with `alert_metadata`.
 
 **Response:**
 ```json
-{ "analysis": "Raw Gemini text response (JSON or markdown)" }
+{
+  "analysis": "Raw Gemini text response (JSON or markdown)",
+  "telemetry": {
+    "requested_model": "gemini-3.8-flash",
+    "resolved_model": "gemini-3.5-flash-lite",
+    "was_fallback": true,
+    "fallback_reason": "429 Quota Exceeded on gemini-3.8-flash",
+    "execution_latency_ms": 1240,
+    "timestamp": "2026-09-13T08:30:00.000Z",
+    "attempts": [
+      { "model": "gemini-3.8-flash", "latency_ms": 410, "error": "429 Quota Exceeded", "success": false },
+      { "model": "gemini-3.5-flash-lite", "latency_ms": 830, "success": true }
+    ]
+  },
+  "status": "ACTIVE_SETUP",
+  "tradeDirection": "LONG",
+  "biasSignal": "BULLISH",
+  "setup": {
+    "entry_range_low": 2410.5,
+    "entry_range_high": 2415.0,
+    "invalidation_level": 2398.0,
+    "target_1": 2445.0,
+    "target_2": 2480.0,
+    "target_3": 2520.0
+  },
+  "isConfigured": true
+}
 ```
 
-**Error Responses:**
-- `500` — Missing API key, model, or system prompt
-- `500` — Gemini API error
+---
+
+### `GET /api/quant-analyze` & `GET /api/quant-analyze/history`
+
+**Purpose:** Chronological audit trail endpoint to retrieve recent AI evaluation records from `ai_analysis_log` with pagination and status filtering.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `limit` | `20` | Max evaluations returned (max 100) |
+| `page` | `1` | Page number |
+| `symbol` | (all) | Filter by symbol (e.g. `ETHUSDC`) |
+| `status` | (all) | Filter by status (`ACTIVE_SETUP`, `NEUTRAL`, `INVALIDATED`) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": 104,
+      "symbol": "ETHUSDC",
+      "timeframe": "5m",
+      "requested_model": "gemini-3.8-flash",
+      "resolved_model": "gemini-3.5-flash-lite",
+      "was_fallback": true,
+      "fallback_reason": "429 Quota Exceeded on gemini-3.8-flash",
+      "execution_latency_ms": 1240,
+      "bias_signal": "BULLISH",
+      "trade_direction": "LONG",
+      "status": "ACTIVE_SETUP",
+      "entry_range_low": 2410.5,
+      "entry_range_high": 2415.0,
+      "invalidation_level": 2398.0,
+      "target_1": 2445.0,
+      "target_2": 2480.0,
+      "target_3": 2520.0,
+      "narrative": "...",
+      "created_at": "2026-09-13T08:30:00.000Z"
+    }
+  ],
+  "pagination": {
+    "total": 42,
+    "limit": 20,
+    "page": 1,
+    "pages": 3
+  }
+}
+```
 
 ---
 

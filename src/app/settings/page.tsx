@@ -34,7 +34,7 @@ import {
 } from "lucide-react";
 import { useAlertSounds, AVAILABLE_ALERT_FILES } from "@/hooks/useAlertSounds";
 import { DEFAULT_THEME_SETTINGS } from "@/hooks/useMarketData";
-import { AVAILABLE_MODELS } from "@/lib/aiModels";
+import { AVAILABLE_MODELS, DEFAULT_MODEL } from "@/lib/aiModels";
 import { updateSweepReclaimLiveSettings } from "@/lib/quantEngine/strategyExecutionConfig";
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ export default function SettingsPage() {
 
   // ── Quant AI State ─────────────────────────────────────────────────────────
   const [quantSettings, setQuantSettings] = useState<QuantSettings>({
-    ACTIVE_MODEL: "gemini-3.5-flash",
+    ACTIVE_MODEL: DEFAULT_MODEL,
     SYSTEM_PROMPT: "",
     GEMINI_LIVE_KEY: "",
   });
@@ -252,7 +252,7 @@ export default function SettingsPage() {
 
       const s = settingsData.settings || {};
       setQuantSettings({
-        ACTIVE_MODEL: s.ACTIVE_MODEL || "gemini-3.5-flash",
+        ACTIVE_MODEL: s.ACTIVE_MODEL || DEFAULT_MODEL,
         SYSTEM_PROMPT: s.SYSTEM_PROMPT || "",
         GEMINI_LIVE_KEY: s.GEMINI_LIVE_KEY || "",
       });
@@ -715,10 +715,13 @@ export default function SettingsPage() {
                   >
                     {AVAILABLE_MODELS.map((model) => (
                       <option key={model.value} value={model.value}>
-                        {model.label}
+                        {model.label} ({model.tierLabel} • {model.rpdQuota} RPD)
                       </option>
                     ))}
                   </select>
+                  <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-relaxed font-sans">
+                    ⚡ <span className="font-semibold text-accent">Resilient Multi-Model Cascade Active:</span> If standard 20 RPD Apex Flash models encounter 429 quota exhaustion or 503 traffic limits, the engine will automatically cascade into high-quota 500 RPD Lite models to keep scans uninterrupted.
+                  </p>
                 </div>
 
                 {/* System Prompt */}
