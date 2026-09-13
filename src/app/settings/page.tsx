@@ -31,11 +31,13 @@ import {
   Crosshair,
   ShieldCheck,
   Zap,
+  Clock,
 } from "lucide-react";
 import { useAlertSounds, AVAILABLE_ALERT_FILES } from "@/hooks/useAlertSounds";
 import { DEFAULT_THEME_SETTINGS } from "@/hooks/useMarketData";
 import { AVAILABLE_MODELS, DEFAULT_MODEL } from "@/lib/aiModels";
 import { updateSweepReclaimLiveSettings } from "@/lib/quantEngine/strategyExecutionConfig";
+import { type AutoScanScheduleMode } from "@/lib/operationalSchedule";
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 interface QuantSettings {
@@ -201,6 +203,10 @@ export default function SettingsPage() {
   const [signalAlertsEnabled, setSignalAlertsEnabled] = useState<SignalAlertsEnabled>(DEFAULT_SIGNAL_ALERTS_ENABLED);
   const [autoScanBaseInterval, setAutoScanBaseInterval] = useState<number>(30);
   const [autoScanTurboEnabled, setAutoScanTurboEnabled] = useState<boolean>(true);
+  const [autoScanScheduleMode, setAutoScanScheduleMode] = useState<AutoScanScheduleMode>('SESSION_PRESET');
+  const [autoScanActiveStart, setAutoScanActiveStart] = useState<string>('08:00');
+  const [autoScanActiveEnd, setAutoScanActiveEnd] = useState<string>('22:00');
+  const [autoScanTimezone, setAutoScanTimezone] = useState<string>('Africa/Cairo');
 
   // Local storage terminal preferences
   const [ambientGlow, setAmbientGlow] = useState(true);
@@ -274,11 +280,24 @@ export default function SettingsPage() {
       setThemeSettings(mergedTheme);
 
       if (settingsData.terminalSettings) {
-        const { signalSounds, enabledSignals, autoScanBaseInterval: asbi, autoScanTurboEnabled: aste } = settingsData.terminalSettings;
+        const {
+          signalSounds,
+          enabledSignals,
+          autoScanBaseInterval: asbi,
+          autoScanTurboEnabled: aste,
+          autoScanScheduleMode: assm,
+          autoScanActiveStart: asas,
+          autoScanActiveEnd: asae,
+          autoScanTimezone: astz,
+        } = settingsData.terminalSettings;
         if (signalSounds) setSignalAlerts(signalSounds);
         if (enabledSignals) setSignalAlertsEnabled(enabledSignals);
         if (asbi !== undefined && asbi !== null) setAutoScanBaseInterval(Number(asbi));
         if (aste !== undefined && aste !== null) setAutoScanTurboEnabled(Boolean(aste));
+        if (assm) setAutoScanScheduleMode(assm);
+        if (asas) setAutoScanActiveStart(asas);
+        if (asae) setAutoScanActiveEnd(asae);
+        if (astz) setAutoScanTimezone(astz);
       }
 
       // 2. Fetch Account & Risk settings
@@ -375,6 +394,10 @@ export default function SettingsPage() {
             enabledSignals: signalAlertsEnabled,
             autoScanBaseInterval,
             autoScanTurboEnabled,
+            autoScanScheduleMode,
+            autoScanActiveStart,
+            autoScanActiveEnd,
+            autoScanTimezone,
           },
         }),
       });
@@ -395,6 +418,10 @@ export default function SettingsPage() {
               ...current,
               autoScanBaseInterval,
               autoScanTurboEnabled,
+              autoScanScheduleMode,
+              autoScanActiveStart,
+              autoScanActiveEnd,
+              autoScanTimezone,
             })
           );
         } catch (storageErr) {
@@ -863,6 +890,193 @@ export default function SettingsPage() {
                       </p>
                     </div>
                   </div>
+                </div>
+
+                {/* ── Operational Schedule & Active Hours Section ── */}
+                <div className="pt-4 border-t border-card-border/60 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-3.5 h-3.5 text-accent" />
+                      <span className="text-[10px] font-black uppercase tracking-widest text-foreground">
+                        Operational Schedule & Active Hours
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent">
+                      {autoScanScheduleMode === 'ALWAYS_ON'
+                        ? '🟢 24/7 ALWAYS ACTIVE'
+                        : autoScanScheduleMode === 'SESSION_PRESET'
+                          ? '🏛️ WESTERN SESSIONS (CAIRO)'
+                          : '⏱️ CUSTOM HOURS'}
+                    </span>
+                  </div>
+
+                  <p className="text-[9.5px] text-slate-500 dark:text-zinc-400 leading-relaxed font-sans">
+                    Automatically silences automated quant scans during off-hours (such as low-volume Asian chop and sleep hours) to preserve daily Apex model quotas, and arms during high-liquidity active trading sessions. Manual data synthesis remains accessible at all times.
+                  </p>
+
+                  {/* Mode Selector Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    {/* Preset 1: Western Sessions */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAutoScanScheduleMode('SESSION_PRESET');
+                        setAutoScanActiveStart('08:00');
+                        setAutoScanActiveEnd('22:00');
+                        setAutoScanTimezone('Africa/Cairo');
+                      }}
+                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2.5 ${
+                        autoScanScheduleMode === 'SESSION_PRESET'
+                          ? 'bg-accent/15 border-accent shadow-md shadow-accent/10 ring-1 ring-accent/30'
+                          : 'bg-card/40 border-card-border hover:border-accent/40'
+                      }`}
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[8.5px] font-black uppercase tracking-wider text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20">
+                            Recommended Preset
+                          </span>
+                          <span className="text-xs">🏛️</span>
+                        </div>
+                        <h4 className="text-xs font-bold text-foreground">
+                          Western Sessions
+                        </h4>
+                        <div className="text-[11px] font-mono font-black text-accent">
+                          08:00 – 22:00 Cairo
+                        </div>
+                      </div>
+                      <p className="text-[9px] text-slate-500 dark:text-zinc-400 leading-normal font-sans">
+                        Comprehensive liquidity coverage spanning Pre-London, London Open, NY AM, and NY Close.
+                      </p>
+                    </button>
+
+                    {/* Preset 2: Custom Hours */}
+                    <button
+                      type="button"
+                      onClick={() => setAutoScanScheduleMode('CUSTOM')}
+                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2.5 ${
+                        autoScanScheduleMode === 'CUSTOM'
+                          ? 'bg-accent/15 border-accent shadow-md shadow-accent/10 ring-1 ring-accent/30'
+                          : 'bg-card/40 border-card-border hover:border-accent/40'
+                      }`}
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[8.5px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 bg-card-border/40 px-2 py-0.5 rounded-full border border-card-border">
+                            Custom Boundary
+                          </span>
+                          <span className="text-xs">⚙️</span>
+                        </div>
+                        <h4 className="text-xs font-bold text-foreground">
+                          Custom Hours
+                        </h4>
+                        <div className="text-[11px] font-mono font-black text-foreground">
+                          {autoScanActiveStart} – {autoScanActiveEnd}
+                        </div>
+                      </div>
+                      <p className="text-[9px] text-slate-500 dark:text-zinc-400 leading-normal font-sans">
+                        Configure bespoke operational session boundaries with dedicated start and end selectors.
+                      </p>
+                    </button>
+
+                    {/* Preset 3: 24/7 Always Active */}
+                    <button
+                      type="button"
+                      onClick={() => setAutoScanScheduleMode('ALWAYS_ON')}
+                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2.5 ${
+                        autoScanScheduleMode === 'ALWAYS_ON'
+                          ? 'bg-amber-500/15 border-amber-500/60 shadow-md shadow-amber-500/10 ring-1 ring-amber-500/30'
+                          : 'bg-card/40 border-card-border hover:border-amber-500/40'
+                      }`}
+                    >
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[8.5px] font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                            Continuous Scan
+                          </span>
+                          <span className="text-xs">🌐</span>
+                        </div>
+                        <h4 className="text-xs font-bold text-foreground">
+                          24/7 Always Active
+                        </h4>
+                        <div className="text-[11px] font-mono font-black text-amber-300">
+                          Unrestricted Scanning
+                        </div>
+                      </div>
+                      <p className="text-[9px] text-slate-500 dark:text-zinc-400 leading-normal font-sans">
+                        Unrestricted continuous scanning around the clock without scheduled sleep windows.
+                      </p>
+                    </button>
+                  </div>
+
+                  {/* Custom Hours Input Deck (Exposed when mode === 'CUSTOM') */}
+                  {autoScanScheduleMode === 'CUSTOM' && (
+                    <div className="p-4 bg-card/60 border border-card-border rounded-xl space-y-3.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9.5px] font-black uppercase tracking-widest text-foreground flex items-center gap-1.5">
+                          <Sliders className="w-3 h-3 text-accent" />
+                          Custom Schedule Time Selectors
+                        </span>
+                        <span className="text-[9px] font-mono font-bold text-muted-foreground">
+                          Timezone: {autoScanTimezone}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block">
+                            Active Session Start (HH:MM)
+                          </label>
+                          <input
+                            type="time"
+                            value={autoScanActiveStart}
+                            onChange={(e) => setAutoScanActiveStart(e.target.value)}
+                            className="w-full bg-card/80 border border-card-border focus:border-accent focus:ring-1 focus:ring-accent px-3 py-2 text-xs font-mono font-bold text-foreground rounded-lg transition-all cursor-pointer"
+                          />
+                          <p className="text-[9px] text-slate-500 dark:text-zinc-400">
+                            Time when the auto-scanner wakes up and arms active session countdown.
+                          </p>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block">
+                            Active Session End (HH:MM)
+                          </label>
+                          <input
+                            type="time"
+                            value={autoScanActiveEnd}
+                            onChange={(e) => setAutoScanActiveEnd(e.target.value)}
+                            className="w-full bg-card/80 border border-card-border focus:border-accent focus:ring-1 focus:ring-accent px-3 py-2 text-xs font-mono font-bold text-foreground rounded-lg transition-all cursor-pointer"
+                          />
+                          <p className="text-[9px] text-slate-500 dark:text-zinc-400">
+                            Time when the auto-scanner enters sleep mode to silence scans and protect quotas.
+                          </p>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-black uppercase tracking-wider text-slate-500 dark:text-zinc-400 block">
+                            Operational Timezone
+                          </label>
+                          <select
+                            value={autoScanTimezone}
+                            onChange={(e) => setAutoScanTimezone(e.target.value)}
+                            className="w-full bg-card/80 border border-card-border focus:border-accent focus:ring-1 focus:ring-accent px-3 py-2 text-xs font-mono font-bold text-foreground rounded-lg transition-all cursor-pointer"
+                          >
+                            <option value="Africa/Cairo">Africa/Cairo (Default)</option>
+                            <option value="UTC">UTC (Universal Coordinated)</option>
+                            <option value="Europe/London">Europe/London (London)</option>
+                            <option value="America/New_York">America/New_York (New York)</option>
+                            <option value="Asia/Dubai">Asia/Dubai (Dubai)</option>
+                            <option value="Asia/Singapore">Asia/Singapore (Singapore)</option>
+                            <option value="Asia/Tokyo">Asia/Tokyo (Tokyo)</option>
+                          </select>
+                          <p className="text-[9px] text-slate-500 dark:text-zinc-400">
+                            Timezone applied to custom session start and end boundaries.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Save button */}

@@ -1,8 +1,48 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.75
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.76
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-13 (V17.75 — Dynamic In-Zone Turbo Cadence, Protected AI Memory Bank & HUD Control Deck Modernization)
+> **Last Updated:** 2026-09-13 (V17.76 — Automated Operational Schedule & Active Hours Window Engine)
+
+## 🆕 V17.76 Changelog — Automated Operational Schedule & Active Hours Window Engine (2026-09-13)
+
+### Summary
+1. **Institutional Operational Schedule Engine (`src/lib/operationalSchedule.ts`):**
+   - Implemented pure, robust institutional trading schedule evaluator: `evaluateOperationalSchedule`.
+   - Supports 3 operational modes: `SESSION_PRESET` ('Western Sessions', 08:00 - 22:00 Cairo covering Pre-London, London Open, NY AM, and NY Close), `CUSTOM` (bespoke Start/End HH:MM bounds and timezone), and `ALWAYS_ON` (unrestricted 24/7 scanning).
+   - Localized timezone component resolution via `Intl.DateTimeFormat` with DST offset compensation, `hourCycle: 'h23'` determinism, and crash-proof fallback to Africa/Cairo/UTC via `isValidTimezone` and `getSafeTimezone`.
+   - Calculates exact epoch ms timestamp of the next session open (`nextSessionOpenTimestamp`) when sleeping during off-hours, supporting both daytime and overnight trading windows.
+2. **Terminal Settings Schema & Persistence (`src/app/api/settings/route.ts`):**
+   - Extended `terminal_settings` table schema with self-healing SQL migrations:
+     - `auto_scan_schedule_mode VARCHAR(30) DEFAULT 'SESSION_PRESET'`
+     - `auto_scan_active_start VARCHAR(10) DEFAULT '08:00'`
+     - `auto_scan_active_end VARCHAR(10) DEFAULT '22:00'`
+     - `auto_scan_timezone VARCHAR(50) DEFAULT 'Africa/Cairo'`
+   - Updated GET handler with default fallbacks, automated seed migrations, and typed responses.
+   - Enhanced POST upsert logic to merge schedule parameters non-destructively with existing settings.
+3. **General Settings UI (`src/app/settings/page.tsx`):**
+   - Added "Operational Schedule & Active Hours" configuration section to Tab 1 (QUANT AI).
+   - Mode Selector with interactive cards for Western Sessions preset, Custom Hours, and 24/7 Always Active.
+   - Bespoke time input deck for `Active Session Start`, `Active Session End`, and `Operational Timezone` dropdown in Custom mode.
+   - Instant local storage persistence (`gem_engine_settings`) and cloud synchronization via `/api/settings`.
+4. **Cadence Scheduler Integration (`src/hooks/useMarketData.ts`, `src/context/MarketDataContext.tsx`):**
+   - Active schedule evaluation wired directly into the 5000ms cadence polling worker with immediate reactive synchronization upon configuration updates.
+   - When outside active window (`isWithinActiveSchedule = false`):
+     - Suppresses automated scan dispatches, preserving daily Apex LLM API quotas during low-volume Asian chop and sleep hours.
+     - Automatically calculates next active session open timestamp and clamps the countdown ticker.
+     - Protects off-hours `nextSessionOpenTimestamp` against corruption from base interval reconfiguration.
+   - When active window opens (`isWithinActiveSchedule = true`):
+     - Automatically transitions to active countdown mode, resuming standard Base Cadence (15m/30m) or 5m Proximity Turbo scanning.
+   - Manual override guarantee: Clicking "Synthesize Live Data" remains active 24/7 regardless of schedule state.
+5. **HUD Sidebar Control Deck Telemetry (`src/components/Sidebar.tsx`):**
+   - Updated `<AutoScanCountdown>` to dynamically replace the countdown ticker during off-hours with an informative status badge:
+     `🌙 AUTO-SCAN: SLEEPING (Resumes HH:MM)`
+   - Styled with dedicated night-shift theme accents and `SLEEP` toggle button.
+   - Zero-latency reactive transition back to active countdown the moment the session open threshold is crossed, eliminating 1-second stale countdown flashes.
+6. **Comprehensive Verification Suite (`scripts/test_operational_schedule.ts`):**
+   - Unit tests covering `ALWAYS_ON`, `SESSION_PRESET` (Cairo timezone boundaries, pre-session, inside-session, post-session, late-night, foreign timezone override protection), `CUSTOM` overnight windows (22:00 - 06:00), equal bounds, time string parser, invalid timezone crash resilience, and localized epoch conversion across DST transitions.
+   - 100% test pass rate.
+   - Clean TypeScript typecheck (`npm run typecheck`) and successful Next.js 16 production build (`npm run build`).
 
 ## 🆕 V17.75 Changelog — Dynamic In-Zone Turbo Cadence, Protected AI Memory Bank & HUD Control Deck Modernization (2026-09-13)
 

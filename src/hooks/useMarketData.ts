@@ -11,7 +11,16 @@ import type { LiveCandle, ClosedCandleEvent } from './useBinanceWS';
 import { MTFTelemetryEngine, MTFTelemetrySummary } from '@/lib/quantEngine/MTFTelemetryEngine';
 import { verifyDisplacementOffline } from '@/lib/displacementEngine';
 import { safeParseAiJson } from '@/lib/aiJsonParser';
-export type { Candle };
+import {
+  evaluateOperationalSchedule,
+  type AutoScanScheduleMode,
+  type ScheduleEvaluationResult,
+  DEFAULT_SCHEDULE_MODE,
+  DEFAULT_ACTIVE_START,
+  DEFAULT_ACTIVE_END,
+  DEFAULT_TIMEZONE,
+} from '@/lib/operationalSchedule';
+export type { Candle, AutoScanScheduleMode, ScheduleEvaluationResult };
 
 export interface SignalAlerts {
   FVG_DETECTION: string;
@@ -356,6 +365,10 @@ export interface EngineSettings {
   pmSweepLookback: number;
   autoScanBaseInterval?: number; // 15 | 30; default: 30
   autoScanTurboEnabled?: boolean; // default: true
+  autoScanScheduleMode?: AutoScanScheduleMode; // default: 'SESSION_PRESET'
+  autoScanActiveStart?: string; // HH:MM; default: '08:00'
+  autoScanActiveEnd?: string; // HH:MM; default: '22:00'
+  autoScanTimezone?: string; // default: 'Africa/Cairo'
 }
 
 export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
@@ -383,6 +396,10 @@ export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
   pmSweepLookback: 5,
   autoScanBaseInterval: 30,
   autoScanTurboEnabled: true,
+  autoScanScheduleMode: 'SESSION_PRESET',
+  autoScanActiveStart: '08:00',
+  autoScanActiveEnd: '22:00',
+  autoScanTimezone: 'Africa/Cairo',
 };
 
 
@@ -686,7 +703,7 @@ export function useMarketData(
           }
 
           if (data.terminalSettings) {
-            const { signalSounds, enabledSignals, atrPeriod, adaptiveNMin, adaptiveNMax, mssBodyRatio, displacementVef, sharpDepartureMult, candlesLimit1m, candlesLimit5m, candlesLimit15m, candlesLimit1h, candlesLimit4h, includeBtcCorrelation, includeStructureAnalysis, includeFvgDetection, visualizePerfectMovementOnly, pmAtrMultiplier, pmVolumeSmaPeriod, pmMinBodyRatio, pmMaxWickRatio, pmMaxRetracementLimit, pmSweepLookback, autoScanBaseInterval, autoScanTurboEnabled } = data.terminalSettings;
+            const { signalSounds, enabledSignals, atrPeriod, adaptiveNMin, adaptiveNMax, mssBodyRatio, displacementVef, sharpDepartureMult, candlesLimit1m, candlesLimit5m, candlesLimit15m, candlesLimit1h, candlesLimit4h, includeBtcCorrelation, includeStructureAnalysis, includeFvgDetection, visualizePerfectMovementOnly, pmAtrMultiplier, pmVolumeSmaPeriod, pmMinBodyRatio, pmMaxWickRatio, pmMaxRetracementLimit, pmSweepLookback, autoScanBaseInterval, autoScanTurboEnabled, autoScanScheduleMode, autoScanActiveStart, autoScanActiveEnd, autoScanTimezone } = data.terminalSettings;
             if (signalSounds) {
               setSignalAlerts(signalSounds);
               if (typeof window !== 'undefined') {
@@ -724,6 +741,10 @@ export function useMarketData(
               pmSweepLookback: pmSweepLookback ?? 5,
               autoScanBaseInterval: autoScanBaseInterval ?? 30,
               autoScanTurboEnabled: autoScanTurboEnabled !== false,
+              autoScanScheduleMode: autoScanScheduleMode ?? 'SESSION_PRESET',
+              autoScanActiveStart: autoScanActiveStart ?? '08:00',
+              autoScanActiveEnd: autoScanActiveEnd ?? '22:00',
+              autoScanTimezone: autoScanTimezone ?? 'Africa/Cairo',
             };
             setEngineSettings(loadedEngine);
             if (typeof window !== 'undefined') {
@@ -777,6 +798,10 @@ export function useMarketData(
               pmSweepLookback: engineSettingsRef.current.pmSweepLookback,
               autoScanBaseInterval: engineSettingsRef.current.autoScanBaseInterval ?? 30,
               autoScanTurboEnabled: engineSettingsRef.current.autoScanTurboEnabled !== false,
+              autoScanScheduleMode: engineSettingsRef.current.autoScanScheduleMode ?? 'SESSION_PRESET',
+              autoScanActiveStart: engineSettingsRef.current.autoScanActiveStart ?? '08:00',
+              autoScanActiveEnd: engineSettingsRef.current.autoScanActiveEnd ?? '22:00',
+              autoScanTimezone: engineSettingsRef.current.autoScanTimezone ?? 'Africa/Cairo',
             },
           }),
         });
@@ -1326,7 +1351,7 @@ export function useMarketData(
     setAiTelemetry,
   } = useAIAnalysis();
 
-  // ── Adaptive Dual-Cadence & Proximity Turbo Scheduler ──────────────────────
+  // ── Adaptive Dual-Cadence, Proximity Turbo & Operational Schedule Engine ──
   const baseIntervalMinutes = engineSettings.autoScanBaseInterval === 15 ? 15 : 30;
   const baseIntervalMs = baseIntervalMinutes * 60 * 1000;
   const isTurboEnabled = engineSettings.autoScanTurboEnabled !== false;
@@ -1338,10 +1363,36 @@ export function useMarketData(
   const triggerScanRef = useRef(triggerScan);
   triggerScanRef.current = triggerScan;
 
+  // Operational schedule configuration & evaluation state
+  const scheduleConfig = useMemo(() => ({
+    scheduleMode: engineSettings.autoScanScheduleMode,
+    activeStart: engineSettings.autoScanActiveStart,
+    activeEnd: engineSettings.autoScanActiveEnd,
+    timezone: engineSettings.autoScanTimezone,
+  }), [
+    engineSettings.autoScanScheduleMode,
+    engineSettings.autoScanActiveStart,
+    engineSettings.autoScanActiveEnd,
+    engineSettings.autoScanTimezone,
+  ]);
+  const scheduleConfigRef = useRef(scheduleConfig);
+  scheduleConfigRef.current = scheduleConfig;
+
+  const [scheduleEvaluation, setScheduleEvaluation] = useState<ScheduleEvaluationResult>(() =>
+    evaluateOperationalSchedule(scheduleConfig, Date.now())
+  );
+  const wasSleepingRef = useRef<boolean>(!scheduleEvaluation.isWithinActiveSchedule);
+
   const [isAutoScanActive, setIsAutoScanActive] = useState<boolean>(true);
   const [isTurboActive, setIsTurboActive] = useState<boolean>(false);
-  const [nextScanTimestamp, setNextScanTimestamp] = useState<number>(() => Date.now() + baseIntervalMs);
-  const nextScanTimestampRef = useRef<number>(Date.now() + baseIntervalMs);
+  const [nextScanTimestamp, setNextScanTimestamp] = useState<number>(() => {
+    const initEval = evaluateOperationalSchedule(scheduleConfig, Date.now());
+    if (!initEval.isWithinActiveSchedule && initEval.nextSessionOpenTimestamp) {
+      return initEval.nextSessionOpenTimestamp;
+    }
+    return Date.now() + baseIntervalMs;
+  });
+  const nextScanTimestampRef = useRef<number>(nextScanTimestamp);
 
   // Track consecutive turbo scans for the burnout guard (max 4 iterations = 20 mins)
   const turboScanCountRef = useRef<number>(0);
@@ -1349,6 +1400,28 @@ export function useMarketData(
   const lastScanDispatchTimeRef = useRef<number>(0);
   // Ref tracking active turbo state for interval loop without closure staleness
   const isTurboActiveRef = useRef<boolean>(false);
+
+  // Immediate re-evaluation when scheduleConfig updates
+  useEffect(() => {
+    const now = Date.now();
+    const curEval = evaluateOperationalSchedule(scheduleConfig, now);
+    setScheduleEvaluation(curEval);
+    if (!curEval.isWithinActiveSchedule && curEval.nextSessionOpenTimestamp) {
+      wasSleepingRef.current = true;
+      if (isTurboActiveRef.current) {
+        isTurboActiveRef.current = false;
+        setIsTurboActive(false);
+      }
+      turboScanCountRef.current = 0;
+      nextScanTimestampRef.current = curEval.nextSessionOpenTimestamp;
+      setNextScanTimestamp(curEval.nextSessionOpenTimestamp);
+    } else if (curEval.isWithinActiveSchedule && wasSleepingRef.current) {
+      wasSleepingRef.current = false;
+      const initialTarget = now + baseIntervalMsRef.current;
+      nextScanTimestampRef.current = initialTarget;
+      setNextScanTimestamp(initialTarget);
+    }
+  }, [scheduleConfig]);
 
   // Sync with localStorage on client mount (supporting both new key and legacy key)
   useEffect(() => {
@@ -1368,7 +1441,13 @@ export function useMarketData(
       if (next) {
         // Reset countdown target on re-enable so it starts fresh
         const now = Date.now();
-        const nextTime = now + (isTurboActiveRef.current ? 5 * 60 * 1000 : baseIntervalMsRef.current);
+        const curEval = evaluateOperationalSchedule(scheduleConfigRef.current, now);
+        setScheduleEvaluation(curEval);
+        wasSleepingRef.current = !curEval.isWithinActiveSchedule;
+        let nextTime = now + (isTurboActiveRef.current ? 5 * 60 * 1000 : baseIntervalMsRef.current);
+        if (!curEval.isWithinActiveSchedule && curEval.nextSessionOpenTimestamp) {
+          nextTime = curEval.nextSessionOpenTimestamp;
+        }
         nextScanTimestampRef.current = nextTime;
         setNextScanTimestamp(nextTime);
       }
@@ -1488,12 +1567,19 @@ export function useMarketData(
     turboScanCountRef.current = 0; // Reset burnout guard on manual invocation
 
     const { inZone, isInvalidated } = evaluateProximityState();
-    const willBeTurbo = inZone && !isInvalidated && isTurboEnabledRef.current;
+    // Refresh operational schedule evaluation
+    const curEval = evaluateOperationalSchedule(scheduleConfigRef.current, now);
+    setScheduleEvaluation(curEval);
+
+    // Turbo acceleration only applies when actively scheduled
+    const willBeTurbo = curEval.isWithinActiveSchedule && inZone && !isInvalidated && isTurboEnabledRef.current;
     isTurboActiveRef.current = willBeTurbo;
     setIsTurboActive(willBeTurbo);
 
     const nextIntervalMs = willBeTurbo ? 5 * 60 * 1000 : baseIntervalMsRef.current;
-    const nextTime = now + nextIntervalMs;
+    const nextTime = !curEval.isWithinActiveSchedule && curEval.nextSessionOpenTimestamp
+      ? curEval.nextSessionOpenTimestamp
+      : now + nextIntervalMs;
     nextScanTimestampRef.current = nextTime;
     setNextScanTimestamp(nextTime);
 
@@ -1501,12 +1587,13 @@ export function useMarketData(
     const targetData = isDataPayload ? (arg1 as MarketDataPayload) : dataRef.current;
     const alertMetadata = isDataPayload ? arg2 : arg1;
 
+    // Manual overrides: clicking "Synthesize Live Data" remains active regardless of schedule state
     return triggerScanRef.current(targetData, alertMetadata);
   }, [evaluateProximityState]);
 
-  // If base interval setting changes, adjust countdown accordingly if not in turbo
+  // If base interval setting changes, adjust countdown accordingly if not in turbo and within active schedule
   useEffect(() => {
-    if (!isTurboActiveRef.current) {
+    if (!isTurboActiveRef.current && scheduleEvaluation.isWithinActiveSchedule) {
       const currentRemaining = nextScanTimestampRef.current - Date.now();
       if (currentRemaining > baseIntervalMs) {
         const adjusted = Date.now() + baseIntervalMs;
@@ -1514,14 +1601,41 @@ export function useMarketData(
         setNextScanTimestamp(adjusted);
       }
     }
-  }, [baseIntervalMs]);
+  }, [baseIntervalMs, scheduleEvaluation.isWithinActiveSchedule]);
 
-  // Dynamic Cadence Polling Worker: evaluates proximity, throttles, and triggers automated scans
+  // Dynamic Cadence Polling Worker: evaluates schedule, proximity, throttles, and triggers automated scans
   useEffect(() => {
     if (!isAutoScanActive) return;
 
     const timer = setInterval(() => {
       const now = Date.now();
+      const currentEval = evaluateOperationalSchedule(scheduleConfigRef.current, now);
+      setScheduleEvaluation(currentEval);
+
+      // Operational Schedule Gate: if outside active hours, suppress automated scan executions
+      if (!currentEval.isWithinActiveSchedule) {
+        wasSleepingRef.current = true;
+        if (isTurboActiveRef.current) {
+          isTurboActiveRef.current = false;
+          setIsTurboActive(false);
+        }
+        turboScanCountRef.current = 0;
+        if (currentEval.nextSessionOpenTimestamp && nextScanTimestampRef.current !== currentEval.nextSessionOpenTimestamp) {
+          nextScanTimestampRef.current = currentEval.nextSessionOpenTimestamp;
+          setNextScanTimestamp(currentEval.nextSessionOpenTimestamp);
+        }
+        return; // Suppress automated scan executions during off-hours
+      }
+
+      // Transition from sleeping -> active schedule window
+      if (wasSleepingRef.current) {
+        wasSleepingRef.current = false;
+        const baseMs = baseIntervalMsRef.current;
+        const initialTarget = now + baseMs;
+        nextScanTimestampRef.current = initialTarget;
+        setNextScanTimestamp(initialTarget);
+      }
+
       const { inZone, isInvalidated } = evaluateProximityState();
       const baseMs = baseIntervalMsRef.current;
 
@@ -1633,6 +1747,10 @@ export function useMarketData(
     engineSettings,
     updateEngineSettings,
     mtfSummary,
+    isWithinActiveSchedule: scheduleEvaluation.isWithinActiveSchedule,
+    autoScanResumesAt: scheduleEvaluation.resumesAtFormatted,
+    autoScanNextOpenTimestamp: scheduleEvaluation.nextSessionOpenTimestamp,
+    scheduleEvaluation,
   }), [
     data,
     isLoading,
@@ -1674,6 +1792,7 @@ export function useMarketData(
     engineSettings,
     updateEngineSettings,
     mtfSummary,
+    scheduleEvaluation,
   ]);
 }
 

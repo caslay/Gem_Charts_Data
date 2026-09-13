@@ -266,26 +266,33 @@ const AutoScanCountdown = memo(function AutoScanCountdown({
   isAutoScanActive,
   isTurboActive,
   baseIntervalMinutes = 30,
+  isWithinActiveSchedule = true,
+  resumesAt = '08:00',
   onToggle
 }: {
   nextScanTimestamp: number;
   isAutoScanActive: boolean;
   isTurboActive: boolean;
   baseIntervalMinutes?: number;
+  isWithinActiveSchedule?: boolean;
+  resumesAt?: string;
   onToggle: () => void;
 }) {
+  const isSleeping = isAutoScanActive && !isWithinActiveSchedule;
+
   const [remainingSec, setRemainingSec] = useState<number>(() => {
     return Math.max(0, Math.floor((nextScanTimestamp - Date.now()) / 1000));
   });
 
   useEffect(() => {
-    if (!isAutoScanActive) return;
+    if (!isAutoScanActive || !isWithinActiveSchedule) return;
+    setRemainingSec(Math.max(0, Math.floor((nextScanTimestamp - Date.now()) / 1000)));
     const timer = setInterval(() => {
       const sec = Math.max(0, Math.floor((nextScanTimestamp - Date.now()) / 1000));
       setRemainingSec(sec);
     }, 1000);
     return () => clearInterval(timer);
-  }, [isAutoScanActive, nextScanTimestamp]);
+  }, [isAutoScanActive, isWithinActiveSchedule, nextScanTimestamp]);
 
   const mins = Math.floor(remainingSec / 60);
   const secs = (remainingSec % 60).toString().padStart(2, '0');
@@ -294,13 +301,22 @@ const AutoScanCountdown = memo(function AutoScanCountdown({
     <div
       suppressHydrationWarning
       className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[10px] font-mono transition-all duration-300 ${
-        isTurboActive && isAutoScanActive
-          ? 'bg-amber-500/15 border border-amber-500/50 shadow-md shadow-amber-500/10'
-          : 'bg-background/50 border border-card-border'
+        isSleeping
+          ? 'bg-indigo-500/10 border border-indigo-500/30 shadow-sm shadow-indigo-500/5'
+          : isTurboActive && isAutoScanActive
+            ? 'bg-amber-500/15 border border-amber-500/50 shadow-md shadow-amber-500/10'
+            : 'bg-background/50 border border-card-border'
       }`}
     >
-      <div suppressHydrationWarning className="flex items-center gap-1.5">
-        {isTurboActive && isAutoScanActive ? (
+      <div suppressHydrationWarning className="flex items-center gap-1.5 min-w-0">
+        {isSleeping ? (
+          <div className="flex items-center gap-1.5 text-indigo-400 truncate">
+            <span className="text-[11px] shrink-0">🌙</span>
+            <span className="font-extrabold uppercase tracking-wider text-[9px] text-indigo-300 truncate">
+              AUTO-SCAN: SLEEPING (Resumes {resumesAt})
+            </span>
+          </div>
+        ) : isTurboActive && isAutoScanActive ? (
           <div className="flex items-center gap-1.5 text-amber-400">
             <Zap size={12} fill="currentColor" className="animate-bounce shrink-0" />
             <span className="font-black uppercase tracking-wider text-amber-400 animate-pulse">
@@ -324,15 +340,17 @@ const AutoScanCountdown = memo(function AutoScanCountdown({
         type="button"
         onClick={onToggle}
         suppressHydrationWarning
-        className={`px-2 py-0.5 rounded-lg text-[8.5px] font-black uppercase tracking-wider border transition-colors cursor-pointer ${
-          isAutoScanActive
-            ? isTurboActive
-              ? 'bg-amber-500/25 border-amber-500/60 text-amber-300 hover:bg-amber-500/40'
-              : 'bg-accent/20 border-accent text-accent hover:bg-accent/30'
-            : 'bg-card border-card-border text-muted hover:text-foreground'
+        className={`px-2 py-0.5 rounded-lg text-[8.5px] font-black uppercase tracking-wider border transition-colors cursor-pointer shrink-0 ml-1.5 ${
+          isSleeping
+            ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-300 hover:bg-indigo-500/30'
+            : isAutoScanActive
+              ? isTurboActive
+                ? 'bg-amber-500/25 border-amber-500/60 text-amber-300 hover:bg-amber-500/40'
+                : 'bg-accent/20 border-accent text-accent hover:bg-accent/30'
+              : 'bg-card border-card-border text-muted hover:text-foreground'
         }`}
       >
-        {isAutoScanActive ? (isTurboActive ? 'TURBO' : 'ENABLED') : 'PAUSED'}
+        {isSleeping ? 'SLEEP' : isAutoScanActive ? (isTurboActive ? 'TURBO' : 'ENABLED') : 'PAUSED'}
       </button>
     </div>
   );
@@ -645,6 +663,8 @@ const Sidebar = memo(function Sidebar({
     autoScanCadenceMinutes,
     baseIntervalMinutes,
     nextScanTimestamp,
+    isWithinActiveSchedule,
+    autoScanResumesAt,
     mtfSummary,
   } = useMarketDataContext();
 
@@ -1410,6 +1430,8 @@ const Sidebar = memo(function Sidebar({
                       isAutoScanActive={isAutoScanActive ?? isAuto30mScanActive}
                       isTurboActive={Boolean(isTurboActive)}
                       baseIntervalMinutes={baseIntervalMinutes ?? 30}
+                      isWithinActiveSchedule={isWithinActiveSchedule ?? true}
+                      resumesAt={autoScanResumesAt ?? '08:00'}
                       onToggle={toggleAutoScan ?? toggleAuto30mScan}
                     />
 
