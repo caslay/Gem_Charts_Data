@@ -1,8 +1,47 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.76
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.77
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-13 (V17.76 — Automated Operational Schedule & Active Hours Window Engine)
+> **Last Updated:** 2026-09-13 (V17.77 — Clock-Aligned Cadence Synchronization, Context Timestamp Busting & Dual-Engine V18.6 Reversal Mechanics)
+
+## 🆕 V17.77 Changelog — Clock-Aligned Cadence Synchronization, Context Timestamp Busting & Dual-Engine V18.6 Reversal Mechanics (2026-09-13)
+
+### Summary
+1. **Clock-Aligned Quant Cadence Engine (`src/lib/sessionContext.ts`, `src/hooks/useMarketData.ts`):**
+   - Implemented pure wall-clock boundary calculation: `getNextCandleCloseTimestamp(intervalMinutes, fromTimestamp)` supporting 5m (:00, :05, :10...), 15m (:00, :15, :30, :45), and 30m (:00, :30). Includes input sanity guards for negative/NaN timestamps.
+   - Eradicated browser refresh ephemeral reset: replaces arbitrary relative offsets (`Date.now() + intervalMs`) with deterministic next candle close boundaries. Multiple tabs and page refreshes compute the exact remaining countdown seconds in 100% synchrony.
+   - Synchronized base interval switching, manual triggers, sleeping-to-active transitions, and In-Zone 5m Turbo proximity clamping to the next wall-clock candle close.
+   - Preserves the 180s debounce guard and 4-iteration (20-minute) Turbo burnout cap; advances `nextScanTimestamp` to the next boundary on debounce suppression rather than firing mid-candle.
+   - Real-time cross-tab debounce state synchronized via `gem_last_scan_dispatch_time` in `localStorage` with `window.addEventListener('storage')` active multi-tab event listeners.
+2. **Market Context Cache-Busting & Live Time Alignment (`src/app/api/market-data/route.ts`, `src/app/api/quant-analyze/route.ts`, `src/app/api/settings/route.ts`, `src/hooks/useMarketData.ts`, `src/hooks/useAIAnalysis.ts`, `src/lib/aiCascadeEngine.ts`, `src/lib/orderFlowEngine.ts`, `src/lib/displacementEngine.ts`, `src/lib/quantEngine/structuralBootstrap.ts`):**
+   - Resolved multi-hour timestamp freezing defect: `mergeDeltaPayload` now dynamically propagates `session_context`, `timestamp`, and synchronized `ipda_metrics.current_time_window`.
+   - Hardened `MarketDataPayload` and `MarketDataDeltaPayload` interfaces to formally type `session_context?: LiveSessionContext`.
+   - Audited and added `{ cache: 'no-store' }` across all ingestion and calculation layers:
+     - Core order flow Binance REST fetches (`depth`, `ticker/price`, `openInterestHist`, `allForceOrders`, `premiumIndex`, `topLongShortAccountRatio`).
+     - Microservice displacement endpoint (`/api/py/calculate-displacement`).
+     - Historical and structural bootstrap Binance fetches (`structuralBootstrap.ts`, `agentEngineHandlers.ts`).
+     - History and telemetry retrieval modals (`AiAnalysisHistoryModal.tsx`).
+   - Added `export const dynamic = 'force-dynamic'` and `Cache-Control: no-store, no-cache, must-revalidate` response headers across `/api/market-data`, `/api/quant-analyze`, and `/api/settings`.
+   - Refactored `calculateCurrentKillzone` in `src/lib/sessionContext.ts` to use deterministic `Intl.DateTimeFormat` with `formatToParts` for New York time resolution, eradicating brittle `Date(toLocaleString)` date-string parsing across international OS environments.
+   - Injected live session context directly into prompt headers (`=== [LIVE EXECUTION TIMESTAMPS & SESSION CONTEXT] ===`) in `src/lib/aiCascadeEngine.ts` with autonomous fallback generation, guaranteeing 100% prompt timestamp freshness.
+   - Upgraded `extractLivePrice` in `quant-analyze/route.ts` to prioritize live mark price fields over candle close slices.
+3. **Canonical System Prompt Refinement & Auto-Upgrade (Dual-Engine V18.6) (`src/lib/sopPromptBuilder.ts`, `src/app/api/settings/route.ts`, `src/app/api/quant-analyze/route.ts`):**
+   - Upgraded `DEFAULT_ETH_SOP_SYSTEM_PROMPT` to Dual-Engine V18.6 with modernized Rule 7 and 5-Step Analytical Workflow.
+   - **Engine 1 Liquidity Purge & Target Flip Logic:** Clarified that when sell-side liquidity (SSL) or session lows are swept and "downside targets are exhausted", the Draw on Liquidity (DOL) immediately flips upward to Equilibrium and Buy-Side Liquidity (BSL). This is a mandatory prerequisite for Mean Reversion (Engine 1), NOT a reason to stand down.
+   - **Multi-Timeframe Confirmation Flexibility:** Authorized Engine 1 to accept confirmed displacement and MSS on 5m (preferred on deep wicks for optimal R:R >= 1.5R) or 15m, eliminating entry lag caused by rigid 15m MSS requirements.
+   - **Autonomous Legacy Prompt Migration:** Configured `/api/settings` and `/api/quant-analyze` to automatically inspect stored database prompts, detect legacy records (< V18.6), and auto-upgrade them to Canonical Dual-Engine V18.6 in PostgreSQL without requiring manual UI intervention.
+4. **Comprehensive Verification Suite (`scripts/test_cadence_and_context_sync.ts`):**
+   - 9 test suites validating:
+     - 5m, 15m, 30m wall-clock candle boundary calculations.
+     - Multi-tab and browser refresh countdown persistence without ephemeral resets.
+     - 5m Turbo clamping and 4-iteration burnout relaxation.
+     - 180s debounce guard advancement.
+     - Dynamic live session context generation and killzone evaluation.
+     - Dual-Engine V18.6 prompt compliance.
+     - Delta payload context merging and live timestamp propagation.
+     - Edge case resilience (invalid/NaN dates, NY lunch dead zone boundaries).
+     - Legacy prompt auto-upgrade detection.
+   - 100% test pass rate, clean TypeScript typecheck (`npm run typecheck`), 100% successful Next.js 16 Turbopack production build.
 
 ## 🆕 V17.76 Changelog — Automated Operational Schedule & Active Hours Window Engine (2026-09-13)
 

@@ -450,7 +450,8 @@ export async function verifyDisplacement(recentCandles: Candle[], symbol: string
         taker_buy_vol: c.taker_buy_vol || 0,
         taker_sell_vol: c.taker_sell_vol || 0,
       }))),
-      signal: controller.signal
+      signal: controller.signal,
+      cache: 'no-store',
     });
  
     clearTimeout(id);

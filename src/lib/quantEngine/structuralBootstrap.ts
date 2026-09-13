@@ -75,7 +75,7 @@ async function fetchWarmupCandles(
   while (currentStart < endMs) {
     const url = `${BINANCE_REST}?symbol=${symbol}&interval=${timeframe}&startTime=${currentStart}&endTime=${endMs - 1}&limit=${limit}`;
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+      const res = await fetch(url, { signal: AbortSignal.timeout(10000), cache: 'no-store' });
       if (!res.ok) break;
       const raw: unknown[][] = await res.json();
       if (!raw || raw.length === 0) break;

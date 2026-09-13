@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { sql } from "@/lib/postgres";
 import { DEFAULT_MODEL } from "@/lib/aiModels";
+import { DEFAULT_ETH_SOP_SYSTEM_PROMPT } from "@/lib/sopPromptBuilder";
+
+export const dynamic = 'force-dynamic';
 
 /**
  * Settings API — Command Center Backend
@@ -186,6 +189,21 @@ export async function GET() {
         }
       }
 
+      // Self-seed or upgrade SYSTEM_PROMPT to Canonical Dual-Engine V18.6 if not present or outdated
+      if (!settings['SYSTEM_PROMPT'] || !settings['SYSTEM_PROMPT'].includes('V18.6')) {
+        settings['SYSTEM_PROMPT'] = DEFAULT_ETH_SOP_SYSTEM_PROMPT;
+        try {
+          await sql`
+            INSERT INTO system_settings (key_name, key_value)
+            VALUES ('SYSTEM_PROMPT', ${DEFAULT_ETH_SOP_SYSTEM_PROMPT})
+            ON CONFLICT (key_name)
+            DO UPDATE SET key_value = EXCLUDED.key_value;
+          `;
+        } catch (seedErr) {
+          console.warn("[SETTINGS API] Auto-seed/upgrade SYSTEM_PROMPT skipped:", seedErr);
+        }
+      }
+
       // 2. Fetch specific user's terminal settings
       const userEmail = session.user.email || "default_user";
       let { rows: termRows } = await sql`
@@ -281,21 +299,27 @@ export async function GET() {
         autoScanTimezone: termRows[0]?.auto_scan_timezone || 'Africa/Cairo',
       };
 
-      return NextResponse.json({ settings, terminalSettings });
+      return NextResponse.json(
+        { settings, terminalSettings },
+        { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+      );
     } catch (dbErr: any) {
       console.warn("[SETTINGS API] Database query failed or quota exceeded (HTTP 402/Offline fallback):", dbErr?.message || dbErr);
-      return NextResponse.json({
-        settings: { ACTIVE_MODEL: DEFAULT_MODEL },
-        terminalSettings: defaultTerminalSettings,
-        isOffline: true,
-      });
+      return NextResponse.json(
+        {
+          settings: { ACTIVE_MODEL: DEFAULT_MODEL, SYSTEM_PROMPT: DEFAULT_ETH_SOP_SYSTEM_PROMPT },
+          terminalSettings: defaultTerminalSettings,
+          isOffline: true,
+        },
+        { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+      );
     }
   } catch (error: unknown) {
     console.error("[SETTINGS API] GET Error:", error);
     const message = error instanceof Error ? error.message : "Failed to fetch settings.";
     return NextResponse.json(
       { error: message, settings: {}, terminalSettings: null },
-      { status: 500 }
+      { status: 500, headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
     );
   }
 }

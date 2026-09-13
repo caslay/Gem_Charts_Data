@@ -32,8 +32,8 @@ export interface OrderFlowEngine {
 export async function fetchRestingLiquidity(symbol: string = 'ETHUSDC'): Promise<RestingLiquidityPools> {
   try {
     const [depthRes, tickerRes] = await Promise.all([
-      fetch(`https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}&limit=1000`, { signal: AbortSignal.timeout(5000) }),
-      fetch(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${symbol}`, { signal: AbortSignal.timeout(5000) })
+      fetch(`https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}&limit=1000`, { signal: AbortSignal.timeout(5000), cache: 'no-store' }),
+      fetch(`https://fapi.binance.com/fapi/v1/ticker/price?symbol=${symbol}`, { signal: AbortSignal.timeout(5000), cache: 'no-store' })
     ]);
 
     if (!depthRes.ok) throw new Error(`Failed to fetch depth data for ${symbol}`);
@@ -87,8 +87,8 @@ function calculateSMA(data: number[], period: number): number {
 export async function fetchOIMetricsAndLiquidations(symbol: string = 'ETHUSDC', isPriceRising: boolean = true): Promise<{ open_interest_trend: string, liquidation_events: LiquidationEvents }> {
   try {
     const [oiResult, liqResult] = await Promise.allSettled([
-      fetch(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=5m&limit=50`, { signal: AbortSignal.timeout(5000) }),
-      fetch(`https://fapi.binance.com/fapi/v1/allForceOrders?symbol=${symbol}&limit=100`, { signal: AbortSignal.timeout(5000) })
+      fetch(`https://fapi.binance.com/futures/data/openInterestHist?symbol=${symbol}&period=5m&limit=50`, { signal: AbortSignal.timeout(5000), cache: 'no-store' }),
+      fetch(`https://fapi.binance.com/fapi/v1/allForceOrders?symbol=${symbol}&limit=100`, { signal: AbortSignal.timeout(5000), cache: 'no-store' })
     ]);
 
     let open_interest_trend = 'UNAVAILABLE';
@@ -206,8 +206,8 @@ export async function fetchOIMetricsAndLiquidations(symbol: string = 'ETHUSDC', 
 export async function fetchSmartMoneySentiment(symbol: string = 'ETHUSDC'): Promise<SmartMoneySentiment> {
   try {
     const [fundingResult, ratioResult] = await Promise.allSettled([
-      fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`, { signal: AbortSignal.timeout(5000) }),
-      fetch(`https://fapi.binance.com/futures/data/topLongShortAccountRatio?symbol=${symbol}&period=5m&limit=1`, { signal: AbortSignal.timeout(5000) })
+      fetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`, { signal: AbortSignal.timeout(5000), cache: 'no-store' }),
+      fetch(`https://fapi.binance.com/futures/data/topLongShortAccountRatio?symbol=${symbol}&period=5m&limit=1`, { signal: AbortSignal.timeout(5000), cache: 'no-store' })
     ]);
 
     let funding_rate_status = 'NEUTRAL';

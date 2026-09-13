@@ -3,6 +3,9 @@ import { sql } from '@/lib/postgres';
 import { DEFAULT_ETH_SOP_SYSTEM_PROMPT } from '@/lib/sopPromptBuilder';
 import { DEFAULT_MODEL } from '@/lib/aiModels';
 import { runAiCascadeEvaluation, fetchAiAnalysisHistory } from '@/lib/aiCascadeEngine';
+import { buildLiveSessionContext } from '@/lib/sessionContext';
+
+export const dynamic = 'force-dynamic';
 
 /**
  * Quant Analyze API — Resilient Multi-Model Cascade & Telemetry Engine
@@ -30,15 +33,30 @@ export async function POST(req: Request) {
 
     const apiKey = config['GEMINI_LIVE_KEY'] || process.env.GEMINI_LIVE_KEY;
     const activeModel = config['ACTIVE_MODEL'] || process.env.ACTIVE_MODEL || DEFAULT_MODEL;
-    const systemPrompt = config['SYSTEM_PROMPT'] || DEFAULT_ETH_SOP_SYSTEM_PROMPT;
+    let systemPrompt = config['SYSTEM_PROMPT'] || DEFAULT_ETH_SOP_SYSTEM_PROMPT;
+
+    // Guard against outdated prompt in DB: ensure Canonical Dual-Engine V18.6 is active
+    if (!config['SYSTEM_PROMPT'] || !config['SYSTEM_PROMPT'].includes('V18.6')) {
+      systemPrompt = DEFAULT_ETH_SOP_SYSTEM_PROMPT;
+      // Proactively upgrade system_settings in DB
+      sql`
+        INSERT INTO system_settings (key_name, key_value)
+        VALUES ('SYSTEM_PROMPT', ${DEFAULT_ETH_SOP_SYSTEM_PROMPT})
+        ON CONFLICT (key_name)
+        DO UPDATE SET key_value = EXCLUDED.key_value;
+      `.catch((err) => console.warn('[QUANT_ANALYZE] Auto-migrate SYSTEM_PROMPT to V18.6 skipped:', err));
+    }
 
     // ── 2. Graceful validation ──
     if (!apiKey) {
-      return NextResponse.json({
-        analysis: `⚠️ **Quant AI Engine Notice:** Gemini API Key is not configured in Settings. Please set your \`GEMINI_LIVE_KEY\` in the Command Center Vault or environment to activate real-time institutional AI analysis.`,
-        isConfigured: false,
-        telemetry: null,
-      });
+      return NextResponse.json(
+        {
+          analysis: `⚠️ **Quant AI Engine Notice:** Gemini API Key is not configured in Settings. Please set your \`GEMINI_LIVE_KEY\` in the Command Center Vault or environment to activate real-time institutional AI analysis.`,
+          isConfigured: false,
+          telemetry: null,
+        },
+        { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+      );
     }
 
     // ── 3. Extract the incoming V8.x JSON payload ────────────────────────
@@ -62,8 +80,20 @@ export async function POST(req: Request) {
       parsedState = { status: 'SEARCHING' };
     }
 
-    // ── 5. Invalidation Guard ────────────────────────────────────────────
+    // ── 5. Invalidation Guard & Dynamic Live Session Stamping ───────────
+    const executionNow = new Date();
     const livePrice = extractLivePrice(payload);
+    const liveSessionContext = buildLiveSessionContext(executionNow, livePrice);
+
+    // Dynamically stamp the current session context at the exact millisecond of analysis execution.
+    // Overwrites any stale cached timestamps with the active live clock and active killzone.
+    payload.timestamp = executionNow.toISOString();
+    payload.session_context = liveSessionContext;
+    if (payload.ipda_metrics && typeof payload.ipda_metrics === 'object') {
+      const ipda = payload.ipda_metrics as Record<string, unknown>;
+      ipda.current_time_window = liveSessionContext.current_killzone;
+      ipda.session_context = liveSessionContext;
+    }
 
     if (
       livePrice !== null &&
@@ -103,29 +133,32 @@ export async function POST(req: Request) {
     });
 
     // ── 7. Return comprehensive response to client ───────────────────────
-    return NextResponse.json({
-      analysis: result.text,
-      telemetry: result.telemetry,
-      status: result.status,
-      tradeDirection: result.tradeDirection,
-      biasSignal: result.biasSignal,
-      setup: {
-        entry_range_low: result.entryRangeLow,
-        entry_range_high: result.entryRangeHigh,
-        invalidation_level: result.invalidationLevel,
-        target_1: result.target1,
-        target_2: result.target2,
-        target_3: result.target3,
+    return NextResponse.json(
+      {
+        analysis: result.text,
+        telemetry: result.telemetry,
+        status: result.status,
+        tradeDirection: result.tradeDirection,
+        biasSignal: result.biasSignal,
+        setup: {
+          entry_range_low: result.entryRangeLow,
+          entry_range_high: result.entryRangeHigh,
+          invalidation_level: result.invalidationLevel,
+          target_1: result.target1,
+          target_2: result.target2,
+          target_3: result.target3,
+        },
+        logId: result.logId,
+        isConfigured: true,
       },
-      logId: result.logId,
-      isConfigured: true,
-    });
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+    );
   } catch (error: unknown) {
     console.error('[QUANT_ANALYZE] Quant AI Engine Cascade Error:', error);
     const message = error instanceof Error ? error.message : 'Internal Server Error during AI analysis.';
     return NextResponse.json(
       { error: message },
-      { status: 500 }
+      { status: 500, headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
     );
   }
 }
@@ -148,23 +181,35 @@ export async function GET(req: Request) {
       status,
     });
 
-    return NextResponse.json({
-      success: true,
-      data: data.history,
-      pagination: data.pagination,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: data.history,
+        pagination: data.pagination,
+      },
+      { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+    );
   } catch (error: unknown) {
     console.error('[QUANT_ANALYZE] GET History Error:', error);
     const message = error instanceof Error ? error.message : 'Failed to retrieve AI analysis history.';
     return NextResponse.json(
       { error: message, success: false, data: [] },
-      { status: 500 }
+      { status: 500, headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
     );
   }
 }
 
 // ─── Helper: Extract live price from the most recent candle ──────────────────
 function extractLivePrice(payload: Record<string, unknown>): number | null {
+  if (typeof payload?.live_price === 'number' && !isNaN(payload.live_price) && payload.live_price > 0) {
+    return payload.live_price;
+  }
+  const ipda = payload?.ipda_metrics as Record<string, unknown> | undefined;
+  const currentPricing = ipda?.current_pricing as Record<string, unknown> | undefined;
+  if (typeof currentPricing?.current_price === 'number' && !isNaN(currentPricing.current_price) && currentPricing.current_price > 0) {
+    return currentPricing.current_price;
+  }
+
   const dp = payload?.data_payload as Record<string, unknown> | undefined;
   if (!dp) return null;
 
@@ -174,7 +219,7 @@ function extractLivePrice(payload: Record<string, unknown>): number | null {
     const candles = dp[key] as Array<{ c?: number }> | undefined;
     if (Array.isArray(candles) && candles.length > 0) {
       const lastCandle = candles[candles.length - 1];
-      if (lastCandle?.c != null && typeof lastCandle.c === 'number') {
+      if (lastCandle?.c != null && typeof lastCandle.c === 'number' && lastCandle.c > 0) {
         return lastCandle.c;
       }
     }

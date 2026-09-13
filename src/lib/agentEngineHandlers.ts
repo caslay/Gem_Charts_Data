@@ -216,7 +216,7 @@ export async function fetchKlines(
 ): Promise<any[]> {
   try {
     const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000), cache: 'no-store' });
     if (!res.ok) {
       console.warn(`[agentEngineHandlers] Binance klines HTTP ${res.status} for ${symbol}/${interval}.`);
       return [];
@@ -246,7 +246,7 @@ export async function fetchPagedKlines(
   while (currentStart < endMs) {
     const url = `${BINANCE_REST}?symbol=${symbol}&interval=${interval}&startTime=${currentStart}&endTime=${endMs - 1}&limit=${limit}`;
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+      const res = await fetch(url, { signal: AbortSignal.timeout(12000), cache: 'no-store' });
       if (!res.ok) {
         console.warn(`[agentEngineHandlers] Binance kline fetch warning [${interval}]: ${res.status}`);
         break;
