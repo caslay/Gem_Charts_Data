@@ -401,10 +401,14 @@ export default function AiAnalysisHistoryModal({
 
                     {onApplyAnalysis && (
                       <button
-                        onClick={() => onApplyAnalysis(selectedRecord)}
+                        onClick={() => {
+                          onApplyAnalysis(selectedRecord);
+                          onClose();
+                        }}
                         className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent/90 text-accent-foreground text-xs font-bold uppercase tracking-wider transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                        title="Restore this historical analysis into the active HUD"
                       >
-                        <Zap size={12} />
+                        <Zap size={12} fill="currentColor" />
                         <span>Load to HUD</span>
                       </button>
                     )}

@@ -10,6 +10,7 @@ import { analyzeMarketStructure, MarketStructureAnalysis } from '@/lib/structure
 import type { LiveCandle, ClosedCandleEvent } from './useBinanceWS';
 import { MTFTelemetryEngine, MTFTelemetrySummary } from '@/lib/quantEngine/MTFTelemetryEngine';
 import { verifyDisplacementOffline } from '@/lib/displacementEngine';
+import { safeParseAiJson } from '@/lib/aiJsonParser';
 export type { Candle };
 
 export interface SignalAlerts {
@@ -353,6 +354,8 @@ export interface EngineSettings {
   pmMaxWickRatio: number;
   pmMaxRetracementLimit: number;
   pmSweepLookback: number;
+  autoScanBaseInterval?: number; // 15 | 30; default: 30
+  autoScanTurboEnabled?: boolean; // default: true
 }
 
 export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
@@ -378,6 +381,8 @@ export const DEFAULT_ENGINE_SETTINGS: EngineSettings = {
   pmMaxWickRatio: 0.5,
   pmMaxRetracementLimit: 0.7,
   pmSweepLookback: 5,
+  autoScanBaseInterval: 30,
+  autoScanTurboEnabled: true,
 };
 
 
@@ -501,7 +506,8 @@ export function useMarketData(
   liveCandles: Record<string, LiveCandle> = {},
   lastClosedEvent: ClosedCandleEvent | null = null,
   livePrice: number | null = null,
-  enabled: boolean = true
+  enabled: boolean = true,
+  livePriceRef?: React.RefObject<number | null>
 ) {
   const [data, setData] = useState<MarketDataPayload | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -680,7 +686,7 @@ export function useMarketData(
           }
 
           if (data.terminalSettings) {
-            const { signalSounds, enabledSignals, atrPeriod, adaptiveNMin, adaptiveNMax, mssBodyRatio, displacementVef, sharpDepartureMult, candlesLimit1m, candlesLimit5m, candlesLimit15m, candlesLimit1h, candlesLimit4h, includeBtcCorrelation, includeStructureAnalysis, includeFvgDetection, visualizePerfectMovementOnly, pmAtrMultiplier, pmVolumeSmaPeriod, pmMinBodyRatio, pmMaxWickRatio, pmMaxRetracementLimit, pmSweepLookback } = data.terminalSettings;
+            const { signalSounds, enabledSignals, atrPeriod, adaptiveNMin, adaptiveNMax, mssBodyRatio, displacementVef, sharpDepartureMult, candlesLimit1m, candlesLimit5m, candlesLimit15m, candlesLimit1h, candlesLimit4h, includeBtcCorrelation, includeStructureAnalysis, includeFvgDetection, visualizePerfectMovementOnly, pmAtrMultiplier, pmVolumeSmaPeriod, pmMinBodyRatio, pmMaxWickRatio, pmMaxRetracementLimit, pmSweepLookback, autoScanBaseInterval, autoScanTurboEnabled } = data.terminalSettings;
             if (signalSounds) {
               setSignalAlerts(signalSounds);
               if (typeof window !== 'undefined') {
@@ -716,6 +722,8 @@ export function useMarketData(
               pmMaxWickRatio: pmMaxWickRatio ?? 0.5,
               pmMaxRetracementLimit: pmMaxRetracementLimit ?? 0.7,
               pmSweepLookback: pmSweepLookback ?? 5,
+              autoScanBaseInterval: autoScanBaseInterval ?? 30,
+              autoScanTurboEnabled: autoScanTurboEnabled !== false,
             };
             setEngineSettings(loadedEngine);
             if (typeof window !== 'undefined') {
@@ -767,6 +775,8 @@ export function useMarketData(
               pmMaxWickRatio: engineSettingsRef.current.pmMaxWickRatio,
               pmMaxRetracementLimit: engineSettingsRef.current.pmMaxRetracementLimit,
               pmSweepLookback: engineSettingsRef.current.pmSweepLookback,
+              autoScanBaseInterval: engineSettingsRef.current.autoScanBaseInterval ?? 30,
+              autoScanTurboEnabled: engineSettingsRef.current.autoScanTurboEnabled !== false,
             },
           }),
         });
@@ -1316,52 +1326,268 @@ export function useMarketData(
     setAiTelemetry,
   } = useAIAnalysis();
 
-  // ── 30-Minute Automated Analysis Scan Scheduler ────────────────────────────
-  const [isAuto30mScanActive, setIsAuto30mScanActive] = useState<boolean>(true);
-  const [nextScanTimestamp, setNextScanTimestamp] = useState<number>(() => Date.now() + 1800 * 1000);
-  const nextScanTimestampRef = useRef<number>(Date.now() + 1800 * 1000);
+  // ── Adaptive Dual-Cadence & Proximity Turbo Scheduler ──────────────────────
+  const baseIntervalMinutes = engineSettings.autoScanBaseInterval === 15 ? 15 : 30;
+  const baseIntervalMs = baseIntervalMinutes * 60 * 1000;
+  const isTurboEnabled = engineSettings.autoScanTurboEnabled !== false;
 
-  // Sync with localStorage on client mount (avoids SSR hydration mismatch)
+  const baseIntervalMsRef = useRef<number>(baseIntervalMs);
+  baseIntervalMsRef.current = baseIntervalMs;
+  const isTurboEnabledRef = useRef<boolean>(isTurboEnabled);
+  isTurboEnabledRef.current = isTurboEnabled;
+  const triggerScanRef = useRef(triggerScan);
+  triggerScanRef.current = triggerScan;
+
+  const [isAutoScanActive, setIsAutoScanActive] = useState<boolean>(true);
+  const [isTurboActive, setIsTurboActive] = useState<boolean>(false);
+  const [nextScanTimestamp, setNextScanTimestamp] = useState<number>(() => Date.now() + baseIntervalMs);
+  const nextScanTimestampRef = useRef<number>(Date.now() + baseIntervalMs);
+
+  // Track consecutive turbo scans for the burnout guard (max 4 iterations = 20 mins)
+  const turboScanCountRef = useRef<number>(0);
+  // Track last automated scan dispatch time for the 180s debounce guard
+  const lastScanDispatchTimeRef = useRef<number>(0);
+  // Ref tracking active turbo state for interval loop without closure staleness
+  const isTurboActiveRef = useRef<boolean>(false);
+
+  // Sync with localStorage on client mount (supporting both new key and legacy key)
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('gem_auto_30m_scan');
+      const stored = localStorage.getItem('gem_auto_scan_active') ?? localStorage.getItem('gem_auto_30m_scan');
       if (stored !== null) {
-        setIsAuto30mScanActive(stored === 'true');
+        setIsAutoScanActive(stored === 'true');
       }
     } catch {
       // Ignore localStorage errors
     }
   }, []);
 
-  const toggleAuto30mScan = useCallback(() => {
-    setIsAuto30mScanActive((prev) => {
+  const toggleAutoScan = useCallback(() => {
+    setIsAutoScanActive((prev) => {
       const next = !prev;
+      if (next) {
+        // Reset countdown target on re-enable so it starts fresh
+        const now = Date.now();
+        const nextTime = now + (isTurboActiveRef.current ? 5 * 60 * 1000 : baseIntervalMsRef.current);
+        nextScanTimestampRef.current = nextTime;
+        setNextScanTimestamp(nextTime);
+      }
       if (typeof window !== 'undefined') {
-        localStorage.setItem('gem_auto_30m_scan', String(next));
+        try {
+          localStorage.setItem('gem_auto_scan_active', String(next));
+          localStorage.setItem('gem_auto_30m_scan', String(next));
+        } catch {}
       }
       return next;
     });
   }, []);
 
-  const triggerAiAnalysisScan = useCallback(async (alertMetadata?: unknown) => {
-    const nextTime = Date.now() + 1800 * 1000;
+  // Setup Extraction & Proximity Radar
+  const activeSetup = useMemo(() => {
+    if (!aiAnalysis) return null;
+    const parsed = safeParseAiJson(aiAnalysis);
+    if (!parsed) return null;
+
+    const rp = parsed?.sop_report?.risk_parameters;
+    const nextSt = parsed?.next_database_state;
+
+    let low: number | null = null;
+    let high: number | null = null;
+
+    if (Array.isArray(rp?.entry_range) && rp.entry_range.length >= 2) {
+      const l = Number(rp.entry_range[0]);
+      const h = Number(rp.entry_range[1]);
+      if (!isNaN(l) && !isNaN(h) && isFinite(l) && isFinite(h) && l > 0 && h > 0) {
+        low = Math.min(l, h);
+        high = Math.max(l, h);
+      }
+    } else if (nextSt?.entry_range_low != null && nextSt?.entry_range_high != null) {
+      const l = Number(nextSt.entry_range_low);
+      const h = Number(nextSt.entry_range_high);
+      if (!isNaN(l) && !isNaN(h) && isFinite(l) && isFinite(h) && l > 0 && h > 0) {
+        low = Math.min(l, h);
+        high = Math.max(l, h);
+      }
+    } else if (parsed?.entry_range_low != null && parsed?.entry_range_high != null) {
+      const l = Number(parsed.entry_range_low);
+      const h = Number(parsed.entry_range_high);
+      if (!isNaN(l) && !isNaN(h) && isFinite(l) && isFinite(h) && l > 0 && h > 0) {
+        low = Math.min(l, h);
+        high = Math.max(l, h);
+      }
+    }
+
+    const rawInvalidation = rp?.invalidation ?? nextSt?.invalidation_level ?? parsed?.invalidation_level;
+    const invalidation = typeof rawInvalidation === 'number' && !isNaN(rawInvalidation) && isFinite(rawInvalidation) && rawInvalidation > 0
+      ? rawInvalidation
+      : null;
+
+    const rawDir = parsed?.bias_label ?? nextSt?.trade_direction ?? (parsed?.bias_signal === 1 ? 'BULLISH' : parsed?.bias_signal === -1 ? 'BEARISH' : null);
+    const direction = typeof rawDir === 'string' ? rawDir.toUpperCase() : null;
+
+    return { low, high, invalidation, direction };
+  }, [aiAnalysis]);
+
+  const activeSetupRef = useRef(activeSetup);
+  activeSetupRef.current = activeSetup;
+
+  // Read current mark / live price with fallback to latest candle close
+  const getCurrentPrice = useCallback((): number | null => {
+    if (livePriceRef && typeof livePriceRef.current === 'number' && livePriceRef.current > 0) {
+      return livePriceRef.current;
+    }
+    if (typeof livePrice === 'number' && livePrice > 0) {
+      return livePrice;
+    }
+    const currentPayload = dataRef.current?.data_payload;
+    const candles = currentPayload?.candles_5m || currentPayload?.candles_15m || [];
+    if (candles.length > 0) {
+      return candles[candles.length - 1].c;
+    }
+    return null;
+  }, [livePriceRef, livePrice]);
+
+  // Evaluate proximity against entry boundaries with 0.05% tolerance band and invalidation guard
+  const evaluateProximityState = useCallback(() => {
+    const isTurbo = isTurboEnabledRef.current;
+    const setup = activeSetupRef.current;
+    if (!isTurbo || !setup || setup.low == null || setup.high == null || setup.low <= 0 || setup.high <= 0) {
+      return { inZone: false, isInvalidated: false };
+    }
+
+    const currentPrice = getCurrentPrice();
+    if (currentPrice == null || currentPrice <= 0) {
+      return { inZone: false, isInvalidated: false };
+    }
+
+    let isInvalidated = false;
+    if (setup.invalidation != null && setup.invalidation > 0) {
+      if ((setup.direction === 'BULLISH' || setup.direction === 'LONG') && currentPrice <= setup.invalidation) {
+        isInvalidated = true;
+      } else if ((setup.direction === 'BEARISH' || setup.direction === 'SHORT') && currentPrice >= setup.invalidation) {
+        isInvalidated = true;
+      }
+    }
+
+    // If setup is invalidated, price cannot be actively eligible for in-zone turbo execution
+    if (isInvalidated) {
+      return { inZone: false, isInvalidated: true };
+    }
+
+    // 0.05% proximity tolerance band
+    const buffer = setup.low * 0.0005;
+    const inZone = currentPrice >= (setup.low - buffer) && currentPrice <= (setup.high + buffer);
+
+    return { inZone, isInvalidated: false };
+  }, [getCurrentPrice]);
+
+  // Manual Trigger Handler ("Synthesize Live Data")
+  const triggerAiAnalysisScan = useCallback(async (arg1?: unknown, arg2?: unknown) => {
+    const now = Date.now();
+    lastScanDispatchTimeRef.current = now;
+    turboScanCountRef.current = 0; // Reset burnout guard on manual invocation
+
+    const { inZone, isInvalidated } = evaluateProximityState();
+    const willBeTurbo = inZone && !isInvalidated && isTurboEnabledRef.current;
+    isTurboActiveRef.current = willBeTurbo;
+    setIsTurboActive(willBeTurbo);
+
+    const nextIntervalMs = willBeTurbo ? 5 * 60 * 1000 : baseIntervalMsRef.current;
+    const nextTime = now + nextIntervalMs;
     nextScanTimestampRef.current = nextTime;
     setNextScanTimestamp(nextTime);
-    return triggerScan(data, alertMetadata);
-  }, [data, triggerScan]);
 
-  // 30-minute periodic scan check (silent 5s polling check, zero React re-render churn)
+    const isDataPayload = arg1 && typeof arg1 === 'object' && ('data_payload' in arg1 || 'ticker' in arg1);
+    const targetData = isDataPayload ? (arg1 as MarketDataPayload) : dataRef.current;
+    const alertMetadata = isDataPayload ? arg2 : arg1;
+
+    return triggerScanRef.current(targetData, alertMetadata);
+  }, [evaluateProximityState]);
+
+  // If base interval setting changes, adjust countdown accordingly if not in turbo
   useEffect(() => {
-    if (!isAuto30mScanActive) return;
+    if (!isTurboActiveRef.current) {
+      const currentRemaining = nextScanTimestampRef.current - Date.now();
+      if (currentRemaining > baseIntervalMs) {
+        const adjusted = Date.now() + baseIntervalMs;
+        nextScanTimestampRef.current = adjusted;
+        setNextScanTimestamp(adjusted);
+      }
+    }
+  }, [baseIntervalMs]);
+
+  // Dynamic Cadence Polling Worker: evaluates proximity, throttles, and triggers automated scans
+  useEffect(() => {
+    if (!isAutoScanActive) return;
 
     const timer = setInterval(() => {
-      if (Date.now() >= nextScanTimestampRef.current) {
-        triggerAiAnalysisScan();
+      const now = Date.now();
+      const { inZone, isInvalidated } = evaluateProximityState();
+      const baseMs = baseIntervalMsRef.current;
+
+      // Check Turbo eligibility
+      const burnoutReached = turboScanCountRef.current >= 4;
+      const shouldBeTurbo = inZone && !isInvalidated && !burnoutReached;
+
+      if (shouldBeTurbo && !isTurboActiveRef.current) {
+        // Elevate to TURBO_IN_ZONE (5m)
+        isTurboActiveRef.current = true;
+        setIsTurboActive(true);
+        // Clamp remaining time to max 5 minutes (300s)
+        const maxTurboTarget = now + 5 * 60 * 1000;
+        if (nextScanTimestampRef.current > maxTurboTarget) {
+          nextScanTimestampRef.current = maxTurboTarget;
+          setNextScanTimestamp(maxTurboTarget);
+        }
+      } else if (!shouldBeTurbo && isTurboActiveRef.current) {
+        // Relax back to Base Interval
+        isTurboActiveRef.current = false;
+        setIsTurboActive(false);
+        // If price left zone or breached invalidation, reset burnout count
+        if (!inZone || isInvalidated) {
+          turboScanCountRef.current = 0;
+        }
+        const baseTarget = now + baseMs;
+        if (nextScanTimestampRef.current < baseTarget) {
+          nextScanTimestampRef.current = baseTarget;
+          setNextScanTimestamp(baseTarget);
+        }
+      }
+
+      // Check if timer elapsed
+      if (now >= nextScanTimestampRef.current) {
+        // Enforce minimum 180-second debounce between consecutive automated scans
+        if (now - lastScanDispatchTimeRef.current >= 180 * 1000) {
+          lastScanDispatchTimeRef.current = now;
+
+          if (isTurboActiveRef.current) {
+            turboScanCountRef.current += 1;
+            if (turboScanCountRef.current >= 4) {
+              // Burnout reached: relax back to base interval
+              isTurboActiveRef.current = false;
+              setIsTurboActive(false);
+              const nextTime = now + baseMs;
+              nextScanTimestampRef.current = nextTime;
+              setNextScanTimestamp(nextTime);
+            } else {
+              const nextTime = now + 5 * 60 * 1000;
+              nextScanTimestampRef.current = nextTime;
+              setNextScanTimestamp(nextTime);
+            }
+          } else {
+            turboScanCountRef.current = 0;
+            const nextTime = now + baseMs;
+            nextScanTimestampRef.current = nextTime;
+            setNextScanTimestamp(nextTime);
+          }
+
+          triggerScanRef.current(dataRef.current);
+        }
       }
     }, 5000);
 
     return () => clearInterval(timer);
-  }, [isAuto30mScanActive, triggerAiAnalysisScan]);
+  }, [isAutoScanActive, evaluateProximityState]);
 
   return useMemo(() => ({
     data,
@@ -1382,10 +1608,16 @@ export function useMarketData(
     isHistoryLoading,
     fetchAiHistory,
     setAiAnalysis,
+    setAiBias,
     setAiTelemetry,
     triggerAiAnalysisScan,
-    isAuto30mScanActive,
-    toggleAuto30mScan,
+    isAutoScanActive,
+    isAuto30mScanActive: isAutoScanActive,
+    toggleAutoScan,
+    toggleAuto30mScan: toggleAutoScan,
+    isTurboActive,
+    autoScanCadenceMinutes: isTurboActive ? 5 : baseIntervalMinutes,
+    baseIntervalMinutes,
     nextScanTimestamp,
     signalAlerts,
     updateSignalAlert,
@@ -1420,10 +1652,13 @@ export function useMarketData(
     isHistoryLoading,
     fetchAiHistory,
     setAiAnalysis,
+    setAiBias,
     setAiTelemetry,
     triggerAiAnalysisScan,
-    isAuto30mScanActive,
-    toggleAuto30mScan,
+    isAutoScanActive,
+    toggleAutoScan,
+    isTurboActive,
+    baseIntervalMinutes,
     nextScanTimestamp,
     signalAlerts,
     updateSignalAlert,

@@ -264,10 +264,14 @@ function calculateValueArea(candles: Array<{ c?: number; h?: number; l?: number;
 const AutoScanCountdown = memo(function AutoScanCountdown({
   nextScanTimestamp,
   isAutoScanActive,
+  isTurboActive,
+  baseIntervalMinutes = 30,
   onToggle
 }: {
   nextScanTimestamp: number;
   isAutoScanActive: boolean;
+  isTurboActive: boolean;
+  baseIntervalMinutes?: number;
   onToggle: () => void;
 }) {
   const [remainingSec, setRemainingSec] = useState<number>(() => {
@@ -287,25 +291,48 @@ const AutoScanCountdown = memo(function AutoScanCountdown({
   const secs = (remainingSec % 60).toString().padStart(2, '0');
 
   return (
-    <div suppressHydrationWarning className="flex items-center justify-between px-2 py-1 bg-background/50 border border-card-border rounded-lg text-[10px] font-mono">
+    <div
+      suppressHydrationWarning
+      className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[10px] font-mono transition-all duration-300 ${
+        isTurboActive && isAutoScanActive
+          ? 'bg-amber-500/15 border border-amber-500/50 shadow-md shadow-amber-500/10'
+          : 'bg-background/50 border border-card-border'
+      }`}
+    >
       <div suppressHydrationWarning className="flex items-center gap-1.5">
-        <Clock size={11} className={isAutoScanActive ? "text-accent animate-pulse" : "text-muted"} />
-        <span className="text-muted font-bold">30m Auto-Scan:</span>
-        <span suppressHydrationWarning className="text-foreground font-extrabold">
-          {isAutoScanActive ? `${mins}:${secs}` : 'OFF'}
-        </span>
+        {isTurboActive && isAutoScanActive ? (
+          <div className="flex items-center gap-1.5 text-amber-400">
+            <Zap size={12} fill="currentColor" className="animate-bounce shrink-0" />
+            <span className="font-black uppercase tracking-wider text-amber-400 animate-pulse">
+              ⚡ 5m TURBO (POI):
+            </span>
+            <span suppressHydrationWarning className="text-amber-300 font-mono font-black">
+              {mins}:{secs}
+            </span>
+          </div>
+        ) : (
+          <>
+            <Clock size={11} className={isAutoScanActive ? "text-accent animate-pulse shrink-0" : "text-muted shrink-0"} />
+            <span className="text-muted font-bold">[{baseIntervalMinutes}m] Auto-Scan:</span>
+            <span suppressHydrationWarning className="text-foreground font-extrabold font-mono">
+              {isAutoScanActive ? `${mins}:${secs}` : 'OFF'}
+            </span>
+          </>
+        )}
       </div>
       <button
         type="button"
         onClick={onToggle}
         suppressHydrationWarning
-        className={`px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wider border transition-colors ${
+        className={`px-2 py-0.5 rounded-lg text-[8.5px] font-black uppercase tracking-wider border transition-colors cursor-pointer ${
           isAutoScanActive
-            ? 'bg-accent/20 border-accent text-accent'
+            ? isTurboActive
+              ? 'bg-amber-500/25 border-amber-500/60 text-amber-300 hover:bg-amber-500/40'
+              : 'bg-accent/20 border-accent text-accent hover:bg-accent/30'
             : 'bg-card border-card-border text-muted hover:text-foreground'
         }`}
       >
-        {isAutoScanActive ? 'ENABLED' : 'PAUSED'}
+        {isAutoScanActive ? (isTurboActive ? 'TURBO' : 'ENABLED') : 'PAUSED'}
       </button>
     </div>
   );
@@ -603,14 +630,20 @@ const Sidebar = memo(function Sidebar({
     aiAnalysis,
     aiTelemetry,
     setAiAnalysis,
+    setAiBias,
     setAiTelemetry,
     triggerAiAnalysisScan,
     wsInterval,
     setWsInterval,
     structureState,
     themeSettings,
+    isAutoScanActive,
     isAuto30mScanActive,
+    toggleAutoScan,
     toggleAuto30mScan,
+    isTurboActive,
+    autoScanCadenceMinutes,
+    baseIntervalMinutes,
     nextScanTimestamp,
     mtfSummary,
   } = useMarketDataContext();
@@ -1371,11 +1404,13 @@ const Sidebar = memo(function Sidebar({
                   </div>
 
                   <div className="p-3 bg-card/45 border-t border-card-border shrink-0 flex flex-col gap-2">
-                    {/* 30m Auto-Scan Toggle & Countdown */}
+                    {/* Auto-Scan Toggle & Countdown */}
                     <AutoScanCountdown
                       nextScanTimestamp={nextScanTimestamp}
-                      isAutoScanActive={isAuto30mScanActive}
-                      onToggle={toggleAuto30mScan}
+                      isAutoScanActive={isAutoScanActive ?? isAuto30mScanActive}
+                      isTurboActive={Boolean(isTurboActive)}
+                      baseIntervalMinutes={baseIntervalMinutes ?? 30}
+                      onToggle={toggleAutoScan ?? toggleAuto30mScan}
                     />
 
                     <button
@@ -1561,7 +1596,48 @@ const Sidebar = memo(function Sidebar({
         isOpen={isAiHistoryOpen}
         onClose={() => setIsAiHistoryOpen(false)}
         onApplyAnalysis={(record) => {
-          setAiAnalysis(record.narrative);
+          let payloadToSet = record.raw_response;
+          if (!payloadToSet || !safeParseAiJson(payloadToSet)) {
+            // Synthesize structured JSON from individual record columns if raw_response is absent or invalid JSON
+            const synthetic = {
+              bias_signal: record.bias_signal,
+              bias_label: record.trade_direction,
+              narrative_summary: record.narrative,
+              sop_report: {
+                trade_narrative: record.narrative,
+                risk_parameters: {
+                  entry_range: (record.entry_range_low != null && record.entry_range_high != null)
+                    ? [Number(record.entry_range_low), Number(record.entry_range_high)]
+                    : undefined,
+                  invalidation: record.invalidation_level != null ? Number(record.invalidation_level) : undefined,
+                  stage1_sl: record.invalidation_level != null ? Number(record.invalidation_level) : undefined,
+                  tp1: record.target_1 != null ? Number(record.target_1) : undefined,
+                  tp2: record.target_2 != null ? Number(record.target_2) : undefined,
+                  tp3: record.target_3 != null ? Number(record.target_3) : undefined,
+                },
+              },
+              next_database_state: {
+                trade_direction: record.trade_direction,
+                entry_range_low: record.entry_range_low,
+                entry_range_high: record.entry_range_high,
+                invalidation_level: record.invalidation_level,
+                target_level: record.target_1,
+              },
+            };
+            payloadToSet = JSON.stringify(synthetic, null, 2);
+          }
+          setAiAnalysis(payloadToSet);
+          if (record.bias_signal) {
+            if (typeof record.bias_signal === 'number') {
+              setAiBias(record.bias_signal);
+            } else if (record.bias_signal === 'BULLISH' || record.bias_signal === 'LONG') {
+              setAiBias(1);
+            } else if (record.bias_signal === 'BEARISH' || record.bias_signal === 'SHORT') {
+              setAiBias(-1);
+            } else {
+              setAiBias(0);
+            }
+          }
           let attempts: any[] = [];
           if (record.telemetry_data) {
             try {

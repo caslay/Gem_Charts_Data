@@ -453,7 +453,7 @@ Timestamp: ${new Date().toISOString()}`;
                 <span className="text-[10px] text-muted block mt-0.5 font-medium">
                   {aiAnalysis
                     ? "Live AI SOP setup card is pinned at the top. Client-side setups matching AI master bias receive a +20 pt confluence boost."
-                    : "Run Gemini 3.6 Flash AI SOP synthesis to generate top-tier AI trade setups and boost aligned quantitative scenarios."}
+                    : "Run AI Quant SOP synthesis to generate top-tier AI trade setups and boost aligned quantitative scenarios."}
                 </span>
               </div>
             </div>
