@@ -199,6 +199,8 @@ export default function SettingsPage() {
   // ── Terminal / Audio Alerts State ──────────────────────────────────────────
   const [signalAlerts, setSignalAlerts] = useState<SignalAlerts>(DEFAULT_SIGNAL_ALERTS);
   const [signalAlertsEnabled, setSignalAlertsEnabled] = useState<SignalAlertsEnabled>(DEFAULT_SIGNAL_ALERTS_ENABLED);
+  const [autoScanBaseInterval, setAutoScanBaseInterval] = useState<number>(30);
+  const [autoScanTurboEnabled, setAutoScanTurboEnabled] = useState<boolean>(true);
 
   // Local storage terminal preferences
   const [ambientGlow, setAmbientGlow] = useState(true);
@@ -272,9 +274,11 @@ export default function SettingsPage() {
       setThemeSettings(mergedTheme);
 
       if (settingsData.terminalSettings) {
-        const { signalSounds, enabledSignals } = settingsData.terminalSettings;
+        const { signalSounds, enabledSignals, autoScanBaseInterval: asbi, autoScanTurboEnabled: aste } = settingsData.terminalSettings;
         if (signalSounds) setSignalAlerts(signalSounds);
         if (enabledSignals) setSignalAlertsEnabled(enabledSignals);
+        if (asbi !== undefined && asbi !== null) setAutoScanBaseInterval(Number(asbi));
+        if (aste !== undefined && aste !== null) setAutoScanTurboEnabled(Boolean(aste));
       }
 
       // 2. Fetch Account & Risk settings
@@ -364,12 +368,38 @@ export default function SettingsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ settings: quantSettings }),
+        body: JSON.stringify({
+          settings: quantSettings,
+          terminalSettings: {
+            signalSounds: signalAlerts,
+            enabledSignals: signalAlertsEnabled,
+            autoScanBaseInterval,
+            autoScanTurboEnabled,
+          },
+        }),
       });
 
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Save failed");
+      }
+
+      // Propagate into active local application state context
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("gem_engine_settings");
+          const current = stored ? JSON.parse(stored) : {};
+          localStorage.setItem(
+            "gem_engine_settings",
+            JSON.stringify({
+              ...current,
+              autoScanBaseInterval,
+              autoScanTurboEnabled,
+            })
+          );
+        } catch (storageErr) {
+          console.error("Failed to update gem_engine_settings in localStorage:", storageErr);
+        }
       }
 
       setSaveStatus("success");
@@ -773,6 +803,66 @@ export default function SettingsPage() {
                       <span>VAULT VALUE MASKED: {maskKey(quantSettings.GEMINI_LIVE_KEY)}</span>
                     </div>
                   )}
+                </div>
+
+                {/* ── Auto-Scan Cadence & Turbo Mode Controls ── */}
+                <div className="pt-4 border-t border-card-border/60 space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-foreground">
+                      Adaptive Scanning & In-Zone Turbo Engine
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Base Scan Frequency Selector */}
+                    <div className="space-y-1.5 bg-card/40 border border-card-border p-3.5 rounded-xl">
+                      <label className="text-[9px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
+                        Base Scan Frequency
+                      </label>
+                      <select
+                        value={autoScanBaseInterval}
+                        onChange={(e) => setAutoScanBaseInterval(Number(e.target.value))}
+                        className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3 py-2 text-xs text-foreground rounded-lg transition-all cursor-pointer font-mono"
+                      >
+                        <option value={30}>30 Minutes (Standard / Quota Saver)</option>
+                        <option value={15}>15 Minutes (Active Session Monitoring)</option>
+                      </select>
+                      <p className="text-[9.5px] text-slate-500 dark:text-zinc-400 leading-relaxed font-sans">
+                        Default timer cadence when price is trading in macro equilibrium or outside institutional POIs.
+                      </p>
+                    </div>
+
+                    {/* In-Zone Turbo Mode Toggle */}
+                    <div className="flex flex-col justify-between bg-card/40 border border-card-border p-3.5 rounded-xl">
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <div>
+                          <span className="text-[9px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
+                            In-Zone Turbo Mode (5m)
+                          </span>
+                          <span className="text-[11px] font-bold text-foreground">
+                            Proximity Acceleration
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAutoScanTurboEnabled(!autoScanTurboEnabled)}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            autoScanTurboEnabled ? 'bg-accent' : 'bg-zinc-700'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-black shadow-lg ring-0 transition duration-200 ease-in-out ${
+                              autoScanTurboEnabled ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                      <p className="text-[9.5px] text-slate-500 dark:text-zinc-400 leading-relaxed font-sans">
+                        ⚡ Automatically elevates scanning cadence to 5 minutes when live price penetrates an active setup's Entry Zone / POI.
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Save button */}

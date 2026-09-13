@@ -953,11 +953,27 @@ export function generatePotentialTrades(
 
       const aiSetupKey = `AI_SOP_${aiDirection}_${entryMin.toFixed(2)}_${entryMax.toFixed(2)}_${sl.toFixed(2)}`;
 
+      const timeline = evaluateSetupTimeline(aiDirection, entryMin, entryMax, sl, tp1, tp2);
+      const status = timeline.status;
+      const openPrice = timeline.openPrice;
+      const openTime = timeline.openTime;
+      const closePrice = timeline.closePrice;
+      const closeTime = timeline.closeTime;
+
+      const storedRec = readRecord(storedHistory[aiSetupKey]);
+      const autoKeys = getAutoExecuteKeys();
+      const isAutoExec = autoKeys.includes(aiSetupKey);
+      const isAutoOpened = Boolean(storedRec?.autoOpened);
+
+      if (!isBacktest) {
+        saveSetupState(aiSetupKey, status, { openPrice, openTime, closePrice, closeTime });
+      }
+
       const aiSetupCard: PotentialTrade = {
         id: "AI-SOP-01",
         type: "⭐ AI Quant SOP Setup",
         direction: aiDirection,
-        trigger: sopReport.trade_narrative || parsedAi?.narrative_summary || "Gemini 3.6 Flash Quant SOP Analysis",
+        trigger: sopReport.trade_narrative || parsedAi?.narrative_summary || "AI Quant SOP Analysis",
         entryMin: parseFloat(entryMin.toFixed(2)),
         entryMax: parseFloat(entryMax.toFixed(2)),
         stopLoss: parseFloat(sl.toFixed(2)),
@@ -965,9 +981,9 @@ export function generatePotentialTrades(
         target2: parseFloat(tp2.toFixed(2)),
         rrRatio: parseFloat(rr.toFixed(2)),
         confluence: `🤖 AI SOP Aligned | ${sopReport.smt_status || "BTC SMT Divergence"}`,
-        status: "ACTIVE_WATCH",
+        status,
         isHighProbability: true,
-        isNearby: true,
+        isNearby: currentPrice > 0 && Math.abs(currentPrice - (entryMin + entryMax) / 2) / currentPrice <= 0.02,
         timeframeConfluence: "⭐ AI Quant SOP Setup",
         scenarioTier: "A+",
         scenarioScore: 100,
@@ -978,9 +994,13 @@ export function generatePotentialTrades(
           `4. SMT Status: ${sopReport.smt_status || "Bullish SMT vs BTC"}`,
           `5. Risk Parameters: SL $${sl.toFixed(2)} | TP1 $${tp1.toFixed(2)} | TP2 $${tp2.toFixed(2)} (1:${rr.toFixed(2)} R:R)`
         ],
+        openPrice,
+        openTime,
+        closePrice,
+        closeTime,
         setupKey: aiSetupKey,
-        isAutoExecute: isAutoExecuteEnabled(aiSetupKey),
-        isAutoOpened: false,
+        isAutoExecute: isAutoExec,
+        isAutoOpened,
       };
 
       setups.unshift(aiSetupCard);

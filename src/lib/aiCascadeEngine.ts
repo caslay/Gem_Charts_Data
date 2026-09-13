@@ -430,16 +430,64 @@ export async function runAiCascadeEvaluation(
     console.warn('[AI_CASCADE] Failed to log telemetry to ai_analysis_log (non-fatal):', dbErr);
   }
 
-  // ── Upsert ai_trade_state row id=1 if next_database_state was returned ──
+  // ── Upsert ai_trade_state row id=1 if next_database_state was returned (Non-destructive merge) ──
   try {
     const nextState = parsedResponse?.next_database_state;
     if (nextState && typeof nextState === 'object') {
+      let existingState: Record<string, unknown> =
+        historicalState && typeof historicalState === 'object'
+          ? { ...historicalState }
+          : {};
+
+      try {
+        const stateRes = await sql`SELECT state_json FROM ai_trade_state WHERE id = 1`;
+        if (stateRes.rows.length > 0 && stateRes.rows[0].state_json) {
+          const raw = stateRes.rows[0].state_json;
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (parsed && typeof parsed === 'object') {
+            existingState = { ...existingState, ...parsed };
+          }
+        }
+      } catch (readErr) {
+        console.warn('[AI_CASCADE] Failed to read existing ai_trade_state before merge (falling back to historicalState):', readErr);
+      }
+
+      // Explicitly preserve and deduplicate historical arrays (specifically recent_mistakes_lessons)
+      const existingLessons = Array.isArray(existingState.recent_mistakes_lessons)
+        ? existingState.recent_mistakes_lessons
+        : [];
+      const nextLessons = Array.isArray((nextState as any).recent_mistakes_lessons)
+        ? (nextState as any).recent_mistakes_lessons
+        : [];
+
+      const seenLessons = new Set<string>();
+      const combinedLessons: unknown[] = [];
+      for (const item of [...nextLessons, ...existingLessons]) {
+        const key = typeof item === 'string'
+          ? item.trim()
+          : item && typeof item === 'object'
+          ? ((item as any).lesson || (item as any).setup_id ? `${(item as any).setup_id || ''}::${(item as any).lesson || ''}` : JSON.stringify(item))
+          : JSON.stringify(item);
+        if (!seenLessons.has(key)) {
+          seenLessons.add(key);
+          combinedLessons.push(item);
+        }
+      }
+
+      const mergedState = {
+        ...existingState,
+        ...nextState,
+        recent_mistakes_lessons: combinedLessons.slice(0, 20),
+        updated_at: new Date().toISOString(),
+      };
+
       await sql`
-        UPDATE ai_trade_state
-        SET state_json = ${JSON.stringify(nextState)}, updated_at = NOW()
-        WHERE id = 1
+        INSERT INTO ai_trade_state (id, state_json, updated_at)
+        VALUES (1, ${JSON.stringify(mergedState)}, NOW())
+        ON CONFLICT (id) DO UPDATE
+        SET state_json = ${JSON.stringify(mergedState)}, updated_at = NOW()
       `;
-      console.log('[AI_CASCADE] ai_trade_state updated with next_database_state');
+      console.log('[AI_CASCADE] ai_trade_state merged non-destructively with next_database_state');
     }
   } catch (stateErr) {
     console.warn('[AI_CASCADE] Failed to update ai_trade_state:', stateErr);

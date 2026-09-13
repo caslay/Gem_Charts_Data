@@ -9,7 +9,11 @@ import { generatePotentialTrades, autoExecuteTradeIfNeeded } from "@/lib/quantTr
  * have entered ACTIVE_WATCH / CONFIRMED / TARGET_HIT state, and automatically
  * logs them to the Trading Journal endpoint (/api/trades or /api/backtest-trades).
  */
-export function useAutoTradeExecutor(data: MarketDataPayload | null, isBacktest: boolean = false) {
+export function useAutoTradeExecutor(
+  data: MarketDataPayload | null,
+  isBacktest: boolean = false,
+  aiAnalysis?: string | null
+) {
   const isExecutingRef = useRef(false);
   const lastEvaluatedKeyRef = useRef<string>('');
 
@@ -20,14 +24,17 @@ export function useAutoTradeExecutor(data: MarketDataPayload | null, isBacktest:
     const candles5m = data.data_payload?.candles_5m || [];
     const last5mT = candles5m.length > 0 ? candles5m[candles5m.length - 1]?.t : 0;
     const fvgCount = data.ipda_metrics?.active_fvgs?.length || 0;
-    const key = `${last5mT}_${fvgCount}`;
+    const aiHash = aiAnalysis
+      ? `${aiAnalysis.length}_${aiAnalysis.slice(0, 32)}_${aiAnalysis.slice(-32)}`
+      : '0';
+    const key = `${last5mT}_${fvgCount}_${aiHash}`;
 
-    // Skip redundant full scans during 5s delta polls if candle timestamp and FVG count haven't changed
+    // Skip redundant full scans during 5s delta polls if candle timestamp, FVG count, and AI analysis haven't changed
     if (!isBacktest && lastEvaluatedKeyRef.current === key) return;
     lastEvaluatedKeyRef.current = key;
 
     try {
-      const summary = generatePotentialTrades(data, isBacktest);
+      const summary = generatePotentialTrades(data, isBacktest, aiAnalysis);
       summary.setups.forEach((setup) => {
         if (setup.isAutoExecute && !setup.isAutoOpened) {
           isExecutingRef.current = true;
@@ -40,5 +47,5 @@ export function useAutoTradeExecutor(data: MarketDataPayload | null, isBacktest:
       console.error("[useAutoTradeExecutor] Error running auto-trade check:", err);
       isExecutingRef.current = false;
     }
-  }, [data, isBacktest]);
+  }, [data, isBacktest, aiAnalysis]);
 }

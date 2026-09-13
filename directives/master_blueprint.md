@@ -1,8 +1,38 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.74
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.75
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-13 (V17.74 — Resilient Multi-Model AI Cascade, Centralized Model Registry, Database Telemetry Logging & Frontend HUD Audit Trail)
+> **Last Updated:** 2026-09-13 (V17.75 — Dynamic In-Zone Turbo Cadence, Protected AI Memory Bank & HUD Control Deck Modernization)
+
+## 🆕 V17.75 Changelog — Dynamic In-Zone Turbo Cadence, Protected AI Memory Bank & HUD Control Deck Modernization (2026-09-13)
+
+### Summary
+1. **Protected PostgreSQL AI Trade State (Non-Destructive Memory Bank Merge):**
+   - Eliminated destructive overwrite of `ai_trade_state.state_json` in `src/lib/aiCascadeEngine.ts`.
+   - Reads existing database state before applying `next_database_state` updates.
+   - Non-destructively merges institutional lessons: combines and deduplicates `recent_mistakes_lessons` (supporting both string lessons and structured lesson objects with `setup_id` / `lesson`), prepends newest lessons, and preserves up to 20 historical lessons without data loss.
+   - Uses `ON CONFLICT (id) DO UPDATE SET state_json = $2, updated_at = NOW()`.
+2. **Terminal Settings Schema & Non-Destructive General Settings Extension (`src/app/api/settings/route.ts`, `src/app/settings/page.tsx`):**
+   - Added `auto_scan_base_interval` ('15m' | '30m', default '30m') and `auto_scan_turbo_enabled` (boolean, default true) to `terminal_settings` table schema with self-healing migrations.
+   - Fixed `POST /api/settings` to read existing `terminal_settings` and perform non-destructive partial updates so saving Tab 1 (Quant AI) or Tab 4 (Terminal Settings) preserves all user-configured candle limits, fee tiers, and audio preferences.
+   - Rendered "Base Scan Frequency" dropdown (15m vs 30m) and "In-Zone Turbo Mode (5m)" toggle switch in `QUANT AI` tab with direct `localStorage` synchronization.
+3. **Adaptive Dual-Cadence & Proximity Turbo Scheduler (`src/hooks/useMarketData.ts`, `src/context/MarketDataContext.tsx`):**
+   - Replaced rigid hardcoded 1800s timer with dynamic cadence resolver.
+   - Stabilized the 5s polling worker using mutable refs to eliminate React interval thrashing across 5000ms market data polls.
+   - Live tick proximity radar evaluates price inside active AI SOP entry range `[entryMin, entryMax]` with ±0.05% tolerance band and normalized boundary checks.
+   - Elevates cadence to 5-minute Turbo mode when price enters POI zone; relaxes to base interval (15m/30m) when outside or invalidated.
+   - Enforces 180s debounce guard against rapid oscillation and 4-iteration (20-minute) burnout cap to protect API quotas.
+   - Disarms immediately upon stop-loss invalidation.
+   - Manual synthesis trigger resets timer dynamically to the current active cadence, supporting both direct and alert-metadata invocation.
+   - Exposed `isAutoScanActive`, `isTurboActive`, `autoScanCadenceMinutes`, `baseIntervalMinutes`, and `nextScanTimestamp`.
+4. **Action Handlers Wired, AI Setup Parity & Legacy Debt Pruned:**
+   - Updated `AiAnalysisHistoryModal.tsx` and `Sidebar.tsx`: restored analysis button injects full `raw_response` or builds synthetic structured JSON from database columns if legacy, ensuring chips, target ladders, and telemetry chips hydrate cleanly.
+   - Aligned `AI-SOP-01` in `src/lib/quantTradeEngine.ts`: dynamic status evaluation via `evaluateSetupTimeline`, persistent `autoOpened` state tracking, and integration with `useAutoTradeExecutor` with robust hash key invalidation.
+   - Pruned orphaned file `src/lib/aiSystemPrompt.ts` and redundant route `src/app/api/quant-analyze/history/route.ts`.
+   - Replaced legacy hardcoded strings `"Gemini 3.6 Flash Quant SOP Analysis"` with dynamic/clean `"AI Quant SOP Analysis"` in `src/lib/quantTradeEngine.ts` and `src/components/modals/PotentialTradesModal.tsx`.
+   - Bumped `package.json` version to `17.40.0` matching `src/lib/version.ts`.
+5. **Modernized HUD Control Deck UI (`src/components/Sidebar.tsx`):**
+   - `<AutoScanCountdown>` dynamically labels base cadence (`[15m] Auto-Scan:` or `[30m] Auto-Scan:`) and switches to an animated neon amber badge (`⚡ 5m TURBO (POI): MM:SS`) with pulsating icon when elevated in POI zone.
 
 ## 🆕 V17.74 Changelog — Resilient Multi-Model AI Cascade & Visual Telemetry Tracking (2026-09-13)
 

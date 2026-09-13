@@ -58,6 +58,8 @@ async function initTables() {
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS use_bnb_discount BOOLEAN DEFAULT false;`;
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS maker_fee_pct DOUBLE PRECISION DEFAULT 0.0000;`;
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS taker_fee_pct DOUBLE PRECISION DEFAULT 0.0400;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS auto_scan_base_interval INTEGER DEFAULT 30;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS auto_scan_turbo_enabled BOOLEAN DEFAULT true;`;
   } catch (err) {
     console.error("[SETTINGS API] Failed to alter table terminal_settings:", err);
   }
@@ -143,6 +145,8 @@ export async function GET() {
       useBnbDiscount: false,
       makerFeePct: 0.0000,
       takerFeePct: 0.0400,
+      autoScanBaseInterval: 30,
+      autoScanTurboEnabled: true,
     };
 
     try {
@@ -161,8 +165,8 @@ export async function GET() {
       }
 
       // Self-seed ACTIVE_MODEL if not present
-      if (!settings.ACTIVE_MODEL) {
-        settings.ACTIVE_MODEL = DEFAULT_MODEL;
+      if (!settings['ACTIVE_MODEL']) {
+        settings['ACTIVE_MODEL'] = DEFAULT_MODEL;
         try {
           await sql`
             INSERT INTO system_settings (key_name, key_value)
@@ -181,7 +185,8 @@ export async function GET() {
                candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
                include_btc_correlation, include_structure_analysis, include_fvg_detection,
                visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback,
-               fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct FROM terminal_settings
+               fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct,
+               auto_scan_base_interval, auto_scan_turbo_enabled FROM terminal_settings
         WHERE user_id = ${userEmail}
         LIMIT 1
       `;
@@ -197,7 +202,8 @@ export async function GET() {
               candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
               include_btc_correlation, include_structure_analysis, include_fvg_detection,
               visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback,
-              fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct
+              fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct,
+              auto_scan_base_interval, auto_scan_turbo_enabled
             )
             VALUES (
               ${userEmail}, ${JSON.stringify(DEFAULT_SIGNAL_SOUNDS)}, ${JSON.stringify(DEFAULT_ENABLED_SIGNALS)},
@@ -206,7 +212,8 @@ export async function GET() {
               350, 350, 250, 120, 80,
               true, true, true,
               false, 0.5, 10, 0.3, 0.5, 0.7, 5,
-              'USDC_REGULAR_VIP1', false, 0.0000, 0.0400
+              'USDC_REGULAR_VIP1', false, 0.0000, 0.0400,
+              30, true
             )
             ON CONFLICT (user_id) DO NOTHING;
           `;
@@ -215,7 +222,8 @@ export async function GET() {
                    candles_limit_1m, candles_limit_5m, candles_limit_15m, candles_limit_1h, candles_limit_4h,
                    include_btc_correlation, include_structure_analysis, include_fvg_detection,
                    visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback,
-                   fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct FROM terminal_settings
+                   fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct,
+                   auto_scan_base_interval, auto_scan_turbo_enabled FROM terminal_settings
             WHERE user_id = ${userEmail}
             LIMIT 1
           `;
@@ -253,6 +261,8 @@ export async function GET() {
         useBnbDiscount: !!termRows[0]?.use_bnb_discount,
         makerFeePct: termRows[0]?.maker_fee_pct !== undefined && termRows[0]?.maker_fee_pct !== null ? Number(termRows[0].maker_fee_pct) : 0.0000,
         takerFeePct: termRows[0]?.taker_fee_pct !== undefined && termRows[0]?.taker_fee_pct !== null ? Number(termRows[0].taker_fee_pct) : 0.0400,
+        autoScanBaseInterval: termRows[0]?.auto_scan_base_interval ?? 30,
+        autoScanTurboEnabled: termRows[0]?.auto_scan_turbo_enabled !== false,
       };
 
       return NextResponse.json({ settings, terminalSettings });
@@ -326,10 +336,12 @@ export async function POST(req: Request) {
         feeTierPreset,
         useBnbDiscount,
         makerFeePct,
-        takerFeePct
-      } = body.terminalSettings as {
-        signalSounds: Record<string, string>;
-        enabledSignals: Record<string, boolean>;
+        takerFeePct,
+        autoScanBaseInterval,
+        autoScanTurboEnabled,
+      } = (body.terminalSettings || {}) as {
+        signalSounds?: Record<string, string>;
+        enabledSignals?: Record<string, boolean>;
         atrPeriod?: number;
         adaptiveNMin?: number;
         adaptiveNMax?: number;
@@ -355,41 +367,53 @@ export async function POST(req: Request) {
         useBnbDiscount?: boolean;
         makerFeePct?: number;
         takerFeePct?: number;
+        autoScanBaseInterval?: number;
+        autoScanTurboEnabled?: boolean;
       };
 
-      if (!signalSounds || !enabledSignals) {
-        return NextResponse.json(
-          { error: "Invalid payload: 'terminalSettings' with 'signalSounds' and 'enabledSignals' required." },
-          { status: 400 }
-        );
+      const userEmail = session.user.email;
+
+      let existingTerm: Record<string, any> | undefined;
+      try {
+        const { rows: existingRows } = await sql`
+          SELECT * FROM terminal_settings WHERE user_id = ${userEmail} LIMIT 1
+        `;
+        if (existingRows.length > 0) {
+          existingTerm = existingRows[0];
+        }
+      } catch (fetchErr) {
+        console.warn("[SETTINGS API] Could not fetch existing terminal_settings before merge:", fetchErr);
       }
 
-      const userEmail = session.user.email;
-      const atr_period = atrPeriod ?? 14;
-      const adaptive_n_min = adaptiveNMin ?? 3;
-      const adaptive_n_max = adaptiveNMax ?? 15;
-      const mss_body_ratio = mssBodyRatio ?? 0.70;
-      const displacement_vef = displacementVef ?? 1.50;
-      const sharp_departure_mult = sharpDepartureMult ?? 1.50;
-      const candles_limit_1m = candlesLimit1m ?? 1000;
-      const candles_limit_5m = candlesLimit5m ?? 1000;
-      const candles_limit_15m = candlesLimit15m ?? 1000;
-      const candles_limit_1h = candlesLimit1h ?? 1000;
-      const candles_limit_4h = candlesLimit4h ?? 1000;
-      const include_btc_correlation = includeBtcCorrelation !== false;
-      const include_structure_analysis = includeStructureAnalysis !== false;
-      const include_fvg_detection = includeFvgDetection !== false;
-      const visualize_perfect_movement_only = !!visualizePerfectMovementOnly;
-      const pm_atr_multiplier = pmAtrMultiplier ?? 0.5;
-      const pm_volume_sma_period = pmVolumeSmaPeriod ?? 10;
-      const pm_min_body_ratio = pmMinBodyRatio ?? 0.3;
-      const pm_max_wick_ratio = pmMaxWickRatio ?? 0.5;
-      const pm_max_retracement_limit = pmMaxRetracementLimit ?? 0.7;
-      const pm_sweep_lookback = pmSweepLookback ?? 5;
-      const fee_tier_preset = feeTierPreset ?? "USDC_REGULAR_VIP1";
-      const use_bnb_discount = !!useBnbDiscount;
-      const maker_fee_pct = makerFeePct !== undefined && makerFeePct !== null ? Number(makerFeePct) : 0.0000;
-      const taker_fee_pct = takerFeePct !== undefined && takerFeePct !== null ? Number(takerFeePct) : 0.0400;
+      const finalSignalSounds = signalSounds !== undefined ? signalSounds : (existingTerm?.signal_sounds || DEFAULT_SIGNAL_SOUNDS);
+      const finalEnabledSignals = enabledSignals !== undefined ? enabledSignals : (existingTerm?.enabled_signals || DEFAULT_ENABLED_SIGNALS);
+      const atr_period = atrPeriod !== undefined ? atrPeriod : (existingTerm?.atr_period ?? 14);
+      const adaptive_n_min = adaptiveNMin !== undefined ? adaptiveNMin : (existingTerm?.adaptive_n_min ?? 3);
+      const adaptive_n_max = adaptiveNMax !== undefined ? adaptiveNMax : (existingTerm?.adaptive_n_max ?? 15);
+      const mss_body_ratio = mssBodyRatio !== undefined ? mssBodyRatio : (existingTerm?.mss_body_ratio ?? 0.70);
+      const displacement_vef = displacementVef !== undefined ? displacementVef : (existingTerm?.displacement_vef ?? 1.50);
+      const sharp_departure_mult = sharpDepartureMult !== undefined ? sharpDepartureMult : (existingTerm?.sharp_departure_mult ?? 1.50);
+      const candles_limit_1m = candlesLimit1m !== undefined ? candlesLimit1m : (existingTerm?.candles_limit_1m ?? 350);
+      const candles_limit_5m = candlesLimit5m !== undefined ? candlesLimit5m : (existingTerm?.candles_limit_5m ?? 350);
+      const candles_limit_15m = candlesLimit15m !== undefined ? candlesLimit15m : (existingTerm?.candles_limit_15m ?? 250);
+      const candles_limit_1h = candlesLimit1h !== undefined ? candlesLimit1h : (existingTerm?.candles_limit_1h ?? 120);
+      const candles_limit_4h = candlesLimit4h !== undefined ? candlesLimit4h : (existingTerm?.candles_limit_4h ?? 80);
+      const include_btc_correlation = includeBtcCorrelation !== undefined ? includeBtcCorrelation : (existingTerm?.include_btc_correlation !== false);
+      const include_structure_analysis = includeStructureAnalysis !== undefined ? includeStructureAnalysis : (existingTerm?.include_structure_analysis !== false);
+      const include_fvg_detection = includeFvgDetection !== undefined ? includeFvgDetection : (existingTerm?.include_fvg_detection !== false);
+      const visualize_perfect_movement_only = visualizePerfectMovementOnly !== undefined ? !!visualizePerfectMovementOnly : (!!existingTerm?.visualize_perfect_movement_only);
+      const pm_atr_multiplier = pmAtrMultiplier !== undefined ? pmAtrMultiplier : (existingTerm?.pm_atr_multiplier ?? 0.5);
+      const pm_volume_sma_period = pmVolumeSmaPeriod !== undefined ? pmVolumeSmaPeriod : (existingTerm?.pm_volume_sma_period ?? 10);
+      const pm_min_body_ratio = pmMinBodyRatio !== undefined ? pmMinBodyRatio : (existingTerm?.pm_min_body_ratio ?? 0.3);
+      const pm_max_wick_ratio = pmMaxWickRatio !== undefined ? pmMaxWickRatio : (existingTerm?.pm_max_wick_ratio ?? 0.5);
+      const pm_max_retracement_limit = pmMaxRetracementLimit !== undefined ? pmMaxRetracementLimit : (existingTerm?.pm_max_retracement_limit ?? 0.7);
+      const pm_sweep_lookback = pmSweepLookback !== undefined ? pmSweepLookback : (existingTerm?.pm_sweep_lookback ?? 5);
+      const fee_tier_preset = feeTierPreset !== undefined ? feeTierPreset : (existingTerm?.fee_tier_preset ?? "USDC_REGULAR_VIP1");
+      const use_bnb_discount = useBnbDiscount !== undefined ? !!useBnbDiscount : (!!existingTerm?.use_bnb_discount);
+      const maker_fee_pct = makerFeePct !== undefined && makerFeePct !== null ? Number(makerFeePct) : (existingTerm?.maker_fee_pct !== undefined ? Number(existingTerm.maker_fee_pct) : 0.0000);
+      const taker_fee_pct = takerFeePct !== undefined && takerFeePct !== null ? Number(takerFeePct) : (existingTerm?.taker_fee_pct !== undefined ? Number(existingTerm.taker_fee_pct) : 0.0400);
+      const auto_scan_base_interval = autoScanBaseInterval !== undefined ? autoScanBaseInterval : (existingTerm?.auto_scan_base_interval ?? 30);
+      const auto_scan_turbo_enabled = autoScanTurboEnabled !== undefined ? autoScanTurboEnabled : (existingTerm?.auto_scan_turbo_enabled !== false);
 
       await sql`
         INSERT INTO terminal_settings (
@@ -400,16 +424,18 @@ export async function POST(req: Request) {
           include_btc_correlation, include_structure_analysis, include_fvg_detection,
           visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback,
           fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct,
+          auto_scan_base_interval, auto_scan_turbo_enabled,
           updated_at
         )
         VALUES (
-          ${userEmail}, ${JSON.stringify(signalSounds)}, ${JSON.stringify(enabledSignals)},
+          ${userEmail}, ${JSON.stringify(finalSignalSounds)}, ${JSON.stringify(finalEnabledSignals)},
           ${atr_period}, ${adaptive_n_min}, ${adaptive_n_max},
           ${mss_body_ratio}, ${displacement_vef}, ${sharp_departure_mult},
           ${candles_limit_1m}, ${candles_limit_5m}, ${candles_limit_15m}, ${candles_limit_1h}, ${candles_limit_4h},
           ${include_btc_correlation}, ${include_structure_analysis}, ${include_fvg_detection},
           ${visualize_perfect_movement_only}, ${pm_atr_multiplier}, ${pm_volume_sma_period}, ${pm_min_body_ratio}, ${pm_max_wick_ratio}, ${pm_max_retracement_limit}, ${pm_sweep_lookback},
           ${fee_tier_preset}, ${use_bnb_discount}, ${maker_fee_pct}, ${taker_fee_pct},
+          ${auto_scan_base_interval}, ${auto_scan_turbo_enabled},
           NOW()
         )
         ON CONFLICT (user_id)
@@ -441,33 +467,41 @@ export async function POST(req: Request) {
           use_bnb_discount = EXCLUDED.use_bnb_discount,
           maker_fee_pct = EXCLUDED.maker_fee_pct,
           taker_fee_pct = EXCLUDED.taker_fee_pct,
+          auto_scan_base_interval = EXCLUDED.auto_scan_base_interval,
+          auto_scan_turbo_enabled = EXCLUDED.auto_scan_turbo_enabled,
           updated_at = NOW()
       `;
 
-      return NextResponse.json({ success: true, message: "Terminal settings saved." });
+      if (!body.settings) {
+        return NextResponse.json({ success: true, message: "Terminal settings saved." });
+      }
     }
 
-    // 2. Otherwise, handle system/theme settings payload
-    const { settings } = body as { settings: Record<string, any> };
+    // 2. Handle system/theme settings payload (if present)
+    if (body.settings && typeof body.settings === "object") {
+      const { settings } = body as { settings: Record<string, any> };
 
-    if (!settings || typeof settings !== "object") {
+      // Upsert each key-value pair using ON CONFLICT
+      for (const [key, value] of Object.entries(settings)) {
+        if (typeof key !== "string" || value === undefined || value === null) continue;
+        const strValue = typeof value === "object" ? JSON.stringify(value) : String(value);
+
+        await sql`
+          INSERT INTO system_settings (key_name, key_value)
+          VALUES (${key}, ${strValue})
+          ON CONFLICT (key_name)
+          DO UPDATE SET key_value = EXCLUDED.key_value, updated_at = NOW()
+        `;
+      }
+
+      return NextResponse.json({ success: true, message: "Settings saved." });
+    }
+
+    if (!body.terminalSettings) {
       return NextResponse.json(
-        { error: "Invalid payload: 'settings' object required." },
+        { error: "Invalid payload: 'settings' or 'terminalSettings' object required." },
         { status: 400 }
       );
-    }
-
-    // Upsert each key-value pair using ON CONFLICT
-    for (const [key, value] of Object.entries(settings)) {
-      if (typeof key !== "string" || value === undefined || value === null) continue;
-      const strValue = typeof value === "object" ? JSON.stringify(value) : String(value);
-
-      await sql`
-        INSERT INTO system_settings (key_name, key_value)
-        VALUES (${key}, ${strValue})
-        ON CONFLICT (key_name)
-        DO UPDATE SET key_value = EXCLUDED.key_value, updated_at = NOW()
-      `;
     }
 
     return NextResponse.json({ success: true, message: "Settings saved." });

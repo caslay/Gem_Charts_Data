@@ -70,11 +70,15 @@ export function MarketDataProvider({ children }: { children: ReactNode }) {
     reconnect: wsReconnect,
   } = useBinanceWS({ symbol: 'ethusdc', interval: wsInterval, enabled: isEnabled });
 
-  // Decoupled from sub-second price ticks: useMarketDataHook does not receive liveCandle/livePrice ticks
-  const marketData = useMarketDataHook(wsInterval, null, {}, lastClosedEvent, null, isEnabled);
+  // Maintain livePriceRef to provide live price ticks to the in-zone proximity radar without re-render cascades
+  const livePriceRef = React.useRef<number | null>(null);
+  livePriceRef.current = livePrice;
+
+  // Decoupled from sub-second price ticks: useMarketDataHook does not receive liveCandle/livePrice ticks directly
+  const marketData = useMarketDataHook(wsInterval, null, {}, lastClosedEvent, null, isEnabled, livePriceRef);
 
   // Background Auto-Trade Executor: automatically opens trades in journal when price touches entry
-  useAutoTradeExecutor(isEnabled ? marketData.data : null, false);
+  useAutoTradeExecutor(isEnabled ? marketData.data : null, false, isEnabled ? marketData.aiAnalysis : null);
 
 
   // Memoize static context value so sub-second price ticks do not trigger re-render cascades
