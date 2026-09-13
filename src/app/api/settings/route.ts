@@ -60,6 +60,10 @@ async function initTables() {
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS taker_fee_pct DOUBLE PRECISION DEFAULT 0.0400;`;
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS auto_scan_base_interval INTEGER DEFAULT 30;`;
     await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS auto_scan_turbo_enabled BOOLEAN DEFAULT true;`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS auto_scan_schedule_mode VARCHAR(30) DEFAULT 'SESSION_PRESET';`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS auto_scan_active_start VARCHAR(10) DEFAULT '08:00';`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS auto_scan_active_end VARCHAR(10) DEFAULT '22:00';`;
+    await sql`ALTER TABLE terminal_settings ADD COLUMN IF NOT EXISTS auto_scan_timezone VARCHAR(50) DEFAULT 'Africa/Cairo';`;
   } catch (err) {
     console.error("[SETTINGS API] Failed to alter table terminal_settings:", err);
   }
@@ -147,6 +151,10 @@ export async function GET() {
       takerFeePct: 0.0400,
       autoScanBaseInterval: 30,
       autoScanTurboEnabled: true,
+      autoScanScheduleMode: 'SESSION_PRESET' as 'SESSION_PRESET' | 'CUSTOM' | 'ALWAYS_ON',
+      autoScanActiveStart: '08:00',
+      autoScanActiveEnd: '22:00',
+      autoScanTimezone: 'Africa/Cairo',
     };
 
     try {
@@ -186,7 +194,8 @@ export async function GET() {
                include_btc_correlation, include_structure_analysis, include_fvg_detection,
                visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback,
                fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct,
-               auto_scan_base_interval, auto_scan_turbo_enabled FROM terminal_settings
+               auto_scan_base_interval, auto_scan_turbo_enabled,
+               auto_scan_schedule_mode, auto_scan_active_start, auto_scan_active_end, auto_scan_timezone FROM terminal_settings
         WHERE user_id = ${userEmail}
         LIMIT 1
       `;
@@ -203,7 +212,8 @@ export async function GET() {
               include_btc_correlation, include_structure_analysis, include_fvg_detection,
               visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback,
               fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct,
-              auto_scan_base_interval, auto_scan_turbo_enabled
+              auto_scan_base_interval, auto_scan_turbo_enabled,
+              auto_scan_schedule_mode, auto_scan_active_start, auto_scan_active_end, auto_scan_timezone
             )
             VALUES (
               ${userEmail}, ${JSON.stringify(DEFAULT_SIGNAL_SOUNDS)}, ${JSON.stringify(DEFAULT_ENABLED_SIGNALS)},
@@ -213,7 +223,8 @@ export async function GET() {
               true, true, true,
               false, 0.5, 10, 0.3, 0.5, 0.7, 5,
               'USDC_REGULAR_VIP1', false, 0.0000, 0.0400,
-              30, true
+              30, true,
+              'SESSION_PRESET', '08:00', '22:00', 'Africa/Cairo'
             )
             ON CONFLICT (user_id) DO NOTHING;
           `;
@@ -223,7 +234,8 @@ export async function GET() {
                    include_btc_correlation, include_structure_analysis, include_fvg_detection,
                    visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback,
                    fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct,
-                   auto_scan_base_interval, auto_scan_turbo_enabled FROM terminal_settings
+                   auto_scan_base_interval, auto_scan_turbo_enabled,
+                   auto_scan_schedule_mode, auto_scan_active_start, auto_scan_active_end, auto_scan_timezone FROM terminal_settings
             WHERE user_id = ${userEmail}
             LIMIT 1
           `;
@@ -263,6 +275,10 @@ export async function GET() {
         takerFeePct: termRows[0]?.taker_fee_pct !== undefined && termRows[0]?.taker_fee_pct !== null ? Number(termRows[0].taker_fee_pct) : 0.0400,
         autoScanBaseInterval: termRows[0]?.auto_scan_base_interval ?? 30,
         autoScanTurboEnabled: termRows[0]?.auto_scan_turbo_enabled !== false,
+        autoScanScheduleMode: (termRows[0]?.auto_scan_schedule_mode || 'SESSION_PRESET') as 'SESSION_PRESET' | 'CUSTOM' | 'ALWAYS_ON',
+        autoScanActiveStart: termRows[0]?.auto_scan_active_start || '08:00',
+        autoScanActiveEnd: termRows[0]?.auto_scan_active_end || '22:00',
+        autoScanTimezone: termRows[0]?.auto_scan_timezone || 'Africa/Cairo',
       };
 
       return NextResponse.json({ settings, terminalSettings });
@@ -339,6 +355,10 @@ export async function POST(req: Request) {
         takerFeePct,
         autoScanBaseInterval,
         autoScanTurboEnabled,
+        autoScanScheduleMode,
+        autoScanActiveStart,
+        autoScanActiveEnd,
+        autoScanTimezone,
       } = (body.terminalSettings || {}) as {
         signalSounds?: Record<string, string>;
         enabledSignals?: Record<string, boolean>;
@@ -369,6 +389,10 @@ export async function POST(req: Request) {
         takerFeePct?: number;
         autoScanBaseInterval?: number;
         autoScanTurboEnabled?: boolean;
+        autoScanScheduleMode?: 'SESSION_PRESET' | 'CUSTOM' | 'ALWAYS_ON';
+        autoScanActiveStart?: string;
+        autoScanActiveEnd?: string;
+        autoScanTimezone?: string;
       };
 
       const userEmail = session.user.email;
@@ -414,6 +438,10 @@ export async function POST(req: Request) {
       const taker_fee_pct = takerFeePct !== undefined && takerFeePct !== null ? Number(takerFeePct) : (existingTerm?.taker_fee_pct !== undefined ? Number(existingTerm.taker_fee_pct) : 0.0400);
       const auto_scan_base_interval = autoScanBaseInterval !== undefined ? autoScanBaseInterval : (existingTerm?.auto_scan_base_interval ?? 30);
       const auto_scan_turbo_enabled = autoScanTurboEnabled !== undefined ? autoScanTurboEnabled : (existingTerm?.auto_scan_turbo_enabled !== false);
+      const auto_scan_schedule_mode = autoScanScheduleMode !== undefined ? autoScanScheduleMode : (existingTerm?.auto_scan_schedule_mode || 'SESSION_PRESET');
+      const auto_scan_active_start = autoScanActiveStart !== undefined ? autoScanActiveStart : (existingTerm?.auto_scan_active_start || '08:00');
+      const auto_scan_active_end = autoScanActiveEnd !== undefined ? autoScanActiveEnd : (existingTerm?.auto_scan_active_end || '22:00');
+      const auto_scan_timezone = autoScanTimezone !== undefined ? autoScanTimezone : (existingTerm?.auto_scan_timezone || 'Africa/Cairo');
 
       await sql`
         INSERT INTO terminal_settings (
@@ -425,6 +453,7 @@ export async function POST(req: Request) {
           visualize_perfect_movement_only, pm_atr_multiplier, pm_volume_sma_period, pm_min_body_ratio, pm_max_wick_ratio, pm_max_retracement_limit, pm_sweep_lookback,
           fee_tier_preset, use_bnb_discount, maker_fee_pct, taker_fee_pct,
           auto_scan_base_interval, auto_scan_turbo_enabled,
+          auto_scan_schedule_mode, auto_scan_active_start, auto_scan_active_end, auto_scan_timezone,
           updated_at
         )
         VALUES (
@@ -436,6 +465,7 @@ export async function POST(req: Request) {
           ${visualize_perfect_movement_only}, ${pm_atr_multiplier}, ${pm_volume_sma_period}, ${pm_min_body_ratio}, ${pm_max_wick_ratio}, ${pm_max_retracement_limit}, ${pm_sweep_lookback},
           ${fee_tier_preset}, ${use_bnb_discount}, ${maker_fee_pct}, ${taker_fee_pct},
           ${auto_scan_base_interval}, ${auto_scan_turbo_enabled},
+          ${auto_scan_schedule_mode}, ${auto_scan_active_start}, ${auto_scan_active_end}, ${auto_scan_timezone},
           NOW()
         )
         ON CONFLICT (user_id)
@@ -469,6 +499,10 @@ export async function POST(req: Request) {
           taker_fee_pct = EXCLUDED.taker_fee_pct,
           auto_scan_base_interval = EXCLUDED.auto_scan_base_interval,
           auto_scan_turbo_enabled = EXCLUDED.auto_scan_turbo_enabled,
+          auto_scan_schedule_mode = EXCLUDED.auto_scan_schedule_mode,
+          auto_scan_active_start = EXCLUDED.auto_scan_active_start,
+          auto_scan_active_end = EXCLUDED.auto_scan_active_end,
+          auto_scan_timezone = EXCLUDED.auto_scan_timezone,
           updated_at = NOW()
       `;
 
