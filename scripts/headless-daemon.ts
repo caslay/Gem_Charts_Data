@@ -37,6 +37,7 @@ import {
 import { GlobalRiskGovernor } from '../src/lib/risk/GlobalRiskGovernor';
 import { sql } from '../src/lib/postgres';
 import { SYSTEM_VERSION } from '../src/lib/version';
+import { ensureAgentDecisionTableInitialized } from '../src/lib/agentEngineHandlers';
 
 // Parse CLI Arguments
 const args = process.argv.slice(2);
@@ -84,6 +85,13 @@ async function main() {
   console.log(` Daemon Mode:     ${isDryRun ? 'DRY-RUN (30s Diagnostic Validation)' : '24/7 LIVE BACKGROUND EXECUTION'}`);
   console.log(` Local Time:      ${new Date().toLocaleString()} (UTC: ${new Date().toISOString()})`);
   console.log(`===============================================================\n`);
+
+  // Defensive self-healing schema migration for agent_decision_log
+  try {
+    await ensureAgentDecisionTableInitialized();
+  } catch (schemaErr: any) {
+    console.warn('[DAEMON_BOOT] agent_decision_log schema initialization non-fatal warning:', schemaErr?.message || schemaErr);
+  }
 
   // 1. Initialize Persistence Ledger
   const ledger = new DaemonLedger(symbolArg, startingEquity);

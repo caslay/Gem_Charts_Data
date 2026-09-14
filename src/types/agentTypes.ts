@@ -319,6 +319,7 @@ export interface AgentDecisionPatchPayload {
   status?:
     | 'PENDING'
     | 'ACTIVE'
+    | 'ARMED'
     | 'ARMED_WATCHING_TRIGGER'
     | 'ARMED_PENDING'
     | 'ORDER_RESTING'
@@ -362,6 +363,7 @@ export interface AgentDecisionRecord {
   status:
     | 'PENDING'
     | 'ACTIVE'
+    | 'ARMED'
     | 'ARMED_WATCHING_TRIGGER'
     | 'ARMED_PENDING'
     | 'ORDER_RESTING'
@@ -382,6 +384,7 @@ export interface AgentDecisionRecord {
   submitted_at: number;
   invalidated_at: number | null;
   created_at: string;
+  updated_at?: string | null;
 
   // ─── Armed Intent & Radar Database Columns ────────────────────────────────
   execution_mode?: 'IMMEDIATE_LIMIT' | 'TRIGGER_ON_CONFIRMATION' | string;

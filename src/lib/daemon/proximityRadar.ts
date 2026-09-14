@@ -24,7 +24,12 @@
 
 import { Candle } from '../fvgEngine';
 
-export type ArmedIntentExecutionMode = 'IMMEDIATE_LIMIT' | 'TRIGGER_ON_CONFIRMATION';
+export type ArmedIntentExecutionMode =
+  | 'IMMEDIATE_LIMIT'
+  | 'TRIGGER_ON_CONFIRMATION'
+  | 'STANDBY'
+  | 'PAPER_TRADING'
+  | 'LIVE_BINANCE';
 
 export type ArmedIntentTriggerCondition =
   | 'MSS_BODY_CLOSE_ABOVE'
@@ -73,6 +78,7 @@ export interface ArmedIntent {
   stage2Ratio?: number;
   stage3Ratio?: number;
   limitEntryPrice?: number | null;
+  fvgProximalPrice?: number | null;
   narrative?: string | null;
   radarStatus: RadarProximityStatus;
   stage: ArmedIntentStage;

@@ -398,7 +398,14 @@ export function parseSparkDecision(
   let limitEntryPrice: number | null = null;
   const isLong = direction === 'LONG';
 
-  if (entryRangeLow !== null && entryRangeHigh !== null) {
+  const rawLimitEntry =
+    record.limit_entry_price !== null && record.limit_entry_price !== undefined
+      ? parseFloat(String(record.limit_entry_price))
+      : null;
+
+  if (rawLimitEntry !== null && !isNaN(rawLimitEntry) && rawLimitEntry > 0) {
+    limitEntryPrice = rawLimitEntry;
+  } else if (entryRangeLow !== null && entryRangeHigh !== null) {
     if (isLong) {
       if (livePrice === null || livePrice > entryRangeHigh) {
         // Price is above entry zone: proximal boundary is entryRangeHigh (resting buy limit below market)
@@ -593,8 +600,9 @@ export class SparkIngestionDispatcher {
             await sql`
               UPDATE agent_decision_log
               SET status = 'PAPER_FILLED',
-                  narrative = COALESCE(narrative, '') || ' [SPARK_PAPER_FILLED: Maker fill @ $' || ${pos.entryPrice.toFixed(2)} || ']'
-              WHERE id = ${decisionId} AND (status = 'PAPER_ACTIVE' OR status = 'STAGED' OR status = 'QUEUED' OR status = 'ORDER_RESTING')
+                  narrative = COALESCE(narrative, '') || ' [SPARK_PAPER_FILLED: Maker fill @ $' || ${pos.entryPrice.toFixed(2)} || ']',
+                  updated_at = NOW()
+              WHERE id = ${decisionId} AND (status = 'PAPER_ACTIVE' OR status = 'ARMED' OR status = 'STAGED' OR status = 'QUEUED' OR status = 'ORDER_RESTING')
             `;
           } catch {}
           this.ledger?.logEvent('SPARK_DECISION_PAPER_FILLED', `Paper order #${decisionId} filled at $${pos.entryPrice.toFixed(2)}`, {
@@ -606,8 +614,9 @@ export class SparkIngestionDispatcher {
             await sql`
               UPDATE agent_decision_log
               SET status = 'ACTIVE',
-                  narrative = COALESCE(narrative, '') || ' [SPARK_LIVE_FILLED: Maker fill @ $' || ${pos.entryPrice.toFixed(2)} || ']'
-              WHERE id = ${decisionId} AND (status = 'EXECUTED' OR status = 'STAGED' OR status = 'QUEUED' OR status = 'ORDER_RESTING')
+                  narrative = COALESCE(narrative, '') || ' [SPARK_LIVE_FILLED: Maker fill @ $' || ${pos.entryPrice.toFixed(2)} || ']',
+                  updated_at = NOW()
+              WHERE id = ${decisionId} AND (status = 'EXECUTED' OR status = 'ARMED' OR status = 'STAGED' OR status = 'QUEUED' OR status = 'ORDER_RESTING')
             `;
           } catch {}
           this.ledger?.logEvent('SPARK_DECISION_EXECUTED', `Live order #${decisionId} filled at $${pos.entryPrice.toFixed(2)}`, {
@@ -675,8 +684,9 @@ export class SparkIngestionDispatcher {
           await sql`
             UPDATE agent_decision_log
             SET status = ${nextStatus},
-                narrative = COALESCE(narrative, '') || ' [SPARK_ORDER_CANCELLED: ' || ${cancelReason} || ']'
-            WHERE id = ${decisionId} AND (status = 'PAPER_ACTIVE' OR status = 'QUEUED' OR status = 'STAGED' OR status = 'ORDER_RESTING')
+                narrative = COALESCE(narrative, '') || ' [SPARK_ORDER_CANCELLED: ' || ${cancelReason} || ']',
+                updated_at = NOW()
+            WHERE id = ${decisionId} AND (status = 'PAPER_ACTIVE' OR status = 'ARMED' OR status = 'QUEUED' OR status = 'STAGED' OR status = 'ORDER_RESTING')
           `;
         } catch {}
         if (isPaper) {
@@ -697,7 +707,8 @@ export class SparkIngestionDispatcher {
         try {
           await sql`
             UPDATE agent_decision_log
-            SET narrative = COALESCE(narrative, '') || ${s1Narrative}
+            SET narrative = COALESCE(narrative, '') || ${s1Narrative},
+                updated_at = NOW()
             WHERE id = ${decisionId}
           `;
         } catch {}
@@ -728,7 +739,8 @@ export class SparkIngestionDispatcher {
           await sql`
             UPDATE agent_decision_log
             SET status = ${nextStatus},
-                narrative = COALESCE(narrative, '') || ${closeNarrative}
+                narrative = COALESCE(narrative, '') || ${closeNarrative},
+                updated_at = NOW()
             WHERE id = ${decisionId}
           `;
         } catch {}
@@ -828,17 +840,42 @@ export class SparkIngestionDispatcher {
   public async promoteStandbyToMode(
     decisionId: number,
     targetMode: 'PAPER_TRADING' | 'LIVE_BINANCE'
-  ): Promise<{ success: boolean; message: string; position?: any }> {
+  ): Promise<{ success: boolean; message: string; position?: any; entryPrice?: number }> {
     console.log(`[SPARK_DISPATCHER] 🚀 Promoting decision #${decisionId} to ${targetMode}...`);
     try {
+      // 0. Ensure schema self-healing is active
+      await ensureAgentDecisionTableInitialized();
+
       // 1. Fetch decision record from database
       const { rows } = await sql`
         SELECT * FROM agent_decision_log WHERE id = ${decisionId} LIMIT 1;
       `;
-      if (!rows || rows.length === 0) {
-        return { success: false, message: `Decision #${decisionId} not found in database.` };
+      let record: any = rows && rows.length > 0 ? rows[0] : null;
+      if (!record) {
+        const radarIntent = this.radar.getIntent(decisionId);
+        if (radarIntent) {
+          record = {
+            id: radarIntent.id,
+            symbol: radarIntent.symbol,
+            agent_id: radarIntent.agentId,
+            bias_signal: radarIntent.direction === 'LONG' ? 'CONFIRMED_BULLISH' : 'CONFIRMED_BEARISH',
+            entry_range_low: radarIntent.poiZoneLow,
+            entry_range_high: radarIntent.poiZoneHigh,
+            limit_entry_price: radarIntent.fvgProximalPrice || radarIntent.triggerPrice,
+            invalidation_level: radarIntent.invalidationLevel,
+            target_1: radarIntent.target1,
+            target_2: radarIntent.target2,
+            execution_mode: radarIntent.executionMode,
+            status: 'STANDBY',
+            trigger_condition: radarIntent.triggerCondition,
+            trigger_price: radarIntent.triggerPrice,
+            trigger_timeframe: radarIntent.triggerTimeframe,
+            ttl_bars: radarIntent.ttlBars,
+          };
+        } else {
+          return { success: false, message: `Decision #${decisionId} not found in database or radar.` };
+        }
       }
-      const record = rows[0];
 
       // 2. If promoting to LIVE_BINANCE, verify safety gate
       if (targetMode === 'LIVE_BINANCE') {
@@ -851,34 +888,78 @@ export class SparkIngestionDispatcher {
         }
       }
 
-      // 3. Update database record to target execution mode and status QUEUED
-      await sql`
-        UPDATE agent_decision_log
-        SET execution_mode = ${targetMode},
-            status = 'QUEUED',
-            narrative = COALESCE(narrative, '') || ' [PROMOTED_VIA_TELEGRAM: Promoted to ' || ${targetMode} || ' @ ' || NOW() || ']',
-            updated_at = NOW()
-        WHERE id = ${decisionId};
-      `;
+      // 3. Update database record to target execution mode and status ARMED
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET execution_mode = ${targetMode},
+              status = 'ARMED',
+              narrative = COALESCE(narrative, '') || ' [PROMOTED_VIA_TELEGRAM: Promoted to ' || ${targetMode} || ' @ ' || NOW() || ']',
+              updated_at = NOW()
+          WHERE id = ${decisionId};
+        `;
+      } catch (updErr: any) {
+        if (updErr?.message?.includes('updated_at') || updErr?.code === '42703') {
+          try {
+            await ensureAgentDecisionTableInitialized(true);
+            await sql`
+              UPDATE agent_decision_log
+              SET execution_mode = ${targetMode},
+                  status = 'ARMED',
+                  narrative = COALESCE(narrative, '') || ' [PROMOTED_VIA_TELEGRAM: Promoted to ' || ${targetMode} || ' @ ' || NOW() || ']',
+                  updated_at = NOW()
+              WHERE id = ${decisionId};
+            `;
+          } catch {
+            // Defensive fallback if updated_at cannot be added (e.g. read-only/restricted user)
+            await sql`
+              UPDATE agent_decision_log
+              SET execution_mode = ${targetMode},
+                  status = 'ARMED',
+                  narrative = COALESCE(narrative, '') || ' [PROMOTED_VIA_TELEGRAM: Promoted to ' || ${targetMode} || ' @ ' || NOW() || ']'
+              WHERE id = ${decisionId};
+            `.catch(() => {});
+          }
+        } else {
+          // In offline/sandbox mode without PostgreSQL, non-fatal
+          console.warn(`[SPARK_DISPATCHER] Non-fatal DB update notice for decision #${decisionId}:`, updErr?.message || updErr);
+        }
+      }
 
       // 4. Update radar intent if present
       const intent = this.radar.getIntent(decisionId);
       if (intent) {
+        intent.executionMode = targetMode;
         this.ledger?.setArmedIntents(this.radar.getAllIntents());
       }
 
       // 5. Trigger immediate processing of this decision with modeOverride
       record.execution_mode = targetMode;
-      record.status = 'ACTIVE';
+      record.status = 'ARMED';
       const result = await this.processDecision(record, undefined, { modeOverride: targetMode });
+      const resolvedEntry =
+        result.position?.limitEntryPrice ??
+        result.position?.entryPrice ??
+        result.parsed?.limitEntryPrice ??
+        (record.limit_entry_price ? parseFloat(String(record.limit_entry_price)) : null) ??
+        (record.entry_range_high ? parseFloat(String(record.entry_range_high)) : null) ??
+        (record.entry_range_low ? parseFloat(String(record.entry_range_low)) : null);
+
+      const isSuccess =
+        result.status === 'PAPER_ACTIVE' ||
+        result.status === 'ARMED_WATCHING_TRIGGER' ||
+        (result.status as string) === 'ARMED' ||
+        result.status === 'EXECUTED' ||
+        result.status === 'ORDER_RESTING' ||
+        result.status === 'STAGED';
+
       return {
-        success:
-          result.status === 'PAPER_ACTIVE' ||
-          result.status === 'EXECUTED' ||
-          result.status === 'ORDER_RESTING' ||
-          result.status === 'STAGED',
-        message: `Decision #${decisionId} successfully promoted to ${targetMode} (Status: ${result.status}).`,
+        success: isSuccess,
+        message: isSuccess
+          ? `Decision #${decisionId} successfully promoted to ${targetMode} (Status: ${result.status}).`
+          : (result.reason || `Promotion to ${targetMode} rejected: status ${result.status}`),
         position: result.position,
+        entryPrice: resolvedEntry ?? undefined,
       };
     } catch (err: any) {
       console.error(`[SPARK_DISPATCHER] Error promoting decision #${decisionId}:`, err);
@@ -892,13 +973,38 @@ export class SparkIngestionDispatcher {
   public async dismissDecision(decisionId: number): Promise<{ success: boolean; message: string }> {
     console.log(`[SPARK_DISPATCHER] ❌ Dismissing decision #${decisionId}...`);
     try {
-      await sql`
-        UPDATE agent_decision_log
-        SET status = 'DISMISSED',
-            narrative = COALESCE(narrative, '') || ' [DISMISSED_VIA_TELEGRAM @ ' || NOW() || ']',
-            updated_at = NOW()
-        WHERE id = ${decisionId};
-      `;
+      await ensureAgentDecisionTableInitialized();
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET status = 'DISMISSED',
+              narrative = COALESCE(narrative, '') || ' [DISMISSED_VIA_TELEGRAM @ ' || NOW() || ']',
+              updated_at = NOW()
+          WHERE id = ${decisionId};
+        `;
+      } catch (updErr: any) {
+        if (updErr?.message?.includes('updated_at') || updErr?.code === '42703') {
+          try {
+            await ensureAgentDecisionTableInitialized(true);
+            await sql`
+              UPDATE agent_decision_log
+              SET status = 'DISMISSED',
+                  narrative = COALESCE(narrative, '') || ' [DISMISSED_VIA_TELEGRAM @ ' || NOW() || ']',
+                  updated_at = NOW()
+              WHERE id = ${decisionId};
+            `;
+          } catch {
+            await sql`
+              UPDATE agent_decision_log
+              SET status = 'DISMISSED',
+                  narrative = COALESCE(narrative, '') || ' [DISMISSED_VIA_TELEGRAM @ ' || NOW() || ']'
+              WHERE id = ${decisionId};
+            `.catch(() => {});
+          }
+        } else {
+          throw updErr;
+        }
+      }
 
       this.radar.removeIntent(decisionId);
       this.ledger?.setArmedIntents(this.radar.getAllIntents());
@@ -1223,8 +1329,9 @@ export class SparkIngestionDispatcher {
           UPDATE agent_decision_log
           SET status = 'INVALIDATED',
               invalidated_at = ${now},
+              updated_at = NOW(),
               narrative = COALESCE(narrative, '') || ' [SPARK_DISPATCHER: ' || ${breachReason} || ']'
-          WHERE id = ${id} AND (status = 'ACTIVE' OR status = 'QUEUED')
+          WHERE id = ${id} AND (status = 'ACTIVE' OR status = 'QUEUED' OR status = 'ARMED')
         `;
       } catch (err: any) {
         console.warn(`[SPARK_DISPATCHER] Could not update status for invalidated record #${id}:`, err?.message || err);
@@ -1273,8 +1380,9 @@ export class SparkIngestionDispatcher {
         await sql`
           UPDATE agent_decision_log
           SET status = 'STAND_DOWN',
+              updated_at = NOW(),
               narrative = COALESCE(narrative, '') || ' [SPARK_DISPATCHER: Non-directional bias signal (' || ${parsed.biasSignal} || '). Standing down.]'
-          WHERE id = ${id} AND (status = 'ACTIVE' OR status = 'QUEUED')
+          WHERE id = ${id} AND (status = 'ACTIVE' OR status = 'QUEUED' OR status = 'ARMED')
         `;
       } catch (err: any) {
         console.warn(`[SPARK_DISPATCHER] Could not update status for stand-down record #${id}:`, err?.message || err);
@@ -1348,8 +1456,9 @@ export class SparkIngestionDispatcher {
       try {
         await sql`
           UPDATE agent_decision_log
-          SET status = 'ARMED_WATCHING_TRIGGER'
-          WHERE id = ${id} AND status = 'ACTIVE'
+          SET status = 'ARMED_WATCHING_TRIGGER',
+              updated_at = NOW()
+          WHERE id = ${id} AND (status = 'ACTIVE' OR status = 'ARMED')
         `;
       } catch {}
 
@@ -1362,14 +1471,15 @@ export class SparkIngestionDispatcher {
 
     // 5. Atomic Queue Claim: Flag record as 'QUEUED' to prevent duplicate execution loops
     let claimSuccessful = false;
-    if (record.status === 'QUEUED') {
+    if (record.status === 'QUEUED' || record.status === 'ARMED') {
       claimSuccessful = true;
     } else {
       try {
         const claimRes = await sql`
           UPDATE agent_decision_log
-          SET status = 'QUEUED'
-          WHERE id = ${id} AND status = 'ACTIVE'
+          SET status = 'QUEUED',
+              updated_at = NOW()
+          WHERE id = ${id} AND (status = 'ACTIVE' OR status = 'ARMED')
           RETURNING id
         `;
         claimSuccessful = claimRes.rows.length > 0;
@@ -1409,6 +1519,7 @@ export class SparkIngestionDispatcher {
         await sql`
           UPDATE agent_decision_log
           SET status = 'REJECTED',
+              updated_at = NOW(),
               narrative = COALESCE(narrative, '') || ' [SPARK_DISPATCHER: ' || ${rejectReason} || ']'
           WHERE id = ${id}
         `;
@@ -1442,6 +1553,7 @@ export class SparkIngestionDispatcher {
         await sql`
           UPDATE agent_decision_log
           SET status = 'REJECTED',
+              updated_at = NOW(),
               narrative = COALESCE(narrative, '') || ' [SPARK_DISPATCHER SIZING ERROR: ' || ${rejectReason} || ']'
           WHERE id = ${id}
         `;
@@ -1501,6 +1613,7 @@ export class SparkIngestionDispatcher {
         await sql`
           UPDATE agent_decision_log
           SET status = 'REJECTED_BY_RISK_GOVERNOR',
+              updated_at = NOW(),
               narrative = COALESCE(narrative, '') || ' [VETO_RISK_GOVERNOR: ' || ${vetoReason} || ']'
           WHERE id = ${id}
         `;
@@ -1535,6 +1648,7 @@ export class SparkIngestionDispatcher {
       await sql`
         UPDATE agent_decision_log
         SET status = 'STAGED',
+            updated_at = NOW(),
             narrative = COALESCE(narrative, '') || ${stageNarrative}
         WHERE id = ${id}
       `;
@@ -1623,6 +1737,7 @@ export class SparkIngestionDispatcher {
         await sql`
           UPDATE agent_decision_log
           SET status = 'LOGGED_STANDBY',
+              updated_at = NOW(),
               narrative = COALESCE(narrative, '') || ${standbyNarrative}
           WHERE id = ${id}
         `;
@@ -1652,7 +1767,8 @@ export class SparkIngestionDispatcher {
       try {
         await sql`
           UPDATE agent_decision_log
-          SET status = 'PAPER_ACTIVE',
+          SET status = 'ARMED',
+              updated_at = NOW(),
               narrative = COALESCE(narrative, '') || ${paperNarrative}
           WHERE id = ${id}
         `;
@@ -1676,7 +1792,7 @@ export class SparkIngestionDispatcher {
         setupId: `spark_decision_${id}`,
         anchorName: `Spark Decision (${parsed.agentId})`,
         originZoneId: `spark_zone_${id}`,
-        originAnchorLevel: parsed.limitEntryPrice,
+        originAnchorLevel: (parsed.direction === 'LONG' ? parsed.entryRangeLow : parsed.entryRangeHigh) ?? undefined,
         executionMode: 'PAPER_TRADING',
         maxRetestBars: 12,
         bypassWeekendFilter: true,
@@ -1724,6 +1840,7 @@ export class SparkIngestionDispatcher {
           await sql`
             UPDATE agent_decision_log
             SET status = 'REJECTED',
+                updated_at = NOW(),
                 narrative = COALESCE(narrative, '') || ' [SPARK_PAPER_VETO: ' || ${rejectReason} || ']'
             WHERE id = ${id}
           `;
@@ -1755,6 +1872,7 @@ export class SparkIngestionDispatcher {
           await sql`
             UPDATE agent_decision_log
             SET status = 'REJECTED',
+                updated_at = NOW(),
                 narrative = COALESCE(narrative, '') || ' [ENVIRONMENT_ISOLATION_VETO: ' || ${vetoReason} || ']'
             WHERE id = ${id}
           `;
@@ -1792,7 +1910,7 @@ export class SparkIngestionDispatcher {
         setupId: `spark_decision_${id}`,
         anchorName: `Spark Decision (${parsed.agentId})`,
         originZoneId: `spark_zone_${id}`,
-        originAnchorLevel: parsed.limitEntryPrice,
+        originAnchorLevel: (parsed.direction === 'LONG' ? parsed.entryRangeLow : parsed.entryRangeHigh) ?? undefined,
         executionMode: 'LIVE_BINANCE',
         maxRetestBars: 12,
         bypassWeekendFilter: true,
@@ -1803,6 +1921,7 @@ export class SparkIngestionDispatcher {
           await sql`
             UPDATE agent_decision_log
             SET status = 'EXECUTED',
+                updated_at = NOW(),
                 narrative = COALESCE(narrative, '') || ' [SPARK_DISPATCHER: Submitted to LIVE Binance execution queue]'
             WHERE id = ${id}
           `;
@@ -1851,6 +1970,7 @@ export class SparkIngestionDispatcher {
           await sql`
             UPDATE agent_decision_log
             SET status = 'REJECTED',
+                updated_at = NOW(),
                 narrative = COALESCE(narrative, '') || ' [SPARK_LIVE_VETO: ' || ${rejectReason} || ']'
             WHERE id = ${id}
           `;
@@ -1904,7 +2024,8 @@ export class SparkIngestionDispatcher {
       try {
         await sql`
           UPDATE agent_decision_log
-          SET radar_status = 'PROXIMITY_ELEVATED'
+          SET radar_status = 'PROXIMITY_ELEVATED',
+              updated_at = NOW()
           WHERE id = ${elev.intent.id} AND (status = 'ARMED_WATCHING_TRIGGER' OR status = 'ARMED_PENDING')
         `;
       } catch {}
@@ -1931,7 +2052,8 @@ export class SparkIngestionDispatcher {
       try {
         await sql`
           UPDATE agent_decision_log
-          SET radar_status = 'DORMANT'
+          SET radar_status = 'DORMANT',
+              updated_at = NOW()
           WHERE id = ${deElev.intent.id} AND (status = 'ARMED_WATCHING_TRIGGER' OR status = 'ARMED_PENDING')
         `;
       } catch {}
@@ -1947,6 +2069,7 @@ export class SparkIngestionDispatcher {
           UPDATE agent_decision_log
           SET status = 'INVALIDATED',
               invalidated_at = ${inv.timestamp},
+              updated_at = NOW(),
               narrative = COALESCE(narrative, '') || ' [RADAR_TICK: ' || ${inv.reason} || ']'
           WHERE id = ${inv.intent.id}
         `;
@@ -2021,6 +2144,7 @@ export class SparkIngestionDispatcher {
           SET status = 'EXPIRED',
               bars_elapsed = ${exp.barsElapsed},
               invalidated_at = ${exp.invalidatedAt || Date.now()},
+              updated_at = NOW(),
               narrative = COALESCE(narrative, '') || ' [RADAR_CANDLE: ' || ${exp.invalidationReason || 'TTL Expired'} || ']'
           WHERE id = ${exp.id}
         `;
@@ -2074,6 +2198,7 @@ export class SparkIngestionDispatcher {
           UPDATE agent_decision_log
           SET status = 'INVALIDATED',
               invalidated_at = ${inv.timestamp},
+              updated_at = NOW(),
               narrative = COALESCE(narrative, '') || ' [RADAR_CANDLE: ' || ${inv.reason} || ']'
           WHERE id = ${inv.intent.id}
         `;
@@ -2173,6 +2298,7 @@ export class SparkIngestionDispatcher {
         await sql`
           UPDATE agent_decision_log
           SET status = 'REJECTED',
+              updated_at = NOW(),
               narrative = COALESCE(narrative, '') || ' [TRIGGER_SIZING_ERROR: ' || ${rejectReason} || ']'
           WHERE id = ${id}
         `;
@@ -2245,6 +2371,7 @@ export class SparkIngestionDispatcher {
         await sql`
           UPDATE agent_decision_log
           SET status = 'REJECTED_BY_RISK_GOVERNOR',
+              updated_at = NOW(),
               narrative = COALESCE(narrative, '') || ' [VETO_RISK_GOVERNOR: ' || ${vetoReason} || ']'
           WHERE id = ${id}
         `;
@@ -2307,6 +2434,7 @@ export class SparkIngestionDispatcher {
         await sql`
           UPDATE agent_decision_log
           SET status = 'LOGGED_STANDBY',
+              updated_at = NOW(),
               narrative = COALESCE(narrative, '') || ${standbyNarrative}
           WHERE id = ${id}
         `;
@@ -2340,6 +2468,7 @@ export class SparkIngestionDispatcher {
           await sql`
             UPDATE agent_decision_log
             SET status = 'REJECTED',
+                updated_at = NOW(),
                 narrative = COALESCE(narrative, '') || ' [ENVIRONMENT_ISOLATION_VETO: ' || ${vetoReason} || ']'
             WHERE id = ${id}
           `;
@@ -2413,7 +2542,8 @@ export class SparkIngestionDispatcher {
           UPDATE agent_decision_log
           SET status = 'ORDER_RESTING',
               limit_entry_price = ${trig.resolvedEntryPrice},
-              narrative = COALESCE(narrative, '') || ${restingNarrative}
+              narrative = COALESCE(narrative, '') || ${restingNarrative},
+              updated_at = NOW()
           WHERE id = ${id}
         `;
       } catch (err: any) {
@@ -2502,7 +2632,8 @@ export class SparkIngestionDispatcher {
         await sql`
           UPDATE agent_decision_log
           SET status = 'REJECTED',
-              narrative = COALESCE(narrative, '') || ' [SUBMISSION_FAILED: ' || ${rejectReason} || ']'
+              narrative = COALESCE(narrative, '') || ' [SUBMISSION_FAILED: ' || ${rejectReason} || ']',
+              updated_at = NOW()
           WHERE id = ${id}
         `;
       } catch {}
