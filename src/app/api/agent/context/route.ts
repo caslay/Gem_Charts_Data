@@ -227,7 +227,7 @@ export async function PATCH(req: Request) {
         // Auto-mark as INVALIDATED
         await sql`
           UPDATE agent_decision_log
-          SET status = 'INVALIDATED', invalidated_at = ${Date.now()}
+          SET status = 'INVALIDATED', invalidated_at = ${Date.now()}, updated_at = NOW()
           WHERE id = ${body.id}
         `.catch(() => {}); // Best effort
 
@@ -256,17 +256,54 @@ export async function PATCH(req: Request) {
       : existingRecord.invalidated_at;
 
   try {
-    const updateRes = await sql`
-      UPDATE agent_decision_log
-      SET
-        status         = ${newStatus},
-        narrative      = ${newNarrative},
-        target_1       = ${newTarget1},
-        target_2       = ${newTarget2},
-        invalidated_at = ${newInvalidatedAt}
-      WHERE id = ${body.id}
-      RETURNING *
-    `;
+    let updateRes;
+    try {
+      updateRes = await sql`
+        UPDATE agent_decision_log
+        SET
+          status         = ${newStatus},
+          narrative      = ${newNarrative},
+          target_1       = ${newTarget1},
+          target_2       = ${newTarget2},
+          invalidated_at = ${newInvalidatedAt},
+          updated_at     = NOW()
+        WHERE id = ${body.id}
+        RETURNING *
+      `;
+    } catch (sqlErr: any) {
+      if (sqlErr?.code === '42703' || String(sqlErr?.message).includes('updated_at')) {
+        await ensureAgentDecisionTableInitialized(true).catch(() => {});
+        try {
+          updateRes = await sql`
+            UPDATE agent_decision_log
+            SET
+              status         = ${newStatus},
+              narrative      = ${newNarrative},
+              target_1       = ${newTarget1},
+              target_2       = ${newTarget2},
+              invalidated_at = ${newInvalidatedAt},
+              updated_at     = NOW()
+            WHERE id = ${body.id}
+            RETURNING *
+          `;
+        } catch {
+          // Fallback if updated_at still missing
+          updateRes = await sql`
+            UPDATE agent_decision_log
+            SET
+              status         = ${newStatus},
+              narrative      = ${newNarrative},
+              target_1       = ${newTarget1},
+              target_2       = ${newTarget2},
+              invalidated_at = ${newInvalidatedAt}
+            WHERE id = ${body.id}
+            RETURNING *
+          `;
+        }
+      } else {
+        throw sqlErr;
+      }
+    }
 
     const updated = updateRes.rows[0] as AgentDecisionRecord;
     console.log(`[agent/context] ✅ Decision updated. id=${body.id} status=${newStatus}`);

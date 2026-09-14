@@ -42,6 +42,7 @@ import {
 } from '../binanceFuturesClient';
 import { evaluateExecutionSafetyGate } from '../binanceOrderRouter';
 import { sql } from '../postgres';
+import { ensureAgentDecisionTableInitialized } from '../agentEngineHandlers';
 
 export interface TelegramBotServiceContext {
   engine: AutomatedStrategyExecutionEngine;
@@ -994,20 +995,41 @@ export class TelegramBotService {
   ): Promise<void> {
     console.log(`[TELEGRAM_BOT] 📝 User clicked [Paper Trade] for setup #${decisionId}`);
 
-    let promotionResult = { success: false, message: '' };
+    // Self-healing schema check prior to DB update
+    await ensureAgentDecisionTableInitialized().catch(() => {});
+
+    let promotionResult: { success: boolean; message: string; position?: any; entryPrice?: number } = {
+      success: false,
+      message: '',
+    };
 
     if (this.context.sparkDispatcher && typeof this.context.sparkDispatcher.promoteStandbyToMode === 'function') {
       promotionResult = await this.context.sparkDispatcher.promoteStandbyToMode(decisionId, 'PAPER_TRADING');
     } else {
       try {
-        await sql`
-          UPDATE agent_decision_log
-          SET execution_mode = 'PAPER_TRADING',
-              status = 'QUEUED',
-              narrative = COALESCE(narrative, '') || ' [PROMOTED_VIA_TELEGRAM: Promoted to PAPER_TRADING @ ' || NOW() || ']',
-              updated_at = NOW()
-          WHERE id = ${decisionId};
-        `;
+        try {
+          await sql`
+            UPDATE agent_decision_log
+            SET execution_mode = 'PAPER_TRADING',
+                status = 'ARMED',
+                narrative = COALESCE(narrative, '') || ' [PROMOTED_VIA_TELEGRAM: Promoted to PAPER_TRADING @ ' || NOW() || ']',
+                updated_at = NOW()
+            WHERE id = ${decisionId};
+          `;
+        } catch (dbErr: any) {
+          if (dbErr?.code === '42703' || String(dbErr?.message).includes('updated_at')) {
+            await ensureAgentDecisionTableInitialized(true).catch(() => {});
+            await sql`
+              UPDATE agent_decision_log
+              SET execution_mode = 'PAPER_TRADING',
+                  status = 'ARMED',
+                  narrative = COALESCE(narrative, '') || ' [PROMOTED_VIA_TELEGRAM: Promoted to PAPER_TRADING @ ' || NOW() || ']'
+              WHERE id = ${decisionId};
+            `;
+          } else {
+            throw dbErr;
+          }
+        }
 
         const rootDir = process.cwd();
         const commandFile = path.join(rootDir, 'run_logs', 'daemon_commands.json');
@@ -1040,17 +1062,41 @@ export class TelegramBotService {
       }
     }
 
+    let entryPriceVal: number | null = (promotionResult as any)?.entryPrice ?? null;
+    if (entryPriceVal === null || entryPriceVal === undefined || isNaN(entryPriceVal) || entryPriceVal <= 0) {
+      try {
+        const { rows } = await sql`
+          SELECT limit_entry_price, entry_range_high, entry_range_low FROM agent_decision_log WHERE id = ${decisionId} LIMIT 1;
+        `;
+        if (rows && rows.length > 0) {
+          const r = rows[0];
+          entryPriceVal = parseFloat(String(r.limit_entry_price || r.entry_range_high || r.entry_range_low || 0));
+        }
+      } catch {}
+    }
+
+    if (!promotionResult.success) {
+      console.error(`[TELEGRAM_BOT] ❌ Setup #${decisionId} promotion failed:`, promotionResult.message);
+    }
+
     const cairoTime = formatCairoDateTime(Date.now());
+    const entryPriceStr = entryPriceVal && entryPriceVal > 0 ? `$${entryPriceVal.toFixed(2)}` : 'target level';
+    const cleanErrorMsg = promotionResult.message
+      ? String(promotionResult.message)
+          .replace(/postgres:\/\/[^@]+@/g, 'postgres://***@')
+          .replace(/at\s+.*node_modules.*/g, '')
+          .slice(0, 300)
+      : 'Execution engine rejected promotion';
+
     const replyText = promotionResult.success
-      ? `📝 <b>[SETUP PROMOTED TO PAPER TRADING]</b>\n` +
+      ? `✅ <b>[PROMOTED TO PAPER TRADING]</b> Setup #<code>${decisionId}</code> is now <b>ARMED</b>. Simulated limit placed at <b>${entryPriceStr}</b>.\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
-        `Setup #<code>${decisionId}</code> promoted to <b>[PAPER_TRADING]</b>.\n` +
-        `Simulated resting limit order armed in execution engine.\n` +
+        `Execution Mode: <code>PAPER_TRADING</code> (Simulated Maker Limit)\n` +
         `Zero real exchange margin committed.\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `⏰ <code>${cairoTime} Cairo</code>`
       : `⚠️ <b>[PROMOTION FAILED]</b>\n` +
-        `Could not promote setup #<code>${decisionId}</code>: ${promotionResult.message}`;
+        `Could not promote setup #<code>${decisionId}</code>: ${cleanErrorMsg}`;
 
     if (chatId && messageId) {
       await this.notifier.editMessageText(chatId, messageId, replyText, {
@@ -1159,6 +1205,7 @@ export class TelegramBotService {
     }
 
     // 2. Fetch setup record to validate Pre-Trade Risk Governor limits
+    await ensureAgentDecisionTableInitialized().catch(() => {});
     let record: any = null;
     try {
       const { rows } = await sql`
@@ -1220,14 +1267,29 @@ export class TelegramBotService {
       executionResult = await this.context.sparkDispatcher.promoteStandbyToMode(decisionId, 'LIVE_BINANCE');
     } else {
       try {
-        await sql`
-          UPDATE agent_decision_log
-          SET execution_mode = 'LIVE_BINANCE',
-              status = 'QUEUED',
-              narrative = COALESCE(narrative, '') || ' [LIVE_PROMOTION_VIA_TELEGRAM @ ' || NOW() || ']',
-              updated_at = NOW()
-          WHERE id = ${decisionId};
-        `;
+        try {
+          await sql`
+            UPDATE agent_decision_log
+            SET execution_mode = 'LIVE_BINANCE',
+                status = 'QUEUED',
+                narrative = COALESCE(narrative, '') || ' [LIVE_PROMOTION_VIA_TELEGRAM @ ' || NOW() || ']',
+                updated_at = NOW()
+            WHERE id = ${decisionId};
+          `;
+        } catch (dbErr: any) {
+          if (dbErr?.code === '42703' || String(dbErr?.message).includes('updated_at')) {
+            await ensureAgentDecisionTableInitialized(true).catch(() => {});
+            await sql`
+              UPDATE agent_decision_log
+              SET execution_mode = 'LIVE_BINANCE',
+                  status = 'QUEUED',
+                  narrative = COALESCE(narrative, '') || ' [LIVE_PROMOTION_VIA_TELEGRAM @ ' || NOW() || ']'
+              WHERE id = ${decisionId};
+            `;
+          } else {
+            throw dbErr;
+          }
+        }
 
         const rootDir = process.cwd();
         const commandFile = path.join(rootDir, 'run_logs', 'daemon_commands.json');
@@ -1295,17 +1357,34 @@ export class TelegramBotService {
   ): Promise<void> {
     console.log(`[TELEGRAM_BOT] ❌ User clicked [Dismiss] for setup #${decisionId}`);
 
+    // Self-healing schema check
+    await ensureAgentDecisionTableInitialized().catch(() => {});
+
     if (this.context.sparkDispatcher && typeof this.context.sparkDispatcher.dismissDecision === 'function') {
       await this.context.sparkDispatcher.dismissDecision(decisionId);
     } else {
       try {
-        await sql`
-          UPDATE agent_decision_log
-          SET status = 'DISMISSED',
-              narrative = COALESCE(narrative, '') || ' [DISMISSED_VIA_TELEGRAM @ ' || NOW() || ']',
-              updated_at = NOW()
-          WHERE id = ${decisionId};
-        `;
+        try {
+          await sql`
+            UPDATE agent_decision_log
+            SET status = 'DISMISSED',
+                narrative = COALESCE(narrative, '') || ' [DISMISSED_VIA_TELEGRAM @ ' || NOW() || ']',
+                updated_at = NOW()
+            WHERE id = ${decisionId};
+          `;
+        } catch (dbErr: any) {
+          if (dbErr?.code === '42703' || String(dbErr?.message).includes('updated_at')) {
+            await ensureAgentDecisionTableInitialized(true).catch(() => {});
+            await sql`
+              UPDATE agent_decision_log
+              SET status = 'DISMISSED',
+                  narrative = COALESCE(narrative, '') || ' [DISMISSED_VIA_TELEGRAM @ ' || NOW() || ']'
+              WHERE id = ${decisionId};
+            `;
+          } else {
+            throw dbErr;
+          }
+        }
       } catch {}
       try {
         const rootDir = process.cwd();

@@ -74,8 +74,8 @@ export type AgentTimeframe = '15m' | '5m' | '1m' | '1h';
 
 let isSchemaInitialized = false;
 
-export async function ensureAgentDecisionTableInitialized(): Promise<void> {
-  if (isSchemaInitialized) return;
+export async function ensureAgentDecisionTableInitialized(force: boolean = false): Promise<void> {
+  if (isSchemaInitialized && !force) return;
   try {
     const check = await sql`
       SELECT 1 FROM information_schema.tables 
@@ -113,7 +113,8 @@ export async function ensureAgentDecisionTableInitialized(): Promise<void> {
           limit_entry_price       NUMERIC(16,4),
           triggered_at            BIGINT,
           radar_status            VARCHAR(64)   DEFAULT 'DORMANT',
-          created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+          created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
       `;
       await sql`
@@ -122,38 +123,47 @@ export async function ensureAgentDecisionTableInitialized(): Promise<void> {
       `;
     }
 
-    // Self-healing schema migration for existing deployments
-    try {
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS execution_mode VARCHAR(64) DEFAULT 'IMMEDIATE_LIMIT'`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS trigger_timeframe VARCHAR(16) DEFAULT '5m'`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS trigger_condition VARCHAR(64)`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS trigger_price NUMERIC(16,4)`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS poi_zone_low NUMERIC(16,4)`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS poi_zone_high NUMERIC(16,4)`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS limit_offset_rule VARCHAR(64) DEFAULT 'FVG_PROXIMAL'`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS ttl_bars INTEGER DEFAULT 12`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS bars_elapsed INTEGER DEFAULT 0`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS limit_entry_price NUMERIC(16,4)`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS target_3 NUMERIC(16,4)`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS stage1_ratio NUMERIC(5,2)`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS stage2_ratio NUMERIC(5,2)`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS stage3_ratio NUMERIC(5,2)`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS triggered_at BIGINT`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS radar_status VARCHAR(64) DEFAULT 'DORMANT'`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS requested_model VARCHAR(64)`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS resolved_model VARCHAR(64)`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS latency_ms INTEGER`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS was_fallback BOOLEAN DEFAULT FALSE`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS fallback_reason TEXT`;
-    } catch {
-      // Ignored if read-only sandbox or columns already present
+    // Defensive self-healing schema migration for existing deployments
+    const migrations = [
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS execution_mode VARCHAR(64) DEFAULT 'IMMEDIATE_LIMIT'`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS trigger_timeframe VARCHAR(16) DEFAULT '5m'`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS trigger_condition VARCHAR(64)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS trigger_price NUMERIC(16,4)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS poi_zone_low NUMERIC(16,4)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS poi_zone_high NUMERIC(16,4)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS limit_offset_rule VARCHAR(64) DEFAULT 'FVG_PROXIMAL'`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS ttl_bars INTEGER DEFAULT 12`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS bars_elapsed INTEGER DEFAULT 0`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS limit_entry_price NUMERIC(16,4)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS target_3 NUMERIC(16,4)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS stage1_ratio NUMERIC(5,2)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS stage2_ratio NUMERIC(5,2)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS stage3_ratio NUMERIC(5,2)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS triggered_at BIGINT`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS radar_status VARCHAR(64) DEFAULT 'DORMANT'`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS requested_model VARCHAR(64)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS resolved_model VARCHAR(64)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS latency_ms INTEGER`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS was_fallback BOOLEAN DEFAULT FALSE`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS fallback_reason TEXT`,
+      sql`CREATE INDEX IF NOT EXISTS idx_agent_decision_created_at ON agent_decision_log(created_at DESC)`,
+      sql`CREATE INDEX IF NOT EXISTS idx_agent_decision_updated_at ON agent_decision_log(updated_at DESC)`,
+    ];
+
+    for (const mig of migrations) {
+      await mig.catch(() => {});
     }
 
     isSchemaInitialized = true;
   } catch (error: any) {
-    isSchemaInitialized = true;
+    // Keep isSchemaInitialized false so retry is permitted
     console.debug(`[agentEngineHandlers] Schema init check: ${error.message || error}`);
   }
+}
+
+export function resetAgentDecisionTableReady(): void {
+  isSchemaInitialized = false;
 }
 
 // ─── Internal Helpers ─────────────────────────────────────────────────────────

@@ -24,6 +24,10 @@ try {
 
 let poolInstance: Pool | null = null;
 
+export function setDbPool(pool: Pool | null): void {
+  poolInstance = pool;
+}
+
 export function getDbPool(): Pool {
   if (!poolInstance) {
     if (!pgModule) {

@@ -196,7 +196,8 @@ CREATE TABLE IF NOT EXISTS agent_decision_log (
   live_price_at_submission  NUMERIC(16,4),
   submitted_at             BIGINT        NOT NULL,
   invalidated_at           BIGINT,
-  created_at               TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  created_at               TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at               TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- OAuth 2.0 Authorization Codes (One-Time Use, 5-Min TTL)

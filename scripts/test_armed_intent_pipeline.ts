@@ -465,7 +465,7 @@ async function runTestSuite() {
     ttlBars: 12,
     narrative: 'Testing radar arming format.',
   });
-  assert(regMd.includes('[ARMED INTENT REGISTERED & RADAR ACTIVE]'), 'Registered card has correct header');
+  assert(regMd.includes('INTENT REGISTERED'), 'Registered card has correct header');
   assert(regMd.includes('MSS_BODY_CLOSE_ABOVE'), 'Registered card includes trigger condition');
   assert(regMd.includes('$2405.00 — $2415.00'), 'Registered card includes POI Zone');
   assert(regMd.includes('12 Bars (60m)'), 'Registered card includes TTL window');

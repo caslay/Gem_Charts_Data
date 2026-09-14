@@ -1,8 +1,48 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.79
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.80
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-14 (V17.79 — Telegram Bot Modernization & Headless Daemon Remote Action Bridge)
+> **Last Updated:** 2026-09-14 (V17.80 — Self-Healing Migration for Decision Log & Telegram Promotion Pipeline Audit)
+
+## 🆕 V17.80 Changelog — Self-Healing Migration for Decision Log & Telegram Promotion Pipeline Audit (2026-09-14)
+
+### Summary
+1. **Workstream A: Database Schema Self-Healing & Parity (`src/lib/agentEngineHandlers.ts`, `src/lib/aiCascadeEngine.ts`, `src/lib/postgres.ts`, `scripts/headless-daemon.ts`, `scripts/db/init_quegar_db.sql`, `directives/07_m2m_agent_mcp_guide.md`):**
+   - Added defensive self-healing schema migration for `agent_decision_log`: creates `updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP` if it does not already exist, and ensures performance index `idx_agent_decision_updated_at` on `updated_at DESC`.
+   - Hardened `ensureAgentDecisionTableInitialized(force?: boolean)` with resilient individual migration blocks, preventing single column/index failure from aborting `updated_at` migration. Fixed failure flag to ensure failed initializations permit future retries.
+   - Added `resetAgentDecisionTableReady()` and exported `setDbPool` in `src/lib/postgres.ts` for deterministic in-memory database simulation and integration testing.
+   - Updated `aiCascadeEngine.ts` to execute telemetry migrations defensively.
+   - Hooked `await ensureAgentDecisionTableInitialized()` into headless daemon initialization in `scripts/headless-daemon.ts` and callback entrypoints in `telegramBotService.ts` to guarantee zero-crash execution when interacting with newly provisioned or legacy database instances.
+   - Added in-flight catch retry for PostgreSQL error code `42703` (undefined_column) across all promotion, dismissal, and context PATCH updates, with graceful non-updated_at fallback if DDL alterations are restricted.
+   - Synchronized schema definitions and indexes across `scripts/db/init_quegar_db.sql` and `directives/07_m2m_agent_mcp_guide.md`.
+2. **Workstream B: Setup Promotion Pipeline to In-Daemon Paper Ledger (`src/lib/daemon/sparkIngestionDispatcher.ts`, `src/types/agentTypes.ts`, `src/lib/daemon/proximityRadar.ts`):**
+   - Expanded `AgentDecisionRecord` and `AgentDecisionPatchPayload` status unions with `'ARMED'` and added `updated_at?: string | null`.
+   - Expanded `ArmedIntentExecutionMode` to support `'STANDBY'`, `'PAPER_TRADING'`, and `'LIVE_BINANCE'`, with `fvgProximalPrice?: number | null` on `ArmedIntent`.
+   - Hardened `promoteStandbyToMode`:
+     - Queries database for setup record, with fallback to in-memory `ProximityRadarEngine` intent for offline/local sandbox resilience.
+     - Atomically updates record status to `'ARMED'` with `execution_mode = 'PAPER_TRADING'` and `updated_at = NOW()` (with 42703 self-healing retry and resilient fallback).
+     - Fixed `originAnchorLevel` to use structural entry zone boundary (`entryRangeLow` for Long, `entryRangeHigh` for Short) instead of `limitEntryPrice`, eliminating false `[EXECUTION_VETO]` Reclaim Not Established rejections during retest touches.
+     - Corrected promotion reporting integrity: when pre-flight validation or Risk Governor vetoes a setup, `message` returns the exact veto reason rather than a misleading "successfully promoted" string.
+     - Routes execution to `processDecision` with `{ modeOverride: targetMode }`, resolving exact `limit_entry_price` or FVG proximal shelf and passing pre-trade Risk Governor validation.
+     - Submits resting limit order to `AutomatedStrategyExecutionEngine` in `PAPER_TRADING` simulation mode.
+     - Updates all subsequent lifecycle status transitions (`ORDER_RESTING`, `REJECTED`, `PAPER_FILLED`, `STAGE_1_HARVEST`, `STAGE_2_HARVEST`, `PAPER_CLOSED`) with `updated_at = NOW()`.
+   - Updated `src/app/api/agent/context/route.ts` invalidation checks and PATCH handler to set `updated_at = NOW()` with error 42703 retry.
+3. **Workstream C: Telegram Bot User Feedback Harmonization (`src/lib/notifications/telegramBotService.ts`):**
+   - Modernized `handlePaperTradeCallback`:
+     - Invoked `ensureAgentDecisionTableInitialized()` prior to queries.
+     - Updated DB fallback query to `status = 'ARMED'` and `updated_at = NOW()` with self-healing retry.
+     - Extracted resolved `entryPriceVal` from execution engine or database record.
+     - Formatted crisp confirmation message:
+       `✅ [PROMOTED TO PAPER TRADING] Setup #ID is now ARMED. Simulated limit placed at $Entry.`
+     - Provided sanitized error feedback when promotion fails, logging deep diagnostic telemetry to server error logs while keeping chat responses informative and safe.
+   - Hardened `handleLiveExecConfirmCallback` and `handleDismissCallback` with pre-query table initialization and self-healing error 42703 retries.
+4. **Verification & Parity Record (`scripts/test_decision_log_promotion_pipeline.ts`, `scripts/test_telegram_callbacks.ts`, `scripts/test_armed_intent_pipeline.ts`):**
+   - Created dedicated integration suite `scripts/test_decision_log_promotion_pipeline.ts` verifying all 8 stages: 28/28 tests passed (100% pass rate).
+   - Re-verified `scripts/test_telegram_callbacks.ts`: 7/7 tests passed (100% pass rate).
+   - Re-verified `scripts/test_armed_intent_pipeline.ts`: 13/13 test suites passed (100% pass rate).
+   - Re-verified `scripts/test_spark_ingestion_dispatcher.ts`: 99/99 tests passed (100% pass rate).
+   - Zero TypeScript errors (`npx tsc --noEmit` exited 0).
+   - Clean production Next.js 16 build (`npm run build` exited 0 across all 30 routes).
 
 ## 🆕 V17.79 Changelog — Telegram Bot Modernization & Headless Daemon Remote Action Bridge (2026-09-14)
 

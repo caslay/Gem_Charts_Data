@@ -118,14 +118,16 @@ export async function ensureAiAnalysisTableInitialized(): Promise<void> {
     `;
 
     // Self-healing migration for agent_decision_log telemetry columns
-    try {
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS requested_model VARCHAR(64)`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS resolved_model VARCHAR(64)`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS latency_ms INTEGER`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS was_fallback BOOLEAN DEFAULT FALSE`;
-      await sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS fallback_reason TEXT`;
-    } catch {
-      // Non-fatal if table not present or columns already exist
+    const decisionLogMigrations = [
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS requested_model VARCHAR(64)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS resolved_model VARCHAR(64)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS latency_ms INTEGER`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS was_fallback BOOLEAN DEFAULT FALSE`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS fallback_reason TEXT`,
+    ];
+    for (const mig of decisionLogMigrations) {
+      await mig.catch(() => {});
     }
 
     isAiAnalysisTableReady = true;

@@ -69,7 +69,8 @@ CREATE TABLE IF NOT EXISTS agent_decision_log (
   target_2 DOUBLE PRECISION,
   narrative TEXT,
   market_state JSONB,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS oauth_access_tokens (
@@ -103,5 +104,6 @@ CREATE TABLE IF NOT EXISTS trades (
 
 -- Step 2: Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_agent_decision_created ON agent_decision_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_decision_updated ON agent_decision_log(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_trades_entry_time ON trades(entry_time DESC);
 CREATE INDEX IF NOT EXISTS idx_oauth_tokens ON oauth_access_tokens(access_token);
