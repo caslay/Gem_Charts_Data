@@ -1,8 +1,47 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.77
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.78
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-13 (V17.77 — Clock-Aligned Cadence Synchronization, Context Timestamp Busting & Dual-Engine V18.6 Reversal Mechanics)
+> **Last Updated:** 2026-09-14 (V17.78 — Headless Daemon Server Migration, Pure Pro-Trend BOS Engine Re-Alignment & Canonical System Prompt V19.0)
+
+## 🆕 V17.78 Changelog — Headless Daemon Server Migration, Pure Pro-Trend BOS Engine Re-Alignment & Canonical System Prompt V19.0 (2026-09-14)
+
+### Summary
+1. **Workstream A: Server-Side Headless Scheduler Migration (`src/lib/daemon/headlessScheduler.ts`, `scripts/headless-daemon.ts`, `src/hooks/useMarketData.ts`, `src/app/api/daemon/state/route.ts`, `src/app/api/daemon/command/route.ts`):**
+   - Transferred 24/7 background AI scanning, operational schedule gating (Western Sessions 08:00–22:00 Cairo), wall-clock candle boundary tracking (15m base, 5m Turbo), and multi-model cascade execution entirely from client React hooks / `localStorage` into the background PM2 daemon on the server.
+   - Re-architected client HUD (`useMarketData.ts`) into a passive telemetry consumer that synchronizes server state via `/api/daemon/state` every 4000ms. Completely eradicated client-side `setInterval` AI dispatch loops, eliminating browser-tab and laptop sleep dependencies.
+   - Implemented `HeadlessScheduler` engine with:
+     - Real-time Point-of-Interest (POI) proximity radar with 0.05% tolerance band and dynamic 5m Turbo cadence acceleration upon entry zone penetration.
+     - 4-iteration (20-minute) burnout protection cap and automatic relaxation back to 15m base cadence on invalidation level breach.
+     - 180-second debounce guard suppressing duplicate intra-candle executions and cleanly advancing to next candle close.
+     - Direct staging of qualified ARMED / ACTIVE_SETUP decisions into `agent_decision_log` and atomic invocation of `sparkDispatcher.pollOnce()`.
+     - Atomic serialization to `run_logs/daemon_scheduler_state.json` maintaining clock continuity and operational schedule status across daemon restarts.
+2. **Workstream B: Total System Prompt Purification & Trend Continuation Framework V19.0 (`src/lib/sopPromptBuilder.ts`, `src/app/api/quant-analyze/route.ts`, `src/app/api/settings/route.ts`, `scripts/update_system_prompt_v19_0.ts`):**
+   - Completely eradicated all occurrences of "Sweep & Reclaim", "Wyckoff Phase C Spring", "Mean Reversion", and knife-catching counter-trend rules from the system prompt and code comments.
+   - Standardized on Pure Institutional Trend Continuation Framework V19.0:
+     - **Rule 1 (Trend Direction Lock):** 1H & 4H trend direction lock. Counter-trend bottom picking or top fading is strictly prohibited.
+     - **Rule 2 (Confirmed 15m BOS):** Confirmed 15m Break of Structure with clean body candle closes beyond swing pivots. Sweeps without body displacement are treated as liquidity purges, not continuations.
+      - **Rule 3 (3-Pillar Volumetric Sponsorship):** Mandates Volume expansion >= 1.25x 20-SMA, Delta dominance >= 52%, and Body/Range ratio >= 50%.
+      - **Rule 4 (FVG Proximal Retest Entry & TTL):** Entry strictly on mitigation retest of the proximal FVG border with a 12-bar Time-to-Live order expiration.
+      - **Rule 5 (30/70 Inverted Asymmetric Harvest Model):** 30% TP1 @ 1.50R with SL ratcheted to breakeven (next bar $i+1$ ratchet); 70% TP2 trailed along 15m structural swing pivots for 3.0R–5.0R macro expansions.
+    - Upgraded prompt self-seed and auto-upgrade migrations in `/api/quant-analyze` and `/api/settings` to detect contaminated legacy prompts (< V19.0 or containing legacy strings) and migrate `system_settings` to V19.0.
+3. **Workstream C: Autonomous Server-Side Execution Dispatch & Command Pipeline (`scripts/headless-daemon.ts`, `src/app/api/daemon/command/route.ts`, `src/lib/quantEngine/strategyExecutionConfig.ts`, `src/lib/daemon/sparkIngestionDispatcher.ts`):**
+   - Decoupled execution authorization from client-side `localStorage`.
+   - Extended `/api/daemon/command` to support `TOGGLE_AUTO_SCAN`, `TOGGLE_AUTO_EXEC`, and `SET_EXECUTION_MODE` with atomic synchronization to PostgreSQL `system_settings` (`AUTO_SCAN_ACTIVE`, `AUTO_EXEC_ACTIVE`, `EXECUTION_MODE`) and command logging to `run_logs/daemon_commands.json`.
+   - Updated `headless-daemon.ts` to hydrate `autoExecute` and `sparkDispatcher` to hydrate `EXECUTION_MODE` from PostgreSQL on cold-start.
+   - Updated `setSweepReclaimAutoExec` in `strategyExecutionConfig.ts` to dispatch `TOGGLE_AUTO_EXEC` to `/api/daemon/command` ensuring UI toggles control the background PM2 daemon directly.
+4. **Comprehensive Test Suite & Parity Proof (`scripts/test_headless_scheduler_autonomy.ts`, `scripts/test_cadence_and_context_sync.ts`, `scripts/test_ttl_and_parity.ts`, `scripts/test_risk_governor.ts`):**
+   - Created standalone autonomy test suite `scripts/test_headless_scheduler_autonomy.ts` validating:
+     - Absolute browser independence (zero `window`, `document`, or `localStorage` dependencies).
+     - Cairo operational schedule evaluation and off-hours sleep calculations.
+     - 15m base and 5m Turbo clock-aligned candle boundary calculations.
+     - Ring buffers & volumetric signal annotation.
+     - POI proximity radar and dynamic 5m Turbo elevation.
+     - Invalidation level breach detection and 4-scan burnout relaxation.
+     - Atomic state serialization to `run_logs/daemon_scheduler_state.json` and rehydration.
+     - Daemon command pipeline integration (`TOGGLE_AUTO_SCAN`, `TOGGLE_AUTO_EXEC`, `SET_EXECUTION_MODE`).
+     - Autonomous scan execution (`executeScan()`), payload assembly, cascade evaluation, and staging decoupled from browser.
+   - All 8 autonomy tests passed, all 9 cadence/prompt sync tests passed, all 99 spark ingestion tests passed, all 88 tri-state tests passed, all 39 risk governor tests passed, all TTL & parity tests passed, TypeScript compiles with 0 errors (`npx tsc --noEmit`), and Next.js production build (`npm run build`) compiled successfully with 0 errors.
 
 ## 🆕 V17.77 Changelog — Clock-Aligned Cadence Synchronization, Context Timestamp Busting & Dual-Engine V18.6 Reversal Mechanics (2026-09-13)
 

@@ -189,8 +189,14 @@ export async function GET() {
         }
       }
 
-      // Self-seed or upgrade SYSTEM_PROMPT to Canonical Dual-Engine V18.6 if not present or outdated
-      if (!settings['SYSTEM_PROMPT'] || !settings['SYSTEM_PROMPT'].includes('V18.6')) {
+      // Self-seed or upgrade SYSTEM_PROMPT to Pure Pro-Trend Continuation V19.0 if not present or outdated
+      const isOutdatedPrompt = !settings['SYSTEM_PROMPT'] ||
+        !settings['SYSTEM_PROMPT'].includes('V19.0') ||
+        settings['SYSTEM_PROMPT'].includes('Sweep & Reclaim') ||
+        settings['SYSTEM_PROMPT'].includes('Phase C Spring') ||
+        settings['SYSTEM_PROMPT'].includes('Mean Reversion');
+
+      if (isOutdatedPrompt) {
         settings['SYSTEM_PROMPT'] = DEFAULT_ETH_SOP_SYSTEM_PROMPT;
         try {
           await sql`

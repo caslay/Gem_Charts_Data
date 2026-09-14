@@ -41,6 +41,9 @@ export interface DaemonSessionEvent {
     | 'ARMED_INTENT_TRIGGERED'
     | 'ARMED_INTENT_EXPIRED'
     | 'ARMED_INTENT_INVALIDATED'
+    | 'AUTONOMOUS_SCAN_DISPATCHED'
+    | 'AUTONOMOUS_SCAN_COMPLETED'
+    | 'AUTONOMOUS_SCAN_ERROR'
     | 'ERROR';
   timestamp: number;
   timeIso: string;

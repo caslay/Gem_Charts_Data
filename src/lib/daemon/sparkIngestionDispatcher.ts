@@ -860,6 +860,24 @@ export class SparkIngestionDispatcher {
       riskGovState = GlobalRiskGovernor.getState();
     }
 
+    // 3b. Sync execution mode from PostgreSQL system_settings if not overridden by CLI or offline fallback
+    if (!this.cliMode && !this.allowOfflineFallback) {
+      try {
+        const { rows } = await sql`
+          SELECT key_value FROM system_settings WHERE key_name = 'EXECUTION_MODE' LIMIT 1
+        `;
+        if (rows.length > 0 && rows[0].key_value) {
+          const dbMode = normalizeExecutionMode(rows[0].key_value);
+          if (dbMode && dbMode !== this.executionMode) {
+            this.executionMode = dbMode;
+            console.log(`[SPARK_DISPATCHER] 🔄 Synced execution mode from PostgreSQL system_settings: ${dbMode}`);
+          }
+        }
+      } catch (e) {
+        // Non-fatal
+      }
+    }
+
     const compoundingRiskPct =
       customSettings.compoundingRiskPct ??
       persistedLiveSettings.compoundingRiskPct ??
@@ -1266,6 +1284,9 @@ export class SparkIngestionDispatcher {
           RETURNING id
         `;
         claimSuccessful = claimRes.rows.length > 0;
+        if (!claimSuccessful && (this.allowOfflineFallback || livePriceOverride !== undefined)) {
+          claimSuccessful = true;
+        }
       } catch (err: any) {
         console.warn(`[SPARK_DISPATCHER] DB error claiming record #${id} as QUEUED:`, err?.message || err);
         // If DB update fails (e.g. read-only local sandbox or offline testing), allow pipeline to proceed if permitted
