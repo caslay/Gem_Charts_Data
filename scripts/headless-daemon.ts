@@ -491,6 +491,25 @@ async function main() {
             engine.updateSweepReclaimSettings(cmd.metadata.settings);
             cmd.status = 'PROCESSED';
             mutated = true;
+          } else if (cmd.action === 'PROMOTE_STANDBY') {
+            const decisionId = cmd.metadata?.decisionId ?? cmd.decisionId;
+            const targetMode = cmd.metadata?.targetMode ?? cmd.targetMode;
+            if (decisionId && targetMode) {
+              sparkDispatcher.promoteStandbyToMode(decisionId, targetMode).then((res: any) => {
+                console.log(`[DAEMON] ⚡ PROMOTE_STANDBY #${decisionId} -> ${targetMode}:`, res?.success ? 'SUCCESS' : res?.message || 'FAILED');
+              }).catch((err: any) => console.error('[DAEMON] PROMOTE_STANDBY error:', err));
+              cmd.status = 'PROCESSED';
+              mutated = true;
+            }
+          } else if (cmd.action === 'DISMISS_SETUP') {
+            const decisionId = cmd.metadata?.decisionId ?? cmd.decisionId;
+            if (decisionId) {
+              sparkDispatcher.dismissDecision(decisionId).then((res: any) => {
+                console.log(`[DAEMON] ❌ DISMISS_SETUP #${decisionId}:`, res?.success ? 'SUCCESS' : res?.message || 'FAILED');
+              }).catch((err: any) => console.error('[DAEMON] DISMISS_SETUP error:', err));
+              cmd.status = 'PROCESSED';
+              mutated = true;
+            }
           }
         }
       }
@@ -592,6 +611,7 @@ async function main() {
       engine,
       ledger,
       wsClient,
+      sparkDispatcher,
       symbol: symbolArg,
       equity: startingEquity,
       isDryRun,

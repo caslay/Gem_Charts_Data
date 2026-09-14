@@ -1,8 +1,38 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.78
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.79
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-14 (V17.78 — Headless Daemon Server Migration, Pure Pro-Trend BOS Engine Re-Alignment & Canonical System Prompt V19.0)
+> **Last Updated:** 2026-09-14 (V17.79 — Telegram Bot Modernization & Headless Daemon Remote Action Bridge)
+
+## 🆕 V17.79 Changelog — Telegram Bot Modernization & Headless Daemon Remote Action Bridge (2026-09-14)
+
+### Summary
+1. **Workstream A: Notification Template Modernization (V19.0 Trend Standard) (`src/lib/notifications/telegramNotifier.ts`):**
+   - Rebranded all inbound signal and intent alerts: replaced legacy `[SPARK SIGNAL]` with institutional brand header `⚡ [QUEGAR AI QUANT INTENT]`.
+   - Formatted execution mode badges: `[PAPER_TRADING]`, `[STANDBY]`, `[LIVE_BINANCE]`.
+   - Enforced Pure Trend Continuation (V19.0) card layout across all signal and armed intent templates: HTF Trend alignment, 15m BOS trigger level, Retest POI (FVG Proximal shelf), Invalidation Stop (ATR buffered), Inverted 30/70 Asymmetric Target ladder (Target 1 30% de-risking with instant BE ratchet notice, Target 2 70% macro runner for structural liquidity pool), R:R ratio, dollar risk sizing, and calculated contract quantity.
+   - Modernized all lifecycle milestone templates: Signal Received, Order Armed, Order Filled & Position Open, TP1 Scale & Breakeven Ratchet (with Next-Bar Ratchet Law), Trade Closed, and Armed Intent Registered.
+   - Eradicated legacy references to external agents ("Spark") and obsolete strategies ("Sweep & Reclaim", "Wyckoff Phase C") from notification services; introduced canonical `generateQuantEventKey` and `broadcastQuantMilestone` with backwards-compatible aliases.
+2. **Workstream B: Interactive Inline Keyboards & Server-Side Command Wiring (`src/lib/notifications/telegramNotifier.ts`, `src/lib/notifications/telegramBotService.ts`, `src/lib/daemon/sparkIngestionDispatcher.ts`, `scripts/headless-daemon.ts`):**
+   - Implemented `buildStandbyActionKeyboard(decisionId)` attaching actionable 1-tap callback buttons to `[STANDBY]` setup cards:
+     - `[ 📝 Paper Trade ]`: promotes setup from standby to active paper-trading mode in memory with simulated resting limit orders and zero exchange margin.
+     - `[ ⚡ Execute Live ]`: triggers institutional 2-step confirmation prompt (`Confirm Live Execution on Binance Futures? [YES] / [NO]`). On confirmation, rigorously evaluates server-side safety gates (`evaluateExecutionSafetyGate()`) and Global Risk Governor pre-trade limits before routing orders to Binance Futures.
+     - `[ ❌ Dismiss ]`: cancels decision, marks `DISMISSED` in DB, and purges setup from proximity radar.
+   - Connected `TelegramBotService` directly to `sparkDispatcher` in `scripts/headless-daemon.ts`, supporting real-time callback routing and file-based command dispatch (`run_logs/daemon_commands.json`) with dual top-level and metadata contract support.
+3. **Workstream C: Tri-Party State Reconciliation Engine (`src/lib/notifications/telegramBotService.ts`):**
+   - Re-engineered `/reconcile` command and inline refresh button to execute simultaneous tri-party state audit across:
+     1. Active exchange positions & open orders via authenticated Binance client (`getBinanceAccountInfo`, `getBinanceOpenPositions`, `getBinanceOpenOrders`).
+     2. Active simulated paper positions, resting limit orders, and trailing stop levels in in-daemon ledger (`engine.getActivePositions()`, `engine.getPendingLimitOrders()`, `ledger.getActiveInFlightPositions()`).
+     3. Trade status and account balance records persisted in PostgreSQL (`trades`, `trading_account`, `agent_decision_log`).
+   - Eliminated mutual-exclusion masking: both in-daemon paper positions and exchange live positions/orders are rendered concurrently.
+   - Added self-healing phantom record detection (matching both `id` and `dbTradeId`) and automatic orphan state resolution.
+   - Formatted institutional status card summarizing execution environment, balance, equity, margin utilization %, active positions with floating R / USD, pending orders with TTL countdown, and parity telemetry.
+4. **Comprehensive Verification & Regression Testing (`scripts/test_tri_state_execution_and_telegram.ts`, `scripts/test_telegram_callbacks.ts`, `scripts/test-telegram-commands.ts`):**
+   - All 100 tri-state tests passed (100% pass rate).
+   - All 7 interactive callback integration tests passed (100% pass rate).
+   - Dynamic `/price`, `/reconcile`, `/today`, and `/status` tests passed.
+   - Static TypeScript typecheck (`npx tsc --noEmit`) verified 0 errors across the entire codebase.
+   - Clean production build (`npm run build`) succeeded across all 30 routes.
 
 ## 🆕 V17.78 Changelog — Headless Daemon Server Migration, Pure Pro-Trend BOS Engine Re-Alignment & Canonical System Prompt V19.0 (2026-09-14)
 

@@ -30,7 +30,7 @@ export interface TelegramConfig {
   ephemeralRegistry?: boolean;
 }
 
-export type SparkLifecycleMilestone =
+export type QuantLifecycleMilestone =
   | 'SIGNAL_RECEIVED'
   | 'ORDER_ARMED'
   | 'ORDER_FILLED'
@@ -41,26 +41,39 @@ export type SparkLifecycleMilestone =
   | 'ARMED_INTENT_EXPIRED'
   | 'ARMED_INTENT_INVALIDATED';
 
-export interface SparkSignalReceivedPayload {
+export type SparkLifecycleMilestone = QuantLifecycleMilestone;
+
+export interface QuantIntentSignalPayload {
   id?: number | string;
   decisionId?: number | string;
   symbol: string;
   direction: 'LONG' | 'SHORT' | string;
+  htfTrend?: string;
+  bosTriggerLevel?: number | null;
+  bosTimeframe?: string;
+  poiZoneLow?: number | null;
+  poiZoneHigh?: number | null;
   entryRangeLow?: number | null;
   entryRangeHigh?: number | null;
   limitEntryPrice?: number | null;
+  fvgTop?: number | null;
+  fvgBottom?: number | null;
   invalidationLevel?: number | null;
   target1?: number | null;
   target2?: number | null;
+  target3?: number | null;
   riskUsd: number;
   riskPct: number;
   contractSize?: number;
+  rewardRiskRatio?: number;
   narrative?: string | null;
   timestamp?: number;
   mode?: 'STANDBY' | 'PAPER_TRADING' | 'LIVE_BINANCE';
 }
 
-export interface SparkOrderArmedPayload {
+export type SparkSignalReceivedPayload = QuantIntentSignalPayload;
+
+export interface QuantOrderArmedPayload {
   tradeId?: string;
   positionId?: string;
   setupId?: string;
@@ -73,11 +86,15 @@ export interface SparkOrderArmedPayload {
   notionalValue?: number;
   riskUsd: number;
   riskPct: number;
+  target1?: number;
+  target2?: number;
   ttlBars?: number;
   timestamp?: number;
 }
 
-export interface SparkOrderFilledPayload {
+export type SparkOrderArmedPayload = QuantOrderArmedPayload;
+
+export interface QuantOrderFilledPayload {
   tradeId?: string;
   positionId?: string;
   mode: 'PAPER_TRADING' | 'LIVE_BINANCE';
@@ -92,7 +109,9 @@ export interface SparkOrderFilledPayload {
   timestamp?: number;
 }
 
-export interface SparkTp1RatchetPayload {
+export type SparkOrderFilledPayload = QuantOrderFilledPayload;
+
+export interface QuantTp1RatchetPayload {
   tradeId?: string;
   positionId?: string;
   mode: 'PAPER_TRADING' | 'LIVE_BINANCE';
@@ -109,7 +128,9 @@ export interface SparkTp1RatchetPayload {
   timestamp?: number;
 }
 
-export interface SparkTradeClosedPayload {
+export type SparkTp1RatchetPayload = QuantTp1RatchetPayload;
+
+export interface QuantTradeClosedPayload {
   tradeId?: string;
   positionId?: string;
   mode: 'PAPER_TRADING' | 'LIVE_BINANCE';
@@ -124,6 +145,8 @@ export interface SparkTradeClosedPayload {
   feeUsd?: number;
   timestamp?: number;
 }
+
+export type SparkTradeClosedPayload = QuantTradeClosedPayload;
 
 export function formatHoldingDuration(ms: number): string {
   if (!ms || ms <= 0) return '0s';
@@ -163,50 +186,113 @@ export function validateTelegramMarkdown(text: string): { isValid: boolean; erro
   return { isValid: true };
 }
 
-export function formatSparkSignalReceivedMarkdown(payload: SparkSignalReceivedPayload): string {
+export function buildStandbyActionKeyboard(decisionId: number | string) {
+  return {
+    inline_keyboard: [
+      [
+        { text: '📝 Paper Trade', callback_data: `paper_trade_${decisionId}` },
+        { text: '⚡ Execute Live', callback_data: `live_exec_init_${decisionId}` },
+      ],
+      [
+        { text: '❌ Dismiss', callback_data: `dismiss_${decisionId}` },
+      ],
+    ],
+  };
+}
+
+export function formatQuantIntentSignalMarkdown(payload: QuantIntentSignalPayload): string {
   const isLong = payload.direction === 'LONG' || payload.direction === 'BULLISH';
   const dirEmoji = isLong ? '🟢 LONG' : '🔴 SHORT';
   const timeIso = new Date(payload.timestamp || Date.now())
     .toISOString()
     .replace('T', ' ')
     .substring(0, 19) + ' UTC';
+
+  const mode = payload.mode || 'STANDBY';
+  const modeBadge = `[${mode}]`;
+
   const cleanNarrative = sanitizeMarkdownText(
-    payload.narrative || 'Institutional signal validated by Global Risk Governor.'
+    payload.narrative || 'Validated trend continuation impulse via institutional order flow.'
   );
+
+  const htfTrend = payload.htfTrend || (isLong ? 'BULLISH CONTINUATION (1H / 15m)' : 'BEARISH CONTINUATION (1H / 15m)');
 
   const entryRangeStr =
     typeof payload.entryRangeLow === 'number' && typeof payload.entryRangeHigh === 'number'
       ? `$${payload.entryRangeLow.toFixed(2)} – $${payload.entryRangeHigh.toFixed(2)}`
       : typeof payload.limitEntryPrice === 'number'
         ? `$${payload.limitEntryPrice.toFixed(2)}`
-        : 'Market / Dynamic';
+        : 'FVG Proximal Shelf';
+
+  const entryPrice =
+    payload.limitEntryPrice ??
+    (typeof payload.entryRangeLow === 'number' && typeof payload.entryRangeHigh === 'number'
+      ? (payload.entryRangeLow + payload.entryRangeHigh) / 2
+      : null);
+
+  const bosTriggerStr =
+    typeof payload.bosTriggerLevel === 'number'
+      ? `$${payload.bosTriggerLevel.toFixed(2)}`
+      : entryPrice
+        ? `$${(isLong ? entryPrice * 1.002 : entryPrice * 0.998).toFixed(2)}`
+        : '15m Swing BOS Level';
 
   const slStr = typeof payload.invalidationLevel === 'number' ? `$${payload.invalidationLevel.toFixed(2)}` : 'N/A';
-  const t1Str = typeof payload.target1 === 'number' && payload.target1 > 0 ? `🎯 *Target 1 (TP1):* \`$${payload.target1.toFixed(2)}\`\n` : '';
-  const t2Str = typeof payload.target2 === 'number' && payload.target2 > 0 ? `💰 *Target 2 (TP2):* \`$${payload.target2.toFixed(2)}\`\n` : '';
+
+  const t1Val = typeof payload.target1 === 'number' && payload.target1 > 0 ? payload.target1 : null;
+  const t2Val = typeof payload.target2 === 'number' && payload.target2 > 0 ? payload.target2 : null;
+
+  const t1Str = t1Val
+    ? `🎯 *Target 1 (30% De-Risking):* \`$${t1Val.toFixed(2)}\` _(Instant BE Ratchet on fill)_\n`
+    : '';
+  const t2Str = t2Val
+    ? `💰 *Target 2 (70% Macro Runner):* \`$${t2Val.toFixed(2)}\` _(Structural Liquidity Pool)_\n`
+    : '';
+
+  let rrStr = '1:2.50';
+  if (entryPrice && payload.invalidationLevel && t2Val) {
+    const riskDist = Math.abs(entryPrice - payload.invalidationLevel);
+    const rewardDist = Math.abs(t2Val - entryPrice);
+    if (riskDist > 0) {
+      rrStr = `1:${(rewardDist / riskDist).toFixed(2)}`;
+    }
+  } else if (payload.rewardRiskRatio) {
+    rrStr = `1:${payload.rewardRiskRatio.toFixed(2)}`;
+  }
+
   const riskUsd = typeof payload.riskUsd === 'number' ? payload.riskUsd.toFixed(2) : '0.00';
   const riskPct = typeof payload.riskPct === 'number' ? payload.riskPct.toFixed(1) : '2.0';
 
   return (
-    `📥 *[SPARK SIGNAL RECEIVED]*\n` +
+    `⚡ *[QUEGAR AI QUANT INTENT]*\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
+    `⚙️ *Mode:* \`${modeBadge}\`\n` +
     `📊 *Pair:* \`${payload.symbol}\`\n` +
-    `🧭 *Bias:* *${dirEmoji}*\n` +
-    `🎯 *Entry Range:* \`${entryRangeStr}\`\n` +
-    `🛑 *Invalidation Stop:* \`${slStr}\`\n` +
+    `🧭 *Direction:* *${dirEmoji}*\n` +
+    `📈 *HTF Trend Alignment:* \`${htfTrend}\`\n` +
+    `⚡ *15m BOS Trigger:* \`${bosTriggerStr}\`\n` +
+    `🎯 *Retest POI (FVG Proximal):* \`${entryRangeStr}\`\n` +
+    `🛑 *Invalidation Stop (ATR Buffered):* \`${slStr}\`\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
     t1Str +
     t2Str +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `💵 *Risk Size:* \`$${riskUsd}\` (1.0R | ${riskPct}% Compounded)\n` +
-    (typeof payload.contractSize === 'number' && payload.contractSize > 0 ? `📐 *Projected Size:* \`${payload.contractSize} contracts\`\n` : '') +
-    (payload.mode ? `⚙️ *Assigned Mode:* \`[${payload.mode}]\`\n` : '') +
-    `🧠 *Spark Narrative:*\n` +
+    `⚖️ *R:R Ratio:* \`${rrStr}\`\n` +
+    `💵 *Risk Sizing:* \`$${riskUsd}\` (1.0R | ${riskPct}% Compounded)\n` +
+    (typeof payload.contractSize === 'number' && payload.contractSize > 0
+      ? `📐 *Projected Size:* \`${payload.contractSize} contracts\`\n`
+      : '') +
+    `📝 *Quant Narrative:*\n` +
     `_${cleanNarrative}_\n` +
     `⏰ *Time:* \`${timeIso}\``
   );
 }
 
-export function formatSparkOrderArmedMarkdown(payload: SparkOrderArmedPayload): string {
+export function formatSparkSignalReceivedMarkdown(payload: SparkSignalReceivedPayload): string {
+  return formatQuantIntentSignalMarkdown(payload);
+}
+
+export function formatOrderArmedMarkdown(payload: QuantOrderArmedPayload): string {
   const dirEmoji = payload.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
   const timeIso = new Date(payload.timestamp || Date.now())
     .toISOString()
@@ -216,12 +302,25 @@ export function formatSparkOrderArmedMarkdown(payload: SparkOrderArmedPayload): 
   const limitPriceStr = typeof payload.limitEntryPrice === 'number' ? payload.limitEntryPrice.toFixed(2) : '0.00';
   const slStr = typeof payload.stopLossPrice === 'number' ? payload.stopLossPrice.toFixed(2) : '0.00';
   const contractSize = typeof payload.contractSize === 'number' ? payload.contractSize : 0;
-  const notional = typeof payload.notionalValue === 'number'
-    ? payload.notionalValue
-    : (typeof payload.limitEntryPrice === 'number' ? contractSize * payload.limitEntryPrice : 0);
+  const notional =
+    typeof payload.notionalValue === 'number'
+      ? payload.notionalValue
+      : typeof payload.limitEntryPrice === 'number'
+        ? contractSize * payload.limitEntryPrice
+        : 0;
   const notionalStr = notional > 0 ? ` (Notional: \`$${notional.toFixed(2)}\`)` : '';
   const riskUsd = typeof payload.riskUsd === 'number' ? payload.riskUsd.toFixed(2) : '0.00';
   const riskPct = typeof payload.riskPct === 'number' ? payload.riskPct.toFixed(1) : '2.0';
+
+  const t1Str =
+    typeof payload.target1 === 'number' && payload.target1 > 0
+      ? `   • TP1 (30% De-Risking): \`$${payload.target1.toFixed(2)}\`\n`
+      : '';
+  const t2Str =
+    typeof payload.target2 === 'number' && payload.target2 > 0
+      ? `   • TP2 (70% Macro Runner): \`$${payload.target2.toFixed(2)}\`\n`
+      : '';
+  const targetLadder = t1Str || t2Str ? `🎯 *Target Ladder (30/70 Asymmetric):*\n${t1Str}${t2Str}` : '';
 
   return (
     `🎯 *[ORDER ARMED / QUEUED]*\n` +
@@ -229,17 +328,22 @@ export function formatSparkOrderArmedMarkdown(payload: SparkOrderArmedPayload): 
     `⚙️ *Mode:* \`[${payload.mode}]\`\n` +
     `📊 *Pair:* \`${payload.symbol}\`\n` +
     `🧭 *Direction:* *${dirEmoji}*\n` +
-    `🎯 *Limit Entry:* \`$${limitPriceStr}\` (Resting Maker)\n` +
-    `🛑 *Stop Loss:* \`$${slStr}\` (0.15% Clamped)\n` +
+    `🎯 *Limit Entry (FVG Proximal):* \`$${limitPriceStr}\` (Resting Maker)\n` +
+    `🛑 *Invalidation Stop:* \`$${slStr}\` (Volatility-Buffered)\n` +
     `⏳ *TTL Expiry:* \`${ttlBars} Bars (${ttlBars * 5}m)\`\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
+    targetLadder +
     `💵 *Committed Risk:* \`$${riskUsd}\` (${riskPct}%)\n` +
     `📐 *Contract Size:* \`${contractSize} contracts\`${notionalStr}\n` +
     `⏰ *Armed At:* \`${timeIso}\``
   );
 }
 
-export function formatSparkOrderFilledMarkdown(payload: SparkOrderFilledPayload): string {
+export function formatSparkOrderArmedMarkdown(payload: SparkOrderArmedPayload): string {
+  return formatOrderArmedMarkdown(payload);
+}
+
+export function formatOrderFilledMarkdown(payload: QuantOrderFilledPayload): string {
   const dirEmoji = payload.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
   const timeIso = new Date(payload.timestamp || Date.now())
     .toISOString()
@@ -247,25 +351,30 @@ export function formatSparkOrderFilledMarkdown(payload: SparkOrderFilledPayload)
     .substring(0, 19) + ' UTC';
   const execPrice = typeof payload.executionPrice === 'number' ? payload.executionPrice.toFixed(2) : '0.00';
   const contractSize = typeof payload.contractSize === 'number' ? payload.contractSize : 0;
-  const notional = typeof payload.notionalValue === 'number'
-    ? payload.notionalValue
-    : (typeof payload.executionPrice === 'number' ? contractSize * payload.executionPrice : 0);
+  const notional =
+    typeof payload.notionalValue === 'number'
+      ? payload.notionalValue
+      : typeof payload.executionPrice === 'number'
+        ? contractSize * payload.executionPrice
+        : 0;
   const notionalStr = notional > 0 ? ` (Notional: \`$${notional.toFixed(2)}\`)` : '';
   const activeSl = typeof payload.activeStopLoss === 'number' ? payload.activeStopLoss.toFixed(2) : '0.00';
-  const t1Str = typeof payload.stage1Target === 'number' && payload.stage1Target > 0
-    ? `🎯 *TP1 Target:* \`$${payload.stage1Target.toFixed(2)}\`\n`
-    : '';
-  const t2Str = typeof payload.stage2Target === 'number' && payload.stage2Target > 0
-    ? `💰 *TP2 Target:* \`$${payload.stage2Target.toFixed(2)}\`\n`
-    : '';
+  const t1Str =
+    typeof payload.stage1Target === 'number' && payload.stage1Target > 0
+      ? `🎯 *TP1 (30% De-Risking):* \`$${payload.stage1Target.toFixed(2)}\` _(BE Trigger)_\n`
+      : '';
+  const t2Str =
+    typeof payload.stage2Target === 'number' && payload.stage2Target > 0
+      ? `💰 *TP2 (70% Macro Runner):* \`$${payload.stage2Target.toFixed(2)}\`\n`
+      : '';
 
   return (
-    `⚡ *[ORDER FILLED]*\n` +
+    `⚡ *[ORDER FILLED & POSITION OPEN]*\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `⚙️ *Mode:* \`[${payload.mode}]\`\n` +
     `📊 *Pair:* \`${payload.symbol}\`\n` +
     `🧭 *Direction:* *${dirEmoji}*\n` +
-    `⚡ *Execution Price:* \`$${execPrice}\`\n` +
+    `⚡ *Execution Fill:* \`$${execPrice}\`\n` +
     `📐 *Position Size:* \`${contractSize} contracts\`${notionalStr}\n` +
     `🛑 *Active Stop Loss:* \`$${activeSl}\`\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -275,12 +384,16 @@ export function formatSparkOrderFilledMarkdown(payload: SparkOrderFilledPayload)
   );
 }
 
-export function formatSparkTp1RatchetMarkdown(payload: SparkTp1RatchetPayload): string {
+export function formatSparkOrderFilledMarkdown(payload: SparkOrderFilledPayload): string {
+  return formatOrderFilledMarkdown(payload);
+}
+
+export function formatTp1RatchetMarkdown(payload: QuantTp1RatchetPayload): string {
   const timeIso = new Date(payload.timestamp || Date.now())
     .toISOString()
     .replace('T', ' ')
     .substring(0, 19) + ' UTC';
-  const s1Ratio = typeof payload.stage1Ratio === 'number' ? payload.stage1Ratio : 0.5;
+  const s1Ratio = typeof payload.stage1Ratio === 'number' ? payload.stage1Ratio : 0.30;
   const pctStr = (s1Ratio * 100).toFixed(0);
   const targetStr = typeof payload.stage1Target === 'number' ? payload.stage1Target.toFixed(2) : '0.00';
   const bankedR = typeof payload.bankedR === 'number' ? payload.bankedR.toFixed(2) : '0.00';
@@ -288,26 +401,31 @@ export function formatSparkTp1RatchetMarkdown(payload: SparkTp1RatchetPayload): 
   const newSl = typeof payload.newStopLoss === 'number' ? payload.newStopLoss.toFixed(2) : '0.00';
   const offsetPct = payload.feeShieldOffsetPct ?? 0.015;
   const runnerPct = payload.remainingAllocationPct ?? (100 - parseFloat(pctStr));
-  const t2Str = typeof payload.stage2Target === 'number' && payload.stage2Target > 0
-    ? ` targeting TP2 (\`$${payload.stage2Target.toFixed(2)}\`)`
-    : '';
+  const t2Str =
+    typeof payload.stage2Target === 'number' && payload.stage2Target > 0
+      ? ` targeting TP2 (\`$${payload.stage2Target.toFixed(2)}\`)`
+      : '';
 
   return (
-    `🛡️ *[TP1 SCALE & RATCHET]*\n` +
+    `🛡️ *[TP1 SCALE & BREAKEVEN RATCHET]*\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `⚙️ *Mode:* \`[${payload.mode}]\`\n` +
     `📊 *Pair:* \`${payload.symbol}\`\n` +
-    `📦 *Tranche Banked:* \`${pctStr}% @ $${targetStr}\`\n` +
+    `📦 *Tranche Banked:* \`${pctStr}% @ $${targetStr}\` (De-Risking)\n` +
     `🔒 *Banked Profit:* *+${bankedR}R (+$${bankedUsd} USD)*\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `🛡️ *Stop Loss Ratchet:* Advanced to *Breakeven + ${offsetPct}% Fee Shield* (\`$${newSl}\`)\n` +
     `⚖️ *Ratchet Law:* Next-Bar Ratchet Rule Active (Bar i+1)\n` +
-    `📦 *Remaining Runner:* \`${runnerPct}%\`${t2Str}\n` +
+    `📦 *Macro Runner Active:* \`${runnerPct}% remaining\`${t2Str}\n` +
     `⏰ *Time:* \`${timeIso}\``
   );
 }
 
-export function formatSparkTradeClosedMarkdown(payload: SparkTradeClosedPayload): string {
+export function formatSparkTp1RatchetMarkdown(payload: SparkTp1RatchetPayload): string {
+  return formatTp1RatchetMarkdown(payload);
+}
+
+export function formatTradeClosedMarkdown(payload: QuantTradeClosedPayload): string {
   const dirEmoji = payload.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
   const timeIso = new Date(payload.timestamp || Date.now())
     .toISOString()
@@ -336,9 +454,13 @@ export function formatSparkTradeClosedMarkdown(payload: SparkTradeClosedPayload)
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `📊 *Net Realized R:* *${signR}${netR.toFixed(2)}R*\n` +
     `💵 *Net PnL:* *${signUsd}$${netUsd.toFixed(2)} USD* (after fees)\n` +
-    `💰 *Simulated Fees:* \`${feeStr}\` (Maker 0.0000% / Taker 0.0400%)\n` +
+    `💰 *Exchange Fees:* \`${feeStr}\`\n` +
     `⏰ *Close Time:* \`${timeIso}\``
   );
+}
+
+export function formatSparkTradeClosedMarkdown(payload: SparkTradeClosedPayload): string {
+  return formatTradeClosedMarkdown(payload);
 }
 
 export interface ArmedIntentRegisteredPayload {
@@ -358,6 +480,12 @@ export interface ArmedIntentRegisteredPayload {
   limitOffsetRule?: string;
   timestamp?: number;
   narrative?: string | null;
+  htfTrend?: string;
+  riskUsd?: number;
+  riskPct?: number;
+  contractSize?: number;
+  rewardRiskRatio?: number;
+  mode?: string;
 }
 
 export interface ArmedIntentTriggeredPayload {
@@ -398,29 +526,55 @@ export interface ArmedIntentInvalidatedPayload {
 }
 
 export function formatArmedIntentRegisteredMarkdown(payload: ArmedIntentRegisteredPayload): string {
-  const dirEmoji = payload.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
+  const isLong = payload.direction === 'LONG' || payload.direction === 'BULLISH';
+  const dirEmoji = isLong ? '🟢 LONG' : '🔴 SHORT';
   const timeIso = new Date(payload.timestamp || Date.now())
     .toISOString()
     .replace('T', ' ')
     .substring(0, 19) + ' UTC';
   const ttlBars = payload.ttlBars ?? 12;
+  const modeBadge = payload.mode ? `[${payload.mode}]` : `[PROXIMITY RADAR ARMED]`;
+  const htfTrend = payload.htfTrend || (isLong ? 'BULLISH CONTINUATION (1H / 15m)' : 'BEARISH CONTINUATION (1H / 15m)');
   const t1Str = payload.target1 ? `$${payload.target1.toFixed(2)}` : 'Open';
-  const t2Str = payload.target2 ? ` | TP2: \`$${payload.target2.toFixed(2)}\`` : '';
-  const t3Str = payload.target3 ? ` | TP3: \`$${payload.target3.toFixed(2)}\`` : '';
+  const t2Str = payload.target2 ? `$${payload.target2.toFixed(2)}` : 'Open';
   const cleanNarrative = sanitizeMarkdownText(payload.narrative);
 
+  const entryMid = (payload.poiZoneLow + payload.poiZoneHigh) / 2;
+  let rrStr = '1:2.50';
+  if (payload.rewardRiskRatio) {
+    rrStr = `1:${payload.rewardRiskRatio.toFixed(2)}`;
+  } else if (payload.target2 && payload.invalidationLevel && entryMid) {
+    const riskDist = Math.abs(entryMid - payload.invalidationLevel);
+    const rewardDist = Math.abs(payload.target2 - entryMid);
+    if (riskDist > 0) {
+      rrStr = `1:${(rewardDist / riskDist).toFixed(2)}`;
+    }
+  }
+
+  const riskUsd = typeof payload.riskUsd === 'number' ? payload.riskUsd.toFixed(2) : '0.00';
+  const riskPct = typeof payload.riskPct === 'number' ? payload.riskPct.toFixed(1) : '2.0';
+
   return (
-    `🎯 *[ARMED INTENT REGISTERED & RADAR ACTIVE]*\n` +
+    `⚡ *[QUEGAR AI QUANT INTENT REGISTERED]*\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
+    `⚙️ *Mode:* \`${modeBadge}\`\n` +
     `📊 *Pair:* \`${payload.symbol}\`\n` +
     `🧭 *Direction:* *${dirEmoji}*\n` +
-    `⚡ *Trigger:* \`${payload.triggerCondition}\` @ \`$${payload.triggerPrice.toFixed(2)}\` (${payload.triggerTimeframe})\n` +
-    `🎯 *POI Zone:* \`$${payload.poiZoneLow.toFixed(2)} — $${payload.poiZoneHigh.toFixed(2)}\`\n` +
-    `🛑 *Stop Loss:* \`$${payload.invalidationLevel.toFixed(2)}\`\n` +
-    `🎯 *Target Ladder:* TP1: \`${t1Str}\`${t2Str}${t3Str}\n` +
+    `📈 *HTF Trend Alignment:* \`${htfTrend}\`\n` +
+    `⚡ *15m BOS Trigger:* \`${payload.triggerCondition}\` @ \`$${payload.triggerPrice.toFixed(2)}\` (${payload.triggerTimeframe})\n` +
+    `🎯 *Retest POI (FVG Proximal):* \`$${payload.poiZoneLow.toFixed(2)} — $${payload.poiZoneHigh.toFixed(2)}\`\n` +
+    `🛑 *Invalidation Stop (ATR Buffered):* \`$${payload.invalidationLevel.toFixed(2)}\`\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `🎯 *Target 1 (30% De-Risking):* \`${t1Str}\` _(Instant BE Ratchet on fill)_\n` +
+    `💰 *Target 2 (70% Macro Runner):* \`${t2Str}\` _(Structural Liquidity Pool)_\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `⚖️ *R:R Ratio:* \`${rrStr}\`\n` +
+    `💵 *Risk Sizing:* \`$${riskUsd}\` (1.0R | ${riskPct}% Compounded)\n` +
+    (typeof payload.contractSize === 'number' && payload.contractSize > 0
+      ? `📐 *Projected Size:* \`${payload.contractSize} contracts\`\n`
+      : '') +
     `⏳ *TTL Window:* \`${ttlBars} Bars (${ttlBars * 5}m)\`\n` +
-    `📡 *Radar Mode:* \`[PROXIMITY RADAR ARMED]\`\n` +
-    (cleanNarrative ? `📝 *Setup Note:* _${cleanNarrative}_\n` : '') +
+    (cleanNarrative ? `📝 *Quant Setup:* _${cleanNarrative}_\n` : '') +
     `⏰ *Armed At:* \`${timeIso}\``
   );
 }
@@ -483,21 +637,21 @@ export function formatArmedIntentInvalidatedMarkdown(payload: ArmedIntentInvalid
   );
 }
 
-export function formatSparkLifecycleMarkdown(
-  milestone: SparkLifecycleMilestone,
+export function formatQuantLifecycleMarkdown(
+  milestone: QuantLifecycleMilestone,
   payload: any
 ): string {
   switch (milestone) {
     case 'SIGNAL_RECEIVED':
-      return formatSparkSignalReceivedMarkdown(payload);
+      return formatQuantIntentSignalMarkdown(payload);
     case 'ORDER_ARMED':
-      return formatSparkOrderArmedMarkdown(payload);
+      return formatOrderArmedMarkdown(payload);
     case 'ORDER_FILLED':
-      return formatSparkOrderFilledMarkdown(payload);
+      return formatOrderFilledMarkdown(payload);
     case 'TP1_SCALE_RATCHET':
-      return formatSparkTp1RatchetMarkdown(payload);
+      return formatTp1RatchetMarkdown(payload);
     case 'TRADE_CLOSED':
-      return formatSparkTradeClosedMarkdown(payload);
+      return formatTradeClosedMarkdown(payload);
     case 'ARMED_INTENT_REGISTERED':
       return formatArmedIntentRegisteredMarkdown(payload);
     case 'ARMED_INTENT_TRIGGERED':
@@ -509,6 +663,13 @@ export function formatSparkLifecycleMarkdown(
     default:
       return '';
   }
+}
+
+export function formatSparkLifecycleMarkdown(
+  milestone: SparkLifecycleMilestone,
+  payload: any
+): string {
+  return formatQuantLifecycleMarkdown(milestone, payload);
 }
 
 export class TelegramNotifier {
@@ -715,7 +876,7 @@ export class TelegramNotifier {
           });
 
         case 'STAGE_1_HARVEST': {
-          const s1Ratio = pos.stage1Ratio ?? 0.5;
+          const s1Ratio = pos.stage1Ratio ?? 0.30;
           const s1Mult = pos.stage1Multiple ?? 1.0;
           const bankedR = s1Ratio * s1Mult;
           return formatSparkTp1RatchetMarkdown({
@@ -757,8 +918,8 @@ export class TelegramNotifier {
       .replace('T', ' ')
       .substring(0, 19) + ' UTC';
 
-    const stage1Ratio = pos?.stage1Ratio ?? 0.50;
-    const stage2Ratio = pos?.stage2Ratio ?? 0.50;
+    const stage1Ratio = pos?.stage1Ratio ?? 0.30;
+    const stage2Ratio = pos?.stage2Ratio ?? 0.70;
     const stage3Ratio = pos?.stage3Ratio ?? 0.00;
     const isTwoStage = stage3Ratio === 0;
 
@@ -768,10 +929,10 @@ export class TelegramNotifier {
         const dirEmoji = pos.direction === 'LONG' ? '🟢 LONG' : '🔴 SHORT';
         const tp2Label = (pos.stage2Multiple ?? 1.30).toFixed(1);
         const targetBlocks = isTwoStage
-          ? `🎯 <b>TP1 (1.0R):</b> <code>$${pos.stage1Target.toFixed(2)}</code> (${(stage1Ratio * 100).toFixed(0)}%)\n` +
-            `💰 <b>TP2 (${tp2Label}R):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${(stage2Ratio * 100).toFixed(0)}% Full Exit)\n`
-          : `🎯 <b>TP1 (1.0R):</b> <code>$${pos.stage1Target.toFixed(2)}</code> (${(stage1Ratio * 100).toFixed(0)}%)\n` +
-            `💰 <b>TP2 (${tp2Label}R):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${(stage2Ratio * 100).toFixed(0)}%)\n` +
+          ? `🎯 <b>TP1 (30% De-Risking):</b> <code>$${pos.stage1Target.toFixed(2)}</code> (Instant BE Ratchet)\n` +
+            `💰 <b>TP2 (70% Macro Runner):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${tp2Label}R Structural Pool)\n`
+          : `🎯 <b>TP1 (30% De-Risking):</b> <code>$${pos.stage1Target.toFixed(2)}</code> (Instant BE Ratchet)\n` +
+            `💰 <b>TP2 (70% Macro Runner):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${tp2Label}R)\n` +
             `🚀 <b>TP3 (DOL):</b> <code>$${pos.stage3Target.toFixed(2)}</code> (${(stage3Ratio * 100).toFixed(0)}% Runner)\n`;
 
         return (
@@ -786,7 +947,7 @@ export class TelegramNotifier {
           `━━━━━━━━━━━━━━━━━━━━\n` +
           `💵 <b>Risk USD:</b> <code>$${pos.riskUsd.toFixed(2)}</code> (${(pos.riskPct ?? 2.0).toFixed(1)}% Compounded)\n` +
           `📐 <b>Size:</b> <code>${pos.contractSize} contracts</code>\n` +
-          `🏛️ <b>Anchor:</b> <i>${pos.anchorName || '5m Structural Liquidity'}</i>\n` +
+          `🏛️ <b>Setup:</b> <i>${pos.anchorName || '15m Trend Continuation / Retest POI'}</i>\n` +
           `⏰ <b>Time:</b> <code>${nowIso}</code>`
         );
       }
@@ -974,12 +1135,12 @@ export class TelegramNotifier {
   }
 
   /**
-   * Generates a deterministic deduplication key for a Spark trade lifecycle milestone event.
+   * Generates a deterministic deduplication key for a Quant trade lifecycle milestone event.
    * Scopes strictly by trade/decision ID when available, or milestone-specific discriminator
    * values to guarantee zero false-positive suppression across distinct trades.
    */
-  public generateSparkEventKey(
-    milestone: SparkLifecycleMilestone,
+  public generateQuantEventKey(
+    milestone: QuantLifecycleMilestone,
     payload: any
   ): string | null {
     if (!payload?.symbol || !milestone) return null;
@@ -992,7 +1153,7 @@ export class TelegramNotifier {
       payload.setupId;
 
     if (uniqueId !== undefined && uniqueId !== null && String(uniqueId).trim() !== '') {
-      return `evt_SPARK_${milestone}_${payload.symbol}_${uniqueId}`;
+      return `evt_QUANT_${milestone}_${payload.symbol}_${uniqueId}`;
     }
 
     switch (milestone) {
@@ -1000,65 +1161,75 @@ export class TelegramNotifier {
         const price = payload.limitEntryPrice ?? payload.entryRangeLow ?? '';
         const dir = payload.direction ? `_${payload.direction}` : '';
         const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
-        return `evt_SPARK_SIGNAL_${payload.symbol}${dir}_${price}${ts}`;
+        return `evt_QUANT_SIGNAL_${payload.symbol}${dir}_${price}${ts}`;
       }
       case 'ORDER_ARMED': {
         const price = payload.limitEntryPrice ?? '';
         const dir = payload.direction ? `_${payload.direction}` : '';
         const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
-        return `evt_SPARK_ARMED_${payload.symbol}${dir}_${price}${ts}`;
+        return `evt_QUANT_ARMED_${payload.symbol}${dir}_${price}${ts}`;
       }
       case 'ORDER_FILLED': {
         const price = payload.executionPrice ?? '';
         const dir = payload.direction ? `_${payload.direction}` : '';
         const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
-        return `evt_SPARK_FILLED_${payload.symbol}${dir}_${price}${ts}`;
+        return `evt_QUANT_FILLED_${payload.symbol}${dir}_${price}${ts}`;
       }
       case 'TP1_SCALE_RATCHET': {
         const target = payload.stage1Target ?? '';
         const newSl = payload.newStopLoss ?? '';
         const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
-        return `evt_SPARK_TP1_${payload.symbol}_${target}_${newSl}${ts}`;
+        return `evt_QUANT_TP1_${payload.symbol}_${target}_${newSl}${ts}`;
       }
       case 'TRADE_CLOSED': {
         const exitPrice = payload.exitPrice ?? '';
         const reason = payload.exitReason ?? '';
         const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
-        return `evt_SPARK_CLOSED_${payload.symbol}_${exitPrice}_${reason}${ts}`;
+        return `evt_QUANT_CLOSED_${payload.symbol}_${exitPrice}_${reason}${ts}`;
       }
       case 'ARMED_INTENT_REGISTERED': {
         const trig = payload.triggerPrice ?? '';
         const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
-        return `evt_SPARK_ARMED_INTENT_${payload.symbol}_${trig}${ts}`;
+        return `evt_QUANT_ARMED_INTENT_${payload.symbol}_${trig}${ts}`;
       }
       case 'ARMED_INTENT_TRIGGERED': {
         const entry = payload.limitEntryPrice ?? '';
         const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
-        return `evt_SPARK_INTENT_TRIGGERED_${payload.symbol}_${entry}${ts}`;
+        return `evt_QUANT_INTENT_TRIGGERED_${payload.symbol}_${entry}${ts}`;
       }
       case 'ARMED_INTENT_EXPIRED': {
         const trig = payload.triggerPrice ?? '';
         const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
-        return `evt_SPARK_INTENT_EXPIRED_${payload.symbol}_${trig}${ts}`;
+        return `evt_QUANT_INTENT_EXPIRED_${payload.symbol}_${trig}${ts}`;
       }
       case 'ARMED_INTENT_INVALIDATED': {
         const reason = payload.reason ? `_${String(payload.reason).substring(0, 10)}` : '';
         const ts = payload.timestamp ? `_${Math.floor(payload.timestamp / 1000)}` : '';
-        return `evt_SPARK_INTENT_INVALIDATED_${payload.symbol}${reason}${ts}`;
+        return `evt_QUANT_INTENT_INVALIDATED_${payload.symbol}${reason}${ts}`;
       }
       default:
-        return `evt_SPARK_${milestone}_${payload.symbol}_${Date.now()}`;
+        return `evt_QUANT_${milestone}_${payload.symbol}_${Date.now()}`;
     }
   }
 
   /**
-   * Broadcasts a Spark trade lifecycle milestone institutional card.
+   * Alias for backward compatibility with existing callers.
+   */
+  public generateSparkEventKey(
+    milestone: SparkLifecycleMilestone,
+    payload: any
+  ): string | null {
+    return this.generateQuantEventKey(milestone, payload);
+  }
+
+  /**
+   * Broadcasts an institutional trade lifecycle milestone card.
    * Guarantees strict single-dispatch deduplication across parallel event hooks.
    */
-  public async broadcastSparkMilestone(
-    milestone: SparkLifecycleMilestone,
+  public async broadcastQuantMilestone(
+    milestone: QuantLifecycleMilestone,
     payload: any,
-    options?: { targetChatId?: string; parseMode?: 'Markdown' | 'HTML'; eventKey?: string }
+    options?: { targetChatId?: string; parseMode?: 'Markdown' | 'HTML'; eventKey?: string; replyMarkup?: any }
   ): Promise<boolean> {
     if (!this.config.enabled || !this.config.botToken || !this.config.chatId) {
       return false;
@@ -1066,14 +1237,14 @@ export class TelegramNotifier {
 
     const eventKey =
       options?.eventKey ||
-      this.generateSparkEventKey(milestone, payload);
+      this.generateQuantEventKey(milestone, payload);
 
     if (eventKey && this.isAlreadyNotified(eventKey)) {
       console.log(`[TELEGRAM] 🛡️ Milestone ${milestone} already notified (${eventKey}). Skipping duplicate.`);
       return true;
     }
 
-    const text = formatSparkLifecycleMarkdown(milestone, payload);
+    const text = formatQuantLifecycleMarkdown(milestone, payload);
     if (!text) return false;
 
     const val = validateTelegramMarkdown(text);
@@ -1081,9 +1252,19 @@ export class TelegramNotifier {
       console.warn(`[TELEGRAM] ⚠️ Markdown validation warning for ${milestone}:`, val.error);
     }
 
+    // Attach inline keyboard automatically for STANDBY setups if not explicitly provided
+    let replyMarkup = options?.replyMarkup;
+    if (!replyMarkup && (!payload.mode || payload.mode === 'STANDBY' || milestone === 'ARMED_INTENT_REGISTERED' || milestone === 'SIGNAL_RECEIVED')) {
+      const uniqueId = payload.decisionId ?? payload.id;
+      if (uniqueId !== undefined && uniqueId !== null) {
+        replyMarkup = buildStandbyActionKeyboard(uniqueId);
+      }
+    }
+
     const success = await this.sendRawMessage(text, {
       targetChatId: options?.targetChatId,
       parseMode: options?.parseMode || 'Markdown',
+      replyMarkup,
     });
 
     if (success && eventKey) {
@@ -1092,6 +1273,17 @@ export class TelegramNotifier {
     }
 
     return success;
+  }
+
+  /**
+   * Alias for backward compatibility with existing callers.
+   */
+  public async broadcastSparkMilestone(
+    milestone: SparkLifecycleMilestone,
+    payload: any,
+    options?: { targetChatId?: string; parseMode?: 'Markdown' | 'HTML'; eventKey?: string; replyMarkup?: any }
+  ): Promise<boolean> {
+    return this.broadcastQuantMilestone(milestone, payload, options);
   }
 
   /**

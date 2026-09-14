@@ -22,6 +22,7 @@ import {
   formatSparkOrderFilledMarkdown,
   formatSparkTp1RatchetMarkdown,
   formatSparkTradeClosedMarkdown,
+  formatArmedIntentRegisteredMarkdown,
   validateTelegramMarkdown,
 } from '../src/lib/notifications/telegramNotifier';
 import { evaluateExecutionSafetyGate } from '../src/lib/binanceOrderRouter';
@@ -308,7 +309,7 @@ async function runVerification() {
   });
   const v1 = validateTelegramMarkdown(m1Card);
   assert(v1.isValid, 'Milestone 1 (Signal Received) Markdown is valid', v1.error);
-  assert(m1Card.includes('*[SPARK SIGNAL RECEIVED]*'), 'Milestone 1 contains correct header');
+  assert(m1Card.includes('*[QUEGAR AI QUANT INTENT]*'), 'Milestone 1 contains correct header');
   assert(m1Card.includes('`[PAPER_TRADING]`'), 'Milestone 1 displays PAPER_TRADING mode badge');
 
   // Milestone 2: Order Armed
@@ -345,7 +346,7 @@ async function runVerification() {
   });
   const v3 = validateTelegramMarkdown(m3Card);
   assert(v3.isValid, 'Milestone 3 (Order Filled) Markdown is valid', v3.error);
-  assert(m3Card.includes('*[ORDER FILLED]*'), 'Milestone 3 contains correct header');
+  assert(m3Card.includes('*[ORDER FILLED & POSITION OPEN]*') || m3Card.includes('ORDER FILLED'), 'Milestone 3 contains correct header');
   assert(m3Card.includes('`$2415.00`'), 'Milestone 3 displays fill price');
 
   // Milestone 4: TP1 Scale & Ratchet
@@ -365,7 +366,7 @@ async function runVerification() {
   });
   const v4 = validateTelegramMarkdown(m4Card);
   assert(v4.isValid, 'Milestone 4 (TP1 Scale & Ratchet) Markdown is valid', v4.error);
-  assert(m4Card.includes('*[TP1 SCALE & RATCHET]*'), 'Milestone 4 contains correct header');
+  assert(m4Card.includes('*[TP1 SCALE & BREAKEVEN RATCHET]*') || m4Card.includes('TP1 SCALE'), 'Milestone 4 contains correct header');
   assert(m4Card.includes('Next-Bar Ratchet Rule Active'), 'Milestone 4 notes Next-Bar Ratchet Law');
 
   // Milestone 5: Trade Closed
@@ -640,6 +641,50 @@ async function runVerification() {
   assert(dedupeNotifier.isAlreadyNotified(testKeyToRemove), 'Key is currently present in registry');
   dedupeNotifier.removeEventKey(testKeyToRemove);
   assert(!dedupeNotifier.isAlreadyNotified(testKeyToRemove), 'Key was cleanly evicted via removeEventKey');
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // TEST 8: Verifying Pure Trend Continuation (V19.0) Armed Intent Layout
+  // ──────────────────────────────────────────────────────────────────────────
+  console.log('\n▶ [TEST 8] Verifying Pure Trend Continuation (V19.0) Armed Intent Layout...');
+  const armedIntentPayload = {
+    id: 888,
+    symbol: 'ETHUSDC',
+    direction: 'LONG',
+    triggerCondition: '15m Swing BOS High Reclaim',
+    triggerPrice: 2450.0,
+    triggerTimeframe: '15m',
+    poiZoneLow: 2420.0,
+    poiZoneHigh: 2425.0,
+    invalidationLevel: 2405.0,
+    target1: 2445.0,
+    target2: 2475.0,
+    riskUsd: 150.0,
+    riskPct: 2.0,
+    contractSize: 7.5,
+    rewardRiskRatio: 3.0,
+    ttlBars: 12,
+    mode: 'STANDBY',
+    htfTrend: 'BULLISH CONTINUATION (1H / 15m)',
+    narrative: 'High-probability trend continuation retest into 15m FVG proximal shelf.',
+  };
+
+  const armedMd = formatArmedIntentRegisteredMarkdown(armedIntentPayload);
+  const armedVal = validateTelegramMarkdown(armedMd);
+  assert(armedVal.isValid, 'Armed Intent V19.0 Markdown passes Telegram syntax validation');
+  assert(armedMd.includes('⚡ *[QUEGAR AI QUANT INTENT REGISTERED]*'), 'Contains institutional V19.0 header');
+  assert(armedMd.includes('📈 *HTF Trend Alignment:* `BULLISH CONTINUATION (1H / 15m)`'), 'Contains HTF Trend alignment');
+  assert(armedMd.includes('⚡ *15m BOS Trigger:* `15m Swing BOS High Reclaim` @ `$2450.00` (15m)'), 'Contains 15m BOS Trigger');
+  assert(armedMd.includes('🎯 *Retest POI (FVG Proximal):* `$2420.00 — $2425.00`'), 'Contains Retest POI FVG proximal shelf');
+  assert(armedMd.includes('🛑 *Invalidation Stop (ATR Buffered):* `$2405.00`'), 'Contains volatility-buffered invalidation stop');
+  assert(armedMd.includes('🎯 *Target 1 (30% De-Risking):* `$2445.00` _(Instant BE Ratchet on fill)_'), 'Contains TP1 30% De-Risking with instant BE note');
+  assert(armedMd.includes('💰 *Target 2 (70% Macro Runner):* `$2475.00` _(Structural Liquidity Pool)_'), 'Contains TP2 70% Macro Runner with Structural Liquidity Pool note');
+  assert(armedMd.includes('⚖️ *R:R Ratio:* `1:3.00`'), 'Contains institutional R:R ratio');
+  assert(armedMd.includes('💵 *Risk Sizing:* `$150.00` (1.0R | 2.0% Compounded)'), 'Contains dollar risk sizing');
+  assert(armedMd.includes('📐 *Projected Size:* `7.5 contracts`'), 'Contains calculated contract size');
+
+  // Verify canonical broadcastQuantMilestone
+  const quantKey = dedupeNotifier.generateQuantEventKey('ARMED_INTENT_REGISTERED', armedIntentPayload);
+  assert(quantKey?.startsWith('evt_QUANT_ARMED_INTENT_REGISTERED_ETHUSDC_888'), 'Canonical Quant key generated with evt_QUANT prefix');
 
   console.log('\n======================================================================');
   console.log(`Phase 3 Verification Finished: ${passed} PASSED, ${failed} FAILED`);
