@@ -1480,23 +1480,19 @@ export function useMarketData(
   const toggleAutoScan = useCallback(() => {
     setIsAutoScanActive((prev) => {
       const next = !prev;
-      if (next) {
-        // Reset countdown target on re-enable aligned strictly to next upcoming candle close
-        const now = Date.now();
-        const curEval = evaluateOperationalSchedule(scheduleConfigRef.current, now);
-        setScheduleEvaluation(curEval);
-        wasSleepingRef.current = !curEval.isWithinActiveSchedule;
-        let nextTime = getNextCandleCloseTimestamp(
-          isTurboActiveRef.current ? 5 : baseIntervalMinutes,
-          now
-        );
-        if (!curEval.isWithinActiveSchedule && curEval.nextSessionOpenTimestamp) {
-          nextTime = curEval.nextSessionOpenTimestamp;
-        }
-        nextScanTimestampRef.current = nextTime;
-        setNextScanTimestamp(nextTime);
-      }
       if (typeof window !== 'undefined') {
+        // Dispatch autonomous command to background daemon and PostgreSQL
+        fetch('/api/daemon/command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'TOGGLE_AUTO_SCAN',
+            metadata: { enabled: next },
+          }),
+        }).catch((err) => {
+          console.warn('[MarketData] Non-fatal daemon command dispatch warning:', err);
+        });
+
         try {
           localStorage.setItem('gem_auto_scan_active', String(next));
           localStorage.setItem('gem_auto_30m_scan', String(next));
@@ -1649,121 +1645,50 @@ export function useMarketData(
     }
   }, [baseIntervalMinutes, scheduleEvaluation.isWithinActiveSchedule]);
 
-  // Dynamic Cadence Polling Worker: evaluates schedule, proximity, throttles, and triggers automated scans
+  // ── Passive Server-Side Telemetry Consumer (Headless Daemon HUD) ──
+  // Re-architected: Browser halts all client-side automated scan intervals.
+  // The HUD acts purely as a passive telemetry consumer, synchronizing live server countdown,
+  // proximity turbo badges, and schedule states directly from /api/daemon/state.
   useEffect(() => {
-    if (!isAutoScanActive) return;
+    let isCancelled = false;
 
-    const timer = setInterval(() => {
-      const now = Date.now();
-      const currentEval = evaluateOperationalSchedule(scheduleConfigRef.current, now);
-      setScheduleEvaluation(currentEval);
+    const syncSchedulerFromDaemon = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      try {
+        const res = await fetch('/api/daemon/state?symbol=ETHUSDC', {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+        });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (!json || isCancelled) return;
 
-      // Operational Schedule Gate: if outside active hours, suppress automated scan executions
-      if (!currentEval.isWithinActiveSchedule) {
-        wasSleepingRef.current = true;
-        if (isTurboActiveRef.current) {
-          isTurboActiveRef.current = false;
-          setIsTurboActive(false);
+        if (typeof json.nextScanTimestamp === 'number' && json.nextScanTimestamp > 0) {
+          nextScanTimestampRef.current = json.nextScanTimestamp;
+          setNextScanTimestamp(json.nextScanTimestamp);
         }
-        turboScanCountRef.current = 0;
-        if (currentEval.nextSessionOpenTimestamp && nextScanTimestampRef.current !== currentEval.nextSessionOpenTimestamp) {
-          nextScanTimestampRef.current = currentEval.nextSessionOpenTimestamp;
-          setNextScanTimestamp(currentEval.nextSessionOpenTimestamp);
+        if (typeof json.isTurboActive === 'boolean') {
+          isTurboActiveRef.current = json.isTurboActive;
+          setIsTurboActive(json.isTurboActive);
         }
-        return; // Suppress automated scan executions during off-hours
+        if (typeof json.isAutoScanActive === 'boolean') {
+          setIsAutoScanActive(json.isAutoScanActive);
+        }
+        if (json.scheduleEvaluation) {
+          setScheduleEvaluation(json.scheduleEvaluation);
+        }
+      } catch (err) {
+        // Non-blocking telemetry sync
       }
+    };
 
-      // Transition from sleeping -> active schedule window
-      if (wasSleepingRef.current) {
-        wasSleepingRef.current = false;
-        const initialTarget = getNextCandleCloseTimestamp(baseIntervalMinutes, now);
-        nextScanTimestampRef.current = initialTarget;
-        setNextScanTimestamp(initialTarget);
-      }
-
-      const { inZone, isInvalidated } = evaluateProximityState();
-
-      // Check Turbo eligibility
-      const burnoutReached = turboScanCountRef.current >= 4;
-      const shouldBeTurbo = inZone && !isInvalidated && !burnoutReached;
-
-      if (shouldBeTurbo && !isTurboActiveRef.current) {
-        // Elevate to TURBO_IN_ZONE (5m)
-        isTurboActiveRef.current = true;
-        setIsTurboActive(true);
-        // Clamp remaining time to the upcoming 5m candle close
-        const next5mTarget = getNextCandleCloseTimestamp(5, now);
-        if (nextScanTimestampRef.current > next5mTarget) {
-          nextScanTimestampRef.current = next5mTarget;
-          setNextScanTimestamp(next5mTarget);
-        }
-      } else if (!shouldBeTurbo && isTurboActiveRef.current) {
-        // Relax back to Base Interval
-        isTurboActiveRef.current = false;
-        setIsTurboActive(false);
-        // If price left zone or breached invalidation, reset burnout count
-        if (!inZone || isInvalidated) {
-          turboScanCountRef.current = 0;
-        }
-        const nextBaseTarget = getNextCandleCloseTimestamp(baseIntervalMinutes, now);
-        if (nextScanTimestampRef.current < nextBaseTarget) {
-          nextScanTimestampRef.current = nextBaseTarget;
-          setNextScanTimestamp(nextBaseTarget);
-        }
-      }
-
-      // Check if timer elapsed
-      if (now >= nextScanTimestampRef.current) {
-        // Sync with cross-tab last dispatch timestamp if set
-        try {
-          const storedLastDispatch = Number(localStorage.getItem('gem_last_scan_dispatch_time') || 0);
-          if (storedLastDispatch > lastScanDispatchTimeRef.current) {
-            lastScanDispatchTimeRef.current = storedLastDispatch;
-          }
-        } catch {}
-
-        // Enforce minimum 180-second debounce between consecutive automated scans
-        if (now - lastScanDispatchTimeRef.current >= 180 * 1000) {
-          lastScanDispatchTimeRef.current = now;
-          try {
-            localStorage.setItem('gem_last_scan_dispatch_time', String(now));
-          } catch {}
-
-          if (isTurboActiveRef.current) {
-            turboScanCountRef.current += 1;
-            if (turboScanCountRef.current >= 4) {
-              // Burnout reached: relax back to base interval
-              isTurboActiveRef.current = false;
-              setIsTurboActive(false);
-              const nextTime = getNextCandleCloseTimestamp(baseIntervalMinutes, now);
-              nextScanTimestampRef.current = nextTime;
-              setNextScanTimestamp(nextTime);
-            } else {
-              const nextTime = getNextCandleCloseTimestamp(5, now);
-              nextScanTimestampRef.current = nextTime;
-              setNextScanTimestamp(nextTime);
-            }
-          } else {
-            turboScanCountRef.current = 0;
-            const nextTime = getNextCandleCloseTimestamp(baseIntervalMinutes, now);
-            nextScanTimestampRef.current = nextTime;
-            setNextScanTimestamp(nextTime);
-          }
-
-          triggerScanRef.current(dataRef.current);
-        } else {
-          // Debounce active (< 180s): advance nextScanTimestamp to the next upcoming candle close
-          // to maintain clock alignment and avoid mid-candle triggering
-          const targetCadence = isTurboActiveRef.current ? 5 : baseIntervalMinutes;
-          const nextTime = getNextCandleCloseTimestamp(targetCadence, now);
-          nextScanTimestampRef.current = nextTime;
-          setNextScanTimestamp(nextTime);
-        }
-      }
-    }, 5000);
-
-    return () => clearInterval(timer);
-  }, [isAutoScanActive, evaluateProximityState, baseIntervalMinutes]);
+    syncSchedulerFromDaemon();
+    const pollTimer = setInterval(syncSchedulerFromDaemon, 4000);
+    return () => {
+      isCancelled = true;
+      clearInterval(pollTimer);
+    };
+  }, []);
 
   return useMemo(() => ({
     data,

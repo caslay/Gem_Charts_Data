@@ -219,28 +219,25 @@ console.log('\n--- Test 5: Killzones & Dynamic Live Session Context Generation -
   console.log('  ✅ Dynamic session context stamping verified!');
 }
 
-// ── TEST 6: Canonical System Prompt V18.6 Content Audit ──
-console.log('\n--- Test 6: Canonical System Prompt V18.6 Content Audit ---');
+// ── TEST 6: Canonical System Prompt V19.0 Content Audit ──
+console.log('\n--- Test 6: Canonical System Prompt V19.0 Content Audit ---');
 {
   const p = DEFAULT_ETH_SOP_SYSTEM_PROMPT;
 
-  // 6.1 Role verification
-  assert(p.includes('V18.6 Institutional Dual-Engine Synthesis Framework SOP Engine'), 'Prompt must specify V18.6 Dual-Engine Framework');
+  // 6.1 Role & Framework verification
+  assert(p.includes('V19.0 Institutional Pure Pro-Trend BOS Continuation Framework SOP Engine'), 'Prompt must specify V19.0 Framework');
+  assert(p.includes('Higher-Timeframe Trend Lock: Directional bias is locked strictly to 1H/4H market structure'), 'Must enforce HTF trend lock');
+  assert(p.includes('Confirmed Structural Break (BOS): Setup qualification requires a confirmed 15m Break of Structure (BOS)'), 'Must require confirmed 15m BOS');
+  assert(p.includes('3-Pillar Volumetric Sponsorship: The displacement breakout candle MUST demonstrate:'), 'Must specify 3-pillar volumetric sponsorship');
+  assert(p.includes('Inverted Asymmetric Harvest (30/70 Model)'), 'Must specify Inverted Asymmetric Harvest (30/70 Model)');
 
-  // 6.2 Liquidity Purge & Target Flip Logic
-  assert(p.includes('Liquidity Purge & Target Flip Logic (Engine 1)'), 'Prompt must have Liquidity Purge & Target Flip Logic header');
-  assert(p.includes('Draw on Liquidity (DOL) immediately flips upward toward Dealing Range Equilibrium and overhead buy-side liquidity (BSL)'), 'Must state DOL flips upward on SSL purge');
-  assert(p.includes('"Downside targets exhausted" is a prerequisite for Mean Reversion (Engine 1), NOT an instruction to stand down'), 'Must specify targets exhausted is a prerequisite for Mean Reversion');
+  // 6.2 Total Purification Verification (0 forbidden relics)
+  assert(!p.includes('Sweep & Reclaim'), 'Prompt MUST NOT contain "Sweep & Reclaim"');
+  assert(!p.includes('Phase C Spring'), 'Prompt MUST NOT contain "Phase C Spring"');
+  assert(!p.includes('Mean Reversion'), 'Prompt MUST NOT contain "Mean Reversion"');
+  assert(!p.includes('Dual-Engine execution mapping'), 'Prompt MUST NOT contain "Dual-Engine execution mapping"');
 
-  // 6.3 Multi-Timeframe Confirmation Flexibility (5m / 15m)
-  assert(p.includes('Multi-Timeframe Confirmation Flexibility'), 'Prompt must specify Multi-Timeframe Confirmation Flexibility');
-  assert(p.includes('Engine 1 (Sweep & Reclaim): Accepts confirmed displacement and MSS candle-body closes on EITHER the 5m or 15m timeframe'), 'Must allow 5m or 15m for Engine 1');
-  assert(p.includes('5m micro-MSS displacement is preferred to preserve favorable Risk-to-Reward (R:R >= 1.5R)'), 'Must note 5m preferred on deep wicks for R:R >= 1.5R');
-
-  // 6.4 Step 5 multi-timeframe confirmation
-  assert(p.includes('confirm displacement MSS candle body close on 5m (preferred on deep wicks for R:R >= 1.5R) or 15m'), 'Step 5 must reflect 5m/15m confirmation');
-
-  console.log('  ✅ Canonical prompt V18.6 contains all required Dual-Engine directives and target flip logic!');
+  console.log('  ✅ Canonical prompt V19.0 contains all required Trend Continuation directives and ZERO mean-reversion relics!');
 }
 
 // ── TEST 7: Delta Payload Context Propagation & Live Cache-Busting ──
@@ -332,25 +329,30 @@ console.log('\n--- Test 8: Robustness & Edge Cases for Cadence & Killzones ---')
 // ── TEST 9: Legacy System Prompt Auto-Upgrade Detection ──
 console.log('\n--- Test 9: Legacy System Prompt Auto-Upgrade Detection ---');
 {
-  const legacyV18_5_Prompt = `⚙️ ROLE: ETHUSDC.p Specialized Quantitative Analyst (V18.5)
-  7. HTF ORDER FLOW HIERARCHY & COUNTER-TREND VETO:
-  If 1H/H4 Order Flow is BEARISH: You are STRICTLY PROHIBITED from generating 15m Counter-Trend Bullish Long setups.`;
+  const legacyV18_6_Prompt = `⚙️ ROLE: ETHUSDC.p Specialized Quantitative Analyst & AI Agent (V18.6 Institutional Dual-Engine Synthesis Framework SOP Engine)
+  Engine 1: Sweep & Reclaim (Mean Reversion / Liquidity Purge Squeeze)
+  Phase C Spring`;
 
   // Verify detection logic
-  const isV18_6_Current = DEFAULT_ETH_SOP_SYSTEM_PROMPT.includes('V18.6');
-  assert.strictEqual(isV18_6_Current, true, 'Current canonical prompt is V18.6');
+  const isV19_0_Current = DEFAULT_ETH_SOP_SYSTEM_PROMPT.includes('V19.0');
+  assert.strictEqual(isV19_0_Current, true, 'Current canonical prompt is V19.0');
 
-  const legacyNeedsUpgrade = !legacyV18_5_Prompt || !legacyV18_5_Prompt.includes('V18.6');
-  assert.strictEqual(legacyNeedsUpgrade, true, 'Legacy V18.5 prompt must be flagged for upgrade');
+  const legacyNeedsUpgrade = !legacyV18_6_Prompt ||
+    !legacyV18_6_Prompt.includes('V19.0') ||
+    legacyV18_6_Prompt.includes('Sweep & Reclaim') ||
+    legacyV18_6_Prompt.includes('Phase C Spring') ||
+    legacyV18_6_Prompt.includes('Mean Reversion');
+  assert.strictEqual(legacyNeedsUpgrade, true, 'Legacy contaminated prompt must be flagged for upgrade');
 
   // Simulated upgrade
-  let resolvedPrompt = legacyV18_5_Prompt;
+  let resolvedPrompt = legacyV18_6_Prompt;
   if (legacyNeedsUpgrade) {
     resolvedPrompt = DEFAULT_ETH_SOP_SYSTEM_PROMPT;
   }
-  assert.strictEqual(resolvedPrompt.includes('V18.6 Institutional Dual-Engine Synthesis Framework SOP Engine'), true);
-  assert.strictEqual(resolvedPrompt.includes('Liquidity Purge & Target Flip Logic (Engine 1)'), true);
-  console.log('  ✅ Legacy prompt auto-upgrade detection correctly replaces outdated prompts with canonical V18.6!');
+  assert.strictEqual(resolvedPrompt.includes('V19.0 Institutional Pure Pro-Trend BOS Continuation Framework SOP Engine'), true);
+  assert.strictEqual(resolvedPrompt.includes('Higher-Timeframe Trend Lock: Directional bias is locked strictly to 1H/4H market structure'), true);
+  assert(!resolvedPrompt.includes('Sweep & Reclaim'), 'Upgraded prompt must NOT contain Sweep & Reclaim');
+  console.log('  ✅ Legacy prompt auto-upgrade detection correctly replaces outdated prompts with canonical V19.0!');
 }
 
 console.log('\n================================================================');

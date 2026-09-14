@@ -304,12 +304,25 @@ export function getSweepReclaimAutoExec(): boolean {
 
 /**
  * Sets the Sweep & Reclaim auto-execution toggle in localStorage and notifies all listeners.
+ * Also dispatches the change to the background PM2 daemon.
  */
 export function setSweepReclaimAutoExec(enabled: boolean): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEY_SR_AUTO_EXEC, String(enabled));
     dispatchStrategyAutoExecChange();
+
+    // Asynchronously dispatch TOGGLE_AUTO_EXEC command to background PM2 daemon
+    fetch('/api/daemon/command', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'TOGGLE_AUTO_EXEC',
+        metadata: { enabled },
+      }),
+    }).catch((err) => {
+      console.warn('[strategyExecutionConfig] Failed to dispatch TOGGLE_AUTO_EXEC command:', err);
+    });
   } catch (err) {
     console.warn('[strategyExecutionConfig] Failed to save SR auto-exec state:', err);
   }

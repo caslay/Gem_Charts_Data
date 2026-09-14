@@ -29,9 +29,17 @@ interface DaemonStateResponse {
   pendingOrders: any[];
   completedTrades: StrategyExecutionPosition[];
   allTodayTrades: any[];
-  serverTime: number;
+  serverTime?: number;
   compoundingRiskPct?: number;
   liveSettings?: Record<string, any>;
+  scheduler?: Record<string, any> | null;
+  nextScanTimestamp?: number;
+  isTurboActive?: boolean;
+  isAutoScanActive?: boolean;
+  baseIntervalMinutes?: number;
+  isWithinActiveSchedule?: boolean;
+  autoScanResumesAt?: string | null;
+  scheduleEvaluation?: Record<string, any> | null;
 }
 
 export async function GET(req: Request) {
@@ -43,6 +51,17 @@ export async function GET(req: Request) {
     const rootDir = process.cwd();
     const sessionLogPath = path.join(rootDir, 'run_logs', `live_session_${today}.json`);
     const trackerJsonPath = path.join(rootDir, 'directives', 'ETHUSDC_Daily_Tracker.json');
+    const schedulerStatePath = path.join(rootDir, 'run_logs', 'daemon_scheduler_state.json');
+
+    let schedulerState: any = null;
+    if (fs.existsSync(schedulerStatePath)) {
+      try {
+        const rawSch = fs.readFileSync(schedulerStatePath, 'utf8');
+        schedulerState = JSON.parse(rawSch);
+      } catch (err) {
+        console.warn('[api/daemon/state] Warning reading scheduler state:', err);
+      }
+    }
 
     let sessionLog: DaemonSessionLog | null = null;
     if (fs.existsSync(sessionLogPath)) {
@@ -90,6 +109,14 @@ export async function GET(req: Request) {
         completedTrades: [],
         allTodayTrades,
         serverTime: Date.now(),
+        scheduler: schedulerState,
+        nextScanTimestamp: schedulerState?.nextScanTimestamp,
+        isTurboActive: schedulerState?.isTurboActive,
+        isAutoScanActive: schedulerState?.isAutoScanActive,
+        baseIntervalMinutes: schedulerState?.baseIntervalMinutes,
+        isWithinActiveSchedule: schedulerState?.isWithinActiveSchedule,
+        autoScanResumesAt: schedulerState?.autoScanResumesAt,
+        scheduleEvaluation: schedulerState?.scheduleEvaluation,
       };
       return NextResponse.json(fallback);
     }
@@ -199,6 +226,14 @@ export async function GET(req: Request) {
       completedTrades: sessionLog.completedTrades || [],
       allTodayTrades,
       serverTime: now,
+      scheduler: schedulerState,
+      nextScanTimestamp: schedulerState?.nextScanTimestamp,
+      isTurboActive: schedulerState?.isTurboActive,
+      isAutoScanActive: schedulerState?.isAutoScanActive,
+      baseIntervalMinutes: schedulerState?.baseIntervalMinutes,
+      isWithinActiveSchedule: schedulerState?.isWithinActiveSchedule,
+      autoScanResumesAt: schedulerState?.autoScanResumesAt,
+      scheduleEvaluation: schedulerState?.scheduleEvaluation,
     };
 
     return NextResponse.json(response);

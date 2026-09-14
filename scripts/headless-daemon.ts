@@ -21,6 +21,7 @@ import { bootstrapHistoricalBuffers, computeMacroContext } from './lib/restBoots
 import { NodeWsClient, CandleClosedPayload, MarketTickPayload } from './lib/nodeWsClient';
 import { DaemonLedger } from './lib/daemonLedger';
 import { SparkIngestionDispatcher, normalizeExecutionMode } from './lib/sparkIngestionDispatcher';
+import { HeadlessScheduler } from './lib/headlessScheduler';
 import { TelegramNotifier } from '../src/lib/notifications/telegramNotifier';
 import { TelegramBotService } from '../src/lib/notifications/telegramBotService';
 import { getBinanceAccountInfo } from '../src/lib/binanceFuturesClient';
@@ -135,12 +136,30 @@ async function main() {
     ...persistedLiveSettings,
   };
 
+  // Hydrate autoExecute state from PostgreSQL system_settings or persisted settings
+  let initialAutoExecute = true;
+  try {
+    const execRow = await sql`
+      SELECT key_value FROM system_settings WHERE key_name = 'AUTO_EXEC_ACTIVE' LIMIT 1;
+    `;
+    if (execRow.length > 0 && execRow[0].key_value !== undefined) {
+      initialAutoExecute = execRow[0].key_value === 'true';
+      console.log(`[DAEMON] ⚙️ Hydrated AUTO_EXEC_ACTIVE from DB: ${initialAutoExecute}`);
+    } else if (persistedLiveSettings.autoExecute !== undefined) {
+      initialAutoExecute = !!persistedLiveSettings.autoExecute;
+    }
+  } catch {
+    if (persistedLiveSettings.autoExecute !== undefined) {
+      initialAutoExecute = !!persistedLiveSettings.autoExecute;
+    }
+  }
+
   const engine = new AutomatedStrategyExecutionEngine({
     symbol: symbolArg.toUpperCase(),
     initialEquity: startingEquity,
     compoundingRiskPct: initialLiveSettings.compoundingRiskPct ?? initialRiskConfig.risk_per_trade_pct,
     maxOpenPositions: 1,
-    autoExecute: true,
+    autoExecute: initialAutoExecute,
     enableAutonomousScan: false, // 🛑 Standby: autonomous candle order triggers silenced for Spark Ingestion Dispatcher
     stage1Ratio: initialLiveSettings.stage1Ratio ?? 0.60,
     stage2Ratio: initialLiveSettings.stage2Ratio ?? 0.40,
@@ -390,6 +409,24 @@ async function main() {
   });
   sparkDispatcher.start();
 
+  // 6.1b. Start 24/7 Server-Side Autonomous Cadence & Proximity Scheduler
+  const headlessScheduler = new HeadlessScheduler({
+    symbol: symbolArg,
+    getCurrentPrice: (sym: string) => {
+      if (sym.toUpperCase() === symbolArg.toUpperCase()) {
+        return wsClient.getLatestPrice();
+      }
+      return null;
+    },
+    getRingBuffers: () => wsClient.getRingBuffers(),
+    telegram,
+    ledger,
+    sparkDispatcher,
+    baseIntervalMinutes: 15,
+    isTurboEnabled: true,
+  });
+  headlessScheduler.start();
+
   let tickCount = 0;
   let lastPriceLogTime = 0;
   let currentMacroContext = bootstrapData.macroContext;
@@ -437,6 +474,18 @@ async function main() {
             engine.updateConfig({ autoExecute: enabled });
             cmd.status = 'PROCESSED';
             mutated = true;
+          } else if (cmd.action === 'TOGGLE_AUTO_SCAN') {
+            const enabled = !!cmd.metadata?.enabled;
+            headlessScheduler.setAutoScanActive(enabled);
+            cmd.status = 'PROCESSED';
+            mutated = true;
+          } else if (cmd.action === 'SET_EXECUTION_MODE' && cmd.metadata?.mode) {
+            const parsedMode = normalizeExecutionMode(cmd.metadata.mode);
+            if (parsedMode) {
+              sparkDispatcher.setExecutionMode(parsedMode);
+              cmd.status = 'PROCESSED';
+              mutated = true;
+            }
           } else if (cmd.action === 'UPDATE_SETTINGS' && cmd.metadata?.settings) {
             console.log(`[DAEMON] 🔄 Applying live settings hot-reload from UI command:`, Object.keys(cmd.metadata.settings));
             engine.updateSweepReclaimSettings(cmd.metadata.settings);
@@ -464,6 +513,9 @@ async function main() {
     sparkDispatcher.onMarketTick(tick.price, tick.symbol || symbolArg).catch((err) => {
       console.warn('[SPARK_DISPATCHER_TICK_ERROR]', err?.message || err);
     });
+
+    // Forward real-time market tick to Autonomous Scheduler
+    headlessScheduler.onMarketTick(tick.price, tick.symbol || symbolArg);
 
     // Poll for UI commands every 1 second
     if (now - lastCommandCheckTime > 1000) {
@@ -493,6 +545,9 @@ async function main() {
     sparkDispatcher.onCandleClosed(payload.interval, payload.candle, symbolArg).catch((err) => {
       console.warn('[SPARK_DISPATCHER_CANDLE_ERROR]', err?.message || err);
     });
+
+    // Forward closed candle to Autonomous Scheduler
+    headlessScheduler.onCandleClosed(payload.interval, payload.candle, symbolArg);
 
     const timeStr = new Date(payload.candle.t).toISOString().substring(11, 16);
     console.log(`\n[${new Date().toLocaleTimeString()}] 🕯️ [${payload.interval.toUpperCase()} Candle Closed @ ${timeStr} UTC] O:$${payload.candle.o} H:$${payload.candle.h} L:$${payload.candle.l} C:$${payload.candle.c} Vol:${payload.candle.v.toFixed(1)}`);
@@ -565,6 +620,7 @@ async function main() {
       console.log(` Session Log Saved:      ${ledger.getRunLogPath()}`);
       console.log(`===============================================================\n`);
       sparkDispatcher.stop();
+      headlessScheduler.stop();
       botService.stop();
       wsClient.stop();
       process.exit(0);
@@ -575,6 +631,7 @@ async function main() {
   const shutdown = () => {
     console.log(`\n\n[DAEMON] 🛑 Stopping Quegar Headless Daemon...`);
     sparkDispatcher.stop();
+    headlessScheduler.stop();
     ledger.logEvent('HEARTBEAT', `Daemon stopped cleanly.`);
     botService.stop();
     wsClient.stop();

@@ -35,8 +35,14 @@ export async function POST(req: Request) {
     const activeModel = config['ACTIVE_MODEL'] || process.env.ACTIVE_MODEL || DEFAULT_MODEL;
     let systemPrompt = config['SYSTEM_PROMPT'] || DEFAULT_ETH_SOP_SYSTEM_PROMPT;
 
-    // Guard against outdated prompt in DB: ensure Canonical Dual-Engine V18.6 is active
-    if (!config['SYSTEM_PROMPT'] || !config['SYSTEM_PROMPT'].includes('V18.6')) {
+    // Guard against outdated prompt in DB: ensure Canonical Pure Pro-Trend Continuation V19.0 is active
+    const isOutdatedPrompt = !config['SYSTEM_PROMPT'] ||
+      !config['SYSTEM_PROMPT'].includes('V19.0') ||
+      config['SYSTEM_PROMPT'].includes('Sweep & Reclaim') ||
+      config['SYSTEM_PROMPT'].includes('Phase C Spring') ||
+      config['SYSTEM_PROMPT'].includes('Mean Reversion');
+
+    if (isOutdatedPrompt) {
       systemPrompt = DEFAULT_ETH_SOP_SYSTEM_PROMPT;
       // Proactively upgrade system_settings in DB
       sql`
@@ -44,7 +50,7 @@ export async function POST(req: Request) {
         VALUES ('SYSTEM_PROMPT', ${DEFAULT_ETH_SOP_SYSTEM_PROMPT})
         ON CONFLICT (key_name)
         DO UPDATE SET key_value = EXCLUDED.key_value;
-      `.catch((err) => console.warn('[QUANT_ANALYZE] Auto-migrate SYSTEM_PROMPT to V18.6 skipped:', err));
+      `.catch((err) => console.warn('[QUANT_ANALYZE] Auto-migrate SYSTEM_PROMPT to V19.0 skipped:', err));
     }
 
     // ── 2. Graceful validation ──
