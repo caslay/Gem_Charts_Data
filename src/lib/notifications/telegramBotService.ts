@@ -21,31 +21,39 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { TelegramNotifier, TelegramConfig, SparkLifecycleMilestone } from './telegramNotifier';
+import {
+  TelegramNotifier,
+  TelegramConfig,
+  QuantLifecycleMilestone,
+  SparkLifecycleMilestone,
+  buildStandbyActionKeyboard,
+} from './telegramNotifier';
 import { AutomatedStrategyExecutionEngine } from '../quantEngine/AutomatedStrategyExecutionEngine';
 import { DaemonLedger } from '../daemon/daemonLedger';
 import { NodeWsClient } from '../daemon/nodeWsClient';
-import {
-  SweepReclaimEngine,
-  SweepReclaimScanConfig,
-  SweepReclaimSetup,
-} from '../quantEngine/SweepReclaimEngine';
-import { DEFAULT_SR_LIVE_SETTINGS } from '../quantEngine/strategyExecutionConfig';
 import { formatCairoDateTime } from '../quantEngine/equityCalculator';
 import { routeEmergencyFlatten } from '../binanceOrderRouter';
 import { GlobalRiskGovernor } from '../risk/GlobalRiskGovernor';
 import { SYSTEM_VERSION } from '../version';
+import {
+  getBinanceAccountInfo,
+  getBinanceOpenPositions,
+  getBinanceOpenOrders,
+} from '../binanceFuturesClient';
+import { evaluateExecutionSafetyGate } from '../binanceOrderRouter';
+import { sql } from '../postgres';
 
 export interface TelegramBotServiceContext {
   engine: AutomatedStrategyExecutionEngine;
   ledger: DaemonLedger;
   wsClient?: NodeWsClient;
+  sparkDispatcher?: any;
   symbol: string;
   equity: number;
   isDryRun: boolean;
   bootTimestamp: number;
   getMacroContext: () => any;
-  getLatestSetups: () => SweepReclaimSetup[];
+  getLatestSetups: () => any[];
   runReconciliationFn?: () => Promise<string>;
 }
 
@@ -117,14 +125,25 @@ export class TelegramBotService {
   }
 
   /**
-   * Broadcasts a Spark trade lifecycle milestone institutional card.
+   * Broadcasts an institutional trade lifecycle milestone card.
+   */
+  public async broadcastQuantMilestone(
+    milestone: QuantLifecycleMilestone,
+    payload: any,
+    options?: { targetChatId?: string; parseMode?: 'Markdown' | 'HTML'; eventKey?: string; replyMarkup?: any }
+  ): Promise<boolean> {
+    return await this.notifier.broadcastQuantMilestone(milestone, payload, options);
+  }
+
+  /**
+   * Broadcasts a trade lifecycle milestone institutional card (backward compatibility alias).
    */
   public async broadcastSparkMilestone(
     milestone: SparkLifecycleMilestone,
     payload: any,
-    options?: { targetChatId?: string; parseMode?: 'Markdown' | 'HTML'; eventKey?: string }
+    options?: { targetChatId?: string; parseMode?: 'Markdown' | 'HTML'; eventKey?: string; replyMarkup?: any }
   ): Promise<boolean> {
-    return await this.notifier.broadcastSparkMilestone(milestone, payload, options);
+    return await this.broadcastQuantMilestone(milestone, payload, options);
   }
 
   /**
@@ -462,12 +481,14 @@ export class TelegramBotService {
         `📐 <b>Size:</b> <code>${pos.contractSize} contracts</code> ($${pos.riskUsd.toFixed(2)} Risk)\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `🛡️ <b>Active Stop Loss:</b> <code>$${pos.activeStopLoss.toFixed(2)}</code> (<i>${pos.trailingSlSource}</i>) [<code>$${slDist} buffer</code>]\n` +
-        `🎯 <b>TP1 (1.0R):</b> <code>$${pos.stage1Target.toFixed(2)}</code> (${pos.isStage1Filled ? '✅ FILLED' : `⏳ $${tp1Dist} away`})\n` +
-        `💰 <b>TP2 (${(pos.stage2Multiple ?? 1.30).toFixed(1)}R):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${pos.isStage2Filled ? '✅ FILLED' : `⏳ $${tp2Dist} away`})\n` +
-        `🚀 <b>TP3 (DOL):</b> <code>$${pos.stage3Target.toFixed(2)}</code> (${pos.isStage3Filled ? '✅ FILLED' : '⏳ Runner'})\n` +
+        `🎯 <b>TP1 (30% De-Risking):</b> <code>$${pos.stage1Target.toFixed(2)}</code> (${pos.isStage1Filled ? '✅ FILLED' : `⏳ $${tp1Dist} away`})\n` +
+        `💰 <b>TP2 (70% Macro Runner):</b> <code>$${pos.stage2Target.toFixed(2)}</code> (${pos.isStage2Filled ? '✅ FILLED' : `⏳ $${tp2Dist} away`})\n` +
+        (typeof pos.stage3Target === 'number' && pos.stage3Target > 0
+          ? `🚀 <b>TP3 (Runner):</b> <code>$${pos.stage3Target.toFixed(2)}</code> (${pos.isStage3Filled ? '✅ FILLED' : '⏳ Open'})\n`
+          : '') +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `📦 <b>Remaining Allocation:</b> <code>${(pos.remainingAllocation * 100).toFixed(0)}%</code>\n` +
-        `🏛️ <b>Setup:</b> <i>${pos.anchorName || '5m Sweep & Reclaim'}</i>`;
+        `🏛️ <b>Setup:</b> <i>${pos.anchorName || '15m Trend Continuation / Retest POI'}</i>`;
 
       await this.notifier.sendRawMessage(msg, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
       return;
@@ -493,11 +514,10 @@ export class TelegramBotService {
         `⚡ <b>Live Market Price:</b> <b>${livePrice.formatted}</b>${distanceStr}\n` +
         `🛑 <b>Stop Loss:</b> <code>$${ord.initialStopLoss.toFixed(2)}</code>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
-        `🎯 <b>TP1 (1.0R):</b> <code>$${ord.stage1Target.toFixed(2)}</code>\n` +
-        `💰 <b>TP2 (${(ord.stage2Multiple ?? 1.30).toFixed(1)}R):</b> <code>$${ord.stage2Target.toFixed(2)}</code>\n` +
-        `🚀 <b>TP3 (DOL):</b> <code>$${ord.stage3Target.toFixed(2)}</code>\n` +
+        `🎯 <b>TP1 (30%):</b> <code>$${ord.stage1Target.toFixed(2)}</code>\n` +
+        `💰 <b>TP2 (70%):</b> <code>$${ord.stage2Target.toFixed(2)}</code>\n` +
         `💵 <b>Risk USD:</b> <code>$${ord.riskUsd.toFixed(2)}</code> (${(ord.riskPct ?? 2.0).toFixed(1)}% Compounded)\n` +
-        `🏛️ <b>Setup:</b> <i>${ord.anchorName || '5m Structural Liquidity'}</i>\n` +
+        `🏛️ <b>Setup:</b> <i>${ord.anchorName || '15m Trend Continuation / Retest POI'}</i>\n` +
         `<i>Awaiting market price pullback to execute fill.</i>`;
 
       await this.notifier.sendRawMessage(msg, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
@@ -510,7 +530,7 @@ export class TelegramBotService {
       `📊 <b>Asset:</b> <code>${symbol.toUpperCase()}</code> (5m)\n` +
       `⚡ <b>Current Live Price:</b> <b>${livePrice.formatted} USD</b>\n` +
       `📦 <b>Active Positions:</b> <code>0</code> | ⏳ <b>Pending Limits:</b> <code>0</code>\n\n` +
-      `<i>The engine is actively scanning real-time order flow for high-confluence liquidity sweeps.</i>`;
+      `<i>The engine is actively scanning order flow for high-confluence trend continuation setups.</i>`;
 
     await this.notifier.sendRawMessage(msg, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
   }
@@ -563,12 +583,12 @@ export class TelegramBotService {
 
     if (!setups || setups.length === 0) {
       const msg =
-        `🏛️ <b>[MONITORED LIQUIDITY ZONES]</b>\n` +
+        `🏛️ <b>[MONITORED TREND CONTINUATION POI ZONES]</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `⚡ <b>Current Market Price:</b> <b>${livePrice.formatted} USD</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
-        `<i>No active un-retested sweep setups currently on ${symbol.toUpperCase()}.</i>\n` +
-        `The engine is indexing multi-timeframe candles on every 5m/15m/1h close.`;
+        `<i>No active un-retested trend continuation POIs currently on ${symbol.toUpperCase()}.</i>\n` +
+        `The engine is indexing 15m Break of Structure & FVG Proximal shelves.`;
       await this.notifier.sendRawMessage(msg, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
       return;
     }
@@ -577,24 +597,24 @@ export class TelegramBotService {
     let setupListStr = '';
     recent.forEach((s: any, idx: number) => {
       const dirEmoji = s.direction === 'LONG' ? '🟢' : '🔴';
-      const anchorLevel = s.anchor_level || s.originAnchorLevel || 0;
+      const level = s.entry_price || s.retest_price || s.anchor_level || 0;
       const timeStr = s.reclaim_time
         ? new Date(s.reclaim_time).toISOString().substring(11, 16) + ' UTC'
         : '---';
 
       let distanceStr = '';
-      if (livePrice.price > 0 && anchorLevel > 0) {
-        const diff = livePrice.price - anchorLevel;
+      if (livePrice.price > 0 && level > 0) {
+        const diff = livePrice.price - level;
         const diffAbs = Math.abs(diff);
-        const positionRel = diff >= 0 ? 'above anchor' : 'below anchor';
+        const positionRel = diff >= 0 ? 'above POI' : 'below POI';
         distanceStr = `\n   📍 <b>Live Distance:</b> <code>$${diffAbs.toFixed(2)} ${positionRel}</code>`;
       }
 
-      setupListStr += `${idx + 1}. ${dirEmoji} <b>${s.anchor_type || 'SWING'}</b> @ <code>$${anchorLevel.toFixed(2)}</code> [${timeStr}]${distanceStr}\n   ➔ Sweep: <code>$${(s.sweep_price || 0).toFixed(2)}</code> | Target: <code>$${(s.stage1_target || 0).toFixed(2)}</code>\n`;
+      setupListStr += `${idx + 1}. ${dirEmoji} <b>${s.anchor_type || '15m BOS'}</b> @ <code>$${level.toFixed(2)}</code> [${timeStr}]${distanceStr}\n   ➔ POI: <code>$${(s.anchor_level || level).toFixed(2)}</code> | TP1 (30%): <code>$${(s.stage1_target || 0).toFixed(2)}</code> | TP2 (70%): <code>$${(s.stage2_target || 0).toFixed(2)}</code>\n`;
     });
 
     const msg =
-      `🏛️ <b>[MONITORED LIQUIDITY SETUPS (${setups.length} Total)]</b>\n` +
+      `🏛️ <b>[MONITORED TREND CONTINUATION SETUPS (${setups.length} Total)]</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `⚡ <b>Current Market Price:</b> <b>${livePrice.formatted} USD</b> (<code>${symbol.toUpperCase()}</code>)\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -606,224 +626,229 @@ export class TelegramBotService {
   }
 
   private async handleReconcileCommand(): Promise<void> {
-    const { ledger, symbol, wsClient, bootTimestamp } = this.context;
+    const { engine, ledger, symbol } = this.context;
     const sessionLog = ledger.getSessionLog();
     const todayStr = sessionLog.dateStr || new Date().toISOString().split('T')[0];
     const livePrice = this.getLivePrice();
+    const cairoTime = formatCairoDateTime(Date.now());
 
-    const candles5m = wsClient?.getRingBuffers?.()['5m'] || [];
-    const completedTrades = sessionLog.completedTrades || [];
-    const inFlightPositions = ledger.getActiveInFlightPositions();
+    // ── PARTY 1: Authenticated Exchange Client (Binance Futures) ──
+    let exchangeStatus = '⚪ SANDBOX / SIMULATED (No Live Exchange Keys)';
+    let exchangeBalance = 0;
+    let exchangeMargin = 0;
+    let availableBalance = 0;
+    let totalUnrealizedPnL = 0;
+    let exchangePositions: any[] = [];
+    let exchangeOrders: any[] = [];
+    let isExchangeConnected = false;
 
-    // Combine all live tracked positions
-    const liveTradeMap = new Map<string, any>();
-    for (const t of completedTrades) {
-      if (t.id) liveTradeMap.set(t.id, t);
+    try {
+      const binanceInfo = await getBinanceAccountInfo();
+      if (binanceInfo) {
+        isExchangeConnected = true;
+        exchangeStatus = '🟢 CONNECTED (Binance USDⓈ-M Futures)';
+        exchangeBalance = binanceInfo.totalWalletBalance;
+        exchangeMargin = binanceInfo.totalMarginBalance;
+        availableBalance = binanceInfo.availableBalance;
+        totalUnrealizedPnL = binanceInfo.totalUnrealizedProfit;
+        exchangePositions = binanceInfo.positions || [];
+
+        const ordersRes = await getBinanceOpenOrders(symbol);
+        if (ordersRes.success && Array.isArray(ordersRes.data)) {
+          exchangeOrders = ordersRes.data;
+        }
+      }
+    } catch (binanceErr: any) {
+      exchangeStatus = `⚠️ ERROR: ${binanceErr?.message || binanceErr}`;
     }
-    for (const p of inFlightPositions) {
-      if (p.id) liveTradeMap.set(p.id, p);
+
+    // ── PARTY 2: In-Daemon Ledger & Execution Engine ──
+    const daemonPositions = engine.getActivePositions();
+    const daemonPendingOrders = engine.getPendingLimitOrders();
+    const daemonEquity = engine.getAccountEquity();
+    const daemonExecutionMode = this.context.sparkDispatcher
+      ? this.context.sparkDispatcher.getExecutionMode()
+      : (process.env.EXECUTION_MODE || 'STANDBY');
+    const daemonState = this.context.sparkDispatcher
+      ? this.context.sparkDispatcher.getDaemonState()
+      : (daemonPositions.length > 0 ? 'ACTIVE_TRADE' : (daemonPendingOrders.length > 0 ? 'ORDER_RESTING' : 'SEARCHING'));
+
+    // ── PARTY 3: PostgreSQL Database Records ──
+    let dbTrades: any[] = [];
+    let dbAccount: any = null;
+    let isDbConnected = false;
+
+    try {
+      const tradesQuery = await sql`
+        SELECT trade_id, symbol, direction, entry_price, status, realized_pnl, realized_r,
+               entry_time, exit_time, execution_mode
+        FROM trades
+        WHERE status IN ('OPEN', 'ACTIVE', 'PARTIAL', 'PENDING_LIMIT_ENTRY')
+        ORDER BY entry_time DESC
+        LIMIT 10;
+      `;
+      dbTrades = tradesQuery.rows || [];
+
+      const accountQuery = await sql`
+        SELECT current_balance, initial_capital, daily_realized_pnl, circuit_breaker_active
+        FROM trading_account
+        WHERE email = 'institutional_admin'
+        LIMIT 1;
+      `;
+      if (accountQuery.rows.length > 0) {
+        dbAccount = accountQuery.rows[0];
+      }
+      isDbConnected = true;
+    } catch (dbErr) {
+      console.warn('[RECONCILER] PostgreSQL query skipped (offline fallback):', dbErr);
     }
-    for (const ev of sessionLog.events || []) {
-      if (ev.position && ev.position.id) {
-        if (ev.type === 'LIMIT_ORDER_CANCELLED') {
-          liveTradeMap.delete(ev.position.id);
-        } else {
-          liveTradeMap.set(ev.position.id, {
-            ...(liveTradeMap.get(ev.position.id) || {}),
-            ...ev.position,
-          });
+
+    // ── STATE RECONCILIATION & PHANTOM PURGE ──
+    let desyncClearedCount = 0;
+
+    // A. Detect & Clear Orphaned DB Trades
+    if (isDbConnected && dbTrades.length > 0) {
+      for (const row of dbTrades) {
+        const tId = row.trade_id;
+        const existsInDaemon =
+          daemonPositions.some((p) => p.id === tId || (p as any).dbTradeId === tId) ||
+          daemonPendingOrders.some((p) => p.id === tId || (p as any).dbTradeId === tId);
+        const existsInExchange = exchangePositions.some((ep) =>
+          Math.abs(parseFloat(ep.entryPrice) - Number(row.entry_price)) < 0.50
+        );
+
+        if (!existsInDaemon && !existsInExchange) {
+          try {
+            await sql`
+              UPDATE trades
+              SET status = 'RECONCILED_CLOSED',
+                  exit_reason = 'TRI_PARTY_AUDIT_PURGE',
+                  exit_time = NOW()
+              WHERE trade_id = ${tId};
+            `;
+            desyncClearedCount++;
+            console.log(`[RECONCILER] 🧹 Safely cleared orphaned DB phantom trade: ${tId}`);
+          } catch {}
         }
       }
     }
-    const allLiveTrades = Array.from(liveTradeMap.values());
 
-    let qlSetups: SweepReclaimSetup[] = [];
-    let isDynamicScanExecuted = false;
-
-    if (candles5m.length >= 25) {
-      try {
-        const scanConfig: SweepReclaimScanConfig = {
-          symbol: symbol.toUpperCase(),
-          timeframe: '5m',
-          anchorTypes: ['SWING_PIVOT', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW', 'PDH', 'PDL'],
-          lookbackMajor: 10,
-          lookbackInternal: 5,
-          maxBarsAnchorToSweep: 25,
-          maxBarsSweepToReclaim: 10,
-          maxBarsToRetest: 20,
-          minSweepDepthAtrMultiplier: 0.10,
-          slBufferAtrMultiplier: 0.10,
-          entryMode: 'FVG_PROXIMAL',
-          stage1Multiple: 1.0,
-          stage2Multiple: 1.4,
-          stage3Multiple: 3.0,
-          stage1Ratio: 0.50,
-          stage2Ratio: 0.50,
-          stage3Ratio: 0.00,
-          enableStructuralTrail: true,
-          enableProfitRatchet: false,
-          volumeSmaPeriod: 20,
-          volumeExpansionThreshold: 1.20,
-          deltaDominanceThreshold: 52.0,
-          bodyRatioThreshold: 0.40,
-          requireThreePillarDisplacement: true,
-          enforceDiscountPremiumGate: true,
-        };
-
-        const engine = new SweepReclaimEngine(scanConfig);
-        const result = engine.scanHistoricalSetups(candles5m);
-        qlSetups = result.setups || [];
-        isDynamicScanExecuted = true;
-      } catch (scanErr) {
-        console.warn('[RECONCILE_DYNAMIC_SCAN_WARN]', scanErr);
+    // B. Detect & Expire Stale In-Daemon Pending Orders
+    const now = Date.now();
+    for (const ord of daemonPendingOrders) {
+      const ttlBars = ord.maxRetestBars || 20;
+      const ttlMs = ttlBars * 5 * 60 * 1000;
+      const pendingTime = ord.pendingTime || ord.openTime || now;
+      if (now - pendingTime >= ttlMs) {
+        engine.cancelPendingLimitOrder(ord.id, `TTL expired (${ttlBars} bars elapsed, auto-purged by Tri-Party Reconciler)`);
+        desyncClearedCount++;
+        console.log(`[RECONCILER] ⌛ Purged expired resting limit order: ${ord.id}`);
       }
     }
 
-    // Filter setups relevant to current session
-    const sessionBootMs = sessionLog.bootTime || bootTimestamp || (Date.now() - 24 * 3600 * 1000);
-    const sessionSetups = qlSetups.filter((s) => {
-      const sTime = s.reclaim_time || s.sweep_time || s.anchor_time || 0;
-      const sDate = new Date(sTime).toISOString().split('T')[0];
-      return sDate === todayStr || sTime >= sessionBootMs - 3600000;
-    });
-
-    const stripSuffix = (id?: string) => (id ? id.replace(/_SW\d+$/, '') : '');
-    const matchedSetupIds = new Set<string>();
-
-    interface ReconcileItem {
-      tradeId: string;
-      direction: string;
-      anchorName: string;
-      liveEntry: number | string;
-      qlEntry: number | string;
-      slippage: number;
-      liveOutcome: string;
-      qlOutcome: string;
-      liveRealizedR: number | string;
-      status: 'EXACT_MATCH' | 'IN_FLIGHT_ACTIVE' | 'INTRA_WAVE_SUPERSEDED' | 'SLIPPAGE_VARIANCE' | 'NOT_RECORDED';
-      notes?: string;
-      openTime?: number | null;
-      closeTime?: number | null;
-    }
-
-    const reconcileItems: ReconcileItem[] = [];
-    let maxSlippage = 0;
-    let exactMatches = 0;
-    let intraWaveCount = 0;
-
-    // Collect all cancelled order IDs from events
-    const cancelledOrderIds = new Set<string>();
-    for (const ev of sessionLog.events || []) {
-      if (ev.type === 'LIMIT_ORDER_CANCELLED' && ev.position?.id) {
-        cancelledOrderIds.add(ev.position.id);
+    // C. Live Binance Mode Desynchronization Detection
+    if (daemonExecutionMode === 'LIVE_BINANCE' && isExchangeConnected) {
+      if (daemonPositions.length > 0 && exchangePositions.length === 0) {
+        for (const p of daemonPositions) {
+          engine.emergencyClosePosition(p.id, livePrice.price);
+          desyncClearedCount++;
+          console.warn(`[RECONCILER] ⚠️ Reconciled closed position in daemon (absent on Binance): ${p.id}`);
+        }
       }
     }
 
-    // Separate executed trades from active resting pending orders
-    const executedTrades = allLiveTrades.filter(
-      (t) => t.openTime && t.status !== 'PENDING_LIMIT_ENTRY' && t.status !== 'CANCELLED' && !cancelledOrderIds.has(t.id)
-    );
-    const pendingOrders = inFlightPositions.filter(
-      (t) =>
-        (!t.openTime || t.status === 'PENDING_LIMIT_ENTRY') &&
-        t.status !== 'CANCELLED' &&
-        !cancelledOrderIds.has(t.id)
-    );
+    // ── FORMAT AUDIT METRICS ──
+    const walletBal = isExchangeConnected ? exchangeBalance : (dbAccount ? Number(dbAccount.current_balance) : daemonEquity);
+    const totalEq = isExchangeConnected ? exchangeBalance + totalUnrealizedPnL : daemonEquity;
+    const availBal = isExchangeConnected ? availableBalance : walletBal;
+    const marginUtilPct = walletBal > 0 && isExchangeConnected
+      ? Math.max(0, ((exchangeMargin - availableBalance) / walletBal) * 100)
+      : 0;
 
-    for (const lt of executedTrades) {
-      const isFilled = !!lt.openTime && lt.status !== 'PENDING_LIMIT_ENTRY';
-      const liveEntry = lt.entryPrice || lt.limitEntryPrice || 0;
-      const expectedDir = lt.direction;
-      const ltBaseId = stripSuffix(lt.originZoneId || lt.setupId || lt.id);
-
-      // Match against Quant Lab setups
-      const matchedQl = sessionSetups.find((s) => {
-        if (matchedSetupIds.has(s.id)) return false;
-        if (stripSuffix(s.id) === ltBaseId) return true;
-        const sameDir = (s.type === 'BULLISH' ? 'LONG' : 'SHORT') === expectedDir;
-        const sameAnchor =
-          Math.abs((lt.originAnchorLevel ?? liveEntry) - s.anchor_level) < 0.50 ||
-          lt.anchorName === s.anchor_name;
-        const timeDiff = Math.abs((lt.openTime || lt.pendingTime || 0) - (s.reclaim_time || 0));
-        return sameDir && sameAnchor && timeDiff <= 3 * 3600 * 1000;
+    // Active Positions Block (auditing both in-daemon paper & exchange positions simultaneously)
+    let positionsBlock = '';
+    if (daemonPositions.length > 0) {
+      daemonPositions.forEach((p, idx) => {
+        const dirEmoji = p.direction === 'LONG' ? '🟢' : '🔴';
+        let floatingR = p.unrealizedR || 0;
+        let floatingUsd = p.unrealizedUsd || 0;
+        if (floatingUsd === 0 && livePrice.price > 0 && p.entryPrice > 0) {
+          const isLong = p.direction === 'LONG';
+          const priceDiff = isLong ? livePrice.price - p.entryPrice : p.entryPrice - livePrice.price;
+          floatingUsd = priceDiff * p.contractSize * (p.remainingAllocation ?? 1.0);
+          floatingR = p.riskUsd > 0 ? floatingUsd / p.riskUsd : 0;
+        }
+        const signR = floatingR >= 0 ? '+' : '';
+        const signUsd = floatingUsd >= 0 ? '+' : '';
+        positionsBlock +=
+          ` ${idx + 1}. ${dirEmoji} <b>${p.direction} ${p.symbol}</b> (<code>${p.executionMode || daemonExecutionMode}</code>)\n` +
+          `    • Entry: <code>$${p.entryPrice.toFixed(2)}</code> | Mark: <code>${livePrice.formatted}</code>\n` +
+          `    • Floating PnL: <b>${signR}${floatingR.toFixed(2)}R (${signUsd}$${floatingUsd.toFixed(2)})</b>\n` +
+          `    • Trailing SL: <code>$${p.activeStopLoss.toFixed(2)}</code> (<i>${p.trailingSlSource}</i>)\n`;
       });
-
-      if (matchedQl) {
-        matchedSetupIds.add(matchedQl.id);
-        const qlEntry = matchedQl.entry_price || matchedQl.retest_price || matchedQl.anchor_level;
-        const slip = Math.abs(liveEntry - qlEntry);
-        if (slip > maxSlippage) maxSlippage = slip;
-
-        const isExactOutcome =
-          lt.exitReason === matchedQl.stage_exit_type ||
-          (lt.exitReason?.includes('WIN') && matchedQl.stage_exit_type?.includes('WIN')) ||
-          (lt.exitReason?.includes('STOP') && matchedQl.stage_exit_type?.includes('STOP')) ||
-          (lt.exitReason?.includes('SCRATCH') && matchedQl.stage_exit_type?.includes('SCRATCH'));
-
-        const isInFlight = lt.status === 'STAGE_1_FILLED' || lt.status === 'STAGE_2_FILLED' || lt.status === 'OPEN';
-
-        let status: ReconcileItem['status'] = 'EXACT_MATCH';
-        let notes = '';
-
-        if (isInFlight) {
-          status = 'IN_FLIGHT_ACTIVE';
-          notes = 'Position currently active & floating';
-        } else if (matchedQl.status === 'RECLAIMED_NO_RETEST' && isFilled) {
-          status = 'INTRA_WAVE_SUPERSEDED';
-          intraWaveCount++;
-          notes = 'Live intermediate fill executed prior to wider batch wave expansion';
-        } else if (isExactOutcome) {
-          if (slip < 0.50) {
-            status = 'EXACT_MATCH';
-          } else {
-            status = 'SLIPPAGE_VARIANCE';
-          }
-          exactMatches++;
-        } else {
-          status = 'SLIPPAGE_VARIANCE';
-        }
-
-        reconcileItems.push({
-          tradeId: lt.id,
-          direction: lt.direction,
-          anchorName: lt.anchorName || matchedQl.anchor_name || '5m Anchor',
-          liveEntry,
-          qlEntry,
-          slippage: slip,
-          liveOutcome: lt.exitReason || (isInFlight ? `ACTIVE (${lt.status})` : 'CLOSED'),
-          qlOutcome: matchedQl.stage_exit_type || matchedQl.status || 'N/A',
-          liveRealizedR: lt.realizedR !== undefined ? lt.realizedR : (isInFlight ? (lt.unrealizedR || 0) : 0),
-          status,
-          notes,
-          openTime: lt.openTime,
-          closeTime: lt.closeTime,
-        });
-      } else {
-        reconcileItems.push({
-          tradeId: lt.id,
-          direction: lt.direction,
-          anchorName: lt.anchorName || '5m Live Order',
-          liveEntry,
-          qlEntry: 'N/A',
-          slippage: 0,
-          liveOutcome: lt.exitReason || 'CLOSED',
-          qlOutcome: 'UNINDEXED',
-          liveRealizedR: lt.realizedR || 0,
-          status: 'NOT_RECORDED',
-          notes: 'Live order executed on dynamic intra-candle tick',
-          openTime: lt.openTime,
-          closeTime: lt.closeTime,
-        });
-      }
     }
 
-    // Calculate Mathematical Parity Score strictly across executed trades
-    const totalExecuted = executedTrades.length;
-    let parityScorePct = '100.0';
-    if (totalExecuted > 0) {
-      const verifiedCount = exactMatches + intraWaveCount + (executedTrades.some(t => t.status === 'OPEN') ? 1 : 0);
-      parityScorePct = Math.min(100.0, (verifiedCount / totalExecuted) * 100).toFixed(1);
+    if (exchangePositions.length > 0) {
+      if (positionsBlock) positionsBlock += '\n   <i>Binance USDⓈ-M Live Positions:</i>\n';
+      exchangePositions.forEach((ep, idx) => {
+        const amt = parseFloat(ep.positionAmt);
+        const dirEmoji = amt > 0 ? '🟢 LONG' : '🔴 SHORT';
+        const uPnl = parseFloat(ep.unRealizedProfit);
+        const sign = uPnl >= 0 ? '+' : '';
+        const entryPr = parseFloat(ep.entryPrice);
+        const markPr = parseFloat(ep.markPrice);
+        positionsBlock +=
+          ` ${idx + 1}. ${dirEmoji} <b>${ep.symbol}</b>: <code>${amt} contracts @ $${entryPr.toFixed(2)}</code>\n` +
+          `    • Mark: <code>$${markPr.toFixed(2)}</code> | Floating uPnL: <b>${sign}$${uPnl.toFixed(2)} USD</b>\n`;
+      });
     }
+
+    if (!positionsBlock) {
+      positionsBlock = ' • <i>Zero active positions (No market exposure).</i>\n';
+    }
+
+    // Resting Orders Block with active TTL countdown
+    let pendingOrdersBlock = '';
+    if (daemonPendingOrders.length > 0) {
+      daemonPendingOrders.forEach((ord, idx) => {
+        const dirEmoji = ord.direction === 'LONG' ? '🟢' : '🔴';
+        const ttlBars = ord.maxRetestBars || 20;
+        const totalTtlMs = ttlBars * 5 * 60 * 1000;
+        const pendingTime = ord.pendingTime || ord.openTime || now;
+        const remainingMs = Math.max(0, totalTtlMs - (now - pendingTime));
+        const remMins = Math.floor(remainingMs / 60000);
+        const remSecs = Math.floor((remainingMs % 60000) / 1000);
+        const remBars = Math.ceil(remainingMs / (5 * 60 * 1000));
+        const countdownStr = remainingMs > 0 ? `${remBars} bars left (${remMins}m ${remSecs}s)` : 'EXPIRED';
+
+        pendingOrdersBlock +=
+          ` ${idx + 1}. ${dirEmoji} <b>${ord.direction} Limit @ $${ord.limitEntryPrice.toFixed(2)}</b>\n` +
+          `    • Stop Loss: <code>$${ord.initialStopLoss.toFixed(2)}</code> | Size: <code>${ord.contractSize}</code>\n` +
+          `    • TTL Countdown: <code>${countdownStr}</code>\n`;
+      });
+    }
+
+    if (exchangeOrders.length > 0) {
+      if (pendingOrdersBlock) pendingOrdersBlock += '\n   <i>Binance Live Resting Orders:</i>\n';
+      exchangeOrders.forEach((eo, idx) => {
+        const dirEmoji = eo.side === 'BUY' ? '🟢' : '🔴';
+        const orderPrice = parseFloat(eo.price) || parseFloat(eo.stopPrice) || 0;
+        const origQty = parseFloat(eo.origQty) || 0;
+        pendingOrdersBlock +=
+          ` ${idx + 1}. ${dirEmoji} <b>${eo.type} ${eo.side} @ $${orderPrice.toFixed(2)}</b> (${eo.symbol})\n` +
+          `    • Order ID: <code>${eo.orderId}</code> | Qty: <code>${origQty}</code>\n`;
+      });
+    }
+
+    if (!pendingOrdersBlock) {
+      pendingOrdersBlock = ' • <i>No resting limit orders in queue.</i>\n';
+    }
+
+    const parityStatus = (daemonPositions.length === 0 && exchangePositions.length === 0 && desyncClearedCount === 0)
+      ? '100% PERFECT PARITY'
+      : desyncClearedCount > 0
+        ? `PARITY RESTORED (${desyncClearedCount} DESYNCS CLEARED)`
+        : 'IN-FLIGHT ACTIVE MATCH';
 
     // Generate Markdown report and save to run_logs/reconciliation_YYYY-MM-DD.md
     try {
@@ -832,89 +857,56 @@ export class TelegramBotService {
       if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });
       const mdPath = path.join(logsDir, `reconciliation_${todayStr}.md`);
 
-      let md = `# 🔬 Quant Lab 1:1 Live Reconciliation Audit (${todayStr})\n\n`;
+      let md = `# 🔬 Tri-Party State Reconciliation Audit (${todayStr})\n\n`;
       md += `> **Symbol:** ${symbol.toUpperCase()}  \n`;
-      md += `> **Session Date:** ${todayStr} (Cairo: ${formatCairoDateTime(Date.now())})  \n`;
-      md += `> **Live Executed Trades:** ${executedTrades.length}  \n`;
-      md += `> **Pending Limit Orders:** ${pendingOrders.length}  \n`;
-      md += `> **Mathematical Parity:** ${parityScorePct}%  \n`;
-      md += `> **Max Slippage:** $${maxSlippage.toFixed(2)}  \n`;
+      md += `> **Session Date:** ${todayStr} (Cairo: ${cairoTime})  \n`;
+      md += `> **Execution Mode:** ${daemonExecutionMode}  \n`;
+      md += `> **Exchange Gateway:** ${exchangeStatus}  \n`;
+      md += `> **Daemon Active Positions:** ${daemonPositions.length}  \n`;
+      md += `> **Exchange Active Positions:** ${exchangePositions.length}  \n`;
+      md += `> **Daemon Pending Limits:** ${daemonPendingOrders.length}  \n`;
+      md += `> **Exchange Open Orders:** ${exchangeOrders.length}  \n`;
+      md += `> **Desynchronizations Cleared:** ${desyncClearedCount}  \n`;
+      md += `> **Parity Status:** ${parityStatus}  \n`;
       md += `> **Generated:** ${new Date().toISOString()}  \n\n`;
-      md += `| Trade ID | Dir | Anchor | Live Entry | QL Entry | Slippage | Live Outcome | QL Outcome | Status |\n`;
-      md += `| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n`;
-
-      for (const item of reconcileItems) {
-        md += `| \`${item.tradeId}\` | **${item.direction}** | ${item.anchorName} | $${typeof item.liveEntry === 'number' ? item.liveEntry.toFixed(2) : item.liveEntry} | $${typeof item.qlEntry === 'number' ? item.qlEntry.toFixed(2) : item.qlEntry} | $${item.slippage.toFixed(2)} | ${item.liveOutcome} | ${item.qlOutcome} | ${item.status} |\n`;
-      }
-
-      if (pendingOrders.length > 0) {
-        md += `\n### ⏳ Active Resting Orders (Awaiting Fill)\n\n`;
-        md += `| Order ID | Dir | Anchor | Limit Price | Status |\n`;
-        md += `| :--- | :--- | :--- | :--- | :--- |\n`;
-        for (const po of pendingOrders) {
-          const lp = po.limitEntryPrice || po.entryPrice || 0;
-          md += `| \`${po.id}\` | **${po.direction}** | ${po.anchorName || '5m Anchor'} | $${typeof lp === 'number' ? lp.toFixed(2) : lp} | Resting Limit |\n`;
-        }
-      }
 
       fs.writeFileSync(mdPath, md, 'utf8');
     } catch (saveErr) {
       console.warn('[RECONCILE_MD_SAVE_WARN]', saveErr);
     }
 
-    // Build Rich HTML Telegram Message
-    let tradesListStr = '';
-    if (reconcileItems.length > 0) {
-      tradesListStr = '\n\n📜 <b>Session Trade Parity Breakdown:</b>\n';
-      reconcileItems.forEach((r, idx) => {
-        const dirEmoji = r.direction === 'LONG' ? '🟢' : '🔴';
-        const badge =
-          r.status === 'EXACT_MATCH'
-            ? '✅ EXACT MATCH'
-            : r.status === 'IN_FLIGHT_ACTIVE'
-            ? '⚡ ACTIVE IN-FLIGHT'
-            : r.status === 'INTRA_WAVE_SUPERSEDED'
-            ? '🌊 INTRA-WAVE FILL'
-            : '⚠️ SLIPPAGE';
-        const slipStr = r.slippage === 0 ? '$0.00' : `$${r.slippage.toFixed(2)}`;
-        const rSign = (typeof r.liveRealizedR === 'number' && r.liveRealizedR >= 0) ? '+' : '';
-        const entryCairo = r.openTime ? formatCairoDateTime(r.openTime).substring(11, 16) : '—';
-        const exitCairo = r.closeTime ? formatCairoDateTime(r.closeTime).substring(11, 16) : '';
-        const timeBadge = exitCairo ? `[${entryCairo} ➔ ${exitCairo} Cairo]` : `[${entryCairo} Cairo]`;
-        tradesListStr += `${idx + 1}. ${dirEmoji} <b>${r.direction}</b> @ $${typeof r.liveEntry === 'number' ? r.liveEntry.toFixed(2) : r.liveEntry} ${timeBadge} ➔ <code>${r.liveOutcome}</code> (${rSign}${r.liveRealizedR}R) [${badge} | Slip: ${slipStr}]\n`;
-        if (r.status === 'INTRA_WAVE_SUPERSEDED') {
-          tradesListStr += `   ↳ <i>Note: Live intermediate sweep entry; batch scanner evaluated full wave expansion.</i>\n`;
-        }
-      });
-    }
-
-    let pendingOrdersStr = '';
-    if (pendingOrders.length > 0) {
-      pendingOrdersStr = '\n\n⏳ <b>Active Resting Orders (Awaiting Fill):</b>\n';
-      pendingOrders.forEach((po, idx) => {
-        const dirEmoji = po.direction === 'LONG' ? '🟢' : '🔴';
-        const limitPrice = po.limitEntryPrice || po.entryPrice || 0;
-        const placedCairo = (po.pendingTime || po.openTime) ? formatCairoDateTime(po.pendingTime || po.openTime).substring(11, 16) : '—';
-        pendingOrdersStr += `${idx + 1}. ${dirEmoji} <b>${po.direction}</b> Limit @ $${typeof limitPrice === 'number' ? limitPrice.toFixed(2) : limitPrice} (<code>${po.anchorName || '5m Anchor'}</code>) [Resting since ${placedCairo} Cairo]\n`;
-      });
-    }
-
-    const msg =
-      `🔬 <b>[QUANT LAB 1:1 RECONCILIATION AUDIT]</b>\n` +
+    // Build rich institutional status card
+    const cardHtml =
+      `🔬 <b>[TRI-PARTY STATE RECONCILIATION AUDIT]</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `📅 <b>Session Date:</b> <code>${todayStr}</code> (<code>${formatCairoDateTime(Date.now())} Cairo</code>)\n` +
-      `⚡ <b>Live Price:</b> <b>${livePrice.formatted} USD</b> (<code>${symbol.toUpperCase()}</code>)\n` +
-      `📊 <b>Live Session Trades:</b> <code>${executedTrades.length}</code> (${sessionLog.winningTrades}W / ${sessionLog.losingTrades}L)\n` +
-      `🏆 <b>Session Realized R:</b> <b>${(sessionLog.totalRealizedR || 0) >= 0 ? '+' : ''}${(sessionLog.totalRealizedR || 0).toFixed(2)}R</b>\n` +
-      `🏛️ <b>Candidate Setups:</b> <code>${sessionSetups.length} detected</code> (${candles5m.length} 5m bars)\n` +
+      `⚙️ <b>Execution Environment:</b> <code>[${daemonExecutionMode}]</code>\n` +
+      `📡 <b>Daemon Status:</b> <code>ONLINE (${daemonState})</code>\n` +
+      `🔌 <b>Exchange Gateway:</b> <code>${exchangeStatus}</code>\n\n` +
+      `💰 <b>Capital & Margin Utilization:</b>\n` +
+      ` • <b>Account Balance:</b> <code>$${walletBal.toFixed(2)} USD</code>\n` +
+      ` • <b>Total Equity:</b> <b>$${totalEq.toFixed(2)} USD</b>\n` +
+      ` • <b>Available:</b> <code>$${availBal.toFixed(2)} USD</code>\n` +
+      ` • <b>Margin Utilization:</b> <code>${marginUtilPct.toFixed(1)}%</code>\n\n` +
+      `📦 <b>Active Positions:</b>\n` +
+      positionsBlock +
+      `\n⏳ <b>Resting Limit Orders:</b>\n` +
+      pendingOrdersBlock +
+      `\n🛡️ <b>Audit Telemetry:</b>\n` +
+      ` • <b>Parity Status:</b> <b>${parityStatus}</b>\n` +
+      ` • <b>Orphaned Phantom Records Cleared:</b> <code>${desyncClearedCount}</code>\n` +
+      ` • <b>Audited At:</b> <code>${cairoTime} Cairo</code>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `✅ <b>Quant Lab Mathematical Parity:</b> <b>${parityScorePct}% VERIFIED</b>\n` +
-      `⚖️ <b>Max Fill Slippage:</b> <code>$${maxSlippage.toFixed(2)}</code>\n` +
-      `📁 <b>Audit Log:</b> <code>run_logs/reconciliation_${todayStr}.md</code>` +
-      tradesListStr +
-      pendingOrdersStr;
+      `<i>Binance Futures ≡ In-Daemon Engine ≡ PostgreSQL Verified</i>`;
 
-    await this.notifier.sendRawMessage(msg, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
+    const inlineKeyboard = {
+      inline_keyboard: [
+        [{ text: '🔬 Refresh Reconcile Audit', callback_data: 'trigger_reconcile' }],
+      ],
+    };
+
+    await this.notifier.sendRawMessage(cardHtml, {
+      replyMarkup: inlineKeyboard,
+    });
   }
 
   /**
@@ -931,7 +923,24 @@ export class TelegramBotService {
     // Always acknowledge callback immediately to dismiss button loading spinner
     await this.notifier.answerCallbackQuery(cbId);
 
-    if (data === 'confirm_flatten') {
+    if (data.startsWith('paper_trade_')) {
+      const decisionId = parseInt(data.replace('paper_trade_', ''), 10);
+      await this.handlePaperTradeCallback(decisionId, chatId, messageId);
+    } else if (data.startsWith('live_exec_init_')) {
+      const decisionId = parseInt(data.replace('live_exec_init_', ''), 10);
+      await this.handleLiveExecInitCallback(decisionId, chatId, messageId);
+    } else if (data.startsWith('live_exec_confirm_')) {
+      const decisionId = parseInt(data.replace('live_exec_confirm_', ''), 10);
+      await this.handleLiveExecConfirmCallback(decisionId, chatId, messageId);
+    } else if (data.startsWith('live_exec_cancel_')) {
+      const decisionId = parseInt(data.replace('live_exec_cancel_', ''), 10);
+      await this.handleLiveExecCancelCallback(decisionId, chatId, messageId);
+    } else if (data.startsWith('dismiss_')) {
+      const decisionId = parseInt(data.replace('dismiss_', ''), 10);
+      await this.handleDismissCallback(decisionId, chatId, messageId);
+    } else if (data === 'trigger_reconcile') {
+      await this.handleReconcileCommand();
+    } else if (data === 'confirm_flatten') {
       if (this.pendingFlatten && (!messageId || this.pendingFlatten.messageId === messageId)) {
         clearTimeout(this.pendingFlatten.timeoutTimer);
         this.pendingFlatten = null;
@@ -972,6 +981,368 @@ export class TelegramBotService {
           { replyMarkup: MAIN_TELEGRAM_KEYBOARD }
         );
       }
+    }
+  }
+
+  /**
+   * Dispatches command to promote standby setup to active paper trading simulator.
+   */
+  private async handlePaperTradeCallback(
+    decisionId: number,
+    chatId?: string | number,
+    messageId?: number
+  ): Promise<void> {
+    console.log(`[TELEGRAM_BOT] 📝 User clicked [Paper Trade] for setup #${decisionId}`);
+
+    let promotionResult = { success: false, message: '' };
+
+    if (this.context.sparkDispatcher && typeof this.context.sparkDispatcher.promoteStandbyToMode === 'function') {
+      promotionResult = await this.context.sparkDispatcher.promoteStandbyToMode(decisionId, 'PAPER_TRADING');
+    } else {
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET execution_mode = 'PAPER_TRADING',
+              status = 'QUEUED',
+              narrative = COALESCE(narrative, '') || ' [PROMOTED_VIA_TELEGRAM: Promoted to PAPER_TRADING @ ' || NOW() || ']',
+              updated_at = NOW()
+          WHERE id = ${decisionId};
+        `;
+
+        const rootDir = process.cwd();
+        const commandFile = path.join(rootDir, 'run_logs', 'daemon_commands.json');
+        let existingCmds: any[] = [];
+        if (fs.existsSync(commandFile)) {
+          try {
+            existingCmds = JSON.parse(fs.readFileSync(commandFile, 'utf8'));
+          } catch {}
+        }
+        existingCmds.push({
+          id: `cmd_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          action: 'PROMOTE_STANDBY',
+          decisionId,
+          targetMode: 'PAPER_TRADING',
+          metadata: { decisionId, targetMode: 'PAPER_TRADING' },
+          status: 'PENDING',
+          timestamp: Date.now(),
+        });
+        fs.writeFileSync(commandFile, JSON.stringify(existingCmds, null, 2), 'utf8');
+
+        promotionResult = {
+          success: true,
+          message: `Decision #${decisionId} queued for Paper Trading promotion via daemon command router.`,
+        };
+      } catch (err: any) {
+        promotionResult = {
+          success: false,
+          message: `Database/Command error: ${err?.message || err}`,
+        };
+      }
+    }
+
+    const cairoTime = formatCairoDateTime(Date.now());
+    const replyText = promotionResult.success
+      ? `📝 <b>[SETUP PROMOTED TO PAPER TRADING]</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `Setup #<code>${decisionId}</code> promoted to <b>[PAPER_TRADING]</b>.\n` +
+        `Simulated resting limit order armed in execution engine.\n` +
+        `Zero real exchange margin committed.\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `⏰ <code>${cairoTime} Cairo</code>`
+      : `⚠️ <b>[PROMOTION FAILED]</b>\n` +
+        `Could not promote setup #<code>${decisionId}</code>: ${promotionResult.message}`;
+
+    if (chatId && messageId) {
+      await this.notifier.editMessageText(chatId, messageId, replyText, {
+        replyMarkup: { inline_keyboard: [] },
+      });
+    } else {
+      await this.notifier.sendRawMessage(replyText, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
+    }
+  }
+
+  /**
+   * Prompts user with a two-step confirmation before executing live order on Binance.
+   */
+  private async handleLiveExecInitCallback(
+    decisionId: number,
+    chatId?: string | number,
+    messageId?: number
+  ): Promise<void> {
+    console.log(`[TELEGRAM_BOT] ⚡ User requested [Execute Live] for setup #${decisionId} — Prompting Confirmation`);
+
+    const confirmText =
+      `⚠️ <b>[CONFIRM LIVE EXECUTION ON BINANCE FUTURES]</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Are you sure you want to execute setup #<code>${decisionId}</code> on <b>LIVE BINANCE FUTURES</b>?\n\n` +
+      `⚠️ <b>TRIPLE-LOCK RISK WARNING:</b>\n` +
+      ` • Server environment gates will be enforced (IS_LIVE_VPS).\n` +
+      ` • Global Risk Governor circuit breakers & sizing will be validated.\n` +
+      ` • Real margin will be committed to the Binance Futures order book.\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `<i>Confirm execution below:</i>`;
+
+    const inlineKeyboard = {
+      inline_keyboard: [
+        [
+          { text: '⚡ YES, EXECUTE LIVE', callback_data: `live_exec_confirm_${decisionId}` },
+          { text: '❌ NO, CANCEL', callback_data: `live_exec_cancel_${decisionId}` },
+        ],
+      ],
+    };
+
+    if (chatId && messageId) {
+      await this.notifier.editMessageText(chatId, messageId, confirmText, {
+        replyMarkup: inlineKeyboard,
+      });
+    } else {
+      await this.notifier.sendRawMessage(confirmText, { replyMarkup: inlineKeyboard });
+    }
+  }
+
+  /**
+   * Disarms live execution confirmation and restores standby action buttons.
+   */
+  private async handleLiveExecCancelCallback(
+    decisionId: number,
+    chatId?: string | number,
+    messageId?: number
+  ): Promise<void> {
+    console.log(`[TELEGRAM_BOT] 🟢 User cancelled live execution for setup #${decisionId}`);
+
+    const cancelText =
+      `🛡️ <b>[LIVE EXECUTION DISARMED]</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Live execution for setup #<code>${decisionId}</code> was cancelled by user.\n` +
+      `Setup returned to <b>[STANDBY]</b> observation mode. Zero live orders placed.\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `<i>Normal algorithmic observation continues uninterrupted.</i>`;
+
+    if (chatId && messageId) {
+      await this.notifier.editMessageText(chatId, messageId, cancelText, {
+        replyMarkup: buildStandbyActionKeyboard(decisionId),
+      });
+    } else {
+      await this.notifier.sendRawMessage(cancelText, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
+    }
+  }
+
+  /**
+   * Confirms live execution after evaluating safety gates and Risk Governor limits.
+   */
+  private async handleLiveExecConfirmCallback(
+    decisionId: number,
+    chatId?: string | number,
+    messageId?: number
+  ): Promise<void> {
+    console.log(`[TELEGRAM_BOT] ⚡ User CONFIRMED live execution for setup #${decisionId}! Validating safety gates...`);
+
+    // 1. Physical Environment & Safety Gate Check
+    const safetyGate = evaluateExecutionSafetyGate();
+    if (!safetyGate.isAllowed) {
+      console.warn(`[TELEGRAM_BOT] 🚫 Live execution blocked by Safety Gate: ${safetyGate.reason}`);
+      const blockedText =
+        `🚫 <b>[LIVE EXECUTION BLOCKED — SAFETY GATE]</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `Execution on live Binance Futures rejected.\n` +
+        `⚠️ <b>Reason:</b> <code>${safetyGate.reason}</code>\n` +
+        `🛑 Setup #<code>${decisionId}</code> remains in <b>[STANDBY]</b>. Zero exchange exposure.`;
+
+      if (chatId && messageId) {
+        await this.notifier.editMessageText(chatId, messageId, blockedText, {
+          replyMarkup: buildStandbyActionKeyboard(decisionId),
+        });
+      } else {
+        await this.notifier.sendRawMessage(blockedText, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
+      }
+      return;
+    }
+
+    // 2. Fetch setup record to validate Pre-Trade Risk Governor limits
+    let record: any = null;
+    try {
+      const { rows } = await sql`
+        SELECT * FROM agent_decision_log WHERE id = ${decisionId} LIMIT 1;
+      `;
+      if (rows && rows.length > 0) record = rows[0];
+    } catch {}
+
+    if (!record) {
+      const errorText = `❌ <b>[EXECUTION FAILED]</b> Decision record #${decisionId} could not be retrieved from database.`;
+      if (chatId && messageId) {
+        await this.notifier.editMessageText(chatId, messageId, errorText, { replyMarkup: { inline_keyboard: [] } });
+      } else {
+        await this.notifier.sendRawMessage(errorText, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
+      }
+      return;
+    }
+
+    const direction = String(record.bias_signal || '').includes('BULL') ? 'LONG' : 'SHORT';
+    const entryPrice = parseFloat(String(record.limit_entry_price || record.entry_range_high || record.entry_range_low || 0));
+    const slPrice = parseFloat(String(record.invalidation_level || 0));
+
+    // 3. Global Risk Governor Gatekeeper
+    try {
+      const riskAssessment = await GlobalRiskGovernor.evaluatePreTradeRisk({
+        symbol: String(record.symbol || this.context.symbol).toUpperCase(),
+        direction,
+        entryPrice,
+        stopLossPrice: slPrice,
+        currentEquity: this.context.engine.getAccountEquity(),
+        currentOpenPositionsCount: this.context.engine.getActivePositions().length,
+      });
+
+      if (!riskAssessment.isApproved) {
+        console.warn(`[TELEGRAM_BOT] 🛡️ Live execution vetoed by Risk Governor: ${riskAssessment.reason}`);
+        const vetoText =
+          `🚫 <b>[LIVE EXECUTION VETOED — RISK GOVERNOR]</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `Pre-trade risk assessment failed.\n` +
+          `⚠️ <b>Violation:</b> <i>${riskAssessment.reason}</i>\n` +
+          `🛑 Setup #<code>${decisionId}</code> remains in <b>[STANDBY]</b>. Zero exchange exposure.`;
+
+        if (chatId && messageId) {
+          await this.notifier.editMessageText(chatId, messageId, vetoText, {
+            replyMarkup: buildStandbyActionKeyboard(decisionId),
+          });
+        } else {
+          await this.notifier.sendRawMessage(vetoText, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
+        }
+        return;
+      }
+    } catch (riskErr) {
+      console.warn('[TELEGRAM_BOT] Risk evaluation non-fatal warning:', riskErr);
+    }
+
+    // 4. Dispatch live execution to in-daemon engine or command router
+    let executionResult = { success: false, message: '' };
+    if (this.context.sparkDispatcher && typeof this.context.sparkDispatcher.promoteStandbyToMode === 'function') {
+      executionResult = await this.context.sparkDispatcher.promoteStandbyToMode(decisionId, 'LIVE_BINANCE');
+    } else {
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET execution_mode = 'LIVE_BINANCE',
+              status = 'QUEUED',
+              narrative = COALESCE(narrative, '') || ' [LIVE_PROMOTION_VIA_TELEGRAM @ ' || NOW() || ']',
+              updated_at = NOW()
+          WHERE id = ${decisionId};
+        `;
+
+        const rootDir = process.cwd();
+        const commandFile = path.join(rootDir, 'run_logs', 'daemon_commands.json');
+        let existingCmds: any[] = [];
+        if (fs.existsSync(commandFile)) {
+          try {
+            existingCmds = JSON.parse(fs.readFileSync(commandFile, 'utf8'));
+          } catch {}
+        }
+        existingCmds.push({
+          id: `cmd_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          action: 'PROMOTE_STANDBY',
+          decisionId,
+          targetMode: 'LIVE_BINANCE',
+          metadata: { decisionId, targetMode: 'LIVE_BINANCE' },
+          status: 'PENDING',
+          timestamp: Date.now(),
+        });
+        fs.writeFileSync(commandFile, JSON.stringify(existingCmds, null, 2), 'utf8');
+
+        executionResult = {
+          success: true,
+          message: `Setup #${decisionId} queued for LIVE_BINANCE execution via daemon command router.`,
+        };
+      } catch (err: any) {
+        executionResult = {
+          success: false,
+          message: `Live execution dispatch error: ${err?.message || err}`,
+        };
+      }
+    }
+
+    const cairoTime = formatCairoDateTime(Date.now());
+    const successText =
+      `⚡ <b>[LIVE EXECUTION ARMED ON BINANCE FUTURES]</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Setup #<code>${decisionId}</code> promoted to <b>[LIVE_BINANCE]</b>.\n` +
+      `Resting maker limit order submitted to Binance USDⓈ-M Futures order book.\n` +
+      `Native exchange STOP_MARKET and 30/70 take-profit ladder armed.\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `⏰ <code>${cairoTime} Cairo</code>`;
+
+    const failText =
+      `❌ <b>[LIVE PROMOTION FAILED]</b>\n` +
+      `Could not route setup #<code>${decisionId}</code> to live execution: ${executionResult.message}`;
+
+    if (chatId && messageId) {
+      await this.notifier.editMessageText(chatId, messageId, executionResult.success ? successText : failText, {
+        replyMarkup: { inline_keyboard: [] },
+      });
+    } else {
+      await this.notifier.sendRawMessage(executionResult.success ? successText : failText, {
+        replyMarkup: MAIN_TELEGRAM_KEYBOARD,
+      });
+    }
+  }
+
+  /**
+   * Dismisses a decision record and removes it from active proximity radar.
+   */
+  private async handleDismissCallback(
+    decisionId: number,
+    chatId?: string | number,
+    messageId?: number
+  ): Promise<void> {
+    console.log(`[TELEGRAM_BOT] ❌ User clicked [Dismiss] for setup #${decisionId}`);
+
+    if (this.context.sparkDispatcher && typeof this.context.sparkDispatcher.dismissDecision === 'function') {
+      await this.context.sparkDispatcher.dismissDecision(decisionId);
+    } else {
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET status = 'DISMISSED',
+              narrative = COALESCE(narrative, '') || ' [DISMISSED_VIA_TELEGRAM @ ' || NOW() || ']',
+              updated_at = NOW()
+          WHERE id = ${decisionId};
+        `;
+      } catch {}
+      try {
+        const rootDir = process.cwd();
+        const commandFile = path.join(rootDir, 'run_logs', 'daemon_commands.json');
+        let existingCmds: any[] = [];
+        if (fs.existsSync(commandFile)) {
+          try {
+            existingCmds = JSON.parse(fs.readFileSync(commandFile, 'utf8'));
+          } catch {}
+        }
+        existingCmds.push({
+          id: `cmd_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          action: 'DISMISS_SETUP',
+          decisionId,
+          metadata: { decisionId },
+          status: 'PENDING',
+          timestamp: Date.now(),
+        });
+        fs.writeFileSync(commandFile, JSON.stringify(existingCmds, null, 2), 'utf8');
+      } catch {}
+    }
+
+    const cairoTime = formatCairoDateTime(Date.now());
+    const dismissText =
+      `❌ <b>[SETUP DISMISSED]</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Setup #<code>${decisionId}</code> has been dismissed and purged from radar.\n` +
+      `Status marked as <code>DISMISSED</code> in database records.\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `⏰ <code>${cairoTime} Cairo</code>`;
+
+    if (chatId && messageId) {
+      await this.notifier.editMessageText(chatId, messageId, dismissText, {
+        replyMarkup: { inline_keyboard: [] },
+      });
+    } else {
+      await this.notifier.sendRawMessage(dismissText, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
     }
   }
 

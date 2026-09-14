@@ -823,6 +823,95 @@ export class SparkIngestionDispatcher {
   }
 
   /**
+   * Promotes a setup from STANDBY into active PAPER_TRADING or LIVE_BINANCE mode.
+   */
+  public async promoteStandbyToMode(
+    decisionId: number,
+    targetMode: 'PAPER_TRADING' | 'LIVE_BINANCE'
+  ): Promise<{ success: boolean; message: string; position?: any }> {
+    console.log(`[SPARK_DISPATCHER] 🚀 Promoting decision #${decisionId} to ${targetMode}...`);
+    try {
+      // 1. Fetch decision record from database
+      const { rows } = await sql`
+        SELECT * FROM agent_decision_log WHERE id = ${decisionId} LIMIT 1;
+      `;
+      if (!rows || rows.length === 0) {
+        return { success: false, message: `Decision #${decisionId} not found in database.` };
+      }
+      const record = rows[0];
+
+      // 2. If promoting to LIVE_BINANCE, verify safety gate
+      if (targetMode === 'LIVE_BINANCE') {
+        const safetyGate = evaluateExecutionSafetyGate();
+        if (!safetyGate.isAllowed) {
+          return {
+            success: false,
+            message: `Safety Gate Veto: ${safetyGate.reason}`,
+          };
+        }
+      }
+
+      // 3. Update database record to target execution mode and status QUEUED
+      await sql`
+        UPDATE agent_decision_log
+        SET execution_mode = ${targetMode},
+            status = 'QUEUED',
+            narrative = COALESCE(narrative, '') || ' [PROMOTED_VIA_TELEGRAM: Promoted to ' || ${targetMode} || ' @ ' || NOW() || ']',
+            updated_at = NOW()
+        WHERE id = ${decisionId};
+      `;
+
+      // 4. Update radar intent if present
+      const intent = this.radar.getIntent(decisionId);
+      if (intent) {
+        this.ledger?.setArmedIntents(this.radar.getAllIntents());
+      }
+
+      // 5. Trigger immediate processing of this decision with modeOverride
+      record.execution_mode = targetMode;
+      record.status = 'ACTIVE';
+      const result = await this.processDecision(record, undefined, { modeOverride: targetMode });
+      return {
+        success:
+          result.status === 'PAPER_ACTIVE' ||
+          result.status === 'EXECUTED' ||
+          result.status === 'ORDER_RESTING' ||
+          result.status === 'STAGED',
+        message: `Decision #${decisionId} successfully promoted to ${targetMode} (Status: ${result.status}).`,
+        position: result.position,
+      };
+    } catch (err: any) {
+      console.error(`[SPARK_DISPATCHER] Error promoting decision #${decisionId}:`, err);
+      return { success: false, message: err?.message || String(err) };
+    }
+  }
+
+  /**
+   * Dismisses a decision record and purges it from radar.
+   */
+  public async dismissDecision(decisionId: number): Promise<{ success: boolean; message: string }> {
+    console.log(`[SPARK_DISPATCHER] ❌ Dismissing decision #${decisionId}...`);
+    try {
+      await sql`
+        UPDATE agent_decision_log
+        SET status = 'DISMISSED',
+            narrative = COALESCE(narrative, '') || ' [DISMISSED_VIA_TELEGRAM @ ' || NOW() || ']',
+            updated_at = NOW()
+        WHERE id = ${decisionId};
+      `;
+
+      this.radar.removeIntent(decisionId);
+      this.ledger?.setArmedIntents(this.radar.getAllIntents());
+      this.ledger?.setDaemonState(this.getDaemonState());
+
+      return { success: true, message: `Decision #${decisionId} successfully dismissed.` };
+    } catch (err: any) {
+      console.error(`[SPARK_DISPATCHER] Error dismissing decision #${decisionId}:`, err);
+      return { success: false, message: err?.message || String(err) };
+    }
+  }
+
+  /**
    * Dynamically hydrates active risk parameters from:
    * 1. Custom callback (if provided)
    * 2. daemon_live_settings.json (if present)
@@ -1479,6 +1568,14 @@ export class SparkIngestionDispatcher {
             decisionId: parsed.id,
             symbol: parsed.symbol,
             direction: parsed.direction,
+            htfTrend:
+              parsed.rawRecord?.htf_trend ||
+              (parsed.direction === 'LONG'
+                ? 'BULLISH CONTINUATION (1H / 15m)'
+                : 'BEARISH CONTINUATION (1H / 15m)'),
+            bosTriggerLevel: parsed.rawRecord?.trigger_price
+              ? parseFloat(String(parsed.rawRecord.trigger_price))
+              : null,
             entryRangeLow: parsed.entryRangeLow,
             entryRangeHigh: parsed.entryRangeHigh,
             limitEntryPrice: parsed.limitEntryPrice,
@@ -1488,6 +1585,11 @@ export class SparkIngestionDispatcher {
             riskUsd: sizing.dollarRisk,
             riskPct: sizing.compoundingRiskPct,
             contractSize: sizing.contractSize,
+            rewardRiskRatio:
+              parsed.stage2Target && parsed.limitEntryPrice && sizing.clampedStopLoss
+                ? Math.abs(parsed.stage2Target - parsed.limitEntryPrice) /
+                  Math.abs(parsed.limitEntryPrice - sizing.clampedStopLoss)
+                : undefined,
             narrative: parsed.rawRecord?.narrative,
             timestamp: Date.now(),
             mode: activeMode,
