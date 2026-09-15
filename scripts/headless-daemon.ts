@@ -479,7 +479,7 @@ async function main() {
             mutated = true;
           } else if (cmd.action === 'TOGGLE_AUTO_EXEC') {
             const enabled = !!cmd.metadata?.enabled;
-            engine.updateConfig({ autoExecute: enabled });
+            engine.updateConfig({ autoExecute: enabled, enableSrAutoExecute: enabled });
             cmd.status = 'PROCESSED';
             mutated = true;
           } else if (cmd.action === 'TOGGLE_AUTO_SCAN') {

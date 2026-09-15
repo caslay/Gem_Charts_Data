@@ -1498,6 +1498,41 @@ export class TrendContinuationEngine {
         executionEntryPrice = brokenPivotLevel;
       }
 
+      // 3C.1 ICT Dealing Range Equilibrium Gate (Strict Anti-Discount Shorting)
+      let activeDisplacementEq: number | null = null;
+      if (setupDirection === 'BEARISH') {
+        const anchorHigh = originSwingPrice;
+        let minExpLow = Infinity;
+        for (let k = originSwingIndex; k <= i; k++) {
+          const lk = candles[k].l ?? (candles[k] as any).low;
+          if (lk < minExpLow) minExpLow = lk;
+        }
+        // Evaluate forward expansion before pullback touches entry
+        const maxRetestBars = this.config.maxBarsToRetest ?? 12;
+        const searchEnd = Math.min(candles.length - 1, i + maxRetestBars);
+        for (let k = i + 1; k <= searchEnd; k++) {
+          const ck = candles[k];
+          const hk = ck.h ?? (ck as any).high;
+          const lk = ck.l ?? (ck as any).low;
+          if (lk < minExpLow) minExpLow = lk;
+          if (hk >= executionEntryPrice) {
+            break;
+          }
+        }
+        const anchorLow = minExpLow;
+        if (anchorHigh > anchorLow && Number.isFinite(anchorHigh) && Number.isFinite(anchorLow)) {
+          const equilibrium = (anchorHigh + anchorLow) / 2;
+          activeDisplacementEq = parseFloat(equilibrium.toFixed(4));
+          // For SHORT setups: The resting limit entry price (FVG Proximal) must reside strictly at or above the 50% Equilibrium level (in Premium).
+          // If a Short setup's entry POI resides in the Discount half (< 50% Equilibrium), strictly VETO the setup ([VALUATION_VETO] Entry resides in Discount).
+          // Do not clamp or force an entry at empty price levels.
+          if (executionEntryPrice < equilibrium) {
+            dbgDispVeto++;
+            continue; // [VALUATION_VETO] Entry resides in Discount
+          }
+        }
+      }
+
       // 3D. Resolve Hard Stop Loss beyond origin swing with ATR buffer
       const currentAtr = atrSeries[i] || 1.0;
       const slBuffer = Math.max(0.01, (this.config.slBufferAtrMultiplier ?? 0.10) * currentAtr);
@@ -1786,7 +1821,9 @@ export class TrendContinuationEngine {
         fvg_top: foundFvg ? parseFloat(fvgTop.toFixed(4)) : null,
         fvg_bottom: foundFvg ? parseFloat(fvgBottom.toFixed(4)) : null,
         fvg_ce: foundFvg ? parseFloat(fvgCe.toFixed(4)) : null,
-        fvg_proximal: parseFloat((setupDirection === 'BULLISH' ? fvgTop : fvgBottom).toFixed(4)),
+        fvg_proximal: foundFvg
+          ? parseFloat((setupDirection === 'BULLISH' ? fvgTop : fvgBottom).toFixed(4))
+          : parseFloat(executionEntryPrice.toFixed(4)),
         fvg_distal: foundFvg ? parseFloat((setupDirection === 'BULLISH' ? fvgBottom : fvgTop).toFixed(4)) : null,
 
         entry_price: parseFloat(executionEntryPrice.toFixed(4)),
@@ -1794,7 +1831,7 @@ export class TrendContinuationEngine {
         risk_usd: parseFloat(riskUsd.toFixed(4)),
         risk_pct: parseFloat(riskPct.toFixed(3)),
 
-        dealing_range_equilibrium: dealingRangeEq,
+        dealing_range_equilibrium: activeDisplacementEq ?? dealingRangeEq,
 
         stage1_target: stage1Target,
         stage2_target: stage2Target,

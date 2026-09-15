@@ -1,8 +1,54 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.80
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.81
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-14 (V17.80 — Self-Healing Migration for Decision Log & Telegram Promotion Pipeline Audit)
+> **Last Updated:** 2026-09-15 (V17.81 — Architectural Hardening Pass: UI Safety, Gating Decoupling, Resting Cap & Anti-Discount Valuation Gate)
+
+## 🆕 V17.81 Changelog — Architectural Hardening Pass: UI Safety, Gating Decoupling, Resting Cap & Anti-Discount Valuation Gate (2026-09-15)
+
+### Summary
+1. **Workstream A: UI Safety & Visual Suppression of Legacy Execution Controls (`src/components/NavigationHeader.tsx`, `src/components/LiveCockpitStatusBadge.tsx`, `src/components/OrderFlowTimelineRibbon.tsx`):**
+   - Suppressed visual rendering of legacy `[S&R]` badge/pill trigger in top global navigation header (`LiveCockpitStatusBadge` hidden via `className="hidden"`), while safely preserving the underlying `LiveOrderBlockModal` mounted in the DOM.
+   - Conditionally suppressed legacy S&R pill rendering in `LiveCockpitStatusBadge` (`!isSR && ...`).
+   - Suppressed legacy `[ LIVE OB EXECUTION ]` button in `OrderFlowTimelineRibbon.tsx` using `hidden` utility class, preventing inadvertent operator engagement with legacy order block execution dialogs while preserving timeline metrics and event interactions.
+2. **Workstream B: Strategy Auto-Execution Decoupling & Independent Authorization Flags (`src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`, `scripts/headless-daemon.ts`):**
+   - Decoupled strategy execution configuration: legacy Sweep & Reclaim toggles (`autoExecute: false`) no longer act as a universal master kill-switch disabling Spark Ingestion Dispatcher or Trend Continuation pipelines.
+   - Introduced independent authorization flags on `AutomatedExecutionConfig`:
+     - `enableSrAutoExecute?: boolean;` (default: true)
+     - `enableTrendContinuationAutoExecute?: boolean;` (default: true)
+     - `enableSparkAutoExecute?: boolean;` (default: true)
+     - `maxPendingOrders?: number;` (default: 1)
+   - Re-architected Guardrail 1 in `submitStrategyOrder`: independently checks `isSparkOrder` vs `enableSparkAutoExecute`, `isTrendContinuationOrder` vs `enableTrendContinuationAutoExecute`, and legacy S&R vs `isSrAuthorized = (enableSrAutoExecute ?? true) && autoExecute`.
+   - Updated `scripts/headless-daemon.ts` `TOGGLE_AUTO_EXEC` command handling to synchronize both `autoExecute` and `enableSrAutoExecute`.
+3. **Workstream C: Resting Limit Order Capping & Spatial Deduplication (`src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`, `src/lib/daemon/proximityRadar.ts`, `src/lib/daemon/sparkIngestionDispatcher.ts`, `src/lib/daemon/daemonLedger.ts`):**
+   - Enforced Guardrail 2.1 resting limit order capping: clamped active unfilled resting limit orders to `maxPendingOrders = 1`. Incoming order candidates breaching the cap are strictly vetoed with `[RESTING_ORDER_CAP] An unfilled resting limit order is already active on the order book.`.
+   - Preserved Guardrail 3 (Directional Lock) precedence before Guardrail 2.1 so opposing incoming candidates are rejected with `[DIRECTIONAL_LOCK]` rather than masking directional risk under resting caps.
+   - Added `cancelAllPendingLimitOrders()` method to `AutomatedStrategyExecutionEngine`.
+   - Implemented `findSpatialDuplicate(symbol, direction, entryPrice, thresholdPct, excludeId)` on `ProximityRadarEngine` checking existing armed and resting intents within $\pm 0.15\%$ tolerance.
+   - Implemented Step 4.1 Spatial Deduplication Guard in `SparkIngestionDispatcher.processDecision`: checks both Proximity Radar armed intents and engine resting limit orders. If candidate targets entry zone within $\pm 0.15\%$ of an existing setup on the same symbol and direction, marks DB record `DUPLICATE_SUPPRESSED`, appends telemetry to narrative, emits `SPARK_DECISION_DUPLICATE_SUPPRESSED` daemon ledger event, and returns `{ status: 'DUPLICATE_SUPPRESSED' }`, preventing order duplication and alert spam.
+   - Added operator preemption in `promoteStandbyToMode`: clears stale resting limit orders via `cancelAllPendingLimitOrders()` prior to routing manually promoted setups, ensuring manual operator decisions seamlessly claim the resting maker slot.
+4. **Workstream D: ICT Dealing Range Equilibrium Gate (Strict Anti-Discount Shorting) (`src/lib/quantEngine/TrendContinuationEngine.ts`, `src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`):**
+   - Enforced ICT Dealing Range Valuation Gate in `TrendContinuationEngine` (Phase 3.1) and `AutomatedStrategyExecutionEngine.evaluateTrendContinuation`:
+     - Range Anchor High = Origin swing high initiating the 15m Break of Structure (BOS).
+     - Range Anchor Low = Lowest expansion point reached before the pullback (tracks forward through bars until pullback touches limit entry).
+     - Equilibrium = `(Anchor High + Anchor Low) / 2`.
+     - Bearish setups must enter in Premium ($\ge 50\%$ Equilibrium). If entry price resides in Discount ($< 50\%$ Equilibrium), the setup is strictly vetoed with `[VALUATION_VETO] Entry resides in Discount`. No clamping or forcing entries into thin air.
+     - Fixed `fvg_proximal` fallback to ensure broken pivot pullback entries without FVGs correctly default to `executionEntryPrice` rather than `0.0000`, preventing false discount valuation vetoes. Populated `dealing_range_equilibrium` on setup objects for 1:1 HUD and downstream parity.
+5. **Workstream E: TypeScript Union Parity & Non-Regression (`src/app/api/daemon/command/route.ts`, `src/lib/daemon/daemonLedger.ts`, `src/lib/daemon/sparkIngestionDispatcher.ts`, `scripts/test_hardening_pass.ts`):**
+   - Added `'PROMOTE_STANDBY' | 'DISMISS_SETUP'` to `DaemonCommandPayload.action` union in `src/app/api/daemon/command/route.ts` along with `decisionId?: number` and `targetMode?: string;`.
+   - Preserved `targetMode` handling in `POST /api/daemon/command` for complete operational parity across Web UI, Telegram callbacks, and headless daemon.
+   - Added `'SPARK_DECISION_DUPLICATE_SUPPRESSED'` to `DaemonEvent.type` union in `src/lib/daemon/daemonLedger.ts`.
+   - Added `'DUPLICATE_SUPPRESSED'` to `ProcessDecisionResult.status` in `src/lib/daemon/sparkIngestionDispatcher.ts`.
+   - Hardened symbol normalization in spatial deduplication (`ETH-USDC` vs `ETHUSDC`).
+   - Authored comprehensive test suite `scripts/test_hardening_pass.ts` validating all 6 hardening domains across UI suppression, decoupling, resting caps, spatial deduplication, equilibrium valuation gating, and type unions with 100% assertions passing.
+6. **Verification & Parity Record:**
+   - Authored and verified `scripts/test_hardening_pass.ts`: 100% assertions passed.
+   - Re-verified `scripts/test_spark_ingestion_dispatcher.ts`: 99/99 passed.
+   - Re-verified `scripts/test_risk_governor.ts`: 39/39 passed.
+   - Re-verified `scripts/test_ttl_and_parity.ts`: 100% passed.
+   - Re-verified `scripts/verify_quant_vs_pm2_parity.ts`: 7/7 (100.00%) passed.
+   - Re-verified `scripts/test_decision_log_promotion_pipeline.ts`: 28/28 passed.
+   - Re-verified `npx tsc --noEmit`: exited 0 with zero TypeScript errors.
 
 ## 🆕 V17.80 Changelog — Self-Healing Migration for Decision Log & Telegram Promotion Pipeline Audit (2026-09-14)
 

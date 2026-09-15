@@ -158,10 +158,14 @@ export interface AutomatedExecutionConfig {
   symbol: string;
   timeframe: string;
   autoExecute: boolean;
+  enableSrAutoExecute?: boolean; // Controls Sweep & Reclaim auto-execution (default: true)
+  enableTrendContinuationAutoExecute?: boolean; // Controls Trend Continuation auto-execution (default: true)
+  enableSparkAutoExecute?: boolean; // Controls Spark Ingestion Dispatcher auto-execution (default: true)
   enableAutonomousScan?: boolean; // When false, internal candle scanning (S&R and Trend Continuation) is on standby — no autonomous orders are generated from candle closes (default: false)
   initialEquity?: number; // Portfolio equity baseline for dynamic compounding (default: 1000.0)
   compoundingRiskPct: number; // default: 2.0% ($1.0R = Equity * 0.02)
   maxOpenPositions: number; // default: 1 (Strict Single-Position Cap)
+  maxPendingOrders?: number; // default: 1 (Explicit cap on unfilled resting limit orders)
   cooldownMs: number; // default: 60000 (60s cooldown post close)
   minLotSize: number; // default: 0.001 ETH
   maxLotSize: number; // default: 100.0 ETH
@@ -218,10 +222,14 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   symbol: "ETHUSDC",
   timeframe: "15m",
   autoExecute: true,
+  enableSrAutoExecute: true,
+  enableTrendContinuationAutoExecute: true,
+  enableSparkAutoExecute: true,
   enableAutonomousScan: false, // Default: Standby (autonomous candle order triggers silenced for Spark Ingestion Dispatcher)
   initialEquity: 1000.0,
   compoundingRiskPct: 2.0,
   maxOpenPositions: 1,
+  maxPendingOrders: 1,
   cooldownMs: 60000,
   minLotSize: 0.001,
   maxLotSize: 100.0,
@@ -602,12 +610,38 @@ export class AutomatedStrategyExecutionEngine {
       bypassWeekendFilter,
     } = params;
 
-    // ── Guardrail 1: Auto-Execute Flag ──
-    if (!this.config.autoExecute) {
-      return {
-        success: false,
-        message: "Automated execution is currently disabled in configuration.",
-      };
+    // ── Guardrail 1: Decoupled Strategy Execution Authorization ──
+    const isSparkOrder =
+      (strategyId && strategyId.startsWith("SPARK_")) ||
+      (strategyName && strategyName.toLowerCase().includes("spark"));
+    const isTrendContinuationOrder =
+      strategyId === "TREND_CONTINUATION" ||
+      (strategyName && strategyName.toLowerCase().includes("trend continuation"));
+
+    if (isSparkOrder) {
+      if (this.config.enableSparkAutoExecute === false) {
+        return {
+          success: false,
+          message: "[SPARK_DISABLED] Spark Ingestion automated execution is currently disabled in configuration.",
+        };
+      }
+    } else if (isTrendContinuationOrder) {
+      if (this.config.enableTrendContinuationAutoExecute === false) {
+        return {
+          success: false,
+          message: "[TC_DISABLED] Trend Continuation automated execution is currently disabled in configuration.",
+        };
+      }
+    } else {
+      // Legacy Sweep & Reclaim pipeline
+      const isSrAuthorized =
+        (this.config.enableSrAutoExecute ?? true) && this.config.autoExecute;
+      if (!isSrAuthorized) {
+        return {
+          success: false,
+          message: "Automated execution is currently disabled in configuration.",
+        };
+      }
     }
 
     // ── Guardrail 1.5: 🛡️ Quant Shield Rule 2: Weekend Off-Liquidity Filter (Fri 22:00 - Sun 20:00 UTC) ──
@@ -656,6 +690,17 @@ export class AutomatedStrategyExecutionEngine {
       } position is active.`;
       this.emit("DIRECTIONAL_VETO", msg);
       return { success: false, message: msg };
+    }
+
+    // ── Guardrail 2.1: Resting Limit Order Capping (maxPendingOrders: 1) ──
+    const maxPending = this.config.maxPendingOrders ?? 1;
+    if (this.pendingLimitOrders.length >= maxPending) {
+      const msg = `[RESTING_ORDER_CAP] An unfilled resting limit order is already active on the order book.`;
+      this.emit("DIRECTIONAL_VETO", msg);
+      return {
+        success: false,
+        message: msg,
+      };
     }
 
     // ── Guardrail 4: 🛡️ Quant Shield Rule 5: Mandatory Post-Loss Directional Cooldown ──
@@ -1768,6 +1813,10 @@ export class AutomatedStrategyExecutionEngine {
     return count;
   }
 
+  public cancelAllPendingLimitOrders(): number {
+    return this.emergencyClearAllPendingOrders();
+  }
+
   public getActivePositions(): StrategyExecutionPosition[] {
     return [...this.activePositions];
   }
@@ -2094,10 +2143,12 @@ export class AutomatedStrategyExecutionEngine {
             isValuationGatePassed;
 
           const isAutonomousScanEnabled = this.config.enableAutonomousScan === true;
+          const isSrAuthorized =
+            (this.config.enableSrAutoExecute ?? true) && this.config.autoExecute;
 
           if (
             isConfirmed &&
-            this.config.autoExecute &&
+            isSrAuthorized &&
             isAutonomousScanEnabled &&
             !this.processedSetupIds.has(s.id)
           ) {
@@ -2298,7 +2349,8 @@ export class AutomatedStrategyExecutionEngine {
       scanned.push(s);
 
       // Standby / Silenced check: do not route orders unless autonomous scanning is explicitly enabled
-      if (!isAutonomousScanEnabled || !this.config.autoExecute) continue;
+      const isTcAuthorized = this.config.enableTrendContinuationAutoExecute !== false;
+      if (!isAutonomousScanEnabled || !isTcAuthorized) continue;
 
       // Only attempt to route setups that are fresh
       const latestIdx = candles.length - 1;
@@ -2306,6 +2358,33 @@ export class AutomatedStrategyExecutionEngine {
       if (barsSinceBos > (customConfig?.maxBarsToRetest ?? 12)) continue;
 
       if (this.activePositions.length > 0) continue;
+
+      // ── ICT Dealing Range Equilibrium Gate (Strict Anti-Discount Shorting) ──
+      if (s.type === 'BEARISH') {
+        const anchorHigh = s.origin_swing_level;
+        // Anchor Low = lowest expansion point reached before the pullback
+        let anchorLow = Infinity;
+        const entryPrice = (s.fvg_proximal && s.fvg_proximal > 0) ? s.fvg_proximal : s.entry_price;
+        const searchEnd = Math.min(candles.length - 1, s.bos_candle_index + (customConfig?.maxBarsToRetest ?? 12));
+        for (let k = s.origin_swing_index; k <= searchEnd; k++) {
+          const ck = candles[k];
+          const hk = ck.h ?? (ck as any).high;
+          const lk = ck.l ?? (ck as any).low;
+          if (lk < anchorLow) anchorLow = lk;
+          if (k > s.bos_candle_index && hk >= entryPrice) {
+            break;
+          }
+        }
+        if (anchorHigh > anchorLow && Number.isFinite(anchorHigh) && Number.isFinite(anchorLow)) {
+          const equilibrium = (anchorHigh + anchorLow) / 2;
+
+          if (entryPrice < equilibrium) {
+            const vetoMsg = `[VALUATION_VETO] Entry resides in Discount`;
+            this.emit("DIRECTIONAL_VETO", `${vetoMsg}: Short entry $${entryPrice.toFixed(2)} < EQ $${equilibrium.toFixed(2)} (Range: $${anchorLow.toFixed(2)} - $${anchorHigh.toFixed(2)})`);
+            continue;
+          }
+        }
+      }
 
       const orderResult = this.submitStrategyOrder({
         strategyId: 'TREND_CONTINUATION',

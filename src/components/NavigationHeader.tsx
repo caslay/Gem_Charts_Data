@@ -213,8 +213,8 @@ export function NavigationHeader() {
           {/* ─── RIGHT SECTION: Live Cockpit, Telemetry & Utility Actions ─── */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
 
-            {/* Persistent Live Cockpit Execution Status Badge */}
-            <LiveCockpitStatusBadge onClick={() => setIsLiveOBModalOpen(true)} variant="responsive" />
+            {/* Persistent Live Cockpit Execution Status Badge - Safely suppressed legacy [S&R] badge/pill trigger */}
+            <LiveCockpitStatusBadge onClick={() => setIsLiveOBModalOpen(true)} variant="responsive" className="hidden" />
 
             {/* Session Indicator (Large Screens) */}
             <div className="hidden xl:flex px-2 py-1 bg-background/50 border border-card-border rounded text-[9px] font-mono font-bold text-accent shrink-0 uppercase tracking-wider">

@@ -15,8 +15,12 @@ export interface DaemonCommandPayload {
     | 'TOGGLE_AUTO_EXEC'
     | 'TOGGLE_AUTO_SCAN'
     | 'SET_EXECUTION_MODE'
-    | 'UPDATE_SETTINGS';
+    | 'UPDATE_SETTINGS'
+    | 'PROMOTE_STANDBY'
+    | 'DISMISS_SETUP';
   positionId?: string;
+  decisionId?: number;
+  targetMode?: string;
   timestamp: number;
   timeIso: string;
   status: 'PENDING' | 'PROCESSED' | 'FAILED';
@@ -26,7 +30,7 @@ export interface DaemonCommandPayload {
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { action, positionId, metadata } = body;
+    const { action, positionId, decisionId, targetMode, metadata } = body;
 
     if (!action) {
       return NextResponse.json({ error: 'Missing action parameter' }, { status: 400 });
@@ -109,6 +113,8 @@ export async function POST(req: Request) {
       id: `cmd_${now}_${Math.random().toString(36).substring(2, 7)}`,
       action,
       positionId,
+      decisionId: decisionId !== undefined ? Number(decisionId) : undefined,
+      targetMode: targetMode || metadata?.targetMode,
       timestamp: now,
       timeIso: new Date(now).toISOString(),
       status: 'PENDING',

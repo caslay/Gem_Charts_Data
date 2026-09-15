@@ -127,18 +127,16 @@ export default function LiveCockpitStatusBadge({
         )}
       </div>
 
-      {/* Strategy Category Pill */}
-      {(variant === 'full' || variant === 'responsive') && (
+      {/* Strategy Category Pill - legacy S&R pill suppressed */}
+      {(variant === 'full' || variant === 'responsive') && !isSR && (
         <span
           className={`text-[8px] px-1.5 py-0.2 rounded font-black ${
-            isSR
-              ? 'bg-cyan-500/15 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30'
-              : isCustom
+            isCustom
               ? 'bg-purple-500/15 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-500/30'
               : 'bg-emerald-500/15 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
           }`}
         >
-          {isSR ? 'S&R' : isCustom ? 'CUSTOM' : 'OB'}
+          {isCustom ? 'CUSTOM' : 'OB'}
         </span>
       )}
 
