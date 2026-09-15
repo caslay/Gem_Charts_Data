@@ -194,6 +194,46 @@ export class ProximityRadarEngine {
   }
 
   /**
+   * Identifies if an existing armed or resting intent matches symbol, direction,
+   * and targets an entry zone within +/- thresholdPct (default: 0.15%).
+   */
+  public findSpatialDuplicate(
+    symbol: string,
+    direction: 'LONG' | 'SHORT',
+    entryPrice: number,
+    thresholdPct: number = 0.0015,
+    excludeId?: number
+  ): ArmedIntent | undefined {
+    if (!entryPrice || entryPrice <= 0) return undefined;
+    const cleanSym = symbol ? symbol.toUpperCase().replace(/[-_/]/g, '') : null;
+    for (const intent of this.intents.values()) {
+      if (excludeId !== undefined && intent.id === excludeId) continue;
+      if (cleanSym && intent.symbol !== cleanSym) continue;
+      if (intent.direction !== direction) continue;
+      const isArmedOrResting =
+        intent.stage === 'ARMED_PENDING' ||
+        intent.stage === 'PROXIMITY_ELEVATED' ||
+        intent.stage === 'ORDER_RESTING';
+      if (!isArmedOrResting) continue;
+
+      const existingEntry =
+        intent.resolvedEntryPrice ||
+        intent.limitEntryPrice ||
+        intent.fvgProximalPrice ||
+        (intent.poiZoneLow && intent.poiZoneHigh ? (intent.poiZoneLow + intent.poiZoneHigh) / 2 : 0) ||
+        intent.triggerPrice;
+
+      if (existingEntry && existingEntry > 0) {
+        const delta = Math.abs(entryPrice - existingEntry) / existingEntry;
+        if (delta <= thresholdPct) {
+          return intent;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /**
    * Evaluates incoming real-time market ticks:
    * 1. Detects POI zone penetration: Elevates radar monitoring from DORMANT to PROXIMITY_ELEVATED.
    * 2. Invalidation pre-check: If live price breaches stop loss before fill -> invalidates.

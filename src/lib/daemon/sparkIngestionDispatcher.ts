@@ -148,6 +148,7 @@ export interface ProcessDecisionResult {
     | 'REJECTED'
     | 'REJECTED_BY_RISK_GOVERNOR'
     | 'STAND_DOWN'
+    | 'DUPLICATE_SUPPRESSED'
     | 'ALREADY_CLAIMED'
     | 'ARMED_WATCHING_TRIGGER'
     | 'ORDER_RESTING'
@@ -933,6 +934,11 @@ export class SparkIngestionDispatcher {
         this.ledger?.setArmedIntents(this.radar.getAllIntents());
       }
 
+      // 4.5 Operator Preemption: Clear any resting limit order so the manually promoted setup occupies the resting slot
+      if (this.engine.getPendingLimitOrders().length > 0) {
+        this.engine.cancelAllPendingLimitOrders();
+      }
+
       // 5. Trigger immediate processing of this decision with modeOverride
       record.execution_mode = targetMode;
       record.status = 'ARMED';
@@ -1402,6 +1408,76 @@ export class SparkIngestionDispatcher {
         reason: `Non-directional bias: ${parsed.biasSignal}`,
         parsed,
       };
+    }
+
+    // 4.1 Spatial Deduplication Guard: Suppress redundant alerts/orders if entry zone is within +/- 0.15%
+    // of an existing armed or resting setup on the same symbol and direction.
+    const targetEntry =
+      parsed.limitEntryPrice ||
+      (parsed.entryRangeLow && parsed.entryRangeHigh ? (parsed.entryRangeLow + parsed.entryRangeHigh) / 2 : 0) ||
+      (record.trigger_price ? parseFloat(String(record.trigger_price)) : 0);
+
+    if (targetEntry > 0 && parsed.direction) {
+      // Check 1: Armed intents in Proximity Radar
+      const duplicateIntent = this.radar.findSpatialDuplicate(
+        parsed.symbol,
+        parsed.direction,
+        targetEntry,
+        0.0015,
+        id
+      );
+
+      // Check 2: Resting limit orders in Automated Strategy Execution Engine
+      let duplicateOrder: StrategyExecutionPosition | undefined = undefined;
+      const cleanTargetSym = parsed.symbol ? parsed.symbol.toUpperCase().replace(/[-_/]/g, '') : '';
+      const pendingOrders = this.engine.getPendingLimitOrders();
+      for (const pos of pendingOrders) {
+        const cleanPosSym = pos.symbol ? pos.symbol.toUpperCase().replace(/[-_/]/g, '') : '';
+        if (cleanPosSym === cleanTargetSym && pos.direction === parsed.direction) {
+          const existingEntry = pos.entryPrice;
+          if (existingEntry > 0) {
+            const delta = Math.abs(targetEntry - existingEntry) / existingEntry;
+            if (delta <= 0.0015) {
+              duplicateOrder = pos;
+              break;
+            }
+          }
+        }
+      }
+
+      if (duplicateIntent || duplicateOrder) {
+        const existingRef = duplicateIntent
+          ? `Radar Intent #${duplicateIntent.id} (Stage: ${duplicateIntent.stage})`
+          : `Engine Order #${duplicateOrder!.id} (Status: ${duplicateOrder!.status})`;
+        const existingPrice = duplicateIntent
+          ? (duplicateIntent.resolvedEntryPrice || duplicateIntent.limitEntryPrice || duplicateIntent.triggerPrice || targetEntry)
+          : duplicateOrder!.entryPrice;
+        const deltaPct = ((Math.abs(targetEntry - existingPrice) / existingPrice) * 100).toFixed(3);
+
+        const dupReason = `Spatial duplicate: Target entry $${targetEntry.toFixed(2)} is within ${deltaPct}% (+/-0.15%) of existing ${parsed.direction} setup (${existingRef} @ $${existingPrice.toFixed(2)}). Redundant alerts/orders suppressed.`;
+        console.warn(`[SPARK_DISPATCHER] 🔁 Decision #${id} suppressed: ${dupReason}`);
+
+        try {
+          await sql`
+            UPDATE agent_decision_log
+            SET status = 'DUPLICATE_SUPPRESSED',
+                updated_at = NOW(),
+                narrative = COALESCE(narrative, '') || ' [SPATIAL_DEDUPLICATION_SUPPRESSED: ' || ${dupReason} || ']'
+            WHERE id = ${id} AND (status = 'ACTIVE' OR status = 'QUEUED' OR status = 'ARMED')
+          `;
+        } catch {}
+
+        this.ledger?.logEvent('SPARK_DECISION_DUPLICATE_SUPPRESSED', dupReason, {
+          livePrice: livePrice ?? undefined,
+          metadata: { decisionId: id, targetEntry, existingPrice, deltaPct },
+        });
+
+        return {
+          status: 'DUPLICATE_SUPPRESSED',
+          reason: dupReason,
+          parsed,
+        };
+      }
     }
 
     // 4.5 Armed Intent Routing: If record is conditional or armed, register directly into Proximity Radar

@@ -308,11 +308,12 @@ export default function OrderFlowTimelineRibbon({
             })}
           </div>
 
+          {/* Safely suppressed: [ LIVE OB EXECUTION ] button */}
           {onOpenLiveOBModal && (
             <button
               type="button"
               onClick={onOpenLiveOBModal}
-              className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-card hover:bg-cyan-500/15 border border-card-border hover:border-cyan-500/50 text-muted hover:text-cyan-400 font-mono text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-sm"
+              className="hidden items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-card hover:bg-cyan-500/15 border border-card-border hover:border-cyan-500/50 text-muted hover:text-cyan-400 font-mono text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-sm"
               title="Open Phase 7 Live Order Block & Breaker Execution Cockpit"
             >
               <Activity size={11} className="text-cyan-400 animate-pulse" />
