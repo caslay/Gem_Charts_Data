@@ -33,6 +33,8 @@ import { analyzeMarketStructureStateful } from '@/lib/structureEngine';
 import { getSmtContext } from '@/lib/smtEngine';
 import { resolveTripleVectorBias } from '@/lib/quantEngine/BiasEngine';
 import { verifyDisplacement } from '@/lib/displacementEngine';
+import { isDeadZone } from '@/lib/temporalGatekeeper';
+import { InstitutionalGeometryGate } from '@/lib/quantEngine/InstitutionalGeometryGate';
 
 import type { AgentContextPayload, AgentDecisionPayload, AgentDecisionRecord } from '@/types/agentTypes';
 import * as fs from 'fs';
@@ -892,11 +894,34 @@ export async function runSubmitQuantDecision(
     invalidationGuard = { checked: false, note: 'LIVE_PRICE_UNAVAILABLE' };
   }
 
+  // ── Pre-flight Geometry Gate (TP1 >= 1.50R, TP2 >= 2.00R) ─────────────────
+  const refEntry = triggerPrice ?? (poiZoneLow && poiZoneHigh ? (poiZoneLow + poiZoneHigh) / 2 : entryRangeLow && entryRangeHigh ? (entryRangeLow + entryRangeHigh) / 2 : livePriceAtSubmission);
+  if (refEntry && invalidationLevel && target1) {
+    const dir = normalizedBias.includes('BULL') ? 'LONG' : normalizedBias.includes('BEAR') ? 'SHORT' : undefined;
+    const geomVerdict = InstitutionalGeometryGate.evaluateGeometry(refEntry, invalidationLevel, target1, target2, dir);
+    if (!geomVerdict.passed) {
+      console.warn(`[agentEngineHandlers] 🛑 Geometry veto for submitted decision: ${geomVerdict.reason}`);
+      throw Object.assign(
+        new Error(`GEOMETRY_REJECTED: ${geomVerdict.reason}`),
+        { code: 'GEOMETRY_REJECTED', status: 422, reason: geomVerdict.reason }
+      );
+    }
+  }
+
   // ── DB persist ────────────────────────────────────────────────────────────
   await ensureAgentDecisionTableInitialized();
 
   const now = Date.now();
-  const initialStatus = isTriggerOnConfirmation ? 'ARMED_WATCHING_TRIGGER' : 'ACTIVE';
+  const deadZoneCheck = isDeadZone(now);
+  const initialStatus = deadZoneCheck.isDead
+    ? 'STAND_DOWN'
+    : isTriggerOnConfirmation
+    ? 'ARMED_WATCHING_TRIGGER'
+    : 'ACTIVE';
+
+  if (deadZoneCheck.isDead) {
+    narrative = `${narrative || ''} [DEAD_ZONE_GATE: ${deadZoneCheck.reason}]`.trim();
+  }
 
   const result = await sql`
     INSERT INTO agent_decision_log (
@@ -949,8 +974,8 @@ export async function runSubmitQuantDecision(
     `[agentEngineHandlers] ✅ Decision persisted. id=${inserted.id} agent=${agent_id} bias=${normalizedBias} symbol=${symbol} mode=${executionMode} status=${initialStatus}`
   );
 
-  // 📡 Telegram Notification: Armed Intent Registered
-  if (isTriggerOnConfirmation) {
+  // 📡 Telegram Notification: Armed Intent Registered (Silenced during Dead Zone)
+  if (isTriggerOnConfirmation && !deadZoneCheck.isDead) {
     try {
       const { TelegramNotifier } = await import('@/lib/notifications/telegramNotifier');
       const telegram = new TelegramNotifier();

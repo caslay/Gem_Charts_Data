@@ -21,6 +21,14 @@ import {
   ExecutionEvent,
   StrategyExecutionPosition,
 } from '../quantEngine/AutomatedStrategyExecutionEngine';
+import {
+  AlertCadenceGovernor,
+  globalAlertCadenceGovernor,
+} from './AlertCadenceGovernor';
+import {
+  isDeadZone,
+  formatDeadZoneObservationHeartbeat,
+} from '../temporalGatekeeper';
 
 export interface TelegramConfig {
   botToken: string;
@@ -28,6 +36,7 @@ export interface TelegramConfig {
   enabled: boolean;
   persistedRegistryPath?: string;
   ephemeralRegistry?: boolean;
+  cadenceGovernor?: AlertCadenceGovernor;
 }
 
 export type QuantLifecycleMilestone =
@@ -249,12 +258,21 @@ export function formatQuantIntentSignalMarkdown(payload: QuantIntentSignalPayloa
     ? `💰 *Target 2 (70% Macro Runner):* \`$${t2Val.toFixed(2)}\` _(Structural Liquidity Pool)_\n`
     : '';
 
-  let rrStr = '1:2.50';
-  if (entryPrice && payload.invalidationLevel && t2Val) {
+  let rrStr = '1:1.50 (TP1) / 1:3.00 (TP2)';
+  if (entryPrice && payload.invalidationLevel) {
     const riskDist = Math.abs(entryPrice - payload.invalidationLevel);
-    const rewardDist = Math.abs(t2Val - entryPrice);
     if (riskDist > 0) {
-      rrStr = `1:${(rewardDist / riskDist).toFixed(2)}`;
+      if (t1Val && t2Val) {
+        const tp1RR = (Math.abs(t1Val - entryPrice) / riskDist).toFixed(2);
+        const tp2RR = (Math.abs(t2Val - entryPrice) / riskDist).toFixed(2);
+        rrStr = `1:${tp1RR} (TP1) / 1:${tp2RR} (TP2)`;
+      } else if (t1Val) {
+        const tp1RR = (Math.abs(t1Val - entryPrice) / riskDist).toFixed(2);
+        rrStr = `1:${tp1RR} (TP1)`;
+      } else if (t2Val) {
+        const tp2RR = (Math.abs(t2Val - entryPrice) / riskDist).toFixed(2);
+        rrStr = `1:${tp2RR} (TP2)`;
+      }
     }
   } else if (payload.rewardRiskRatio) {
     rrStr = `1:${payload.rewardRiskRatio.toFixed(2)}`;
@@ -540,15 +558,24 @@ export function formatArmedIntentRegisteredMarkdown(payload: ArmedIntentRegister
   const cleanNarrative = sanitizeMarkdownText(payload.narrative);
 
   const entryMid = (payload.poiZoneLow + payload.poiZoneHigh) / 2;
-  let rrStr = '1:2.50';
-  if (payload.rewardRiskRatio) {
-    rrStr = `1:${payload.rewardRiskRatio.toFixed(2)}`;
-  } else if (payload.target2 && payload.invalidationLevel && entryMid) {
+  let rrStr = '1:1.50 (TP1) / 1:3.00 (TP2)';
+  if (entryMid && payload.invalidationLevel) {
     const riskDist = Math.abs(entryMid - payload.invalidationLevel);
-    const rewardDist = Math.abs(payload.target2 - entryMid);
     if (riskDist > 0) {
-      rrStr = `1:${(rewardDist / riskDist).toFixed(2)}`;
+      if (payload.target1 && payload.target2) {
+        const tp1RR = (Math.abs(payload.target1 - entryMid) / riskDist).toFixed(2);
+        const tp2RR = (Math.abs(payload.target2 - entryMid) / riskDist).toFixed(2);
+        rrStr = `1:${tp1RR} (TP1) / 1:${tp2RR} (TP2)`;
+      } else if (payload.target1) {
+        const tp1RR = (Math.abs(payload.target1 - entryMid) / riskDist).toFixed(2);
+        rrStr = `1:${tp1RR} (TP1)`;
+      } else if (payload.target2) {
+        const tp2RR = (Math.abs(payload.target2 - entryMid) / riskDist).toFixed(2);
+        rrStr = `1:${tp2RR} (TP2)`;
+      }
     }
+  } else if (payload.rewardRiskRatio) {
+    rrStr = `1:${payload.rewardRiskRatio.toFixed(2)}`;
   }
 
   const riskUsd = typeof payload.riskUsd === 'number' ? payload.riskUsd.toFixed(2) : '0.00';
@@ -676,6 +703,7 @@ export class TelegramNotifier {
   private config: TelegramConfig;
   private sentEventKeys: Set<string> = new Set();
   private registryFilePath: string;
+  public cadenceGovernor: AlertCadenceGovernor;
 
   constructor(config?: Partial<TelegramConfig>) {
     this.loadEnvIfPresent();
@@ -691,6 +719,8 @@ export class TelegramNotifier {
     const enabled =
       config?.enabled ??
       (process.env.TELEGRAM_ENABLED !== 'false' && Boolean(botToken && chatId));
+
+    this.cadenceGovernor = config?.cadenceGovernor || globalAlertCadenceGovernor;
 
     const rootDir = process.cwd();
     const logsDir = path.join(rootDir, 'run_logs');
@@ -712,6 +742,7 @@ export class TelegramNotifier {
       enabled,
       persistedRegistryPath: this.registryFilePath,
       ephemeralRegistry: config?.ephemeralRegistry ?? false,
+      cadenceGovernor: this.cadenceGovernor,
     };
 
     // Load persisted deduplication registry if not in ephemeral mode
@@ -1235,6 +1266,22 @@ export class TelegramNotifier {
       return false;
     }
 
+    // ── 1. Dead Zone Gating for Entry / Intent Signals ──
+    if (milestone === 'SIGNAL_RECEIVED' || milestone === 'ARMED_INTENT_REGISTERED') {
+      const dz = isDeadZone(payload?.timestamp || Date.now());
+      if (dz.isDead) {
+        console.log(`[TELEGRAM] ⚪ Dead zone active (${dz.reason}) — suppressing ${milestone} card broadcast.`);
+        return false;
+      }
+    }
+
+    // ── 2. Alert Cadence Governor (Temporal Cooldown & Spatial Hysteresis) ──
+    const cadenceVerdict = this.cadenceGovernor.isAllowed(milestone, payload);
+    if (!cadenceVerdict.allowed) {
+      console.log(`[TELEGRAM] 🛡️ ${cadenceVerdict.reason}. Suppressing ${milestone}.`);
+      return false;
+    }
+
     const eventKey =
       options?.eventKey ||
       this.generateQuantEventKey(milestone, payload);
@@ -1270,6 +1317,16 @@ export class TelegramNotifier {
     if (success && eventKey) {
       this.sentEventKeys.add(eventKey);
       this.flushDeduplicationRegistry();
+
+      // Register cooldown and active POI in Cadence Governor
+      if (milestone === 'SIGNAL_RECEIVED' || milestone === 'ARMED_INTENT_REGISTERED') {
+        const rawDir = payload.direction || (payload.isLong ? 'LONG' : 'SHORT');
+        const dir = String(rawDir).toUpperCase().includes('LONG') || String(rawDir).toUpperCase().includes('BULL') ? 'LONG' : 'SHORT';
+        this.cadenceGovernor.registerAlertDispatched(payload.symbol || 'ETHUSDC', dir);
+        if (payload.poiZoneLow && payload.poiZoneHigh) {
+          this.cadenceGovernor.registerActivePoiZone(payload.symbol || 'ETHUSDC', dir, payload.poiZoneLow, payload.poiZoneHigh);
+        }
+      }
     }
 
     return success;
@@ -1287,7 +1344,7 @@ export class TelegramNotifier {
   }
 
   /**
-   * Low-level raw message sender via Telegram HTTP Bot API.
+   * Low-level raw message sender via Telegram HTTP Bot API, rate-limited via leaky bucket.
    */
   public async sendRawMessage(
     messageText: string,
@@ -1298,7 +1355,6 @@ export class TelegramNotifier {
       return false;
     }
 
-    const url = `https://api.telegram.org/bot${this.config.botToken}/sendMessage`;
     const payload: any = {
       chat_id: chatId,
       text: messageText,
@@ -1310,6 +1366,11 @@ export class TelegramNotifier {
       payload.reply_markup = options.replyMarkup;
     }
 
+    return this.cadenceGovernor.enqueueMessage(() => this.executeHttpSend(payload));
+  }
+
+  private async executeHttpSend(payload: any): Promise<boolean> {
+    const url = `https://api.telegram.org/bot${this.config.botToken}/sendMessage`;
     try {
       const res = await fetch(url, {
         method: 'POST',

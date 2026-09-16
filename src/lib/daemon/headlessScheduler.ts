@@ -37,6 +37,8 @@ import { TelegramNotifier } from '../notifications/telegramNotifier';
 import { TelegramBotService } from '../notifications/telegramBotService';
 import { SparkIngestionDispatcher } from './sparkIngestionDispatcher';
 import { annotateCandlesWithVolumetricSignals } from '../../utils/generateChartMarkers';
+import { globalAlertCadenceGovernor } from '../notifications/AlertCadenceGovernor';
+import { isDeadZone } from '../temporalGatekeeper';
 
 export interface HeadlessSchedulerOptions {
   symbol?: string;
@@ -716,9 +718,17 @@ export class HeadlessScheduler {
               `[HEADLESS_SCHEDULER] 🎯 Dispatched ARMED setup into agent_decision_log (Range: $${safeEntryLow}-$${safeEntryHigh}, SL: $${result.invalidationLevel})`
             );
 
-            // Trigger immediate poll in SparkIngestionDispatcher
+            // Trigger immediate poll in SparkIngestionDispatcher if authorized
             if (this.sparkDispatcher) {
-              this.sparkDispatcher.pollOnce().catch(() => {});
+              const dz = isDeadZone(Date.now());
+              const isCooling = globalAlertCadenceGovernor.isTemporalCooldownActive(this.symbol, isLong ? 'LONG' : 'SHORT');
+              if (!dz.isDead && !isCooling) {
+                this.sparkDispatcher.pollOnce().catch(() => {});
+              } else {
+                console.log(
+                  `[HEADLESS_SCHEDULER] 🛡️ Suppressed immediate sparkDispatcher poll (${dz.isDead ? dz.reason : 'temporal cooldown active'}). Normal background polling cycle will handle staging.`
+                );
+              }
             }
           } catch (dbErr: any) {
             console.warn('[HEADLESS_SCHEDULER] Could not insert into agent_decision_log:', dbErr?.message || dbErr);
