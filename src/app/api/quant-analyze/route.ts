@@ -175,22 +175,29 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : 20;
+    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!, 10) : 50;
     const page = searchParams.get('page') ? parseInt(searchParams.get('page')!, 10) : 1;
     const symbol = searchParams.get('symbol') || undefined;
     const status = searchParams.get('status') || undefined;
+    const startDate = searchParams.get('startDate') || undefined;
+    const endDate = searchParams.get('endDate') || undefined;
+    const currentPrice = searchParams.get('currentPrice') ? parseFloat(searchParams.get('currentPrice')!) : undefined;
 
     const data = await fetchAiAnalysisHistory({
       limit,
       page,
       symbol,
       status,
+      startDate,
+      endDate,
+      currentPrice,
     });
 
     return NextResponse.json(
       {
         success: true,
         data: data.history,
+        summary: data.summary,
         pagination: data.pagination,
       },
       { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }

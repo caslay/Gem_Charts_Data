@@ -1,9 +1,19 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { sql } from '@/lib/postgres';
+import { sql, getDbPool } from '@/lib/postgres';
 import { safeParseAiJson } from '@/lib/aiJsonParser';
 import { autoLogSopSetup } from '@/lib/sopTrackerLogger';
 import { getFallbackCascadePool, isLiteWorkhorseModel, DEFAULT_MODEL } from '@/lib/aiModels';
 import { buildLiveSessionContext, type LiveSessionContext } from '@/lib/sessionContext';
+import {
+  reconcileSetupOutcomes,
+  calculateDailyAuditMetrics,
+  getCairoDayRange,
+  type EnrichedAiAnalysisRecord,
+  type DailyAuditMetrics,
+  type SetupReconciledStatus,
+} from '@/lib/quantEngine/SetupOutcomeReconciler';
+
+export type { EnrichedAiAnalysisRecord, DailyAuditMetrics, SetupReconciledStatus };
 
 export interface AiAttemptTelemetry {
   model: string;
@@ -532,10 +542,14 @@ export interface FetchHistoryOptions {
   page?: number;
   symbol?: string;
   status?: string;
+  startDate?: string;
+  endDate?: string;
+  currentPrice?: number | null;
 }
 
 export interface HistoryQueryResult {
-  history: AiAnalysisRecord[];
+  history: EnrichedAiAnalysisRecord[];
+  summary: DailyAuditMetrics;
   pagination: {
     total: number;
     limit: number;
@@ -545,73 +559,106 @@ export interface HistoryQueryResult {
 }
 
 /**
- * Fetch recent AI evaluation telemetry records from PostgreSQL
+ * Fetch recent AI evaluation telemetry records from PostgreSQL with
+ * temporal date filtering, dynamic outcome reconciliation, and daily audit KPIs.
  */
 export async function fetchAiAnalysisHistory(
   options: FetchHistoryOptions = {}
 ): Promise<HistoryQueryResult> {
-  const limit = Math.min(Math.max(Number(options.limit) || 20, 1), 100);
+  const limit = Math.min(Math.max(Number(options.limit) || 50, 1), 200);
   const page = Math.max(Number(options.page) || 1, 1);
   const offset = (page - 1) * limit;
   const symbol = options.symbol?.trim() || '';
   const status = options.status?.trim() || '';
+  const startDate = options.startDate?.trim() || '';
+  const endDate = options.endDate?.trim() || '';
 
   await ensureAiAnalysisTableInitialized();
 
   try {
-    // Dynamic query building
-    let countResult;
-    let dataResult;
+    const pool = getDbPool();
+    const conditions: string[] = [];
+    const params: any[] = [];
 
-    if (symbol && status) {
-      countResult = await sql`
-        SELECT COUNT(*)::integer AS total FROM ai_analysis_log
-        WHERE symbol = ${symbol} AND status = ${status}
-      `;
-      dataResult = await sql`
-        SELECT * FROM ai_analysis_log
-        WHERE symbol = ${symbol} AND status = ${status}
-        ORDER BY created_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `;
-    } else if (symbol) {
-      countResult = await sql`
-        SELECT COUNT(*)::integer AS total FROM ai_analysis_log
-        WHERE symbol = ${symbol}
-      `;
-      dataResult = await sql`
-        SELECT * FROM ai_analysis_log
-        WHERE symbol = ${symbol}
-        ORDER BY created_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `;
-    } else if (status) {
-      countResult = await sql`
-        SELECT COUNT(*)::integer AS total FROM ai_analysis_log
-        WHERE status = ${status}
-      `;
-      dataResult = await sql`
-        SELECT * FROM ai_analysis_log
-        WHERE status = ${status}
-        ORDER BY created_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `;
-    } else {
-      countResult = await sql`
-        SELECT COUNT(*)::integer AS total FROM ai_analysis_log
-      `;
-      dataResult = await sql`
-        SELECT * FROM ai_analysis_log
-        ORDER BY created_at DESC
-        LIMIT ${limit} OFFSET ${offset}
-      `;
+    if (symbol) {
+      params.push(symbol);
+      conditions.push(`symbol = $${params.length}`);
     }
 
+    if (status && status !== 'ALL') {
+      params.push(status);
+      conditions.push(`status = $${params.length}`);
+    }
+
+    // Temporal date range filtering
+    if (startDate || endDate) {
+      let startBound: Date | null = null;
+      let endBound: Date | null = null;
+
+      if (startDate && endDate) {
+        if (!startDate.includes('T')) {
+          startBound = new Date(getCairoDayRange(startDate).startIso);
+        } else {
+          startBound = new Date(startDate);
+        }
+        if (!endDate.includes('T')) {
+          endBound = new Date(getCairoDayRange(endDate).endIso);
+        } else {
+          endBound = new Date(endDate);
+        }
+      } else if (startDate) {
+        const range = getCairoDayRange(startDate);
+        startBound = new Date(range.startIso);
+        endBound = new Date(range.endIso);
+      } else if (endDate) {
+        const range = getCairoDayRange(endDate);
+        startBound = new Date(range.startIso);
+        endBound = new Date(range.endIso);
+      }
+
+      if (startBound && !isNaN(startBound.getTime())) {
+        params.push(startBound);
+        conditions.push(`created_at >= $${params.length}`);
+      }
+      if (endBound && !isNaN(endBound.getTime())) {
+        params.push(endBound);
+        conditions.push(`created_at <= $${params.length}`);
+      }
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // 1. Total count query
+    const countSql = `SELECT COUNT(*)::integer AS total FROM ai_analysis_log ${whereClause}`;
+    const countResult = await pool.query(countSql, params);
     const total = countResult.rows[0]?.total || 0;
     const pages = Math.ceil(total / limit) || 1;
 
+    // 2. Data query
+    const queryParams = [...params, limit, offset];
+    const limitIdx = queryParams.length - 1;
+    const offsetIdx = queryParams.length;
+
+    const dataSql = `
+      SELECT * FROM ai_analysis_log
+      ${whereClause}
+      ORDER BY created_at DESC
+      LIMIT $${limitIdx} OFFSET $${offsetIdx}
+    `;
+    const dataResult = await pool.query(dataSql, queryParams);
+    const rawRecords = dataResult.rows as AiAnalysisRecord[];
+
+    // 3. Dynamic setup outcome reconciliation
+    const reconciledHistory = await reconcileSetupOutcomes(rawRecords, {
+      currentPrice: options.currentPrice,
+    });
+
+    // 4. Daily audit summary metrics
+    const summary = calculateDailyAuditMetrics(reconciledHistory);
+
     return {
-      history: dataResult.rows as AiAnalysisRecord[],
+      history: reconciledHistory,
+      summary,
       pagination: {
         total,
         limit,
@@ -623,6 +670,22 @@ export async function fetchAiAnalysisHistory(
     console.warn('[AI_CASCADE] Failed to fetch ai_analysis_log history (returning empty list):', err);
     return {
       history: [],
+      summary: {
+        totalRuns: 0,
+        activeSetups: 0,
+        neutralCount: 0,
+        invalidatedCount: 0,
+        winsCount: 0,
+        tp1Count: 0,
+        tp2Count: 0,
+        lossesCount: 0,
+        breakevenCount: 0,
+        expiredCount: 0,
+        cancelledCount: 0,
+        primaryModelCount: 0,
+        fallbackCount: 0,
+        avgLatencyMs: 0,
+      },
       pagination: {
         total: 0,
         limit,
