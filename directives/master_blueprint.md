@@ -1,8 +1,50 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.82
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.83
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-16 (V17.82 — Institutional Quant Engine Stability & Behavioral Hardening Pass: HTF Bias Hysteresis, Alert Cadence Governor, Dead Zone Silence Engine & Pre-Broadcast Geometry Gate)
+> **Last Updated:** 2026-09-16 (V17.83 — Temporal Date Filtering, Terminal Outcome Reconciliation & Daily Audit Metrics in AI Analysis History Modal)
+
+## 🆕 V17.83 Changelog — Temporal Date Scoping, Dynamic Outcome Reconciliation & Daily Audit Ribbon (2026-09-16)
+
+### Summary
+1. **Workstream A: Setup Outcome Reconciliation Engine (`src/lib/quantEngine/SetupOutcomeTypes.ts`, `src/lib/quantEngine/SetupOutcomeReconciler.ts`):**
+   - Engineered client-safe types and pure helpers (`SetupOutcomeTypes.ts`) completely decoupled from Node.js dependencies (`fs`, `path`, `pg`), enabling safe consumption by Next.js App Router client components without hydration errors.
+   - Built server-side reconciliation engine (`SetupOutcomeReconciler.ts`) that correlates historical AI evaluation logs (`ai_analysis_log`) against live execution truth (`agent_decision_log`, `trades`, `paper_trades`, and local daemon session logs `run_logs/live_session_<date>.json`).
+   - Reconciles static initial snapshots into dynamic lifecycle states:
+     - `🟢 ACTIVE_SETUP`: Restricted strictly to setups genuinely in-flight or actively armed within their 12-bar TTL window.
+     - `🟢 TP1_HIT` / `🟢 TP2_HIT`: Verified win where execution reached Take Profit targets, displaying harvested R-multiple and realized PnL.
+     - `🔴 STOPPED_OUT`: Closed at invalidation level (-1.00R).
+     - `🔵 BREAKEVEN`: Position scratched at entry price.
+     - `🟡 CANCELLED_PRE_FILL`: Target 1 reached (`MISSED_TP1_EXPANSION`) or invalidation breached (`STOP_LOSS_BREACHED`) prior to entry fill, matching `AutomatedStrategyExecutionEngine` line 1026-1062 parity.
+     - `⚪ TTL_EXPIRED`: Limit order was never filled and 12-bar TTL expired without execution.
+     - `⚪ NEUTRAL` / `⚪ STAND_DOWN` / `⚪ INVALIDATED`: Macro filter vetoes or dead zone silences.
+2. **Workstream B: Temporal Scoping & Day Selection UI (`src/components/modals/AiAnalysisHistoryModal.tsx`, `src/lib/aiCascadeEngine.ts`, `src/app/api/quant-analyze/route.ts`):**
+   - Modal defaults to the current active trading day in localized Cairo Time (Africa/Cairo, UTC+3) using `getCairoDateString()`.
+   - Added interactive date selection pills: `[ Today ]`, `[ Yesterday ]`, `[ Custom Date ]` (with native datepicker), and `[ All History ]`.
+   - Updated backend API `/api/quant-analyze` and `fetchAiAnalysisHistory` to accept `startDate`, `endDate`, and `currentPrice`, executing parameterized SQL queries with Cairo day boundaries (`00:00:00` to `23:59:59.999`).
+   - Implemented an institutional empty state card with a "View All History" fallback button when zero runs exist for the selected day.
+3. **Workstream C: Daily Audit Mini-KPI Ribbon (`src/components/modals/AiAnalysisHistoryModal.tsx`, `src/lib/quantEngine/SetupOutcomeTypes.ts`):**
+   - High-contrast telemetry strip placed directly above the run stream summarizing:
+     - Total Scans Executed (Total AI pipeline sweeps).
+     - Setups Identified (Active in-flight vs Neutral/Stand Down).
+     - Terminal Realized Outcomes (Wins TP1/TP2, Losses, BE, Expired, Cancelled Pre-Fill).
+     - Cascade Infrastructure Health (Apex Primary vs Lite Fallback failover count and average execution latency in ms).
+   - Detailed Terminal Outcome Reconciliation Audit Card in the evaluation detail view, detailing outcome reason, realized R multiple, realized USD PnL, and in-flight/armed state.
+4. **Verification & Parity Record:**
+   - Authored and verified `scripts/test_outcome_reconciliation.ts`: 18/18 checks passed (100.0%).
+   - Re-verified `npx tsc --noEmit`: 0 errors.
+   - Re-verified `npm run build`: compiled all 31 routes successfully in 4.7s with Turbopack.
+
+### Files Created & Modified
+- **`src/lib/quantEngine/SetupOutcomeTypes.ts`** [NEW]
+- **`src/lib/quantEngine/SetupOutcomeReconciler.ts`** [NEW]
+- **`scripts/test_outcome_reconciliation.ts`** [NEW]
+- **`src/lib/aiCascadeEngine.ts`** [MODIFY]
+- **`src/app/api/quant-analyze/route.ts`** [MODIFY]
+- **`src/components/modals/AiAnalysisHistoryModal.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.82 Changelog — Institutional Quant Engine Stability & Behavioral Hardening Pass (2026-09-16)
 

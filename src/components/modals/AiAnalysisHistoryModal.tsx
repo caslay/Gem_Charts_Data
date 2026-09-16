@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   X,
   Brain,
@@ -16,12 +16,19 @@ import {
   TrendingUp,
   TrendingDown,
   Layers,
-  ArrowRight,
-  Database,
   Search,
   Check,
+  Calendar,
+  CalendarDays,
 } from 'lucide-react';
 import type { AiAnalysisRecord } from '@/lib/aiCascadeEngine';
+import {
+  getCairoDateString,
+  calculateDailyAuditMetrics,
+  type EnrichedAiAnalysisRecord,
+  type DailyAuditMetrics,
+  type SetupReconciledStatus,
+} from '@/lib/quantEngine/SetupOutcomeTypes';
 import { safeParseAiJson } from '@/lib/aiJsonParser';
 
 interface AiAnalysisHistoryModalProps {
@@ -30,53 +37,143 @@ interface AiAnalysisHistoryModalProps {
   onApplyAnalysis?: (record: AiAnalysisRecord) => void;
 }
 
+type DateFilterMode = 'TODAY' | 'YESTERDAY' | 'CUSTOM' | 'ALL';
+
+const STATUS_FILTERS = [
+  { id: 'ALL', label: 'All Evaluations' },
+  { id: 'ACTIVE_SETUP', label: '🟢 Active Setups' },
+  { id: 'RESOLVED_WINS', label: '🏆 Wins (TP1/TP2)' },
+  { id: 'STOPPED_OUT', label: '🔴 Stopped Out' },
+  { id: 'EXPIRED_OR_CANCELLED', label: '⚪ Expired / Cancelled' },
+  { id: 'NEUTRAL', label: 'Neutral / Stand Down' },
+  { id: 'FALLBACK', label: '⚡ Cascade Fallback' },
+] as const;
+
 export default function AiAnalysisHistoryModal({
   isOpen,
   onClose,
   onApplyAnalysis,
 }: AiAnalysisHistoryModalProps) {
-  const [history, setHistory] = useState<AiAnalysisRecord[]>([]);
+  const [history, setHistory] = useState<EnrichedAiAnalysisRecord[]>([]);
+  const [serverMetrics, setServerMetrics] = useState<DailyAuditMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<number | null>(null);
+  const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('TODAY');
+  const [customDate, setCustomDate] = useState<string>(() => getCairoDateString(new Date()));
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [showRawResponse, setShowRawResponse] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
-  const fetchHistory = async () => {
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/quant-analyze?limit=50', { cache: 'no-store' });
-      if (res.ok) {
-        const json = await res.json();
-        if (Array.isArray(json.data)) {
-          setHistory(json.data);
-          if (json.data.length > 0 && selectedRecordId === null) {
-            setSelectedRecordId(json.data[0].id);
+  // ── 1. Fetch History from Server with Date Parameters ──
+  const fetchHistory = useCallback(
+    async (mode: DateFilterMode = dateFilterMode, cDate: string = customDate) => {
+      setIsLoading(true);
+      try {
+        const params = new URLSearchParams();
+        params.set('limit', '100');
+
+        if (mode === 'TODAY') {
+          const today = getCairoDateString(new Date());
+          params.set('startDate', today);
+          params.set('endDate', today);
+        } else if (mode === 'YESTERDAY') {
+          const yesterday = getCairoDateString(new Date(Date.now() - 24 * 3600 * 1000));
+          params.set('startDate', yesterday);
+          params.set('endDate', yesterday);
+        } else if (mode === 'CUSTOM' && cDate) {
+          params.set('startDate', cDate);
+          params.set('endDate', cDate);
+        }
+        // mode === 'ALL': no startDate/endDate params
+
+        const res = await fetch(`/api/quant-analyze?${params.toString()}`, { cache: 'no-store' });
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json.data)) {
+            setHistory(json.data);
+            if (json.summary) {
+              setServerMetrics(json.summary);
+            }
+            if (json.data.length > 0) {
+              setSelectedRecordId((prevId) => {
+                const stillExists = json.data.some((d: EnrichedAiAnalysisRecord) => d.id === prevId);
+                return stillExists && prevId !== null ? prevId : json.data[0].id;
+              });
+            } else {
+              setSelectedRecordId(null);
+            }
           }
         }
+      } catch (err) {
+        console.warn('[AiAnalysisHistoryModal] Failed to fetch history:', err);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (err) {
-      console.warn('[AiAnalysisHistoryModal] Failed to fetch history:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    },
+    [dateFilterMode, customDate]
+  );
 
   useEffect(() => {
     if (isOpen) {
-      fetchHistory();
+      fetchHistory(dateFilterMode, customDate);
     }
-  }, [isOpen]);
+  }, [isOpen, dateFilterMode, customDate, fetchHistory]);
 
-  // Filtered list
+  const handleDateModeChange = (mode: DateFilterMode) => {
+    setDateFilterMode(mode);
+    fetchHistory(mode, customDate);
+  };
+
+  const handleCustomDateChange = (dateVal: string) => {
+    setCustomDate(dateVal);
+    if (dateFilterMode === 'CUSTOM') {
+      fetchHistory('CUSTOM', dateVal);
+    }
+  };
+
+  // ── 2. Computed Metrics (Fallback / Live Hydration) ──
+  const activeMetrics = useMemo<DailyAuditMetrics>(() => {
+    if (history.length > 0) {
+      return calculateDailyAuditMetrics(history);
+    }
+    if (serverMetrics) return serverMetrics;
+    return {
+      totalRuns: 0,
+      activeSetups: 0,
+      neutralCount: 0,
+      invalidatedCount: 0,
+      winsCount: 0,
+      tp1Count: 0,
+      tp2Count: 0,
+      lossesCount: 0,
+      breakevenCount: 0,
+      expiredCount: 0,
+      cancelledCount: 0,
+      primaryModelCount: 0,
+      fallbackCount: 0,
+      avgLatencyMs: 0,
+    };
+  }, [history, serverMetrics]);
+
+  // ── 3. Client Filtered List ──
   const filteredHistory = useMemo(() => {
     return history.filter((item) => {
       // Status filter
       if (filterStatus !== 'ALL') {
-        if (filterStatus === 'ACTIVE_SETUP' && item.status !== 'ACTIVE_SETUP') return false;
-        if (filterStatus === 'NEUTRAL' && item.status !== 'NEUTRAL') return false;
-        if (filterStatus === 'INVALIDATED' && item.status !== 'INVALIDATED') return false;
+        const termStatus = (item.reconciled_status || item.status).toUpperCase();
+        if (filterStatus === 'ACTIVE_SETUP' && termStatus !== 'ACTIVE_SETUP') return false;
+        if (filterStatus === 'RESOLVED_WINS' && termStatus !== 'TP1_HIT' && termStatus !== 'TP2_HIT')
+          return false;
+        if (filterStatus === 'STOPPED_OUT' && termStatus !== 'STOPPED_OUT') return false;
+        if (
+          filterStatus === 'EXPIRED_OR_CANCELLED' &&
+          termStatus !== 'TTL_EXPIRED' &&
+          termStatus !== 'CANCELLED_PRE_FILL'
+        )
+          return false;
+        if (filterStatus === 'NEUTRAL' && termStatus !== 'NEUTRAL' && termStatus !== 'STAND_DOWN')
+          return false;
         if (filterStatus === 'FALLBACK' && !item.was_fallback) return false;
       }
       // Search query filter
@@ -85,7 +182,8 @@ export default function AiAnalysisHistoryModal({
         const matchesModel = item.resolved_model.toLowerCase().includes(q);
         const matchesNarrative = item.narrative.toLowerCase().includes(q);
         const matchesBias = item.bias_signal?.toLowerCase().includes(q);
-        if (!matchesModel && !matchesNarrative && !matchesBias) return false;
+        const matchesStatus = (item.reconciled_status || item.status).toLowerCase().includes(q);
+        if (!matchesModel && !matchesNarrative && !matchesBias && !matchesStatus) return false;
       }
       return true;
     });
@@ -114,13 +212,21 @@ export default function AiAnalysisHistoryModal({
     return selectedRecord.telemetry_data as Record<string, unknown>;
   }, [selectedRecord]);
 
-  if (!isOpen) return null;
-
   const handleCopyNarrative = (id: number, text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
+
+  const currentDateLabel = useMemo(() => {
+    if (dateFilterMode === 'TODAY') return `Today (${getCairoDateString(new Date())} Cairo)`;
+    if (dateFilterMode === 'YESTERDAY')
+      return `Yesterday (${getCairoDateString(new Date(Date.now() - 24 * 3600 * 1000))} Cairo)`;
+    if (dateFilterMode === 'CUSTOM') return `Custom Date (${customDate})`;
+    return 'All Recorded History';
+  }, [dateFilterMode, customDate]);
+
+  if (!isOpen) return null;
 
   return (
     <div
@@ -128,33 +234,34 @@ export default function AiAnalysisHistoryModal({
       onClick={onClose}
     >
       <div
-        className="bg-card border border-card-border rounded-2xl w-full max-w-6xl h-[90vh] flex flex-col shadow-2xl overflow-hidden text-foreground font-mono"
+        className="bg-card border border-card-border rounded-2xl w-full max-w-6xl h-[92vh] flex flex-col shadow-2xl overflow-hidden text-foreground font-mono"
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Top Header ── */}
-        <div className="p-4 border-b border-card-border bg-card/60 flex items-center justify-between shrink-0">
+        <div className="p-4 border-b border-card-border bg-card/70 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-accent/15 border border-accent/30 text-accent">
               <Brain className="w-5 h-5 animate-pulse" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-sm sm:text-base font-black uppercase tracking-wider text-foreground">
                   AI Institutional Telemetry & Analysis History
                 </h2>
                 <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-accent/10 border border-accent/20 text-accent">
                   {history.length} Runs Logged
                 </span>
+                <span className="text-[10px] text-muted-foreground font-sans">• Cairo (UTC+3)</span>
               </div>
               <p className="text-[11px] text-muted-foreground font-sans">
-                Chronological audit trail of multi-model cascade executions, quota failovers, and institutional narratives.
+                Dynamic lifecycle badging, post-trade outcome reconciliation, and multi-model cascade telemetry.
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              onClick={fetchHistory}
+              onClick={() => fetchHistory(dateFilterMode, customDate)}
               disabled={isLoading}
               className="p-2 rounded-lg bg-card border border-card-border hover:border-accent/40 text-muted-foreground hover:text-foreground transition cursor-pointer disabled:opacity-50"
               title="Refresh History"
@@ -171,19 +278,166 @@ export default function AiAnalysisHistoryModal({
           </div>
         </div>
 
+        {/* ── Workstream B: Temporal Scoping Date Navigation Ribbon ── */}
+        <div className="px-4 py-2 border-b border-card-border bg-card/30 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-black uppercase text-muted-foreground mr-1 flex items-center gap-1">
+              <Calendar size={11} className="text-accent" />
+              <span>Date Scope:</span>
+            </span>
+
+            <button
+              onClick={() => handleDateModeChange('TODAY')}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer border ${
+                dateFilterMode === 'TODAY'
+                  ? 'bg-accent text-accent-foreground border-accent shadow-sm'
+                  : 'bg-card border-card-border text-muted-foreground hover:text-foreground hover:border-accent/30'
+              }`}
+            >
+              Today
+            </button>
+
+            <button
+              onClick={() => handleDateModeChange('YESTERDAY')}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer border ${
+                dateFilterMode === 'YESTERDAY'
+                  ? 'bg-accent text-accent-foreground border-accent shadow-sm'
+                  : 'bg-card border-card-border text-muted-foreground hover:text-foreground hover:border-accent/30'
+              }`}
+            >
+              Yesterday
+            </button>
+
+            <button
+              onClick={() => handleDateModeChange('CUSTOM')}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer border flex items-center gap-1.5 ${
+                dateFilterMode === 'CUSTOM'
+                  ? 'bg-accent text-accent-foreground border-accent shadow-sm'
+                  : 'bg-card border-card-border text-muted-foreground hover:text-foreground hover:border-accent/30'
+              }`}
+            >
+              <CalendarDays size={11} />
+              <span>Custom Date</span>
+            </button>
+
+            {dateFilterMode === 'CUSTOM' && (
+              <input
+                type="date"
+                value={customDate}
+                onChange={(e) => handleCustomDateChange(e.target.value)}
+                className="bg-background/80 border border-card-border text-foreground rounded-lg px-2 py-0.5 text-[11px] font-mono focus:outline-none focus:border-accent"
+              />
+            )}
+
+            <button
+              onClick={() => handleDateModeChange('ALL')}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer border ${
+                dateFilterMode === 'ALL'
+                  ? 'bg-accent text-accent-foreground border-accent shadow-sm'
+                  : 'bg-card border-card-border text-muted-foreground hover:text-foreground hover:border-accent/30'
+              }`}
+            >
+              All History
+            </button>
+          </div>
+
+          <div className="text-[10px] text-muted-foreground font-mono">
+            Viewing: <span className="text-foreground font-bold">{currentDateLabel}</span>
+          </div>
+        </div>
+
+        {/* ── Workstream C: Daily Audit Mini-KPI Ribbon ── */}
+        <div className="px-4 py-2 border-b border-card-border bg-card/40 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs shrink-0">
+          <div className="bg-background/50 p-2 rounded-lg border border-card-border/80 flex flex-col justify-between">
+            <span className="text-[8.5px] uppercase font-black tracking-wider text-muted-foreground flex items-center gap-1">
+              <Cpu size={10} className="text-accent" />
+              <span>Scans Executed</span>
+            </span>
+            <div className="flex items-baseline gap-1.5 mt-0.5">
+              <span className="text-sm font-black text-foreground font-mono">{activeMetrics.totalRuns}</span>
+              <span className="text-[10px] text-muted-foreground">evaluations</span>
+            </div>
+            <span className="text-[9px] text-muted-foreground truncate">{currentDateLabel}</span>
+          </div>
+
+          <div className="bg-background/50 p-2 rounded-lg border border-card-border/80 flex flex-col justify-between">
+            <span className="text-[8.5px] uppercase font-black tracking-wider text-muted-foreground flex items-center gap-1">
+              <Target size={10} className="text-emerald-400" />
+              <span>Setups Identified</span>
+            </span>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-sm font-black text-emerald-400 font-mono">
+                {activeMetrics.activeSetups} Active
+              </span>
+              <span className="text-[10px] text-muted-foreground">/</span>
+              <span className="text-xs font-bold text-amber-400 font-mono">
+                {activeMetrics.neutralCount} Neutral
+              </span>
+            </div>
+            <span className="text-[9px] text-muted-foreground">
+              {activeMetrics.totalRuns > 0
+                ? `${((activeMetrics.activeSetups / activeMetrics.totalRuns) * 100).toFixed(0)}% setup yield`
+                : '0% setup yield'}
+            </span>
+          </div>
+
+          <div className="bg-background/50 p-2 rounded-lg border border-card-border/80 flex flex-col justify-between">
+            <span className="text-[8.5px] uppercase font-black tracking-wider text-muted-foreground flex items-center gap-1">
+              <Zap size={10} className="text-emerald-400" />
+              <span>Execution Outcomes</span>
+            </span>
+            <div className="flex items-center gap-2 mt-0.5 font-mono text-xs font-black">
+              <span className="text-emerald-400 flex items-center gap-0.5" title="Wins (TP1 / TP2)">
+                🟢 {activeMetrics.winsCount}W
+              </span>
+              <span className="text-rose-400 flex items-center gap-0.5" title="Stopped Out">
+                🔴 {activeMetrics.lossesCount}L
+              </span>
+              <span
+                className="text-slate-400 flex items-center gap-0.5"
+                title="TTL Expired / Cancelled Pre-Fill"
+              >
+                ⚪ {activeMetrics.expiredCount + activeMetrics.cancelledCount}X
+              </span>
+            </div>
+            <span className="text-[9px] text-muted-foreground">
+              {activeMetrics.winsCount + activeMetrics.lossesCount > 0
+                ? `${(
+                    (activeMetrics.winsCount / (activeMetrics.winsCount + activeMetrics.lossesCount)) *
+                    100
+                  ).toFixed(0)}% Win Rate`
+                : '0 closed trades'}
+            </span>
+          </div>
+
+          <div className="bg-background/50 p-2 rounded-lg border border-card-border/80 flex flex-col justify-between">
+            <span className="text-[8.5px] uppercase font-black tracking-wider text-muted-foreground flex items-center gap-1">
+              <Layers size={10} className="text-accent" />
+              <span>Cascade Health</span>
+            </span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-xs font-bold text-emerald-400 font-mono">
+                {activeMetrics.primaryModelCount} Apex
+              </span>
+              {activeMetrics.fallbackCount > 0 ? (
+                <span className="text-[10px] font-bold text-amber-300 font-mono bg-amber-500/20 px-1 rounded animate-pulse">
+                  ⚡ {activeMetrics.fallbackCount}
+                </span>
+              ) : (
+                <span className="text-[10px] text-emerald-400/80 font-mono">100% Primary</span>
+              )}
+            </div>
+            <span className="text-[9px] text-muted-foreground font-mono">
+              Avg Latency: {activeMetrics.avgLatencyMs}ms
+            </span>
+          </div>
+        </div>
+
         {/* ── Sub-header: Filters & Search ── */}
-        <div className="px-4 py-2.5 border-b border-card-border bg-card/30 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="px-4 py-2 border-b border-card-border bg-card/20 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[10px] font-black uppercase text-muted-foreground mr-1">Filter:</span>
-            {(
-              [
-                { id: 'ALL', label: 'All Evaluations' },
-                { id: 'ACTIVE_SETUP', label: 'Active Setups' },
-                { id: 'NEUTRAL', label: 'Neutral / Stand Down' },
-                { id: 'INVALIDATED', label: 'Invalidated' },
-                { id: 'FALLBACK', label: '⚡ Fallback Cascaded' },
-              ] as const
-            ).map((f) => {
+            {STATUS_FILTERS.map((f) => {
               const active = filterStatus === f.id;
               return (
                 <button
@@ -229,9 +483,24 @@ export default function AiAnalysisHistoryModal({
                   <span>Loading telemetry log...</span>
                 </div>
               ) : filteredHistory.length === 0 ? (
-                <div className="h-40 flex flex-col items-center justify-center text-muted-foreground text-xs text-center p-4">
-                  <Database className="w-6 h-6 mb-2 text-card-border" />
-                  <p className="font-bold uppercase tracking-wider">No AI evaluations match filter</p>
+                <div className="h-48 flex flex-col items-center justify-center text-muted-foreground text-xs text-center p-4">
+                  <Clock className="w-8 h-8 mb-2 text-card-border" />
+                  <p className="font-bold uppercase tracking-wider text-foreground">
+                    No evaluations for this filter
+                  </p>
+                  <p className="text-[11px] font-sans text-muted-foreground mt-1 max-w-xs">
+                    {history.length === 0
+                      ? `Zero AI scans recorded for ${currentDateLabel}. Headless scheduler scans on 15m cadence.`
+                      : 'No records matched the selected status or search filter.'}
+                  </p>
+                  {history.length === 0 && dateFilterMode !== 'ALL' && (
+                    <button
+                      onClick={() => handleDateModeChange('ALL')}
+                      className="mt-3 px-3 py-1 rounded-lg bg-accent/20 border border-accent/40 text-accent text-[10px] font-black uppercase tracking-wider hover:bg-accent/30 transition cursor-pointer"
+                    >
+                      View All History
+                    </button>
+                  )}
                 </div>
               ) : (
                 filteredHistory.map((item) => {
@@ -244,15 +513,11 @@ export default function AiAnalysisHistoryModal({
                     ? ''
                     : date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 
-                  // Status style
-                  let statusBadgeClass = 'bg-slate-500/15 border-slate-500/30 text-slate-400';
-                  if (item.status === 'ACTIVE_SETUP') {
-                    statusBadgeClass = 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400';
-                  } else if (item.status === 'INVALIDATED') {
-                    statusBadgeClass = 'bg-rose-500/15 border-rose-500/40 text-rose-400';
-                  } else if (item.status === 'NEUTRAL') {
-                    statusBadgeClass = 'bg-amber-500/15 border-amber-500/40 text-amber-400';
-                  }
+                  // Dynamic Outcome Badge
+                  const badgeInfo = getOutcomeBadgeInfo(
+                    item.reconciled_status || item.status,
+                    item.reconciled_outcome?.realized_r
+                  );
 
                   return (
                     <div
@@ -265,11 +530,11 @@ export default function AiAnalysisHistoryModal({
                       }`}
                     >
                       <div className="flex items-center justify-between gap-1.5 mb-1.5">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <span
-                            className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${statusBadgeClass}`}
+                            className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider border ${badgeInfo.className}`}
                           >
-                            {item.status.replace(/_/g, ' ')}
+                            {badgeInfo.label}
                           </span>
 
                           {item.was_fallback && (
@@ -283,7 +548,7 @@ export default function AiAnalysisHistoryModal({
                           )}
                         </div>
 
-                        <div className="text-[9px] text-muted-foreground font-mono flex items-center gap-1">
+                        <div className="text-[9px] text-muted-foreground font-mono flex items-center gap-1 shrink-0">
                           <Clock size={10} />
                           <span>{timeFormatted}</span>
                           <span className="text-muted-foreground/60">{dateFormatted}</span>
@@ -336,28 +601,36 @@ export default function AiAnalysisHistoryModal({
                 {/* Header card */}
                 <div className="bg-card p-4 rounded-xl border border-card-border shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="text-xs font-black text-accent uppercase tracking-widest">
                         {selectedRecord.symbol} • {selectedRecord.timeframe}
                       </span>
                       <span className="text-[10px] text-muted-foreground">|</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {new Date(selectedRecord.created_at).toLocaleString()}
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {new Date(selectedRecord.created_at).toLocaleString([], {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                        })}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${
-                          selectedRecord.status === 'ACTIVE_SETUP'
-                            ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
-                            : selectedRecord.status === 'INVALIDATED'
-                            ? 'bg-rose-500/20 border-rose-500/50 text-rose-400'
-                            : 'bg-slate-500/20 border-slate-500/50 text-slate-300'
-                        }`}
-                      >
-                        {selectedRecord.status.replace(/_/g, ' ')}
-                      </span>
+                      {(() => {
+                        const badge = getOutcomeBadgeInfo(
+                          selectedRecord.reconciled_status || selectedRecord.status,
+                          selectedRecord.reconciled_outcome?.realized_r
+                        );
+                        return (
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${badge.className}`}
+                          >
+                            {badge.label}
+                          </span>
+                        );
+                      })()}
 
                       {selectedRecord.trade_direction && (
                         <span
@@ -393,7 +666,7 @@ export default function AiAnalysisHistoryModal({
                         </>
                       ) : (
                         <>
-                          <Database size={12} />
+                          <CheckCircle2 size={12} />
                           <span>Copy Narrative</span>
                         </>
                       )}
@@ -415,6 +688,90 @@ export default function AiAnalysisHistoryModal({
                   </div>
                 </div>
 
+                {/* ── Workstream A: Outcome Reconciliation Audit Card ── */}
+                <div className="bg-card p-4 rounded-xl border border-card-border space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-accent flex items-center gap-1.5">
+                      <Shield size={12} />
+                      Terminal Execution Outcome & Reconciliation Audit
+                    </span>
+                    {selectedRecord.reconciled_outcome?.bars_elapsed !== undefined && (
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        TTL: {selectedRecord.reconciled_outcome.bars_elapsed} /{' '}
+                        {selectedRecord.reconciled_outcome.ttl_bars || 12} bars
+                      </span>
+                    )}
+                  </div>
+
+                  {(() => {
+                    const badge = getOutcomeBadgeInfo(
+                      selectedRecord.reconciled_status || selectedRecord.status,
+                      selectedRecord.reconciled_outcome?.realized_r
+                    );
+                    const outcome = selectedRecord.reconciled_outcome;
+
+                    return (
+                      <div
+                        className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${badge.className}`}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <span className="text-base mt-0.5">{badge.icon}</span>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-xs uppercase tracking-wider">
+                                {badge.label}
+                              </span>
+                              {outcome?.is_in_flight && (
+                                <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-300 animate-pulse">
+                                  In-Flight Position
+                                </span>
+                              )}
+                              {outcome?.is_armed && (
+                                <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-cyan-500/30 text-cyan-300">
+                                  Proximity Radar Armed
+                                </span>
+                              )}
+                              {outcome?.matched_trade_id && (
+                                <span className="text-[9px] font-mono opacity-70">
+                                  Trade: #{outcome.matched_trade_id}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] font-sans opacity-90 mt-1 leading-relaxed">
+                              {outcome?.outcome_reason || 'Initial evaluation state preserved.'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {outcome?.realized_r !== undefined && outcome?.realized_r !== null && (
+                          <div className="text-left sm:text-right shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-current/20">
+                            <span className="text-[9px] uppercase font-black opacity-80 block">
+                              Realized Performance
+                            </span>
+                            <span
+                              className={`text-base font-black font-mono ${
+                                outcome.realized_r > 0
+                                  ? 'text-emerald-400'
+                                  : outcome.realized_r < 0
+                                  ? 'text-rose-400'
+                                  : 'text-slate-300'
+                              }`}
+                            >
+                              {outcome.realized_r >= 0 ? '+' : ''}
+                              {outcome.realized_r.toFixed(2)}R
+                            </span>
+                            {outcome.realized_pnl !== undefined && outcome.realized_pnl !== null && (
+                              <span className="text-[10px] block font-mono opacity-80">
+                                (${outcome.realized_pnl.toFixed(2)} USD)
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+
                 {/* ── Telemetry Cascade Card ── */}
                 <div className="bg-card/70 p-4 rounded-xl border border-card-border space-y-3">
                   <div className="flex items-center justify-between">
@@ -423,7 +780,8 @@ export default function AiAnalysisHistoryModal({
                       Multi-Model Cascade Telemetry
                     </span>
                     <span className="text-[10px] text-muted-foreground font-mono">
-                      Latency: <span className="text-foreground font-bold">{selectedRecord.execution_latency_ms}ms</span>
+                      Latency:{' '}
+                      <span className="text-foreground font-bold">{selectedRecord.execution_latency_ms}ms</span>
                     </span>
                   </div>
 
@@ -432,7 +790,10 @@ export default function AiAnalysisHistoryModal({
                       <span className="text-[8.5px] uppercase font-black text-muted-foreground block mb-1">
                         Resolved Model
                       </span>
-                      <span className="font-bold text-accent truncate block" title={selectedRecord.resolved_model}>
+                      <span
+                        className="font-bold text-accent truncate block"
+                        title={selectedRecord.resolved_model}
+                      >
                         {selectedRecord.resolved_model}
                       </span>
                     </div>
@@ -441,7 +802,10 @@ export default function AiAnalysisHistoryModal({
                       <span className="text-[8.5px] uppercase font-black text-muted-foreground block mb-1">
                         Requested Model
                       </span>
-                      <span className="font-bold text-foreground truncate block" title={selectedRecord.requested_model}>
+                      <span
+                        className="font-bold text-foreground truncate block"
+                        title={selectedRecord.requested_model}
+                      >
                         {selectedRecord.requested_model}
                       </span>
                     </div>
@@ -664,8 +1028,8 @@ export default function AiAnalysisHistoryModal({
               <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-xs text-center">
                 <Brain size={32} className="text-card-border mb-3 animate-pulse" />
                 <p className="font-bold uppercase tracking-wider">Select an evaluation from the stream</p>
-                <p className="text-[11px] font-sans text-muted-foreground mt-1">
-                  Click any entry on the left to inspect its multi-model cascade telemetry and institutional narrative.
+                <p className="text-[11px] font-sans text-muted-foreground mt-1 max-w-sm">
+                  Click any entry on the left to inspect its terminal outcome, multi-model cascade telemetry, and institutional narrative.
                 </p>
               </div>
             )}
@@ -674,4 +1038,84 @@ export default function AiAnalysisHistoryModal({
       </div>
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Badge Helper
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getOutcomeBadgeInfo(status: string, realizedR?: number | null) {
+  const s = status.toUpperCase();
+
+  if (s === 'ACTIVE_SETUP') {
+    return {
+      label: 'ACTIVE SETUP',
+      className: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 animate-pulse',
+      icon: '🟢',
+    };
+  }
+  if (s === 'TP1_HIT') {
+    const rText = realizedR !== undefined && realizedR !== null ? ` (+${realizedR.toFixed(2)}R)` : ' (TP1)';
+    return {
+      label: `TP1 HIT${rText}`,
+      className: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400',
+      icon: '🟢',
+    };
+  }
+  if (s === 'TP2_HIT') {
+    const rText = realizedR !== undefined && realizedR !== null ? ` (+${realizedR.toFixed(2)}R)` : ' (TP2)';
+    return {
+      label: `TP2 HIT${rText}`,
+      className: 'bg-teal-500/20 border-teal-500/50 text-teal-300',
+      icon: '🏆',
+    };
+  }
+  if (s === 'STOPPED_OUT') {
+    const rText = realizedR !== undefined && realizedR !== null ? ` (${realizedR.toFixed(2)}R)` : ' (-1.0R)';
+    return {
+      label: `STOPPED OUT${rText}`,
+      className: 'bg-rose-500/20 border-rose-500/50 text-rose-400',
+      icon: '🔴',
+    };
+  }
+  if (s === 'BREAKEVEN') {
+    return {
+      label: 'BREAKEVEN (0.0R)',
+      className: 'bg-blue-500/20 border-blue-500/50 text-blue-300',
+      icon: '🔵',
+    };
+  }
+  if (s === 'CANCELLED_PRE_FILL') {
+    return {
+      label: 'CANCELLED PRE-FILL',
+      className: 'bg-amber-500/20 border-amber-500/50 text-amber-300',
+      icon: '🟡',
+    };
+  }
+  if (s === 'TTL_EXPIRED') {
+    return {
+      label: 'TTL EXPIRED',
+      className: 'bg-slate-500/20 border-slate-500/40 text-slate-300',
+      icon: '⚪',
+    };
+  }
+  if (s === 'STAND_DOWN' || s === 'NEUTRAL') {
+    return {
+      label: 'STAND DOWN',
+      className: 'bg-slate-500/15 border-slate-500/30 text-slate-400',
+      icon: '⚪',
+    };
+  }
+  if (s === 'INVALIDATED') {
+    return {
+      label: 'INVALIDATED',
+      className: 'bg-rose-500/15 border-rose-500/30 text-rose-400',
+      icon: '🔴',
+    };
+  }
+  return {
+    label: s.replace(/_/g, ' '),
+    className: 'bg-slate-500/15 border-slate-500/30 text-slate-400',
+    icon: '⚪',
+  };
 }
