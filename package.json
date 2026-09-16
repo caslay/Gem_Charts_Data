@@ -22,11 +22,11 @@
     "sync:prod:dry": "tsx scripts/sync-prod.ts --dry-run",
     "test:telegram": "tsx scripts/test-telegram.ts",
     "test:telegram:commands": "tsx scripts/test-telegram-commands.ts",
-    "vps:status": "ssh -i LightsailDefaultKey-ap-northeast-1.pem -o StrictHostKeyChecking=no ubuntu@57.181.64.238 \"pm2 status\"",
-    "vps:logs": "ssh -i LightsailDefaultKey-ap-northeast-1.pem -o StrictHostKeyChecking=no ubuntu@57.181.64.238 \"pm2 logs quegar-daemon --lines 40\"",
-    "vps:restart": "ssh -i LightsailDefaultKey-ap-northeast-1.pem -o StrictHostKeyChecking=no ubuntu@57.181.64.238 \"pm2 restart all --update-env && pm2 save\"",
-    "vps:build": "ssh -i LightsailDefaultKey-ap-northeast-1.pem -o StrictHostKeyChecking=no ubuntu@57.181.64.238 \"cd /home/ubuntu/quegar && NODE_OPTIONS='--max-old-space-size=1536' npm run build\"",
-    "vps:deploy": "ssh -i LightsailDefaultKey-ap-northeast-1.pem -o StrictHostKeyChecking=no ubuntu@57.181.64.238 \"cd /home/ubuntu/quegar && git fetch origin main && git reset --hard origin/main && NODE_OPTIONS='--max-old-space-size=1536' npm run build && pm2 restart all --update-env && pm2 save && pm2 status\""
+    "vps:status": "ssh -i LightsailDefaultKey-ap-northeast-1.pem -o ConnectTimeout=15 -o ConnectionAttempts=3 -o StrictHostKeyChecking=no ubuntu@57.181.64.238 \"pm2 status\"",
+    "vps:logs": "ssh -i LightsailDefaultKey-ap-northeast-1.pem -o ConnectTimeout=15 -o ConnectionAttempts=3 -o StrictHostKeyChecking=no ubuntu@57.181.64.238 \"pm2 logs quegar-daemon --lines 40\"",
+    "vps:restart": "ssh -i LightsailDefaultKey-ap-northeast-1.pem -o ConnectTimeout=15 -o ConnectionAttempts=3 -o StrictHostKeyChecking=no ubuntu@57.181.64.238 \"pm2 restart all --update-env && pm2 save\"",
+    "vps:build": "ssh -i LightsailDefaultKey-ap-northeast-1.pem -o ConnectTimeout=15 -o ConnectionAttempts=3 -o StrictHostKeyChecking=no ubuntu@57.181.64.238 \"cd /home/ubuntu/quegar && NODE_OPTIONS='--max-old-space-size=1536' npm run build\"",
+    "vps:deploy": "ssh -i LightsailDefaultKey-ap-northeast-1.pem -o ConnectTimeout=15 -o ConnectionAttempts=3 -o StrictHostKeyChecking=no ubuntu@57.181.64.238 \"cd /home/ubuntu/quegar && git fetch origin main && git reset --hard origin/main && NODE_OPTIONS='--max-old-space-size=1536' npm run build && pm2 restart all --update-env && pm2 save && pm2 status\""
   },
   "dependencies": {
     "@auth/core": "^0.41.2",
