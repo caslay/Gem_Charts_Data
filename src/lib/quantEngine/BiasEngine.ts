@@ -39,8 +39,8 @@ export function resolveTripleVectorBias(params: BiasEngineParams): 'CONFIRMED_BU
   }
 
   // Vector 1 (Pricing Zone / POC): Is current price in Discount relative to activeSwingPOC (Bullish) or Premium (Bearish)?
-  const v1Bullish = livePrice < activeSwingPOC;
-  const v1Bearish = livePrice > activeSwingPOC;
+  const v1Bullish = livePrice <= activeSwingPOC;
+  const v1Bearish = livePrice >= activeSwingPOC;
 
   // Vector 2 (Structure): Is the HTF magnet pointing in the anticipated direction?
   // Bullish magnets (above price): PWH, PMH, DAILY_SIBI
@@ -50,13 +50,13 @@ export function resolveTripleVectorBias(params: BiasEngineParams): 'CONFIRMED_BU
   const v2Bullish = bullishMagnets.includes(nearest_htf_magnet.label);
   const v2Bearish = bearishMagnets.includes(nearest_htf_magnet.label);
 
-  // Vector 3 (Volume/Liquidity): Is the active Swing POC supporting the move, and has a LIQUIDATION_STATUS sweep occurred?
+  // Vector 3 (Volume/Liquidity): Has a liquidity sweep or target expansion occurred?
   const sweepOccurred =
     liquidation_status === 'LIQUIDITY_SWEPT' ||
     (target_status && target_status !== 'PENDING' && target_status !== 'UNKNOWN');
 
-  const v3Bullish = livePrice >= activeSwingPOC && sweepOccurred;
-  const v3Bearish = livePrice <= activeSwingPOC && sweepOccurred;
+  const v3Bullish = Boolean(sweepOccurred);
+  const v3Bearish = Boolean(sweepOccurred);
 
   if (v1Bullish && v2Bullish && v3Bullish) {
     return 'CONFIRMED_BULLISH';

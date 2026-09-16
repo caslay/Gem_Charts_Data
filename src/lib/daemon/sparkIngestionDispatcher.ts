@@ -50,6 +50,9 @@ import {
   CandleEvaluationOutput,
 } from './proximityRadar';
 import { Candle } from '../fvgEngine';
+import { isDeadZone, formatDeadZoneObservationHeartbeat } from '../temporalGatekeeper';
+import { globalAlertCadenceGovernor } from '../notifications/AlertCadenceGovernor';
+import { InstitutionalGeometryGate } from '../quantEngine/InstitutionalGeometryGate';
 
 export type TriStateExecutionMode = 'STANDBY' | 'PAPER_TRADING' | 'LIVE_BINANCE';
 
@@ -461,17 +464,17 @@ export function parseSparkDecision(
     const riskDist = Math.max(Math.abs(limitEntryPrice - stopLossPrice), limitEntryPrice * 0.0015);
     if (isLong) {
       if (stage1Target === null || stage1Target <= limitEntryPrice) {
-        stage1Target = limitEntryPrice + riskDist * 1.0;
+        stage1Target = limitEntryPrice + riskDist * 1.50;
       }
       if (stage2Target === null || stage2Target <= stage1Target) {
-        stage2Target = limitEntryPrice + riskDist * 1.5;
+        stage2Target = limitEntryPrice + riskDist * 3.00;
       }
     } else {
       if (stage1Target === null || stage1Target >= limitEntryPrice) {
-        stage1Target = limitEntryPrice - riskDist * 1.0;
+        stage1Target = limitEntryPrice - riskDist * 1.50;
       }
       if (stage2Target === null || stage2Target >= stage1Target) {
-        stage2Target = limitEntryPrice - riskDist * 1.5;
+        stage2Target = limitEntryPrice - riskDist * 3.00;
       }
     }
   }
@@ -1361,6 +1364,42 @@ export class SparkIngestionDispatcher {
       };
     }
 
+    // 3.4 Dead Zone Silence Engine: Hard-lock all intent broadcasts & live executions during toxic windows
+    const deadZoneEvaluation = isDeadZone(Date.now());
+    if (deadZoneEvaluation.isDead) {
+      const msg = `[DEADZONE_GATE] Ingestion paused during ${deadZoneEvaluation.reason}. Standing down decision #${id}.`;
+      console.log(`[SPARK_DISPATCHER] ⚪ ${msg}`);
+      try {
+        await sql`
+          UPDATE agent_decision_log
+          SET status = 'STAND_DOWN',
+              updated_at = NOW(),
+              narrative = COALESCE(narrative, '') || ' [' || ${deadZoneEvaluation.reason} || ']'
+          WHERE id = ${id} AND (status = 'ACTIVE' OR status = 'QUEUED' OR status = 'ARMED')
+        `;
+      } catch {}
+
+      this.ledger?.logEvent('SPARK_DECISION_STAND_DOWN', msg, {
+        livePrice: livePrice ?? undefined,
+        metadata: { decisionId: id, category: deadZoneEvaluation.category },
+      });
+
+      // Restrict outbound Telegram communication exclusively to quiet observation heartbeat
+      if (this.telegram && typeof (this.telegram as any).sendRawMessage === 'function') {
+        const notifier = this.telegram as any;
+        const heartbeatKey = `evt_OBS_DEADZONE_${deadZoneEvaluation.category}_${Math.floor(Date.now() / (15 * 60 * 1000))}`;
+        if (!notifier.isAlreadyNotified || !notifier.isAlreadyNotified(heartbeatKey)) {
+          notifier.sendRawMessage(formatDeadZoneObservationHeartbeat(deadZoneEvaluation.reason)).catch(() => {});
+        }
+      }
+
+      return {
+        status: 'STAND_DOWN',
+        reason: deadZoneEvaluation.reason,
+        parsed,
+      };
+    }
+
     // 3.5 Symbol Mismatch Check: Daemon engine is pinned to a specific asset
     if (parsed.symbol !== this.engine.config.symbol) {
       const msg = `Decision #${id} symbol (${parsed.symbol}) does not match engine symbol (${this.engine.config.symbol}). Standing down.`;
@@ -1652,6 +1691,42 @@ export class SparkIngestionDispatcher {
     parsed.riskPct = sizing.compoundingRiskPct;
     parsed.effectiveLeverage = sizing.effectiveLeverage;
     parsed.stopLossPrice = sizing.clampedStopLoss;
+
+    // 8.5 Institutional Pre-Broadcast Geometry Gate (TP1 >= 1.50R, TP2 >= 2.00R)
+    if (parsed.limitEntryPrice && sizing.clampedStopLoss) {
+      const geomVerdict = InstitutionalGeometryGate.evaluateGeometry(
+        parsed.limitEntryPrice,
+        sizing.clampedStopLoss,
+        parsed.stage1Target,
+        parsed.stage2Target,
+        parsed.direction || 'LONG'
+      );
+
+      if (!geomVerdict.passed) {
+        console.warn(`[SPARK_DISPATCHER] 🛑 Geometry veto for decision #${id}: ${geomVerdict.reason}`);
+        try {
+          await sql`
+            UPDATE agent_decision_log
+            SET status = 'REJECTED',
+                updated_at = NOW(),
+                narrative = COALESCE(narrative, '') || ' [' || ${geomVerdict.reason || 'Geometry rejected'} || ']'
+            WHERE id = ${id}
+          `;
+        } catch {}
+
+        this.ledger?.logEvent('SPARK_DECISION_REJECTED', geomVerdict.reason || 'Geometry rejected', {
+          livePrice: livePrice ?? undefined,
+          metadata: { decisionId: id, geomVerdict },
+        });
+
+        return {
+          status: 'REJECTED',
+          reason: geomVerdict.reason,
+          parsed,
+          sizing,
+        };
+      }
+    }
 
     // 9. Global Risk Governor Pre-Flight Gatekeeper
     const normalizeSym = (s: string) => {

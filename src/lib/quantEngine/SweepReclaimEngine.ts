@@ -33,6 +33,8 @@ import {
   RetestType,
   ValuationGateMode,
 } from './types';
+import { InstitutionalGeometryGate } from './InstitutionalGeometryGate';
+import { isDeadZone } from '../temporalGatekeeper';
 
 export type {
   MarketRegimeState,
@@ -327,6 +329,7 @@ export interface SweepReclaimScanConfig {
   maxDynamicTp1Multiple?: number;             // Maximum R for TP1 when dynamic (default: 1.50)
   minDynamicTp2Multiple?: number;             // Minimum R for TP2 when dynamic (default: 1.30)
   maxDynamicTp2Multiple?: number;             // Maximum R for TP2 when dynamic (default: 3.50)
+  enforceInstitutionalGeometry?: boolean;     // Enforce strict Invariants 9 & 10 (TP1 >= 1.50R, TP2 >= 2.00R) (default: false)
 
   // ⚡ Confirmed Lower-Timeframe Market Structure Shift (MSS) Gate (Pillars 2 & 3)
   requireMssConfirmation?: boolean;           // Require internal swing break before arming (default: false)
@@ -338,6 +341,7 @@ export interface SweepReclaimScanConfig {
   filterWeekend?: boolean;                    // Rule 2: Weekend Off-Liquidity Filter (Fri 22:00 - Sun 20:00 UTC) (default: true)
   filterDeadZones?: boolean;                  // Rule 6: Dead Zone Filter (Mute 17:00-19:00 UTC & 00:00 UTC) (default: false)
   enforceHtfBiasGuard?: boolean;              // Rule 3: Macro Daily Bias & 1H Structure Alignment Guard (default: false)
+  htfConfirmedBias?: 'BULLISH' | 'BEARISH' | 'PENDING' | 'UNSET'; // Direct injection of verified 1H multi-bar hysteresis bias
   enableEarlyBreakeven?: boolean;             // Rule 4: Dynamic Early Breakeven Ratchet (default: true)
   earlyBreakevenMultiple?: number;            // Rule 4: MFE Multiple to trigger Breakeven (default: 0.60)
   enableFeePaddedBreakeven?: boolean;         // Fee-Padded Breakeven: Offset BE stop to cover Binance 0.0400% taker fee (default: true)
@@ -2467,15 +2471,21 @@ export class SweepReclaimEngine {
       let isHtfAligned = true;
       let htfBias: 'BULLISH' | 'BEARISH' = 'BULLISH';
       if (this.config.enforceHtfBiasGuard) {
-        const lookbackHtf = Math.min(120, evalIdx);
-        let htfEma = candles[evalIdx - lookbackHtf]?.c ?? (candles[evalIdx - lookbackHtf] as any)?.close ?? anchorLevel;
-        const kEma = 2 / (24 + 1); // 24 bars on 5m = 2 hours
-        for (let m = evalIdx - lookbackHtf; m <= evalIdx; m++) {
-          const cClose = candles[m].c ?? (candles[m] as any).close;
-          htfEma = cClose * kEma + htfEma * (1 - kEma);
+        if (this.config.htfConfirmedBias === 'BEARISH') {
+          htfBias = 'BEARISH';
+        } else if (this.config.htfConfirmedBias === 'BULLISH') {
+          htfBias = 'BULLISH';
+        } else {
+          const lookbackHtf = Math.min(120, evalIdx);
+          let htfEma = candles[evalIdx - lookbackHtf]?.c ?? (candles[evalIdx - lookbackHtf] as any)?.close ?? anchorLevel;
+          const kEma = 2 / (24 + 1); // 24 bars on 5m = 2 hours
+          for (let m = evalIdx - lookbackHtf; m <= evalIdx; m++) {
+            const cClose = candles[m].c ?? (candles[m] as any).close;
+            htfEma = cClose * kEma + htfEma * (1 - kEma);
+          }
+          const curClose = candles[evalIdx].c ?? (candles[evalIdx] as any).close;
+          htfBias = curClose >= htfEma ? 'BULLISH' : 'BEARISH';
         }
-        const curClose = candles[evalIdx].c ?? (candles[evalIdx] as any).close;
-        htfBias = curClose >= htfEma ? 'BULLISH' : 'BEARISH';
 
         const isCounterTrend = (isBullish && htfBias === 'BEARISH') || (!isBullish && htfBias === 'BULLISH');
         if (isCounterTrend) {
@@ -2619,6 +2629,20 @@ export class SweepReclaimEngine {
       target3 = isBullish
         ? executionEntry + stage3Multiple * riskUsd
         : executionEntry - stage3Multiple * riskUsd;
+
+      // 🛡️ Institutional Pre-Broadcast Geometry Gate (Invariant 9: TP1 >= 1.50R, Invariant 10: TP2 >= 2.00R)
+      if (this.config.enforceInstitutionalGeometry) {
+        const geomVerdict = InstitutionalGeometryGate.evaluateGeometry(
+          executionEntry,
+          stopLoss,
+          target1,
+          target2,
+          isBullish ? 'LONG' : 'SHORT'
+        );
+        if (!geomVerdict.passed) {
+          continue;
+        }
+      }
 
       // ── BUG-1 FIX: 3-Candle Displacement Sequence — Anchor to reclaimIdx ────
       // When reclaimIdx is confirmed, extract the 3-candle sequence as:
@@ -3030,11 +3054,10 @@ export class SweepReclaimEngine {
         continue;
       }
 
-      // 🛡️ Quant Shield Rule 6: Precision Temporal Filter (Mute 00:00, 09:00, 13:00, 17:00-19:00, 21:00 UTC)
+      // 🛡️ Quant Shield Rule 6: Centralized Temporal Gatekeeper (NY Lunch, Funding Rollover, Macro News)
       if (this.config.filterDeadZones && retestTime !== null) {
-        const d = new Date(retestTime);
-        const hr = d.getUTCHours();
-        if (hr === 0 || hr === 9 || hr === 13 || hr === 21 || (hr >= 17 && hr <= 19)) {
+        const dz = isDeadZone(retestTime);
+        if (dz.isDead) {
           baseSetup.status = 'RECLAIMED_NO_RETEST';
           baseSetup.simulated_outcome = 'NO_RETEST';
           baseSetup.stage_exit_type = 'NO_RETEST';

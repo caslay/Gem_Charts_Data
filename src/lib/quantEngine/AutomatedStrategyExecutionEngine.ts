@@ -31,6 +31,8 @@ import {
   DEFAULT_SR_LIVE_SETTINGS,
   SupportedOBTimeframe,
 } from "./strategyExecutionConfig";
+import { InstitutionalGeometryGate } from "./InstitutionalGeometryGate";
+import { isDeadZone } from "../temporalGatekeeper";
 
 export type PositionStageStatus =
   | "PENDING_LIMIT_ENTRY"
@@ -236,7 +238,7 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   lotPrecision: 3,
   tickSize: 0.01,
 
-  stage1Multiple: 1.30,
+  stage1Multiple: 1.50,
   stage2Multiple: 3.50,
   stage3Multiple: 0.0,
 
@@ -263,7 +265,7 @@ export const DEFAULT_AUTOMATED_CONFIG: AutomatedExecutionConfig = {
   targetMode: 'DYNAMIC_LIQUIDITY',
   dynamicTp1Source: 'DEALING_RANGE_EQ',
   dynamicTp2Source: 'OPPOSING_LIQUIDITY',
-  minDynamicTp1Multiple: 1.20,
+  minDynamicTp1Multiple: 1.50,
   maxDynamicTp1Multiple: 1.50,
   minDynamicTp2Multiple: 3.00,
   maxDynamicTp2Multiple: 5.00,
@@ -658,12 +660,12 @@ export class AutomatedStrategyExecutionEngine {
       }
     }
 
-    // ── Guardrail 1.6: 🛡️ Quant Shield Rule 6: Precision Temporal Filter (Mute 00, 09, 13, 17-19, 21 UTC) ──
+    // ── Guardrail 1.6: 🛡️ Centralized Temporal Gatekeeper (NY Lunch, Funding Rollover, News) ──
     const filterDeadZones = this.config.filterDeadZones ?? this.config.liveSettings?.filterDeadZones ?? false;
     if (filterDeadZones) {
-      const hr = new Date().getUTCHours();
-      if (hr === 0 || hr === 9 || hr === 13 || hr === 21 || (hr >= 17 && hr <= 19)) {
-        const msg = `[DEAD_ZONE_FILTER] Automated execution paused during toxic dead zone hours (00:00, 09:00, 13:00, 17:00-19:00, and 21:00 UTC).`;
+      const dz = isDeadZone(Date.now());
+      if (dz.isDead) {
+        const msg = `[DEAD_ZONE_FILTER] Automated execution paused: ${dz.reason}`;
         this.emit("DIRECTIONAL_VETO", msg);
         return { success: false, message: msg };
       }
@@ -858,6 +860,21 @@ export class AutomatedStrategyExecutionEngine {
               riskDistance * this.config.stage3Multiple
             ).toFixed(4),
           );
+    }
+
+    // ── 🛡️ Institutional Pre-Order Geometry Gate (TP1 >= 1.50R, TP2 >= 2.00R) ──
+    const geomVerdict = InstitutionalGeometryGate.evaluateGeometry(
+      limitEntryPrice,
+      clampedStopLoss,
+      stage1Target,
+      stage2Target,
+      direction
+    );
+
+    if (!geomVerdict.passed) {
+      const msg = `[GEOMETRY_VETO] ${geomVerdict.reason || 'Geometry rejected'}`;
+      this.emit('DIRECTIONAL_VETO', msg);
+      return { success: false, message: msg };
     }
 
     const posId = `POS_${direction}_${Date.now()}_${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
@@ -1849,6 +1866,8 @@ export class AutomatedStrategyExecutionEngine {
     multiTfCandles: { "3m"?: Candle[]; "5m"?: Candle[]; "15m"?: Candle[]; "1h"?: Candle[] },
     macroContext?: {
       macroDailyBias?: "BULLISH" | "BEARISH" | "NEUTRAL";
+      htfConfirmedBias?: "BULLISH" | "BEARISH" | "PENDING" | "UNSET";
+      htfHysteresis?: any;
       dolDirection?: "BULLISH" | "BEARISH" | "BALANCED";
       localDealingRange?: any;
     },
@@ -1972,6 +1991,8 @@ export class AutomatedStrategyExecutionEngine {
         institutionalKillzoneCutoffMinuteUtc: settings.institutionalKillzoneCutoffMinuteUtc ?? 30,
         enforcePreNewsFreeze: settings.enforcePreNewsFreeze ?? true,
         enableM15StructuralTrail: settings.enableM15StructuralTrail ?? true,
+        enforceHtfBiasGuard: settings.enforceHtfBiasGuard ?? this.config.enforceHtfBiasGuard ?? true,
+        htfConfirmedBias: macroContext?.htfConfirmedBias,
       };
 
       try {
@@ -2136,6 +2157,28 @@ export class AutomatedStrategyExecutionEngine {
 
           const isValuationGatePassed = !(settings.enforceDiscountPremiumGate ?? true) ||
             (s.is_valuation_aligned && isStructuralAligned);
+
+          // 🛡️ HTF Macro Bias Hysteresis Directional Gate
+          const htfBias = macroContext?.htfConfirmedBias || macroContext?.macroDailyBias;
+          const isHtfContradiction =
+            (htfBias === 'BEARISH' && isBullish) ||
+            (htfBias === 'BULLISH' && !isBullish);
+
+          if (isHtfContradiction) {
+            this.emit(
+              'DIRECTIONAL_VETO',
+              `[HTF_BIAS_VETO] ${s.symbol} ${isBullish ? 'BULLISH' : 'BEARISH'} setup rejected: directly contradicts confirmed HTF Macro Bias (${htfBias}).`
+            );
+            continue;
+          }
+
+          if (macroContext?.htfConfirmedBias === 'PENDING') {
+            this.emit(
+              'DIRECTIONAL_VETO',
+              `[HTF_BIAS_VETO] ${s.symbol} setup rejected: HTF Bias state transition is PENDING confirmation.`
+            );
+            continue;
+          }
 
           const isConfirmed =
             s.is_reclaimed &&
@@ -2310,6 +2353,8 @@ export class AutomatedStrategyExecutionEngine {
     customConfig?: Partial<TrendContinuationConfig>,
     macroContext?: {
       macroDailyBias?: "BULLISH" | "BEARISH" | "NEUTRAL";
+      htfConfirmedBias?: "BULLISH" | "BEARISH" | "PENDING" | "UNSET";
+      htfHysteresis?: any;
       dolDirection?: "BULLISH" | "BEARISH" | "BALANCED";
       localDealingRange?: any;
       restingLiquidityPools?: { BSL_Magnets?: number[]; SSL_Magnets?: number[] };
@@ -2351,6 +2396,28 @@ export class AutomatedStrategyExecutionEngine {
       // Standby / Silenced check: do not route orders unless autonomous scanning is explicitly enabled
       const isTcAuthorized = this.config.enableTrendContinuationAutoExecute !== false;
       if (!isAutonomousScanEnabled || !isTcAuthorized) continue;
+
+      // 🛡️ HTF Macro Bias Hysteresis Directional Gate
+      const htfBias = macroContext?.htfConfirmedBias || macroContext?.macroDailyBias;
+      const isHtfContradiction =
+        (htfBias === 'BEARISH' && s.type === 'BULLISH') ||
+        (htfBias === 'BULLISH' && s.type === 'BEARISH');
+
+      if (isHtfContradiction) {
+        this.emit(
+          'DIRECTIONAL_VETO',
+          `[HTF_BIAS_VETO] ${s.symbol} ${s.type} trend continuation setup rejected: directly contradicts confirmed HTF Macro Bias (${htfBias}).`
+        );
+        continue;
+      }
+
+      if (macroContext?.htfConfirmedBias === 'PENDING') {
+        this.emit(
+          'DIRECTIONAL_VETO',
+          `[HTF_BIAS_VETO] ${s.symbol} setup rejected: HTF Bias state transition is PENDING confirmation.`
+        );
+        continue;
+      }
 
       // Only attempt to route setups that are fresh
       const latestIdx = candles.length - 1;

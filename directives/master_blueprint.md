@@ -1,8 +1,63 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.81
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.82
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-15 (V17.81 — Architectural Hardening Pass: UI Safety, Gating Decoupling, Resting Cap & Anti-Discount Valuation Gate)
+> **Last Updated:** 2026-09-16 (V17.82 — Institutional Quant Engine Stability & Behavioral Hardening Pass: HTF Bias Hysteresis, Alert Cadence Governor, Dead Zone Silence Engine & Pre-Broadcast Geometry Gate)
+
+## 🆕 V17.82 Changelog — Institutional Quant Engine Stability & Behavioral Hardening Pass (2026-09-16)
+
+### Summary
+1. **Phase 1: HTF Bias Hysteresis Gate & Trend State Machine Hardening (`src/lib/quantEngine/HtfBiasHysteresisEngine.ts`, `src/lib/quantEngine/BiasEngine.ts`, `src/lib/daemon/restBootstrap.ts`, `src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`, `src/lib/quantEngine/SweepReclaimEngine.ts`, `src/lib/quantEngine/SMCStateEngine.ts`):**
+   - Implemented `HtfBiasHysteresisEngine` with institutional 4-state persistence machine (`UNSET -> BULLISH_CONFIRMED <-> BEARISH_PENDING -> BEARISH_CONFIRMED <-> BULLISH_PENDING`).
+   - Enforced Invariant 1: Macro trend flip requires 1H displaced body close (body-to-range ratio $\ge 0.40$) beyond the preceding protected swing high/low.
+   - Enforced Invariant 2: Multi-bar persistence confirmation. Single 1H break enters `PENDING` state; confirmation requires the consecutive 1H candle to close in the breakout direction before advancing to `CONFIRMED`.
+   - Enforced Invariant 3: Single 15m counter-trend wicks inside macro supply/demand are strictly classified as `RETRACEMENT_IN_DISCOUNT` or `RETRACEMENT_IN_PREMIUM` with `execution_disabled = true`, preventing counter-trend bias whiplash.
+   - Fixed `BiasEngine.ts` `resolveTripleVectorBias()` contradictory inequalities (`livePrice < activeSwingPOC` AND `livePrice >= activeSwingPOC`) that permanently forced `NEUTRAL`, restoring live Triple-Vector bias solving.
+   - Updated `restBootstrap.ts` `computeMacroContext`: replaced tautological `livePrice > sma20` with a $0.15\%$ deadband hysteresis buffer around 1H SMA20 and directly injected `htfConfirmedBias` and `htfHysteresis`.
+   - Wired `htfConfirmedBias` into `AutomatedStrategyExecutionEngine.ts` (`onMultiTimeframeCandles` and `evaluateTrendContinuation`), emitting `[HTF_BIAS_VETO]` on setups that contradict the macro trend or during `PENDING` transitions.
+   - Updated `SweepReclaimEngine.ts` to accept `htfConfirmedBias` in `SweepReclaimConfig` and bypass pseudo-EMA approximation when confirmed macro bias is supplied.
+   - Hardened `SMCStateEngine.ts`: required displaced body close and volume expansion (`is_displaced`) before executing `current_trend_state` structural flips; undisplaced CHoCH wicks no longer flip the trend.
+
+2. **Phase 2: Alert Cadence Governor & Spatial Hysteresis Engine (`src/lib/notifications/AlertCadenceGovernor.ts`, `src/lib/notifications/telegramNotifier.ts`, `src/lib/daemon/sparkIngestionDispatcher.ts`, `src/lib/daemon/headlessScheduler.ts`):**
+   - Implemented `AlertCadenceGovernor` with global singleton `globalAlertCadenceGovernor`:
+     - Temporal Cooldown: Enforced strict 15-minute ($900,000\text{ ms}$) spacing between outbound entry/intent alert cards (`SIGNAL_RECEIVED`, `ARMED_INTENT_REGISTERED`) for the same symbol and direction.
+     - Spatial Hysteresis: Registered active POI zones and suppressed redundant intent broadcasts when live price oscillates within an active setup's POI band ($\pm 0.05\%$ proximity tolerance).
+     - Leaky Bucket Rate Limiter: Outbound FIFO message queue enforcing maximum 1 message per $2,000\text{ ms}$ for Telegram HTTP Bot API rate compliance.
+     - Preserved lifecycle progression: In-flight execution events (`ORDER_FILLED`, `STAGE_1_HARVEST`, `TRADE_CLOSED`) bypass signal cadence limits.
+   - Wired `AlertCadenceGovernor` into `TelegramNotifier.broadcastQuantMilestone` and `sendRawMessage`.
+   - Integrated cadence and temporal checks into `SparkIngestionDispatcher.ts` and `HeadlessScheduler.ts`.
+
+3. **Phase 3: Centralized Temporal Gatekeeper & Dead Zone Silence Engine (`src/lib/temporalGatekeeper.ts`, `src/lib/daemon/sparkIngestionDispatcher.ts`, `src/lib/agentEngineHandlers.ts`, `src/lib/notifications/telegramNotifier.ts`, `src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`, `src/lib/quantEngine/SweepReclaimEngine.ts`):**
+   - Unified all fragmented temporal and toxic window definitions into `isDeadZone()` pure function:
+     - NY Lunch Dead Zone: 12:00 PM – 1:30 PM America/New_York (ICT liquidity vacuum).
+     - Funding Rollover Freeze: 23:50 – 00:10 UTC (Binance futures rate settlement).
+     - Macro News Freeze: $\pm 20$ minutes around major high-impact US releases (CPI/PPI 12:10–12:50 UTC, FOMC 17:40–18:20 UTC).
+     - Off-Hours Cutoff: Outside active schedule (Africa/Cairo 08:00–22:00).
+   - Enforced Invariant 8: During dead zones, full actionable setup cards (with sizing, entry limits, and stops) are completely silenced. Outbound Telegram broadcasts are strictly restricted to quiet `⚪ OBSERVATION: DEADZONE_STAND_DOWN` heartbeats.
+   - Updated `SparkIngestionDispatcher.ts` to transition incoming records to `STAND_DOWN` during dead zones and log reason.
+   - Updated `agentEngineHandlers.ts` `runSubmitQuantDecision` to assign `STAND_DOWN` during dead zones and suppress Telegram card dispatch.
+   - Synchronized `AutomatedStrategyExecutionEngine.ts` Guardrail 1.6 and `SweepReclaimEngine.ts` Rule 6 to delegate to `isDeadZone()`.
+
+4. **Phase 4: Institutional Pre-Broadcast Geometry Gate (`src/lib/quantEngine/InstitutionalGeometryGate.ts`, `src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`, `src/lib/quantEngine/SweepReclaimEngine.ts`, `src/lib/daemon/sparkIngestionDispatcher.ts`, `src/lib/quantEngine/scannerPresets.ts`, `src/lib/notifications/telegramNotifier.ts`):**
+   - Implemented `InstitutionalGeometryGate` enforcing strict mathematical invariants prior to staging, dispatch, or order entry:
+     - Invariant 9: Minimum Target 1 (TP1) distance $\ge 1.50\text{R}$.
+     - Invariant 10: Minimum Overall Target 2 (TP2) distance $\ge 2.00\text{R}$.
+     - Directional Polarity validation: Long SL must reside strictly below entry; Short SL must reside strictly above entry.
+   - Updated `scannerPresets.ts` factory presets (`factory_sr_15m_institutional_asymmetric`, `factory_sr_15m_institutional_confluence`) and fallbacks: updated `stage1Multiple: 1.50` (was 1.30) and `minDynamicTp1Multiple: 1.50` (was 1.20).
+   - Updated `AutomatedStrategyExecutionEngine.ts` `DEFAULT_AUTOMATED_CONFIG` and `submitStrategyOrder`: checks `InstitutionalGeometryGate.evaluateGeometry()` and emits `[GEOMETRY_VETO]` on sub-1.50R setups.
+   - Updated `SparkIngestionDispatcher.ts` `parseSparkDecision`: replaced $1.0\text{R} / 1.5\text{R}$ fallbacks with compliant $1.50\text{R} / 3.00\text{R}$ targets. Added geometry validation after position sizing.
+   - Updated `TelegramNotifier.ts` `formatQuantIntentSignalMarkdown` and `formatArmedIntentRegisteredMarkdown` to display Target 1 R:R as the binding headline (`1:X.XX (TP1) / 1:Y.YY (TP2)`).
+
+5. **Verification & Parity Record:**
+   - Authored and verified `scripts/test_htf_hysteresis.ts`: 10/10 assertions passed (100.0%).
+   - Authored and verified `scripts/test_alert_cadence_governor.ts`: 12/12 assertions passed (100.0%).
+   - Authored and verified `scripts/test_dead_zone_silence.ts`: 18/18 assertions passed (100.0%).
+   - Authored and verified `scripts/test_geometry_gate.ts`: 14/14 assertions passed (100.0%).
+   - Re-verified `scripts/test_ttl_and_parity.ts`: 100% success.
+   - Re-verified `scripts/verify_quant_vs_pm2_parity.ts`: 7/7 trades (100.00% parity confirmed).
+   - Re-verified `scripts/test_risk_governor.ts`: 39/39 assertions passed (100.0%).
+   - Re-verified `npx tsc --noEmit`: 0 errors.
+   - Re-verified `npm run build`: compiled all 30 routes successfully in 10.1s.
 
 ## 🆕 V17.81 Changelog — Architectural Hardening Pass: UI Safety, Gating Decoupling, Resting Cap & Anti-Discount Valuation Gate (2026-09-15)
 

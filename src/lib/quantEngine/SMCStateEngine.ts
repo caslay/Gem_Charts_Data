@@ -224,14 +224,14 @@ export class SMCStateEngine {
           });
           this.pending_breaks.push({ event_idx: idx, p_ref: this.protected_low, type: event_type, direction: 'BEARISH' });
           
-          this.current_trend_state = 'BEARISH_SWING';
-          this.protected_high = this.active_swing_high;
-          this.active_swing_low = candle.low; // Candidate bottom
-          this.last_processed_pivot_type = null;
-
-          // ─── BEARISH EXPANSION FLOAT ACTIVATION (MSS from BULLISH) ─────────
-          // If this is a displaced MSS, activate the bearish expansion float.
           if (is_displaced) {
+            this.current_trend_state = 'BEARISH_SWING';
+            this.protected_high = this.active_swing_high;
+            this.active_swing_low = candle.low; // Candidate bottom
+            this.last_processed_pivot_type = null;
+
+            // ─── BEARISH EXPANSION FLOAT ACTIVATION (MSS from BULLISH) ─────────
+            // If this is a displaced MSS, activate the bearish expansion float.
             this.expansion_origin_price = this.protected_low;
             this.expansion_low_float = candle.low;
             this.is_in_expansion = true;
@@ -288,13 +288,13 @@ export class SMCStateEngine {
           });
           this.pending_breaks.push({ event_idx: idx, p_ref: this.protected_high, type: event_type, direction: 'BULLISH' });
           
-          this.current_trend_state = 'BULLISH_SWING';
-          this.protected_low = this.active_swing_low;
-          this.active_swing_high = candle.high; // Candidate top
-          this.last_processed_pivot_type = null;
-
-          // ─── BULLISH EXPANSION FLOAT ACTIVATION (MSS from BEARISH) ─────────
           if (is_displaced) {
+            this.current_trend_state = 'BULLISH_SWING';
+            this.protected_low = this.active_swing_low;
+            this.active_swing_high = candle.high; // Candidate top
+            this.last_processed_pivot_type = null;
+
+            // ─── BULLISH EXPANSION FLOAT ACTIVATION (MSS from BEARISH) ─────────
             this.expansion_origin_price = this.protected_high;
             this.expansion_high_float = candle.high;
             this.is_in_expansion = true;

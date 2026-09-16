@@ -9,6 +9,7 @@
 
 import { Candle } from '../fvgEngine';
 import { MarketStructureAPI } from '../quantEngine/MarketStructureAPI';
+import { globalHtfHysteresisEngine, HtfBiasEvaluationResult } from '../quantEngine/HtfBiasHysteresisEngine';
 
 const BINANCE_FAPI_BASE = 'https://fapi.binance.com/fapi/v1/klines';
 
@@ -21,6 +22,8 @@ export interface BootstrapCandleBuffers {
 
 export interface MacroStructuralContext {
   macroDailyBias: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  htfConfirmedBias?: 'BULLISH' | 'BEARISH' | 'PENDING' | 'UNSET';
+  htfHysteresis?: HtfBiasEvaluationResult;
   dolDirection: 'BULLISH' | 'BEARISH' | 'BALANCED';
   localDealingRange: {
     high: number;
@@ -194,24 +197,46 @@ export function computeMacroContext(
     else if (livePrice < eq - 0.5) currentStatus = 'DISCOUNT';
   }
 
-  // Macro Bias heuristics based on 1H trend & equilibrium
+  // ── Macro Bias heuristics based on 1H trend & equilibrium with Hysteresis ──
+  const htfHysteresis = globalHtfHysteresisEngine.evaluate(candles1h, candles15m);
   let macroDailyBias: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
+
   if (candles1h.length >= 20) {
-    const sma20 =
-      candles1h.slice(-20).reduce((acc, c) => acc + c.c, 0) / 20;
-    if (livePrice > sma20 && currentStatus === 'DISCOUNT') {
+    const sma20 = candles1h.slice(-20).reduce((acc, c) => acc + c.c, 0) / 20;
+    const upperBuffer = sma20 * 1.0015;
+    const lowerBuffer = sma20 * 0.9985;
+
+    if (livePrice > upperBuffer && currentStatus === 'DISCOUNT') {
       macroDailyBias = 'BULLISH';
-    } else if (livePrice < sma20 && currentStatus === 'PREMIUM') {
+    } else if (livePrice < lowerBuffer && currentStatus === 'PREMIUM') {
+      macroDailyBias = 'BEARISH';
+    } else if (livePrice > upperBuffer) {
+      macroDailyBias = 'BULLISH';
+    } else if (livePrice < lowerBuffer) {
       macroDailyBias = 'BEARISH';
     } else {
-      macroDailyBias = livePrice > sma20 ? 'BULLISH' : 'BEARISH';
+      // In the deadband / buffer zone, retain confirmed HTF hysteresis bias
+      macroDailyBias = htfHysteresis.confirmedBias;
     }
+  } else {
+    macroDailyBias = htfHysteresis.confirmedBias;
   }
+
+  const htfConfirmedBias: 'BULLISH' | 'BEARISH' | 'PENDING' | 'UNSET' =
+    htfHysteresis.state === 'BULLISH_CONFIRMED'
+      ? 'BULLISH'
+      : htfHysteresis.state === 'BEARISH_CONFIRMED'
+      ? 'BEARISH'
+      : htfHysteresis.state === 'BEARISH_PENDING' || htfHysteresis.state === 'BULLISH_PENDING'
+      ? 'PENDING'
+      : 'UNSET';
 
   const dolDirection = macroDailyBias === 'BULLISH' ? 'BULLISH' : macroDailyBias === 'BEARISH' ? 'BEARISH' : 'BALANCED';
 
   return {
     macroDailyBias,
+    htfConfirmedBias,
+    htfHysteresis,
     dolDirection,
     localDealingRange:
       eq > 0
