@@ -27,6 +27,7 @@ import {
   QuantLifecycleMilestone,
   SparkLifecycleMilestone,
   buildStandbyActionKeyboard,
+  escapeHtml,
 } from './telegramNotifier';
 import { AutomatedStrategyExecutionEngine } from '../quantEngine/AutomatedStrategyExecutionEngine';
 import { DaemonLedger } from '../daemon/daemonLedger';
@@ -924,11 +925,11 @@ export class TelegramBotService {
     // Always acknowledge callback immediately to dismiss button loading spinner
     await this.notifier.answerCallbackQuery(cbId);
 
-    if (data.startsWith('paper_trade_')) {
-      const decisionId = parseInt(data.replace('paper_trade_', ''), 10);
+    if (data.startsWith('paper_trade_') || data.startsWith('retry_paper_')) {
+      const decisionId = parseInt(data.replace(/^(paper_trade_|retry_paper_)/, ''), 10);
       await this.handlePaperTradeCallback(decisionId, chatId, messageId);
-    } else if (data.startsWith('live_exec_init_')) {
-      const decisionId = parseInt(data.replace('live_exec_init_', ''), 10);
+    } else if (data.startsWith('live_exec_init_') || data.startsWith('retry_live_')) {
+      const decisionId = parseInt(data.replace(/^(live_exec_init_|retry_live_)/, ''), 10);
       await this.handleLiveExecInitCallback(decisionId, chatId, messageId);
     } else if (data.startsWith('live_exec_confirm_')) {
       const decisionId = parseInt(data.replace('live_exec_confirm_', ''), 10);
@@ -1096,14 +1097,22 @@ export class TelegramBotService {
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `⏰ <code>${cairoTime} Cairo</code>`
       : `⚠️ <b>[PROMOTION FAILED]</b>\n` +
-        `Could not promote setup #<code>${decisionId}</code>: ${cleanErrorMsg}`;
+        `Could not promote setup #<code>${decisionId}</code>: <code>${escapeHtml(cleanErrorMsg)}</code>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `<i>Action buttons preserved. Select an option below:</i>`;
+
+    const replyMarkup = promotionResult.success
+      ? { inline_keyboard: [] }
+      : buildStandbyActionKeyboard(decisionId, { hasError: true, errorReason: cleanErrorMsg });
 
     if (chatId && messageId) {
       await this.notifier.editMessageText(chatId, messageId, replyText, {
-        replyMarkup: { inline_keyboard: [] },
+        replyMarkup,
       });
     } else {
-      await this.notifier.sendRawMessage(replyText, { replyMarkup: MAIN_TELEGRAM_KEYBOARD });
+      await this.notifier.sendRawMessage(replyText, {
+        replyMarkup: promotionResult.success ? MAIN_TELEGRAM_KEYBOARD : replyMarkup,
+      });
     }
   }
 
@@ -1334,15 +1343,21 @@ export class TelegramBotService {
 
     const failText =
       `❌ <b>[LIVE PROMOTION FAILED]</b>\n` +
-      `Could not route setup #<code>${decisionId}</code> to live execution: ${executionResult.message}`;
+      `Could not route setup #<code>${decisionId}</code> to live execution: <code>${escapeHtml(executionResult.message)}</code>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `<i>Action buttons preserved. Select an option below:</i>`;
+
+    const replyMarkup = executionResult.success
+      ? { inline_keyboard: [] }
+      : buildStandbyActionKeyboard(decisionId, { hasError: true, errorReason: executionResult.message });
 
     if (chatId && messageId) {
       await this.notifier.editMessageText(chatId, messageId, executionResult.success ? successText : failText, {
-        replyMarkup: { inline_keyboard: [] },
+        replyMarkup,
       });
     } else {
       await this.notifier.sendRawMessage(executionResult.success ? successText : failText, {
-        replyMarkup: MAIN_TELEGRAM_KEYBOARD,
+        replyMarkup: executionResult.success ? MAIN_TELEGRAM_KEYBOARD : replyMarkup,
       });
     }
   }

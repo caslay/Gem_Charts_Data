@@ -1,8 +1,57 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.84
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.85
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-17 (V17.84 — Paper Trading Lifecycle Reconciliation, Journal Persistence & Dynamic Trailing Stop Visualization)
+> **Last Updated:** 2026-09-17 (V17.85 — Synthetic Tape Outcome Reconciliation, Resilient Telegram Interactive Keyboards & Universal HTML Normalization)
+
+## 🆕 V17.85 Changelog — Synthetic Tape Outcome Reconciliation, Resilient Telegram Interactive Keyboards & Universal HTML Normalization (2026-09-17)
+
+### Summary
+1. **Workstream A: Synthetic AI Analysis Reconciliation Engine (`src/lib/quantEngine/SetupOutcomeTypes.ts`, `src/lib/quantEngine/SetupOutcomeReconciler.ts`, `src/components/modals/AiAnalysisHistoryModal.tsx`):**
+   - **Synthetic Telemetry Schema:** Extended `ReconciledOutcome` with `is_synthetic_evaluation`, `synthetic_fill_price`, `synthetic_exit_price`, `synthetic_mfe_r`, and `synthetic_mae_r`.
+   - **Binance Klines Telemetry Pipeline:** Added `fetchCandlesForReconciliation(symbol, minTime, maxTime, timeframe)` to fetch 5m/15m forward historical klines with 60s memory caching and automatic fallback from USDC to USDT.
+   - **Forward Tape Simulation Engine:** Implemented `simulateSyntheticTapeOutcome`:
+     - 12-bar entry touch check (distinguishes touched limit orders from unreached orders).
+     - Pre-fill invalidation breach check and missed expansion cancellation.
+     - Conservative same-bar stop out guard.
+     - Two-stage asymmetric harvest (30% TP1 de-risking, 70% TP2 macro runner).
+     - Strict Next-Bar Ratchet Rule for breakeven adjustment on bar $i+1$.
+     - Early Breakeven ratchet (+0.40R rule) for scratch protection.
+     - In-flight position and floating MFE tracking for active setups.
+   - **HUD & Modal Synchronization:** Updated `AiAnalysisHistoryModal.tsx`:
+     - Mini-KPI ribbon now renders Breakeven count (`🔵 X BE`) alongside Wins (`🟢 XW`), Losses (`🔴 XL`), and Expired/Cancelled (`⚪ XX`).
+     - Audit cards render a dedicated `[Synthetic Tape Reconciled]` badge and show exact simulated `Fill`, `Exit`, and `MFE` metrics.
+
+2. **Workstream B: Resilient Telegram Interactive Keyboards (`src/lib/notifications/telegramNotifier.ts`, `src/lib/notifications/telegramBotService.ts`):**
+   - **Enhanced Keyboard Builder:** Updated `buildStandbyActionKeyboard(decisionId, options)` to accept `{ hasError?: boolean; errorReason?: string }`. When an execution gate fails (such as `[RESTING_SIDE_VETO]` where market price drifted past limit price), it yields `[ 🔄 Retry Paper Trade ]` (`retry_paper_${decisionId}`), `[ ⚡ Execute Live ]` (`retry_live_${decisionId}`), and `[ ❌ Dismiss ]` (`dismiss_${decisionId}`).
+   - **Zero Lockout Callback Routing:** Updated `processIncomingCallbackQuery` in `telegramBotService.ts` to route `retry_paper_` and `retry_live_` to the respective promotion handlers.
+   - **Error Keyboard Preservation:** In both `handlePaperTradeCallback` and `handleLiveExecConfirmCallback`, prevented stripping the inline keyboard on failure. Preserved action buttons with retry options.
+
+3. **Workstream C: Universal Telegram HTML ParseMode Normalization (`src/lib/notifications/telegramNotifier.ts`, `src/lib/temporalGatekeeper.ts`):**
+   - **Root-Cause Resolution for Raw Tags:** Identified that `handleExecutionEvent` previously switched `parseMode` to `'Markdown'` whenever `pos.executionMode` was set, while the message body contained HTML tags (`<b>`, `<code>`, `<i>`), causing Telegram to display raw HTML tags in early breakeven and trade harvest alerts.
+   - **Universal HTML Standard:** Standardized all message formatters in `telegramNotifier.ts` (`formatQuantIntentSignalMarkdown`, `formatOrderArmedMarkdown`, `formatOrderFilledMarkdown`, `formatTp1RatchetMarkdown`, `formatTradeClosedMarkdown`, `formatArmedIntentRegisteredMarkdown`, `formatArmedIntentTriggeredMarkdown`, `formatArmedIntentExpiredMarkdown`, `formatArmedIntentInvalidatedMarkdown`, `formatDeadZoneObservationHeartbeat`) to output clean, valid HTML tags.
+   - **Universal HTML Dispatch:** Enforced `parseMode = 'HTML'` in `handleExecutionEvent`, `broadcastQuantMilestone`, `editMessageText`, and `sendRawMessage`.
+   - **HTML Entity Sanitization:** Exported `escapeHtml()` across notifications and gatekeepers to escape `<`, `>`, `&`, and `"`, preventing Telegram entity parsing errors.
+   - **HTML Tag Validator:** Implemented `validateTelegramHtml()` to verify balanced `<b>`, `<code>`, `<i>`, and `<pre>` tags.
+
+4. **Verification & Audit:**
+   - Authored and verified `scripts/test_synthetic_tape_reconciliation.ts`: 9/9 tests passed (100% assertions passed).
+   - Authored and verified `scripts/test_telegram_resilience_and_html.ts`: 9/9 tests passed (100% assertions passed).
+   - TypeScript verification: `npx tsc --noEmit` exited with 0 errors.
+   - Next.js production build: `npm run build` compiled all 31 routes successfully.
+
+### Files Created & Modified
+- **`scripts/test_synthetic_tape_reconciliation.ts`** [NEW]
+- **`scripts/test_telegram_resilience_and_html.ts`** [NEW]
+- **`src/lib/quantEngine/SetupOutcomeTypes.ts`** [MODIFY]
+- **`src/lib/quantEngine/SetupOutcomeReconciler.ts`** [MODIFY]
+- **`src/components/modals/AiAnalysisHistoryModal.tsx`** [MODIFY]
+- **`src/lib/notifications/telegramNotifier.ts`** [MODIFY]
+- **`src/lib/notifications/telegramBotService.ts`** [MODIFY]
+- **`src/lib/temporalGatekeeper.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.84 Changelog — Paper Trading Lifecycle Reconciliation, Journal Persistence & Dynamic Trailing Stop Visualization (2026-09-17)
 
