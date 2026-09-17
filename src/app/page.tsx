@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, memo, useCallback } from 'react';
+import { useState, useEffect, memo, useCallback, useRef } from 'react';
 import { useMarketDataContext, useMarketDataLiveContext } from '@/context/MarketDataContext';
 import Chart from '@/components/Chart';
 import Sidebar from '@/components/Sidebar';
@@ -56,17 +56,44 @@ export default function Home() {
   const [commandCenterTab, setCommandCenterTab] = useState<'strategy' | 'audio'>('strategy');
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
 
+  // Stable preview handler with object identity deduplication
+  const handlePreviewSetup = useCallback((setup: any) => {
+    setStagedPreviewOverlay((prev) => {
+      if (!setup && !prev) return null;
+      if (setup && prev && setup.id === prev.id) return prev;
+      if (!setup) return null;
+      return {
+        id: setup.id,
+        symbol: setup.symbol,
+        direction: setup.direction,
+        entryPrice: setup.entryPrice,
+        entryRangeLow: setup.entryRangeLow,
+        entryRangeHigh: setup.entryRangeHigh,
+        stopLoss: setup.stopLoss,
+        target1: setup.target1,
+        target2: setup.target2,
+        target3: setup.target3,
+        sourceReference: setup.sourceReference,
+      };
+    });
+  }, []);
+
   // Fetch active staged setups count for HUD ribbon
+  const isFetchingCountRef = useRef(false);
   const fetchStagedCount = useCallback(async () => {
+    if (isFetchingCountRef.current) return;
+    isFetchingCountRef.current = true;
     try {
       const res = await fetch('/api/staged-setups?status=PINNED', { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.data)) {
-          setStagedSetupsCount(json.data.length);
+          setStagedSetupsCount((prev) => (prev !== json.data.length ? json.data.length : prev));
         }
       }
-    } catch {}
+    } catch {} finally {
+      isFetchingCountRef.current = false;
+    }
   }, []);
 
   useEffect(() => {
@@ -609,25 +636,7 @@ export default function Home() {
           fetchStagedCount();
         }}
         livePrice={getChartData().length > 0 ? getChartData()[getChartData().length - 1].c : null}
-        onPreviewSetup={(setup) => {
-          if (setup) {
-            setStagedPreviewOverlay({
-              id: setup.id,
-              symbol: setup.symbol,
-              direction: setup.direction,
-              entryPrice: setup.entryPrice,
-              entryRangeLow: setup.entryRangeLow,
-              entryRangeHigh: setup.entryRangeHigh,
-              stopLoss: setup.stopLoss,
-              target1: setup.target1,
-              target2: setup.target2,
-              target3: setup.target3,
-              sourceReference: setup.sourceReference,
-            });
-          } else {
-            setStagedPreviewOverlay(null);
-          }
-        }}
+        onPreviewSetup={handlePreviewSetup}
         onDeploySuccess={() => {
           fetchStagedCount();
         }}

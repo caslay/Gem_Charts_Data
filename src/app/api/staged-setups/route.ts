@@ -4,6 +4,7 @@ import {
   pinSetup,
   unpinSetup,
   getStagedSetupById,
+  resolveAndValidateSetupGeometry,
 } from '@/lib/staging/userStagedSetupsStore';
 import type { CreateStagedSetupInput, StagedSetupStatus } from '@/types/stagedSetupTypes';
 
@@ -67,58 +68,42 @@ export async function POST(req: Request) {
         metadata,
       } = body;
 
-      if (!direction || !entryPrice || !stopLoss || !target1) {
+      if (!entryPrice || !stopLoss || !target1) {
         return NextResponse.json(
-          { success: false, error: 'Missing required setup parameters (direction, entryPrice, stopLoss, target1)' },
+          { success: false, error: 'Missing required setup parameters (entryPrice, stopLoss, target1)' },
           { status: 400 }
         );
       }
 
-      // Financial boundary sanity check
-      const dirUpper = String(direction).toUpperCase();
-      const numEntry = Number(entryPrice);
-      const numSl = Number(stopLoss);
-      const numTp1 = Number(target1);
-
-      if (dirUpper === 'LONG') {
-        if (numSl >= numEntry) {
-          return NextResponse.json(
-            { success: false, error: 'Sanity validation failed: LONG Stop Loss must be below Entry Price.' },
-            { status: 400 }
-          );
-        }
-        if (numTp1 <= numEntry) {
-          return NextResponse.json(
-            { success: false, error: 'Sanity validation failed: LONG Target 1 must be above Entry Price.' },
-            { status: 400 }
-          );
-        }
-      } else if (dirUpper === 'SHORT') {
-        if (numSl <= numEntry) {
-          return NextResponse.json(
-            { success: false, error: 'Sanity validation failed: SHORT Stop Loss must be above Entry Price.' },
-            { status: 400 }
-          );
-        }
-        if (numTp1 >= numEntry) {
-          return NextResponse.json(
-            { success: false, error: 'Sanity validation failed: SHORT Target 1 must be below Entry Price.' },
-            { status: 400 }
-          );
-        }
-      }
-
-      const input: CreateStagedSetupInput = {
-        symbol,
-        direction: dirUpper === 'SHORT' ? 'SHORT' : 'LONG',
-        entryPrice: numEntry,
-        entryRangeLow: entryRangeLow != null ? Number(entryRangeLow) : null,
-        entryRangeHigh: entryRangeHigh != null ? Number(entryRangeHigh) : null,
-        stopLoss: numSl,
-        target1: numTp1,
+      // Mathematical price geometry resolution & sanity validation
+      const geom = resolveAndValidateSetupGeometry({
+        direction,
+        entryPrice: Number(entryPrice),
+        stopLoss: Number(stopLoss),
+        target1: Number(target1),
         target2: target2 != null ? Number(target2) : null,
         target3: target3 != null ? Number(target3) : null,
         riskRewardRatio: riskRewardRatio != null ? Number(riskRewardRatio) : null,
+      });
+
+      if (!geom.isValid) {
+        return NextResponse.json(
+          { success: false, error: `Sanity validation failed: ${geom.error}` },
+          { status: 400 }
+        );
+      }
+
+      const input: CreateStagedSetupInput = {
+        symbol: (symbol || 'ETHUSDC').trim().toUpperCase(),
+        direction: geom.resolvedDirection,
+        entryPrice: geom.entryPrice,
+        entryRangeLow: entryRangeLow != null ? Number(entryRangeLow) : null,
+        entryRangeHigh: entryRangeHigh != null ? Number(entryRangeHigh) : null,
+        stopLoss: geom.stopLoss,
+        target1: geom.target1,
+        target2: geom.target2,
+        target3: geom.target3,
+        riskRewardRatio: geom.riskRewardRatio,
         riskUsd: riskUsd != null ? Number(riskUsd) : null,
         riskPct: riskPct != null ? Number(riskPct) : null,
         contractSize: contractSize != null ? Number(contractSize) : null,
@@ -126,7 +111,11 @@ export async function POST(req: Request) {
         analysisLogId: analysisLogId != null ? Number(analysisLogId) : null,
         decisionLogId: decisionLogId != null ? Number(decisionLogId) : null,
         notes,
-        metadata,
+        metadata: {
+          ...(metadata || {}),
+          wasDirectionCorrected: geom.wasDirectionCorrected,
+          correctionReason: geom.correctionReason || null,
+        },
       };
 
       const staged = await pinSetup(input);
@@ -134,6 +123,7 @@ export async function POST(req: Request) {
         {
           success: true,
           message: `Setup #${staged.id} pinned to Copilot Staging Deck.`,
+          warning: geom.wasDirectionCorrected ? geom.correctionReason : undefined,
           data: staged,
         },
         { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }

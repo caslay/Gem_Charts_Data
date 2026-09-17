@@ -1,8 +1,48 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.86
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.87
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-18 (V17.86 — Copilot Staging Deck, Setup Pinning & Cockpit Direct Execution Router)
+> **Last Updated:** 2026-09-18 (V17.87 — Staging Deck Infinite Loop Eradication & Directional Geometry Physics Engine)
+
+## 🆕 V17.87 Changelog — Staging Deck Infinite Loop Eradication & Directional Geometry Physics Engine (2026-09-18)
+
+### Summary
+1. **Workstream A: Eradication of Infinite Fetch Loop & Network Choke (`CopilotStagingDeckModal.tsx`, `src/app/page.tsx`):**
+   - **Cyclic Prop Cascade Severance:** Decoupled `onPreviewSetup` in `CopilotStagingDeckModal.tsx` using `onPreviewSetupRef = useRef(onPreviewSetup)` and removed `onPreviewSetup` from the initial fetch `useEffect` dependency array, permanently severing the cyclic parent re-render $\rightarrow$ new prop reference $\rightarrow$ child re-fetch storm that previously flooded Chrome with 1,200+ `ERR_INSUFFICIENT_RESOURCES` errors.
+   - **In-Flight Guard & AbortController:** Added `isFetchingRef = useRef(false)` and `abortControllerRef = useRef<AbortController | null>(null)` to cancel stale requests during rapid drawer open/close toggles.
+   - **Preview Emission Deduplication:** Enforced `lastEmittedSetupIdRef = useRef<number | null | undefined>(undefined)` inside the preview sync effect so `onPreviewSetupRef.current` is triggered strictly when the active hovered/selected setup ID actually changes.
+   - **Parent Callback Memoization & State Deduplication (`page.tsx`):** Memoized `handlePreviewSetup` with `useCallback` and object identity deduplication. Guarded `fetchStagedCount` with `isFetchingCountRef` and value equality check to avoid redundant state updates.
+
+2. **Workstream B: Mathematical Directional Geometry Physics & Self-Healing Store (`src/lib/staging/userStagedSetupsStore.ts`, `src/app/api/staged-setups/route.ts`, `src/app/api/daemon/execute-staged/route.ts`):**
+   - **Mathematical Price Physics Validator (`resolveAndValidateSetupGeometry`):** Derived trade direction directly from coordinate geometry:
+     $$\text{LONG} \iff \text{SL} < \text{Entry} \land \text{TP1} > \text{Entry}$$
+     $$\text{SHORT} \iff \text{SL} > \text{Entry} \land \text{TP1} < \text{Entry}$$
+     Rejects corrupt setups where Stop Loss and Target 1 reside on the same side of Entry.
+   - **Categorical Auto-Correction:** Resolves AI direction hallucinations (such as Setup #267 mislabeled as LONG despite $SL = \$2456.49 > Entry = \$2446.17$ and $TP1 = \$2429.31 < Entry$), auto-correcting direction to `SHORT` and tagging records with `wasDirectionCorrected: true`.
+   - **Target Ladder Sanitization:** Discards inverted auxiliary targets (`target2`, `target3`) that breach directional geometry.
+   - **Self-Healing SQL Migrations:** Automatically executes schema updates in `ensureUserStagedSetupsTableInitialized` to align historical mislabeled records.
+   - **Execution Router Hardening (`execute-staged/route.ts`):** Validates and auto-aligns geometry before dispatching orders, eliminating false "Inverted Geometry" rejections.
+
+3. **Workstream C: Visual Telemetry & Error Feedback (`CopilotStagingDeckModal.tsx`, `AiAnalysisHistoryModal.tsx`):**
+   - Added `Auto-Aligned` badge in Staging Deck cards for setups whose direction was reconciled by the geometry engine.
+   - Added pre-validation and user-friendly error alerts in `AiAnalysisHistoryModal` if attempting to stage corrupt setups.
+
+4. **Workstream D: Automated Verification Suite (`scripts/test_geometry_and_staging.ts`):**
+   - 26/26 tests passed (100% assertions passed) across geometry calculations, auto-corrections, corrupt coordinate rejections, and store operations.
+   - TypeScript verification: `npx tsc --noEmit` exited with 0 errors.
+   - Production build: `npm run build` compiled all 31 routes cleanly.
+
+### Files Created & Modified
+- **`src/lib/staging/userStagedSetupsStore.ts`** [MODIFY]
+- **`src/app/api/staged-setups/route.ts`** [MODIFY]
+- **`src/app/api/daemon/execute-staged/route.ts`** [MODIFY]
+- **`src/components/modals/CopilotStagingDeckModal.tsx`** [MODIFY]
+- **`src/app/page.tsx`** [MODIFY]
+- **`src/components/modals/AiAnalysisHistoryModal.tsx`** [MODIFY]
+- **`scripts/test_geometry_and_staging.ts`** [NEW]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.86 Changelog — Copilot Staging Deck, Setup Pinning & Cockpit Direct Execution Router (2026-09-18)
 

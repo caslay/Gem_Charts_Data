@@ -271,10 +271,20 @@ export default function AiAnalysisHistoryModal({
 
         const sl = Number(record.invalidation_level || 0);
         const tp1 = Number(record.target_1 || 0);
-        const dir = (record.trade_direction || (String(record.bias_signal).includes('BULL') ? 'LONG' : 'SHORT')) as 'LONG' | 'SHORT';
+        let dir = (record.trade_direction || (String(record.bias_signal).includes('BULL') ? 'LONG' : 'SHORT')) as 'LONG' | 'SHORT';
 
         if (!entryPrice || !sl || !tp1) {
           alert('Cannot pin setup: Missing entry, stop loss, or target parameters.');
+          return;
+        }
+
+        // Pre-validate directional physics
+        if (sl > entryPrice && tp1 < entryPrice) {
+          dir = 'SHORT';
+        } else if (sl < entryPrice && tp1 > entryPrice) {
+          dir = 'LONG';
+        } else {
+          alert(`Cannot pin setup: Corrupt price geometry. Stop Loss ($${sl}) and Target 1 ($${tp1}) cannot both be on the same side of Entry ($${entryPrice.toFixed(2)}).`);
           return;
         }
 
@@ -300,6 +310,9 @@ export default function AiAnalysisHistoryModal({
 
         if (res.ok) {
           setPinnedAnalysisIds((prev) => new Set(prev).add(record.id));
+        } else {
+          const errData = await res.json().catch(() => null);
+          alert(`Failed to pin setup: ${errData?.error || 'Invalid setup parameters.'}`);
         }
       }
     } catch (err) {

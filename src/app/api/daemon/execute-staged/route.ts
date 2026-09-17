@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs';
-import { userStagedSetupsStore } from '@/lib/staging/userStagedSetupsStore';
+import { userStagedSetupsStore, resolveAndValidateSetupGeometry } from '@/lib/staging/userStagedSetupsStore';
 import { evaluateExecutionSafetyGate } from '@/lib/binanceOrderRouter';
 import { TelegramNotifier } from '@/lib/notifications/telegramNotifier';
 import { sql } from '@/lib/postgres';
@@ -36,46 +36,36 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Directional and Risk Sanity Checks
-    const { direction, entryPrice, stopLoss, target1, target2, symbol } = stagedSetup;
-    if (direction === 'LONG') {
-      if (stopLoss >= entryPrice) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Inverted Geometry: Long Stop Loss ($${stopLoss}) must be below Entry ($${entryPrice}).`,
-          },
-          { status: 400 }
-        );
-      }
-      if (target1 <= entryPrice) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Inverted Geometry: Long TP1 ($${target1}) must be above Entry ($${entryPrice}).`,
-          },
-          { status: 400 }
-        );
-      }
-    } else {
-      if (stopLoss <= entryPrice) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Inverted Geometry: Short Stop Loss ($${stopLoss}) must be above Entry ($${entryPrice}).`,
-          },
-          { status: 400 }
-        );
-      }
-      if (target1 >= entryPrice) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Inverted Geometry: Short TP1 ($${target1}) must be below Entry ($${entryPrice}).`,
-          },
-          { status: 400 }
-        );
-      }
+    // 2. Mathematical Directional and Risk Sanity Checks
+    const geom = resolveAndValidateSetupGeometry({
+      direction: stagedSetup.direction,
+      entryPrice: stagedSetup.entryPrice,
+      stopLoss: stagedSetup.stopLoss,
+      target1: stagedSetup.target1,
+      target2: stagedSetup.target2,
+      target3: stagedSetup.target3,
+      riskRewardRatio: stagedSetup.riskRewardRatio,
+    });
+
+    if (!geom.isValid) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Corrupt Geometry: ${geom.error}`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const direction = geom.resolvedDirection;
+    const entryPrice = geom.entryPrice;
+    const stopLoss = geom.stopLoss;
+    const target1 = geom.target1;
+    const target2 = geom.target2;
+    const symbol = stagedSetup.symbol;
+
+    if (geom.wasDirectionCorrected) {
+      console.warn(`[EXECUTE_STAGED] ⚠️ Auto-aligned setup #${stagedId} direction: ${geom.correctionReason}`);
     }
 
     // 3. Execution Safety Gate for LIVE_BINANCE

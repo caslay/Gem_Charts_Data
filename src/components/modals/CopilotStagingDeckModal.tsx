@@ -46,12 +46,33 @@ export default function CopilotStagingDeckModal({
   const [confirmLiveSetup, setConfirmLiveSetup] = useState<UserStagedSetup | null>(null);
 
   const drawerRef = useRef<HTMLDivElement>(null);
+  const onPreviewSetupRef = useRef(onPreviewSetup);
+  const isFetchingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const lastEmittedSetupIdRef = useRef<number | null | undefined>(undefined);
+
+  // Keep callback ref updated without triggering effects
+  useEffect(() => {
+    onPreviewSetupRef.current = onPreviewSetup;
+  }, [onPreviewSetup]);
 
   const fetchStagedSetups = useCallback(async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setIsLoading(true);
     setActionError(null);
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
-      const res = await fetch('/api/staged-setups?status=PINNED', { cache: 'no-store' });
+      const res = await fetch('/api/staged-setups?status=PINNED', {
+        cache: 'no-store',
+        signal: controller.signal,
+      });
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.data)) {
@@ -59,13 +80,16 @@ export default function CopilotStagingDeckModal({
         }
       }
     } catch (err: any) {
+      if (err?.name === 'AbortError') return;
       console.warn('[COPILOT_DECK] Failed to fetch staged setups:', err);
       setActionError('Could not refresh staging queue.');
     } finally {
       setIsLoading(false);
+      isFetchingRef.current = false;
     }
   }, []);
 
+  // Fetch setups ONCE upon drawer opening, reset state upon closing
   useEffect(() => {
     if (isOpen) {
       fetchStagedSetups();
@@ -73,9 +97,12 @@ export default function CopilotStagingDeckModal({
       setSelectedId(null);
       setHoveredId(null);
       setConfirmLiveSetup(null);
-      if (onPreviewSetup) onPreviewSetup(null);
+      if (lastEmittedSetupIdRef.current !== null) {
+        lastEmittedSetupIdRef.current = null;
+        onPreviewSetupRef.current?.(null);
+      }
     }
-  }, [isOpen, fetchStagedSetups, onPreviewSetup]);
+  }, [isOpen, fetchStagedSetups]);
 
   // Click-outside listener & ESC key listener
   useEffect(() => {
@@ -110,12 +137,19 @@ export default function CopilotStagingDeckModal({
     };
   }, [isOpen, onClose, confirmLiveSetup]);
 
-  // Sync active preview to parent
+  // Sync active preview to parent strictly when active setup ID changes
   useEffect(() => {
-    if (!isOpen || !onPreviewSetup) return;
-    const activeSetup = stagedSetups.find((s) => s.id === (hoveredId ?? selectedId)) || null;
-    onPreviewSetup(activeSetup);
-  }, [hoveredId, selectedId, stagedSetups, isOpen, onPreviewSetup]);
+    if (!isOpen) return;
+
+    const activeId = hoveredId ?? selectedId;
+    if (activeId === lastEmittedSetupIdRef.current) {
+      return; // Deduplicate: do not fire if preview target did not change
+    }
+    lastEmittedSetupIdRef.current = activeId;
+
+    const activeSetup = activeId ? (stagedSetups.find((s) => s.id === activeId) ?? null) : null;
+    onPreviewSetupRef.current?.(activeSetup);
+  }, [hoveredId, selectedId, stagedSetups, isOpen]);
 
   // Dismiss / Unpin setup
   const handleDismiss = async (e: React.MouseEvent, id: number) => {
@@ -302,6 +336,14 @@ export default function CopilotStagingDeckModal({
                     <span className="px-1.5 py-0.5 text-[9px] font-mono rounded bg-slate-800/80 text-slate-400 border border-slate-700/60">
                       {setup.sourceReference}
                     </span>
+                    {Boolean(setup.metadata?.wasDirectionCorrected) && (
+                      <span
+                        className="px-1.5 py-0.5 text-[8.5px] font-mono rounded bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                        title={String(setup.metadata?.correctionReason || 'Auto-corrected from inverted geometry')}
+                      >
+                        Auto-Aligned
+                      </span>
+                    )}
                   </div>
 
                   <button
