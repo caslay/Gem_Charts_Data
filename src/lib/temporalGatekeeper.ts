@@ -151,17 +151,35 @@ export function isDeadZone(
   };
 }
 
+export function escapeHtml(text: string): string {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
 /**
  * Formats a quiet, non-actionable observation heartbeat for dead zone periods.
  */
-export function formatDeadZoneObservationHeartbeat(reason: string, timestamp: number = Date.now()): string {
-  const timeIso = new Date(timestamp).toISOString().substring(11, 19) + ' UTC';
+export function formatDeadZoneObservationHeartbeat(
+  reason: string,
+  timestamp?: number | string | Date
+): string {
+  const ts =
+    typeof timestamp === 'number' && !isNaN(timestamp)
+      ? timestamp
+      : timestamp instanceof Date
+        ? timestamp.getTime()
+        : typeof timestamp === 'string' && !isNaN(Date.parse(timestamp))
+          ? Date.parse(timestamp)
+          : Date.now();
+  const timeIso = new Date(ts).toISOString().substring(11, 19) + ' UTC';
   return (
-    `⚪ *[OBSERVATION: DEADZONE_STAND_DOWN]*\n` +
+    `⚪ <b>[OBSERVATION: DEADZONE_STAND_DOWN]</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `⏳ *Status:* \`STAND_DOWN (Active Temporal Gate)\`\n` +
-    `ℹ️ *Details:* _${reason}_\n` +
-    `🛑 *Action:* All setups silenced. Zero trade orders placed.\n` +
-    `⏰ *Time:* \`${timeIso}\``
+    `⏳ <b>Status:</b> <code>STAND_DOWN (Active Temporal Gate)</code>\n` +
+    `ℹ️ <b>Details:</b> <i>${escapeHtml(reason)}</i>\n` +
+    `🛑 <b>Action:</b> All setups silenced. Zero trade orders placed.\n` +
+    `⏰ <b>Time:</b> <code>${timeIso}</code>`
   );
 }

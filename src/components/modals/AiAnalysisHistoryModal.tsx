@@ -393,6 +393,11 @@ export default function AiAnalysisHistoryModal({
               <span className="text-rose-400 flex items-center gap-0.5" title="Stopped Out">
                 🔴 {activeMetrics.lossesCount}L
               </span>
+              {activeMetrics.breakevenCount > 0 && (
+                <span className="text-blue-400 flex items-center gap-0.5" title="Breakeven Scratch">
+                  🔵 {activeMetrics.breakevenCount}BE
+                </span>
+              )}
               <span
                 className="text-slate-400 flex items-center gap-0.5"
                 title="TTL Expired / Cancelled Pre-Fill"
@@ -721,6 +726,11 @@ export default function AiAnalysisHistoryModal({
                               <span className="font-black text-xs uppercase tracking-wider">
                                 {badge.label}
                               </span>
+                              {outcome?.is_synthetic_evaluation && (
+                                <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-violet-500/20 border border-violet-500/40 text-violet-300">
+                                  Synthetic Tape Reconciled
+                                </span>
+                              )}
                               {outcome?.is_in_flight && (
                                 <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-300 animate-pulse">
                                   In-Flight Position
@@ -740,6 +750,17 @@ export default function AiAnalysisHistoryModal({
                             <p className="text-[11px] font-sans opacity-90 mt-1 leading-relaxed">
                               {outcome?.outcome_reason || 'Initial evaluation state preserved.'}
                             </p>
+                            {outcome?.synthetic_fill_price && (
+                              <div className="text-[10px] font-mono opacity-85 mt-1 flex items-center gap-3">
+                                <span>Fill: <b>${outcome.synthetic_fill_price.toFixed(2)}</b></span>
+                                {outcome.synthetic_exit_price && (
+                                  <span>Exit: <b>${outcome.synthetic_exit_price.toFixed(2)}</b></span>
+                                )}
+                                {outcome.synthetic_mfe_r !== undefined && outcome.synthetic_mfe_r !== null && (
+                                  <span>MFE: <b>+{outcome.synthetic_mfe_r.toFixed(2)}R</b></span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
 

@@ -62,12 +62,403 @@ interface DecisionMatchCandidate {
 }
 
 
+export interface ReconciliationCandle {
+  openTime: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  closeTime: number;
+}
+
+export interface ReconcileOptions {
+  currentPrice?: number | null;
+  now?: number;
+  skipCandleFetch?: boolean;
+  injectedCandles?: ReconciliationCandle[];
+}
+
+const candleCache = new Map<string, { candles: ReconciliationCandle[]; fetchedAt: number }>();
+const CACHE_TTL_MS = 60 * 1000;
+
+/**
+ * Fetches 5m or 15m historical klines from Binance public Futures REST API.
+ * Uses 60-second in-memory caching to avoid repeated calls within the same minute.
+ */
+export async function fetchCandlesForReconciliation(
+  symbol: string,
+  minTime: number,
+  maxTime: number,
+  timeframe: string = '5m'
+): Promise<ReconciliationCandle[]> {
+  const cleanSymbol = (symbol || 'ETHUSDC').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const tf = timeframe === '15m' ? '15m' : '5m';
+  const roundedMinTime = Math.floor(minTime / 60000) * 60000;
+  const cacheKey = `${cleanSymbol}_${tf}_${roundedMinTime}`;
+
+  const cached = candleCache.get(cacheKey);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return cached.candles;
+  }
+
+  try {
+    const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${cleanSymbol}&interval=${tf}&startTime=${minTime}&endTime=${maxTime}&limit=1000`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000), cache: 'no-store' });
+    if (!res.ok) {
+      if (cleanSymbol.endsWith('USDC')) {
+        const altSymbol = cleanSymbol.replace('USDC', 'USDT');
+        const altUrl = `https://fapi.binance.com/fapi/v1/klines?symbol=${altSymbol}&interval=${tf}&startTime=${minTime}&endTime=${maxTime}&limit=1000`;
+        const altRes = await fetch(altUrl, { signal: AbortSignal.timeout(6000), cache: 'no-store' });
+        if (altRes.ok) {
+          const raw = await altRes.json();
+          if (Array.isArray(raw)) {
+            const candles: ReconciliationCandle[] = raw.map((k: any) => ({
+              openTime: Number(k[0]),
+              open: parseFloat(String(k[1])),
+              high: parseFloat(String(k[2])),
+              low: parseFloat(String(k[3])),
+              close: parseFloat(String(k[4])),
+              closeTime: Number(k[6]),
+            }));
+            candleCache.set(cacheKey, { candles, fetchedAt: Date.now() });
+            return candles;
+          }
+        }
+      }
+      return [];
+    }
+
+    const raw = await res.json();
+    if (Array.isArray(raw)) {
+      const candles: ReconciliationCandle[] = raw.map((k: any) => ({
+        openTime: Number(k[0]),
+        open: parseFloat(String(k[1])),
+        high: parseFloat(String(k[2])),
+        low: parseFloat(String(k[3])),
+        close: parseFloat(String(k[4])),
+        closeTime: Number(k[6]),
+      }));
+      candleCache.set(cacheKey, { candles, fetchedAt: Date.now() });
+      return candles;
+    }
+  } catch (err) {
+    console.warn('[SetupOutcomeReconciler] Candle fetch non-fatal warning:', err);
+  }
+
+  return [];
+}
+
+/**
+ * Simulates the theoretical market lifecycle (fills, TP1, TP2, SL, Breakeven, and TTL)
+ * using forward historical candle telemetry.
+ */
+export function simulateSyntheticTapeOutcome(params: {
+  symbol: string;
+  isLong: boolean;
+  entryPrice: number;
+  invalidation: number;
+  target1: number;
+  target2: number | null;
+  ttlBars: number;
+  barMinutes: number;
+  recTime: number;
+  candles: ReconciliationCandle[];
+  now: number;
+}): ReconciledOutcome | null {
+  const { isLong, entryPrice, invalidation, target1, target2, ttlBars, barMinutes, recTime, candles, now } = params;
+
+  const riskDist = Math.abs(entryPrice - invalidation);
+  if (riskDist <= 0 || isNaN(riskDist)) {
+    return null;
+  }
+
+  const barMs = barMinutes * 60 * 1000;
+  const forwardCandles = candles
+    .filter((c) => c.closeTime >= recTime || c.openTime + barMs >= recTime)
+    .sort((a, b) => a.openTime - b.openTime);
+
+  if (forwardCandles.length === 0) {
+    return null;
+  }
+
+  let isFilled = false;
+  let fillBarIdx = -1;
+  let activeStopLoss = invalidation;
+  let pendingStopLoss: number | null = null;
+  let tp1Hit = false;
+  let earlyBreakevenHit = false;
+  let peakFavorablePrice = entryPrice;
+  let maxAdversePrice = entryPrice;
+  const elapsedSinceRec = Math.max(0, now - recTime);
+
+  for (let i = 0; i < forwardCandles.length; i++) {
+    const c = forwardCandles[i];
+    const barsElapsed = i;
+
+    // Apply pending stop loss ratchet from previous bar (Next-Bar Ratchet Rule)
+    if (pendingStopLoss !== null) {
+      activeStopLoss = pendingStopLoss;
+      pendingStopLoss = null;
+    }
+
+    if (!isFilled) {
+      // 1. Check TTL expiry before fill
+      if (barsElapsed >= ttlBars) {
+        return {
+          terminal_state: 'TTL_EXPIRED',
+          bars_elapsed: ttlBars,
+          ttl_bars: ttlBars,
+          is_synthetic_evaluation: true,
+          outcome_reason: `Synthetic tape: Limit entry ($${entryPrice.toFixed(2)}) was never touched within ${ttlBars} bars (${ttlBars * barMinutes}m TTL expired).`,
+        };
+      }
+
+      // 2. Check Pre-fill Invalidation breach
+      const isSlBreached = isLong ? c.low <= invalidation : c.high >= invalidation;
+      if (isSlBreached) {
+        return {
+          terminal_state: 'CANCELLED_PRE_FILL',
+          bars_elapsed: barsElapsed,
+          ttl_bars: ttlBars,
+          is_synthetic_evaluation: true,
+          outcome_reason: `Synthetic tape: Invalidation level ($${invalidation.toFixed(2)}) breached prior to limit entry fill.`,
+        };
+      }
+
+      // 3. Check Pre-fill Target 1 expansion (missed fill)
+      const isTp1PreFill = isLong ? c.high >= target1 : c.low <= target1;
+      if (isTp1PreFill) {
+        return {
+          terminal_state: 'CANCELLED_PRE_FILL',
+          bars_elapsed: barsElapsed,
+          ttl_bars: ttlBars,
+          is_synthetic_evaluation: true,
+          outcome_reason: `Synthetic tape: Market expanded directly to Target 1 ($${target1.toFixed(2)}) before limit fill (Missed Expansion).`,
+        };
+      }
+
+      // 4. Check Limit Fill Touch
+      const isLimitTouched = isLong ? c.low <= entryPrice : c.high >= entryPrice;
+      if (isLimitTouched) {
+        isFilled = true;
+        fillBarIdx = i;
+        peakFavorablePrice = entryPrice;
+        maxAdversePrice = entryPrice;
+
+        // Intra-bar check on fill bar: Did adverse excursion hit SL?
+        const sameBarStopHit = isLong ? c.low <= invalidation : c.high >= invalidation;
+        if (sameBarStopHit) {
+          return {
+            terminal_state: 'STOPPED_OUT',
+            realized_r: -1.0,
+            realized_pnl: null,
+            is_synthetic_evaluation: true,
+            synthetic_fill_price: entryPrice,
+            synthetic_exit_price: invalidation,
+            synthetic_mfe_r: 0,
+            synthetic_mae_r: -1.0,
+            bars_elapsed: barsElapsed,
+            ttl_bars: ttlBars,
+            outcome_reason: `Synthetic tape: Filled @ $${entryPrice.toFixed(2)} and stopped out at Invalidation ($${invalidation.toFixed(2)}) on bar ${barsElapsed}.`,
+          };
+        }
+
+        // Record excursion on fill candle
+        if (isLong) {
+          peakFavorablePrice = Math.max(peakFavorablePrice, c.high);
+          maxAdversePrice = Math.min(maxAdversePrice, c.low);
+        } else {
+          peakFavorablePrice = Math.min(peakFavorablePrice, c.low);
+          maxAdversePrice = Math.max(maxAdversePrice, c.high);
+        }
+      }
+      continue;
+    }
+
+    // ── Position is in-flight on subsequent bars (i >= fillBarIdx) ──
+    const favorable = isLong ? c.high : c.low;
+    const adverse = isLong ? c.low : c.high;
+    if (isLong) {
+      peakFavorablePrice = Math.max(peakFavorablePrice, c.high);
+      maxAdversePrice = Math.min(maxAdversePrice, c.low);
+    } else {
+      peakFavorablePrice = Math.min(peakFavorablePrice, c.low);
+      maxAdversePrice = Math.max(maxAdversePrice, c.high);
+    }
+
+    const currentMfeR = isLong
+      ? (peakFavorablePrice - entryPrice) / riskDist
+      : (entryPrice - peakFavorablePrice) / riskDist;
+
+    // Check Stop Loss breach
+    const isStopHit = isLong ? adverse <= activeStopLoss : adverse >= activeStopLoss;
+    if (isStopHit) {
+      if (tp1Hit) {
+        // Banked 30% on TP1 (+0.30R), scratched remainder at Breakeven
+        return {
+          terminal_state: 'BREAKEVEN',
+          realized_r: 0.30,
+          realized_pnl: null,
+          is_synthetic_evaluation: true,
+          synthetic_fill_price: entryPrice,
+          synthetic_exit_price: activeStopLoss,
+          synthetic_mfe_r: parseFloat(currentMfeR.toFixed(2)),
+          bars_elapsed: i,
+          ttl_bars: ttlBars,
+          outcome_reason: `Synthetic tape: Filled @ $${entryPrice.toFixed(2)}, TP1 banked (+0.30R), runner scratched at Breakeven ($${activeStopLoss.toFixed(2)}).`,
+        };
+      }
+
+      if (earlyBreakevenHit) {
+        // Early breakeven ratchet (+0.40R rule) protected scratch
+        return {
+          terminal_state: 'BREAKEVEN',
+          realized_r: 0.0,
+          realized_pnl: null,
+          is_synthetic_evaluation: true,
+          synthetic_fill_price: entryPrice,
+          synthetic_exit_price: activeStopLoss,
+          synthetic_mfe_r: parseFloat(currentMfeR.toFixed(2)),
+          bars_elapsed: i,
+          ttl_bars: ttlBars,
+          outcome_reason: `Synthetic tape: Filled @ $${entryPrice.toFixed(2)}, Early Breakeven ratchet protected full scratch ($0.00R loss).`,
+        };
+      }
+
+      // Stopped Out at initial invalidation
+      return {
+        terminal_state: 'STOPPED_OUT',
+        realized_r: -1.0,
+        realized_pnl: null,
+        is_synthetic_evaluation: true,
+        synthetic_fill_price: entryPrice,
+        synthetic_exit_price: invalidation,
+        synthetic_mfe_r: parseFloat(currentMfeR.toFixed(2)),
+        synthetic_mae_r: -1.0,
+        bars_elapsed: i,
+        ttl_bars: ttlBars,
+        outcome_reason: `Synthetic tape: Filled @ $${entryPrice.toFixed(2)}, stopped out at Invalidation ($${invalidation.toFixed(2)}) (-1.00R).`,
+      };
+    }
+
+    // Check TP2 (Full 2-Stage Win)
+    if (target2 !== null) {
+      const isTp2Hit = isLong ? favorable >= target2 : favorable <= target2;
+      if (isTp2Hit) {
+        const tp1R = Math.abs(target1 - entryPrice) / riskDist;
+        const tp2R = Math.abs(target2 - entryPrice) / riskDist;
+        const totalRealizedR = 0.30 * tp1R + 0.70 * tp2R;
+
+        return {
+          terminal_state: 'TP2_HIT',
+          realized_r: parseFloat(totalRealizedR.toFixed(2)),
+          realized_pnl: null,
+          is_synthetic_evaluation: true,
+          synthetic_fill_price: entryPrice,
+          synthetic_exit_price: target2,
+          synthetic_mfe_r: parseFloat(totalRealizedR.toFixed(2)),
+          bars_elapsed: i,
+          ttl_bars: ttlBars,
+          outcome_reason: `Synthetic tape: Full 2-stage harvest completed. TP1 ($${target1.toFixed(2)}) & TP2 ($${target2.toFixed(2)}) filled (+${totalRealizedR.toFixed(2)}R).`,
+        };
+      }
+    }
+
+    // Check TP1 (Stage 1 Harvest)
+    if (!tp1Hit) {
+      const isTp1Hit = isLong ? favorable >= target1 : favorable <= target1;
+      if (isTp1Hit) {
+        tp1Hit = true;
+        // Next-Bar Ratchet Rule: Ratchet SL to Breakeven on bar i+1
+        pendingStopLoss = entryPrice;
+
+        if (target2 === null || target2 === target1) {
+          // Single target full exit
+          const tp1R = Math.abs(target1 - entryPrice) / riskDist;
+          return {
+            terminal_state: 'TP1_HIT',
+            realized_r: parseFloat(tp1R.toFixed(2)),
+            realized_pnl: null,
+            is_synthetic_evaluation: true,
+            synthetic_fill_price: entryPrice,
+            synthetic_exit_price: target1,
+            synthetic_mfe_r: parseFloat(tp1R.toFixed(2)),
+            bars_elapsed: i,
+            ttl_bars: ttlBars,
+            outcome_reason: `Synthetic tape: Target 1 ($${target1.toFixed(2)}) harvested successfully (+${tp1R.toFixed(2)}R).`,
+          };
+        }
+      }
+    }
+
+    // Early Breakeven Ratchet (+0.40R Rule)
+    if (!tp1Hit && !earlyBreakevenHit && currentMfeR >= 0.40) {
+      earlyBreakevenHit = true;
+      pendingStopLoss = entryPrice;
+    }
+  }
+
+  // ── End of available candles reached ──
+  const finalMfeR = isLong
+    ? (peakFavorablePrice - entryPrice) / riskDist
+    : (entryPrice - peakFavorablePrice) / riskDist;
+
+  if (isFilled) {
+    if (tp1Hit) {
+      return {
+        terminal_state: 'TP1_HIT',
+        realized_r: 0.30,
+        is_in_flight: true,
+        is_synthetic_evaluation: true,
+        synthetic_fill_price: entryPrice,
+        synthetic_mfe_r: parseFloat(finalMfeR.toFixed(2)),
+        bars_elapsed: forwardCandles.length,
+        ttl_bars: ttlBars,
+        outcome_reason: `Synthetic tape: TP1 harvested (+0.30R locked), runner actively floating in profit (+${finalMfeR.toFixed(2)}R MFE, SL @ Breakeven).`,
+      };
+    }
+
+    return {
+      terminal_state: 'ACTIVE_SETUP',
+      is_in_flight: true,
+      is_synthetic_evaluation: true,
+      synthetic_fill_price: entryPrice,
+      synthetic_mfe_r: parseFloat(finalMfeR.toFixed(2)),
+      bars_elapsed: forwardCandles.length,
+      ttl_bars: ttlBars,
+      outcome_reason: `Synthetic tape: Limit entry filled @ $${entryPrice.toFixed(2)}, position currently in-flight (+${finalMfeR.toFixed(2)}R MFE).`,
+    };
+  }
+
+  // Never filled: check if still within TTL or expired
+  const ttlDurationMs = ttlBars * barMs;
+  if (elapsedSinceRec <= ttlDurationMs) {
+    const barsElapsed = Math.floor(elapsedSinceRec / barMs);
+    return {
+      terminal_state: 'ACTIVE_SETUP',
+      is_armed: true,
+      is_synthetic_evaluation: true,
+      bars_elapsed: barsElapsed,
+      ttl_bars: ttlBars,
+      outcome_reason: `Armed setup within active ${ttlBars}-bar window (${barsElapsed}/${ttlBars} bars elapsed)`,
+    };
+  }
+
+  return {
+    terminal_state: 'TTL_EXPIRED',
+    bars_elapsed: ttlBars,
+    ttl_bars: ttlBars,
+    is_synthetic_evaluation: true,
+    outcome_reason: `Synthetic tape: Limit order was never filled and ${ttlBars}-bar TTL expired without execution`,
+  };
+}
+
 /**
  * Reconciles an array of raw ai_analysis_log records into terminal execution outcomes.
  */
 export async function reconcileSetupOutcomes(
   records: AiAnalysisRecord[],
-  options: { currentPrice?: number | null; now?: number } = {}
+  options: ReconcileOptions = {}
 ): Promise<EnrichedAiAnalysisRecord[]> {
   if (!records || records.length === 0) return [];
 
@@ -88,7 +479,45 @@ export async function reconcileSetupOutcomes(
   // 2. Fetch relevant agent decisions from DB
   const decisions = await fetchDecisionCandidates(minTime, maxTime);
 
-  // 3. Reconcile each record
+  // 3. Pre-fetch historical candles for ACTIVE_SETUP records to evaluate synthetic tape outcomes
+  const candlesBySymbol = new Map<string, ReconciliationCandle[]>();
+  const activeRecords = records.filter(
+    (r) => (r.status || 'COMPLETED').toUpperCase() === 'ACTIVE_SETUP'
+  );
+
+  if (activeRecords.length > 0) {
+    if (options.injectedCandles && options.injectedCandles.length > 0) {
+      for (const rec of activeRecords) {
+        const pairKey = `${(rec.symbol || 'ETHUSDC').toUpperCase()}|${rec.timeframe === '15m' ? '15m' : '5m'}`;
+        candlesBySymbol.set(pairKey, options.injectedCandles);
+      }
+    } else if (!options.skipCandleFetch) {
+      const uniquePairs = Array.from(
+        new Set(
+          activeRecords.map((r) => {
+            const sym = (r.symbol || 'ETHUSDC').toUpperCase();
+            const tf = r.timeframe === '15m' ? '15m' : '5m';
+            return `${sym}|${tf}`;
+          })
+        )
+      );
+
+      await Promise.all(
+        uniquePairs.map(async (pairKey) => {
+          const [sym, tf] = pairKey.split('|');
+          const candles = await fetchCandlesForReconciliation(
+            sym,
+            minTime - 15 * 60 * 1000,
+            maxTime + 12 * 15 * 60 * 1000,
+            tf
+          );
+          candlesBySymbol.set(pairKey, candles);
+        })
+      );
+    }
+  }
+
+  // 4. Reconcile each record
   return records.map((rec) => {
     const rawStatus = (rec.status || 'COMPLETED').toUpperCase();
     const evaluatedStatus = rawStatus;
@@ -128,7 +557,7 @@ export async function reconcileSetupOutcomes(
     const isWithinTtl = elapsedMs <= ttlDurationMs;
 
     const dir = (rec.trade_direction || '').toUpperCase();
-    const isLong = dir.includes('LONG') || rec.bias_signal?.toUpperCase().includes('BULL');
+    const isLong = Boolean(dir.includes('LONG') || rec.bias_signal?.toUpperCase().includes('BULL'));
     const normDir = isLong ? 'LONG' : 'SHORT';
 
     const entryLow = rec.entry_range_low !== null ? Number(rec.entry_range_low) : null;
@@ -273,7 +702,55 @@ export async function reconcileSetupOutcomes(
           },
         };
       }
+    }
 
+    // ── Step C: Synthetic Tape Outcome Evaluation (Forward Candle Simulation) ──
+    const pairKey = `${(rec.symbol || 'ETHUSDC').toUpperCase()}|${rec.timeframe === '15m' ? '15m' : '5m'}`;
+    const candles = candlesBySymbol.get(pairKey) || [];
+
+    const limitPriceCandidate =
+      (rec.telemetry_data as any)?.limitEntryPrice ??
+      (rec.telemetry_data as any)?.limit_entry_price ??
+      (typeof entryLow === 'number' && typeof entryHigh === 'number'
+        ? (entryLow + entryHigh) / 2
+        : entryLow ?? entryHigh);
+
+    if (
+      typeof limitPriceCandidate === 'number' &&
+      !isNaN(limitPriceCandidate) &&
+      limitPriceCandidate > 0 &&
+      invalidation !== null &&
+      target1 !== null &&
+      candles.length > 0
+    ) {
+      const syntheticOutcome = simulateSyntheticTapeOutcome({
+        symbol: rec.symbol,
+        isLong,
+        entryPrice: limitPriceCandidate,
+        invalidation,
+        target1,
+        target2,
+        ttlBars,
+        barMinutes,
+        recTime,
+        candles,
+        now,
+      });
+
+      if (syntheticOutcome) {
+        return {
+          ...rec,
+          status: syntheticOutcome.terminal_state,
+          evaluated_status: evaluatedStatus,
+          reconciled_status: syntheticOutcome.terminal_state,
+          reconciled_outcome: syntheticOutcome,
+        };
+      }
+    }
+
+    // ── Step D: Decision Fallback & Temporal TTL Fallback ──
+    if (matchedDecision) {
+      const decStatus = matchedDecision.status.toUpperCase();
       if (decStatus === 'TTL_EXPIRED' || decStatus === 'CANCELLED') {
         const isCancelPreFill =
           matchedDecision.narrative?.includes('STOP_LOSS_BREACHED') ||
@@ -313,8 +790,6 @@ export async function reconcileSetupOutcomes(
         };
       }
     }
-
-    // ── Step C: Temporal TTL & Pre-Fill Cancellation Fallback ──
     if (isWithinTtl) {
       // Check if immediate live price breached invalidation while armed
       if (currentPrice !== null && invalidation !== null) {

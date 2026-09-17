@@ -168,12 +168,37 @@ export function formatHoldingDuration(ms: number): string {
   return `${secs}s`;
 }
 
+export function escapeHtml(text: string | null | undefined): string {
+  if (!text) return '';
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 export function sanitizeMarkdownText(text?: string | null): string {
   if (!text) return '';
-  return String(text).replace(/[*_`\[\]()]/g, '');
+  return escapeHtml(String(text).replace(/[*_`\[\]()]/g, ''));
+}
+
+export function validateTelegramHtml(text: string): { isValid: boolean; error?: string } {
+  const tags = ['b', 'i', 'code', 'pre'];
+  for (const tag of tags) {
+    const openMatches = (text.match(new RegExp(`<${tag}>`, 'g')) || []).length;
+    const closeMatches = (text.match(new RegExp(`</${tag}>`, 'g')) || []).length;
+    if (openMatches !== closeMatches) {
+      return { isValid: false, error: `Unbalanced <${tag}> tags (${openMatches} open vs ${closeMatches} close)` };
+    }
+  }
+  return { isValid: true };
 }
 
 export function validateTelegramMarkdown(text: string): { isValid: boolean; error?: string } {
+  // If string contains HTML tags, validate via HTML validator
+  if (/<[a-z]+>/i.test(text)) {
+    return validateTelegramHtml(text);
+  }
   const withoutPre = text.replace(/```[\s\S]*?```/g, '');
   const withoutCode = withoutPre.replace(/`[^`]*`/g, '');
 
@@ -195,7 +220,24 @@ export function validateTelegramMarkdown(text: string): { isValid: boolean; erro
   return { isValid: true };
 }
 
-export function buildStandbyActionKeyboard(decisionId: number | string) {
+export function buildStandbyActionKeyboard(
+  decisionId: number | string,
+  options?: { hasError?: boolean; errorReason?: string }
+) {
+  if (options?.hasError) {
+    return {
+      inline_keyboard: [
+        [
+          { text: '🔄 Retry Paper Trade', callback_data: `retry_paper_${decisionId}` },
+          { text: '⚡ Execute Live', callback_data: `retry_live_${decisionId}` },
+        ],
+        [
+          { text: '❌ Dismiss', callback_data: `dismiss_${decisionId}` },
+        ],
+      ],
+    };
+  }
+
   return {
     inline_keyboard: [
       [
@@ -220,11 +262,11 @@ export function formatQuantIntentSignalMarkdown(payload: QuantIntentSignalPayloa
   const mode = payload.mode || 'STANDBY';
   const modeBadge = `[${mode}]`;
 
-  const cleanNarrative = sanitizeMarkdownText(
+  const cleanNarrative = escapeHtml(
     payload.narrative || 'Validated trend continuation impulse via institutional order flow.'
   );
 
-  const htfTrend = payload.htfTrend || (isLong ? 'BULLISH CONTINUATION (1H / 15m)' : 'BEARISH CONTINUATION (1H / 15m)');
+  const htfTrend = escapeHtml(payload.htfTrend || (isLong ? 'BULLISH CONTINUATION (1H / 15m)' : 'BEARISH CONTINUATION (1H / 15m)'));
 
   const entryRangeStr =
     typeof payload.entryRangeLow === 'number' && typeof payload.entryRangeHigh === 'number'
@@ -252,10 +294,10 @@ export function formatQuantIntentSignalMarkdown(payload: QuantIntentSignalPayloa
   const t2Val = typeof payload.target2 === 'number' && payload.target2 > 0 ? payload.target2 : null;
 
   const t1Str = t1Val
-    ? `🎯 *Target 1 (30% De-Risking):* \`$${t1Val.toFixed(2)}\` _(Instant BE Ratchet on fill)_\n`
+    ? `🎯 <b>Target 1 (30% De-Risking):</b> <code>$${t1Val.toFixed(2)}</code> <i>(Instant BE Ratchet on fill)</i>\n`
     : '';
   const t2Str = t2Val
-    ? `💰 *Target 2 (70% Macro Runner):* \`$${t2Val.toFixed(2)}\` _(Structural Liquidity Pool)_\n`
+    ? `💰 <b>Target 2 (70% Macro Runner):</b> <code>$${t2Val.toFixed(2)}</code> <i>(Structural Liquidity Pool)</i>\n`
     : '';
 
   let rrStr = '1:1.50 (TP1) / 1:3.00 (TP2)';
@@ -282,27 +324,27 @@ export function formatQuantIntentSignalMarkdown(payload: QuantIntentSignalPayloa
   const riskPct = typeof payload.riskPct === 'number' ? payload.riskPct.toFixed(1) : '2.0';
 
   return (
-    `⚡ *[QUEGAR AI QUANT INTENT]*\n` +
+    `⚡ <b>[QUEGAR AI QUANT INTENT]</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `⚙️ *Mode:* \`${modeBadge}\`\n` +
-    `📊 *Pair:* \`${payload.symbol}\`\n` +
-    `🧭 *Direction:* *${dirEmoji}*\n` +
-    `📈 *HTF Trend Alignment:* \`${htfTrend}\`\n` +
-    `⚡ *15m BOS Trigger:* \`${bosTriggerStr}\`\n` +
-    `🎯 *Retest POI (FVG Proximal):* \`${entryRangeStr}\`\n` +
-    `🛑 *Invalidation Stop (ATR Buffered):* \`${slStr}\`\n` +
+    `⚙️ <b>Mode:</b> <code>${modeBadge}</code>\n` +
+    `📊 <b>Pair:</b> <code>${escapeHtml(payload.symbol)}</code>\n` +
+    `🧭 <b>Direction:</b> <b>${dirEmoji}</b>\n` +
+    `📈 <b>HTF Trend Alignment:</b> <code>${htfTrend}</code>\n` +
+    `⚡ <b>15m BOS Trigger:</b> <code>${escapeHtml(bosTriggerStr)}</code>\n` +
+    `🎯 <b>Retest POI (FVG Proximal):</b> <code>${escapeHtml(entryRangeStr)}</code>\n` +
+    `🛑 <b>Invalidation Stop (ATR Buffered):</b> <code>${slStr}</code>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     t1Str +
     t2Str +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `⚖️ *R:R Ratio:* \`${rrStr}\`\n` +
-    `💵 *Risk Sizing:* \`$${riskUsd}\` (1.0R | ${riskPct}% Compounded)\n` +
+    `⚖️ <b>R:R Ratio:</b> <code>${rrStr}</code>\n` +
+    `💵 <b>Risk Sizing:</b> <code>$${riskUsd}</code> (1.0R | ${riskPct}% Compounded)\n` +
     (typeof payload.contractSize === 'number' && payload.contractSize > 0
-      ? `📐 *Projected Size:* \`${payload.contractSize} contracts\`\n`
+      ? `📐 <b>Projected Size:</b> <code>${payload.contractSize} contracts</code>\n`
       : '') +
-    `📝 *Quant Narrative:*\n` +
-    `_${cleanNarrative}_\n` +
-    `⏰ *Time:* \`${timeIso}\``
+    `📝 <b>Quant Narrative:</b>\n` +
+    `<i>${cleanNarrative}</i>\n` +
+    `⏰ <b>Time:</b> <code>${timeIso}</code>`
   );
 }
 
@@ -326,34 +368,34 @@ export function formatOrderArmedMarkdown(payload: QuantOrderArmedPayload): strin
       : typeof payload.limitEntryPrice === 'number'
         ? contractSize * payload.limitEntryPrice
         : 0;
-  const notionalStr = notional > 0 ? ` (Notional: \`$${notional.toFixed(2)}\`)` : '';
+  const notionalStr = notional > 0 ? ` (Notional: <code>$${notional.toFixed(2)}</code>)` : '';
   const riskUsd = typeof payload.riskUsd === 'number' ? payload.riskUsd.toFixed(2) : '0.00';
   const riskPct = typeof payload.riskPct === 'number' ? payload.riskPct.toFixed(1) : '2.0';
 
   const t1Str =
     typeof payload.target1 === 'number' && payload.target1 > 0
-      ? `   • TP1 (30% De-Risking): \`$${payload.target1.toFixed(2)}\`\n`
+      ? `   • TP1 (30% De-Risking): <code>$${payload.target1.toFixed(2)}</code>\n`
       : '';
   const t2Str =
     typeof payload.target2 === 'number' && payload.target2 > 0
-      ? `   • TP2 (70% Macro Runner): \`$${payload.target2.toFixed(2)}\`\n`
+      ? `   • TP2 (70% Macro Runner): <code>$${payload.target2.toFixed(2)}</code>\n`
       : '';
-  const targetLadder = t1Str || t2Str ? `🎯 *Target Ladder (30/70 Asymmetric):*\n${t1Str}${t2Str}` : '';
+  const targetLadder = t1Str || t2Str ? `🎯 <b>Target Ladder (30/70 Asymmetric):</b>\n${t1Str}${t2Str}` : '';
 
   return (
-    `🎯 *[ORDER ARMED / QUEUED]*\n` +
+    `🎯 <b>[ORDER ARMED / QUEUED]</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `⚙️ *Mode:* \`[${payload.mode}]\`\n` +
-    `📊 *Pair:* \`${payload.symbol}\`\n` +
-    `🧭 *Direction:* *${dirEmoji}*\n` +
-    `🎯 *Limit Entry (FVG Proximal):* \`$${limitPriceStr}\` (Resting Maker)\n` +
-    `🛑 *Invalidation Stop:* \`$${slStr}\` (Volatility-Buffered)\n` +
-    `⏳ *TTL Expiry:* \`${ttlBars} Bars (${ttlBars * 5}m)\`\n` +
+    `⚙️ <b>Mode:</b> <code>[${payload.mode}]</code>\n` +
+    `📊 <b>Pair:</b> <code>${escapeHtml(payload.symbol)}</code>\n` +
+    `🧭 <b>Direction:</b> <b>${dirEmoji}</b>\n` +
+    `🎯 <b>Limit Entry (FVG Proximal):</b> <code>$${limitPriceStr}</code> (Resting Maker)\n` +
+    `🛑 <b>Invalidation Stop:</b> <code>$${slStr}</code> (Volatility-Buffered)\n` +
+    `⏳ <b>TTL Expiry:</b> <code>${ttlBars} Bars (${ttlBars * 5}m)</code>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     targetLadder +
-    `💵 *Committed Risk:* \`$${riskUsd}\` (${riskPct}%)\n` +
-    `📐 *Contract Size:* \`${contractSize} contracts\`${notionalStr}\n` +
-    `⏰ *Armed At:* \`${timeIso}\``
+    `💵 <b>Committed Risk:</b> <code>$${riskUsd}</code> (${riskPct}%)\n` +
+    `📐 <b>Contract Size:</b> <code>${contractSize} contracts</code>${notionalStr}\n` +
+    `⏰ <b>Armed At:</b> <code>${timeIso}</code>`
   );
 }
 
@@ -375,30 +417,30 @@ export function formatOrderFilledMarkdown(payload: QuantOrderFilledPayload): str
       : typeof payload.executionPrice === 'number'
         ? contractSize * payload.executionPrice
         : 0;
-  const notionalStr = notional > 0 ? ` (Notional: \`$${notional.toFixed(2)}\`)` : '';
+  const notionalStr = notional > 0 ? ` (Notional: <code>$${notional.toFixed(2)}</code>)` : '';
   const activeSl = typeof payload.activeStopLoss === 'number' ? payload.activeStopLoss.toFixed(2) : '0.00';
   const t1Str =
     typeof payload.stage1Target === 'number' && payload.stage1Target > 0
-      ? `🎯 *TP1 (30% De-Risking):* \`$${payload.stage1Target.toFixed(2)}\` _(BE Trigger)_\n`
+      ? `🎯 <b>TP1 (30% De-Risking):</b> <code>$${payload.stage1Target.toFixed(2)}</code> <i>(BE Trigger)</i>\n`
       : '';
   const t2Str =
     typeof payload.stage2Target === 'number' && payload.stage2Target > 0
-      ? `💰 *TP2 (70% Macro Runner):* \`$${payload.stage2Target.toFixed(2)}\`\n`
+      ? `💰 <b>TP2 (70% Macro Runner):</b> <code>$${payload.stage2Target.toFixed(2)}</code>\n`
       : '';
 
   return (
-    `⚡ *[ORDER FILLED & POSITION OPEN]*\n` +
+    `⚡ <b>[ORDER FILLED & POSITION OPEN]</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `⚙️ *Mode:* \`[${payload.mode}]\`\n` +
-    `📊 *Pair:* \`${payload.symbol}\`\n` +
-    `🧭 *Direction:* *${dirEmoji}*\n` +
-    `⚡ *Execution Fill:* \`$${execPrice}\`\n` +
-    `📐 *Position Size:* \`${contractSize} contracts\`${notionalStr}\n` +
-    `🛑 *Active Stop Loss:* \`$${activeSl}\`\n` +
+    `⚙️ <b>Mode:</b> <code>[${payload.mode}]</code>\n` +
+    `📊 <b>Pair:</b> <code>${escapeHtml(payload.symbol)}</code>\n` +
+    `🧭 <b>Direction:</b> <b>${dirEmoji}</b>\n` +
+    `⚡ <b>Execution Fill:</b> <code>$${execPrice}</code>\n` +
+    `📐 <b>Position Size:</b> <code>${contractSize} contracts</code>${notionalStr}\n` +
+    `🛑 <b>Active Stop Loss:</b> <code>$${activeSl}</code>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     t1Str +
     t2Str +
-    `⏰ *Fill Time:* \`${timeIso}\``
+    `⏰ <b>Fill Time:</b> <code>${timeIso}</code>`
   );
 }
 
@@ -421,21 +463,21 @@ export function formatTp1RatchetMarkdown(payload: QuantTp1RatchetPayload): strin
   const runnerPct = payload.remainingAllocationPct ?? (100 - parseFloat(pctStr));
   const t2Str =
     typeof payload.stage2Target === 'number' && payload.stage2Target > 0
-      ? ` targeting TP2 (\`$${payload.stage2Target.toFixed(2)}\`)`
+      ? ` targeting TP2 (<code>$${payload.stage2Target.toFixed(2)}</code>)`
       : '';
 
   return (
-    `🛡️ *[TP1 SCALE & BREAKEVEN RATCHET]*\n` +
+    `🛡️ <b>[TP1 SCALE & BREAKEVEN RATCHET]</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `⚙️ *Mode:* \`[${payload.mode}]\`\n` +
-    `📊 *Pair:* \`${payload.symbol}\`\n` +
-    `📦 *Tranche Banked:* \`${pctStr}% @ $${targetStr}\` (De-Risking)\n` +
-    `🔒 *Banked Profit:* *+${bankedR}R (+$${bankedUsd} USD)*\n` +
+    `⚙️ <b>Mode:</b> <code>[${payload.mode}]</code>\n` +
+    `📊 <b>Pair:</b> <code>${escapeHtml(payload.symbol)}</code>\n` +
+    `📦 <b>Tranche Banked:</b> <code>${pctStr}% @ $${targetStr}</code> (De-Risking)\n` +
+    `🔒 <b>Banked Profit:</b> <b>+${bankedR}R (+$${bankedUsd} USD)</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `🛡️ *Stop Loss Ratchet:* Advanced to *Breakeven + ${offsetPct}% Fee Shield* (\`$${newSl}\`)\n` +
-    `⚖️ *Ratchet Law:* Next-Bar Ratchet Rule Active (Bar i+1)\n` +
-    `📦 *Macro Runner Active:* \`${runnerPct}% remaining\`${t2Str}\n` +
-    `⏰ *Time:* \`${timeIso}\``
+    `🛡️ <b>Stop Loss Ratchet:</b> Advanced to <b>Breakeven + ${offsetPct}% Fee Shield</b> (<code>$${newSl}</code>)\n` +
+    `⚖️ <b>Ratchet Law:</b> Next-Bar Ratchet Rule Active (Bar i+1)\n` +
+    `📦 <b>Macro Runner Active:</b> <code>${runnerPct}% remaining</code>${t2Str}\n` +
+    `⏰ <b>Time:</b> <code>${timeIso}</code>`
   );
 }
 
@@ -450,10 +492,11 @@ export function formatTradeClosedMarkdown(payload: QuantTradeClosedPayload): str
     .replace('T', ' ')
     .substring(0, 19) + ' UTC';
   const exitPriceStr = typeof payload.exitPrice === 'number' ? payload.exitPrice.toFixed(2) : '0.00';
-  const safeExitReason = payload.exitReason ? String(payload.exitReason).replace(/[`]/g, '') : 'CLOSED';
-  const durationStr =
+  const safeExitReason = escapeHtml(payload.exitReason || 'CLOSED');
+  const durationStr = escapeHtml(
     payload.holdingDurationStr ||
-    (typeof payload.holdingDurationMs === 'number' ? formatHoldingDuration(payload.holdingDurationMs) : 'N/A');
+    (typeof payload.holdingDurationMs === 'number' ? formatHoldingDuration(payload.holdingDurationMs) : 'N/A')
+  );
   const netR = typeof payload.netRealizedR === 'number' ? payload.netRealizedR : 0;
   const netUsd = typeof payload.netRealizedUsd === 'number' ? payload.netRealizedUsd : 0;
   const signR = netR >= 0 ? '+' : '';
@@ -462,18 +505,18 @@ export function formatTradeClosedMarkdown(payload: QuantTradeClosedPayload): str
     typeof payload.feeUsd === 'number' ? `-$${Math.abs(payload.feeUsd).toFixed(2)} USD` : '0.00 USD';
 
   return (
-    `🏁 *[TRADE CLOSED]*\n` +
+    `🏁 <b>[TRADE CLOSED]</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `⚙️ *Mode:* \`[${payload.mode}]\`\n` +
-    `📊 *Pair:* \`${payload.symbol}\` (${dirEmoji})\n` +
-    `⚡ *Exit Price:* \`$${exitPriceStr}\`\n` +
-    `🏷️ *Exit Trigger:* \`${safeExitReason}\`\n` +
-    `⏱️ *Holding Duration:* \`${durationStr}\`\n` +
+    `⚙️ <b>Mode:</b> <code>[${payload.mode}]</code>\n` +
+    `📊 <b>Pair:</b> <code>${escapeHtml(payload.symbol)}</code> (${dirEmoji})\n` +
+    `⚡ <b>Exit Price:</b> <code>$${exitPriceStr}</code>\n` +
+    `🏷️ <b>Exit Trigger:</b> <code>${safeExitReason}</code>\n` +
+    `⏱️ <b>Holding Duration:</b> <code>${durationStr}</code>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `📊 *Net Realized R:* *${signR}${netR.toFixed(2)}R*\n` +
-    `💵 *Net PnL:* *${signUsd}$${netUsd.toFixed(2)} USD* (after fees)\n` +
-    `💰 *Exchange Fees:* \`${feeStr}\`\n` +
-    `⏰ *Close Time:* \`${timeIso}\``
+    `📊 <b>Net Realized R:</b> <b>${signR}${netR.toFixed(2)}R</b>\n` +
+    `💵 <b>Net PnL:</b> <b>${signUsd}$${netUsd.toFixed(2)} USD</b> (after fees)\n` +
+    `💰 <b>Exchange Fees:</b> <code>${feeStr}</code>\n` +
+    `⏰ <b>Close Time:</b> <code>${timeIso}</code>`
   );
 }
 
@@ -552,10 +595,10 @@ export function formatArmedIntentRegisteredMarkdown(payload: ArmedIntentRegister
     .substring(0, 19) + ' UTC';
   const ttlBars = payload.ttlBars ?? 12;
   const modeBadge = payload.mode ? `[${payload.mode}]` : `[PROXIMITY RADAR ARMED]`;
-  const htfTrend = payload.htfTrend || (isLong ? 'BULLISH CONTINUATION (1H / 15m)' : 'BEARISH CONTINUATION (1H / 15m)');
+  const htfTrend = escapeHtml(payload.htfTrend || (isLong ? 'BULLISH CONTINUATION (1H / 15m)' : 'BEARISH CONTINUATION (1H / 15m)'));
   const t1Str = payload.target1 ? `$${payload.target1.toFixed(2)}` : 'Open';
   const t2Str = payload.target2 ? `$${payload.target2.toFixed(2)}` : 'Open';
-  const cleanNarrative = sanitizeMarkdownText(payload.narrative);
+  const cleanNarrative = escapeHtml(payload.narrative);
 
   const entryMid = (payload.poiZoneLow + payload.poiZoneHigh) / 2;
   let rrStr = '1:1.50 (TP1) / 1:3.00 (TP2)';
@@ -582,27 +625,27 @@ export function formatArmedIntentRegisteredMarkdown(payload: ArmedIntentRegister
   const riskPct = typeof payload.riskPct === 'number' ? payload.riskPct.toFixed(1) : '2.0';
 
   return (
-    `⚡ *[QUEGAR AI QUANT INTENT REGISTERED]*\n` +
+    `⚡ <b>[QUEGAR AI QUANT INTENT REGISTERED]</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `⚙️ *Mode:* \`${modeBadge}\`\n` +
-    `📊 *Pair:* \`${payload.symbol}\`\n` +
-    `🧭 *Direction:* *${dirEmoji}*\n` +
-    `📈 *HTF Trend Alignment:* \`${htfTrend}\`\n` +
-    `⚡ *15m BOS Trigger:* \`${payload.triggerCondition}\` @ \`$${payload.triggerPrice.toFixed(2)}\` (${payload.triggerTimeframe})\n` +
-    `🎯 *Retest POI (FVG Proximal):* \`$${payload.poiZoneLow.toFixed(2)} — $${payload.poiZoneHigh.toFixed(2)}\`\n` +
-    `🛑 *Invalidation Stop (ATR Buffered):* \`$${payload.invalidationLevel.toFixed(2)}\`\n` +
+    `⚙️ <b>Mode:</b> <code>${modeBadge}</code>\n` +
+    `📊 <b>Pair:</b> <code>${escapeHtml(payload.symbol)}</code>\n` +
+    `🧭 <b>Direction:</b> <b>${dirEmoji}</b>\n` +
+    `📈 <b>HTF Trend Alignment:</b> <code>${htfTrend}</code>\n` +
+    `⚡ <b>15m BOS Trigger:</b> <code>${escapeHtml(payload.triggerCondition)}</code> @ <code>$${payload.triggerPrice.toFixed(2)}</code> (${escapeHtml(payload.triggerTimeframe)})\n` +
+    `🎯 <b>Retest POI (FVG Proximal):</b> <code>$${payload.poiZoneLow.toFixed(2)} — $${payload.poiZoneHigh.toFixed(2)}</code>\n` +
+    `🛑 <b>Invalidation Stop (ATR Buffered):</b> <code>$${payload.invalidationLevel.toFixed(2)}</code>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `🎯 *Target 1 (30% De-Risking):* \`${t1Str}\` _(Instant BE Ratchet on fill)_\n` +
-    `💰 *Target 2 (70% Macro Runner):* \`${t2Str}\` _(Structural Liquidity Pool)_\n` +
+    `🎯 <b>Target 1 (30% De-Risking):</b> <code>${t1Str}</code> <i>(Instant BE Ratchet on fill)</i>\n` +
+    `💰 <b>Target 2 (70% Macro Runner):</b> <code>${t2Str}</code> <i>(Structural Liquidity Pool)</i>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `⚖️ *R:R Ratio:* \`${rrStr}\`\n` +
-    `💵 *Risk Sizing:* \`$${riskUsd}\` (1.0R | ${riskPct}% Compounded)\n` +
+    `⚖️ <b>R:R Ratio:</b> <code>${rrStr}</code>\n` +
+    `💵 <b>Risk Sizing:</b> <code>$${riskUsd}</code> (1.0R | ${riskPct}% Compounded)\n` +
     (typeof payload.contractSize === 'number' && payload.contractSize > 0
-      ? `📐 *Projected Size:* \`${payload.contractSize} contracts\`\n`
+      ? `📐 <b>Projected Size:</b> <code>${payload.contractSize} contracts</code>\n`
       : '') +
-    `⏳ *TTL Window:* \`${ttlBars} Bars (${ttlBars * 5}m)\`\n` +
-    (cleanNarrative ? `📝 *Quant Setup:* _${cleanNarrative}_\n` : '') +
-    `⏰ *Armed At:* \`${timeIso}\``
+    `⏳ <b>TTL Window:</b> <code>${ttlBars} Bars (${ttlBars * 5}m)</code>\n` +
+    (cleanNarrative ? `📝 <b>Quant Setup:</b> <i>${cleanNarrative}</i>\n` : '') +
+    `⏰ <b>Armed At:</b> <code>${timeIso}</code>`
   );
 }
 
@@ -612,19 +655,19 @@ export function formatArmedIntentTriggeredMarkdown(payload: ArmedIntentTriggered
     .toISOString()
     .replace('T', ' ')
     .substring(0, 19) + ' UTC';
-  const sizeStr = payload.contractSize ? `\n📐 *Position Size:* \`${payload.contractSize} contracts\`` : '';
-  const riskStr = payload.riskUsd && payload.riskPct ? `\n💵 *Committed Risk:* \`$${payload.riskUsd.toFixed(2)}\` (${payload.riskPct.toFixed(1)}%)` : '';
+  const sizeStr = payload.contractSize ? `\n📐 <b>Position Size:</b> <code>${payload.contractSize} contracts</code>` : '';
+  const riskStr = payload.riskUsd && payload.riskPct ? `\n💵 <b>Committed Risk:</b> <code>$${payload.riskUsd.toFixed(2)}</code> (${payload.riskPct.toFixed(1)}%)` : '';
 
   return (
-    `🚀 *[ARMED INTENT TRIGGERED & ORDER RESTING]*\n` +
+    `🚀 <b>[ARMED INTENT TRIGGERED & ORDER RESTING]</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `📊 *Pair:* \`${payload.symbol}\` (${dirEmoji})\n` +
-    `⚡ *Trigger Confirmed:* \`${payload.triggerCondition}\` on ${payload.triggerTimeframe} @ \`$${payload.triggerPrice.toFixed(2)}\`\n` +
-    `🎯 *Resting Limit:* \`$${payload.limitEntryPrice.toFixed(2)}\` (Resting Maker)\n` +
-    `🛑 *Stop Loss:* \`$${payload.stopLossPrice.toFixed(2)}\`` +
+    `📊 <b>Pair:</b> <code>${escapeHtml(payload.symbol)}</code> (${dirEmoji})\n` +
+    `⚡ <b>Trigger Confirmed:</b> <code>${escapeHtml(payload.triggerCondition)}</code> on ${escapeHtml(payload.triggerTimeframe)} @ <code>$${payload.triggerPrice.toFixed(2)}</code>\n` +
+    `🎯 <b>Resting Limit:</b> <code>$${payload.limitEntryPrice.toFixed(2)}</code> (Resting Maker)\n` +
+    `🛑 <b>Stop Loss:</b> <code>$${payload.stopLossPrice.toFixed(2)}</code>` +
     riskStr +
     sizeStr +
-    `\n⏰ *Trigger Time:* \`${timeIso}\``
+    `\n⏰ <b>Trigger Time:</b> <code>${timeIso}</code>`
   );
 }
 
@@ -636,13 +679,13 @@ export function formatArmedIntentExpiredMarkdown(payload: ArmedIntentExpiredPayl
     .substring(0, 19) + ' UTC';
 
   return (
-    `⌛ *[ARMED INTENT EXPIRED]*\n` +
+    `⌛ <b>[ARMED INTENT EXPIRED]</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `📊 *Pair:* \`${payload.symbol}\` (${dirEmoji})\n` +
-    `⚡ *Awaited Trigger:* \`${payload.triggerCondition}\` @ \`$${payload.triggerPrice.toFixed(2)}\`\n` +
-    `⏳ *Reason:* \`TTL Expired (${payload.ttlBars} bars elapsed without trigger confirmation)\`\n` +
-    `🛑 *Action:* Intent disarmed & pending queue flushed.\n` +
-    `⏰ *Expiry Time:* \`${timeIso}\``
+    `📊 <b>Pair:</b> <code>${escapeHtml(payload.symbol)}</code> (${dirEmoji})\n` +
+    `⚡ <b>Awaited Trigger:</b> <code>${escapeHtml(payload.triggerCondition)}</code> @ <code>$${payload.triggerPrice.toFixed(2)}</code>\n` +
+    `⏳ <b>Reason:</b> <code>TTL Expired (${payload.ttlBars} bars elapsed without trigger confirmation)</code>\n` +
+    `🛑 <b>Action:</b> Intent disarmed & pending queue flushed.\n` +
+    `⏰ <b>Expiry Time:</b> <code>${timeIso}</code>`
   );
 }
 
@@ -652,15 +695,15 @@ export function formatArmedIntentInvalidatedMarkdown(payload: ArmedIntentInvalid
     .toISOString()
     .replace('T', ' ')
     .substring(0, 19) + ' UTC';
-  const safeReason = sanitizeMarkdownText(payload.reason);
+  const safeReason = escapeHtml(payload.reason);
 
   return (
-    `🛑 *[ARMED INTENT INVALIDATED]*\n` +
+    `🛑 <b>[ARMED INTENT INVALIDATED]</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `📊 *Pair:* \`${payload.symbol}\` (${dirEmoji})\n` +
-    `⚠️ *Reason:* _${safeReason}_\n` +
-    `🛑 *Action:* Armed intent cancelled. Zero exchange exposure.\n` +
-    `⏰ *Invalidated At:* \`${timeIso}\``
+    `📊 <b>Pair:</b> <code>${escapeHtml(payload.symbol)}</code> (${dirEmoji})\n` +
+    `⚠️ <b>Reason:</b> <i>${safeReason}</i>\n` +
+    `🛑 <b>Action:</b> Armed intent cancelled. Zero exchange exposure.\n` +
+    `⏰ <b>Invalidated At:</b> <code>${timeIso}</code>`
   );
 }
 
@@ -1151,13 +1194,11 @@ export class TelegramNotifier {
     this.sentEventKeys.add(eventKey);
     this.flushDeduplicationRegistry();
 
-    const pos = event.position;
-    const isSpark = Boolean(pos?.strategyId?.startsWith('SPARK_') || pos?.executionMode);
-    const parseMode = isSpark ? 'Markdown' : 'HTML';
+    const parseMode = 'HTML';
 
     const success = await this.sendRawMessage(text, { parseMode });
     if (success) {
-      console.log(`[TELEGRAM] 📲 Notification sent for event: ${eventKey} (Mode: ${parseMode})`);
+      console.log(`[TELEGRAM] 📲 Notification sent for event: ${eventKey} (Mode: HTML)`);
     } else {
       console.warn(`[TELEGRAM] ⚠️ Failed to deliver notification for: ${eventKey}`);
     }
@@ -1310,7 +1351,7 @@ export class TelegramNotifier {
 
     const success = await this.sendRawMessage(text, {
       targetChatId: options?.targetChatId,
-      parseMode: options?.parseMode || 'Markdown',
+      parseMode: options?.parseMode || 'HTML',
       replyMarkup,
     });
 

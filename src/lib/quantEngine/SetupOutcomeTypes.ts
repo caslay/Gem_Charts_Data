@@ -31,6 +31,11 @@ export interface ReconciledOutcome {
   matched_trade_id?: string | null;
   bars_elapsed?: number;
   ttl_bars?: number;
+  is_synthetic_evaluation?: boolean;
+  synthetic_fill_price?: number | null;
+  synthetic_exit_price?: number | null;
+  synthetic_mfe_r?: number | null;
+  synthetic_mae_r?: number | null;
 }
 
 export interface EnrichedAiAnalysisRecord extends AiAnalysisRecord {
