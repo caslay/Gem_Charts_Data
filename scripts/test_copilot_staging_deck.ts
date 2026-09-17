@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { userStagedSetupsStore } from '../src/lib/staging/userStagedSetupsStore';
 import { evaluateExecutionSafetyGate } from '../src/lib/binanceOrderRouter';
+import { AutomatedStrategyExecutionEngine } from '../src/lib/quantEngine/AutomatedStrategyExecutionEngine';
 
 async function runStagingDeckTests() {
   console.log('🧪 ========================================================');
@@ -103,14 +104,28 @@ async function runStagingDeckTests() {
 
   const deployedRecord = await userStagedSetupsStore.getStagedSetupById(pinnedLong.id);
   assert.ok(deployedRecord, 'Deployed record must be queryable');
-  assert.strictEqual(deployedRecord!.status, 'DEPLOYED');
+  assert.strictEqual(deployedRecord!.status, 'RESTING_LIMIT');
   assert.ok(deployedRecord!.deployedAt, 'deployedAt must be populated');
+  assert.strictEqual(deployedRecord!.targetMode, 'PAPER_TRADING');
 
   // Verify setup is no longer listed in active PINNED list
   const activeListAfterDeploy = await userStagedSetupsStore.listStagedSetups('PINNED');
   const stillPinned = activeListAfterDeploy.find((s) => s.id === pinnedLong.id);
   assert.strictEqual(stillPinned, undefined, 'Deployed setup must not appear in active PINNED list');
-  console.log('✅ TEST 5 PASSED: Setup transitioned to DEPLOYED and excluded from active list.');
+
+  // Verify setup DOES appear in ACTIVE list (which includes PINNED and RESTING_LIMIT)
+  const activeUnionList = await userStagedSetupsStore.listStagedSetups('ACTIVE');
+  const foundInActive = activeUnionList.find((s) => s.id === pinnedLong.id);
+  assert.ok(foundInActive, 'Deployed setup must appear in ACTIVE list');
+  assert.strictEqual(foundInActive!.status, 'RESTING_LIMIT');
+
+  // Test canceling the resting limit order
+  const cancelOk = await userStagedSetupsStore.cancelRestingLimit(pinnedLong.id, 'OPERATOR_TEST_CANCEL');
+  assert.strictEqual(cancelOk, true, 'cancelRestingLimit must return true');
+  const cancelledRecord = await userStagedSetupsStore.getStagedSetupById(pinnedLong.id);
+  assert.strictEqual(cancelledRecord!.status, 'CANCELLED');
+  assert.strictEqual(cancelledRecord!.cancelReason, 'OPERATOR_TEST_CANCEL');
+  console.log('✅ TEST 5 PASSED: Setup transitioned to RESTING_LIMIT, verified in ACTIVE list, and cancelled properly.');
 
   // ----------------------------------------------------
   // TEST 6: Command Queue (daemon_commands.json) Output Verification
@@ -184,6 +199,123 @@ async function runStagingDeckTests() {
   const recordPinnedAfterUnpin = await userStagedSetupsStore.isAnalysisRecordPinned(999002);
   assert.strictEqual(recordPinnedAfterUnpin, false, 'isAnalysisRecordPinned must return false after unpin');
   console.log('✅ TEST 7 PASSED: Setup unpinned and state cleared successfully.');
+
+  // ----------------------------------------------------
+  // TEST 8: Headless Daemon Startup Rehydration Parity
+  // ----------------------------------------------------
+  console.log('\n▶ [TEST 8] Verifying Headless Daemon Startup Rehydration into AutomatedStrategyExecutionEngine...');
+  // Pin and deploy a resting setup to test engine rehydration
+  const rehydrateCandidate = await userStagedSetupsStore.pinSetup({
+    analysisLogId: 999003,
+    symbol: testSymbol,
+    direction: 'LONG',
+    entryPrice: 2160.0,
+    stopLoss: 2130.0,
+    target1: 2220.0,
+    sourceReference: 'AI_ANALYSIS #999003',
+  });
+  await userStagedSetupsStore.markSetupDeployed(rehydrateCandidate.id, 'PAPER_TRADING');
+
+  const engine = new AutomatedStrategyExecutionEngine({
+    symbol: testSymbol,
+    timeframe: '5m',
+    autoExecute: true,
+  });
+
+  const restingSetups = await userStagedSetupsStore.listStagedSetups('RESTING_LIMIT');
+  const targetResting = restingSetups.find((s) => s.id === rehydrateCandidate.id);
+  assert.ok(targetResting, 'Resting candidate must be listed in RESTING_LIMIT');
+
+  const deployedTime = targetResting.deployedAt ? new Date(targetResting.deployedAt).getTime() : Date.now();
+  engine.rehydratePositionsDirect([{
+    id: `staged_${targetResting.id}`,
+    dbTradeId: null,
+    strategyId: 'COCKPIT_STAGED_LIMIT',
+    strategyName: 'Cockpit Staged Limit Order',
+    symbol: targetResting.symbol,
+    timeframe: '5m',
+    direction: targetResting.direction,
+    status: 'PENDING_LIMIT_ENTRY',
+    limitEntryPrice: targetResting.entryPrice,
+    entryPrice: targetResting.entryPrice,
+    initialStopLoss: targetResting.stopLoss,
+    activeStopLoss: targetResting.stopLoss,
+    activeRatchetFloor: null,
+    trailingSlSource: 'INITIAL',
+    stage1Target: targetResting.target1,
+    stage2Target: targetResting.target2 || targetResting.target1,
+    stage3Target: targetResting.target3 || targetResting.target1,
+    dynamicDolTarget: null,
+    fvgCeLevel: null,
+    stage1Ratio: 0.4,
+    stage2Ratio: 0.4,
+    stage3Ratio: 0.2,
+    stage1Multiple: 1.0,
+    stage2Multiple: 1.5,
+    stage3Multiple: 3.0,
+    riskUsd: targetResting.riskUsd || 100,
+    riskPerContract: Math.abs(targetResting.entryPrice - targetResting.stopLoss),
+    equityAtEntry: 10000,
+    riskPct: targetResting.riskPct || 1.0,
+    contractSize: targetResting.contractSize || 1,
+    allocatedAmount: 1.0,
+    remainingAllocation: 1.0,
+    realizedR: 0,
+    realizedUsd: 0,
+    unrealizedR: 0,
+    unrealizedUsd: 0,
+    mfeR: 0,
+    maeR: 0,
+    isStage1Filled: false,
+    isStage2Filled: false,
+    isStage3Filled: false,
+    stage1HitTime: null,
+    stage2HitTime: null,
+    stage3HitTime: null,
+    pendingTime: deployedTime,
+    openTime: null,
+    closeTime: null,
+    exitPrice: null,
+    exitReason: null,
+    setupId: `staged_${targetResting.id}`,
+    anchorName: `Staged #${targetResting.id}`,
+    originAnchorLevel: targetResting.entryPrice,
+    originZoneId: `staged_${targetResting.id}`,
+    executionMode: 'PAPER_TRADING',
+    maxRetestBars: 48,
+    stage1BarTime: null,
+    ratchetEffectiveTime: null,
+    stagedId: targetResting.id,
+  } as any]);
+
+  const pendingInEngine = engine.getPendingLimitOrders();
+  assert.strictEqual(pendingInEngine.length, 1, 'Engine must contain exactly 1 rehydrated pending limit order');
+  assert.strictEqual(pendingInEngine[0].id, `staged_${targetResting.id}`);
+  assert.strictEqual(pendingInEngine[0].status, 'PENDING_LIMIT_ENTRY');
+  assert.strictEqual((pendingInEngine[0] as any).stagedId, targetResting.id);
+  console.log('✅ TEST 8 PASSED: Resting staged setups successfully rehydrate into engine pendingLimitOrders.');
+
+  // ----------------------------------------------------
+  // TEST 9: Operator Preemption & Staged Limit Order Cancellation
+  // ----------------------------------------------------
+  console.log('\n▶ [TEST 9] Testing cancelPendingLimitOrder matching by stagedId and prefixed ID...');
+  const cancelResult = engine.cancelPendingLimitOrder(`staged_${targetResting.id}`, 'TEST_ABORT');
+  assert.strictEqual(cancelResult, true, 'cancelPendingLimitOrder must succeed for staged_${id}');
+  assert.strictEqual(engine.getPendingLimitOrders().length, 0, 'Pending limit orders must be empty after cancellation');
+
+  // Test cancellation by numeric stagedId
+  engine.rehydratePositionsDirect([{
+    id: `POS_LONG_${Date.now()}`,
+    status: 'PENDING_LIMIT_ENTRY',
+    stagedId: targetResting.id,
+    direction: 'LONG',
+    limitEntryPrice: 2160,
+  } as any]);
+  assert.strictEqual(engine.getPendingLimitOrders().length, 1, 'Engine rehydrated 1 order with POS_LONG prefix');
+  const cancelNumericResult = engine.cancelPendingLimitOrder(String(targetResting.id), 'TEST_NUMERIC_ABORT');
+  assert.strictEqual(cancelNumericResult, true, 'cancelPendingLimitOrder must succeed using numeric stagedId');
+  assert.strictEqual(engine.getPendingLimitOrders().length, 0, 'Pending orders must be empty after numeric abort');
+  console.log('✅ TEST 9 PASSED: cancelPendingLimitOrder reliably cancels staged limit orders by any ID format.');
 
   console.log('\n========================================================');
   console.log('🎉 ALL COPILOT STAGING DECK TESTS PASSED (100% SUCCESS)');

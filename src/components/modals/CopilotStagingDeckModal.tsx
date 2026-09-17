@@ -16,6 +16,9 @@ import {
   Clock,
   Crosshair,
   Sparkles,
+  Ban,
+  Activity,
+  CheckCircle2,
 } from 'lucide-react';
 import type { UserStagedSetup } from '@/types/stagedSetupTypes';
 
@@ -25,6 +28,7 @@ interface CopilotStagingDeckModalProps {
   livePrice?: number | null;
   onPreviewSetup?: (setup: UserStagedSetup | null) => void;
   onDeploySuccess?: (stagedId: number, mode: string) => void;
+  onCancelSuccess?: (stagedId: number) => void;
 }
 
 export default function CopilotStagingDeckModal({
@@ -33,12 +37,16 @@ export default function CopilotStagingDeckModal({
   livePrice,
   onPreviewSetup,
   onDeploySuccess,
+  onCancelSuccess,
 }: CopilotStagingDeckModalProps) {
-  const [stagedSetups, setStagedSetups] = useState<UserStagedSetup[]>([]);
+  const [activeTab, setActiveTab] = useState<'PINNED' | 'RESTING_LIMIT'>('PINNED');
+  const [pinnedSetups, setPinnedSetups] = useState<UserStagedSetup[]>([]);
+  const [restingOrders, setRestingOrders] = useState<UserStagedSetup[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [deployingId, setDeployingId] = useState<number | null>(null);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
@@ -69,14 +77,17 @@ export default function CopilotStagingDeckModal({
     abortControllerRef.current = controller;
 
     try {
-      const res = await fetch('/api/staged-setups?status=PINNED', {
+      const res = await fetch('/api/staged-setups?status=ACTIVE', {
         cache: 'no-store',
         signal: controller.signal,
       });
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.data)) {
-          setStagedSetups(json.data);
+          const pinned = json.data.filter((s: UserStagedSetup) => s.status === 'PINNED');
+          const resting = json.data.filter((s: UserStagedSetup) => s.status === 'RESTING_LIMIT');
+          setPinnedSetups(pinned);
+          setRestingOrders(resting);
         }
       }
     } catch (err: any) {
@@ -89,10 +100,20 @@ export default function CopilotStagingDeckModal({
     }
   }, []);
 
-  // Fetch setups ONCE upon drawer opening, reset state upon closing
+  // Fetch setups upon drawer opening and maintain 15-second background interval with clean teardown
   useEffect(() => {
     if (isOpen) {
       fetchStagedSetups();
+      const interval = setInterval(() => {
+        if (typeof document !== 'undefined' && document.hidden) return;
+        fetchStagedSetups();
+      }, 15000);
+      return () => {
+        clearInterval(interval);
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+      };
     } else {
       setSelectedId(null);
       setHoveredId(null);
@@ -147,11 +168,12 @@ export default function CopilotStagingDeckModal({
     }
     lastEmittedSetupIdRef.current = activeId;
 
-    const activeSetup = activeId ? (stagedSetups.find((s) => s.id === activeId) ?? null) : null;
+    const allSetups = [...pinnedSetups, ...restingOrders];
+    const activeSetup = activeId ? (allSetups.find((s) => s.id === activeId) ?? null) : null;
     onPreviewSetupRef.current?.(activeSetup);
-  }, [hoveredId, selectedId, stagedSetups, isOpen]);
+  }, [hoveredId, selectedId, pinnedSetups, restingOrders, isOpen]);
 
-  // Dismiss / Unpin setup
+  // Dismiss / Unpin setup from backlog
   const handleDismiss = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
     try {
@@ -161,12 +183,42 @@ export default function CopilotStagingDeckModal({
         body: JSON.stringify({ action: 'DISMISS', id }),
       });
       if (res.ok) {
-        setStagedSetups((prev) => prev.filter((s) => s.id !== id));
+        setPinnedSetups((prev) => prev.filter((s) => s.id !== id));
         if (selectedId === id) setSelectedId(null);
         if (hoveredId === id) setHoveredId(null);
       }
     } catch (err: any) {
       console.error('[COPILOT_DECK] Dismiss failed:', err);
+    }
+  };
+
+  // Cancel resting limit order
+  const handleCancelRestingOrder = async (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    setCancellingId(id);
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      const res = await fetch('/api/staged-setups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'CANCEL_LIMIT', id }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setRestingOrders((prev) => prev.filter((s) => s.id !== id));
+        if (selectedId === id) setSelectedId(null);
+        if (hoveredId === id) setHoveredId(null);
+        setActionSuccess(`Resting limit #${id} successfully aborted.`);
+        if (onCancelSuccess) onCancelSuccess(id);
+      } else {
+        setActionError(json.error || 'Failed to cancel resting limit order.');
+      }
+    } catch (err: any) {
+      setActionError(err?.message || 'Network error while cancelling resting limit.');
+    } finally {
+      setCancellingId(null);
     }
   };
 
@@ -190,10 +242,23 @@ export default function CopilotStagingDeckModal({
       const json = await res.json();
       if (res.ok && json.success) {
         setActionSuccess(
-          `Setup #${setup.id} successfully deployed to ${targetMode === 'PAPER_TRADING' ? 'Paper Trading' : 'Live Binance'}!`
+          `Setup #${setup.id} successfully deployed as resting limit to ${
+            targetMode === 'PAPER_TRADING' ? 'Paper Trading' : 'Live Binance'
+          }!`
         );
-        // Remove deployed setup from active list
-        setStagedSetups((prev) => prev.filter((s) => s.id !== setup.id));
+
+        // Move setup from pinned backlog to resting orders
+        const restingRecord: UserStagedSetup = {
+          ...setup,
+          status: 'RESTING_LIMIT',
+          targetMode,
+          deployedAt: new Date().toISOString(),
+        };
+
+        setPinnedSetups((prev) => prev.filter((s) => s.id !== setup.id));
+        setRestingOrders((prev) => [restingRecord, ...prev.filter((r) => r.id !== setup.id)]);
+        setActiveTab('RESTING_LIMIT');
+
         if (selectedId === setup.id) setSelectedId(null);
         if (onDeploySuccess) onDeploySuccess(setup.id, targetMode);
       } else {
@@ -226,11 +291,17 @@ export default function CopilotStagingDeckModal({
                 Copilot Staging Deck
               </h2>
               <span className="px-1.5 py-0.2 text-[9px] font-mono font-bold uppercase rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                {stagedSetups.length} Pinned
+                {pinnedSetups.length} Pinned
               </span>
+              {restingOrders.length > 0 && (
+                <span className="px-1.5 py-0.2 text-[9px] font-mono font-bold uppercase rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
+                  {restingOrders.length} Resting
+                </span>
+              )}
             </div>
             <p className="text-[10px] text-slate-400">
-              Discretionary queue • Live chart projection
+              Discretionary queue • Live chart projection • Retest tracking
             </p>
           </div>
         </div>
@@ -254,6 +325,45 @@ export default function CopilotStagingDeckModal({
         </div>
       </div>
 
+      {/* ── Operational Dual-State Tabs ─────────────────────────────────── */}
+      <div className="flex items-center px-4 py-2 border-b border-slate-800/80 bg-slate-900/50 gap-2 shrink-0">
+        <button
+          onClick={() => setActiveTab('PINNED')}
+          className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            activeTab === 'PINNED'
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm shadow-amber-500/10'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+          }`}
+        >
+          <Pin className="w-3.5 h-3.5" />
+          <span>Pinned Backlog</span>
+          <span className="ml-1 px-1.5 py-0.2 text-[9px] font-mono font-bold rounded-full bg-slate-800 text-slate-300">
+            {pinnedSetups.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('RESTING_LIMIT')}
+          className={`flex-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            activeTab === 'RESTING_LIMIT'
+              ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40 shadow-sm shadow-sky-500/10'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60 border border-transparent'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5" />
+          <span>Active Resting</span>
+          {restingOrders.length > 0 ? (
+            <span className="ml-1 px-1.5 py-0.2 text-[9px] font-mono font-bold rounded-full bg-sky-500/30 text-sky-200 animate-pulse border border-sky-500/40">
+              {restingOrders.length}
+            </span>
+          ) : (
+            <span className="ml-1 px-1.5 py-0.2 text-[9px] font-mono font-bold rounded-full bg-slate-800 text-slate-400">
+              0
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* ── Status Feedback Banners ─────────────────────────────────────── */}
       {actionSuccess && (
         <div className="mx-4 mt-2.5 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-400 text-xs flex items-center justify-between shrink-0">
@@ -274,187 +384,367 @@ export default function CopilotStagingDeckModal({
 
       {/* ── Content Area: Vertical Single-Column Setup Stream ───────────── */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 custom-scrollbar">
-        {stagedSetups.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-slate-800/80 rounded-xl bg-slate-900/30">
-            <div className="p-3 bg-slate-800/50 rounded-xl text-slate-500 mb-2">
-              <Pin className="w-6 h-6 opacity-40" />
-            </div>
-            <h3 className="text-xs font-semibold text-slate-300">Staging Deck is Empty</h3>
-            <p className="text-[11px] text-slate-500 max-w-[280px] mt-1 mb-3 leading-relaxed">
-              Pin setups from the AI History Modal or Setup Drawer via <span className="text-amber-400 font-mono">[ 📌 Pin to Staging ]</span>.
-            </p>
-          </div>
-        ) : (
-          stagedSetups.map((setup) => {
-            const isLong = setup.direction === 'LONG';
-            const isSelected = selectedId === setup.id;
-            const isHovered = hoveredId === setup.id;
-            const isDeploying = deployingId === setup.id;
-
-            // Distance calculation
-            let distanceText = '---';
-            let distancePctText = '';
-            let isFavorable = false;
-            if (livePrice != null && livePrice > 0 && setup.entryPrice > 0) {
-              const diff = setup.entryPrice - livePrice;
-              const diffPct = ((diff / livePrice) * 100);
-              distanceText = `${diff >= 0 ? '+' : ''}$${diff.toFixed(2)}`;
-              distancePctText = `(${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(2)}%)`;
-              isFavorable = isLong ? diff <= 0 : diff >= 0;
-            }
-
-            return (
-              <div
-                key={setup.id}
-                onMouseEnter={() => setHoveredId(setup.id)}
-                onMouseLeave={() => setHoveredId((prev) => (prev === setup.id ? null : prev))}
-                onClick={() => setSelectedId((prev) => (prev === setup.id ? null : setup.id))}
-                className={`relative p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
-                  isSelected
-                    ? 'bg-slate-900/90 border-amber-500/80 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500/30'
-                    : isHovered
-                    ? 'bg-slate-900/80 border-slate-600'
-                    : 'bg-slate-900/50 border-slate-800/90 hover:border-slate-700'
-                }`}
-              >
-                {/* Top Row: Direction, Symbol, Source, and Dismiss */}
-                <div className="flex items-start justify-between gap-1.5 mb-2.5">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span
-                      className={`px-2 py-0.5 rounded-md text-[10px] font-black tracking-wider uppercase flex items-center gap-1 ${
-                        isLong
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                      }`}
-                    >
-                      {isLong ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                      {setup.direction}
-                    </span>
-                    <span className="text-xs font-mono font-bold text-slate-200">
-                      {setup.symbol}
-                    </span>
-                    <span className="px-1.5 py-0.5 text-[9px] font-mono rounded bg-slate-800/80 text-slate-400 border border-slate-700/60">
-                      {setup.sourceReference}
-                    </span>
-                    {Boolean(setup.metadata?.wasDirectionCorrected) && (
-                      <span
-                        className="px-1.5 py-0.5 text-[8.5px] font-mono rounded bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                        title={String(setup.metadata?.correctionReason || 'Auto-corrected from inverted geometry')}
-                      >
-                        Auto-Aligned
-                      </span>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={(e) => handleDismiss(e, setup.id)}
-                    className="p-1 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
-                    title="Dismiss from Staging"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
+        {/* TAB 1: PINNED BACKLOG */}
+        {activeTab === 'PINNED' && (
+          <>
+            {pinnedSetups.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-slate-800/80 rounded-xl bg-slate-900/30">
+                <div className="p-3 bg-slate-800/50 rounded-xl text-slate-500 mb-2">
+                  <Pin className="w-6 h-6 opacity-40" />
                 </div>
-
-                {/* Metrics Grid (2x2 Compact) */}
-                <div className="grid grid-cols-2 gap-1.5 my-1 text-xs font-mono">
-                  {/* Entry Price */}
-                  <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800/70">
-                    <div className="text-[9px] uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                      <Crosshair className="w-2.5 h-2.5 text-sky-400" /> Limit Entry
-                    </div>
-                    <div className="text-xs font-bold text-sky-300 mt-0.5">
-                      ${setup.entryPrice.toFixed(2)}
-                    </div>
-                    {setup.entryRangeLow != null && setup.entryRangeHigh != null && (
-                      <div className="text-[8.5px] text-slate-500">
-                        [{setup.entryRangeLow.toFixed(1)} - {setup.entryRangeHigh.toFixed(1)}]
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Distance to Fill */}
-                  <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800/70">
-                    <div className="text-[9px] uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                      <Clock className="w-2.5 h-2.5 text-amber-400" /> Distance to Fill
-                    </div>
-                    <div className={`text-xs font-bold mt-0.5 ${isFavorable ? 'text-emerald-400' : 'text-slate-300'}`}>
-                      {distanceText} <span className="text-[9px] font-normal">{distancePctText}</span>
-                    </div>
-                    <div className="text-[8.5px] text-slate-500">
-                      Live: ${livePrice ? livePrice.toFixed(2) : '---'}
-                    </div>
-                  </div>
-
-                  {/* Invalidation (SL) */}
-                  <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800/70">
-                    <div className="text-[9px] uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                      <Shield className="w-2.5 h-2.5 text-rose-400" /> Invalidation (SL)
-                    </div>
-                    <div className="text-xs font-bold text-rose-300 mt-0.5">
-                      ${setup.stopLoss.toFixed(2)}
-                    </div>
-                    <div className="text-[8.5px] text-slate-500">
-                      Δ ${(Math.abs(setup.entryPrice - setup.stopLoss)).toFixed(2)}
-                    </div>
-                  </div>
-
-                  {/* Targets & R:R */}
-                  <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800/70">
-                    <div className="text-[9px] uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                      <Target className="w-2.5 h-2.5 text-emerald-400" /> Targets & R:R
-                    </div>
-                    <div className="text-xs font-bold text-emerald-300 mt-0.5">
-                      TP1: ${setup.target1.toFixed(2)}
-                    </div>
-                    <div className="text-[8.5px] text-slate-400">
-                      {setup.target2 ? `TP2: $${setup.target2.toFixed(1)} • ` : ''}
-                      <span className="text-amber-400 font-bold">{setup.riskRewardRatio ? `${setup.riskRewardRatio}R` : '---'}</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Chart Projection Status */}
-                <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono py-1">
-                  <span className="flex items-center gap-1">
-                    <Sparkles className="w-2.5 h-2.5 text-amber-400/80" />
-                    {isSelected || isHovered ? (
-                      <span className="text-amber-300 font-semibold">Projected on Chart</span>
-                    ) : (
-                      'Hover to Project on Chart'
-                    )}
-                  </span>
-                  <span>Pinned: {new Date(setup.pinnedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                </div>
-
-                {/* Action Execution Buttons */}
-                <div className="mt-2 pt-2.5 border-t border-slate-800/80 flex items-center gap-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeploy(setup, 'PAPER_TRADING');
-                    }}
-                    disabled={isDeploying}
-                    className="flex-1 py-1.5 px-2.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700/60"
-                  >
-                    <FileText className="w-3 h-3 text-sky-400" />
-                    {isDeploying ? 'Deploying...' : 'Deploy Paper'}
-                  </button>
-
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setConfirmLiveSetup(setup);
-                    }}
-                    disabled={isDeploying}
-                    className="flex-1 py-1.5 px-2.5 bg-rose-500/20 hover:bg-rose-500/30 active:bg-rose-500/40 text-rose-300 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-rose-500/40"
-                  >
-                    <Zap className="w-3 h-3 text-rose-400" />
-                    Deploy Live
-                  </button>
-                </div>
+                <h3 className="text-xs font-semibold text-slate-300">Staging Deck is Empty</h3>
+                <p className="text-[11px] text-slate-500 max-w-[280px] mt-1 mb-3 leading-relaxed">
+                  Pin candidate setups from the AI History Modal or Setup Drawer via{' '}
+                  <span className="text-amber-400 font-mono">[ 📌 Pin to Staging ]</span>.
+                </p>
               </div>
-            );
-          })
+            ) : (
+              pinnedSetups.map((setup) => {
+                const isLong = setup.direction === 'LONG';
+                const isSelected = selectedId === setup.id;
+                const isHovered = hoveredId === setup.id;
+                const isDeploying = deployingId === setup.id;
+
+                // Distance calculation
+                let distanceText = '---';
+                let distancePctText = '';
+                let isFavorable = false;
+                if (livePrice != null && livePrice > 0 && setup.entryPrice > 0) {
+                  const diff = setup.entryPrice - livePrice;
+                  const diffPct = (diff / livePrice) * 100;
+                  distanceText = `${diff >= 0 ? '+' : ''}$${diff.toFixed(2)}`;
+                  distancePctText = `(${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(2)}%)`;
+                  isFavorable = isLong ? diff <= 0 : diff >= 0;
+                }
+
+                return (
+                  <div
+                    key={setup.id}
+                    onMouseEnter={() => setHoveredId(setup.id)}
+                    onMouseLeave={() => setHoveredId((prev) => (prev === setup.id ? null : prev))}
+                    onClick={() => setSelectedId((prev) => (prev === setup.id ? null : setup.id))}
+                    className={`relative p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                      isSelected
+                        ? 'bg-slate-900/90 border-amber-500/80 shadow-lg shadow-amber-500/10 ring-1 ring-amber-500/30'
+                        : isHovered
+                        ? 'bg-slate-900/80 border-slate-600'
+                        : 'bg-slate-900/50 border-slate-800/90 hover:border-slate-700'
+                    }`}
+                  >
+                    {/* Top Row: Direction, Symbol, Source, and Dismiss */}
+                    <div className="flex items-start justify-between gap-1.5 mb-2.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-black tracking-wider uppercase flex items-center gap-1 ${
+                            isLong
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                          }`}
+                        >
+                          {isLong ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                          {setup.direction}
+                        </span>
+                        <span className="text-xs font-mono font-bold text-slate-200">
+                          {setup.symbol}
+                        </span>
+                        <span className="px-1.5 py-0.5 text-[9px] font-mono rounded bg-slate-800/80 text-slate-400 border border-slate-700/60">
+                          {setup.sourceReference}
+                        </span>
+                        {Boolean(setup.metadata?.wasDirectionCorrected) && (
+                          <span
+                            className="px-1.5 py-0.5 text-[8.5px] font-mono rounded bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                            title={String(setup.metadata?.correctionReason || 'Auto-corrected from inverted geometry')}
+                          >
+                            Auto-Aligned
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={(e) => handleDismiss(e, setup.id)}
+                        className="p-1 rounded-md text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                        title="Dismiss from Staging"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+
+                    {/* Metrics Grid (2x2 Compact) */}
+                    <div className="grid grid-cols-2 gap-1.5 my-1 text-xs font-mono">
+                      {/* Entry Price */}
+                      <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800/70">
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                          <Crosshair className="w-2.5 h-2.5 text-sky-400" /> Limit Entry
+                        </div>
+                        <div className="text-xs font-bold text-sky-300 mt-0.5">
+                          ${setup.entryPrice.toFixed(2)}
+                        </div>
+                        {setup.entryRangeLow != null && setup.entryRangeHigh != null && (
+                          <div className="text-[8.5px] text-slate-500">
+                            [{setup.entryRangeLow.toFixed(1)} - {setup.entryRangeHigh.toFixed(1)}]
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Distance to Fill */}
+                      <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800/70">
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5 text-amber-400" /> Distance to Fill
+                        </div>
+                        <div className={`text-xs font-bold mt-0.5 ${isFavorable ? 'text-emerald-400' : 'text-slate-300'}`}>
+                          {distanceText} <span className="text-[9px] font-normal">{distancePctText}</span>
+                        </div>
+                        <div className="text-[8.5px] text-slate-500">
+                          Live: ${livePrice ? livePrice.toFixed(2) : '---'}
+                        </div>
+                      </div>
+
+                      {/* Invalidation (SL) */}
+                      <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800/70">
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                          <Shield className="w-2.5 h-2.5 text-rose-400" /> Invalidation (SL)
+                        </div>
+                        <div className="text-xs font-bold text-rose-300 mt-0.5">
+                          ${setup.stopLoss.toFixed(2)}
+                        </div>
+                        <div className="text-[8.5px] text-slate-500">
+                          Δ ${(Math.abs(setup.entryPrice - setup.stopLoss)).toFixed(2)}
+                        </div>
+                      </div>
+
+                      {/* Targets & R:R */}
+                      <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800/70">
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                          <Target className="w-2.5 h-2.5 text-emerald-400" /> Targets & R:R
+                        </div>
+                        <div className="text-xs font-bold text-emerald-300 mt-0.5">
+                          TP1: ${setup.target1.toFixed(2)}
+                        </div>
+                        <div className="text-[8.5px] text-slate-400">
+                          {setup.target2 ? `TP2: $${setup.target2.toFixed(1)} • ` : ''}
+                          <span className="text-amber-400 font-bold">{setup.riskRewardRatio ? `${setup.riskRewardRatio}R` : '---'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Chart Projection Status */}
+                    <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono py-1">
+                      <span className="flex items-center gap-1">
+                        <Sparkles className="w-2.5 h-2.5 text-amber-400/80" />
+                        {isSelected || isHovered ? (
+                          <span className="text-amber-300 font-semibold">Projected on Chart</span>
+                        ) : (
+                          'Hover to Project on Chart'
+                        )}
+                      </span>
+                      <span>Pinned: {new Date(setup.pinnedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+
+                    {/* Action Execution Buttons */}
+                    <div className="mt-2 pt-2.5 border-t border-slate-800/80 flex items-center gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeploy(setup, 'PAPER_TRADING');
+                        }}
+                        disabled={isDeploying}
+                        className="flex-1 py-1.5 px-2.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-slate-700/60"
+                      >
+                        <FileText className="w-3 h-3 text-sky-400" />
+                        {isDeploying ? 'Deploying...' : 'Deploy Paper'}
+                      </button>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConfirmLiveSetup(setup);
+                        }}
+                        disabled={isDeploying}
+                        className="flex-1 py-1.5 px-2.5 bg-rose-500/20 hover:bg-rose-500/30 active:bg-rose-500/40 text-rose-300 text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-rose-500/40"
+                      >
+                        <Zap className="w-3 h-3 text-rose-400" />
+                        Deploy Live
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </>
+        )}
+
+        {/* TAB 2: ACTIVE RESTING ORDERS */}
+        {activeTab === 'RESTING_LIMIT' && (
+          <>
+            {restingOrders.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center border border-dashed border-slate-800/80 rounded-xl bg-slate-900/30">
+                <div className="p-3 bg-slate-800/50 rounded-xl text-slate-500 mb-2">
+                  <Clock className="w-6 h-6 opacity-40" />
+                </div>
+                <h3 className="text-xs font-semibold text-slate-300">No Active Resting Limits</h3>
+                <p className="text-[11px] text-slate-500 max-w-[280px] mt-1 mb-3 leading-relaxed">
+                  Dispatched limit orders waiting for market retest will appear here with live distance tracking and abort controls.
+                </p>
+              </div>
+            ) : (
+              restingOrders.map((order) => {
+                const isLong = order.direction === 'LONG';
+                const isSelected = selectedId === order.id;
+                const isHovered = hoveredId === order.id;
+                const isCancelling = cancellingId === order.id;
+
+                // Distance calculation
+                let distanceText = '---';
+                let distancePctText = '';
+                let isFavorable = false;
+                if (livePrice != null && livePrice > 0 && order.entryPrice > 0) {
+                  const diff = order.entryPrice - livePrice;
+                  const diffPct = (diff / livePrice) * 100;
+                  distanceText = `${diff >= 0 ? '+' : ''}$${diff.toFixed(2)}`;
+                  distancePctText = `(${diffPct >= 0 ? '+' : ''}${diffPct.toFixed(2)}%)`;
+                  isFavorable = isLong ? diff <= 0 : diff >= 0;
+                }
+
+                // Elapsed time calculation
+                let elapsedMinutes = 0;
+                if (order.deployedAt) {
+                  elapsedMinutes = Math.max(
+                    0,
+                    Math.round((Date.now() - new Date(order.deployedAt).getTime()) / 60000)
+                  );
+                }
+
+                const modeBadge =
+                  order.targetMode === 'LIVE_BINANCE' ? '🚨 LIVE BINANCE' : '🧪 PAPER TRADING';
+
+                return (
+                  <div
+                    key={order.id}
+                    onMouseEnter={() => setHoveredId(order.id)}
+                    onMouseLeave={() => setHoveredId((prev) => (prev === order.id ? null : prev))}
+                    onClick={() => setSelectedId((prev) => (prev === order.id ? null : order.id))}
+                    className={`relative p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
+                      isSelected
+                        ? 'bg-slate-900/90 border-sky-500/80 shadow-lg shadow-sky-500/10 ring-1 ring-sky-500/30'
+                        : isHovered
+                        ? 'bg-slate-900/80 border-slate-600'
+                        : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    {/* Top Row: Direction, Symbol, Mode, Resting Badge */}
+                    <div className="flex items-start justify-between gap-1.5 mb-2.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-black tracking-wider uppercase flex items-center gap-1 ${
+                            isLong
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                          }`}
+                        >
+                          {isLong ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                          {order.direction}
+                        </span>
+                        <span className="text-xs font-mono font-bold text-slate-200">
+                          {order.symbol}
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.5 text-[8.5px] font-mono font-bold rounded border ${
+                            order.targetMode === 'LIVE_BINANCE'
+                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                              : 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                          }`}
+                        >
+                          {modeBadge}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-[9px] font-mono font-bold text-amber-300">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                        <span>WAITING RETEST</span>
+                      </div>
+                    </div>
+
+                    {/* Metrics Grid (2x2 Compact) */}
+                    <div className="grid grid-cols-2 gap-1.5 my-1 text-xs font-mono">
+                      {/* Resting Limit Price */}
+                      <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800/70">
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                          <Crosshair className="w-2.5 h-2.5 text-amber-400" /> Resting Limit
+                        </div>
+                        <div className="text-xs font-bold text-amber-300 mt-0.5">
+                          ${order.entryPrice.toFixed(2)}
+                        </div>
+                        <div className="text-[8.5px] text-slate-500">
+                          Persistent Net on Canvas
+                        </div>
+                      </div>
+
+                      {/* Distance to Fill */}
+                      <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800/70">
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5 text-sky-400" /> Distance to Fill
+                        </div>
+                        <div className={`text-xs font-bold mt-0.5 ${isFavorable ? 'text-emerald-400' : 'text-slate-300'}`}>
+                          {distanceText} <span className="text-[9px] font-normal">{distancePctText}</span>
+                        </div>
+                        <div className="text-[8.5px] text-slate-500">
+                          Live: ${livePrice ? livePrice.toFixed(2) : '---'}
+                        </div>
+                      </div>
+
+                      {/* Invalidation (SL) */}
+                      <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800/70">
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                          <Shield className="w-2.5 h-2.5 text-rose-400" /> Invalidation (SL)
+                        </div>
+                        <div className="text-xs font-bold text-rose-300 mt-0.5">
+                          ${order.stopLoss.toFixed(2)}
+                        </div>
+                        <div className="text-[8.5px] text-slate-500">
+                          Δ ${(Math.abs(order.entryPrice - order.stopLoss)).toFixed(2)}
+                        </div>
+                      </div>
+
+                      {/* Targets & R:R */}
+                      <div className="p-2 rounded-lg bg-slate-950/60 border border-slate-800/70">
+                        <div className="text-[9px] uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                          <Target className="w-2.5 h-2.5 text-emerald-400" /> Targets & R:R
+                        </div>
+                        <div className="text-xs font-bold text-emerald-300 mt-0.5">
+                          TP1: ${order.target1.toFixed(2)}
+                        </div>
+                        <div className="text-[8.5px] text-slate-400">
+                          {order.target2 ? `TP2: $${order.target2.toFixed(1)} • ` : ''}
+                          <span className="text-amber-400 font-bold">{order.riskRewardRatio ? `${order.riskRewardRatio}R` : '---'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* TTL & Retest Telemetry */}
+                    <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono py-1.5 px-1">
+                      <span className="flex items-center gap-1">
+                        <Activity className="w-2.5 h-2.5 text-sky-400" />
+                        <span>Elapsed: {elapsedMinutes}m / ~240m (48-bar TTL)</span>
+                      </span>
+                      <span>Order #{order.id}</span>
+                    </div>
+
+                    {/* Cancel Action Button */}
+                    <div className="mt-2 pt-2 border-t border-slate-800/80">
+                      <button
+                        onClick={(e) => handleCancelRestingOrder(e, order.id)}
+                        disabled={isCancelling}
+                        className="w-full py-1.5 px-3 bg-rose-500/20 hover:bg-rose-500/30 active:bg-rose-500/40 text-rose-300 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 cursor-pointer border border-rose-500/40 shadow-sm"
+                      >
+                        <Ban className="w-3.5 h-3.5 text-rose-400" />
+                        {isCancelling ? 'Aborting Resting Order...' : '🚫 Cancel Resting Order'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </>
         )}
       </div>
 
@@ -462,7 +752,7 @@ export default function CopilotStagingDeckModal({
       <div className="px-4 py-2.5 border-t border-slate-800/80 bg-slate-950/80 flex items-center justify-between text-[11px] text-slate-400 shrink-0">
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-[10px]">Override Authorized (Bypasses Deadzone)</span>
+          <span className="text-[10px]">Override Authorized (48-Bar Extended TTL)</span>
         </div>
         <button
           onClick={onClose}

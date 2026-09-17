@@ -1,8 +1,84 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.87
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.89
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-18 (V17.87 — Staging Deck Infinite Loop Eradication & Directional Geometry Physics Engine)
+> **Last Updated:** 2026-09-18 (V17.89 — Resting Rehydration Parity, Staged ID Traceability, Preemption Matching & Multi-Badge Canvas)
+
+## 🆕 V17.89 Changelog — Resting Rehydration Parity, Staged ID Traceability, Preemption Matching & Multi-Badge Canvas (2026-09-18)
+
+### Summary
+1. **Headless Daemon Boot Rehydration Parity (`scripts/headless-daemon.ts`):**
+   - Corrected daemon startup rehydration to call `engine.rehydratePositionsDirect` with `status: 'PENDING_LIMIT_ENTRY'` rather than `engine.rehydrateOpenPositions`, which strictly dropped non-`OPEN` trades.
+   - Fully restored resting limit orders from `user_staged_setups` into `engine.pendingLimitOrders` with 48-bar TTL, preserving staged ID metadata and allowing live tick matching on restart.
+2. **Staged ID Traceability & Lifecycle Parity (`scripts/headless-daemon.ts`, `src/lib/daemon/sparkIngestionDispatcher.ts`):**
+   - Propagated `stagedId` from `EXECUTE_STAGED` into `sparkDispatcher.promoteStandbyToMode` and `sparkDispatcher.processDecision`.
+   - Assigned `(submitRes.position as any).stagedId = options.stagedId`, ensuring `LIMIT_ORDER_CANCELLED` and `ORDER_FILLED` daemon events reliably locate and update the staging store record (`markSetupFilled`, `expireRestingLimit`, `cancelRestingLimit`).
+   - Fixed `EXECUTE_STAGED` fallback mock record property mappings (`entryPrice`, `stopLoss`, `target1`, `target2`) when direct decision record is unlinked.
+3. **Multi-Format Preemption & Cancellation Matching (`src/lib/quantEngine/AutomatedStrategyExecutionEngine.ts`, `scripts/headless-daemon.ts`):**
+   - Enhanced `cancelPendingLimitOrder` findIndex predicate to match by exact ID, database trade ID, numerical `stagedId`, stringified `stagedId`, and `staged_${id}` prefix.
+   - Added fallback staged lookup in `scripts/headless-daemon.ts` when handling `CANCEL_PENDING` / `CANCEL_LIMIT` commands, ensuring manual operator cancellations immediately purge orders from memory.
+4. **Persistent Multi-Badge Canvas & Instant UI Re-Sync (`src/components/Chart.tsx`, `src/components/modals/CopilotStagingDeckModal.tsx`, `src/app/page.tsx`, `src/components/LiveBinanceJournal.tsx`):**
+   - Added dedicated SVG badges for Stop Loss (`🔴 SL: $XXXX.XX`) and Target 1 (`🟢 TP1: $XXXX.XX`) alongside the yellow resting limit entry badge on `Chart.tsx`.
+   - Added `onCancelSuccess` callback to `CopilotStagingDeckModal` triggering immediate parent refresh in `page.tsx`, instantly erasing cancelled resting lines from the chart canvas.
+   - Implemented background tab visibility checking (`document.hidden` / `visibilitychange`) across `page.tsx`, `CopilotStagingDeckModal.tsx`, and `LiveBinanceJournal.tsx` to throttle idle background requests.
+   - Hardened `userStagedSetupsStore.ts` with `SELECT 1 as test` connectivity probe to prevent empty table results from spuriously falling back to stale JSON records.
+5. **Verification & Parity Record:**
+   - `scripts/test_geometry_and_staging.ts`: 43/43 tests passed (100% success).
+   - `scripts/test_copilot_staging_deck.ts`: 9/9 test suites passed (100% success across pinning, listing, safety gate, RESTING_LIMIT transitions, daemon command serialization, dismissal, startup rehydration, and cancellation matching).
+   - `npx tsc --noEmit`: 0 errors.
+   - `npm run build`: 31/31 routes compiled in 6.8s.
+
+---
+
+## 🆕 V17.88 Changelog — Dual-State Staging Lifecycle, Rest-Limit Canvas Visualization, Network Polling Hygiene & Crash Recovery (2026-09-18)
+
+### Summary
+1. **Workstream A: Throttled Polling Hygiene & Network Saturation Eradication (`CopilotStagingDeckModal.tsx`, `src/app/page.tsx`):**
+   - **Throttled Polling Cadence:** Replaced unthrottled rapid re-fetching with 15-second background polling cadence guarded by `isFetchingRef` and `abortControllerRef`.
+   - **Unified Multi-Status Polling:** Updated cockpit header and staging drawer to poll `/api/staged-setups?status=ACTIVE`, retrieving both `PINNED` and `RESTING_LIMIT` setups in a single request with structured breakdown counts (`counts: { pinned, resting }`).
+   - **Event-Driven Lifecycle Updates:** Drawer and header state instantly refresh upon manual deployment, cancellation, or unpinning without waiting for timer ticks, completely eliminating `ERR_INSUFFICIENT_RESOURCES`.
+
+2. **Workstream B: Directional Price Geometry Physics & Monotonic Milestones (`src/lib/staging/userStagedSetupsStore.ts`):**
+   - **Strict Directional Coordinate Invariants:**
+     - LONG: $\text{Stop Loss} < \text{Entry Price}$ and $\text{TP1} > \text{Entry Price}$.
+     - SHORT: $\text{Stop Loss} > \text{Entry Price}$ and $\text{TP1} < \text{Entry Price}$.
+     - Auto-corrects mislabeled direction when coordinate physics is unambiguous, and rejects corrupt configurations where SL and TP reside on the same side of Entry.
+   - **Monotonic Milestone Ladder Sorting:** Automatically sorts targets away from entry (ascending for LONG: $TP_1 < TP_2 < TP_3$; descending for SHORT: $TP_1 > TP_2 > TP_3$) and prunes invalid targets that breach entry boundaries.
+
+3. **Workstream C: Dual-State Staging Lifecycle Partition & Operator Cancellation (`CopilotStagingDeckModal.tsx`, `src/lib/staging/userStagedSetupsStore.ts`, `src/app/api/staged-setups/route.ts`, `src/components/LiveBinanceJournal.tsx`):**
+   - **Staging Lifecycle FSM:** Expanded `StagedSetupStatus` to `'PINNED' | 'RESTING_LIMIT' | 'FILLED' | 'CANCELLED' | 'EXPIRED' | 'DISMISSED' | 'DEPLOYED'`.
+   - **Dual-Partition Drawer UI:** Split `CopilotStagingDeckModal` into two distinct tabs:
+     - **📌 Pinned Backlog:** Candidate setups ready for inspection, tuning, and manual dispatch.
+     - **⏳ Active Resting:** Dispatched limits currently waiting in the order book or engine with real-time distance-to-fill ($\Delta$ and %), elapsed minutes vs 48-bar (4h) TTL, and target mode badges.
+   - **Operator Preemption & Cancel Action:** Added `[ 🚫 Cancel Resting Order ]` button in both the Staging Deck and `/journal` (`LiveBinanceJournal.tsx`). Queues `CANCEL_PENDING` / `CANCEL_LIMIT` commands into `run_logs/daemon_commands.json`, marks setups `CANCELLED` in store, and triggers immediate Telegram telemetry.
+
+4. **Workstream D: Persistent Canvas Limit Projections & Headless Daemon Crash Recovery (`src/components/Chart.tsx`, `scripts/headless-daemon.ts`, `src/app/api/binance/live-state/route.ts`):**
+   - **Persistent SVG Canvas Projections:** Added `restingLimitOrders` prop to `Chart.tsx`. Renders amber dashed horizontal lines with badge `🟡 PENDING LIMIT (DIRECTION): $XXXX.XX [MODE]` along with stop-loss and take-profit milestones directly on the chart canvas until filled or cancelled.
+   - **Headless Daemon Boot Rehydration:** Added startup phase `6.1c` in `scripts/headless-daemon.ts` that checks `userStagedSetupsStore.getRestingLimitSetups()`. Automatically expires setups that exceeded the 48-bar TTL window and rehydrates active orders into memory.
+   - **Live State Bridge:** Merged `RESTING_LIMIT` setups into `/api/binance/live-state` `openOrders` payload, providing seamless parity between shadow simulation and live VPS environments.
+
+5. **Automated Verification Suite:**
+   - `scripts/test_geometry_and_staging.ts`: 43/43 tests passed (100% assertions passed) covering geometry auto-correction, monotonic milestone sorting, and resting limit status lifecycles.
+   - `scripts/test_copilot_staging_deck.ts`: 7/7 tests passed (100% assertions passed) covering pinning, listing, safety gate, RESTING_LIMIT transitions, daemon command serialization, and cancellation.
+   - `npx tsc --noEmit`: 0 errors.
+   - `npm run build`: 31/31 routes compiled successfully.
+
+### Files Modified
+- **`src/types/stagedSetupTypes.ts`** [MODIFY]
+- **`src/lib/staging/userStagedSetupsStore.ts`** [MODIFY]
+- **`src/app/api/staged-setups/route.ts`** [MODIFY]
+- **`src/app/api/daemon/execute-staged/route.ts`** [MODIFY]
+- **`src/app/api/binance/live-state/route.ts`** [MODIFY]
+- **`src/components/modals/CopilotStagingDeckModal.tsx`** [MODIFY]
+- **`src/app/page.tsx`** [MODIFY]
+- **`src/components/Chart.tsx`** [MODIFY]
+- **`src/components/LiveBinanceJournal.tsx`** [MODIFY]
+- **`scripts/headless-daemon.ts`** [MODIFY]
+- **`scripts/test_copilot_staging_deck.ts`** [MODIFY]
+- **`scripts/test_geometry_and_staging.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.87 Changelog — Staging Deck Infinite Loop Eradication & Directional Geometry Physics Engine (2026-09-18)
 

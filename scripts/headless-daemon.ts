@@ -38,6 +38,7 @@ import { GlobalRiskGovernor } from '../src/lib/risk/GlobalRiskGovernor';
 import { sql } from '../src/lib/postgres';
 import { SYSTEM_VERSION } from '../src/lib/version';
 import { ensureAgentDecisionTableInitialized } from '../src/lib/agentEngineHandlers';
+import { userStagedSetupsStore } from '../src/lib/staging/userStagedSetupsStore';
 
 // Parse CLI Arguments
 const args = process.argv.slice(2);
@@ -273,6 +274,15 @@ async function main() {
       case 'LIMIT_ORDER_CANCELLED':
         console.log(`\n⌛ [${now}] [LIMIT_ORDER_CANCELLED] ${event.message}`);
         if (pos) {
+          // If this was a staged limit order, update the staging store
+          if ((pos as any).stagedId) {
+            const isExpired = event.message.includes('EXPIRED') || event.message.includes('expired');
+            if (isExpired) {
+              userStagedSetupsStore.expireRestingLimit((pos as any).stagedId, event.message).catch(() => {});
+            } else {
+              userStagedSetupsStore.cancelRestingLimit((pos as any).stagedId, event.message).catch(() => {});
+            }
+          }
           // Cancel order on Binance order book only for LIVE_BINANCE
           if (pos.executionMode === 'LIVE_BINANCE') {
             routeLimitOrderCancellation(pos, event.message).catch((err) => {
@@ -289,6 +299,10 @@ async function main() {
           console.log(
             `   ➔ Direction: ${pos.direction} | Fill Price: $${pos.entryPrice.toFixed(2)} | Size: ${pos.contractSize} contracts ($${pos.riskUsd.toFixed(2)} Risk)`
           );
+          // If this was a staged limit order, mark it FILLED in the staging store
+          if ((pos as any).stagedId) {
+            userStagedSetupsStore.markSetupFilled((pos as any).stagedId, pos).catch(() => {});
+          }
           // Arm native exchange Stop Loss and Stage 1 TP limit orders on Binance only for LIVE_BINANCE
           if (pos.executionMode === 'LIVE_BINANCE') {
             routeOrderFilledBracket(pos).catch((err) => {
@@ -481,6 +495,97 @@ async function main() {
   });
   headlessScheduler.start();
 
+  // 6.1c. Recover and re-hydrate persistent resting staged setups on startup
+  try {
+    userStagedSetupsStore.listStagedSetups('RESTING_LIMIT').then((restingSetups) => {
+      if (restingSetups.length > 0) {
+        console.log(`[DAEMON] 🔄 Found ${restingSetups.length} resting limit order(s) in staging store. Re-hydrating...`);
+        const now = Date.now();
+        const maxTtlMs = 48 * 5 * 60 * 1000; // 48 5m bars = 4 hours
+        for (const setup of restingSetups) {
+          const deployedTime = setup.deployedAt ? new Date(setup.deployedAt).getTime() : now;
+          const isExpired = (now - deployedTime) >= maxTtlMs;
+          if (isExpired) {
+            console.log(`[DAEMON] ⌛ Resting staged setup #${setup.id} expired during downtime. Marking EXPIRED.`);
+            userStagedSetupsStore.expireRestingLimit(setup.id, 'DAEMON_STARTUP_TTL_EXPIRED').catch(() => {});
+          } else {
+            console.log(`[DAEMON] 📥 Re-hydrating resting ${setup.direction} limit @ $${setup.entryPrice.toFixed(2)} (Staged #${setup.id})`);
+            engine.rehydratePositionsDirect([{
+              id: `staged_${setup.id}`,
+              dbTradeId: null,
+              strategyId: 'COCKPIT_STAGED_LIMIT',
+              strategyName: 'Cockpit Staged Limit Order',
+              symbol: setup.symbol,
+              timeframe: '5m',
+              direction: setup.direction,
+              status: 'PENDING_LIMIT_ENTRY',
+
+              limitEntryPrice: setup.entryPrice,
+              entryPrice: setup.entryPrice,
+              initialStopLoss: setup.stopLoss,
+              activeStopLoss: setup.stopLoss,
+              activeRatchetFloor: null,
+              trailingSlSource: 'INITIAL',
+
+              stage1Target: setup.target1,
+              stage2Target: setup.target2 || setup.target1,
+              stage3Target: setup.target3 || setup.target2 || setup.target1,
+              dynamicDolTarget: null,
+              fvgCeLevel: null,
+              stage1Ratio: 0.4,
+              stage2Ratio: 0.4,
+              stage3Ratio: 0.2,
+              stage1Multiple: 1.0,
+              stage2Multiple: 1.5,
+              stage3Multiple: 3.0,
+
+              riskUsd: setup.riskUsd || 100,
+              riskPerContract: Math.abs(setup.entryPrice - setup.stopLoss),
+              equityAtEntry: 10000,
+              riskPct: setup.riskPct || 1.0,
+              contractSize: setup.contractSize || 1,
+              allocatedAmount: 1.0,
+              remainingAllocation: 1.0,
+
+              realizedR: 0,
+              realizedUsd: 0,
+              unrealizedR: 0,
+              unrealizedUsd: 0,
+              mfeR: 0,
+              maeR: 0,
+
+              isStage1Filled: false,
+              isStage2Filled: false,
+              isStage3Filled: false,
+              stage1HitTime: null,
+              stage2HitTime: null,
+              stage3HitTime: null,
+
+              pendingTime: deployedTime,
+              openTime: null,
+              closeTime: null,
+              exitPrice: null,
+              exitReason: null,
+
+              setupId: `staged_${setup.id}`,
+              anchorName: `Staged #${setup.id}`,
+              originAnchorLevel: setup.entryPrice,
+              originZoneId: `staged_${setup.id}`,
+              executionMode: (setup.targetMode as any) || 'PAPER_TRADING',
+              maxRetestBars: 48,
+              stage1BarTime: null,
+              ratchetEffectiveTime: null,
+              stagedId: setup.id,
+              decisionId: setup.decisionLogId,
+            } as any]);
+          }
+        }
+      }
+    }).catch((err) => console.warn('[DAEMON] Could not rehydrate staged resting orders:', err));
+  } catch (err) {
+    console.warn('[DAEMON] Error during resting order rehydration:', err);
+  }
+
   let tickCount = 0;
   let lastPriceLogTime = 0;
   let currentMacroContext = bootstrapData.macroContext;
@@ -571,6 +676,7 @@ async function main() {
                   .promoteStandbyToMode(decisionId, targetMode, {
                     bypassDeadZone: true,
                     executionSource: 'COCKPIT_MANUAL_OVERRIDE',
+                    stagedId: stagedId ? Number(stagedId) : undefined,
                   })
                   .then((res: any) => {
                     console.log(
@@ -580,15 +686,19 @@ async function main() {
                   })
                   .catch((err: any) => console.error('[DAEMON] EXECUTE_STAGED error:', err));
               } else if (stagedSetup) {
+                const entryVal = Number(stagedSetup.entryPrice ?? stagedSetup.limit_entry_price ?? 0);
+                const slVal = Number(stagedSetup.stopLoss ?? stagedSetup.stop_loss ?? stagedSetup.invalidation_level ?? 0);
+                const tp1Val = Number(stagedSetup.target1 ?? stagedSetup.take_profit_1 ?? stagedSetup.target_1 ?? 0);
+                const tp2Val = stagedSetup.target2 ?? stagedSetup.take_profit_2 ?? stagedSetup.target_2;
                 const mockRecord = {
                   id: Date.now(),
-                  symbol: stagedSetup.symbol,
-                  agent_id: stagedSetup.agent_id || 'COCKPIT_OPERATOR',
-                  bias_signal: stagedSetup.direction === 'LONG' ? 'CONFIRMED_BULLISH' : 'CONFIRMED_BEARISH',
-                  limit_entry_price: stagedSetup.limit_entry_price,
-                  invalidation_level: stagedSetup.stop_loss,
-                  target_1: stagedSetup.take_profit_1,
-                  target_2: stagedSetup.take_profit_2,
+                  symbol: stagedSetup.symbol || 'ETHUSDC',
+                  agent_id: stagedSetup.agent_id || stagedSetup.sourceReference || 'COCKPIT_OPERATOR',
+                  bias_signal: (stagedSetup.direction === 'LONG' ? 'CONFIRMED_BULLISH' : 'CONFIRMED_BEARISH') as any,
+                  limit_entry_price: entryVal,
+                  invalidation_level: slVal,
+                  target_1: tp1Val,
+                  target_2: tp2Val ? Number(tp2Val) : null,
                   execution_mode: targetMode,
                   status: 'ARMED',
                   narrative: `[COCKPIT_MANUAL_OVERRIDE: Staged #${stagedId}]`,
@@ -598,6 +708,7 @@ async function main() {
                     modeOverride: targetMode,
                     bypassDeadZone: true,
                     executionSource: 'COCKPIT_MANUAL_OVERRIDE',
+                    stagedId: stagedId ? Number(stagedId) : undefined,
                   })
                   .then((res: any) => {
                     console.log(`[DAEMON] 🎯 EXECUTE_STAGED direct mock record -> ${targetMode}:`, res?.status);
@@ -616,6 +727,34 @@ async function main() {
               cmd.status = 'PROCESSED';
               mutated = true;
             }
+          } else if (cmd.action === 'CANCEL_PENDING' || (cmd.action as string) === 'CANCEL_LIMIT') {
+            const posId = cmd.positionId;
+            const stagedId = cmd.metadata?.stagedId
+              ? Number(cmd.metadata.stagedId)
+              : (posId && String(posId).startsWith('staged_') ? Number(String(posId).replace('staged_', '')) : undefined);
+            const cancelReason = cmd.metadata?.reason || 'OPERATOR_CANCELLED';
+            console.log(`[DAEMON] 🚫 CANCEL_PENDING command received (Pos: ${posId || 'N/A'}, Staged: ${stagedId || 'N/A'})`);
+            if (stagedId) {
+              userStagedSetupsStore.cancelRestingLimit(stagedId, cancelReason).catch(() => {});
+            }
+            let cancelled = false;
+            if (posId) {
+              cancelled = engine.cancelPendingLimitOrder(posId, cancelReason);
+            }
+            if (!cancelled && stagedId) {
+              const pending = engine.getPendingLimitOrders().find(
+                (p: any) => p.stagedId === stagedId || p.id === `staged_${stagedId}`
+              );
+              if (pending) {
+                engine.cancelPendingLimitOrder(pending.id, cancelReason);
+                cancelled = true;
+              }
+            }
+            if (!cancelled && !posId && !stagedId) {
+              engine.cancelAllPendingLimitOrders();
+            }
+            cmd.status = 'PROCESSED';
+            mutated = true;
           }
         }
       }
