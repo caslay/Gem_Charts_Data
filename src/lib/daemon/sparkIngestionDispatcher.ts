@@ -843,9 +843,10 @@ export class SparkIngestionDispatcher {
    */
   public async promoteStandbyToMode(
     decisionId: number,
-    targetMode: 'PAPER_TRADING' | 'LIVE_BINANCE'
+    targetMode: 'PAPER_TRADING' | 'LIVE_BINANCE',
+    options?: { bypassDeadZone?: boolean; executionSource?: string }
   ): Promise<{ success: boolean; message: string; position?: any; entryPrice?: number }> {
-    console.log(`[SPARK_DISPATCHER] 🚀 Promoting decision #${decisionId} to ${targetMode}...`);
+    console.log(`[SPARK_DISPATCHER] 🚀 Promoting decision #${decisionId} to ${targetMode}... (Source: ${options?.executionSource || 'STANDARD'})`);
     try {
       // 0. Ensure schema self-healing is active
       await ensureAgentDecisionTableInitialized();
@@ -945,7 +946,11 @@ export class SparkIngestionDispatcher {
       // 5. Trigger immediate processing of this decision with modeOverride
       record.execution_mode = targetMode;
       record.status = 'ARMED';
-      const result = await this.processDecision(record, undefined, { modeOverride: targetMode });
+      const result = await this.processDecision(record, undefined, {
+        modeOverride: targetMode,
+        bypassDeadZone: options?.bypassDeadZone,
+        executionSource: options?.executionSource,
+      });
       const resolvedEntry =
         result.position?.limitEntryPrice ??
         result.position?.entryPrice ??
@@ -1312,7 +1317,12 @@ export class SparkIngestionDispatcher {
   public async processDecision(
     record: any,
     livePriceOverride?: number,
-    options?: { stageOnly?: boolean; modeOverride?: TriStateExecutionMode }
+    options?: {
+      stageOnly?: boolean;
+      modeOverride?: TriStateExecutionMode;
+      bypassDeadZone?: boolean;
+      executionSource?: string;
+    }
   ): Promise<ProcessDecisionResult> {
     const id = Number(record.id);
 
@@ -1365,8 +1375,10 @@ export class SparkIngestionDispatcher {
     }
 
     // 3.4 Dead Zone Silence Engine: Hard-lock all intent broadcasts & live executions during toxic windows
+    const isManualOverride =
+      options?.executionSource === 'COCKPIT_MANUAL_OVERRIDE' || options?.bypassDeadZone === true;
     const deadZoneEvaluation = isDeadZone(Date.now());
-    if (deadZoneEvaluation.isDead) {
+    if (deadZoneEvaluation.isDead && !isManualOverride) {
       const msg = `[DEADZONE_GATE] Ingestion paused during ${deadZoneEvaluation.reason}. Standing down decision #${id}.`;
       console.log(`[SPARK_DISPATCHER] ⚪ ${msg}`);
       try {
@@ -1945,12 +1957,12 @@ export class SparkIngestionDispatcher {
         originZoneId: `spark_zone_${id}`,
         originAnchorLevel: (parsed.direction === 'LONG' ? parsed.entryRangeLow : parsed.entryRangeHigh) ?? undefined,
         executionMode: 'PAPER_TRADING',
-        maxRetestBars: 12,
+        maxRetestBars: isManualOverride ? 48 : 12,
         bypassWeekendFilter: true,
       });
 
       if (submitRes.success) {
-        console.log(`[SPARK_DISPATCHER] 🧪 Decision #${id} queued in PAPER_TRADING simulator (12-bar TTL)!`);
+        console.log(`[SPARK_DISPATCHER] 🧪 Decision #${id} queued in PAPER_TRADING simulator (${isManualOverride ? 48 : 12}-bar TTL)!`);
         this.ledger?.logEvent('SPARK_DECISION_PAPER_QUEUED', `Decision #${id} queued in Paper Trading Simulator`, {
           livePrice: livePrice ?? undefined,
           position: submitRes.position,
@@ -2063,7 +2075,7 @@ export class SparkIngestionDispatcher {
         originZoneId: `spark_zone_${id}`,
         originAnchorLevel: (parsed.direction === 'LONG' ? parsed.entryRangeLow : parsed.entryRangeHigh) ?? undefined,
         executionMode: 'LIVE_BINANCE',
-        maxRetestBars: 12,
+        maxRetestBars: isManualOverride ? 48 : 12,
         bypassWeekendFilter: true,
       });
 
