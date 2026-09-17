@@ -1,4 +1,4 @@
-﻿import * as fs from 'fs';
+import * as fs from 'fs';
 import * as path from 'path';
 
 // Automatically load .env.local if present
@@ -26,6 +26,11 @@ async function main() {
   console.log('🔍 Testing PostgreSQL Database Connection via SSH Tunnel (127.0.0.1:5433)...');
   try {
     const res = await sql.query('SELECT NOW() as server_time, COUNT(*)::int as total_trades FROM trades;');
+    if (!res.rows || res.rows.length === 0) {
+      console.warn('⚠️ [POSTGRES] Database is offline or SSH tunnel (127.0.0.1:5433) is not active.');
+      console.warn('💡 TIP: Run `npm run tunnel:db` in another terminal to establish the live link.');
+      process.exit(0);
+    }
     console.log('✅ PostgreSQL Database Tunnel Connected Successfully!');
     console.log(`   🕒 Server Time: ${res.rows[0].server_time}`);
     console.log(`   📊 Total Recorded Trades: ${res.rows[0].total_trades}`);

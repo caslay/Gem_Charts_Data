@@ -1016,6 +1016,7 @@ export default function Chart({
     srOverlay?.entryPrice,
     srOverlay?.stopLoss,
     srOverlay?.target1,
+    srOverlay?.trailingSlSource,
     data?.length,
     updateSvgCoordinates
   ]);
@@ -2035,72 +2036,61 @@ export default function Chart({
               {isPositionOpen && (
                 <>
                   {/* Stop Loss Line & Label (Dynamic Multi-Stage Trailing Color & Label) */}
-                  {srOverlay.stopLoss > 0 && (
-                    <>
-                      <line
-                        id="svg-sr-line-sl"
-                        x1="0"
-                        x2="100%"
-                        y1="-1000"
-                        y2="-1000"
-                        stroke={
-                          srOverlay.isStage2Filled
-                            ? '#34d399'
-                            : srOverlay.isStage1Filled
-                            ? '#facc15'
-                            : '#f43f5e'
-                        }
-                        strokeDasharray="4 2"
-                        strokeWidth="1.5"
-                      />
-                      <g id="svg-sr-label-sl" transform="translate(10, -1000)">
-                        <rect
-                          x="5"
-                          y="-9"
-                          width={srOverlay.isStage2Filled ? 220 : srOverlay.isStage1Filled ? 215 : 200}
-                          height="18"
-                          fill={
-                            srOverlay.isStage2Filled
-                              ? '#02140f'
-                              : srOverlay.isStage1Filled
-                              ? '#281c03'
-                              : '#2c0b0e'
-                          }
-                          rx="3"
-                          stroke={
-                            srOverlay.isStage2Filled
-                              ? '#34d399'
-                              : srOverlay.isStage1Filled
-                              ? '#facc15'
-                              : '#f43f5e'
-                          }
-                          strokeWidth="1"
+                  {srOverlay.stopLoss > 0 && (() => {
+                    const isFloorLocked = srOverlay.isStage2Filled || srOverlay.trailingSlSource === 'PROFIT_RATCHET_FLOOR';
+                    const isBeRatchet =
+                      srOverlay.isStage1Filled ||
+                      srOverlay.trailingSlSource === 'BREAKEVEN' ||
+                      srOverlay.trailingSlSource === 'FVG_CE' ||
+                      (srOverlay.type === 'BULLISH' ? srOverlay.stopLoss >= srOverlay.entryPrice : srOverlay.stopLoss <= srOverlay.entryPrice);
+                    const slColor = isFloorLocked ? '#34d399' : isBeRatchet ? '#facc15' : '#f43f5e';
+                    const slBg = isFloorLocked ? '#02140f' : isBeRatchet ? '#281c03' : '#2c0b0e';
+                    const slBadgeText = isFloorLocked
+                      ? '(+1.0R FLOOR)'
+                      : srOverlay.isStage1Filled
+                      ? '(FVG CE / BE)'
+                      : isBeRatchet
+                      ? '(BREAKEVEN)'
+                      : '(-1.0R HARD)';
+                    const badgeWidth = isFloorLocked ? 220 : isBeRatchet ? 215 : 200;
+
+                    return (
+                      <>
+                        <line
+                          id="svg-sr-line-sl"
+                          x1="0"
+                          x2="100%"
+                          y1="-1000"
+                          y2="-1000"
+                          stroke={slColor}
+                          strokeDasharray="4 2"
+                          strokeWidth="1.5"
                         />
-                        <text
-                          x="12"
-                          y="4"
-                          fill={
-                            srOverlay.isStage2Filled
-                              ? '#34d399'
-                              : srOverlay.isStage1Filled
-                              ? '#facc15'
-                              : '#f43f5e'
-                          }
-                          fontSize="9.5"
-                          fontFamily="monospace"
-                          fontWeight="bold"
-                        >
-                          {`🛑 S&R SL: $${srOverlay.stopLoss.toFixed(2)} ${
-                            srOverlay.isStage2Filled
-                              ? '(+1.0R FLOOR)'
-                              : srOverlay.isStage1Filled
-                              ? '(FVG CE / BE)'
-                              : '(-1.0R HARD)'
-                          }`}
-                        </text>
-                      </g>
-                    </>
-                  )}
+                        <g id="svg-sr-label-sl" transform="translate(10, -1000)">
+                          <rect
+                            x="5"
+                            y="-9"
+                            width={badgeWidth}
+                            height="18"
+                            fill={slBg}
+                            rx="3"
+                            stroke={slColor}
+                            strokeWidth="1"
+                          />
+                          <text
+                            x="12"
+                            y="4"
+                            fill={slColor}
+                            fontSize="9.5"
+                            fontFamily="monospace"
+                            fontWeight="bold"
+                          >
+                            {`🛑 S&R SL: $${srOverlay.stopLoss.toFixed(2)} ${slBadgeText}`}
+                          </text>
+                        </g>
+                      </>
+                    );
+                  })()}
 
                   {/* Stage 1 Target (50% @ 1.0R) - Unmounts when Stage 1 is Filled */}
                   {srOverlay.target1 > 0 && !srOverlay.isStage1Filled && (

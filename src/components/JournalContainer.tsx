@@ -50,7 +50,7 @@ export function JournalContainer({ initialTrades, initialAccount }: JournalConta
       {activeView === "live" ? (
         <LiveBinanceJournal />
       ) : (
-        <JournalTable initialTrades={initialTrades} initialAccount={initialAccount} />
+        <JournalTable initialTrades={initialTrades} initialAccount={initialAccount} mode="paper" />
       )}
     </div>
   );

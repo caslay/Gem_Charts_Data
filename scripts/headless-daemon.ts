@@ -297,8 +297,46 @@ async function main() {
           } else {
             console.log(`[DAEMON] 🧪 Bracket orders active in ${pos.executionMode || 'PAPER_TRADING'} mode (in-daemon simulation).`);
           }
+
+          // Persist in-flight position to PostgreSQL so journal dashboard immediately reflects active trade
+          const finalExecutionMode = pos.executionMode || (process.env.IS_LIVE_VPS === 'true' ? 'LIVE_BINANCE' : 'PAPER_TRADING');
+          sql`
+            INSERT INTO trades (
+              trade_id, symbol, direction, entry_price, stop_loss,
+              take_profit_1, take_profit_2, status, realized_pnl, realized_r,
+              entry_time, metadata, binance_order_id, binance_client_order_id,
+              execution_mode, anchor_name
+            )
+            VALUES (
+              ${pos.id}, ${pos.symbol}, ${pos.direction}, ${pos.entryPrice},
+              ${pos.initialStopLoss}, ${pos.stage1Target}, ${pos.stage2Target},
+              'OPEN', 0, 0,
+              ${new Date(pos.openTime || Date.now())},
+              ${JSON.stringify({ riskUsd: pos.riskUsd, contractSize: pos.contractSize, setupId: pos.setupId })},
+              ${pos.binanceOrderId || null}, ${pos.binanceClientOrderId || null},
+              ${finalExecutionMode},
+              ${pos.anchorName || null}
+            )
+            ON CONFLICT (trade_id) DO UPDATE SET
+              status = 'OPEN',
+              stop_loss = EXCLUDED.stop_loss;
+          `.catch((err) => console.warn('[DAEMON] DB open trade insert skipped (offline fallback):', err?.message || err));
         }
         ledger.logEvent('ORDER_FILLED', event.message, { position: pos });
+        break;
+
+      case 'EARLY_BREAKEVEN':
+        console.log(`\n🛡️ [${now}] [EARLY_BREAKEVEN] ${event.message}`);
+        if (pos) {
+          console.log(`   ➔ Stop Loss ratcheted to Breakeven ($${pos.activeStopLoss.toFixed(2)})`);
+          sql`
+            UPDATE trades
+            SET stop_loss = ${pos.activeStopLoss},
+                status = 'OPEN'
+            WHERE trade_id = ${pos.id};
+          `.catch((err) => console.warn('[DAEMON] DB trade BE update skipped (offline fallback):', err?.message || err));
+        }
+        ledger.logEvent('EARLY_BREAKEVEN', event.message, { position: pos });
         break;
 
       case 'STAGE_1_HARVEST':
@@ -311,6 +349,14 @@ async function main() {
               console.error('[ORDER_ROUTER_ERROR] Failed routing Stage 1 harvest update:', err);
             });
           }
+          sql`
+            UPDATE trades
+            SET stop_loss = ${pos.activeStopLoss},
+                status = 'STAGE_1_FILLED',
+                realized_r = ${pos.realizedR || 0},
+                realized_pnl = ${pos.realizedUsd || 0}
+            WHERE trade_id = ${pos.id};
+          `.catch((err) => console.warn('[DAEMON] DB trade Stage 1 update skipped (offline fallback):', err?.message || err));
         }
         ledger.logEvent('STAGE_1_HARVEST', event.message, { position: pos });
         break;
