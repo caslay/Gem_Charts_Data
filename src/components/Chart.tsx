@@ -17,6 +17,7 @@ import { useDrawings } from '@/hooks/useDrawings';
 import DrawingCanvasOverlay from './drawings/DrawingCanvasOverlay';
 import DrawingToolbar from './drawings/DrawingToolbar';
 import type { SweepReclaimOverlayData } from '@/hooks/useBacktestStrategyExecution';
+import type { StagedPreviewOverlayData } from '@/types/stagedSetupTypes';
 // Imports of detectActiveFVGs, mapAndConsolidateFVGs, and analyzeMarketStructure removed to prevent main-thread blocking calculations
 
 function findCandleByTime(candles: Candle[] | undefined, targetSec: number): Candle | undefined {
@@ -64,6 +65,7 @@ interface ChartProps {
   onUpdateTradeLevels?: (tradeId: string, tp: number | null, sl: number | null) => Promise<void>;
   symbol?: string;
   srOverlay?: SweepReclaimOverlayData | null;
+  stagedPreviewOverlay?: StagedPreviewOverlayData | null;
 }
 
 export default function Chart({
@@ -91,6 +93,7 @@ export default function Chart({
   onUpdateTradeLevels,
   symbol = 'ETHUSDC',
   srOverlay = null,
+  stagedPreviewOverlay = null,
 }: ChartProps) {
   const { theme } = useTheme();
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -847,6 +850,8 @@ export default function Chart({
   openTradesRef.current = openTrades;
   const srOverlayRef = useRef(srOverlay);
   srOverlayRef.current = srOverlay;
+  const stagedPreviewOverlayRef = useRef(stagedPreviewOverlay);
+  stagedPreviewOverlayRef.current = stagedPreviewOverlay;
 
   // Update SVG line and label coordinates directly in DOM styles to target 120 FPS
   const updateSvgCoordinates = useCallback(() => {
@@ -1002,9 +1007,56 @@ export default function Chart({
       hideLineAndLabel('tp2');
       hideLineAndLabel('tp3');
     }
+
+    // ── Update Copilot Staging Deck Preview DOM Lines & Labels ──
+    const currentStaged = stagedPreviewOverlayRef.current;
+    if (currentStaged) {
+      const updateStagedLineAndLabel = (idPrefix: string, price: number | null | undefined, xOffset = 250) => {
+        const lineEl = document.getElementById(`svg-staged-line-${idPrefix}`);
+        const labelEl = document.getElementById(`svg-staged-label-${idPrefix}`);
+        const y = price !== null && price !== undefined && price > 0 ? series.priceToCoordinate(price) : null;
+        if (lineEl) {
+          if (y !== null && !isNaN(y)) {
+            lineEl.setAttribute('y1', String(y));
+            lineEl.setAttribute('y2', String(y));
+          } else {
+            lineEl.setAttribute('y1', '-1000');
+            lineEl.setAttribute('y2', '-1000');
+          }
+        }
+        if (labelEl) {
+          if (y !== null && !isNaN(y)) {
+            labelEl.setAttribute('transform', `translate(${xOffset}, ${y})`);
+          } else {
+            labelEl.setAttribute('transform', `translate(${xOffset}, -1000)`);
+          }
+        }
+      };
+
+      updateStagedLineAndLabel('entry', currentStaged.entryPrice);
+      updateStagedLineAndLabel('sl', currentStaged.stopLoss);
+      updateStagedLineAndLabel('tp1', currentStaged.target1);
+      updateStagedLineAndLabel('tp2', currentStaged.target2);
+    } else {
+      const hideStaged = (idPrefix: string) => {
+        const lineEl = document.getElementById(`svg-staged-line-${idPrefix}`);
+        const labelEl = document.getElementById(`svg-staged-label-${idPrefix}`);
+        if (lineEl) {
+          lineEl.setAttribute('y1', '-1000');
+          lineEl.setAttribute('y2', '-1000');
+        }
+        if (labelEl) {
+          labelEl.setAttribute('transform', 'translate(10, -1000)');
+        }
+      };
+      hideStaged('entry');
+      hideStaged('sl');
+      hideStaged('tp1');
+      hideStaged('tp2');
+    }
   }, []);
 
-  // Sync coordinates when openTrades, srOverlay, or data changes
+  // Sync coordinates when openTrades, srOverlay, stagedPreviewOverlay, or data changes
   useEffect(() => {
     const timer = setTimeout(() => {
       updateSvgCoordinates();
@@ -1017,6 +1069,10 @@ export default function Chart({
     srOverlay?.stopLoss,
     srOverlay?.target1,
     srOverlay?.trailingSlSource,
+    stagedPreviewOverlay?.entryPrice,
+    stagedPreviewOverlay?.stopLoss,
+    stagedPreviewOverlay?.target1,
+    stagedPreviewOverlay?.target2,
     data?.length,
     updateSvgCoordinates
   ]);
@@ -2162,6 +2218,87 @@ export default function Chart({
             </g>
           );
         })()}
+
+        {/* Copilot Staging Deck Preview Overlay */}
+        {stagedPreviewOverlay && (
+          <g id="svg-staged-overlay-group">
+            {/* Staged Limit Entry Line & Badge */}
+            <line
+              id="svg-staged-line-entry"
+              x1="0"
+              x2="100%"
+              y1="-1000"
+              y2="-1000"
+              stroke="#f59e0b"
+              strokeDasharray="6 3"
+              strokeWidth="2"
+            />
+            <g id="svg-staged-label-entry" transform="translate(250, -1000)">
+              <rect x="5" y="-10" width="230" height="20" fill="#1e1b4b" rx="4" stroke="#f59e0b" strokeWidth="1.5" />
+              <text x="12" y="4" fill="#fbbf24" fontSize="10" fontFamily="monospace" fontWeight="bold">
+                {`📌 STAGED ENTRY (${stagedPreviewOverlay.direction}): $${stagedPreviewOverlay.entryPrice.toFixed(2)}`}
+              </text>
+            </g>
+
+            {/* Staged Stop Loss Line & Badge */}
+            <line
+              id="svg-staged-line-sl"
+              x1="0"
+              x2="100%"
+              y1="-1000"
+              y2="-1000"
+              stroke="#f43f5e"
+              strokeDasharray="4 2"
+              strokeWidth="2"
+            />
+            <g id="svg-staged-label-sl" transform="translate(250, -1000)">
+              <rect x="5" y="-10" width="190" height="20" fill="#2e101a" rx="4" stroke="#f43f5e" strokeWidth="1.5" />
+              <text x="12" y="4" fill="#fb7185" fontSize="10" fontFamily="monospace" fontWeight="bold">
+                {`📌 STAGED SL: $${stagedPreviewOverlay.stopLoss.toFixed(2)}`}
+              </text>
+            </g>
+
+            {/* Staged TP1 Line & Badge */}
+            <line
+              id="svg-staged-line-tp1"
+              x1="0"
+              x2="100%"
+              y1="-1000"
+              y2="-1000"
+              stroke="#10b981"
+              strokeDasharray="4 2"
+              strokeWidth="2"
+            />
+            <g id="svg-staged-label-tp1" transform="translate(250, -1000)">
+              <rect x="5" y="-10" width="190" height="20" fill="#064e3b" rx="4" stroke="#10b981" strokeWidth="1.5" />
+              <text x="12" y="4" fill="#34d399" fontSize="10" fontFamily="monospace" fontWeight="bold">
+                {`📌 STAGED TP1: $${stagedPreviewOverlay.target1.toFixed(2)}`}
+              </text>
+            </g>
+
+            {/* Staged TP2 Line & Badge */}
+            {stagedPreviewOverlay.target2 && (
+              <>
+                <line
+                  id="svg-staged-line-tp2"
+                  x1="0"
+                  x2="100%"
+                  y1="-1000"
+                  y2="-1000"
+                  stroke="#14b8a6"
+                  strokeDasharray="4 2"
+                  strokeWidth="2"
+                />
+                <g id="svg-staged-label-tp2" transform="translate(250, -1000)">
+                  <rect x="5" y="-10" width="190" height="20" fill="#134e4a" rx="4" stroke="#14b8a6" strokeWidth="1.5" />
+                  <text x="12" y="4" fill="#2dd4bf" fontSize="10" fontFamily="monospace" fontWeight="bold">
+                    {`📌 STAGED TP2: $${stagedPreviewOverlay.target2.toFixed(2)}`}
+                  </text>
+                </g>
+              </>
+            )}
+          </g>
+        )}
       </svg>
 
       {/* Dynamic Layer Orchestrator HTML Overlays */}

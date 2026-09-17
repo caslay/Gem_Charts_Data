@@ -6,7 +6,7 @@ import Chart from '@/components/Chart';
 import Sidebar from '@/components/Sidebar';
 import SmartAlertsToast from '@/components/SmartAlertsToast';
 import SettingsModal from '@/components/modals/SettingsModal';
-import { Loader2, Menu, Settings, Shield, ChevronLeft, Volume2 } from 'lucide-react';
+import { Loader2, Menu, Settings, Shield, ChevronLeft, Volume2, Pin } from 'lucide-react';
 import { useStrategyEvaluator } from '@/hooks/useStrategyEvaluator';
 import TimeframeSwitcher, { Timeframe } from '@/components/TimeframeSwitcher';
 import { LiveTicker } from '@/components/LiveTicker';
@@ -15,6 +15,8 @@ import ManualOrderPanel from '@/components/ManualOrderPanel';
 import OrderFlowTimelineRibbon from '@/components/OrderFlowTimelineRibbon';
 import OrderFlowTimelineModal from '@/components/modals/OrderFlowTimelineModal';
 import LiveOrderBlockModal from '@/components/modals/LiveOrderBlockModal';
+import CopilotStagingDeckModal from '@/components/modals/CopilotStagingDeckModal';
+import type { StagedPreviewOverlayData } from '@/types/stagedSetupTypes';
 import { useAutomatedStrategyExecution } from '@/hooks/useAutomatedStrategyExecution';
 import { useSessionJournalStore } from '@/lib/quantEngine/sessionJournalStore';
 import { calculateATR } from '@/lib/riskEngine';
@@ -48,8 +50,30 @@ export default function Home() {
   const [isSoundSettingsOpen, setIsSoundSettingsOpen] = useState(false);
   const [isOrderFlowModalOpen, setIsOrderFlowModalOpen] = useState(false);
   const [isLiveOBModalOpen, setIsLiveOBModalOpen] = useState(false);
+  const [isStagingDeckOpen, setIsStagingDeckOpen] = useState(false);
+  const [stagedSetupsCount, setStagedSetupsCount] = useState(0);
+  const [stagedPreviewOverlay, setStagedPreviewOverlay] = useState<StagedPreviewOverlayData | null>(null);
   const [commandCenterTab, setCommandCenterTab] = useState<'strategy' | 'audio'>('strategy');
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
+
+  // Fetch active staged setups count for HUD ribbon
+  const fetchStagedCount = useCallback(async () => {
+    try {
+      const res = await fetch('/api/staged-setups?status=PINNED', { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.data)) {
+          setStagedSetupsCount(json.data.length);
+        }
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchStagedCount();
+    const timer = setInterval(fetchStagedCount, 15000);
+    return () => clearInterval(timer);
+  }, [fetchStagedCount]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -381,6 +405,38 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Copilot Staging Deck Trigger Button */}
+            <div className="relative group flex items-center">
+              <button
+                data-staging-deck-trigger="true"
+                onClick={() => setIsStagingDeckOpen((prev) => !prev)}
+                className={`px-2.5 py-1 rounded-full border transition-all cursor-pointer flex items-center gap-1.5 shadow-sm text-xs font-mono font-bold ${
+                  isStagingDeckOpen
+                    ? 'bg-amber-500/25 border-amber-400 text-amber-300 shadow-md shadow-amber-500/20'
+                    : stagedSetupsCount > 0
+                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-400 hover:bg-amber-500/25 animate-pulse'
+                    : 'bg-card border-card-border hover:border-accent/40 text-muted hover:text-foreground'
+                }`}
+                aria-label="Toggle Copilot Staging Deck"
+              >
+                <Pin size={12} className={stagedSetupsCount > 0 || isStagingDeckOpen ? 'fill-current text-amber-400' : ''} />
+                <span>Staging</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${stagedSetupsCount > 0 ? 'bg-amber-500/30 text-amber-200' : 'bg-card text-muted-foreground'}`}>
+                  {stagedSetupsCount}
+                </span>
+              </button>
+
+              <div
+                role="tooltip"
+                className="hidden [@media(hover:hover)_and_(pointer:fine)]:group-hover:flex custom-tooltip absolute top-full mt-2 left-1/2 -translate-x-1/2 z-50 flex-col items-center pointer-events-none animate-in fade-in zoom-in-95 duration-150"
+              >
+                <div className="w-2 h-2 bg-slate-900 dark:bg-slate-950 border-t border-l border-slate-700 dark:border-slate-800 rotate-45 -mb-1 shadow-sm" />
+                <div className="bg-slate-900/95 dark:bg-slate-950/95 border border-slate-700/90 dark:border-slate-800/90 rounded-md px-2 py-0.5 shadow-xl text-[9px] font-mono font-bold text-slate-100 dark:text-slate-300 whitespace-nowrap">
+                  Copilot Staging Deck ({stagedSetupsCount} Pinned)
+                </div>
+              </div>
+            </div>
+
             {/* Audio & Signal Alerts Modal Trigger */}
             <div className="relative group flex items-center">
               <button
@@ -465,6 +521,7 @@ export default function Home() {
                 openTrades={openTrades}
                 onUpdateTradeLevels={handleUpdateTradeLevels}
                 srOverlay={liveSr.srOverlay}
+                stagedPreviewOverlay={stagedPreviewOverlay}
                 symbol="ETHUSDC"
               />
               {isManualTradingActive && (
@@ -541,6 +598,39 @@ export default function Home() {
         isOpen={isLiveOBModalOpen}
         onClose={() => setIsLiveOBModalOpen(false)}
         symbol="ETHUSDC.p"
+      />
+
+      {/* Copilot Staging Deck Modal */}
+      <CopilotStagingDeckModal
+        isOpen={isStagingDeckOpen}
+        onClose={() => {
+          setIsStagingDeckOpen(false);
+          setStagedPreviewOverlay(null);
+          fetchStagedCount();
+        }}
+        livePrice={getChartData().length > 0 ? getChartData()[getChartData().length - 1].c : null}
+        onPreviewSetup={(setup) => {
+          if (setup) {
+            setStagedPreviewOverlay({
+              id: setup.id,
+              symbol: setup.symbol,
+              direction: setup.direction,
+              entryPrice: setup.entryPrice,
+              entryRangeLow: setup.entryRangeLow,
+              entryRangeHigh: setup.entryRangeHigh,
+              stopLoss: setup.stopLoss,
+              target1: setup.target1,
+              target2: setup.target2,
+              target3: setup.target3,
+              sourceReference: setup.sourceReference,
+            });
+          } else {
+            setStagedPreviewOverlay(null);
+          }
+        }}
+        onDeploySuccess={() => {
+          fetchStagedCount();
+        }}
       />
 
       {/* Decoupled Leaf Runners */}

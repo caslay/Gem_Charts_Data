@@ -20,6 +20,7 @@ import {
   Check,
   Calendar,
   CalendarDays,
+  Pin,
 } from 'lucide-react';
 import type { AiAnalysisRecord } from '@/lib/aiCascadeEngine';
 import {
@@ -64,12 +65,28 @@ export default function AiAnalysisHistoryModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [showRawResponse, setShowRawResponse] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [pinnedAnalysisIds, setPinnedAnalysisIds] = useState<Set<number>>(new Set());
+  const [isPinning, setIsPinning] = useState(false);
 
-  // ── 1. Fetch History from Server with Date Parameters ──
+  // ── 1. Fetch History from Server with Date Parameters & Staged Setups ──
   const fetchHistory = useCallback(
     async (mode: DateFilterMode = dateFilterMode, cDate: string = customDate) => {
       setIsLoading(true);
       try {
+        // Fetch staged setups in parallel to track pinned states
+        fetch('/api/staged-setups?status=PINNED', { cache: 'no-store' })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((json) => {
+            if (json && Array.isArray(json.data)) {
+              const ids = new Set<number>();
+              json.data.forEach((s: any) => {
+                if (s.analysisLogId) ids.add(s.analysisLogId);
+              });
+              setPinnedAnalysisIds(ids);
+            }
+          })
+          .catch(() => {});
+
         const params = new URLSearchParams();
         params.set('limit', '100');
 
@@ -216,6 +233,80 @@ export default function AiAnalysisHistoryModal({
     navigator.clipboard.writeText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleTogglePin = async (record: EnrichedAiAnalysisRecord) => {
+    setIsPinning(true);
+    try {
+      const isCurrentlyPinned = pinnedAnalysisIds.has(record.id);
+      if (isCurrentlyPinned) {
+        // Find staged record to unpin
+        const stagedRes = await fetch('/api/staged-setups?status=PINNED', { cache: 'no-store' });
+        if (stagedRes.ok) {
+          const json = await stagedRes.json();
+          const found = json.data?.find((s: any) => s.analysisLogId === record.id);
+          if (found) {
+            await fetch('/api/staged-setups', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'DISMISS', id: found.id }),
+            });
+            setPinnedAnalysisIds((prev) => {
+              const next = new Set(prev);
+              next.delete(record.id);
+              return next;
+            });
+          }
+        }
+      } else {
+        // Derive entry price
+        let entryPrice = 0;
+        if (record.entry_range_low != null && record.entry_range_high != null) {
+          entryPrice = (Number(record.entry_range_low) + Number(record.entry_range_high)) / 2;
+        } else if (record.entry_range_high != null) {
+          entryPrice = Number(record.entry_range_high);
+        } else if (record.entry_range_low != null) {
+          entryPrice = Number(record.entry_range_low);
+        }
+
+        const sl = Number(record.invalidation_level || 0);
+        const tp1 = Number(record.target_1 || 0);
+        const dir = (record.trade_direction || (String(record.bias_signal).includes('BULL') ? 'LONG' : 'SHORT')) as 'LONG' | 'SHORT';
+
+        if (!entryPrice || !sl || !tp1) {
+          alert('Cannot pin setup: Missing entry, stop loss, or target parameters.');
+          return;
+        }
+
+        const res = await fetch('/api/staged-setups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'PIN',
+            symbol: record.symbol || 'ETHUSDC',
+            direction: dir,
+            entryPrice,
+            entryRangeLow: record.entry_range_low != null ? Number(record.entry_range_low) : null,
+            entryRangeHigh: record.entry_range_high != null ? Number(record.entry_range_high) : null,
+            stopLoss: sl,
+            target1: tp1,
+            target2: record.target_2 != null ? Number(record.target_2) : null,
+            target3: record.target_3 != null ? Number(record.target_3) : null,
+            sourceReference: `AI Analysis #${record.id}`,
+            analysisLogId: record.id,
+            notes: record.narrative?.slice(0, 200),
+          }),
+        });
+
+        if (res.ok) {
+          setPinnedAnalysisIds((prev) => new Set(prev).add(record.id));
+        }
+      }
+    } catch (err) {
+      console.error('[AiAnalysisHistoryModal] Failed to toggle pin:', err);
+    } finally {
+      setIsPinning(false);
+    }
   };
 
   const currentDateLabel = useMemo(() => {
@@ -551,6 +642,16 @@ export default function AiAnalysisHistoryModal({
                               <span>Cascade</span>
                             </span>
                           )}
+
+                          {pinnedAnalysisIds.has(item.id) && (
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-amber-500/20 border border-amber-500/40 text-amber-300 flex items-center gap-0.5"
+                              title="Pinned to Copilot Staging Deck"
+                            >
+                              <Pin size={9} className="fill-current text-amber-400" />
+                              <span>Staged</span>
+                            </span>
+                          )}
                         </div>
 
                         <div className="text-[9px] text-muted-foreground font-mono flex items-center gap-1 shrink-0">
@@ -675,6 +776,24 @@ export default function AiAnalysisHistoryModal({
                           <span>Copy Narrative</span>
                         </>
                       )}
+                    </button>
+
+                    <button
+                      onClick={() => handleTogglePin(selectedRecord)}
+                      disabled={isPinning}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-sans font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                        pinnedAnalysisIds.has(selectedRecord.id)
+                          ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 font-bold shadow-sm'
+                          : 'bg-card border-card-border hover:border-amber-500/50 hover:text-amber-300 text-foreground'
+                      }`}
+                      title={
+                        pinnedAnalysisIds.has(selectedRecord.id)
+                          ? 'Setup is pinned in Copilot Staging Deck (Click to unpin)'
+                          : 'Pin setup to persistent Copilot Staging Deck'
+                      }
+                    >
+                      <Pin size={12} className={pinnedAnalysisIds.has(selectedRecord.id) ? 'fill-current text-amber-400' : ''} />
+                      <span>{pinnedAnalysisIds.has(selectedRecord.id) ? 'Pinned to Deck' : 'Pin to Staging'}</span>
                     </button>
 
                     {onApplyAnalysis && (

@@ -1,8 +1,49 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.85
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.86
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-17 (V17.85 — Synthetic Tape Outcome Reconciliation, Resilient Telegram Interactive Keyboards & Universal HTML Normalization)
+> **Last Updated:** 2026-09-18 (V17.86 — Copilot Staging Deck, Setup Pinning & Cockpit Direct Execution Router)
+
+## 🆕 V17.86 Changelog — Copilot Staging Deck, Setup Pinning & Cockpit Direct Execution Router (2026-09-18)
+
+### Summary
+1. **Workstream A: Data Model & Staging Persistence Store (`src/types/stagedSetupTypes.ts`, `src/lib/staging/userStagedSetupsStore.ts`, `src/app/api/staged-setups/route.ts`):**
+   - **Typed Schema:** Created `UserStagedSetup`, `CreateStagedSetupInput`, `StagedPreviewOverlayData`, and `ExecuteStagedRequestPayload` interfaces.
+   - **Dual Persistence Architecture:** Built `userStagedSetupsStore` with self-healing PostgreSQL table `user_staged_setups` (with automatic index on `analysis_log_id`), coupled with an atomic local JSON fallback (`run_logs/user_staged_setups.json`) ensuring 100% resilience across restricted read-only or offline developer sandboxes.
+   - **CRUD Staging Methods:** Implemented `pinSetup`, `unpinSetup`, `listStagedSetups`, `getStagedSetupById`, `markSetupDeployed`, and `isAnalysisRecordPinned`.
+   - **Staged Setups API Route:** Implemented `/api/staged-setups` with `GET` (retrieving active pinned setups) and `POST` (actions: `PIN`, `UNPIN`, `DISMISS`) with strict directional geometry sanity validation.
+
+2. **Workstream B: Web Cockpit Staging Deck Modal & Chart Overlay (`src/components/modals/CopilotStagingDeckModal.tsx`, `src/components/modals/AiAnalysisHistoryModal.tsx`, `src/components/Chart.tsx`, `src/app/page.tsx`):**
+   - **Copilot Staging Deck Modal:** Engineered institutional modal rendering pinned setups with real-time distance-to-entry tracking, directional badges, target metrics, `[ 🧪 Deploy Paper ]`, `[ 🚨 Deploy Live ]` (with a 2-step confirmation dialog), and `[ ✕ Dismiss ]` actions.
+   - **Setup Pinning in AI History Modal:** Integrated `[ 📌 Pin to Staging ]` / `[ 📌 Pinned to Deck ]` interactive toggle buttons in `AiAnalysisHistoryModal` header, coupled with stream item `[ 📌 Staged ]` badges and optimistic local state synchronization.
+   - **Dynamic SVG Chart Overlay:** Added `stagedPreviewOverlay` prop to `Chart.tsx` and implemented `#svg-staged-overlay-group` rendering SVG horizontal dashed projection lines and badges for Entry, Stop Loss, TP1, and TP2 directly on the active chart canvas on hover or selection.
+   - **Cockpit Header Ribbon:** Integrated `📌 Staging (N)` trigger button in the main cockpit header bar (`page.tsx`) with real-time setup count badge and modal toggle.
+
+3. **Workstream C: Cockpit Direct Execution Router & Daemon Bridge (`src/app/api/daemon/execute-staged/route.ts`, `src/lib/daemon/sparkIngestionDispatcher.ts`, `scripts/headless-daemon.ts`):**
+   - **Execution Router Route:** Built `/api/daemon/execute-staged` with `COCKPIT_MANUAL_OVERRIDE` authority. Verifies directional price geometry, evaluates `evaluateExecutionSafetyGate()` for Live Binance, correlates/creates `agent_decision_log` entries, marks setups deployed in staging store, serializes `EXECUTE_STAGED` commands to `run_logs/daemon_commands.json`, and dispatches formatted Telegram HTML alerts.
+   - **Extended TTL & Dead Zone Override:** Enhanced `sparkIngestionDispatcher.ts` to recognize `isManualOverride` (`COCKPIT_MANUAL_OVERRIDE`), bypassing dead-zone silence locks and extending resting limit order TTL from standard 12 bars (1 hour) to 48 bars (4 hours).
+   - **Preemptive Daemon Dispatcher:** Updated `scripts/headless-daemon.ts` `processPendingCommands` to handle `cmd.action === 'EXECUTE_STAGED'`, cancelling existing resting limit orders to grant operator preemption before dispatching the setup.
+
+4. **Verification & Audit:**
+   - Authored and verified `scripts/test_copilot_staging_deck.ts`: 7/7 tests passed (100% assertions passed).
+   - TypeScript verification: `npx tsc --noEmit` exited with 0 errors.
+   - Production build: `npm run build` compiled all 31 routes successfully.
+
+### Files Created & Modified
+- **`src/types/stagedSetupTypes.ts`** [NEW]
+- **`src/lib/staging/userStagedSetupsStore.ts`** [NEW]
+- **`src/app/api/staged-setups/route.ts`** [NEW]
+- **`src/app/api/daemon/execute-staged/route.ts`** [NEW]
+- **`src/components/modals/CopilotStagingDeckModal.tsx`** [NEW]
+- **`scripts/test_copilot_staging_deck.ts`** [NEW]
+- **`src/components/modals/AiAnalysisHistoryModal.tsx`** [MODIFY]
+- **`src/components/Chart.tsx`** [MODIFY]
+- **`src/app/page.tsx`** [MODIFY]
+- **`src/lib/daemon/sparkIngestionDispatcher.ts`** [MODIFY]
+- **`scripts/headless-daemon.ts`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.85 Changelog — Synthetic Tape Outcome Reconciliation, Resilient Telegram Interactive Keyboards & Universal HTML Normalization (2026-09-17)
 

@@ -555,6 +555,58 @@ async function main() {
               cmd.status = 'PROCESSED';
               mutated = true;
             }
+          } else if (cmd.action === 'EXECUTE_STAGED') {
+            const decisionId = cmd.metadata?.decisionId ?? cmd.decisionId;
+            const targetMode = cmd.metadata?.targetMode ?? cmd.targetMode;
+            const stagedId = cmd.metadata?.stagedId;
+            const stagedSetup = cmd.metadata?.stagedSetup;
+            if (targetMode) {
+              if (engine.getPendingLimitOrders().length > 0) {
+                console.log(`[DAEMON] 🧹 Operator preemption: cancelling existing resting limit orders.`);
+                engine.cancelAllPendingLimitOrders();
+              }
+
+              if (decisionId) {
+                sparkDispatcher
+                  .promoteStandbyToMode(decisionId, targetMode, {
+                    bypassDeadZone: true,
+                    executionSource: 'COCKPIT_MANUAL_OVERRIDE',
+                  })
+                  .then((res: any) => {
+                    console.log(
+                      `[DAEMON] 🎯 EXECUTE_STAGED (Staged: ${stagedId}, Decision: #${decisionId}) -> ${targetMode}:`,
+                      res?.success ? 'SUCCESS' : res?.message || 'FAILED'
+                    );
+                  })
+                  .catch((err: any) => console.error('[DAEMON] EXECUTE_STAGED error:', err));
+              } else if (stagedSetup) {
+                const mockRecord = {
+                  id: Date.now(),
+                  symbol: stagedSetup.symbol,
+                  agent_id: stagedSetup.agent_id || 'COCKPIT_OPERATOR',
+                  bias_signal: stagedSetup.direction === 'LONG' ? 'CONFIRMED_BULLISH' : 'CONFIRMED_BEARISH',
+                  limit_entry_price: stagedSetup.limit_entry_price,
+                  invalidation_level: stagedSetup.stop_loss,
+                  target_1: stagedSetup.take_profit_1,
+                  target_2: stagedSetup.take_profit_2,
+                  execution_mode: targetMode,
+                  status: 'ARMED',
+                  narrative: `[COCKPIT_MANUAL_OVERRIDE: Staged #${stagedId}]`,
+                };
+                sparkDispatcher
+                  .processDecision(mockRecord, undefined, {
+                    modeOverride: targetMode,
+                    bypassDeadZone: true,
+                    executionSource: 'COCKPIT_MANUAL_OVERRIDE',
+                  })
+                  .then((res: any) => {
+                    console.log(`[DAEMON] 🎯 EXECUTE_STAGED direct mock record -> ${targetMode}:`, res?.status);
+                  })
+                  .catch((err: any) => console.error('[DAEMON] EXECUTE_STAGED mock record error:', err));
+              }
+              cmd.status = 'PROCESSED';
+              mutated = true;
+            }
           } else if (cmd.action === 'DISMISS_SETUP') {
             const decisionId = cmd.metadata?.decisionId ?? cmd.decisionId;
             if (decisionId) {
