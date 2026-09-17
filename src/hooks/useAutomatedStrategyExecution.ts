@@ -451,6 +451,14 @@ export function useAutomatedStrategyExecution(
     const isPositionOpen = !!activePos && activePos.status !== 'CLOSED';
     const entryPrice = activePos?.entryPrice ?? pendingOrd?.limitEntryPrice ?? latestActiveSetup?.entry_price ?? 0;
     const stopLoss = activePos?.activeStopLoss ?? pendingOrd?.activeStopLoss ?? latestActiveSetup?.stop_loss ?? 0;
+    const initialStopLoss = activePos?.initialStopLoss ?? pendingOrd?.initialStopLoss ?? latestActiveSetup?.stop_loss ?? stopLoss;
+    const trailingSlSource = activePos?.trailingSlSource ?? (
+      activePos?.isStage1Filled
+        ? 'FVG_CE'
+        : activePos && activePos.activeStopLoss !== activePos.initialStopLoss
+        ? 'BREAKEVEN'
+        : undefined
+    );
     const anchorLevel = activePos?.originAnchorLevel ?? pendingOrd?.originAnchorLevel ?? latestActiveSetup?.anchor_level ?? 0;
     const riskUsd = activePos?.riskUsd ?? pendingOrd?.riskUsd ?? latestActiveSetup?.risk_usd ?? Math.abs(entryPrice - stopLoss);
     const riskPct = activePos?.riskPct ?? pendingOrd?.riskPct ?? latestActiveSetup?.risk_pct ?? (engineConfig.liveSettings?.compoundingRiskPct ?? 2.0);
@@ -520,6 +528,8 @@ export function useAutomatedStrategyExecution(
       fvgCe: activePos?.fvgCeLevel ?? pendingOrd?.fvgCeLevel ?? latestActiveSetup?.reclaim_fvg_ce ?? null,
       entryPrice,
       stopLoss,
+      initialStopLoss,
+      trailingSlSource,
       target1,
       target2,
       target3,

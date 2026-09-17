@@ -217,25 +217,27 @@ export class DaemonLedger {
     this.sessionLog.events.push(event);
 
     // If trade closed, update stats
-    if (type === 'POSITION_CLOSED' && options.position) {
+    if ((type === 'POSITION_CLOSED' || type === 'SPARK_DECISION_PAPER_CLOSED') && options.position) {
       const pos = options.position as StrategyExecutionPosition;
-      this.sessionLog.completedTrades.push(pos);
-      this.sessionLog.totalTrades += 1;
+      if (!this.sessionLog.completedTrades.some((t) => t.id === pos.id)) {
+        this.sessionLog.completedTrades.push(pos);
+        this.sessionLog.totalTrades += 1;
 
-      const realizedR = pos.realizedR || 0;
-      this.sessionLog.totalRealizedR = parseFloat((this.sessionLog.totalRealizedR + realizedR).toFixed(4));
-      this.sessionLog.currentEquity = parseFloat(
-        (this.sessionLog.currentEquity + (pos.realizedUsd || 0)).toFixed(2)
-      );
+        const realizedR = pos.realizedR || 0;
+        this.sessionLog.totalRealizedR = parseFloat((this.sessionLog.totalRealizedR + realizedR).toFixed(4));
+        this.sessionLog.currentEquity = parseFloat(
+          (this.sessionLog.currentEquity + (pos.realizedUsd || 0)).toFixed(2)
+        );
 
-      if (realizedR > 0) {
-        this.sessionLog.winningTrades += 1;
-      } else if (realizedR < 0) {
-        this.sessionLog.losingTrades += 1;
+        if (realizedR > 0) {
+          this.sessionLog.winningTrades += 1;
+        } else if (realizedR < 0) {
+          this.sessionLog.losingTrades += 1;
+        }
+
+        // Sync to ETHUSDC_Daily_Tracker.json
+        this.appendToDailyTracker(pos);
       }
-
-      // Sync to ETHUSDC_Daily_Tracker.json
-      this.appendToDailyTracker(pos);
     }
 
     this.flushToDisk();
@@ -250,15 +252,20 @@ export class DaemonLedger {
 
     for (const evt of this.sessionLog.events) {
       if (
-        (evt.type === 'LIMIT_ORDER_PLACED' ||
-          evt.type === 'ORDER_FILLED' ||
+        (evt.type === 'ORDER_FILLED' ||
+          evt.type === 'SPARK_DECISION_PAPER_FILLED' ||
+          evt.type === 'SPARK_DECISION_EXECUTED' ||
           evt.type === 'EARLY_BREAKEVEN' ||
           evt.type === 'STAGE_1_HARVEST' ||
+          evt.type === 'SPARK_DECISION_TP1_HARVEST' ||
           evt.type === 'STAGE_2_HARVEST') &&
         evt.position?.id
       ) {
         activeMap.set(evt.position.id, evt.position as StrategyExecutionPosition);
-      } else if (evt.type === 'POSITION_CLOSED' && evt.position?.id) {
+      } else if (
+        (evt.type === 'POSITION_CLOSED' || evt.type === 'SPARK_DECISION_PAPER_CLOSED') &&
+        evt.position?.id
+      ) {
         activeMap.delete(evt.position.id);
       } else if (evt.type === 'LIMIT_ORDER_CANCELLED' && evt.position?.id) {
         activeMap.delete(evt.position.id);

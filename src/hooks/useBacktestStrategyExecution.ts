@@ -45,6 +45,8 @@ export interface SweepReclaimOverlayData {
   fvgCe: number | null;
   entryPrice: number;
   stopLoss: number;
+  initialStopLoss?: number;
+  trailingSlSource?: string;
   target1: number;
   target2: number;
   target3: number;

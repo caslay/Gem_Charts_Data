@@ -139,12 +139,26 @@ export async function GET(req: Request) {
 
       if (evt.type === 'LIMIT_ORDER_PLACED' && evt.position?.id) {
         pendingMap.set(evt.position.id, evt.position as StrategyExecutionPosition);
-      } else if (evt.type === 'ORDER_FILLED' && evt.position?.id) {
+      } else if (
+        (evt.type === 'ORDER_FILLED' ||
+          evt.type === 'SPARK_DECISION_PAPER_FILLED' ||
+          evt.type === 'SPARK_DECISION_EXECUTED') &&
+        evt.position?.id
+      ) {
         pendingMap.delete(evt.position.id);
         activeMap.set(evt.position.id, evt.position as StrategyExecutionPosition);
-      } else if ((evt.type === 'STAGE_1_HARVEST' || evt.type === 'STAGE_2_HARVEST' || evt.type === 'EARLY_BREAKEVEN') && evt.position?.id) {
+      } else if (
+        (evt.type === 'STAGE_1_HARVEST' ||
+          evt.type === 'SPARK_DECISION_TP1_HARVEST' ||
+          evt.type === 'STAGE_2_HARVEST' ||
+          evt.type === 'EARLY_BREAKEVEN') &&
+        evt.position?.id
+      ) {
         activeMap.set(evt.position.id, evt.position as StrategyExecutionPosition);
-      } else if (evt.type === 'POSITION_CLOSED' && evt.position?.id) {
+      } else if (
+        (evt.type === 'POSITION_CLOSED' || evt.type === 'SPARK_DECISION_PAPER_CLOSED') &&
+        evt.position?.id
+      ) {
         activeMap.delete(evt.position.id);
         pendingMap.delete(evt.position.id);
       } else if (evt.type === 'LIMIT_ORDER_CANCELLED' && evt.position?.id) {

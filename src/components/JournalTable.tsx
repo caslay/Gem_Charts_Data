@@ -32,6 +32,7 @@ interface JournalTableProps {
     initial_capital: string | number;
     max_risk_limit_pct: string | number;
   };
+  mode?: "live" | "paper";
   isBacktest?: boolean;
   backtestLivePrice?: number | null;
   backtestCandleTime?: number | null;
@@ -228,18 +229,18 @@ const ClosedTradeRow = memo(function ClosedTradeRow({
       </td>
 
       <td className="py-4 px-4 text-right font-mono font-medium text-title">
-        {parseFloat(String(trade.entry_price)).toFixed(2)}
+        {parseFloat(String(trade.entry_price || 0)).toFixed(2)}
       </td>
 
       <td className="py-4 px-4 text-right font-mono text-rose-500">
-        <div>{parseFloat(String(trade.stop_loss)).toFixed(2)}</div>
+        <div>{parseFloat(String(trade.stop_loss || 0)).toFixed(2)}</div>
         <div className="text-[9px] text-rose-500/70 font-sans font-medium">
-          Risk: ${(trade as any).risk_amount_usd ? parseFloat(String((trade as any).risk_amount_usd)).toFixed(2) : (Math.abs(parseFloat(String(trade.entry_price)) - parseFloat(String(trade.stop_loss))) * positionSize).toFixed(2)}
+          Risk: ${(trade as any).risk_amount_usd ? parseFloat(String((trade as any).risk_amount_usd)).toFixed(2) : (Math.abs(parseFloat(String(trade.entry_price || 0)) - parseFloat(String(trade.stop_loss || 0))) * positionSize).toFixed(2)}
         </div>
       </td>
 
       <td className="py-4 px-4 text-right font-mono text-emerald-500">
-        {parseFloat(String(trade.take_profit)).toFixed(2)}
+        {parseFloat(String(trade.take_profit || 0)).toFixed(2)}
       </td>
 
       {/* Realized P&L Column */}
@@ -318,9 +319,9 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
     ? parseFloat(String(trade.position_size))
     : 1.0;
 
-  const entryPrice = parseFloat(String(trade.entry_price));
-  const takeProfit = parseFloat(String(trade.take_profit));
-  const stopLoss = parseFloat(String(trade.stop_loss));
+  const entryPrice = parseFloat(String(trade.entry_price || 0));
+  const takeProfit = parseFloat(String(trade.take_profit || 0));
+  const stopLoss = parseFloat(String(trade.stop_loss || 0));
 
   // Determine if Take Profit or Stop Loss has been touched or breached
   let isTpHit = false;
@@ -440,18 +441,18 @@ const ActiveTradeRow = memo(function ActiveTradeRow({
       </td>
 
       <td className="py-4 px-4 text-right font-mono font-medium text-title">
-        {parseFloat(String(trade.entry_price)).toFixed(2)}
+        {entryPrice.toFixed(2)}
       </td>
 
       <td className="py-4 px-4 text-right font-mono text-rose-500">
-        <div>{parseFloat(String(trade.stop_loss)).toFixed(2)}</div>
+        <div>{stopLoss.toFixed(2)}</div>
         <div className="text-[9px] text-rose-500/70 font-sans font-medium">
           Risk: ${(trade as any).risk_amount_usd ? parseFloat(String((trade as any).risk_amount_usd)).toFixed(2) : (Math.abs(entryPrice - stopLoss) * positionSize).toFixed(2)}
         </div>
       </td>
 
       <td className="py-4 px-4 text-right font-mono text-emerald-500">
-        {parseFloat(String(trade.take_profit)).toFixed(2)}
+        {takeProfit.toFixed(2)}
       </td>
 
       {/* Real-time Unrealized P&L */}
@@ -581,9 +582,16 @@ const JournalTableRow = memo(function JournalTableRow({
   );
 });
 
-export const JournalTable = memo(function JournalTable({ initialTrades, initialAccount, isBacktest = false, backtestLivePrice, backtestCandleTime }: JournalTableProps) {
+export const JournalTable = memo(function JournalTable({
+  initialTrades,
+  initialAccount,
+  mode = "paper",
+  isBacktest = false,
+  backtestLivePrice,
+  backtestCandleTime
+}: JournalTableProps) {
   const context = useMarketDataContext();
-  const tradesApiUrl = isBacktest ? "/api/backtest-trades" : "/api/trades";
+  const tradesApiUrl = isBacktest ? "/api/backtest-trades" : `/api/trades?mode=${mode}`;
 
   const [trades, setTrades] = useState<TradeRecord[]>(initialTrades);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -710,7 +718,7 @@ export const JournalTable = memo(function JournalTable({ initialTrades, initialA
             );
           }
 
-          if (tradesRes?.success && Array.isArray(tradesRes.trades) && tradesRes.trades.length > 0) {
+          if (tradesRes?.success && Array.isArray(tradesRes.trades)) {
             const combinedMap = new Map<string, TradeRecord>();
             for (const t of localTrades) combinedMap.set(t.id, t as unknown as TradeRecord);
             for (const t of tradesRes.trades) combinedMap.set(t.id, t);

@@ -1,8 +1,60 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.83
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.84
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-16 (V17.83 — Temporal Date Filtering, Terminal Outcome Reconciliation & Daily Audit Metrics in AI Analysis History Modal)
+> **Last Updated:** 2026-09-17 (V17.84 — Paper Trading Lifecycle Reconciliation, Journal Persistence & Dynamic Trailing Stop Visualization)
+
+## 🆕 V17.84 Changelog — Paper Trading Lifecycle Reconciliation, Journal Persistence & Dynamic Trailing Stop Visualization (2026-09-17)
+
+### Summary
+1. **Workstream A: Database & Daemon Lifecycle Persistence Hardening (`scripts/headless-daemon.ts`, `src/lib/daemon/daemonLedger.ts`, `src/app/api/daemon/state/route.ts`):**
+   - **In-Flight Position DB Upsert:** Updated `scripts/headless-daemon.ts` `ORDER_FILLED` to immediately persist new in-flight simulated/paper positions into PostgreSQL `trades` with `status = 'OPEN'`, `stop_loss = pos.initialStopLoss`, and full position sizing metadata.
+   - **Early Breakeven Persistence:** Added missing `case 'EARLY_BREAKEVEN':` to `headless-daemon.ts` engine event switch, logging the event into `ledger.logEvent('EARLY_BREAKEVEN', ...)` and updating the PostgreSQL `trades` record with `stop_loss = pos.activeStopLoss`.
+   - **Stage 1 Harvest State:** Updated `STAGE_1_HARVEST` to set `status = 'STAGE_1_FILLED'` and update `stop_loss = pos.activeStopLoss` in PostgreSQL.
+   - **Spark Closed Event Handling:** Extended `daemonLedger.ts` to recognize `SPARK_DECISION_PAPER_CLOSED`, incrementing session stats, pushing to `completedTrades`, and appending to `directives/ETHUSDC_Daily_Tracker.json`.
+   - **Daemon State Parity:** Updated `/api/daemon/state/route.ts` event reducer to recognize all execution events (`SPARK_DECISION_PAPER_FILLED`, `SPARK_DECISION_EXECUTED`, `STAGE_1_HARVEST`, `SPARK_DECISION_TP1_HARVEST`, `EARLY_BREAKEVEN`, `SPARK_DECISION_PAPER_CLOSED`), ensuring `activeStopLoss` and `trailingSlSource` remain strictly synchronized between daemon memory and web HUD.
+
+2. **Workstream B: Trading Journal API & Dual-Mode UI Reconciliation (`src/app/api/trades/route.ts`, `src/components/JournalContainer.tsx`, `src/components/JournalTable.tsx`):**
+   - **Multi-Source Journal Ingestion:** Completely overhauled `/api/trades/route.ts`:
+     - Ingests active in-flight positions directly from today's daemon session log events as `status: 'OPEN'`.
+     - Ingests completed trades across all historical `run_logs/live_session_*.json` files.
+     - Ingests historical journal trades from `directives/ETHUSDC_Daily_Tracker.json`.
+     - Queries PostgreSQL `trades` table with fallback to `paper_trades`, mapping database columns (`take_profit_1`, `entry_time`, `exit_time`, `trade_id`) to `TradeRecord` fields (`take_profit`, `opened_at`, `closed_at`, `id`).
+     - Supports query parameters `?mode=paper`, `?mode=live`, `?mode=all`, and provides atomic `DELETE` endpoints for individual records and clear-all operations.
+   - **UI Mode Wiring:** Updated `JournalContainer.tsx` to pass `mode="paper"` to `<JournalTable />` when viewing the Paper Journal tab.
+   - **Safe Number Rendering:** Updated `JournalTable.tsx` `ClosedTradeRow` and `ActiveTradeRow` to apply safe fallbacks (`trade.take_profit || 0`, `trade.entry_price || 0`, `trade.stop_loss || 0`), eliminating `NaN` displays across all journal views.
+
+3. **Workstream C: Dynamic Stop Loss & Breakeven Chart Synchronization (`src/hooks/useBacktestStrategyExecution.ts`, `src/hooks/useAutomatedStrategyExecution.ts`, `src/components/Chart.tsx`):**
+   - **Data Interface Extension:** Added `initialStopLoss?: number;` and `trailingSlSource?: string;` to `SweepReclaimOverlayData`.
+   - **Hook Reactive Propagation:** Updated `useAutomatedStrategyExecution.ts` to derive `trailingSlSource` dynamically and emit the updated `srOverlay.stopLoss` when `activeStopLoss` ratchets.
+   - **Dynamic SVG Styling & Visual Badging:** Updated `Chart.tsx`:
+     - Added `srOverlay?.trailingSlSource` to the SVG coordinate synchronization `useEffect` dependency array.
+     - Dynamically transitions Stop Loss line stroke and label badge:
+       - **Emerald Green (`#34d399` / `(+1.0R FLOOR)`):** When Stage 2 is reached or `trailingSlSource === 'PROFIT_RATCHET_FLOOR'`.
+       - **Golden Amber (`#facc15` / `(BREAKEVEN)` or `(FVG CE / BE)`):** When Stage 1 is harvested, Early Breakeven is locked, or stop loss is at or beyond breakeven.
+       - **Rose Red (`#f43f5e` / `(-1.0R HARD)`):** Unmitigated initial risk before breakeven ratchet.
+
+4. **Verification & Parity Record:**
+   - Authored and verified `scripts/test_paper_trading_reconciliation.ts`: 4/4 suites (100% assertions passed).
+   - Re-verified database tunnel: `scripts/test-db-tunnel.ts` passed.
+   - Re-verified TypeScript compiler: `npx tsc --noEmit` exited with 0 errors.
+   - Re-verified Next.js production build: `npm run build` compiled all 31 routes successfully in 9.6s.
+
+### Files Created & Modified
+- **`scripts/test_paper_trading_reconciliation.ts`** [NEW]
+- **`scripts/headless-daemon.ts`** [MODIFY]
+- **`scripts/test-db-tunnel.ts`** [MODIFY]
+- **`src/lib/daemon/daemonLedger.ts`** [MODIFY]
+- **`src/app/api/daemon/state/route.ts`** [MODIFY]
+- **`src/app/api/trades/route.ts`** [MODIFY]
+- **`src/components/JournalContainer.tsx`** [MODIFY]
+- **`src/components/JournalTable.tsx`** [MODIFY]
+- **`src/hooks/useBacktestStrategyExecution.ts`** [MODIFY]
+- **`src/hooks/useAutomatedStrategyExecution.ts`** [MODIFY]
+- **`src/components/Chart.tsx`** [MODIFY]
+- **`directives/master_blueprint.md`** [MODIFY]
+
+---
 
 ## 🆕 V17.83 Changelog — Temporal Date Scoping, Dynamic Outcome Reconciliation & Daily Audit Ribbon (2026-09-16)
 
