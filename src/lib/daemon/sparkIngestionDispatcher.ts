@@ -844,7 +844,7 @@ export class SparkIngestionDispatcher {
   public async promoteStandbyToMode(
     decisionId: number,
     targetMode: 'PAPER_TRADING' | 'LIVE_BINANCE',
-    options?: { bypassDeadZone?: boolean; executionSource?: string }
+    options?: { bypassDeadZone?: boolean; executionSource?: string; stagedId?: number }
   ): Promise<{ success: boolean; message: string; position?: any; entryPrice?: number }> {
     console.log(`[SPARK_DISPATCHER] 🚀 Promoting decision #${decisionId} to ${targetMode}... (Source: ${options?.executionSource || 'STANDARD'})`);
     try {
@@ -950,6 +950,7 @@ export class SparkIngestionDispatcher {
         modeOverride: targetMode,
         bypassDeadZone: options?.bypassDeadZone,
         executionSource: options?.executionSource,
+        stagedId: options?.stagedId,
       });
       const resolvedEntry =
         result.position?.limitEntryPrice ??
@@ -966,6 +967,10 @@ export class SparkIngestionDispatcher {
         result.status === 'EXECUTED' ||
         result.status === 'ORDER_RESTING' ||
         result.status === 'STAGED';
+
+      if (options?.stagedId && result.position) {
+        (result.position as any).stagedId = options.stagedId;
+      }
 
       return {
         success: isSuccess,
@@ -1322,6 +1327,7 @@ export class SparkIngestionDispatcher {
       modeOverride?: TriStateExecutionMode;
       bypassDeadZone?: boolean;
       executionSource?: string;
+      stagedId?: number;
     }
   ): Promise<ProcessDecisionResult> {
     const id = Number(record.id);
@@ -1962,6 +1968,9 @@ export class SparkIngestionDispatcher {
       });
 
       if (submitRes.success) {
+        if (options?.stagedId && submitRes.position) {
+          (submitRes.position as any).stagedId = options.stagedId;
+        }
         console.log(`[SPARK_DISPATCHER] 🧪 Decision #${id} queued in PAPER_TRADING simulator (${isManualOverride ? 48 : 12}-bar TTL)!`);
         this.ledger?.logEvent('SPARK_DECISION_PAPER_QUEUED', `Decision #${id} queued in Paper Trading Simulator`, {
           livePrice: livePrice ?? undefined,
@@ -2080,6 +2089,9 @@ export class SparkIngestionDispatcher {
       });
 
       if (submitRes.success) {
+        if (options?.stagedId && submitRes.position) {
+          (submitRes.position as any).stagedId = options.stagedId;
+        }
         try {
           await sql`
             UPDATE agent_decision_log

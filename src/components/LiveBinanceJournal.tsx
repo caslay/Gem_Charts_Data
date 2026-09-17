@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   ShieldAlert,
   Activity,
@@ -58,6 +58,8 @@ interface OpenOrderItem {
   status: string;
   time: number;
   anchorName?: string;
+  stagedId?: number;
+  targetMode?: string;
 }
 
 interface TradeItem {
@@ -103,30 +105,80 @@ export function LiveBinanceJournal() {
   const [flattenCountdown, setFlattenCountdown] = useState(15);
   const [isFlattening, setIsFlattening] = useState(false);
   const [flattenToast, setFlattenToast] = useState<string | null>(null);
+  const [cancellingStagedId, setCancellingStagedId] = useState<number | null>(null);
+
+  const handleCancelStagedLimit = async (stagedId: number) => {
+    setCancellingStagedId(stagedId);
+    try {
+      const res = await fetch('/api/staged-setups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'CANCEL_LIMIT', id: stagedId }),
+      });
+      if (res.ok) {
+        await fetchLiveState(true);
+      }
+    } catch (e) {
+      console.error('Failed to cancel staged limit from journal:', e);
+    } finally {
+      setCancellingStagedId(null);
+    }
+  };
+
+  const isFetchingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchLiveState = useCallback(async (manual = false) => {
+    if (isFetchingRef.current && !manual) return;
+    isFetchingRef.current = true;
     if (manual) setIsRefreshing(true);
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
-      const res = await fetch("/api/binance/live-state?symbol=ETHUSDC");
+      const res = await fetch("/api/binance/live-state?symbol=ETHUSDC", {
+        signal: controller.signal,
+      });
       if (res.ok) {
         const json: LiveStatePayload = await res.json();
         setData(json);
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
       console.error("Failed to fetch live Binance state:", err);
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
       if (manual) setTimeout(() => setIsRefreshing(false), 500);
     }
   }, []);
 
-  // Poll every 4 seconds
+  // Poll every 5 seconds when active
   useEffect(() => {
     fetchLiveState();
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       fetchLiveState();
-    }, 4000);
-    return () => clearInterval(interval);
+    }, 5000);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchLiveState();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [fetchLiveState]);
 
   // Countdown timer for emergency modal
@@ -498,6 +550,7 @@ export function LiveBinanceJournal() {
                     <th className="py-3 px-4">Anchor Origin</th>
                     <th className="py-3 px-4">Order Status</th>
                     <th className="py-3 px-4">TTL Protection</th>
+                    <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-card-border/50 font-mono">
@@ -524,12 +577,34 @@ export function LiveBinanceJournal() {
                         {ord.anchorName || "5m Structural Swing"}
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/30 text-blue-400 text-[10px] font-bold uppercase">
-                          {ord.status}
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
+                            ord.status === "RESTING_LIMIT"
+                              ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                              : "bg-blue-500/10 border-blue-500/30 text-blue-400"
+                          }`}
+                        >
+                          {ord.status === "RESTING_LIMIT" ? "⏳ RESTING LIMIT" : ord.status}
                         </span>
                       </td>
                       <td className="py-3.5 px-4 font-sans text-muted text-[11px]">
-                        <span className="text-foreground font-bold">20 Bars</span> (100m Max TTL)
+                        <span className="text-foreground font-bold">
+                          {ord.status === "RESTING_LIMIT" ? "48 Bars" : "20 Bars"}
+                        </span>{" "}
+                        ({ord.status === "RESTING_LIMIT" ? "240m Extended TTL" : "100m Max TTL"})
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        {ord.stagedId ? (
+                          <button
+                            onClick={() => handleCancelStagedLimit(ord.stagedId!)}
+                            disabled={cancellingStagedId === ord.stagedId}
+                            className="px-2.5 py-1 rounded bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/30 text-rose-400 text-[10px] font-bold uppercase transition-all cursor-pointer"
+                          >
+                            {cancellingStagedId === ord.stagedId ? "Aborting..." : "Cancel Order"}
+                          </button>
+                        ) : (
+                          <span className="text-muted text-[10px]">Exchange Native</span>
+                        )}
                       </td>
                     </tr>
                   ))}

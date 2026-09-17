@@ -21,6 +21,7 @@ import type {
 } from '@/types/stagedSetupTypes';
 
 let isTableInitialized = false;
+let isPostgresAvailable = false;
 
 function getFallbackFilePath(): string {
   const rootDir = process.cwd();
@@ -83,6 +84,14 @@ export async function ensureUserStagedSetupsTableInitialized(): Promise<void> {
   if (isTableInitialized) return;
 
   try {
+    const probe = await sql`SELECT 1 as test;`;
+    if (!probe || !probe.rows || probe.rows.length === 0 || (probe.rows[0] as any)?.test != 1) {
+      isPostgresAvailable = false;
+      isTableInitialized = true;
+      return;
+    }
+    isPostgresAvailable = true;
+
     await sql`
       CREATE TABLE IF NOT EXISTS user_staged_setups (
         id                  SERIAL PRIMARY KEY,
@@ -105,11 +114,23 @@ export async function ensureUserStagedSetupsTableInitialized(): Promise<void> {
         decision_log_id     INTEGER,
         notes               TEXT,
         metadata            JSONB,
+        target_mode         VARCHAR(32),
         pinned_at           TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         deployed_at         TIMESTAMP WITH TIME ZONE,
+        filled_at           TIMESTAMP WITH TIME ZONE,
+        cancelled_at        TIMESTAMP WITH TIME ZONE,
+        expired_at          TIMESTAMP WITH TIME ZONE,
+        cancel_reason       TEXT,
         updated_at          TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
+
+    // Self-healing column additions for existing installations
+    await sql`ALTER TABLE user_staged_setups ADD COLUMN IF NOT EXISTS target_mode VARCHAR(32);`.catch(() => {});
+    await sql`ALTER TABLE user_staged_setups ADD COLUMN IF NOT EXISTS filled_at TIMESTAMP WITH TIME ZONE;`.catch(() => {});
+    await sql`ALTER TABLE user_staged_setups ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP WITH TIME ZONE;`.catch(() => {});
+    await sql`ALTER TABLE user_staged_setups ADD COLUMN IF NOT EXISTS expired_at TIMESTAMP WITH TIME ZONE;`.catch(() => {});
+    await sql`ALTER TABLE user_staged_setups ADD COLUMN IF NOT EXISTS cancel_reason TEXT;`.catch(() => {});
 
     await sql`
       CREATE INDEX IF NOT EXISTS idx_user_staged_status
@@ -137,6 +158,8 @@ export async function ensureUserStagedSetupsTableInitialized(): Promise<void> {
     isTableInitialized = true;
   } catch (err) {
     console.warn('[STAGED_STORE] Postgres table initialization skipped or offline (using JSON fallback):', err);
+    isPostgresAvailable = false;
+    isTableInitialized = true;
   }
 }
 
@@ -226,27 +249,35 @@ export function resolveAndValidateSetupGeometry(params: {
     console.warn(`[GEOMETRY_VALIDATOR] ⚠️ ${correctionReason}`);
   }
 
-  // Sanitize Target 2 & Target 3
-  let cleanTarget2 = params.target2 != null ? Number(params.target2) : null;
-  let cleanTarget3 = params.target3 != null ? Number(params.target3) : null;
+  // Sanitize and sort targets monotonically away from entry to guarantee physical milestone order
+  const rawTargets = [tp1, params.target2 != null ? Number(params.target2) : null, params.target3 != null ? Number(params.target3) : null]
+    .filter((t): t is number => t !== null && !isNaN(t));
 
-  if (cleanTarget2 != null) {
-    if ((trueDirection === 'LONG' && cleanTarget2 <= entry) || (trueDirection === 'SHORT' && cleanTarget2 >= entry)) {
-      console.warn(`[GEOMETRY_VALIDATOR] Target 2 ($${cleanTarget2}) inverted relative to ${trueDirection} direction. Discarding invalid TP2.`);
-      cleanTarget2 = null;
+  let cleanTp1 = tp1;
+  let cleanTarget2: number | null = null;
+  let cleanTarget3: number | null = null;
+
+  if (trueDirection === 'LONG') {
+    // Valid long targets must be strictly greater than entry, sorted ascending (closest milestone first)
+    const validLongTargets = rawTargets.filter((t) => t > entry).sort((a, b) => a - b);
+    if (validLongTargets.length > 0) {
+      cleanTp1 = validLongTargets[0];
+      cleanTarget2 = validLongTargets[1] ?? null;
+      cleanTarget3 = validLongTargets[2] ?? null;
     }
-  }
-
-  if (cleanTarget3 != null) {
-    if ((trueDirection === 'LONG' && cleanTarget3 <= entry) || (trueDirection === 'SHORT' && cleanTarget3 >= entry)) {
-      console.warn(`[GEOMETRY_VALIDATOR] Target 3 ($${cleanTarget3}) inverted relative to ${trueDirection} direction. Discarding invalid TP3.`);
-      cleanTarget3 = null;
+  } else {
+    // Valid short targets must be strictly less than entry, sorted descending (closest milestone first)
+    const validShortTargets = rawTargets.filter((t) => t < entry).sort((a, b) => b - a);
+    if (validShortTargets.length > 0) {
+      cleanTp1 = validShortTargets[0];
+      cleanTarget2 = validShortTargets[1] ?? null;
+      cleanTarget3 = validShortTargets[2] ?? null;
     }
   }
 
   // Calculate clean R:R
   const risk = Math.abs(entry - sl);
-  const reward = Math.abs(tp1 - entry);
+  const reward = Math.abs(cleanTp1 - entry);
   const rrr = risk > 0 ? parseFloat((reward / risk).toFixed(2)) : 0;
 
   return {
@@ -256,7 +287,7 @@ export function resolveAndValidateSetupGeometry(params: {
     correctionReason,
     entryPrice: entry,
     stopLoss: sl,
-    target1: tp1,
+    target1: cleanTp1,
     target2: cleanTarget2,
     target3: cleanTarget3,
     riskRewardRatio: params.riskRewardRatio != null ? Number(params.riskRewardRatio) : rrr,
@@ -307,8 +338,14 @@ function mapRowToSetup(row: any): UserStagedSetup {
     decisionLogId: row.decision_log_id != null ? Number(row.decision_log_id) : null,
     notes: row.notes || null,
     metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata || null),
+    targetMode: row.target_mode || (row.metadata?.targetMode ?? null),
     pinnedAt: row.pinned_at ? new Date(row.pinned_at).toISOString() : new Date().toISOString(),
     deployedAt: row.deployed_at ? new Date(row.deployed_at).toISOString() : null,
+    filledAt: row.filled_at ? new Date(row.filled_at).toISOString() : null,
+    cancelledAt: row.cancelled_at ? new Date(row.cancelled_at).toISOString() : null,
+    expiredAt: row.expired_at ? new Date(row.expired_at).toISOString() : null,
+    cancelReason: row.cancel_reason || (row.metadata?.cancelReason ?? null),
+    ttlBars: row.metadata?.ttlBars ?? 48,
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
   };
 }
@@ -469,29 +506,40 @@ export async function unpinSetup(id: number | string): Promise<boolean> {
 }
 
 /**
- * Lists all active staged setups. Defaults to 'PINNED'.
+ * Lists active staged setups. Supports 'PINNED', 'RESTING_LIMIT', 'ACTIVE' (both PINNED & RESTING_LIMIT), 'ALL', or comma-separated.
  */
 export async function listStagedSetups(
-  status: StagedSetupStatus = 'PINNED'
+  status: StagedSetupStatus | 'ACTIVE' | 'ALL' | string = 'PINNED'
 ): Promise<UserStagedSetup[]> {
   await ensureUserStagedSetupsTableInitialized();
 
-  try {
-    const { rows } = await sql`
-      SELECT * FROM user_staged_setups
-      WHERE status = ${status}
-      ORDER BY pinned_at DESC;
-    `;
-    if (rows && rows.length > 0) {
-      return rows.map(mapRowToSetup);
+  let statusList: string[];
+  if (status === 'ACTIVE') {
+    statusList = ['PINNED', 'RESTING_LIMIT'];
+  } else if (status === 'ALL') {
+    statusList = ['PINNED', 'RESTING_LIMIT', 'FILLED', 'CANCELLED', 'EXPIRED', 'DEPLOYED'];
+  } else {
+    statusList = status.split(',').map((s) => s.trim().toUpperCase());
+  }
+
+  if (isPostgresAvailable) {
+    try {
+      const { rows } = await sql`
+        SELECT * FROM user_staged_setups
+        WHERE status = ANY(${statusList})
+        ORDER BY pinned_at DESC;
+      `;
+      if (rows) {
+        return rows.map(mapRowToSetup);
+      }
+    } catch (err: any) {
+      console.warn('[STAGED_STORE] PostgreSQL list query failed (using JSON fallback):', err?.message || err);
     }
-  } catch (err: any) {
-    console.warn('[STAGED_STORE] PostgreSQL list query failed (using JSON fallback):', err?.message || err);
   }
 
   // Fallback to JSON
   const fallbacks = readFallbackSetups();
-  return fallbacks.filter((s) => s.status === status);
+  return fallbacks.filter((s) => statusList.includes(s.status));
 }
 
 /**
@@ -503,17 +551,20 @@ export async function getStagedSetupById(
   await ensureUserStagedSetupsTableInitialized();
   const numId = Number(id);
 
-  try {
-    const { rows } = await sql`
-      SELECT * FROM user_staged_setups
-      WHERE id = ${numId}
-      LIMIT 1;
-    `;
-    if (rows && rows.length > 0) {
-      return mapRowToSetup(rows[0]);
+  if (isPostgresAvailable) {
+    try {
+      const { rows } = await sql`
+        SELECT * FROM user_staged_setups
+        WHERE id = ${numId}
+        LIMIT 1;
+      `;
+      if (rows && rows.length > 0) {
+        return mapRowToSetup(rows[0]);
+      }
+      return null;
+    } catch (err: any) {
+      console.warn('[STAGED_STORE] PostgreSQL getById query failed (using JSON fallback):', err?.message || err);
     }
-  } catch (err: any) {
-    console.warn('[STAGED_STORE] PostgreSQL getById query failed (using JSON fallback):', err?.message || err);
   }
 
   const fallbacks = readFallbackSetups();
@@ -521,9 +572,9 @@ export async function getStagedSetupById(
 }
 
 /**
- * Marks a staged setup as DEPLOYED upon manual cockpit execution.
+ * Transitions a staged setup to RESTING_LIMIT upon cockpit manual override deployment.
  */
-export async function markSetupDeployed(
+export async function markSetupRestingLimit(
   id: number | string,
   targetMode: string,
   details?: any
@@ -534,10 +585,11 @@ export async function markSetupDeployed(
 
   let success = false;
   try {
-    const note = details?.notes ? String(details.notes) : `Deployed to ${targetMode} @ ${nowIso}`;
+    const note = details?.notes ? String(details.notes) : `Dispatched to ${targetMode} (Resting Limit) @ ${nowIso}`;
     const res = await sql`
       UPDATE user_staged_setups
-      SET status = 'DEPLOYED',
+      SET status = 'RESTING_LIMIT',
+          target_mode = ${targetMode},
           deployed_at = NOW(),
           updated_at = NOW(),
           notes = COALESCE(notes, '') || ' [' || ${note} || ']'
@@ -548,14 +600,73 @@ export async function markSetupDeployed(
       success = true;
     }
   } catch (err: any) {
-    console.warn('[STAGED_STORE] PostgreSQL markSetupDeployed failed (using JSON fallback):', err?.message || err);
+    console.warn('[STAGED_STORE] PostgreSQL markSetupRestingLimit failed (using JSON fallback):', err?.message || err);
   }
 
   const fallbacks = readFallbackSetups();
   const idx = fallbacks.findIndex((s) => s.id === numId);
   if (idx !== -1) {
-    fallbacks[idx].status = 'DEPLOYED';
+    fallbacks[idx].status = 'RESTING_LIMIT';
+    fallbacks[idx].targetMode = targetMode;
     fallbacks[idx].deployedAt = nowIso;
+    fallbacks[idx].updatedAt = nowIso;
+    if (details?.notes) {
+      fallbacks[idx].notes = `${fallbacks[idx].notes || ''} [${details.notes}]`;
+    }
+    writeFallbackSetups(fallbacks);
+    success = true;
+  }
+
+  return success;
+}
+
+/**
+ * Marks a staged setup as DEPLOYED upon manual cockpit execution (bridges to markSetupRestingLimit).
+ */
+export async function markSetupDeployed(
+  id: number | string,
+  targetMode: string,
+  details?: any
+): Promise<boolean> {
+  return markSetupRestingLimit(id, targetMode, details);
+}
+
+/**
+ * Cancels an active resting limit order by operator action.
+ */
+export async function cancelRestingLimit(
+  id: number | string,
+  reason: string = 'OPERATOR_CANCELLED'
+): Promise<boolean> {
+  await ensureUserStagedSetupsTableInitialized();
+  const numId = Number(id);
+  const nowIso = new Date().toISOString();
+
+  let success = false;
+  try {
+    const res = await sql`
+      UPDATE user_staged_setups
+      SET status = 'CANCELLED',
+          cancelled_at = NOW(),
+          cancel_reason = ${reason},
+          updated_at = NOW(),
+          notes = COALESCE(notes, '') || ' [CANCELLED: ' || ${reason} || ' @ ' || NOW() || ']'
+      WHERE id = ${numId}
+      RETURNING id;
+    `;
+    if (res.rows.length > 0) {
+      success = true;
+    }
+  } catch (err: any) {
+    console.warn('[STAGED_STORE] PostgreSQL cancelRestingLimit failed (using JSON fallback):', err?.message || err);
+  }
+
+  const fallbacks = readFallbackSetups();
+  const idx = fallbacks.findIndex((s) => s.id === numId);
+  if (idx !== -1) {
+    fallbacks[idx].status = 'CANCELLED';
+    fallbacks[idx].cancelledAt = nowIso;
+    fallbacks[idx].cancelReason = reason;
     fallbacks[idx].updatedAt = nowIso;
     writeFallbackSetups(fallbacks);
     success = true;
@@ -565,17 +676,118 @@ export async function markSetupDeployed(
 }
 
 /**
+ * Marks an active resting limit order as EXPIRED after TTL retest bars lapse.
+ */
+export async function expireRestingLimit(
+  id: number | string,
+  reason: string = 'TTL_RETEST_EXPIRED'
+): Promise<boolean> {
+  await ensureUserStagedSetupsTableInitialized();
+  const numId = Number(id);
+  const nowIso = new Date().toISOString();
+
+  let success = false;
+  try {
+    const res = await sql`
+      UPDATE user_staged_setups
+      SET status = 'EXPIRED',
+          expired_at = NOW(),
+          cancel_reason = ${reason},
+          updated_at = NOW(),
+          notes = COALESCE(notes, '') || ' [EXPIRED: ' || ${reason} || ' @ ' || NOW() || ']'
+      WHERE id = ${numId}
+      RETURNING id;
+    `;
+    if (res.rows.length > 0) {
+      success = true;
+    }
+  } catch (err: any) {
+    console.warn('[STAGED_STORE] PostgreSQL expireRestingLimit failed (using JSON fallback):', err?.message || err);
+  }
+
+  const fallbacks = readFallbackSetups();
+  const idx = fallbacks.findIndex((s) => s.id === numId);
+  if (idx !== -1) {
+    fallbacks[idx].status = 'EXPIRED';
+    fallbacks[idx].expiredAt = nowIso;
+    fallbacks[idx].cancelReason = reason;
+    fallbacks[idx].updatedAt = nowIso;
+    writeFallbackSetups(fallbacks);
+    success = true;
+  }
+
+  return success;
+}
+
+/**
+ * Marks an active resting limit order as FILLED when price touches limit.
+ */
+export async function markSetupFilled(
+  id: number | string,
+  details?: any
+): Promise<boolean> {
+  await ensureUserStagedSetupsTableInitialized();
+  const numId = Number(id);
+  const nowIso = new Date().toISOString();
+
+  let success = false;
+  try {
+    const fillPrice = details?.entryPrice ? Number(details.entryPrice) : null;
+    const note = `FILLED @ $${fillPrice ?? 'N/A'}`;
+    const res = await sql`
+      UPDATE user_staged_setups
+      SET status = 'FILLED',
+          filled_at = NOW(),
+          updated_at = NOW(),
+          notes = COALESCE(notes, '') || ' [' || ${note} || ' @ ' || NOW() || ']'
+      WHERE id = ${numId}
+      RETURNING id;
+    `;
+    if (res.rows.length > 0) {
+      success = true;
+    }
+  } catch (err: any) {
+    console.warn('[STAGED_STORE] PostgreSQL markSetupFilled failed (using JSON fallback):', err?.message || err);
+  }
+
+  const fallbacks = readFallbackSetups();
+  const idx = fallbacks.findIndex((s) => s.id === numId);
+  if (idx !== -1) {
+    fallbacks[idx].status = 'FILLED';
+    fallbacks[idx].filledAt = nowIso;
+    fallbacks[idx].updatedAt = nowIso;
+    writeFallbackSetups(fallbacks);
+    success = true;
+  }
+
+  return success;
+}
+
+/**
+ * Convenience helper to list all active RESTING_LIMIT setups for a given symbol.
+ */
+export async function getRestingLimitSetups(symbol?: string): Promise<UserStagedSetup[]> {
+  const setups = await listStagedSetups('RESTING_LIMIT');
+  if (!symbol) return setups;
+  const upperSymbol = symbol.trim().toUpperCase();
+  return setups.filter((s) => s.symbol.toUpperCase() === upperSymbol);
+}
+
+/**
  * Checks whether an analysis log record is currently pinned in the staging queue.
  */
 export async function isAnalysisRecordPinned(analysisLogId: number): Promise<boolean> {
-  try {
-    const { rows } = await sql`
-      SELECT id FROM user_staged_setups
-      WHERE analysis_log_id = ${analysisLogId} AND status = 'PINNED'
-      LIMIT 1;
-    `;
-    if (rows && rows.length > 0) return true;
-  } catch {}
+  await ensureUserStagedSetupsTableInitialized();
+  if (isPostgresAvailable) {
+    try {
+      const { rows } = await sql`
+        SELECT id FROM user_staged_setups
+        WHERE analysis_log_id = ${analysisLogId} AND status = 'PINNED'
+        LIMIT 1;
+      `;
+      return !!(rows && rows.length > 0);
+    } catch {}
+  }
 
   const fallbacks = readFallbackSetups();
   return fallbacks.some((s) => s.analysisLogId === analysisLogId && s.status === 'PINNED');
@@ -600,6 +812,11 @@ export const userStagedSetupsStore = {
   listStagedSetups,
   getStagedSetupById,
   markSetupDeployed,
+  markSetupRestingLimit,
+  cancelRestingLimit,
+  expireRestingLimit,
+  markSetupFilled,
+  getRestingLimitSetups,
   isAnalysisRecordPinned,
 };
 

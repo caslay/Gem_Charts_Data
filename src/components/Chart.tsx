@@ -17,7 +17,7 @@ import { useDrawings } from '@/hooks/useDrawings';
 import DrawingCanvasOverlay from './drawings/DrawingCanvasOverlay';
 import DrawingToolbar from './drawings/DrawingToolbar';
 import type { SweepReclaimOverlayData } from '@/hooks/useBacktestStrategyExecution';
-import type { StagedPreviewOverlayData } from '@/types/stagedSetupTypes';
+import type { StagedPreviewOverlayData, UserStagedSetup } from '@/types/stagedSetupTypes';
 // Imports of detectActiveFVGs, mapAndConsolidateFVGs, and analyzeMarketStructure removed to prevent main-thread blocking calculations
 
 function findCandleByTime(candles: Candle[] | undefined, targetSec: number): Candle | undefined {
@@ -66,6 +66,7 @@ interface ChartProps {
   symbol?: string;
   srOverlay?: SweepReclaimOverlayData | null;
   stagedPreviewOverlay?: StagedPreviewOverlayData | null;
+  restingLimitOrders?: UserStagedSetup[];
 }
 
 export default function Chart({
@@ -94,6 +95,7 @@ export default function Chart({
   symbol = 'ETHUSDC',
   srOverlay = null,
   stagedPreviewOverlay = null,
+  restingLimitOrders = [],
 }: ChartProps) {
   const { theme } = useTheme();
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -852,6 +854,8 @@ export default function Chart({
   srOverlayRef.current = srOverlay;
   const stagedPreviewOverlayRef = useRef(stagedPreviewOverlay);
   stagedPreviewOverlayRef.current = stagedPreviewOverlay;
+  const restingLimitOrdersRef = useRef(restingLimitOrders);
+  restingLimitOrdersRef.current = restingLimitOrders;
 
   // Update SVG line and label coordinates directly in DOM styles to target 120 FPS
   const updateSvgCoordinates = useCallback(() => {
@@ -1054,9 +1058,74 @@ export default function Chart({
       hideStaged('tp1');
       hideStaged('tp2');
     }
+
+    // ── Update Persistent Resting Limit Orders DOM Lines & Labels ──
+    const currentRestingOrders = restingLimitOrdersRef.current || [];
+    currentRestingOrders.forEach((order) => {
+      const entryY = series.priceToCoordinate(order.entryPrice);
+      const slY = order.stopLoss > 0 ? series.priceToCoordinate(order.stopLoss) : null;
+      const tp1Y = order.target1 > 0 ? series.priceToCoordinate(order.target1) : null;
+
+      const entryLine = document.getElementById(`svg-resting-${order.id}-entry`);
+      const entryLabel = document.getElementById(`svg-resting-label-${order.id}-entry`);
+      if (entryLine) {
+        if (entryY !== null && !isNaN(entryY)) {
+          entryLine.setAttribute('y1', String(entryY));
+          entryLine.setAttribute('y2', String(entryY));
+        } else {
+          entryLine.setAttribute('y1', '-1000');
+          entryLine.setAttribute('y2', '-1000');
+        }
+      }
+      if (entryLabel) {
+        if (entryY !== null && !isNaN(entryY)) {
+          entryLabel.setAttribute('transform', `translate(160, ${entryY})`);
+        } else {
+          entryLabel.setAttribute('transform', 'translate(160, -1000)');
+        }
+      }
+
+      const slLine = document.getElementById(`svg-resting-${order.id}-sl`);
+      const slLabel = document.getElementById(`svg-resting-label-${order.id}-sl`);
+      if (slLine) {
+        if (slY !== null && !isNaN(slY)) {
+          slLine.setAttribute('y1', String(slY));
+          slLine.setAttribute('y2', String(slY));
+        } else {
+          slLine.setAttribute('y1', '-1000');
+          slLine.setAttribute('y2', '-1000');
+        }
+      }
+      if (slLabel) {
+        if (slY !== null && !isNaN(slY)) {
+          slLabel.setAttribute('transform', `translate(160, ${slY})`);
+        } else {
+          slLabel.setAttribute('transform', 'translate(160, -1000)');
+        }
+      }
+
+      const tp1Line = document.getElementById(`svg-resting-${order.id}-tp1`);
+      const tp1Label = document.getElementById(`svg-resting-label-${order.id}-tp1`);
+      if (tp1Line) {
+        if (tp1Y !== null && !isNaN(tp1Y)) {
+          tp1Line.setAttribute('y1', String(tp1Y));
+          tp1Line.setAttribute('y2', String(tp1Y));
+        } else {
+          tp1Line.setAttribute('y1', '-1000');
+          tp1Line.setAttribute('y2', '-1000');
+        }
+      }
+      if (tp1Label) {
+        if (tp1Y !== null && !isNaN(tp1Y)) {
+          tp1Label.setAttribute('transform', `translate(160, ${tp1Y})`);
+        } else {
+          tp1Label.setAttribute('transform', 'translate(160, -1000)');
+        }
+      }
+    });
   }, []);
 
-  // Sync coordinates when openTrades, srOverlay, stagedPreviewOverlay, or data changes
+  // Sync coordinates when openTrades, srOverlay, stagedPreviewOverlay, restingLimitOrders, or data changes
   useEffect(() => {
     const timer = setTimeout(() => {
       updateSvgCoordinates();
@@ -1073,6 +1142,8 @@ export default function Chart({
     stagedPreviewOverlay?.stopLoss,
     stagedPreviewOverlay?.target1,
     stagedPreviewOverlay?.target2,
+    restingLimitOrders?.length,
+    restingLimitOrders,
     data?.length,
     updateSvgCoordinates
   ]);
@@ -2299,6 +2370,70 @@ export default function Chart({
             )}
           </g>
         )}
+
+        {/* Persistent Active Resting Limit Orders on Canvas */}
+        {restingLimitOrders && restingLimitOrders.map((order) => {
+          const modeLabel = order.targetMode === 'LIVE_BINANCE' ? 'LIVE' : 'PAPER';
+          return (
+            <g key={order.id} id={`svg-resting-group-${order.id}`} className="pointer-events-none">
+              {/* Persistent Limit Entry Line & Badge */}
+              <line
+                id={`svg-resting-${order.id}-entry`}
+                x1="0"
+                x2="100%"
+                y1="-1000"
+                y2="-1000"
+                stroke="#eab308"
+                strokeDasharray="6 4"
+                strokeWidth="2"
+              />
+              <g id={`svg-resting-label-${order.id}-entry`} transform="translate(160, -1000)">
+                <rect x="5" y="-10" width="270" height="20" fill="#1c1917" rx="4" stroke="#eab308" strokeWidth="1.5" />
+                <text x="12" y="4" fill="#fde047" fontSize="10" fontFamily="monospace" fontWeight="bold">
+                  {`🟡 PENDING LIMIT (${order.direction}): $${order.entryPrice.toFixed(2)} [${modeLabel}]`}
+                </text>
+              </g>
+
+              {/* Invalidation SL Line & Badge */}
+              <line
+                id={`svg-resting-${order.id}-sl`}
+                x1="0"
+                x2="100%"
+                y1="-1000"
+                y2="-1000"
+                stroke="#f43f5e"
+                strokeDasharray="3 3"
+                strokeWidth="1.2"
+                strokeOpacity="0.8"
+              />
+              <g id={`svg-resting-label-${order.id}-sl`} transform="translate(160, -1000)">
+                <rect x="5" y="-9" width="130" height="18" fill="#1c1917" rx="3" stroke="#f43f5e" strokeWidth="1" strokeOpacity="0.8" />
+                <text x="10" y="4" fill="#fda4af" fontSize="9" fontFamily="monospace" fontWeight="bold">
+                  {`🔴 SL: $${order.stopLoss.toFixed(2)}`}
+                </text>
+              </g>
+
+              {/* Target 1 Line & Badge */}
+              <line
+                id={`svg-resting-${order.id}-tp1`}
+                x1="0"
+                x2="100%"
+                y1="-1000"
+                y2="-1000"
+                stroke="#10b981"
+                strokeDasharray="3 3"
+                strokeWidth="1.2"
+                strokeOpacity="0.8"
+              />
+              <g id={`svg-resting-label-${order.id}-tp1`} transform="translate(160, -1000)">
+                <rect x="5" y="-9" width="130" height="18" fill="#1c1917" rx="3" stroke="#10b981" strokeWidth="1" strokeOpacity="0.8" />
+                <text x="10" y="4" fill="#6ee7b7" fontSize="9" fontFamily="monospace" fontWeight="bold">
+                  {`🟢 TP1: $${order.target1.toFixed(2)}`}
+                </text>
+              </g>
+            </g>
+          );
+        })}
       </svg>
 
       {/* Dynamic Layer Orchestrator HTML Overlays */}

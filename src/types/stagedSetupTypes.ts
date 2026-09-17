@@ -5,7 +5,14 @@
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
-export type StagedSetupStatus = 'PINNED' | 'DEPLOYED' | 'DISMISSED';
+export type StagedSetupStatus =
+  | 'PINNED'
+  | 'RESTING_LIMIT'
+  | 'FILLED'
+  | 'CANCELLED'
+  | 'EXPIRED'
+  | 'DISMISSED'
+  | 'DEPLOYED';
 
 export interface UserStagedSetup {
   id: number;
@@ -28,8 +35,14 @@ export interface UserStagedSetup {
   decisionLogId?: number | null;
   notes?: string | null;
   metadata?: Record<string, any> | null;
+  targetMode?: 'PAPER_TRADING' | 'LIVE_BINANCE' | string | null;
   pinnedAt: string; // ISO string
   deployedAt?: string | null;
+  filledAt?: string | null;
+  cancelledAt?: string | null;
+  expiredAt?: string | null;
+  cancelReason?: string | null;
+  ttlBars?: number | null;
   updatedAt: string; // ISO string
 }
 

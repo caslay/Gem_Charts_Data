@@ -16,7 +16,7 @@ import OrderFlowTimelineRibbon from '@/components/OrderFlowTimelineRibbon';
 import OrderFlowTimelineModal from '@/components/modals/OrderFlowTimelineModal';
 import LiveOrderBlockModal from '@/components/modals/LiveOrderBlockModal';
 import CopilotStagingDeckModal from '@/components/modals/CopilotStagingDeckModal';
-import type { StagedPreviewOverlayData } from '@/types/stagedSetupTypes';
+import type { StagedPreviewOverlayData, UserStagedSetup } from '@/types/stagedSetupTypes';
 import { useAutomatedStrategyExecution } from '@/hooks/useAutomatedStrategyExecution';
 import { useSessionJournalStore } from '@/lib/quantEngine/sessionJournalStore';
 import { calculateATR } from '@/lib/riskEngine';
@@ -53,6 +53,7 @@ export default function Home() {
   const [isStagingDeckOpen, setIsStagingDeckOpen] = useState(false);
   const [stagedSetupsCount, setStagedSetupsCount] = useState(0);
   const [stagedPreviewOverlay, setStagedPreviewOverlay] = useState<StagedPreviewOverlayData | null>(null);
+  const [restingLimitOrders, setRestingLimitOrders] = useState<UserStagedSetup[]>([]);
   const [commandCenterTab, setCommandCenterTab] = useState<'strategy' | 'audio'>('strategy');
   const [counts, setCounts] = useState({ '5m': 60, '15m': 0, '1h': 72, '4h': 20 });
 
@@ -78,29 +79,64 @@ export default function Home() {
     });
   }, []);
 
-  // Fetch active staged setups count for HUD ribbon
+  // Fetch active staged setups & resting limits for HUD ribbon and live chart projection
   const isFetchingCountRef = useRef(false);
-  const fetchStagedCount = useCallback(async () => {
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const fetchStagedData = useCallback(async () => {
     if (isFetchingCountRef.current) return;
     isFetchingCountRef.current = true;
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
-      const res = await fetch('/api/staged-setups?status=PINNED', { cache: 'no-store' });
+      const res = await fetch('/api/staged-setups?status=ACTIVE', {
+        cache: 'no-store',
+        signal: controller.signal,
+      });
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.data)) {
-          setStagedSetupsCount((prev) => (prev !== json.data.length ? json.data.length : prev));
+          const pinned = json.data.filter((s: UserStagedSetup) => s.status === 'PINNED');
+          const resting = json.data.filter((s: UserStagedSetup) => s.status === 'RESTING_LIMIT');
+          setStagedSetupsCount(pinned.length);
+          setRestingLimitOrders(resting);
         }
       }
-    } catch {} finally {
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return;
+      console.warn('[PAGE] Failed to fetch active staged data:', err);
+    } finally {
       isFetchingCountRef.current = false;
     }
   }, []);
 
   useEffect(() => {
-    fetchStagedCount();
-    const timer = setInterval(fetchStagedCount, 15000);
-    return () => clearInterval(timer);
-  }, [fetchStagedCount]);
+    fetchStagedData();
+    const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchStagedData();
+    }, 15000);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchStagedData();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [fetchStagedData]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -549,6 +585,7 @@ export default function Home() {
                 onUpdateTradeLevels={handleUpdateTradeLevels}
                 srOverlay={liveSr.srOverlay}
                 stagedPreviewOverlay={stagedPreviewOverlay}
+                restingLimitOrders={restingLimitOrders}
                 symbol="ETHUSDC"
               />
               {isManualTradingActive && (
@@ -633,12 +670,15 @@ export default function Home() {
         onClose={() => {
           setIsStagingDeckOpen(false);
           setStagedPreviewOverlay(null);
-          fetchStagedCount();
+          fetchStagedData();
         }}
         livePrice={getChartData().length > 0 ? getChartData()[getChartData().length - 1].c : null}
         onPreviewSetup={handlePreviewSetup}
         onDeploySuccess={() => {
-          fetchStagedCount();
+          fetchStagedData();
+        }}
+        onCancelSuccess={() => {
+          fetchStagedData();
         }}
       />
 

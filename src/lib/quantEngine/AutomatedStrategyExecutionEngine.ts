@@ -1794,8 +1794,16 @@ export class AutomatedStrategyExecutionEngine {
   }
 
   public cancelPendingLimitOrder(posId: string, cancelReason?: string): boolean {
+    const rawIdStr = String(posId);
+    const cleanStagedIdStr = rawIdStr.replace(/^staged_/, '');
     const idx = this.pendingLimitOrders.findIndex(
-      (p) => p.id === posId || p.dbTradeId === posId,
+      (p) =>
+        p.id === posId ||
+        p.dbTradeId === posId ||
+        (p as any).stagedId === posId ||
+        String((p as any).stagedId) === rawIdStr ||
+        String((p as any).stagedId) === cleanStagedIdStr ||
+        p.id === `staged_${(p as any).stagedId}`
     );
     if (idx !== -1) {
       const order = this.pendingLimitOrders[idx];

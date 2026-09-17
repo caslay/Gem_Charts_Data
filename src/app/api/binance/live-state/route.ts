@@ -6,6 +6,7 @@ import {
   getBinanceUserTrades,
 } from '@/lib/binanceFuturesClient';
 import { evaluateExecutionSafetyGate } from '@/lib/binanceOrderRouter';
+import { userStagedSetupsStore } from '@/lib/staging/userStagedSetupsStore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -54,6 +55,24 @@ export async function GET(request: Request) {
 
   const safetyGate = evaluateExecutionSafetyGate();
 
+  // Fetch active resting limit orders from staging deck store
+  const stagedResting = await userStagedSetupsStore.getRestingLimitSetups(symbol).catch(() => []);
+  const stagedOpenOrders = stagedResting.map((s) => ({
+    orderId: s.id,
+    clientOrderId: `STAGED_LIMIT_${s.id}`,
+    symbol: s.symbol || symbol,
+    side: (s.direction === 'LONG' ? 'BUY' : 'SELL') as 'BUY' | 'SELL',
+    type: 'LIMIT (STAGED)',
+    price: String(s.entryPrice),
+    origQty: String(s.contractSize || 1),
+    stopPrice: String(s.stopLoss),
+    status: 'RESTING_LIMIT',
+    time: s.deployedAt ? new Date(s.deployedAt).getTime() : Date.now(),
+    anchorName: `${s.sourceReference} • Staged Resting Limit`,
+    stagedId: s.id,
+    targetMode: s.targetMode || 'PAPER_TRADING',
+  }));
+
   // 2. Local Workstation or Unarmed Mode -> Shadow / Paper Telemetry
   if (!safetyGate.isAllowed) {
     const sessionLog = getLocalDaemonSessionFallback(symbol);
@@ -64,6 +83,28 @@ export async function GET(request: Request) {
     const mockEquity = sessionLog?.currentCapital || 15000.0;
     const sessionRealizedUsd = sessionLog?.totalRealizedUsd || 0.0;
     const sessionRealizedR = sessionLog?.totalRealizedR || 0.0;
+
+    const baseOpenOrders = pendingOrders.map((po: any) => ({
+      orderId: 0,
+      clientOrderId: `MOCK_PENDING_${po.id}`,
+      symbol: po.symbol || symbol,
+      side: po.direction === 'LONG' ? 'BUY' : 'SELL',
+      type: 'LIMIT',
+      price: String(po.limitEntryPrice || po.entryPrice),
+      origQty: String(po.contractSize),
+      stopPrice: String(po.initialStopLoss || 0),
+      status: 'NEW',
+      time: po.pendingTime || Date.now(),
+      anchorName: po.anchorName || '5m Anchor',
+    }));
+
+    // Merge staged resting orders without duplicates
+    const combinedOrders = [...baseOpenOrders];
+    for (const so of stagedOpenOrders) {
+      if (!combinedOrders.some((co: any) => co.clientOrderId === so.clientOrderId)) {
+        combinedOrders.push(so);
+      }
+    }
 
     const shadowPayload = {
       success: true,
@@ -98,19 +139,7 @@ export async function GET(request: Request) {
         stage1Target: String(p.stage1Target || 0),
         stage2Target: String(p.stage2Target || 0),
       })),
-      openOrders: pendingOrders.map((po: any) => ({
-        orderId: 0,
-        clientOrderId: `MOCK_PENDING_${po.id}`,
-        symbol: po.symbol || symbol,
-        side: po.direction === 'LONG' ? 'BUY' : 'SELL',
-        type: 'LIMIT',
-        price: String(po.limitEntryPrice || po.entryPrice),
-        origQty: String(po.contractSize),
-        stopPrice: String(po.initialStopLoss || 0),
-        status: 'NEW',
-        time: po.pendingTime || Date.now(),
-        anchorName: po.anchorName || '5m Anchor',
-      })),
+      openOrders: combinedOrders,
       recentTrades: completedTrades.map((t: any) => ({
         symbol: t.symbol || symbol,
         id: t.id,
@@ -181,20 +210,28 @@ export async function GET(request: Request) {
           updateTime: p.updateTime,
         };
       }),
-      openOrders: openOrdersData.map((o) => ({
-        orderId: o.orderId,
-        clientOrderId: o.clientOrderId,
-        symbol: o.symbol,
-        side: o.side,
-        type: o.type,
-        price: o.price,
-        origQty: o.origQty,
-        executedQty: o.executedQty,
-        stopPrice: o.stopPrice,
-        status: o.status,
-        time: o.updateTime || Date.now(),
-        reduceOnly: o.reduceOnly,
-      })),
+      openOrders: (() => {
+        const liveOrders: any[] = openOrdersData.map((o) => ({
+          orderId: o.orderId,
+          clientOrderId: o.clientOrderId,
+          symbol: o.symbol,
+          side: o.side,
+          type: o.type,
+          price: o.price,
+          origQty: o.origQty,
+          executedQty: o.executedQty,
+          stopPrice: o.stopPrice,
+          status: o.status,
+          time: o.updateTime || Date.now(),
+          reduceOnly: o.reduceOnly,
+        }));
+        for (const so of stagedOpenOrders) {
+          if (!liveOrders.some((lo) => lo.clientOrderId === so.clientOrderId)) {
+            liveOrders.push(so);
+          }
+        }
+        return liveOrders;
+      })(),
       recentTrades: tradesData.map((t) => ({
         symbol: t.symbol,
         id: t.id,

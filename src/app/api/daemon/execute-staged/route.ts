@@ -131,8 +131,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Update Staging Store: Mark Setup as Deployed
-    await userStagedSetupsStore.markSetupDeployed(stagedId, targetMode);
+    // 5. Update Staging Store: Transition Setup to RESTING_LIMIT
+    await userStagedSetupsStore.markSetupRestingLimit(stagedId, targetMode, {
+      decisionId,
+      notes: `Dispatched to ${targetMode} via ${executionSource}`,
+    });
 
     // 6. Append Command to daemon_commands.json
     const runLogsDir = path.join(process.cwd(), 'run_logs');

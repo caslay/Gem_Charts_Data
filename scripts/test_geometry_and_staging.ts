@@ -118,10 +118,77 @@ async function runTests() {
   assert(retrieved !== null, 'Retrieved pinned setup by ID');
   assert(retrieved?.direction === 'SHORT', 'Retrieved setup direction is SHORT');
 
-  // Clean up test setup
-  await userStagedSetupsStore.unpinSetup(pinned.id);
-  const unpinned = await userStagedSetupsStore.getStagedSetupById(pinned.id);
-  assert(unpinned?.status === 'DISMISSED', 'Setup successfully dismissed');
+  // Test 10: Monotonic Target Sorting (Ascending for LONG, Descending for SHORT)
+  console.log('\nTesting Monotonic Target Sorting...');
+  const outOfOrderLong = resolveAndValidateSetupGeometry({
+    direction: 'LONG',
+    entryPrice: 2000,
+    stopLoss: 1950,
+    target1: 2200, // Was put as TP1
+    target2: 2050, // Closer milestone, should become TP1
+    target3: 2100, // Should become TP2
+  });
+  assert(outOfOrderLong.isValid === true, 'Out of order Long targets are valid');
+  assert(outOfOrderLong.target1 === 2050, 'Target 1 sorted to closest milestone (2050)');
+  assert(outOfOrderLong.target2 === 2100, 'Target 2 sorted to next milestone (2100)');
+  assert(outOfOrderLong.target3 === 2200, 'Target 3 sorted to farthest milestone (2200)');
+
+  const outOfOrderShort = resolveAndValidateSetupGeometry({
+    direction: 'SHORT',
+    entryPrice: 2000,
+    stopLoss: 2050,
+    target1: 1800, // Was put as TP1
+    target2: 1950, // Closer milestone, should become TP1
+    target3: 1900, // Should become TP2
+  });
+  assert(outOfOrderShort.isValid === true, 'Out of order Short targets are valid');
+  assert(outOfOrderShort.target1 === 1950, 'Short Target 1 sorted to closest milestone (1950)');
+  assert(outOfOrderShort.target2 === 1900, 'Short Target 2 sorted to next milestone (1900)');
+  assert(outOfOrderShort.target3 === 1800, 'Short Target 3 sorted to farthest milestone (1800)');
+
+  // Test 11: Staging Lifecycle: RESTING_LIMIT -> EXPIRED
+  console.log('\nTesting Resting Limit Expiry Lifecycle...');
+  const restingToExpire = await userStagedSetupsStore.pinSetup({
+    symbol: 'ETHUSDC',
+    direction: 'LONG',
+    entryPrice: 2000,
+    stopLoss: 1980,
+    target1: 2050,
+    sourceReference: 'TEST_EXPIRY_LIFECYCLE',
+  });
+  await userStagedSetupsStore.markSetupRestingLimit(restingToExpire.id, 'PAPER_TRADING');
+  let restingRec = await userStagedSetupsStore.getStagedSetupById(restingToExpire.id);
+  assert(restingRec?.status === 'RESTING_LIMIT', 'Setup transitioned to RESTING_LIMIT');
+  assert(restingRec?.targetMode === 'PAPER_TRADING', 'targetMode recorded as PAPER_TRADING');
+
+  const expireOk = await userStagedSetupsStore.expireRestingLimit(restingToExpire.id, 48);
+  assert(expireOk === true, 'expireRestingLimit succeeded');
+  restingRec = await userStagedSetupsStore.getStagedSetupById(restingToExpire.id);
+  assert(restingRec?.status === 'EXPIRED', 'Setup status updated to EXPIRED');
+  assert(restingRec?.expiredAt !== undefined, 'expiredAt timestamp populated');
+
+  // Test 12: Staging Lifecycle: RESTING_LIMIT -> FILLED
+  console.log('\nTesting Resting Limit Fill Lifecycle...');
+  const restingToFill = await userStagedSetupsStore.pinSetup({
+    symbol: 'ETHUSDC',
+    direction: 'SHORT',
+    entryPrice: 2000,
+    stopLoss: 2020,
+    target1: 1950,
+    sourceReference: 'TEST_FILL_LIFECYCLE',
+  });
+  await userStagedSetupsStore.markSetupRestingLimit(restingToFill.id, 'LIVE_BINANCE');
+  const fillOk = await userStagedSetupsStore.markSetupFilled(restingToFill.id, { fillPrice: 2000 });
+  assert(fillOk === true, 'markSetupFilled succeeded');
+  const filledRec = await userStagedSetupsStore.getStagedSetupById(restingToFill.id);
+  assert(filledRec?.status === 'FILLED', 'Setup status updated to FILLED');
+  assert(filledRec?.filledAt !== undefined, 'filledAt timestamp populated');
+
+  // Test 13: Query getRestingLimitSetups
+  const restingList = await userStagedSetupsStore.getRestingLimitSetups();
+  assert(Array.isArray(restingList), 'getRestingLimitSetups returns array');
+  const hasExpiredOrFilled = restingList.some((s) => s.id === restingToExpire.id || s.id === restingToFill.id);
+  assert(!hasExpiredOrFilled, 'getRestingLimitSetups excludes EXPIRED and FILLED setups');
 
   console.log(`\nResults: ${passed} passed, ${failed} failed`);
   if (failed > 0) {
