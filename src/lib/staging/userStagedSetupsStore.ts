@@ -39,7 +39,28 @@ function readFallbackSetups(): UserStagedSetup[] {
     if (!fs.existsSync(file)) return [];
     const raw = fs.readFileSync(file, 'utf8');
     const data = JSON.parse(raw);
-    return Array.isArray(data) ? data : [];
+    if (!Array.isArray(data)) return [];
+    return data.map((s: any) => {
+      const geom = resolveAndValidateSetupGeometry({
+        direction: s.direction,
+        entryPrice: s.entryPrice,
+        stopLoss: s.stopLoss,
+        target1: s.target1,
+        target2: s.target2,
+        target3: s.target3,
+        riskRewardRatio: s.riskRewardRatio,
+      });
+      return {
+        ...s,
+        direction: geom.resolvedDirection,
+        entryPrice: geom.entryPrice,
+        stopLoss: geom.stopLoss,
+        target1: geom.target1,
+        target2: geom.target2,
+        target3: geom.target3,
+        riskRewardRatio: geom.riskRewardRatio,
+      };
+    });
   } catch (err) {
     console.warn('[STAGED_STORE] Could not read fallback JSON store:', err);
     return [];
@@ -100,28 +121,183 @@ export async function ensureUserStagedSetupsTableInitialized(): Promise<void> {
         ON user_staged_setups (analysis_log_id);
     `;
 
+    // 3. Self-healing geometry reconciliation: auto-correct historical mislabeled direction rows
+    await sql`
+      UPDATE user_staged_setups
+      SET direction = 'SHORT', updated_at = NOW()
+      WHERE direction = 'LONG' AND stop_loss > entry_price AND target_1 < entry_price;
+    `.catch(() => {});
+
+    await sql`
+      UPDATE user_staged_setups
+      SET direction = 'LONG', updated_at = NOW()
+      WHERE direction = 'SHORT' AND stop_loss < entry_price AND target_1 > entry_price;
+    `.catch(() => {});
+
     isTableInitialized = true;
   } catch (err) {
     console.warn('[STAGED_STORE] Postgres table initialization skipped or offline (using JSON fallback):', err);
   }
 }
 
+export interface ResolvedGeometry {
+  isValid: boolean;
+  resolvedDirection: 'LONG' | 'SHORT';
+  wasDirectionCorrected: boolean;
+  correctionReason?: string;
+  error?: string;
+  entryPrice: number;
+  stopLoss: number;
+  target1: number;
+  target2?: number | null;
+  target3?: number | null;
+  riskRewardRatio: number;
+}
+
+/**
+ * Validates and auto-corrects directional geometry based on price action physics.
+ * Long: Stop Loss < Entry Price and Target 1 > Entry Price.
+ * Short: Stop Loss > Entry Price and Target 1 < Entry Price.
+ * Automatically corrects mislabeled direction if price geometry unambiguously dictates it.
+ */
+export function resolveAndValidateSetupGeometry(params: {
+  direction?: string | null;
+  entryPrice: number;
+  stopLoss: number;
+  target1: number;
+  target2?: number | null;
+  target3?: number | null;
+  riskRewardRatio?: number | null;
+}): ResolvedGeometry {
+  const entry = Number(params.entryPrice);
+  const sl = Number(params.stopLoss);
+  const tp1 = Number(params.target1);
+
+  if (isNaN(entry) || entry <= 0) {
+    return { isValid: false, error: `Invalid Entry Price: ${params.entryPrice}`, resolvedDirection: 'LONG', wasDirectionCorrected: false, entryPrice: entry, stopLoss: sl, target1: tp1, riskRewardRatio: 0 };
+  }
+  if (isNaN(sl) || sl <= 0) {
+    return { isValid: false, error: `Invalid Stop Loss: ${params.stopLoss}`, resolvedDirection: 'LONG', wasDirectionCorrected: false, entryPrice: entry, stopLoss: sl, target1: tp1, riskRewardRatio: 0 };
+  }
+  if (isNaN(tp1) || tp1 <= 0) {
+    return { isValid: false, error: `Invalid Target 1: ${params.target1}`, resolvedDirection: 'LONG', wasDirectionCorrected: false, entryPrice: entry, stopLoss: sl, target1: tp1, riskRewardRatio: 0 };
+  }
+
+  // Check if SL and TP1 are on the same side of Entry
+  if ((sl >= entry && tp1 >= entry) || (sl <= entry && tp1 <= entry)) {
+    return {
+      isValid: false,
+      error: `Corrupt setup geometry: Stop Loss ($${sl}) and Target 1 ($${tp1}) cannot both be on the same side of Entry ($${entry}).`,
+      resolvedDirection: 'LONG',
+      wasDirectionCorrected: false,
+      entryPrice: entry,
+      stopLoss: sl,
+      target1: tp1,
+      riskRewardRatio: 0,
+    };
+  }
+
+  // Derive mathematical direction from price physics
+  let trueDirection: 'LONG' | 'SHORT';
+  if (sl < entry && tp1 > entry) {
+    trueDirection = 'LONG';
+  } else if (sl > entry && tp1 < entry) {
+    trueDirection = 'SHORT';
+  } else {
+    return {
+      isValid: false,
+      error: `Invalid geometry coordinates: Entry=$${entry}, SL=$${sl}, TP1=$${tp1}.`,
+      resolvedDirection: 'LONG',
+      wasDirectionCorrected: false,
+      entryPrice: entry,
+      stopLoss: sl,
+      target1: tp1,
+      riskRewardRatio: 0,
+    };
+  }
+
+  const rawDirection = (params.direction || '').trim().toUpperCase();
+  let wasDirectionCorrected = false;
+  let correctionReason: string | undefined;
+
+  if (rawDirection && rawDirection !== trueDirection) {
+    wasDirectionCorrected = true;
+    correctionReason = `Mislabeled direction: Setup was labeled ${rawDirection}, but price geometry (Entry: $${entry}, SL: $${sl}, TP1: $${tp1}) dictates ${trueDirection}. Auto-corrected to ${trueDirection}.`;
+    console.warn(`[GEOMETRY_VALIDATOR] ⚠️ ${correctionReason}`);
+  }
+
+  // Sanitize Target 2 & Target 3
+  let cleanTarget2 = params.target2 != null ? Number(params.target2) : null;
+  let cleanTarget3 = params.target3 != null ? Number(params.target3) : null;
+
+  if (cleanTarget2 != null) {
+    if ((trueDirection === 'LONG' && cleanTarget2 <= entry) || (trueDirection === 'SHORT' && cleanTarget2 >= entry)) {
+      console.warn(`[GEOMETRY_VALIDATOR] Target 2 ($${cleanTarget2}) inverted relative to ${trueDirection} direction. Discarding invalid TP2.`);
+      cleanTarget2 = null;
+    }
+  }
+
+  if (cleanTarget3 != null) {
+    if ((trueDirection === 'LONG' && cleanTarget3 <= entry) || (trueDirection === 'SHORT' && cleanTarget3 >= entry)) {
+      console.warn(`[GEOMETRY_VALIDATOR] Target 3 ($${cleanTarget3}) inverted relative to ${trueDirection} direction. Discarding invalid TP3.`);
+      cleanTarget3 = null;
+    }
+  }
+
+  // Calculate clean R:R
+  const risk = Math.abs(entry - sl);
+  const reward = Math.abs(tp1 - entry);
+  const rrr = risk > 0 ? parseFloat((reward / risk).toFixed(2)) : 0;
+
+  return {
+    isValid: true,
+    resolvedDirection: trueDirection,
+    wasDirectionCorrected,
+    correctionReason,
+    entryPrice: entry,
+    stopLoss: sl,
+    target1: tp1,
+    target2: cleanTarget2,
+    target3: cleanTarget3,
+    riskRewardRatio: params.riskRewardRatio != null ? Number(params.riskRewardRatio) : rrr,
+  };
+}
+
 /**
  * Maps a raw database row to the typed UserStagedSetup object.
+ * Enforces automatic geometry validation and direction resolution.
  */
 function mapRowToSetup(row: any): UserStagedSetup {
+  const rawDirection = String(row.direction || 'LONG').toUpperCase();
+  const entryPrice = Number(row.entry_price || 0);
+  const stopLoss = Number(row.stop_loss || 0);
+  const target1 = Number(row.target_1 || 0);
+  const target2 = row.target_2 != null ? Number(row.target_2) : null;
+  const target3 = row.target_3 != null ? Number(row.target_3) : null;
+
+  // Auto-validate and correct direction based on physical price geometry
+  const geom = resolveAndValidateSetupGeometry({
+    direction: rawDirection,
+    entryPrice,
+    stopLoss,
+    target1,
+    target2,
+    target3,
+    riskRewardRatio: row.risk_reward_ratio != null ? Number(row.risk_reward_ratio) : null,
+  });
+
   return {
     id: Number(row.id),
     symbol: String(row.symbol || 'ETHUSDC'),
-    direction: (String(row.direction || 'LONG').toUpperCase() === 'SHORT' ? 'SHORT' : 'LONG'),
-    entryPrice: Number(row.entry_price || 0),
+    direction: geom.resolvedDirection,
+    entryPrice: geom.entryPrice,
     entryRangeLow: row.entry_range_low != null ? Number(row.entry_range_low) : null,
     entryRangeHigh: row.entry_range_high != null ? Number(row.entry_range_high) : null,
-    stopLoss: Number(row.stop_loss || 0),
-    target1: Number(row.target_1 || 0),
-    target2: row.target_2 != null ? Number(row.target_2) : null,
-    target3: row.target_3 != null ? Number(row.target_3) : null,
-    riskRewardRatio: row.risk_reward_ratio != null ? Number(row.risk_reward_ratio) : null,
+    stopLoss: geom.stopLoss,
+    target1: geom.target1,
+    target2: geom.target2,
+    target3: geom.target3,
+    riskRewardRatio: geom.riskRewardRatio,
     riskUsd: row.risk_usd != null ? Number(row.risk_usd) : null,
     riskPct: row.risk_pct != null ? Number(row.risk_pct) : null,
     contractSize: row.contract_size != null ? Number(row.contract_size) : null,
@@ -144,23 +320,31 @@ function mapRowToSetup(row: any): UserStagedSetup {
 export async function pinSetup(input: CreateStagedSetupInput): Promise<UserStagedSetup> {
   await ensureUserStagedSetupsTableInitialized();
 
+  // Validate and resolve directional geometry
+  const geom = resolveAndValidateSetupGeometry({
+    direction: input.direction,
+    entryPrice: Number(input.entryPrice),
+    stopLoss: Number(input.stopLoss),
+    target1: Number(input.target1),
+    target2: input.target2 != null ? Number(input.target2) : null,
+    target3: input.target3 != null ? Number(input.target3) : null,
+    riskRewardRatio: input.riskRewardRatio != null ? Number(input.riskRewardRatio) : null,
+  });
+
+  if (!geom.isValid) {
+    throw new Error(geom.error || 'Corrupt or invalid setup geometry coordinates.');
+  }
+
   const symbol = (input.symbol || 'ETHUSDC').trim().toUpperCase();
-  const direction = input.direction === 'SHORT' ? 'SHORT' : 'LONG';
-  const entryPrice = Number(input.entryPrice);
+  const direction = geom.resolvedDirection;
+  const entryPrice = geom.entryPrice;
   const entryRangeLow = input.entryRangeLow != null ? Number(input.entryRangeLow) : null;
   const entryRangeHigh = input.entryRangeHigh != null ? Number(input.entryRangeHigh) : null;
-  const stopLoss = Number(input.stopLoss);
-  const target1 = Number(input.target1);
-  const target2 = input.target2 != null ? Number(input.target2) : null;
-  const target3 = input.target3 != null ? Number(input.target3) : null;
-
-  // Calculate default R:R if omitted
-  let rrr = input.riskRewardRatio != null ? Number(input.riskRewardRatio) : null;
-  if (rrr == null && entryPrice > 0 && Math.abs(entryPrice - stopLoss) > 0) {
-    const risk = Math.abs(entryPrice - stopLoss);
-    const reward = Math.abs(target1 - entryPrice);
-    rrr = parseFloat((reward / risk).toFixed(2));
-  }
+  const stopLoss = geom.stopLoss;
+  const target1 = geom.target1;
+  const target2 = geom.target2 ?? null;
+  const target3 = geom.target3 ?? null;
+  const rrr = geom.riskRewardRatio;
 
   const sourceRef = input.sourceReference || 'MANUAL';
   const metadataJson = input.metadata ? JSON.stringify(input.metadata) : null;
@@ -410,6 +594,7 @@ function updateFallbackRecord(setup: UserStagedSetup): void {
 
 export const userStagedSetupsStore = {
   ensureUserStagedSetupsTableInitialized,
+  resolveAndValidateSetupGeometry,
   pinSetup,
   unpinSetup,
   listStagedSetups,
