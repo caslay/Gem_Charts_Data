@@ -1,8 +1,34 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.99
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V18.0
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-18 (V17.99 — Model Cascade Sanitation, Signal Normalization & Execution Mode Tagging)
+> **Last Updated:** 2026-09-19 (V18.0 — AI Model Registry Migration to Stable 3.5 Tier & Deprecated Endpoint Pruning)
+
+## 🆕 V18.0 Changelog — AI Model Registry Migration to Stable 3.5 Tier & Deprecated Endpoint Pruning (2026-09-19)
+
+### Summary
+1. **Official API Lifecycle Alignment & Deprecation Shielding (`src/lib/aiModels.ts`):**
+   - **Primary Model Reassignment (`DEFAULT_MODEL = "gemini-3.5-flash"`):** Designated GA `gemini-3.5-flash` as the authoritative Primary model for all quantitative scheduled scanning and on-demand analysis. Permanently resolves the upcoming October 16, 2026 deprecation and shutdown cliff of `gemini-2.5-flash`.
+   - **Immediate High-Quota Failover (`gemini-3.5-flash-lite`):** Configured Candidate 2 to immediately fail over to `gemini-3.5-flash-lite` (500 RPD high capacity), delivering ~3s execution latency and 100% JSON reasoning reliability without upstream 429 quota exhaustion.
+   - **Deprecated Endpoint Pruning:** Pruned `gemini-2.5-flash` and `gemini-2.5-flash-lite` from automated cascade chains and active registry. Completely pruned unstable free-tier OpenRouter endpoints (`deepseek/deepseek-v4-flash-0731:free`), leaving only commercial `deepseek/deepseek-chat` (1000 RPD).
+2. **Streamlined 2-Tier Cascade Flow & Latency Ceiling (`src/lib/aiCascadeEngine.ts`):**
+   - **Tightened Cascade Priority:**
+     * Candidate 1: Primary `gemini-3.5-flash`
+     * Candidate 2: Secondary `gemini-3.5-flash-lite` (500 RPD Workhorse)
+     * Candidate 3: Tertiary `gemini-3.1-flash-lite` (500 RPD Workhorse)
+     * Candidate 4+: Reserve Apex models (`gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, `gemini-3-flash`) and OpenRouter Commercial (`deepseek/deepseek-chat`).
+   - **Cumulative Scan Budget Enforcement:** Capped `CASCADE_MAX_CUMULATIVE_SCAN_MS = 45000` (45s), enforcing a maximum of 3 x 15s attempts per cycle, strictly shielding scheduler tick cadence from multi-minute hangs.
+3. **Graceful Auto-Migration & Settings UI Synchronization (`route.ts`, `headlessScheduler.ts`, `quant-analyze`, `settings/page.tsx`):**
+   - **Backend Auto-Migration:** In `/api/settings` GET handler, dynamically detects legacy/deprecated DB records (`gemini-2.5-flash`, `gemini-2.5-flash-lite`, `deepseek/deepseek-v4-flash-0731:free`), auto-migrates them to `DEFAULT_MODEL` (`gemini-3.5-flash`), and updates the `system_settings` table asynchronously with zero operator intervention.
+   - **Daemon & API Protection:** Added defensive normalization in `headlessScheduler.ts` and `api/quant-analyze/route.ts` to automatically map any legacy model string to `DEFAULT_MODEL`.
+   - **Settings UI Polish:** Reordered `/settings` model selection dropdown to display the Google Gemini tier first, featuring `gemini-3.5-flash` and `gemini-3.5-flash-lite` prominently at the top with clear quota and tier badges.
+4. **Verification & Parity Audit:**
+   - Dedicated verification suite (`scratch/verify_v18_models.ts`): 100% pass across default model assignment, cascade fallback pool ordering, legacy auto-migration, and timeout limits.
+   - TypeScript compiler verification (`npx tsc --noEmit`): 0 errors.
+   - Production build verification (`npm run build`): Next.js 16.2.4 compiled all 32 routes cleanly.
+   - System Invariant Guardrail: `data/ai_15min_sync_payload_export.json` and `scripts/export_live_ai_payload.ts` remain 100% untouched.
+
+---
 
 ## 🆕 V17.99 Changelog — Model Cascade Sanitation, Signal Normalization & Execution Mode Tagging (2026-09-18)
 

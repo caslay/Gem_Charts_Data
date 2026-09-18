@@ -175,17 +175,25 @@ export async function GET() {
         settings[row.key_name] = row.key_value;
       }
 
-      // Self-seed ACTIVE_MODEL if not present
-      if (!settings['ACTIVE_MODEL']) {
+      // Self-seed or auto-migrate ACTIVE_MODEL to DEFAULT_MODEL (gemini-3.5-flash)
+      const currentActiveModel = settings['ACTIVE_MODEL'];
+      const isDeprecatedModel =
+        !currentActiveModel ||
+        currentActiveModel === 'gemini-2.5-flash' ||
+        currentActiveModel === 'gemini-2.5-flash-lite' ||
+        currentActiveModel === 'deepseek/deepseek-v4-flash-0731:free';
+
+      if (isDeprecatedModel) {
         settings['ACTIVE_MODEL'] = DEFAULT_MODEL;
         try {
           await sql`
             INSERT INTO system_settings (key_name, key_value)
             VALUES ('ACTIVE_MODEL', ${DEFAULT_MODEL})
-            ON CONFLICT (key_name) DO NOTHING;
+            ON CONFLICT (key_name)
+            DO UPDATE SET key_value = ${DEFAULT_MODEL}, updated_at = CURRENT_TIMESTAMP;
           `;
         } catch (seedErr) {
-          console.warn("[SETTINGS API] Auto-seed ACTIVE_MODEL skipped:", seedErr);
+          console.warn("[SETTINGS API] Auto-migrate/seed ACTIVE_MODEL skipped:", seedErr);
         }
       }
 
