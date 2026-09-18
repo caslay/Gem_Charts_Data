@@ -197,7 +197,7 @@ export interface AutomatedExecutionConfig {
   enableEarlyBreakeven?: boolean; // Rule 4: Dynamic Early Breakeven Ratchet (default: true)
   earlyBreakevenMultiple?: number; // Rule 4: MFE Multiple to trigger Breakeven (default: 0.60)
   enableFeePaddedBreakeven?: boolean; // Rule 4: Fee-Padded Breakeven to offset Binance Taker fees (default: true)
-  breakevenOffsetPct?: number; // Rule 4: Fee offset percentage e.g. 0.05% (default: 0.05)
+  breakevenOffsetPct?: number; // Rule 4: Fee offset percentage e.g. 0.015% (calibrated default: 0.015)
   postLossCooldownMinutes?: number; // Rule 5: Directional cooldown minutes after stop-out (default: 45)
 
   // 🎯 Pillar 4 Dynamic Liquidity Targets & MSS Confirmation
