@@ -22,6 +22,11 @@ import { DEFAULT_MODEL } from '../aiModels';
 import { runAiCascadeEvaluation, ensureAiAnalysisTableInitialized } from '../aiCascadeEngine';
 import { buildLiveSessionContext, getNextCandleCloseTimestamp } from '../sessionContext';
 import {
+  hydrateIpdaMetrics,
+  reconcileHierarchicalCandles,
+  sanitizeCandleClosureInvariant,
+} from '../quantEngine/scheduledPayloadHydrator';
+import {
   evaluateOperationalSchedule,
   OperationalScheduleConfig,
   ScheduleEvaluationResult,
@@ -39,6 +44,138 @@ import { SparkIngestionDispatcher } from './sparkIngestionDispatcher';
 import { annotateCandlesWithVolumetricSignals } from '../../utils/generateChartMarkers';
 import { globalAlertCadenceGovernor } from '../notifications/AlertCadenceGovernor';
 import { isDeadZone } from '../temporalGatekeeper';
+
+/**
+ * Synchronizes candle array with live edge mark price and proper interval timestamp alignment.
+ * Enforces mandatory micro-invariants:
+ * 1. close = livePrice
+ * 2. candle.high = Math.max(candle.high, livePrice)
+ * 3. candle.low = Math.min(candle.low, livePrice)
+ * 4. Distinct bar open timestamps aligned strictly to interval boundaries
+ */
+export function synchronizeCandlesWithLiveEdge(
+  closedCandles: Candle[],
+  intervalMinutes: number,
+  livePrice: number,
+  nowMs: number = Date.now()
+): Candle[] {
+  if (!closedCandles || closedCandles.length === 0) return [];
+  const candles = closedCandles.map((c) => ({ ...c }));
+  if (!livePrice || isNaN(livePrice) || livePrice <= 0) return candles;
+
+  const intervalMs = intervalMinutes * 60 * 1000;
+  const currentBarOpenMs = Math.floor(nowMs / intervalMs) * intervalMs;
+
+  const lastCandle = candles[candles.length - 1];
+  if (!lastCandle) return candles;
+
+  if (lastCandle.t === currentBarOpenMs) {
+    // Current bar is already the forming bar: pin close and enforce OHLC bounds
+    lastCandle.c = parseFloat(livePrice.toFixed(2));
+    lastCandle.h = parseFloat(Math.max(lastCandle.h, livePrice).toFixed(2));
+    lastCandle.l = parseFloat(Math.min(lastCandle.l, livePrice).toFixed(2));
+    lastCandle.isClosed = false;
+  } else if (lastCandle.t < currentBarOpenMs) {
+    // Current bar has not been pushed yet: append active forming candle at the live edge
+    const openPrice = lastCandle.c;
+    const formingCandle: Candle = {
+      t: currentBarOpenMs,
+      o: parseFloat(openPrice.toFixed(2)),
+      h: parseFloat(Math.max(openPrice, livePrice).toFixed(2)),
+      l: parseFloat(Math.min(openPrice, livePrice).toFixed(2)),
+      c: parseFloat(livePrice.toFixed(2)),
+      v: 0,
+      taker_buy_vol: 0,
+      taker_sell_vol: 0,
+      isClosed: false,
+    };
+    candles.push(formingCandle);
+  } else {
+    // Bar timestamp is already current or ahead: ensure OHLC integrity
+    lastCandle.c = parseFloat(livePrice.toFixed(2));
+    lastCandle.h = parseFloat(Math.max(lastCandle.h, livePrice).toFixed(2));
+    lastCandle.l = parseFloat(Math.min(lastCandle.l, livePrice).toFixed(2));
+  }
+
+  return candles;
+}
+
+/**
+ * Aggregates lower timeframe candles (e.g. 1H) into higher timeframe candles (e.g. 4H).
+ * Strictly anchors to official Binance UTC session boundaries:
+ * 00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC (bucketOpen = t - (t % 14_400_000)).
+ * Guarantees mathematical tracking:
+ * - 4H open equals open of first child 1H candle in the 4H window
+ * - 4H close equals close of last child 1H candle in the 4H window
+ * - 4H high = max(child highs), 4H low = min(child lows)
+ * - 4H volume = sum(child volumes), taker volumes = sum(child taker volumes)
+ * - Properly handles the active forming 4H candle containing 1 to 4 1H child bars.
+ */
+export function aggregateCandlesFromLowerTimeframe(
+  childCandles: Candle[],
+  targetIntervalMinutes: number
+): Candle[] {
+  if (!childCandles || childCandles.length === 0) return [];
+  const targetIntervalMs = targetIntervalMinutes * 60 * 1000;
+
+  // Group child candles strictly by official UTC boundary bucket
+  const buckets = new Map<number, Candle[]>();
+  for (const c of childCandles) {
+    const bucketOpen = c.t - (c.t % targetIntervalMs);
+    const list = buckets.get(bucketOpen) || [];
+    list.push(c);
+    buckets.set(bucketOpen, list);
+  }
+
+  const aggregated: Candle[] = [];
+  const sortedBucketKeys = Array.from(buckets.keys()).sort((a, b) => a - b);
+  const nowMs = Date.now();
+
+  for (let idx = 0; idx < sortedBucketKeys.length; idx++) {
+    const bucketTs = sortedBucketKeys[idx];
+    const bars = buckets.get(bucketTs)!;
+    if (bars.length === 0) continue;
+
+    bars.sort((a, b) => a.t - b.t);
+
+    const first = bars[0];
+    const last = bars[bars.length - 1];
+
+    let high = -Infinity;
+    let low = Infinity;
+    let totalVol = 0;
+    let totalTakerBuy = 0;
+    let totalTakerSell = 0;
+
+    for (const b of bars) {
+      if (b.h > high) high = b.h;
+      if (b.l < low) low = b.l;
+      totalVol += b.v || 0;
+      totalTakerBuy += b.taker_buy_vol || 0;
+      totalTakerSell += b.taker_sell_vol || 0;
+    }
+
+    const isLastBucket = idx === sortedBucketKeys.length - 1;
+    const bucketEndTs = bucketTs + targetIntervalMs;
+    const isPastEndTime = nowMs >= bucketEndTs;
+    // Active forming 4H bar may contain 1 to 4 1H child bars; marked open until time expires
+    const isClosed = !isLastBucket || isPastEndTime;
+
+    aggregated.push({
+      t: bucketTs,
+      o: first.o,
+      h: parseFloat(high.toFixed(2)),
+      l: parseFloat(low.toFixed(2)),
+      c: last.c,
+      v: parseFloat(totalVol.toFixed(2)),
+      taker_buy_vol: parseFloat(totalTakerBuy.toFixed(2)),
+      taker_sell_vol: parseFloat(totalTakerSell.toFixed(2)),
+      isClosed,
+    });
+  }
+
+  return aggregated;
+}
 
 export interface HeadlessSchedulerOptions {
   symbol?: string;
@@ -586,30 +723,65 @@ export class HeadlessScheduler {
 
       // 2. Assemble market data payload from ring buffers
       const buffers = this.getRingBuffers();
-      const candles5m = [...(buffers['5m'] || [])];
-      const candles15m = [...(buffers['15m'] || [])];
-      const candles1h = [...(buffers['1h'] || [])];
-      const candles4h = [...(buffers['4h'] || [])];
+      const nowMs = executionNow.getTime();
+
+      const raw5m = buffers['5m'] || [];
+      const raw15m = reconcileHierarchicalCandles(raw5m, buffers['15m'] || [], 5, 15);
+      const raw1h = buffers['1h'] || [];
+      
+      let raw4h = buffers['4h'] || [];
+      if (raw4h.length < 10 && raw1h.length >= 10) {
+        raw4h = aggregateCandlesFromLowerTimeframe(raw1h, 240);
+      } else if (raw4h.length >= 10 && raw1h.length >= 10) {
+        raw4h = reconcileHierarchicalCandles(raw1h, raw4h, 60, 240);
+      }
+
+      const candles5m = synchronizeCandlesWithLiveEdge(raw5m, 5, livePrice, nowMs);
+      const candles15m = synchronizeCandlesWithLiveEdge(raw15m, 15, livePrice, nowMs);
+      const candles1h = synchronizeCandlesWithLiveEdge(raw1h, 60, livePrice, nowMs);
+      const candles4h = synchronizeCandlesWithLiveEdge(raw4h, 240, livePrice, nowMs);
 
       annotateCandlesWithVolumetricSignals(candles5m);
       annotateCandlesWithVolumetricSignals(candles15m);
       annotateCandlesWithVolumetricSignals(candles1h);
       annotateCandlesWithVolumetricSignals(candles4h);
 
+      // Pre-calculate native IPDA primitives, AMT Value Area, Dealing Range Valuation, and SMT Telemetry
+      const hydratedIpda = await hydrateIpdaMetrics({
+        symbol: this.symbol,
+        livePrice,
+        sessionContext,
+        candles5m,
+        candles15m,
+        candles1h,
+        candles4h,
+        allowNetworkFetch: !this.allowOfflineFallback,
+      });
+
+      // Workstream A: Preempt AI dispatch if feed is stale / flatlined or volume anomaly detected
+      if (hydratedIpda._integrity?.feed_stale) {
+        console.warn(
+          `[HEADLESS_SCHEDULER] ⚠️ Feed stale or synthetic volume anomaly detected. Standing down to protect AI agent.`
+        );
+        this.ledger?.logEvent(
+          'FEED_STALE_ABORT',
+          'Scheduler aborted scan: consecutive flatlined candle closes or synthetic volume anomaly detected',
+          { livePrice }
+        );
+        return;
+      }
+
       const aiPayload = {
         ticker: `${this.symbol}.p`,
         symbol: this.symbol,
         timestamp: executionNow.toISOString(),
         session_context: sessionContext,
-        ipda_metrics: {
-          current_time_window: sessionContext.current_killzone,
-          session_context: sessionContext,
-        },
+        ipda_metrics: hydratedIpda,
         data_payload: {
-          candles_4h: candles4h.slice(-30),
-          candles_1h: candles1h.slice(-30),
-          candles_15m: candles15m.slice(-30),
-          candles_5m: candles5m.slice(-30),
+          candles_4h: sanitizeCandleClosureInvariant(candles4h.slice(-30)),
+          candles_1h: sanitizeCandleClosureInvariant(candles1h.slice(-30)),
+          candles_15m: sanitizeCandleClosureInvariant(candles15m.slice(-30)),
+          candles_5m: sanitizeCandleClosureInvariant(candles5m.slice(-30)),
         },
       };
 

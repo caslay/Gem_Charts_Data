@@ -20,7 +20,7 @@ export interface NodeWsClientOptions {
 export type WSConnectionStatus = 'CONNECTING' | 'OPEN' | 'CLOSED' | 'ERROR' | 'RECONNECTING';
 
 export interface CandleClosedPayload {
-  interval: '1m' | '3m' | '5m' | '15m' | '1h';
+  interval: '1m' | '3m' | '5m' | '15m' | '1h' | '4h';
   candle: Candle;
   closedAt: number;
 }
@@ -53,12 +53,14 @@ export class NodeWsClient {
     '5m': Candle[];
     '15m': Candle[];
     '1h': Candle[];
+    '4h': Candle[];
   } = {
     '1m': [],
     '3m': [],
     '5m': [],
     '15m': [],
     '1h': [],
+    '4h': [],
   };
 
   // Active forming candles & real-time tick cache
@@ -80,7 +82,7 @@ export class NodeWsClient {
   /**
    * Seed existing historical buffers from REST bootstrap.
    */
-  public seedBuffers(buffers: { '1m'?: Candle[]; '3m'?: Candle[]; '5m': Candle[]; '15m': Candle[]; '1h': Candle[] }): void {
+  public seedBuffers(buffers: { '1m'?: Candle[]; '3m'?: Candle[]; '5m': Candle[]; '15m': Candle[]; '1h': Candle[]; '4h'?: Candle[] }): void {
     if (buffers['1m']) {
       this.buffers['1m'] = [...buffers['1m'].slice(-this.ringBufferSize)];
     }
@@ -90,21 +92,25 @@ export class NodeWsClient {
     this.buffers['5m'] = [...buffers['5m'].slice(-this.ringBufferSize)];
     this.buffers['15m'] = [...buffers['15m'].slice(-this.ringBufferSize)];
     this.buffers['1h'] = [...buffers['1h'].slice(-this.ringBufferSize)];
+    if (buffers['4h']) {
+      this.buffers['4h'] = [...buffers['4h'].slice(-this.ringBufferSize)];
+    }
     console.log(
-      `[NODE_WS] 📦 Ring buffers seeded: ${this.buffers['1m'].length > 0 ? `1m (${this.buffers['1m'].length}), ` : ''}${this.buffers['3m'].length > 0 ? `3m (${this.buffers['3m'].length}), ` : ''}5m (${this.buffers['5m'].length}), 15m (${this.buffers['15m'].length}), 1h (${this.buffers['1h'].length})`
+      `[NODE_WS] 📦 Ring buffers seeded: ${this.buffers['1m'].length > 0 ? `1m (${this.buffers['1m'].length}), ` : ''}${this.buffers['3m'].length > 0 ? `3m (${this.buffers['3m'].length}), ` : ''}5m (${this.buffers['5m'].length}), 15m (${this.buffers['15m'].length}), 1h (${this.buffers['1h'].length})${this.buffers['4h'].length > 0 ? `, 4h (${this.buffers['4h'].length})` : ''}`
     );
   }
 
   /**
    * Retrieve clone of current ring buffers.
    */
-  public getRingBuffers(): { '1m': Candle[]; '3m': Candle[]; '5m': Candle[]; '15m': Candle[]; '1h': Candle[] } {
+  public getRingBuffers(): { '1m': Candle[]; '3m': Candle[]; '5m': Candle[]; '15m': Candle[]; '1h': Candle[]; '4h': Candle[] } {
     return {
       '1m': [...this.buffers['1m']],
       '3m': [...this.buffers['3m']],
       '5m': [...this.buffers['5m']],
       '15m': [...this.buffers['15m']],
       '1h': [...this.buffers['1h']],
+      '4h': [...this.buffers['4h']],
     };
   }
 
@@ -136,7 +142,7 @@ export class NodeWsClient {
     return this.status;
   }
 
-  public getActiveCandle(interval: '1m' | '3m' | '5m' | '15m' | '1h'): Candle | undefined {
+  public getActiveCandle(interval: '1m' | '3m' | '5m' | '15m' | '1h' | '4h'): Candle | undefined {
     return this.activeCandles[interval];
   }
 
@@ -177,6 +183,7 @@ export class NodeWsClient {
       `${sym}@kline_5m`,
       `${sym}@kline_15m`,
       `${sym}@kline_1h`,
+      `${sym}@kline_4h`,
     ];
 
     if (this.enableAggTrade) {
@@ -263,8 +270,8 @@ export class NodeWsClient {
       // ── B. Process Multi-Timeframe Kline Data ──
       if (data.e === 'kline' && data.k) {
         const k = data.k;
-        const interval = k.i as '1m' | '3m' | '5m' | '15m' | '1h';
-        if (!['1m', '3m', '5m', '15m', '1h'].includes(interval)) return;
+        const interval = k.i as '1m' | '3m' | '5m' | '15m' | '1h' | '4h';
+        if (!['1m', '3m', '5m', '15m', '1h', '4h'].includes(interval)) return;
 
         const volume = parseFloat(k.v);
         const taker_buy_vol = parseFloat(k.V || '0');

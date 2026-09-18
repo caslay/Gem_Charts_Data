@@ -4,6 +4,7 @@ import { DEFAULT_ETH_SOP_SYSTEM_PROMPT } from '@/lib/sopPromptBuilder';
 import { DEFAULT_MODEL } from '@/lib/aiModels';
 import { runAiCascadeEvaluation, fetchAiAnalysisHistory } from '@/lib/aiCascadeEngine';
 import { buildLiveSessionContext } from '@/lib/sessionContext';
+import { hydrateIpdaMetrics } from '@/lib/quantEngine/scheduledPayloadHydrator';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,10 +97,38 @@ export async function POST(req: Request) {
     // Overwrites any stale cached timestamps with the active live clock and active killzone.
     payload.timestamp = executionNow.toISOString();
     payload.session_context = liveSessionContext;
+    // Pre-compute full institutional IPDA metrics (primitives, dealing range, AMT VA, SMT, displacement) if missing
+    if (payload.data_payload && livePrice !== null) {
+      const dp = payload.data_payload;
+      const c15m = dp.candles_15m || [];
+      const c5m = dp.candles_5m || [];
+      if (c15m.length > 0 || c5m.length > 0) {
+        const hasFullIpda = payload.ipda_metrics?.pricing_context?.value_area && payload.ipda_metrics?.displacement_metrics;
+        if (!hasFullIpda) {
+          const hydrated = await hydrateIpdaMetrics({
+            symbol: payload.symbol || 'ETHUSDC',
+            livePrice,
+            sessionContext: liveSessionContext,
+            candles5m: c5m,
+            candles15m: c15m,
+            candles1h: dp.candles_1h || [],
+            candles4h: dp.candles_4h || [],
+            allowNetworkFetch: false,
+          });
+          payload.ipda_metrics = {
+            ...(payload.ipda_metrics || {}),
+            ...hydrated,
+            current_time_window: liveSessionContext.current_killzone,
+          };
+        }
+      }
+    }
+
     if (payload.ipda_metrics && typeof payload.ipda_metrics === 'object') {
       const ipda = payload.ipda_metrics as Record<string, unknown>;
       ipda.current_time_window = liveSessionContext.current_killzone;
-      ipda.session_context = liveSessionContext;
+      // Deduplicate session_context: already present at root payload.session_context
+      delete ipda.session_context;
     }
 
     if (

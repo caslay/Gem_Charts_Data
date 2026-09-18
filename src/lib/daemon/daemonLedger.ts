@@ -45,6 +45,7 @@ export interface DaemonSessionEvent {
     | 'AUTONOMOUS_SCAN_DISPATCHED'
     | 'AUTONOMOUS_SCAN_COMPLETED'
     | 'AUTONOMOUS_SCAN_ERROR'
+    | 'FEED_STALE_ABORT'
     | 'ERROR';
   timestamp: number;
   timeIso: string;
