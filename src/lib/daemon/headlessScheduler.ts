@@ -560,16 +560,18 @@ export class HeadlessScheduler {
     try {
       // 1. Fetch system settings from DB
       let apiKey = process.env.GEMINI_LIVE_KEY;
+      let openRouterApiKey = process.env.OPENROUTER_API_KEY;
       let activeModel = process.env.ACTIVE_MODEL || DEFAULT_MODEL;
       let systemPrompt = DEFAULT_ETH_SOP_SYSTEM_PROMPT;
 
       try {
         const { rows } = await sql`
           SELECT key_name, key_value FROM system_settings
-          WHERE key_name IN ('GEMINI_LIVE_KEY', 'ACTIVE_MODEL', 'SYSTEM_PROMPT')
+          WHERE key_name IN ('GEMINI_LIVE_KEY', 'OPENROUTER_API_KEY', 'ACTIVE_MODEL', 'SYSTEM_PROMPT')
         `;
         for (const row of rows) {
           if (row.key_name === 'GEMINI_LIVE_KEY' && row.key_value) apiKey = row.key_value;
+          if (row.key_name === 'OPENROUTER_API_KEY' && row.key_value) openRouterApiKey = row.key_value;
           if (row.key_name === 'ACTIVE_MODEL' && row.key_value) activeModel = row.key_value;
           if (row.key_name === 'SYSTEM_PROMPT' && row.key_value) systemPrompt = row.key_value;
         }
@@ -577,8 +579,8 @@ export class HeadlessScheduler {
         // Fallback to environment
       }
 
-      if (!apiKey && !this.allowOfflineFallback) {
-        console.warn('[HEADLESS_SCHEDULER] GEMINI_LIVE_KEY not found. Skipping AI dispatch.');
+      if (!apiKey && !openRouterApiKey && !this.allowOfflineFallback) {
+        console.warn('[HEADLESS_SCHEDULER] Neither GEMINI_LIVE_KEY nor OPENROUTER_API_KEY found. Skipping AI dispatch.');
         return;
       }
 
@@ -626,7 +628,9 @@ export class HeadlessScheduler {
       // 4. Execute Multi-Model Cascade
       const cascadeRunner = this.evaluateAiCascadeFn || runAiCascadeEvaluation;
       const result = await cascadeRunner({
-        apiKey: apiKey || 'mock_key',
+        apiKey: apiKey || (this.allowOfflineFallback ? 'mock_key' : undefined),
+        geminiApiKey: apiKey,
+        openRouterApiKey: openRouterApiKey,
         requestedModel: activeModel,
         systemPrompt,
         payload: aiPayload,

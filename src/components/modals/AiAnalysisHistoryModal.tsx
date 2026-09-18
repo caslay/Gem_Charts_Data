@@ -678,6 +678,11 @@ export default function AiAnalysisHistoryModal({
                         <span className="text-xs font-black text-foreground truncate flex items-center gap-1">
                           <Cpu size={12} className="text-accent shrink-0" />
                           <span className="truncate">{item.resolved_model}</span>
+                          {item.provider && (
+                            <span className="px-1 py-0.2 rounded text-[7.5px] font-mono font-black uppercase tracking-wider bg-accent/10 border border-accent/20 text-accent shrink-0">
+                              {item.provider}
+                            </span>
+                          )}
                         </span>
                         <span className="text-[10px] font-mono font-bold text-accent shrink-0">
                           {item.execution_latency_ms}ms
@@ -943,12 +948,19 @@ export default function AiAnalysisHistoryModal({
                       <span className="text-[8.5px] uppercase font-black text-muted-foreground block mb-1">
                         Resolved Model
                       </span>
-                      <span
-                        className="font-bold text-accent truncate block"
-                        title={selectedRecord.resolved_model}
-                      >
-                        {selectedRecord.resolved_model}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className="font-bold text-accent truncate block"
+                          title={selectedRecord.resolved_model}
+                        >
+                          {selectedRecord.resolved_model}
+                        </span>
+                        {selectedRecord.provider && (
+                          <span className="px-1 py-0.2 rounded text-[7.5px] font-mono font-black uppercase tracking-wider bg-accent/15 border border-accent/25 text-accent shrink-0">
+                            {selectedRecord.provider}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="bg-background/60 p-2.5 rounded-lg border border-card-border">
@@ -1025,7 +1037,12 @@ export default function AiAnalysisHistoryModal({
                                   #{idx + 1}
                                 </span>
                                 <span className="font-bold font-mono truncate">{att.model}</span>
-                                {att.error && <span className="text-[10px] italic">({att.error})</span>}
+                                {att.provider && (
+                                  <span className="px-1 py-0.2 rounded text-[7.5px] font-mono font-black uppercase tracking-wider bg-accent/15 border border-accent/25 text-accent shrink-0">
+                                    {att.provider}
+                                  </span>
+                                )}
+                                {att.error && <span className="text-[10px] italic truncate max-w-[150px]">({att.error})</span>}
                               </div>
                               <span className="font-mono text-[10px] shrink-0">
                                 {att.latency_ms}ms • {att.success ? 'RESOLVED' : 'FAILED'}

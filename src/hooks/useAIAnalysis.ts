@@ -50,6 +50,7 @@ export function useAIAnalysis(): UseAIAnalysisReturn {
               return {
                 requested_model: latest.requested_model,
                 resolved_model: latest.resolved_model,
+                provider: (latest.provider as any) || (latest.telemetry_data as any)?.provider || undefined,
                 was_fallback: latest.was_fallback,
                 fallback_reason: latest.fallback_reason,
                 execution_latency_ms: latest.execution_latency_ms,
@@ -133,8 +134,15 @@ export function useAIAnalysis(): UseAIAnalysisReturn {
         }
         try {
           const parsed = safeParseAiJson(result.analysis);
-          if (parsed && parsed.bias_signal !== undefined) {
-            setAiBias(Number(parsed.bias_signal));
+          const rawSignal = parsed?.bias_signal ?? result.biasSignal;
+          if (rawSignal === 1 || String(rawSignal).toUpperCase().includes('BULL') || String(rawSignal).toUpperCase().includes('LONG')) {
+            setAiBias(1);
+          } else if (rawSignal === -1 || String(rawSignal).toUpperCase().includes('BEAR') || String(rawSignal).toUpperCase().includes('SHORT')) {
+            setAiBias(-1);
+          } else if (rawSignal === 0 || String(rawSignal).toUpperCase().includes('NEUT')) {
+            setAiBias(0);
+          } else if (rawSignal !== undefined && rawSignal !== null && !isNaN(Number(rawSignal))) {
+            setAiBias(Number(rawSignal));
           }
         } catch (e) {
           console.error('[useAIAnalysis] Failed to parse bias_signal from AI response:', e);

@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     try {
       const { rows } = await sql`
         SELECT key_name, key_value FROM system_settings
-        WHERE key_name IN ('GEMINI_LIVE_KEY', 'ACTIVE_MODEL', 'SYSTEM_PROMPT')
+        WHERE key_name IN ('GEMINI_LIVE_KEY', 'OPENROUTER_API_KEY', 'ACTIVE_MODEL', 'SYSTEM_PROMPT')
       `;
       for (const row of rows) {
         config[row.key_name] = row.key_value;
@@ -31,7 +31,8 @@ export async function POST(req: Request) {
       console.warn('[QUANT_ANALYZE] System settings read error (using env fallback):', dbErr);
     }
 
-    const apiKey = config['GEMINI_LIVE_KEY'] || process.env.GEMINI_LIVE_KEY;
+    const geminiApiKey = config['GEMINI_LIVE_KEY'] || process.env.GEMINI_LIVE_KEY;
+    const openRouterApiKey = config['OPENROUTER_API_KEY'] || process.env.OPENROUTER_API_KEY;
     const activeModel = config['ACTIVE_MODEL'] || process.env.ACTIVE_MODEL || DEFAULT_MODEL;
     let systemPrompt = config['SYSTEM_PROMPT'] || DEFAULT_ETH_SOP_SYSTEM_PROMPT;
 
@@ -53,11 +54,11 @@ export async function POST(req: Request) {
       `.catch((err) => console.warn('[QUANT_ANALYZE] Auto-migrate SYSTEM_PROMPT to V19.0 skipped:', err));
     }
 
-    // ── 2. Graceful validation ──
-    if (!apiKey) {
+    // ── 2. Graceful validation: Ensure at least one intelligence provider key is configured ──
+    if (!geminiApiKey && !openRouterApiKey) {
       return NextResponse.json(
         {
-          analysis: `⚠️ **Quant AI Engine Notice:** Gemini API Key is not configured in Settings. Please set your \`GEMINI_LIVE_KEY\` in the Command Center Vault or environment to activate real-time institutional AI analysis.`,
+          analysis: `⚠️ **Quant AI Engine Notice:** Neither Google Gemini API Key nor OpenRouter API Key is configured in Settings. Please set your \`GEMINI_LIVE_KEY\` or \`OPENROUTER_API_KEY\` in the Command Center Vault or environment to activate real-time institutional AI analysis.`,
           isConfigured: false,
           telemetry: null,
         },
@@ -129,7 +130,9 @@ export async function POST(req: Request) {
 
     // ── 6. Execute Multi-Model Cascade with Telemetry & Persistence ──────
     const result = await runAiCascadeEvaluation({
-      apiKey,
+      apiKey: geminiApiKey,
+      geminiApiKey,
+      openRouterApiKey,
       requestedModel: activeModel,
       systemPrompt,
       payload,

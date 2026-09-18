@@ -2,7 +2,14 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { sql, getDbPool } from '@/lib/postgres';
 import { safeParseAiJson } from '@/lib/aiJsonParser';
 import { autoLogSopSetup } from '@/lib/sopTrackerLogger';
-import { getFallbackCascadePool, isLiteWorkhorseModel, DEFAULT_MODEL } from '@/lib/aiModels';
+import {
+  getFallbackCascadePool,
+  isLiteWorkhorseModel,
+  getModelProvider,
+  DEFAULT_MODEL,
+  type ModelProvider,
+} from '@/lib/aiModels';
+import { callOpenRouterApi } from '@/lib/openRouterClient';
 import { buildLiveSessionContext, type LiveSessionContext } from '@/lib/sessionContext';
 import {
   reconcileSetupOutcomes,
@@ -17,6 +24,7 @@ export type { EnrichedAiAnalysisRecord, DailyAuditMetrics, SetupReconciledStatus
 
 export interface AiAttemptTelemetry {
   model: string;
+  provider?: ModelProvider;
   latency_ms: number;
   error?: string;
   success: boolean;
@@ -25,6 +33,7 @@ export interface AiAttemptTelemetry {
 export interface AiExecutionTelemetry {
   requested_model: string;
   resolved_model: string;
+  provider?: ModelProvider;
   was_fallback: boolean;
   fallback_reason: string | null;
   execution_latency_ms: number;
@@ -38,6 +47,7 @@ export interface AiAnalysisRecord {
   timeframe: string;
   requested_model: string;
   resolved_model: string;
+  provider?: string | null;
   was_fallback: boolean;
   fallback_reason: string | null;
   execution_latency_ms: number;
@@ -57,7 +67,9 @@ export interface AiAnalysisRecord {
 }
 
 export interface CascadeEvaluationParams {
-  apiKey: string;
+  apiKey?: string;
+  geminiApiKey?: string;
+  openRouterApiKey?: string;
   requestedModel?: string;
   systemPrompt: string;
   payload: Record<string, unknown>;
@@ -96,8 +108,9 @@ export async function ensureAiAnalysisTableInitialized(): Promise<void> {
         id                      SERIAL PRIMARY KEY,
         symbol                  VARCHAR(32)   NOT NULL DEFAULT 'ETHUSDC',
         timeframe               VARCHAR(16)   DEFAULT '5m',
-        requested_model         VARCHAR(64)   NOT NULL,
-        resolved_model          VARCHAR(64)   NOT NULL,
+        requested_model         VARCHAR(128)  NOT NULL,
+        resolved_model          VARCHAR(128)  NOT NULL,
+        provider                VARCHAR(32)   DEFAULT 'GOOGLE',
         was_fallback            BOOLEAN       NOT NULL DEFAULT FALSE,
         fallback_reason         TEXT,
         execution_latency_ms    INTEGER       NOT NULL,
@@ -127,11 +140,15 @@ export async function ensureAiAnalysisTableInitialized(): Promise<void> {
         ON ai_analysis_log (symbol, status, created_at DESC);
     `;
 
-    // Self-healing migration for agent_decision_log telemetry columns
+    // Self-healing migration for agent_decision_log & ai_analysis_log telemetry columns
     const decisionLogMigrations = [
+      sql`ALTER TABLE ai_analysis_log ADD COLUMN IF NOT EXISTS provider VARCHAR(32) DEFAULT 'GOOGLE'`,
+      sql`ALTER TABLE ai_analysis_log ALTER COLUMN requested_model TYPE VARCHAR(128)`,
+      sql`ALTER TABLE ai_analysis_log ALTER COLUMN resolved_model TYPE VARCHAR(128)`,
       sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP`,
-      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS requested_model VARCHAR(64)`,
-      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS resolved_model VARCHAR(64)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS requested_model VARCHAR(128)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS resolved_model VARCHAR(128)`,
+      sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS provider VARCHAR(32) DEFAULT 'GOOGLE'`,
       sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS latency_ms INTEGER`,
       sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS was_fallback BOOLEAN DEFAULT FALSE`,
       sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS fallback_reason TEXT`,
@@ -148,8 +165,8 @@ export async function ensureAiAnalysisTableInitialized(): Promise<void> {
 }
 
 /**
- * Robust error categorization to identify recoverable quota exhaustion (429)
- * and server overload/unavailability (503) errors.
+ * Robust error categorization to identify recoverable quota exhaustion (429),
+ * server overload/unavailability (503), timeouts, and fatal auth errors (401/403).
  */
 export function isRecoverableAiError(error: unknown): { isRecoverable: boolean; reason: string } {
   if (!error) return { isRecoverable: false, reason: 'Unknown error' };
@@ -159,7 +176,7 @@ export function isRecoverableAiError(error: unknown): { isRecoverable: boolean; 
   const message = String(errObj.message || error);
 
   // 0. Non-recoverable auth / permission errors (immediate abort, never loop across models)
-  if (status === 401 || /401|API_KEY_INVALID|unauthorized/i.test(message)) {
+  if (status === 401 || /401|API_KEY_INVALID|unauthorized|invalid\s*api\s*key/i.test(message)) {
     return { isRecoverable: false, reason: '401 Invalid API Key' };
   }
   if (status === 403 || /403|PERMISSION_DENIED/i.test(message)) {
@@ -169,12 +186,17 @@ export function isRecoverableAiError(error: unknown): { isRecoverable: boolean; 
     return { isRecoverable: false, reason: `400 Bad Request: ${message.slice(0, 100)}` };
   }
 
-  // 1. Quota Exhaustion (429 / RESOURCE_EXHAUSTED)
+  // 1. Quota Exhaustion / Rate Limits (429 / RESOURCE_EXHAUSTED)
   if (status === 429 || /429|quota|RESOURCE_EXHAUSTED|rate\s*limit/i.test(message)) {
     return { isRecoverable: true, reason: '429 Quota Exceeded' };
   }
 
-  // 2. High traffic / Overloaded model (503 / UNAVAILABLE)
+  // 1b. Quota Exhaustion / Out of Credits (402 Payment Required / Insufficient credits)
+  if (status === 402 || /402|insufficient.*credit|payment\s*required/i.test(message)) {
+    return { isRecoverable: true, reason: '402 Insufficient Provider Credits' };
+  }
+
+  // 2. High traffic / Overloaded model / Service Unavailable (503 / UNAVAILABLE)
   if (status === 503 || /503|overloaded|Service Unavailable|UNAVAILABLE|high\s*traffic/i.test(message)) {
     return { isRecoverable: true, reason: '503 Service Overloaded' };
   }
@@ -184,7 +206,17 @@ export function isRecoverableAiError(error: unknown): { isRecoverable: boolean; 
     return { isRecoverable: true, reason: '404 Model Endpoint Unavailable' };
   }
 
-  // 4. Any general 5xx upstream gateway/server issue
+  // 4. Timeouts & queue stalls (504 / 524 / 408 / AbortError / ETIMEDOUT)
+  if (
+    status === 504 ||
+    status === 524 ||
+    status === 408 ||
+    /timeout|timed\s*out|AbortError|ECONNABORTED|ETIMEDOUT|queue\s*timeout/i.test(message)
+  ) {
+    return { isRecoverable: true, reason: 'Request Timeout / Queue Stalled' };
+  }
+
+  // 5. Any general 5xx upstream gateway/server issue
   if (status >= 500 && status < 600) {
     return { isRecoverable: true, reason: `HTTP ${status} Upstream Error` };
   }
@@ -194,12 +226,15 @@ export function isRecoverableAiError(error: unknown): { isRecoverable: boolean; 
 
 /**
  * Execute an AI evaluation with the automated multi-model cascade loop.
+ * Abstracts Google Gemini and OpenRouter behind a unified resilient dispatch layer.
  */
 export async function runAiCascadeEvaluation(
   params: CascadeEvaluationParams
 ): Promise<CascadeEvaluationResult> {
   const {
     apiKey,
+    geminiApiKey = apiKey || process.env.GEMINI_LIVE_KEY,
+    openRouterApiKey = process.env.OPENROUTER_API_KEY,
     requestedModel = DEFAULT_MODEL,
     systemPrompt,
     payload,
@@ -209,7 +244,10 @@ export async function runAiCascadeEvaluation(
   } = params;
 
   const totalStartTime = Date.now();
-  const genAI = new GoogleGenerativeAI(apiKey);
+  let genAI: GoogleGenerativeAI | null = null;
+  if (geminiApiKey) {
+    genAI = new GoogleGenerativeAI(geminiApiKey);
+  }
 
   // ── Construct prompt with live execution timestamps and session context ──
   const liveContext: LiveSessionContext =
@@ -218,9 +256,10 @@ export async function runAiCascadeEvaluation(
   const sessionHeader = `=== [LIVE EXECUTION TIMESTAMPS & SESSION CONTEXT] ===\n- System Clock UTC: ${liveContext.timestamp_utc} (${liveContext.current_time_utc})\n- Localized Cairo Time: ${liveContext.timestamp_cairo} (${liveContext.current_time_cairo})\n- Active Institutional Killzone: ${liveContext.current_killzone}\n- In-Flight Live Price: ${liveContext.live_price != null ? `$${Number(liveContext.live_price).toFixed(2)}` : 'N/A'}\n- Millisecond Stamp: ${liveContext.execution_millisecond}\n\n`;
 
   const memorySection = `\n\n=== [HISTORICAL MEMORY (CURRENT STATE)] ===\n${JSON.stringify(historicalState, null, 2)}`;
-  const prompt = `${systemPrompt}\n\n${sessionHeader}=== MARKET DATA PAYLOAD ===\n${JSON.stringify(payload, null, 2)}${memorySection}`;
+  const marketDataPrompt = `${sessionHeader}=== MARKET DATA PAYLOAD ===\n${JSON.stringify(payload, null, 2)}${memorySection}`;
+  const fullPromptForGemini = `${systemPrompt}\n\n${marketDataPrompt}`;
 
-  // ── Build cascade pool: starts with requested model, falls back to remaining Flash models, then 500 RPD Lite models ──
+  // ── Build cascade pool: starts with requested model, cascades to Lite workhorses then reserve pool ──
   const cascadePool = getFallbackCascadePool(requestedModel);
   const attempts: AiAttemptTelemetry[] = [];
 
@@ -231,23 +270,96 @@ export async function runAiCascadeEvaluation(
 
   for (let i = 0; i < cascadePool.length; i++) {
     const candidateModel = cascadePool[i];
+    const candidateProvider = getModelProvider(candidateModel);
     const attemptStart = Date.now();
 
     try {
       const isLite = isLiteWorkhorseModel(candidateModel);
       if (i > 0) {
         console.warn(
-          `[AI_CASCADE] Attempting fallback candidate #${i + 1}: ${candidateModel} (${isLite ? '500 RPD Workhorse' : 'Apex Reasoning'})`
+          `[AI_CASCADE] Attempting fallback candidate #${i + 1}: ${candidateModel} (${candidateProvider} • ${isLite ? '500 RPD Workhorse' : 'Apex / Community'})`
         );
       }
 
-      const model = genAI.getGenerativeModel({ model: candidateModel });
-      const result = await model.generateContent(prompt);
-      text = result.response.text();
+      if (candidateProvider === 'OPENROUTER') {
+        const orKey = openRouterApiKey || process.env.OPENROUTER_API_KEY;
+        if (!orKey) {
+          if (candidateModel === requestedModel) {
+            const keyErr = new Error('401 Invalid API Key: OPENROUTER_API_KEY not configured in Settings or Environment');
+            (keyErr as any).status = 401;
+            throw keyErr;
+          }
+          // Secondary fallback provider unconfigured: record and continue cascade
+          console.warn(`[AI_CASCADE] Skipping fallback candidate ${candidateModel}: OPENROUTER_API_KEY not configured.`);
+          attempts.push({
+            model: candidateModel,
+            provider: candidateProvider,
+            latency_ms: 0,
+            error: 'OPENROUTER_API_KEY not configured (skipped)',
+            success: false,
+          });
+          if (i === cascadePool.length - 1) {
+            const errorSummary = attempts.map((a) => `${a.model} [${a.provider}]: ${a.error || 'Failed'}`).join(' | ');
+            throw new Error(`All cascade models exhausted (${attempts.length} models attempted). Details: ${errorSummary}`);
+          }
+          continue;
+        }
+
+        const openRouterRes = await callOpenRouterApi({
+          apiKey: orKey,
+          model: candidateModel,
+          prompt: marketDataPrompt,
+          systemPrompt,
+          temperature: 0.2,
+          maxTokens: 4096,
+          timeoutMs: 45000,
+        });
+
+        text = openRouterRes.content;
+      } else {
+        // Google Gemini Provider
+        const gKey = geminiApiKey || apiKey || process.env.GEMINI_LIVE_KEY;
+        if (!gKey) {
+          if (candidateModel === requestedModel) {
+            const keyErr = new Error('401 Invalid API Key: GEMINI_LIVE_KEY not configured in Settings or Environment');
+            (keyErr as any).status = 401;
+            throw keyErr;
+          }
+          // Secondary fallback provider unconfigured: record and continue cascade
+          console.warn(`[AI_CASCADE] Skipping fallback candidate ${candidateModel}: GEMINI_LIVE_KEY not configured.`);
+          attempts.push({
+            model: candidateModel,
+            provider: candidateProvider,
+            latency_ms: 0,
+            error: 'GEMINI_LIVE_KEY not configured (skipped)',
+            success: false,
+          });
+          if (i === cascadePool.length - 1) {
+            const errorSummary = attempts.map((a) => `${a.model} [${a.provider}]: ${a.error || 'Failed'}`).join(' | ');
+            throw new Error(`All cascade models exhausted (${attempts.length} models attempted). Details: ${errorSummary}`);
+          }
+          continue;
+        }
+
+        if (!genAI) {
+          genAI = new GoogleGenerativeAI(gKey);
+        }
+
+        const model = genAI.getGenerativeModel({ model: candidateModel });
+        const result = await model.generateContent(fullPromptForGemini);
+        text = result.response.text();
+      }
+
+      if (!text || !text.trim()) {
+        const emptyErr = new Error(`Received empty or blank response from ${candidateModel}`);
+        (emptyErr as any).status = 502;
+        throw emptyErr;
+      }
 
       const attemptLatency = Date.now() - attemptStart;
       attempts.push({
         model: candidateModel,
+        provider: candidateProvider,
         latency_ms: attemptLatency,
         success: true,
       });
@@ -262,19 +374,20 @@ export async function runAiCascadeEvaluation(
       const { isRecoverable, reason } = isRecoverableAiError(err);
 
       console.warn(
-        `[AI_CASCADE] Model ${candidateModel} failed (${reason}) in ${attemptLatency}ms:`,
+        `[AI_CASCADE] Model ${candidateModel} (${candidateProvider}) failed (${reason}) in ${attemptLatency}ms:`,
         (err as Error)?.message || err
       );
 
       attempts.push({
         model: candidateModel,
+        provider: candidateProvider,
         latency_ms: attemptLatency,
         error: reason,
         success: false,
       });
 
       if (!fallbackReason) {
-        fallbackReason = `${reason} on ${candidateModel}`;
+        fallbackReason = `${reason} on ${candidateModel} (${candidateProvider})`;
       }
 
       // Non-recoverable fatal errors (e.g. invalid API key, permission denied): abort cascade immediately
@@ -287,17 +400,19 @@ export async function runAiCascadeEvaluation(
 
       // If this was the last model in the pool, throw comprehensive cascade error
       if (i === cascadePool.length - 1) {
-        const errorSummary = attempts.map((a) => `${a.model}: ${a.error || 'Failed'}`).join(' | ');
+        const errorSummary = attempts.map((a) => `${a.model} [${a.provider}]: ${a.error || 'Failed'}`).join(' | ');
         throw new Error(`All cascade models exhausted (${attempts.length} models attempted). Details: ${errorSummary}`);
       }
     }
   }
 
+  const resolvedProvider = getModelProvider(resolvedModel);
   const totalExecutionLatency = Date.now() - totalStartTime;
 
   const telemetry: AiExecutionTelemetry = {
     requested_model: requestedModel,
     resolved_model: resolvedModel,
+    provider: resolvedProvider,
     was_fallback: wasFallback,
     fallback_reason: fallbackReason,
     execution_latency_ms: totalExecutionLatency,
@@ -427,12 +542,12 @@ export async function runAiCascadeEvaluation(
 
     const insertResult = await sql`
       INSERT INTO ai_analysis_log (
-        symbol, timeframe, requested_model, resolved_model, was_fallback, fallback_reason,
+        symbol, timeframe, requested_model, resolved_model, provider, was_fallback, fallback_reason,
         execution_latency_ms, bias_signal, trade_direction, status,
         entry_range_low, entry_range_high, invalidation_level,
         target_1, target_2, target_3, narrative, raw_response, telemetry_data
       ) VALUES (
-        ${symbol}, ${timeframe}, ${requestedModel}, ${resolvedModel}, ${wasFallback}, ${fallbackReason},
+        ${symbol}, ${timeframe}, ${requestedModel}, ${resolvedModel}, ${resolvedProvider}, ${wasFallback}, ${fallbackReason},
         ${totalExecutionLatency}, ${biasSignal}, ${tradeDirection}, ${status},
         ${entryRangeLow}, ${entryRangeHigh}, ${invalidationLevel},
         ${target1}, ${target2}, ${target3}, ${narrative}, ${text},
