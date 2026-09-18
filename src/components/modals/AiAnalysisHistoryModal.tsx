@@ -21,6 +21,10 @@ import {
   Calendar,
   CalendarDays,
   Pin,
+  Download,
+  ChevronDown,
+  FileSpreadsheet,
+  FileJson,
 } from 'lucide-react';
 import type { AiAnalysisRecord } from '@/lib/aiCascadeEngine';
 import {
@@ -67,6 +71,8 @@ export default function AiAnalysisHistoryModal({
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [pinnedAnalysisIds, setPinnedAnalysisIds] = useState<Set<number>>(new Set());
   const [isPinning, setIsPinning] = useState(false);
+  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // ── 1. Fetch History from Server with Date Parameters & Staged Setups ──
   const fetchHistory = useCallback(
@@ -322,6 +328,102 @@ export default function AiAnalysisHistoryModal({
     }
   };
 
+  // ── Telemetry Export Handler ──
+  useEffect(() => {
+    if (!isExportDropdownOpen) return;
+    const handleClickOutside = () => setIsExportDropdownOpen(false);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, [isExportDropdownOpen]);
+
+  const handleExportTelemetry = async (format: 'csv' | 'json') => {
+    setIsExportDropdownOpen(false);
+    setIsExporting(true);
+
+    try {
+      const params = new URLSearchParams();
+      params.set('format', format);
+
+      // Bind to currently active modal DateScope
+      if (dateFilterMode === 'TODAY') {
+        const today = getCairoDateString(new Date());
+        params.set('startDate', today);
+        params.set('endDate', today);
+      } else if (dateFilterMode === 'YESTERDAY') {
+        const yesterday = getCairoDateString(new Date(Date.now() - 24 * 3600 * 1000));
+        params.set('startDate', yesterday);
+        params.set('endDate', yesterday);
+      } else if (dateFilterMode === 'CUSTOM' && customDate) {
+        params.set('startDate', customDate);
+        params.set('endDate', customDate);
+      } else if (dateFilterMode === 'ALL') {
+        params.set('startDate', 'ALL');
+        params.set('endDate', 'ALL');
+      }
+
+      // Bind to active status filter
+      if (filterStatus === 'RESOLVED_WINS') {
+        params.set('filter', 'WINS');
+      } else if (filterStatus === 'STOPPED_OUT') {
+        params.set('filter', 'LOSSES');
+      } else if (filterStatus === 'EXPIRED_OR_CANCELLED') {
+        params.set('filter', 'CANCELLED');
+      } else if (filterStatus === 'ACTIVE_SETUP') {
+        params.set('filter', 'ACTIVE');
+      } else if (filterStatus !== 'ALL') {
+        params.set('filter', filterStatus);
+      }
+
+      const res = await fetch(`/api/quant-analyze/export?${params.toString()}`, {
+        cache: 'no-store',
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error || `Export failed with HTTP ${res.status}`);
+      }
+
+      // Read Content-Disposition for filename or derive fallback
+      let downloadFilename = '';
+      const disposition = res.headers.get('Content-Disposition');
+      if (disposition && disposition.includes('filename=')) {
+        const match = disposition.match(/filename="?([^";]+)"?/);
+        if (match && match[1]) {
+          downloadFilename = match[1];
+        }
+      }
+
+      if (!downloadFilename) {
+        let datePart = '';
+        if (dateFilterMode === 'TODAY') {
+          datePart = getCairoDateString(new Date());
+        } else if (dateFilterMode === 'YESTERDAY') {
+          datePart = getCairoDateString(new Date(Date.now() - 24 * 3600 * 1000));
+        } else if (dateFilterMode === 'CUSTOM') {
+          datePart = customDate;
+        } else {
+          datePart = `all_history_${getCairoDateString(new Date())}`;
+        }
+        downloadFilename = `quegar_ai_telemetry_${datePart}.${format}`;
+      }
+
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = downloadFilename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err: any) {
+      console.error('[AiAnalysisHistoryModal] Export failed:', err);
+      alert(`Telemetry export failed: ${err?.message || 'Network or server error'}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const currentDateLabel = useMemo(() => {
     if (dateFilterMode === 'TODAY') return `Today (${getCairoDateString(new Date())} Cairo)`;
     if (dateFilterMode === 'YESTERDAY')
@@ -364,6 +466,66 @@ export default function AiAnalysisHistoryModal({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* ── Institutional Telemetry Export Action ── */}
+            <div className="relative">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsExportDropdownOpen((prev) => !prev);
+                }}
+                disabled={isExporting}
+                className="px-3 py-1.5 rounded-lg bg-card border border-card-border hover:border-accent/40 text-xs font-sans font-medium text-foreground hover:text-accent transition cursor-pointer flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+                title="Export Telemetry & Evaluation Corpus"
+              >
+                {isExporting ? (
+                  <RefreshCw size={13} className="animate-spin text-accent" />
+                ) : (
+                  <Download size={13} className="text-accent" />
+                )}
+                <span className="font-bold text-[11px] tracking-wide">
+                  {isExporting ? 'Exporting...' : 'Export Telemetry'}
+                </span>
+                <ChevronDown
+                  size={12}
+                  className={`text-muted-foreground transition-transform duration-200 ${
+                    isExportDropdownOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+
+              {isExportDropdownOpen && (
+                <div
+                  className="absolute right-0 mt-1.5 w-64 bg-card border border-card-border rounded-xl shadow-2xl py-1.5 z-50 animate-[fade-in_0.1s_ease-out] font-sans"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="px-3 py-1 border-b border-card-border text-[9px] uppercase font-black tracking-wider text-muted-foreground">
+                    Telemetry Export Formats
+                  </div>
+                  <button
+                    onClick={() => handleExportTelemetry('csv')}
+                    className="w-full px-3 py-2 text-left text-xs text-foreground hover:bg-accent/15 hover:text-accent flex items-center gap-2.5 transition cursor-pointer"
+                  >
+                    <FileSpreadsheet size={15} className="text-emerald-400 shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="font-bold text-[11px]">Export CSV</span>
+                      <span className="text-[9.5px] text-muted-foreground">Quant & Statistical Analysis (RFC 4180)</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleExportTelemetry('json')}
+                    className="w-full px-3 py-2 text-left text-xs text-foreground hover:bg-accent/15 hover:text-accent flex items-center gap-2.5 transition cursor-pointer"
+                  >
+                    <FileJson size={15} className="text-cyan-400 shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="font-bold text-[11px]">Export JSON</span>
+                      <span className="text-[9.5px] text-muted-foreground">AI Evaluation Corpus (Indented Array)</span>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={() => fetchHistory(dateFilterMode, customDate)}
               disabled={isLoading}
