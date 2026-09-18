@@ -115,25 +115,28 @@ export const AVAILABLE_MODELS: readonly AiModelOption[] = [
   },
 ] as const;
 
-export const DEFAULT_MODEL = "gemini-3.8-flash";
+export const DEFAULT_MODEL = "gemini-2.5-flash";
 
 /**
- * Standard baseline Gemini sequence: Apex models first, then 500 RPD Lite workhorses.
+ * Standard baseline Gemini sequence:
+ * 1. Primary: gemini-2.5-flash (fast, stable, authoritative)
+ * 2. High-Quota Secondary Failover: gemini-3.5-flash-lite (500 RPD)
+ * 3. Tertiary Workhorse: gemini-3.1-flash-lite (500 RPD)
+ * 4. Apex Reserve Pool: gemini-3.8-flash down to gemini-3-flash
  */
 export const GEMINI_CASCADE_ORDER: readonly string[] = [
+  "gemini-2.5-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
   "gemini-3.8-flash",
   "gemini-3.7-flash",
   "gemini-3.6-flash",
   "gemini-3.5-flash",
   "gemini-3-flash",
-  "gemini-2.5-flash",
-  "gemini-3.5-flash-lite",
-  "gemini-3.1-flash-lite",
 ] as const;
 
 export const DEFAULT_CASCADE_ORDER: readonly string[] = [
   ...GEMINI_CASCADE_ORDER,
-  "deepseek/deepseek-v4-flash-0731:free",
   "deepseek/deepseek-chat",
 ] as const;
 
@@ -161,18 +164,26 @@ export function isOpenRouterModel(modelName: string): boolean {
  *
  * Cascade Priorities:
  * 1. If OpenRouter model is requested:
- *    - Attempt #1: Active Selected Model (e.g., OpenRouter DeepSeek Flash)
+ *    - Attempt #1: Active Selected Model (e.g., OpenRouter DeepSeek Chat)
  *    - Attempt #2 (on failover): High-Quota Gemini Flash-Lite Workhorses (3.5 Lite, 3.1 Lite)
- *    - Attempt #3: Flash Reserve Pool (3.8 Flash down to 2.5 Flash)
- *    - Attempt #4: Remaining OpenRouter models
+ *    - Attempt #3: Gemini Flash Reserve Pool (2.5 Flash, 3.8 Flash, etc.)
+ *    - Attempt #4: Remaining commercial OpenRouter models (free tier pruned)
  * 2. If Gemini Lite Workhorse is requested:
- *    - Requested Lite model -> other Lite models -> Gemini Apex models -> OpenRouter models
- * 3. If Gemini Apex model is requested:
- *    - Requested Apex -> remaining downward to Lite Workhorses -> preceding Apex -> OpenRouter models
+ *    - Requested Lite model -> other Lite models -> Gemini 2.5 Flash & Apex models -> OpenRouter models
+ * 3. If Gemini Flash/Apex model is requested:
+ *    - Requested model -> following in GEMINI_CASCADE_ORDER (e.g. 3.5-flash-lite failover) -> preceding -> OpenRouter models (free tier pruned)
  */
 export function getFallbackCascadePool(requestedModel: string): string[] {
   const cleanRequested = (requestedModel || DEFAULT_MODEL).trim();
   const provider = getModelProvider(cleanRequested);
+
+  // Filter helper: completely bypasses free-tier queue stalls from automated fallback cascades
+  const isEligibleFallback = (m: string) => {
+    if (m === 'deepseek/deepseek-v4-flash-0731:free' && cleanRequested !== m) {
+      return false;
+    }
+    return true;
+  };
 
   // Case 1: OpenRouter model requested
   if (provider === 'OPENROUTER') {
@@ -183,7 +194,7 @@ export function getFallbackCascadePool(requestedModel: string): string[] {
       .filter((m) => m.provider === 'GOOGLE' && m.tier === 'apex')
       .map((m) => m.value);
     const otherOpenRouter = AVAILABLE_MODELS
-      .filter((m) => m.provider === 'OPENROUTER' && m.value !== cleanRequested)
+      .filter((m) => m.provider === 'OPENROUTER' && m.value !== cleanRequested && isEligibleFallback(m.value))
       .map((m) => m.value);
 
     return [
@@ -200,22 +211,22 @@ export function getFallbackCascadePool(requestedModel: string): string[] {
     const liteModels = AVAILABLE_MODELS.filter((m) => m.provider === 'GOOGLE' && m.tier === 'workhorse').map((m) => m.value);
     const otherLite = liteModels.filter((m) => m !== cleanRequested);
     const apexModels = AVAILABLE_MODELS.filter((m) => m.provider === 'GOOGLE' && m.tier === 'apex').map((m) => m.value);
-    const openRouterModels = AVAILABLE_MODELS.filter((m) => m.provider === 'OPENROUTER').map((m) => m.value);
+    const openRouterModels = AVAILABLE_MODELS.filter((m) => m.provider === 'OPENROUTER' && isEligibleFallback(m.value)).map((m) => m.value);
     return [cleanRequested, ...otherLite, ...apexModels, ...openRouterModels];
   }
 
-  // Case 3: Gemini Apex model requested -> Progressive downward cascade
+  // Case 3: Gemini model requested -> Progressive downward cascade
   const idx = GEMINI_CASCADE_ORDER.indexOf(cleanRequested);
   if (idx !== -1) {
     const following = GEMINI_CASCADE_ORDER.slice(idx + 1);
     const preceding = GEMINI_CASCADE_ORDER.slice(0, idx);
-    const openRouterModels = AVAILABLE_MODELS.filter((m) => m.provider === 'OPENROUTER').map((m) => m.value);
+    const openRouterModels = AVAILABLE_MODELS.filter((m) => m.provider === 'OPENROUTER' && isEligibleFallback(m.value)).map((m) => m.value);
     return [cleanRequested, ...following, ...preceding, ...openRouterModels];
   }
 
   // Case 4: Fallback for custom or unlisted model
   const geminiRest = GEMINI_CASCADE_ORDER.filter((m) => m !== cleanRequested);
-  const openRouterRest = AVAILABLE_MODELS.filter((m) => m.provider === 'OPENROUTER' && m.value !== cleanRequested).map((m) => m.value);
+  const openRouterRest = AVAILABLE_MODELS.filter((m) => m.provider === 'OPENROUTER' && m.value !== cleanRequested && isEligibleFallback(m.value)).map((m) => m.value);
   return [cleanRequested, ...geminiRest, ...openRouterRest];
 }
 

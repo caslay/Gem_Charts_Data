@@ -48,6 +48,7 @@ export interface AiAnalysisRecord {
   requested_model: string;
   resolved_model: string;
   provider?: string | null;
+  execution_mode?: string | null;
   was_fallback: boolean;
   fallback_reason: string | null;
   execution_latency_ms: number;
@@ -94,6 +95,9 @@ export interface CascadeEvaluationResult {
   logId?: number | null;
 }
 
+export const CASCADE_PER_ATTEMPT_TIMEOUT_MS = 15000;
+export const CASCADE_MAX_CUMULATIVE_SCAN_MS = 60000;
+
 let isAiAnalysisTableReady = false;
 
 /**
@@ -126,6 +130,7 @@ export async function ensureAiAnalysisTableInitialized(): Promise<void> {
         narrative               TEXT          NOT NULL,
         raw_response            TEXT,
         telemetry_data          JSONB,
+        execution_mode          VARCHAR(32)   DEFAULT 'SYNTHETIC_AUDIT',
         created_at              TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
@@ -153,6 +158,7 @@ export async function ensureAiAnalysisTableInitialized(): Promise<void> {
     // Self-healing migration for agent_decision_log & ai_analysis_log telemetry columns
     const decisionLogMigrations = [
       sql`ALTER TABLE ai_analysis_log ADD COLUMN IF NOT EXISTS provider VARCHAR(32) DEFAULT 'GOOGLE'`,
+      sql`ALTER TABLE ai_analysis_log ADD COLUMN IF NOT EXISTS execution_mode VARCHAR(32) DEFAULT 'SYNTHETIC_AUDIT'`,
       sql`ALTER TABLE ai_analysis_log ALTER COLUMN requested_model TYPE VARCHAR(128)`,
       sql`ALTER TABLE ai_analysis_log ALTER COLUMN resolved_model TYPE VARCHAR(128)`,
       sql`ALTER TABLE agent_decision_log ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP`,
@@ -283,6 +289,21 @@ export async function runAiCascadeEvaluation(
     const candidateProvider = getModelProvider(candidateModel);
     const attemptStart = Date.now();
 
+    // Cumulative scan ceiling guard: protect 15-minute / 5-minute scheduler tick cadence
+    const elapsedSoFar = Date.now() - totalStartTime;
+    const remainingCumulativeBudget = CASCADE_MAX_CUMULATIVE_SCAN_MS - elapsedSoFar;
+    if (remainingCumulativeBudget <= 1000) {
+      console.warn(
+        `[AI_CASCADE] Max cumulative scan ceiling reached (${elapsedSoFar}ms >= ${CASCADE_MAX_CUMULATIVE_SCAN_MS}ms). Halting cascade to protect scheduler tick cadence.`
+      );
+      const errorSummary = attempts.map((a) => `${a.model} [${a.provider}]: ${a.error || 'Failed'}`).join(' | ');
+      throw new Error(
+        `Max cumulative scan timeout exceeded (${elapsedSoFar}ms elapsed, ${attempts.length} attempts). Details: ${errorSummary || 'Scan deadline reached'}`
+      );
+    }
+
+    const currentAttemptTimeoutMs = Math.min(CASCADE_PER_ATTEMPT_TIMEOUT_MS, remainingCumulativeBudget);
+
     try {
       const isLite = isLiteWorkhorseModel(candidateModel);
       if (i > 0) {
@@ -322,7 +343,7 @@ export async function runAiCascadeEvaluation(
           systemPrompt,
           temperature: 0.2,
           maxTokens: 4096,
-          timeoutMs: 45000,
+          timeoutMs: currentAttemptTimeoutMs,
         });
 
         text = openRouterRes.content;
@@ -356,8 +377,28 @@ export async function runAiCascadeEvaluation(
         }
 
         const model = genAI.getGenerativeModel({ model: candidateModel });
-        const result = await model.generateContent(fullPromptForGemini);
-        text = result.response.text();
+
+        let timeoutHandle: NodeJS.Timeout | null = null;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutHandle = setTimeout(() => {
+            const timeoutErr = new Error(`Gemini request timed out after ${currentAttemptTimeoutMs}ms`);
+            (timeoutErr as any).status = 504;
+            (timeoutErr as any).code = 'ETIMEDOUT';
+            reject(timeoutErr);
+          }, currentAttemptTimeoutMs);
+        });
+
+        try {
+          const result = await Promise.race([
+            model.generateContent(fullPromptForGemini),
+            timeoutPromise,
+          ]);
+          text = result.response.text();
+        } finally {
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+          }
+        }
       }
 
       if (!text || !text.trim()) {
@@ -585,32 +626,61 @@ export async function runAiCascadeEvaluation(
         parsedResponse.next_database_state.notes = vetoMsg;
       }
     }
+
+    // ── Workstream B: Strict Atomic Parity between bias_signal and bias_label ──
+    if (biasSignal === 'BULLISH') {
+      parsedResponse.bias_signal = 1;
+      parsedResponse.bias_label = 'BULLISH';
+    } else if (biasSignal === 'BEARISH') {
+      parsedResponse.bias_signal = -1;
+      parsedResponse.bias_label = 'BEARISH';
+    } else {
+      parsedResponse.bias_signal = 0;
+      parsedResponse.bias_label = 'NEUTRAL';
+    }
   }
 
-  // ── Extract narrative ──
+  // ── Extract narrative & serialize normalized raw response ──
   const narrative =
     parsedResponse?.narrative ||
     parsedResponse?.narrative_summary ||
     parsedResponse?.sop_report?.trade_narrative ||
     text.slice(0, 1500);
 
+  const serializedRawResponse = parsedResponse ? JSON.stringify(parsedResponse) : text;
+
   // ── Persist to PostgreSQL (ai_analysis_log) ──
   let logId: number | null = null;
   try {
     await ensureAiAnalysisTableInitialized();
+
+    const ipdaMetrics = (payload?.ipda_metrics as any) || (payload as any)?.ipda_metrics || {};
+    const pricingContext = ipdaMetrics?.pricing_context || (payload as any)?.pricing_context || null;
+    const displacementMetrics = ipdaMetrics?.displacement_metrics || (payload as any)?.displacement_metrics || null;
+    const smtContext = ipdaMetrics?.smt_context || (payload as any)?.smt_context || null;
+    const orderFlow = ipdaMetrics?.order_flow || (payload as any)?.order_flow || null;
+
+    const persistedTelemetry = {
+      ...telemetry,
+      pricing_context: pricingContext,
+      displacement_metrics: displacementMetrics,
+      smt_context: smtContext,
+      order_flow: orderFlow,
+      risk_amount_usd: 50.0,
+    };
 
     const insertResult = await sql`
       INSERT INTO ai_analysis_log (
         symbol, timeframe, requested_model, resolved_model, provider, was_fallback, fallback_reason,
         execution_latency_ms, bias_signal, trade_direction, status,
         entry_range_low, entry_range_high, invalidation_level,
-        target_1, target_2, target_3, narrative, raw_response, telemetry_data
+        target_1, target_2, target_3, narrative, raw_response, telemetry_data, execution_mode
       ) VALUES (
         ${symbol}, ${timeframe}, ${requestedModel}, ${resolvedModel}, ${resolvedProvider}, ${wasFallback}, ${fallbackReason},
         ${totalExecutionLatency}, ${biasSignal}, ${tradeDirection}, ${status},
         ${entryRangeLow}, ${entryRangeHigh}, ${invalidationLevel},
-        ${target1}, ${target2}, ${target3}, ${narrative}, ${text},
-        ${JSON.stringify(telemetry)}
+        ${target1}, ${target2}, ${target3}, ${narrative}, ${serializedRawResponse},
+        ${JSON.stringify(persistedTelemetry)}, 'SYNTHETIC_AUDIT'
       )
       RETURNING id
     `;

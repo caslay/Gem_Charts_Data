@@ -9,6 +9,8 @@
 
 import type { AiAnalysisRecord } from '../aiCascadeEngine';
 
+export type SetupExecutionMode = 'SYNTHETIC_AUDIT' | 'PAPER_TRADING' | 'LIVE_BINANCE';
+
 export type SetupReconciledStatus =
   | 'ACTIVE_SETUP'
   | 'TP1_HIT'
@@ -23,6 +25,7 @@ export type SetupReconciledStatus =
 
 export interface ReconciledOutcome {
   terminal_state: SetupReconciledStatus;
+  execution_mode?: SetupExecutionMode;
   realized_r?: number | null;
   realized_pnl?: number | null;
   outcome_reason: string;
@@ -42,6 +45,7 @@ export interface EnrichedAiAnalysisRecord extends AiAnalysisRecord {
   evaluated_status: string;
   reconciled_status: SetupReconciledStatus;
   reconciled_outcome: ReconciledOutcome;
+  execution_mode?: SetupExecutionMode;
 }
 
 export interface DailyAuditMetrics {

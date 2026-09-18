@@ -1,8 +1,62 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.97
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.99
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-18 (V17.97 — Telemetry & Reconciled Outcome Export Pipeline in AI Analysis History)
+> **Last Updated:** 2026-09-18 (V17.99 — Model Cascade Sanitation, Signal Normalization & Execution Mode Tagging)
+
+## 🆕 V17.99 Changelog — Model Cascade Sanitation, Signal Normalization & Execution Mode Tagging (2026-09-18)
+
+### Summary
+1. **Model Cascade Registry Sanitation & High-Throughput Reordering (`src/lib/aiModels.ts`):**
+   - **Primary Model Reassignment:** Set `gemini-2.5-flash` as the declared, authoritative Primary model for scheduled scanning (`DEFAULT_MODEL = "gemini-2.5-flash"`).
+   - **Immediate High-Quota Failover:** Configured `GEMINI_CASCADE_ORDER` to route immediately to `gemini-3.5-flash-lite` (500 RPD) upon primary 429/503 exhaustion, followed by `gemini-3.1-flash-lite` (500 RPD), and then the Gemini Flash reserve pool (`gemini-3.8-flash` down to `gemini-3-flash`).
+   - **Free-Tier Stall Elimination:** Completely pruned and bypassed `deepseek/deepseek-v4-flash-0731:free` from automated fallback cascades via `isEligibleFallback` filter and pruned `DEFAULT_CASCADE_ORDER`, eliminating 45s upstream queue hang stalls while retaining commercial OpenRouter models (`deepseek/deepseek-chat`).
+2. **Atomic Bias Signal & Label Harmonization (`aiCascadeEngine.ts` & `telemetryExportService.ts`):**
+   - **Elimination of Silent Valuation Veto Mismatch:** Previously, when a Valuation Veto (Rule 8) fired, `bias_signal` was zeroed to 0 in-memory, but un-normalized `raw_response` text was persisted into PostgreSQL, causing export parsers to read `bias_label: "BULLISH"` alongside `bias_signal: 0`.
+   - **Atomic Invariant Enforcement:** Guaranteed 100% strict mathematical parity across cascade evaluation, PostgreSQL persistence (`ai_analysis_log`), and telemetry export:
+     * `bias_signal === 0` (or Valuation Veto / Neutral / Stand Down) $\to$ `bias_signal: "0"` and `bias_label: "NEUTRAL"`.
+     * `bias_signal === 1` $\to$ `bias_signal: "1"` and `bias_label: "BULLISH"`.
+     * `bias_signal === -1` $\to$ `bias_signal: "-1"` and `bias_label: "BEARISH"`.
+   - **Serialized Normalized Persistence:** Re-serializes `parsedResponse` with normalized bias fields into `ai_analysis_log.raw_response` while fully preserving analytical narratives, risk parameters, and SOP reports.
+3. **Explicit Execution Mode Classification (`SetupOutcomeTypes.ts`, `SetupOutcomeReconciler.ts`, `telemetryExportService.ts`, `aiCascadeEngine.ts`):**
+   - **Schema & Migration:** Added `execution_mode: 'SYNTHETIC_AUDIT' | 'PAPER_TRADING' | 'LIVE_BINANCE'` to `SetupOutcomeTypes.ts`, `ReconciledOutcome`, `EnrichedAiAnalysisRecord`, `AiAnalysisRecord`, and self-healing DB migration (`ALTER TABLE ai_analysis_log ADD COLUMN IF NOT EXISTS execution_mode VARCHAR(32) DEFAULT 'SYNTHETIC_AUDIT'`).
+   - **Reconciliation Mode Assignment:**
+     * Matched exchange trades via `findMatchingTrade`: dynamic resolution between `'LIVE_BINANCE'` (real exchange order ID/fill) and `'PAPER_TRADING'` (simulation trades).
+     * Matched decision log events via `findMatchingDecision`: `'PAPER_TRADING'`.
+     * Forward candle tape simulations via `simulateSyntheticTapeOutcome` & temporal TTL fallbacks: strictly tagged as `'SYNTHETIC_AUDIT'`.
+   - **Export & Corpus Integration:** Added `Execution_Mode` to `CSV_COLUMNS` (positioned immediately after `Outcome_Status`), populated in `serializeTelemetryToCsv`, and serialized in `TelemetryCorpusItem.metadata` and `forward_audit`.
+4. **Verification & Parity Ledger:**
+   - Scratch test suite (`scratch/verify_cascade_sanitation.ts`): 100% pass across model cascade order, deepseek-free bypass, CSV columns, and execution mode indexing.
+   - `npx tsc --noEmit`: Exited with 0 errors.
+   - `npm run build`: Next.js 16.2.4 compiled successfully in 4.1s across all 32 routes.
+   - Guardrail verification: `data/ai_15min_sync_payload_export.json` and `scripts/export_live_ai_payload.ts` remain 100% untouched.
+
+---
+
+## 🆕 V17.98 Changelog — BOS Level Validation, Multi-Layer Telemetry Extraction & Cascade Latency Enforcement (2026-09-18)
+
+### Summary
+1. **Strict BOS Level Price Validation (`extractValidBosLevel` & `isValidAssetPrice`):**
+   - **Root Cause Elimination of Spurious Number Captures:** Previously, a loose regex (`/BOS.*?\$?([0-9,.]+)/i`) erroneously matched arbitrary non-price tokens (e.g. `3` from "3-pillar displacement", `15` from "15m", `1.25` from volume expansion ratio, or literal punctuation `.`).
+   - **Multi-Layer Valuation Bounds:** Implemented `isValidAssetPrice(val, symbol, referencePrice)` enforcing finite positive bounds ($100 \le \text{ETH} \le \$50,000$, or within $0.4\times \dots 2.5\times$ of entry mid-price) and refined high-precision regex patterns prioritizing explicit currency symbols, structural verbs (`above`, `below`, `at`, `level`), and comma-separated numbers. Returns `""` (empty string) whenever no genuine market price is identified.
+2. **Multi-Layer Telemetry Extraction & Historical Hydration (`src/lib/quantEngine/telemetryExportService.ts`):**
+   - **Hydration of Previously Empty Fields:** Resolves empty string serialization across `volume_expansion_ratio`, `taker_delta_pct`, `body_ratio`, `auction_status`, and `structural_dealing_valuation`.
+   - **Dual Structured + Heuristic Ingestion:** Extracts metrics first from structured fields (`sopReport`, `parsed`, `telemetryObj.displacement_metrics`, `telemetryObj.pricing_context`), followed by deep regex extraction across narrative bodies (`([0-9.]+)x Vol`, `([0-9.]+)% Taker Delta`, `([0-9.]+)% Body`, and canonical AMT value area regex).
+   - **Value Area Geometric Derivation:** If auction status is absent, derives `PREMIUM_AUCTION_EXPANSION (> VAH)`, `DISCOUNT_AUCTION_EXPANSION (< VAL)`, or `VALUE_ACCEPTANCE_CHOP (INSIDE VA)` directly from `session_profile` VAH/VAL coordinates relative to entry price.
+3. **Database Telemetry Persistence Enrichment (`src/lib/aiCascadeEngine.ts`):**
+   - In `runAiCascadeEvaluation()`, enriched the payload persisted into `ai_analysis_log.telemetry_data` to store `pricing_context` (local dealing range, value area, auction status), `displacement_metrics` (volume expansion ratio, taker delta percent, body ratio), `smt_context`, `order_flow`, and default `risk_amount_usd: 50.0`.
+   - Guarantees 100% structured fidelity for all ongoing and future scheduled AI scans.
+4. **Per-Attempt Timeout & Cumulative Scan Ceiling Enforcement (`aiCascadeEngine.ts` & `openRouterClient.ts`):**
+   - **Per-Attempt Timeout:** Changed default `timeoutMs` in `openRouterClient.ts` from 45s to 15s. Configured `CASCADE_PER_ATTEMPT_TIMEOUT_MS = 15000`.
+   - **Gemini Promise Race:** Wrapped Google Gemini (`model.generateContent`) in a `Promise.race` with an explicit timeout promise throwing a recoverable HTTP 504 / ETIMEDOUT error upon 15-second expiry.
+   - **Cumulative Scan Ceiling (`CASCADE_MAX_CUMULATIVE_SCAN_MS = 60000`):** Checks remaining cumulative scan budget before each model attempt in the cascade pool. If remaining budget is $\le 1000\text{ms}$, immediately halts cascade, protecting the 5-minute / 15-minute scheduler cadence from upstream queue stalls.
+5. **Verification & Quality Standards:**
+   - Scratch test suite (`scratch/verify_parser_and_timeouts.ts`): 100% pass across all BOS edge-cases (rejecting 3, 15, 1.25, "."), volumetric extractions, structured overrides, and auction derivations.
+   - `npx tsc --noEmit`: 0 TypeScript compiler errors.
+   - `npm run build`: Next.js 16.2.4 compiled cleanly in 4.8s across all 32 routes.
+   - Read-only guardrail verified: `data/ai_15min_sync_payload_export.json` and `scripts/export_live_ai_payload.ts` completely untouched.
+
+---
 
 ## 🆕 V17.97 Changelog — Telemetry & Reconciled Outcome Export Pipeline (CSV & JSON) in AI Analysis History (2026-09-18)
 

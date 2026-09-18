@@ -32,6 +32,7 @@ export type DiagnosticTag =
 export interface TelemetryCorpusItem {
   metadata: {
     record_id: number;
+    execution_mode: string;
     date_cairo: string;
     time_cairo: string;
     date_utc: string;
@@ -80,6 +81,7 @@ export interface TelemetryCorpusItem {
   };
   forward_audit: {
     outcome_status: SetupReconciledStatus | string;
+    execution_mode: string;
     realized_r: number | string;
     realized_pnl_usd: number | string;
     mfe_r: number | string;
@@ -230,6 +232,361 @@ export function classifyDiagnosticTag(params: {
   }
 
   return 'NONE';
+}
+
+/**
+ * Sanity-checks whether a number looks like a genuine market price for the given asset symbol.
+ * For ETH: price should be between $100 and $50,000.
+ * For BTC: price should be between $1,000 and $500,000.
+ * If referencePrice is provided (e.g. entryMid), level must be within [0.4 * ref, 2.5 * ref].
+ */
+export function isValidAssetPrice(val: number, symbol: string = 'ETHUSDC', referencePrice?: number | null): boolean {
+  if (typeof val !== 'number' || isNaN(val) || !isFinite(val) || val <= 0) {
+    return false;
+  }
+  if (referencePrice && referencePrice > 0) {
+    return val >= referencePrice * 0.4 && val <= referencePrice * 2.5;
+  }
+  const s = symbol.toUpperCase();
+  if (s.includes('BTC')) {
+    return val >= 1000 && val <= 500000;
+  }
+  // Default to ETH / crypto futures price bounds (strictly rejects 1.25, 3, 15, 20, etc.)
+  return val >= 100 && val <= 50000;
+}
+
+/**
+ * Extracts a mathematically valid Break of Structure (BOS / MSS) price level.
+ * Rejects arbitrary numbers (e.g. 3 from 3-pillar, 15 from 15m, 1.25 from vol ratio, "." punctuation).
+ */
+export function extractValidBosLevel(
+  sopReport: any,
+  narratives: (string | null | undefined)[],
+  symbol: string = 'ETHUSDC',
+  referencePrice?: number | null
+): number | string {
+  // 1. Direct structured field check
+  if (sopReport && typeof sopReport === 'object') {
+    const rawVal = sopReport.bos_level ?? sopReport.market_structure?.bos_level ?? sopReport.structure?.bos;
+    if (typeof rawVal === 'number' && isValidAssetPrice(rawVal, symbol, referencePrice)) {
+      return parseFloat(rawVal.toFixed(2));
+    }
+    if (typeof rawVal === 'string') {
+      const parsed = parseFloat(rawVal.replace(/[$,]/g, '').trim());
+      if (isValidAssetPrice(parsed, symbol, referencePrice)) {
+        return parseFloat(parsed.toFixed(2));
+      }
+    }
+  }
+
+  // 2. High-precision regex pattern searching in narratives
+  const patterns: RegExp[] = [
+    // Matches "BOS ... above $1,876.34", "BOS at 2481.50", "BOS body close above $1,876.34"
+    /(?:BOS|MSS|break of structure|market structure shift)[^.\n]{0,80}?(?:above|below|at|through|sweep(?:ed|ing)?|pivot(?:ing)?|level|@)\s*\$?\s*([0-9,]+(?:\.[0-9]+)?)/i,
+    // Matches "BOS ... $1,876.34"
+    /(?:BOS|MSS|break of structure|market structure shift)[^.\n]{0,60}?\$\s*([0-9,]+(?:\.[0-9]+)?)/i,
+    // Matches "$1,876.34 BOS" or "$2,481.50 level BOS"
+    /\$\s*([0-9,]+(?:\.[0-9]+)?)[^.\n]{0,40}?(?:BOS|MSS|break of structure)/i,
+    // Matches "BOS: 2481.50" or "BOS = 2481.50"
+    /(?:BOS|MSS)[\s:=]+\$?\s*([0-9,]+(?:\.[0-9]+)?)/i,
+  ];
+
+  for (const text of narratives) {
+    if (!text || typeof text !== 'string') continue;
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const numStr = match[1].replace(/,/g, '').trim();
+        const parsed = parseFloat(numStr);
+        if (isValidAssetPrice(parsed, symbol, referencePrice)) {
+          return parseFloat(parsed.toFixed(2));
+        }
+      }
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Extracts volume expansion ratio (e.g. 1.45, 1.25, 0.62).
+ */
+export function extractVolumeExpansionRatio(
+  sopReport: any,
+  parsed: any,
+  telemetryObj: any,
+  narratives: (string | null | undefined)[]
+): number | string {
+  // 1. Structured sources
+  const candidate =
+    sopReport?.volumetric_sponsorship?.volume_expansion ??
+    sopReport?.volumetric_sponsorship?.volume_expansion_ratio ??
+    sopReport?.displacement_metrics?.volume_expansion_ratio ??
+    sopReport?.displacement_metrics?.volume_expansion ??
+    parsed?.volume_expansion_ratio ??
+    parsed?.volume_expansion ??
+    telemetryObj?.displacement_metrics?.volume_expansion_ratio ??
+    telemetryObj?.displacement_metrics?.volume_expansion;
+
+  if (typeof candidate === 'number' && !isNaN(candidate) && candidate > 0) {
+    return parseFloat(candidate.toFixed(2));
+  }
+  if (typeof candidate === 'string') {
+    const p = parseFloat(candidate.replace(/[^\d.]/g, ''));
+    if (!isNaN(p) && p > 0 && p < 50) return parseFloat(p.toFixed(2));
+  }
+
+  // 2. Regex fallback across narratives
+  const patterns: RegExp[] = [
+    /([0-9]+(?:\.[0-9]+)?)\s*x\s*(?:Vol|Volume|SMA)/i,
+    /(?:Vol(?:ume)?\s*(?:expansion|ratio)?|SMA20)[\s:=]*([0-9]+(?:\.[0-9]+)?)\s*x?/i,
+    /([0-9]+(?:\.[0-9]+)?)\s*x\s*(?:relative\s*volume|rVol)/i,
+  ];
+
+  for (const text of narratives) {
+    if (!text || typeof text !== 'string') continue;
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const val = parseFloat(match[1]);
+        if (!isNaN(val) && val > 0 && val < 50) {
+          return parseFloat(val.toFixed(2));
+        }
+      }
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Extracts taker delta percentage / delta dominance (e.g. 58, 52, 49.8).
+ */
+export function extractTakerDeltaPct(
+  sopReport: any,
+  parsed: any,
+  telemetryObj: any,
+  narratives: (string | null | undefined)[]
+): number | string {
+  // 1. Structured sources
+  const candidate =
+    sopReport?.volumetric_sponsorship?.taker_delta_pct ??
+    sopReport?.volumetric_sponsorship?.delta_dominance_pct ??
+    sopReport?.displacement_metrics?.taker_delta_percent ??
+    sopReport?.displacement_metrics?.taker_delta_pct ??
+    parsed?.taker_delta_pct ??
+    parsed?.delta_dominance_pct ??
+    telemetryObj?.displacement_metrics?.taker_delta_percent ??
+    telemetryObj?.displacement_metrics?.taker_delta_pct;
+
+  if (typeof candidate === 'number' && !isNaN(candidate) && candidate >= 0) {
+    const norm = candidate <= 1.0 && candidate > 0 ? candidate * 100 : candidate;
+    return parseFloat(norm.toFixed(1));
+  }
+  if (typeof candidate === 'string') {
+    const p = parseFloat(candidate.replace(/[^\d.]/g, ''));
+    if (!isNaN(p) && p >= 0) {
+      const norm = p <= 1.0 && p > 0 ? p * 100 : p;
+      return parseFloat(norm.toFixed(1));
+    }
+  }
+
+  // 2. Regex fallback across narratives
+  const patterns: RegExp[] = [
+    /([0-9]+(?:\.[0-9]+)?)\s*%\s*(?:Taker\s*Delta|Delta\s*Dominance|Delta)/i,
+    /(?:Taker\s*Delta|Delta\s*Dominance|Delta)[\s:=]*([0-9]+(?:\.[0-9]+)?)\s*%/i,
+  ];
+
+  for (const text of narratives) {
+    if (!text || typeof text !== 'string') continue;
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const val = parseFloat(match[1]);
+        if (!isNaN(val) && val >= 0 && val <= 100) {
+          return parseFloat(val.toFixed(1));
+        }
+      }
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Extracts candle body-to-range ratio (e.g. 50, 58, 30, 62).
+ */
+export function extractBodyRatio(
+  sopReport: any,
+  parsed: any,
+  telemetryObj: any,
+  narratives: (string | null | undefined)[]
+): number | string {
+  // 1. Structured sources
+  const candidate =
+    sopReport?.volumetric_sponsorship?.body_ratio ??
+    sopReport?.displacement_metrics?.body_ratio ??
+    parsed?.body_ratio ??
+    telemetryObj?.displacement_metrics?.body_ratio;
+
+  if (typeof candidate === 'number' && !isNaN(candidate) && candidate >= 0) {
+    const norm = candidate <= 1.0 && candidate > 0 ? candidate * 100 : candidate;
+    return parseFloat(norm.toFixed(1));
+  }
+  if (typeof candidate === 'string') {
+    const p = parseFloat(candidate.replace(/[^\d.]/g, ''));
+    if (!isNaN(p) && p >= 0) {
+      const norm = p <= 1.0 && p > 0 ? p * 100 : p;
+      return parseFloat(norm.toFixed(1));
+    }
+  }
+
+  // 2. Regex fallback across narratives
+  const patterns: RegExp[] = [
+    /([0-9]+(?:\.[0-9]+)?)\s*%\s*(?:Body[\s-]*(?:to[\s-]*range)?|Body)/i,
+    /(?:Body[\s-]*(?:to[\s-]*range)?\s*ratio|Body)[\s:=]*([0-9]+(?:\.[0-9]+)?)\s*%/i,
+  ];
+
+  for (const text of narratives) {
+    if (!text || typeof text !== 'string') continue;
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const val = parseFloat(match[1]);
+        if (!isNaN(val) && val >= 0 && val <= 100) {
+          return parseFloat(val.toFixed(1));
+        }
+      }
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Extracts or derives the Auction Market Theory (AMT) status relative to Value Area (VAH/VAL/POC).
+ */
+export function extractAuctionStatus(
+  sopReport: any,
+  parsed: any,
+  telemetryObj: any,
+  narratives: (string | null | undefined)[],
+  entryPrice?: number | null,
+  structuralValuation?: string
+): string {
+  // 1. Structured checks
+  const candidate =
+    parsed?.auction_status ||
+    sopReport?.auction_status ||
+    telemetryObj?.pricing_context?.value_area?.auction_status ||
+    telemetryObj?.auction_status;
+
+  if (typeof candidate === 'string' && candidate.trim()) {
+    return candidate.trim();
+  }
+
+  // 2. Regex pattern check across narratives
+  const statusRegex = /\b(PREMIUM_AUCTION_EXPANSION\s*(?:\([^)]+\))?|DISCOUNT_AUCTION_EXPANSION\s*(?:\([^)]+\))?|VALUE_ACCEPTANCE_CHOP\s*(?:\([^)]+\))?|ACCEPTANCE_ABOVE_VAH|ACCEPTANCE_BELOW_VAL|INSIDE_VALUE_AREA|AUCTION_EXPANSION|VALUE_ACCEPTANCE)\b/i;
+
+  for (const text of narratives) {
+    if (!text || typeof text !== 'string') continue;
+    const match = text.match(statusRegex);
+    if (match && match[1]) {
+      const found = match[1].toUpperCase();
+      if (found.includes('ACCEPTANCE_ABOVE_VAH') || found.includes('PREMIUM_AUCTION')) {
+        return 'PREMIUM_AUCTION_EXPANSION (> VAH)';
+      }
+      if (found.includes('ACCEPTANCE_BELOW_VAL') || found.includes('DISCOUNT_AUCTION')) {
+        return 'DISCOUNT_AUCTION_EXPANSION (< VAL)';
+      }
+      if (found.includes('INSIDE_VALUE_AREA') || found.includes('VALUE_ACCEPTANCE')) {
+        return 'VALUE_ACCEPTANCE_CHOP (INSIDE VA)';
+      }
+      return match[1].trim();
+    }
+  }
+
+  // 3. Derive from session_profile VAH/VAL numbers and entry/reference price
+  const sessionProfile = String(sopReport?.session_profile || '');
+  const vahMatch = sessionProfile.match(/VAH:\s*\$?([0-9,.]+)/i);
+  const valMatch = sessionProfile.match(/VAL:\s*\$?([0-9,.]+)/i);
+
+  if (vahMatch && valMatch && entryPrice && entryPrice > 0) {
+    const vah = parseFloat(vahMatch[1].replace(/,/g, ''));
+    const val = parseFloat(valMatch[1].replace(/,/g, ''));
+    if (!isNaN(vah) && !isNaN(val)) {
+      if (entryPrice > vah) {
+        return 'PREMIUM_AUCTION_EXPANSION (> VAH)';
+      } else if (entryPrice < val) {
+        return 'DISCOUNT_AUCTION_EXPANSION (< VAL)';
+      } else {
+        return 'VALUE_ACCEPTANCE_CHOP (INSIDE VA)';
+      }
+    }
+  }
+
+  // 4. Derive from structural dealing valuation if aligned
+  if (structuralValuation === 'PREMIUM') {
+    return 'PREMIUM_AUCTION_EXPANSION (> VAH)';
+  }
+  if (structuralValuation === 'DISCOUNT') {
+    return 'DISCOUNT_AUCTION_EXPANSION (< VAL)';
+  }
+  if (structuralValuation === 'EQUILIBRIUM') {
+    return 'VALUE_ACCEPTANCE_CHOP (INSIDE VA)';
+  }
+
+  return '';
+}
+
+/**
+ * Extracts or derives the ICT Structural Dealing Range Valuation (PREMIUM / DISCOUNT / EQUILIBRIUM).
+ */
+export function extractStructuralValuation(
+  sopReport: any,
+  parsed: any,
+  telemetryObj: any,
+  narratives: (string | null | undefined)[],
+  tradeDirection?: string | null,
+  biasSignal?: string | null
+): string {
+  // 1. Structured checks
+  const candidate =
+    parsed?.structural_dealing_range_valuation ||
+    sopReport?.structural_dealing_valuation ||
+    sopReport?.structural_dealing_range_valuation ||
+    telemetryObj?.pricing_context?.local_dealing_range?.current_status ||
+    telemetryObj?.pricing_context?.local_dealing_range?.structural_dealing_range_valuation;
+
+  if (typeof candidate === 'string' && candidate.trim()) {
+    return candidate.trim().toUpperCase();
+  }
+
+  // 2. Veto check and textual markers
+  for (const text of narratives) {
+    if (!text || typeof text !== 'string') continue;
+    if (text.includes('[VALUATION_VETO]') || text.includes('VALUATION_VETO')) {
+      if (/Long prohibited in Premium/i.test(text)) return 'PREMIUM';
+      if (/Short prohibited in Discount/i.test(text)) return 'DISCOUNT';
+      return 'VALUATION_VETO';
+    }
+    const match = text.match(/\b(PREMIUM|DISCOUNT|EQUILIBRIUM)\s+territory\b/i) ||
+                  text.match(/dealing\s*range(?:\s*valuation)?[\s:]*(PREMIUM|DISCOUNT|EQUILIBRIUM)/i);
+    if (match && match[1]) {
+      return match[1].toUpperCase();
+    }
+  }
+
+  // 3. Fallback: by Rule 8, approved Longs execute strictly in Discount, Shorts strictly in Premium
+  const dir = (tradeDirection || biasSignal || '').toUpperCase();
+  if (dir.includes('LONG') || dir.includes('BULL')) {
+    return 'DISCOUNT';
+  }
+  if (dir.includes('SHORT') || dir.includes('BEAR')) {
+    return 'PREMIUM';
+  }
+
+  return '';
 }
 
 /**
@@ -443,21 +800,24 @@ export async function buildTelemetryCorpus(
       ? parseFloat((Math.abs(target2 - (entryMid ?? target2)) / riskDist).toFixed(2))
       : '';
 
-    // BOS Level extraction
-    let bosLevel: number | string = '';
-    if (sopReport.bos_level !== undefined) {
-      bosLevel = sopReport.bos_level;
-    } else if (sopReport.trade_narrative) {
-      const match = String(sopReport.trade_narrative).match(/BOS.*?\$?([0-9,.]+)/i);
-      if (match && match[1]) {
-        bosLevel = parseFloat(match[1].replace(/,/g, '')) || match[1];
-      }
-    } else if (rec.narrative) {
-      const match = rec.narrative.match(/BOS.*?\$?([0-9,.]+)/i);
-      if (match && match[1]) {
-        bosLevel = parseFloat(match[1].replace(/,/g, '')) || match[1];
-      }
-    }
+    // Narratives corpus for deep forensic extraction
+    const narrativeCorpus = [
+      sopReport.trade_narrative,
+      sopReport.session_profile,
+      sopReport.market_context,
+      parsed.narrative_summary,
+      parsed.narrative,
+      rec.narrative,
+      rec.raw_response,
+    ];
+
+    // BOS Level extraction: strict price validation (rejects 3, 15, 1.25, ".")
+    const bosLevel = extractValidBosLevel(
+      sopReport,
+      narrativeCorpus,
+      rec.symbol || 'ETHUSDC',
+      entryMid
+    );
 
     // Excursions & outcome values
     const realizedR = outcome?.realized_r !== undefined && outcome?.realized_r !== null
@@ -528,59 +888,96 @@ export async function buildTelemetryCorpus(
       barsElapsed: typeof barsElapsed === 'number' ? barsElapsed : undefined,
     });
 
-    // V17.96 Nomenclature fields
-    const biasSignal = rec.bias_signal || (parsed.bias_signal !== undefined ? String(parsed.bias_signal) : '');
-    const biasLabel = parsed.bias_label || (biasSignal.includes('BULL') ? 'BULLISH' : biasSignal.includes('BEAR') ? 'BEARISH' : 'NEUTRAL');
+    // ── Atomic Bias Harmonization (Workstream B) ──
+    const isVetoed =
+      rec.narrative.includes('[VALUATION_VETO]') ||
+      rec.narrative.includes('VALUATION_VETO') ||
+      String(parsed.narrative || '').includes('VALUATION_VETO') ||
+      String(parsed.next_database_state?.notes || '').includes('VALUATION_VETO');
 
-    const structuralValuation =
-      parsed.structural_dealing_range_valuation ||
-      sopReport.structural_dealing_valuation ||
-      (telemetryObj.pricing_context as any)?.local_dealing_range?.current_status ||
-      (rec.narrative.includes('[VALUATION_VETO]') ? 'VALUATION_VETO' : '');
+    let normalizedSignal = 0;
+    const rawSignal = parsed.bias_signal !== undefined ? parsed.bias_signal : rec.bias_signal;
+    const rawLabel = String(parsed.bias_label || rec.bias_signal || '').toUpperCase();
 
-    const auctionStatus =
-      parsed.auction_status ||
-      sopReport.auction_status ||
-      (telemetryObj.pricing_context as any)?.value_area?.auction_status ||
-      '';
+    if (isVetoed || rec.status === 'NEUTRAL' || rec.trade_direction === 'NEUTRAL' || rec.status === 'STAND_DOWN') {
+      normalizedSignal = 0;
+    } else if (rawSignal === 1 || rawSignal === '1' || rawLabel.includes('BULL') || rawLabel.includes('LONG')) {
+      normalizedSignal = 1;
+    } else if (rawSignal === -1 || rawSignal === '-1' || rawLabel.includes('BEAR') || rawLabel.includes('SHORT')) {
+      normalizedSignal = -1;
+    } else {
+      normalizedSignal = 0;
+    }
+
+    const biasSignal = String(normalizedSignal);
+    const biasLabel = normalizedSignal === 1 ? 'BULLISH' : normalizedSignal === -1 ? 'BEARISH' : 'NEUTRAL';
+
+    const structuralValuation = extractStructuralValuation(
+      sopReport,
+      parsed,
+      telemetryObj,
+      narrativeCorpus,
+      rec.trade_direction,
+      biasSignal
+    );
+
+    const auctionStatus = extractAuctionStatus(
+      sopReport,
+      parsed,
+      telemetryObj,
+      narrativeCorpus,
+      entryMid,
+      structuralValuation
+    );
 
     const valuationNote =
       parsed.valuation_note ||
       parsed.next_database_state?.notes ||
       (telemetryObj.pricing_context as any)?.valuation_reconciliation_note ||
-      '';
+      (rec.narrative.includes('[VALUATION_VETO]') ? '[VALUATION_VETO] Automatic valuation gate enforced' : '');
 
     const btcSmtStatus =
       sopReport.smt_status ||
       parsed.smt_status ||
       (telemetryObj.smt_context as any)?.status ||
+      (telemetryObj.smt_context as any)?.eth_vs_btc_summary ||
       '';
 
     const openInterestRegime =
       ofTelemetry.active_regime ||
       parsed.open_interest_regime ||
+      (telemetryObj.order_flow as any)?.active_regime ||
+      (telemetryObj.displacement_metrics as any)?.open_interest_regime ||
       '';
 
-    const volExpansion =
-      sopReport.volumetric_sponsorship?.volume_expansion ||
-      parsed.volume_expansion_ratio ||
-      '';
+    const volExpansion = extractVolumeExpansionRatio(
+      sopReport,
+      parsed,
+      telemetryObj,
+      narrativeCorpus
+    );
 
-    const takerDeltaPct =
-      sopReport.volumetric_sponsorship?.taker_delta_pct ||
-      parsed.taker_delta_pct ||
-      '';
+    const takerDeltaPct = extractTakerDeltaPct(
+      sopReport,
+      parsed,
+      telemetryObj,
+      narrativeCorpus
+    );
 
-    const bodyRatio =
-      sopReport.volumetric_sponsorship?.body_ratio ||
-      parsed.body_ratio ||
-      '';
+    const bodyRatio = extractBodyRatio(
+      sopReport,
+      parsed,
+      telemetryObj,
+      narrativeCorpus
+    );
 
     const summaryText = parsed.narrative_summary || parsed.narrative || rec.narrative;
+    const executionMode = rec.execution_mode || outcome?.execution_mode || 'SYNTHETIC_AUDIT';
 
     corpus.push({
       metadata: {
         record_id: rec.id,
+        execution_mode: executionMode,
         date_cairo: getCairoDateString(recDate),
         time_cairo: formatCairoTime(recDate),
         date_utc: recDate.toISOString().slice(0, 10),
@@ -623,6 +1020,7 @@ export async function buildTelemetryCorpus(
       },
       forward_audit: {
         outcome_status: outcomeState,
+        execution_mode: executionMode,
         realized_r: typeof realizedR === 'number' ? parseFloat(realizedR.toFixed(2)) : '',
         realized_pnl_usd: typeof realizedPnlUsd === 'number' ? parseFloat(realizedPnlUsd.toFixed(2)) : '',
         mfe_r: typeof mfeR === 'number' ? parseFloat(mfeR.toFixed(2)) : '',
@@ -686,6 +1084,7 @@ export const CSV_COLUMNS = [
   'RR_TP1',
   'RR_TP2',
   'Outcome_Status',
+  'Execution_Mode',
   'Realized_R',
   'MFE_R',
   'MAE_R',
@@ -742,6 +1141,7 @@ export function serializeTelemetryToCsv(corpus: TelemetryCorpusItem[]): string {
       escapeCsvField(item.trade_plan.rr_tp1),
       escapeCsvField(item.trade_plan.rr_tp2),
       escapeCsvField(item.forward_audit.outcome_status),
+      escapeCsvField(item.forward_audit.execution_mode),
       escapeCsvField(item.forward_audit.realized_r),
       escapeCsvField(item.forward_audit.mfe_r),
       escapeCsvField(item.forward_audit.mae_r),
