@@ -140,6 +140,16 @@ export async function ensureAiAnalysisTableInitialized(): Promise<void> {
         ON ai_analysis_log (symbol, status, created_at DESC);
     `;
 
+    // Self-healing: ensure ai_trade_state table exists (singleton row id=1 for persistent AI memory)
+    await sql`
+      CREATE TABLE IF NOT EXISTS ai_trade_state (
+        id          INTEGER PRIMARY KEY DEFAULT 1,
+        state_json  JSONB        NOT NULL DEFAULT '{}',
+        updated_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT ai_trade_state_singleton CHECK (id = 1)
+      );
+    `;
+
     // Self-healing migration for agent_decision_log & ai_analysis_log telemetry columns
     const decisionLogMigrations = [
       sql`ALTER TABLE ai_analysis_log ADD COLUMN IF NOT EXISTS provider VARCHAR(32) DEFAULT 'GOOGLE'`,
