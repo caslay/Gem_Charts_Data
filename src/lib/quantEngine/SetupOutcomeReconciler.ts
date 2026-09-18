@@ -23,6 +23,7 @@ import { getDbPool } from '../postgres';
 import type { AiAnalysisRecord } from '../aiCascadeEngine';
 import {
   type SetupReconciledStatus,
+  type SetupExecutionMode,
   type ReconciledOutcome,
   type EnrichedAiAnalysisRecord,
   type DailyAuditMetrics,
@@ -32,6 +33,16 @@ import {
 } from './SetupOutcomeTypes';
 
 export * from './SetupOutcomeTypes';
+
+function resolveTradeExecutionMode(trade?: TradeMatchCandidate | null): SetupExecutionMode {
+  if (!trade) return 'SYNTHETIC_AUDIT';
+  const idStr = String(trade.id || '').toUpperCase();
+  const setupIdStr = String(trade.setupId || '').toUpperCase();
+  if (idStr.includes('LIVE') || idStr.includes('BINANCE') || setupIdStr.includes('LIVE')) {
+    return 'LIVE_BINANCE';
+  }
+  return 'PAPER_TRADING';
+}
 
 interface TradeMatchCandidate {
   id: string;
@@ -206,6 +217,7 @@ export function simulateSyntheticTapeOutcome(params: {
       if (barsElapsed >= ttlBars) {
         return {
           terminal_state: 'TTL_EXPIRED',
+          execution_mode: 'SYNTHETIC_AUDIT',
           bars_elapsed: ttlBars,
           ttl_bars: ttlBars,
           is_synthetic_evaluation: true,
@@ -218,6 +230,7 @@ export function simulateSyntheticTapeOutcome(params: {
       if (isSlBreached) {
         return {
           terminal_state: 'CANCELLED_PRE_FILL',
+          execution_mode: 'SYNTHETIC_AUDIT',
           bars_elapsed: barsElapsed,
           ttl_bars: ttlBars,
           is_synthetic_evaluation: true,
@@ -230,6 +243,7 @@ export function simulateSyntheticTapeOutcome(params: {
       if (isTp1PreFill) {
         return {
           terminal_state: 'CANCELLED_PRE_FILL',
+          execution_mode: 'SYNTHETIC_AUDIT',
           bars_elapsed: barsElapsed,
           ttl_bars: ttlBars,
           is_synthetic_evaluation: true,
@@ -250,6 +264,7 @@ export function simulateSyntheticTapeOutcome(params: {
         if (sameBarStopHit) {
           return {
             terminal_state: 'STOPPED_OUT',
+            execution_mode: 'SYNTHETIC_AUDIT',
             realized_r: -1.0,
             realized_pnl: null,
             is_synthetic_evaluation: true,
@@ -297,6 +312,7 @@ export function simulateSyntheticTapeOutcome(params: {
         // Banked 30% on TP1 (+0.30R), scratched remainder at Breakeven
         return {
           terminal_state: 'BREAKEVEN',
+          execution_mode: 'SYNTHETIC_AUDIT',
           realized_r: 0.30,
           realized_pnl: null,
           is_synthetic_evaluation: true,
@@ -313,6 +329,7 @@ export function simulateSyntheticTapeOutcome(params: {
         // Early breakeven ratchet (+0.40R rule) protected scratch
         return {
           terminal_state: 'BREAKEVEN',
+          execution_mode: 'SYNTHETIC_AUDIT',
           realized_r: 0.0,
           realized_pnl: null,
           is_synthetic_evaluation: true,
@@ -328,6 +345,7 @@ export function simulateSyntheticTapeOutcome(params: {
       // Stopped Out at initial invalidation
       return {
         terminal_state: 'STOPPED_OUT',
+        execution_mode: 'SYNTHETIC_AUDIT',
         realized_r: -1.0,
         realized_pnl: null,
         is_synthetic_evaluation: true,
@@ -351,6 +369,7 @@ export function simulateSyntheticTapeOutcome(params: {
 
         return {
           terminal_state: 'TP2_HIT',
+          execution_mode: 'SYNTHETIC_AUDIT',
           realized_r: parseFloat(totalRealizedR.toFixed(2)),
           realized_pnl: null,
           is_synthetic_evaluation: true,
@@ -377,6 +396,7 @@ export function simulateSyntheticTapeOutcome(params: {
           const tp1R = Math.abs(target1 - entryPrice) / riskDist;
           return {
             terminal_state: 'TP1_HIT',
+            execution_mode: 'SYNTHETIC_AUDIT',
             realized_r: parseFloat(tp1R.toFixed(2)),
             realized_pnl: null,
             is_synthetic_evaluation: true,
@@ -407,6 +427,7 @@ export function simulateSyntheticTapeOutcome(params: {
     if (tp1Hit) {
       return {
         terminal_state: 'TP1_HIT',
+        execution_mode: 'SYNTHETIC_AUDIT',
         realized_r: 0.30,
         is_in_flight: true,
         is_synthetic_evaluation: true,
@@ -420,6 +441,7 @@ export function simulateSyntheticTapeOutcome(params: {
 
     return {
       terminal_state: 'ACTIVE_SETUP',
+      execution_mode: 'SYNTHETIC_AUDIT',
       is_in_flight: true,
       is_synthetic_evaluation: true,
       synthetic_fill_price: entryPrice,
@@ -436,6 +458,7 @@ export function simulateSyntheticTapeOutcome(params: {
     const barsElapsed = Math.floor(elapsedSinceRec / barMs);
     return {
       terminal_state: 'ACTIVE_SETUP',
+      execution_mode: 'SYNTHETIC_AUDIT',
       is_armed: true,
       is_synthetic_evaluation: true,
       bars_elapsed: barsElapsed,
@@ -446,6 +469,7 @@ export function simulateSyntheticTapeOutcome(params: {
 
   return {
     terminal_state: 'TTL_EXPIRED',
+    execution_mode: 'SYNTHETIC_AUDIT',
     bars_elapsed: ttlBars,
     ttl_bars: ttlBars,
     is_synthetic_evaluation: true,
@@ -539,10 +563,12 @@ export async function reconcileSetupOutcomes(
 
       return {
         ...rec,
+        execution_mode: 'SYNTHETIC_AUDIT',
         evaluated_status: evaluatedStatus,
         reconciled_status: terminalState,
         reconciled_outcome: {
           terminal_state: terminalState,
+          execution_mode: 'SYNTHETIC_AUDIT',
           outcome_reason: reason,
         },
       };
@@ -577,14 +603,18 @@ export async function reconcileSetupOutcomes(
     });
 
     if (matchedTrade) {
+      const tradeExecMode = resolveTradeExecutionMode(matchedTrade);
+
       if (matchedTrade.status === 'OPEN') {
         return {
           ...rec,
+          execution_mode: tradeExecMode,
           status: 'ACTIVE_SETUP',
           evaluated_status: evaluatedStatus,
           reconciled_status: 'ACTIVE_SETUP',
           reconciled_outcome: {
             terminal_state: 'ACTIVE_SETUP',
+            execution_mode: tradeExecMode,
             is_in_flight: true,
             matched_trade_id: matchedTrade.id,
             outcome_reason: `Position actively in-flight on exchange (${matchedTrade.direction} @ $${matchedTrade.entryPrice})`,
@@ -605,11 +635,13 @@ export async function reconcileSetupOutcomes(
 
         return {
           ...rec,
+          execution_mode: tradeExecMode,
           status: state,
           evaluated_status: evaluatedStatus,
           reconciled_status: state,
           reconciled_outcome: {
             terminal_state: state,
+            execution_mode: tradeExecMode,
             realized_r: r,
             realized_pnl: pnl,
             matched_trade_id: matchedTrade.id,
@@ -621,11 +653,13 @@ export async function reconcileSetupOutcomes(
       if (isBreakeven) {
         return {
           ...rec,
+          execution_mode: tradeExecMode,
           status: 'BREAKEVEN',
           evaluated_status: evaluatedStatus,
           reconciled_status: 'BREAKEVEN',
           reconciled_outcome: {
             terminal_state: 'BREAKEVEN',
+            execution_mode: tradeExecMode,
             realized_r: 0,
             realized_pnl: pnl,
             matched_trade_id: matchedTrade.id,
@@ -638,11 +672,13 @@ export async function reconcileSetupOutcomes(
       const stopR = r !== 0 ? r : -1.0;
       return {
         ...rec,
+        execution_mode: tradeExecMode,
         status: 'STOPPED_OUT',
         evaluated_status: evaluatedStatus,
         reconciled_status: 'STOPPED_OUT',
         reconciled_outcome: {
           terminal_state: 'STOPPED_OUT',
+          execution_mode: tradeExecMode,
           realized_r: stopR,
           realized_pnl: pnl,
           matched_trade_id: matchedTrade.id,
@@ -665,11 +701,13 @@ export async function reconcileSetupOutcomes(
       if (decStatus === 'STAND_DOWN') {
         return {
           ...rec,
+          execution_mode: 'PAPER_TRADING',
           status: 'STAND_DOWN',
           evaluated_status: evaluatedStatus,
           reconciled_status: 'STAND_DOWN',
           reconciled_outcome: {
             terminal_state: 'STAND_DOWN',
+            execution_mode: 'PAPER_TRADING',
             outcome_reason: matchedDecision.narrative?.includes('DEADZONE')
               ? 'Stand down: Toxic dead zone window hard-locked execution'
               : 'Stand down: Microstructure condition rejected order placement',
@@ -680,11 +718,13 @@ export async function reconcileSetupOutcomes(
       if (decStatus === 'INVALIDATED') {
         return {
           ...rec,
+          execution_mode: 'PAPER_TRADING',
           status: 'CANCELLED_PRE_FILL',
           evaluated_status: evaluatedStatus,
           reconciled_status: 'CANCELLED_PRE_FILL',
           reconciled_outcome: {
             terminal_state: 'CANCELLED_PRE_FILL',
+            execution_mode: 'PAPER_TRADING',
             outcome_reason: 'Cancelled pre-fill: Invalidation level breached before limit fill',
           },
         };
@@ -693,11 +733,13 @@ export async function reconcileSetupOutcomes(
       if (decStatus.includes('REJECTED') || decStatus.includes('VETO')) {
         return {
           ...rec,
+          execution_mode: 'PAPER_TRADING',
           status: 'CANCELLED_PRE_FILL',
           evaluated_status: evaluatedStatus,
           reconciled_status: 'CANCELLED_PRE_FILL',
           reconciled_outcome: {
             terminal_state: 'CANCELLED_PRE_FILL',
+            execution_mode: 'PAPER_TRADING',
             outcome_reason: 'Cancelled pre-fill: Vetoed by Global Risk Governor or Geometry Gate',
           },
         };
@@ -740,10 +782,14 @@ export async function reconcileSetupOutcomes(
       if (syntheticOutcome) {
         return {
           ...rec,
+          execution_mode: 'SYNTHETIC_AUDIT',
           status: syntheticOutcome.terminal_state,
           evaluated_status: evaluatedStatus,
           reconciled_status: syntheticOutcome.terminal_state,
-          reconciled_outcome: syntheticOutcome,
+          reconciled_outcome: {
+            ...syntheticOutcome,
+            execution_mode: 'SYNTHETIC_AUDIT',
+          },
         };
       }
     }
@@ -762,11 +808,13 @@ export async function reconcileSetupOutcomes(
 
         return {
           ...rec,
+          execution_mode: 'PAPER_TRADING',
           status: finalState,
           evaluated_status: evaluatedStatus,
           reconciled_status: finalState,
           reconciled_outcome: {
             terminal_state: finalState,
+            execution_mode: 'PAPER_TRADING',
             bars_elapsed: ttlBars,
             ttl_bars: ttlBars,
             outcome_reason: reason,
@@ -777,11 +825,13 @@ export async function reconcileSetupOutcomes(
       if (decStatus.includes('ARMED') && isWithinTtl) {
         return {
           ...rec,
+          execution_mode: 'PAPER_TRADING',
           status: 'ACTIVE_SETUP',
           evaluated_status: evaluatedStatus,
           reconciled_status: 'ACTIVE_SETUP',
           reconciled_outcome: {
             terminal_state: 'ACTIVE_SETUP',
+            execution_mode: 'PAPER_TRADING',
             is_armed: true,
             bars_elapsed: Math.floor(elapsedMs / (barMinutes * 60 * 1000)),
             ttl_bars: ttlBars,
@@ -797,11 +847,13 @@ export async function reconcileSetupOutcomes(
         if (isBreached) {
           return {
             ...rec,
+            execution_mode: 'SYNTHETIC_AUDIT',
             status: 'CANCELLED_PRE_FILL',
             evaluated_status: evaluatedStatus,
             reconciled_status: 'CANCELLED_PRE_FILL',
             reconciled_outcome: {
               terminal_state: 'CANCELLED_PRE_FILL',
+              execution_mode: 'SYNTHETIC_AUDIT',
               outcome_reason: `Cancelled pre-fill: Live price ($${currentPrice.toFixed(2)}) breached invalidation ($${invalidation.toFixed(2)})`,
             },
           };
@@ -814,11 +866,13 @@ export async function reconcileSetupOutcomes(
         if (isTp1Reached) {
           return {
             ...rec,
+            execution_mode: 'SYNTHETIC_AUDIT',
             status: 'CANCELLED_PRE_FILL',
             evaluated_status: evaluatedStatus,
             reconciled_status: 'CANCELLED_PRE_FILL',
             reconciled_outcome: {
               terminal_state: 'CANCELLED_PRE_FILL',
+              execution_mode: 'SYNTHETIC_AUDIT',
               outcome_reason: `Cancelled pre-fill: Market reached Target 1 ($${target1.toFixed(2)}) before filling entry`,
             },
           };
@@ -829,11 +883,13 @@ export async function reconcileSetupOutcomes(
       const barsElapsed = Math.floor(elapsedMs / (barMinutes * 60 * 1000));
       return {
         ...rec,
+        execution_mode: 'SYNTHETIC_AUDIT',
         status: 'ACTIVE_SETUP',
         evaluated_status: evaluatedStatus,
         reconciled_status: 'ACTIVE_SETUP',
         reconciled_outcome: {
           terminal_state: 'ACTIVE_SETUP',
+          execution_mode: 'SYNTHETIC_AUDIT',
           is_armed: true,
           bars_elapsed: barsElapsed,
           ttl_bars: ttlBars,
@@ -845,11 +901,13 @@ export async function reconcileSetupOutcomes(
     // TTL Has Expired (>12 bars elapsed without an executed trade)
     return {
       ...rec,
+      execution_mode: 'SYNTHETIC_AUDIT',
       status: 'TTL_EXPIRED',
       evaluated_status: evaluatedStatus,
       reconciled_status: 'TTL_EXPIRED',
       reconciled_outcome: {
         terminal_state: 'TTL_EXPIRED',
+        execution_mode: 'SYNTHETIC_AUDIT',
         bars_elapsed: ttlBars,
         ttl_bars: ttlBars,
         outcome_reason: `Limit order was never filled and ${ttlBars}-bar TTL expired without execution`,

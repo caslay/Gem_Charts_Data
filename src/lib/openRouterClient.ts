@@ -36,7 +36,7 @@ export async function callOpenRouterApi(options: OpenRouterCallOptions): Promise
     systemPrompt,
     temperature = 0.2,
     maxTokens = 4096,
-    timeoutMs = 45000,
+    timeoutMs = 15000,
   } = options;
 
   if (!apiKey || !apiKey.trim()) {
