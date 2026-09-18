@@ -81,6 +81,12 @@ export function autoLogSopSetup(sopReport: SopReportData, nextState?: Record<str
       }
     }
 
+    // Guard: ensure entries is always an array (schema drift or corruption guard)
+    if (!Array.isArray(trackerJson.entries)) {
+      console.warn('[SOP TRACKER] entries field is not an array — coercing to []. Raw type:', typeof trackerJson.entries);
+      trackerJson.entries = [];
+    }
+
     // Deduplication check: if entry with same setupId or timestamp within 1 hour exists, skip duplicate insert
     const duplicate = trackerJson.entries.find(e => e.id === setupId);
     if (duplicate) {
