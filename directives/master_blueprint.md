@@ -1,8 +1,164 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.89
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.95
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-18 (V17.89 — Resting Rehydration Parity, Staged ID Traceability, Preemption Matching & Multi-Badge Canvas)
+> **Last Updated:** 2026-09-18 (V17.95 — Chronological Candle Closure Invariant, Dual-Valuation Semantic Disambiguation & SMT Permissive Status Harmonization)
+
+## 🆕 V17.95 Changelog — Chronological Candle Closure Invariant, Dual-Valuation Semantic Disambiguation & SMT Status Harmonization (2026-09-18)
+
+### Summary
+1. **Chronological Candle Closure Invariant (`sanitizeCandleClosureInvariant`):**
+   - **Root Cause Elimination of Multi-Open Paradox:** In `reconcileHierarchicalCandles()`, historical parent bars (e.g. at index 4 in 4H series) could be marked `isClosed: false` if child buffers did not span the full parent window ($< 4$ hours of 1H child bars at buffer initiation).
+   - **Deterministic Chronological Invariant Engine (`src/lib/quantEngine/scheduledPayloadHydrator.ts`):** Implemented and exported `sanitizeCandleClosureInvariant(candles: Candle[]): Candle[]`. Enforces the universal rule: across any series of length $N$, indices $0$ to $N - 2$ are strictly forced to `isClosed: true`. Index $N - 1$ preserves its active in-flight status (`isClosed: false` for live forming bars).
+   - **Multi-Layer Integration (`headlessScheduler.ts`, `export_live_ai_payload.ts`, `verify_scheduled_payload_hydration.ts`):** Applied across all 4 operational timeframes (4H, 1H, 15M, 5M) during hierarchical reconciliation, live edge synchronization, and payload array slicing. Verified bit-for-bit: exactly 29 closed historical bars and 1 live forming bar per timeframe in both production exports and test fixtures.
+2. **Dual-Valuation Semantic Disambiguation (ICT 50% Equilibrium vs AMT Volume Profile):**
+   - **Backwards-Compatible Schema Expansion (`HydratedLocalDealingRange`):** Added `structural_dealing_range_valuation` and explicit `valuation_basis_note` alongside existing `current_status`.
+   - **`valuation_reconciliation_note` (`pricing_context`):** Automated quantitative resolution of potential semantic tension between ICT Dealing Range (macro structural 50% equilibrium between Level-2 Major impulse anchors) and Auction Market Theory (`value_area.auction_status`). Specifically documents that price in macro DISCOUNT trading above intraday VAH represents an internal bullish expansion leg within macro discount—fully permissible for long setups when supported by 15m BOS and 3-pillar displacement.
+   - **System Prompt Rule 8 Update (`src/lib/sopPromptBuilder.ts`):** Formally codified Dual-Metric Harmony and Valuation Nomenclature in the system prompt, providing unambiguous reasoning guidance for the LLM.
+3. **SMT Telemetry Status Disambiguation:**
+   - **Clear Operational Semantics:** Disambiguated `smt_context.eth_vs_btc_summary` between active synchronous price action (`"NEUTRAL_SYNCHRONIZED — ETH and BTC expanding synchronously with zero structural divergence."`) and offline/isolated fallback (`"OFFLINE_FALLBACK — BTC correlation telemetry offline (permissive neutral baseline applied)"`).
+4. **Verification & Parity Ledger:**
+   - `scripts/verify_scheduled_payload_hydration.ts`: All 8/8 tests pass with zero assertion failures.
+   - `scripts/export_live_ai_payload.ts`: 100% organic live Binance snapshot exported to `data/ai_15min_sync_payload_export.json` with verified closure invariant across all 4 operational intervals.
+   - `npx tsc --noEmit`: Exited with 0 errors.
+
+---
+
+## 🆕 V17.94 Changelog — Decoupled Live Binance Snapshot Exporter & Cross-Timeframe Invariant (2026-09-18)
+
+### Summary
+1. **Decoupled 100% Authentic Live Market Snapshot Pipeline (`scripts/export_live_ai_payload.ts`):**
+   - **Elimination of Mock-Data Payload Exports:** Decoupled snapshot serialization from synthetic unit test loops. Created dedicated production exporter `scripts/export_live_ai_payload.ts` that ingests authentic market data directly from Binance Futures public REST endpoints.
+   - **Genuine Multi-Timeframe Kline Ingestion:** Pulls 100 closed bars for ETHUSDC across all operational intervals (4H, 1H, 15M, 5M) and BTC correlation klines (BTCUSDT: 5m, 15m) for intermarket SMT analysis.
+   - **Live Microstructure & Delta Ingestion:** Ingests live mark price from Binance ticker (`$2482.24`), real-time Open Interest regime (`RISING_AGAINST_PRICE`), and live taker/maker buy/sell delta.
+   - **Direct IPDA Hydration & Production Snapshot:** Executes `hydrateIpdaMetrics()` directly on genuine market buffers and serializes the 100% authentic payload snapshot to `data/ai_15min_sync_payload_export.json` with realistic multi-thousand volume metrics (e.g. 4.6k–10.7k ETH per 15m candle).
+2. **Cross-Timeframe Micro-Consistency ($15\text{m} \equiv 5\text{m}$ and $4\text{H} \equiv 1\text{H}$ Invariants):**
+   - **`reconcileHierarchicalCandles()` Engine (`src/lib/quantEngine/scheduledPayloadHydrator.ts`):** Implemented pure mathematical reconciler enforcing strict child-to-parent enclosure across multi-timeframe candle ring buffers:
+     * $\text{Parent Open} = \text{First Child Open}$
+     * $\text{Parent Close} = \text{Last Child Close}$
+     * $\text{Parent High} = \max(\text{Child Highs})$
+     * $\text{Parent Low} = \min(\text{Child Lows})$
+     * $\text{Parent Volume} = \sum(\text{Child Volumes})$
+     * $\text{Parent Taker Buy/Sell} = \sum(\text{Child Taker Buy/Sell})$
+   - **Safe Live-Edge Forming Bar Handling:** Explicitly designed to handle partial child sets (e.g. 1 or 2 closed 5m bars for an active 15m bar) prior to live-edge mark pinning, setting `isClosed = false` while maintaining exact OHLCV enclosure.
+   - **Scheduler Integration (`src/lib/daemon/headlessScheduler.ts`):** Applied `reconcileHierarchicalCandles()` across ring buffers before volumetric annotation and IPDA hydration, permanently preventing phantom candle gaps or timeframe divergence.
+3. **Synthetic Volume Anomaly Guard & Zero-Variance Distribution Detection:**
+   - **`detectSyntheticVolume()` (`src/lib/quantEngine/scheduledPayloadHydrator.ts`):** Added quantitative anomaly detector identifying:
+     * Multi-bar consecutive identical volumes ($\ge 3$ bars with $|v_i - v_{i-1}| < 0.0001$).
+     * Zero-variance volume distributions ($\sigma^2(v) < 0.0001$).
+     * Deterministic cyclical loop patterns ($p \in [2, 10]$ where $v_i = v_{i-p}$).
+     * Multi-bar consecutive zero volume ($\ge 3$ bars).
+   - **Enhanced Integrity Block (`_integrity.volume_synthetic_detected`):** Integrated into `_integrity` block. If synthetic volume or flatlined closes are detected, `feed_stale` triggers true and `headlessScheduler.ts` preempts AI dispatch with `FEED_STALE_ABORT`.
+4. **Test Suite Decoupling & Protection:**
+   - **Synthetic Fixture Decoupling (`scripts/verify_scheduled_payload_hydration.ts`):** Test 8 redirected to write synthetic test fixtures strictly to `data/test_payload_synthetic_fixture.json`, completely protecting `data/ai_15min_sync_payload_export.json` from mock data corruption.
+   - **Enhanced Unit Assertions:** Added tests for 15m ≡ 5m enclosure validation, synthetic repeating volume injection detection, and zero-variance detection. All 8/8 tests pass cleanly.
+
+---
+
+## 🆕 V17.93 Changelog — Elimination of Mock Data Artifacts & Macro Structural Geometry Refinement (2026-09-18)
+
+### Summary
+1. **Realistic Continuous Market Data Harness (Workstream A & Stale Feed Gatekeeper):**
+   - **Elimination of Synthetic Clamps & Flatlines (`scripts/verify_scheduled_payload_hydration.ts`):** Eradicated hardcoded 3-candle spike templates and artificial price ceiling clamping (`Math.min(2479.5, ...)`), which previously caused flatlined consecutive closes mimicking a frozen exchange feed.
+   - **Continuous Path-Dependent Multi-Timeframe Generator:** Implemented independent continuous generators for 1H, 15m, and 5m. Enforces strict inter-candle continuity ($O_k = C_{k-1}$ for all closed bars), path-dependent random walk with realistic volatility, and completely independent FVG geometries across timeframes (15m SIBI at $2480.5–$2482.5 vs 5m SIBI at $2474.8–$2476.0 vs 1H discount BISI at $2444.0–$2452.0).
+   - **`_integrity.feed_stale` Detection & Preemption (`src/lib/quantEngine/scheduledPayloadHydrator.ts`, `src/lib/daemon/headlessScheduler.ts`):** Added `feed_stale: boolean` to `HydratedIntegrityBlock`. Automatically detects if $\ge 3$ consecutive bars flatline with identical closes. If detected, `headlessScheduler.ts` preemptively stands down and logs a `FEED_STALE_ABORT` event, preventing corrupted payloads from reaching the AI cascade.
+2. **Macro Structural Magnet Filtering & Minimum Clearance (Workstream B):**
+   - **Exclusion of Raw Candle Wicks (`src/lib/quantEngine/scheduledPayloadHydrator.ts`):** Stripped all raw candle wicks (`...allCandles.map(c => c.h/l)`) which previously populated micro-magnets within 15–60 cents of live mark price.
+   - **Institutional Level Derivation:** Derived BSL and SSL candidates exclusively from confirmed Level-2 Major swing fractals (`grade === 'MAJOR'` and `colorValidated !== false`), Dealing Range anchor extremes, and macro session boundaries (Asian H/L, London H/L, PDH/PDL).
+   - **Spatial Clearance Gate:** Enforced minimum spatial clearance $\ge \max(5.0, \text{livePrice} \times 0.0025)$ (~6.18 points on ETH at $2470). Any level within this buffer is pruned. Guaranteed $\ge 2$ macro targets per side with non-empty arrays (Micro-Invariant 2).
+   - **Directional Sorting:** BSL sorted ascending (nearest overhead macro pool first); SSL sorted descending (nearest downside macro pool first).
+3. **Macro Dealing Range Anchoring & Anti-Collapse Guardrail (Workstream C):**
+   - **Multi-Hour Operational Wave Anchoring (`src/lib/quantEngine/scheduledPayloadHydrator.ts`):** Structural Dealing Range anchors to confirmed Level-2 Major swing extremes from 1H macro structure and 15m structure, ensuring 50% Equilibrium reflects multi-hour market valuation.
+   - **Critical Anti-Collapse Guardrail ($\ge 35.0$ pts on ETH):** Prevented the dealing range from collapsing into minor intraday noise (e.g. 13-point micro-slices). If the initial range depth is $< 35.0$ points, the search automatically expands backwards into the 1H/4H macro swing history (up to 48–72 hours) to locate genuine preceding Level-2 Major anchors, rather than synthesizing artificial levels.
+   - **Dynamic Enclosure:** Enforces $\text{anchorHigh} \ge \text{livePrice} \ge \text{anchorLow}$.
+4. **Array Synchronization & Closed-Bar Metric Parity (Workstream D):**
+   - **FVG Status Count Reconciliation (`src/lib/quantEngine/scheduledPayloadHydrator.ts`):** Assembles and slices `active_fvgs` (up to 6 elements) before formatting status strings, ensuring `overhead_sibi_status` and `discount_bisi_status` report the exact count of items present in `active_fvgs` with 100% numerical parity.
+   - **Closed-Bar Timeframe Deviation:** Evaluates `_integrity.timeframe_max_deviation_percent` across the latest closed bars rather than pinned forming bars, ensuring accurate measurement of historical multi-timeframe convergence.
+5. **Verification & Parity Record:**
+   - `scripts/verify_scheduled_payload_hydration.ts`: All 8/8 tests passed with 100% assertions satisfied.
+   - `data/ai_15min_sync_payload_export.json`: Fully regenerated with realistic continuous path-dependent data, genuine macro dealing range depth ($45.37$ pts, $2458.63 – $2504.00), macro magnets outside clearance (BSL: $2478.56, $2483.80, $2504.00; SSL: $2458.63, $2449.36, $2440.09), exact FVG telemetry parity (2 SIBIs detected in string and 2 SIBIs in array), and valid `_integrity` block (`feed_stale: false`).
+   - `npx tsc --noEmit`: 0 errors.
+
+---
+
+### Summary
+1. **Root 4H Historical Kline Feed Alignment (Workstream A & Mandatory UTC Boundary Constraint):**
+   - **Binance 4H UTC Bucket Partitioning (`src/lib/daemon/headlessScheduler.ts`):** Implemented and integrated `aggregateCandlesFromLowerTimeframe(childCandles, 240)` strictly anchoring 4H aggregations to official Binance 4H UTC session boundaries (`00:00, 04:00, 08:00, 12:00, 16:00, 20:00 UTC` via `bucketOpen = t - (t % 14_400_000)`).
+   - **Active Forming 4H Bar Handling:** Correctly aggregates between 1 and 4 child 1H bars for the active 4H interval, marking it open until expiration and pinning `close = livePrice` at the live edge.
+   - **Zero Step-Function Dislocation:** In `headlessScheduler.ts`, if the 4H ring buffer is sparse (< 10 bars) upon cold-start or harness execution, it synthesizes 4H candles directly from 1H bars with 100% mathematical tracking (`c4h.o === firstChild.o`, `c4h.c === lastChild.c`, `c4h.h === max(child.h)`, `c4h.l === min(child.l)`), completely eradicating the artificial 200-point historical price jump between 4H ($2150–$2200) and 1H ($2380–$2480).
+2. **Bidirectional FVG Scanning & Age Metadata (Workstream B):**
+   - **Unmitigated SIBI & BISI Imbalance Tracking (`src/lib/quantEngine/scheduledPayloadHydrator.ts`):** Consolidated active FVGs across 15m and 5m now represent both bullish (`BISI`) and bearish (`SIBI`) imbalances.
+   - **Age & Creation Metadata:** Enriched all detected FVG objects with creation timestamp (`created_at_time: string` in ISO 8601 format), relative bar age (`age_bars: number`), and elapsed wall-clock minutes (`age_minutes: number`).
+   - **Overhead SIBI & Discount BISI Status Indicators:** Appended `overhead_sibi_status` and `discount_bisi_status` to `ipda_metrics`. When price trades in `PREMIUM`, the nearest overhead SIBI is verified and prioritized for short execution mapping; if none is detected within the lookback window, an explicit informative empty-state notice is dispatched.
+   - **Valuation-Aware FVG Prioritization:** In `PREMIUM`, active FVGs prioritize the top 4 nearest SIBIs before allocating remaining slots to target BISIs. In `DISCOUNT`, active FVGs prioritize BISIs before SIBIs.
+3. **Telemetry Cleanup & Synthetic Integrity Block (Workstream C):**
+   - **Redundant Field Removal (`src/lib/quantEngine/scheduledPayloadHydrator.ts`):** Removed redundant `body_percentage` from `HydratedDisplacementMetrics`, preserving exclusively normalized decimal `body_ratio`.
+   - **Dedicated Root `_integrity` Block:** Added `_integrity` directly at the root of `ipda_metrics` providing programmatic, verifiable boolean assertions:
+     - `timeframe_convergence`: boolean (validates that maximum price deviation between 4H, 1H, 15M, and 5M live closes is within $\le 0.20\%$).
+     - `timeframe_max_deviation_percent`: number (exact percentage spread across timeframe close edges).
+     - `dealing_range_enclosed`: boolean (`anchor_high >= livePrice - 0.05 && anchor_low <= livePrice + 0.05`).
+     - `magnets_valid`: boolean (`BSL > livePrice` and `SSL < livePrice` on non-empty arrays).
+     - `overhead_sibi_present`: boolean (`sibiFvgs.length > 0`).
+4. **Verification & Parity Record:**
+   - `scripts/verify_scheduled_payload_hydration.ts`: All 8/8 test suites passed with 100% assertions satisfied.
+   - `scripts/test_cadence_and_context_sync.ts`: All 9/9 test suites passed.
+   - `scripts/test_veto_logic_unit.ts`: All valuation veto test suites passed.
+   - `data/ai_15min_sync_payload_export.json`: Fully regenerated with synchronized 4H/1H continuous price scale, bidirectional FVGs with age metadata, and valid `_integrity` block.
+   - `npx tsc --noEmit`: 0 errors across entire repository.
+
+---
+
+### Summary
+1. **Multi-Timeframe Ingestion & Live-Edge Synchronization (Workstream A & Micro-Invariant 1):**
+   - **4H Stream & Buffer Support (`src/lib/daemon/nodeWsClient.ts`, `src/lib/daemon/restBootstrap.ts`):** Added native `'4h'` kline stream to `NodeWsClient` (`${sym}@kline_4h`), initialized `'4h'` ring buffer (`buffers['4h']`), added 4H bootstrap query to `bootstrapHistoricalBuffers` (`restBootstrap.ts`), and expanded `fetchHistoricalKlines` interval union to include `'4h'`.
+   - **Live-Edge Pinning & Timestamp Alignment (`src/lib/daemon/headlessScheduler.ts`):** Implemented `synchronizeCandlesWithLiveEdge()` aligning candle arrays across 5m, 15m, 1h, and 4h. Enforces Micro-Invariant 1: forming live edge candle has `close = livePrice`, `high = Math.max(high, livePrice)`, and `low = Math.min(low, livePrice)`, with distinct bar open timestamps aligned to wall-clock interval boundaries (`Math.floor(now / intervalMs) * intervalMs`).
+2. **Dynamic Dealing Range Enclosure & 50% Equilibrium (Workstream B):**
+   - **Enclosure Invariant (`src/lib/quantEngine/scheduledPayloadHydrator.ts`):** Eradicated broken dealing ranges where live price traded outside anchor extremes. If price expands beyond `anchorHigh`, the upper boundary dynamically encloses `livePrice` and recent expansion highs (`anchorHigh = Math.max(anchorHigh, livePrice, ...recentHighs)`). If price breaks below `anchorLow`, the lower boundary expands to enclose `livePrice` and recent lows.
+   - **Deterministic Valuation Recalculation:** Recalculates `equilibrium = (anchorHigh + anchorLow) / 2` strictly within `[anchorLow, anchorHigh]`, ensuring `current_pricing: "DISCOUNT" | "PREMIUM" | "EQUILIBRIUM"` is always mathematically valid.
+3. **Directionally Validated Macro Structural Liquidity Magnets (Workstream C & Micro-Invariant 2):**
+   - **Directional Enforcement (`src/lib/quantEngine/scheduledPayloadHydrator.ts`):** Corrected inverted liquidity pools. Buy-Side Liquidity (BSL) candidates are strictly filtered with `p > livePrice + 0.10` (sorted ascending, nearest first). Sell-Side Liquidity (SSL) candidates are strictly filtered with `p < livePrice - 0.10` (sorted descending, nearest first).
+   - **Micro-Invariant 2 (Safe Non-Empty Fallback):** Implemented safe fallback projection pools (`[livePrice * 1.006, livePrice * 1.012]` for BSL; `[livePrice * 0.994, livePrice * 0.988]` for SSL) guaranteeing that downstream validators and array indexers never encounter empty arrays or inverted levels during breakout expansions.
+4. **Permissive SMT Fallback Prompt Codification (Workstream D):**
+   - **System Prompt Fortification (`src/lib/sopPromptBuilder.ts`):** Updated Rule 6 (SMT Gatekeeper) and Step 4 in `DEFAULT_ETH_SOP_SYSTEM_PROMPT` to add the conditional permissive fallback: if SMT telemetry is `NEUTRAL` or `OFFLINE` (due to Binance REST timeout, rate limit, or synchronous price action), the SMT gate is conditionally PERMISSIVE provided all remaining institutional gates (Valuation, AMT Value Area, 15m BOS, 3-Pillar Displacement) pass with 100% conviction.
+   - **PostgreSQL Database Sync (`scripts/update_system_prompt_v19_0.ts`):** Re-synchronized updated prompt directly into Neon PostgreSQL `system_settings` table.
+5. **Payload Token Deduplication (Workstream E):**
+   - **Deduplication (`src/lib/quantEngine/scheduledPayloadHydrator.ts`, `src/app/api/quant-analyze/route.ts`):** Made `session_context` optional in `HydratedIpdaMetrics` and omitted from returned `ipda_metrics` object, avoiding double serialization since `session_context` is already stamped at the root `payload.session_context`.
+6. **Verification & Parity Record:**
+   - `scripts/verify_scheduled_payload_hydration.ts`: All 6/6 test suites passed with 100% assertions satisfied.
+   - `scripts/test_cadence_and_context_sync.ts`: All 9/9 test suites passed.
+   - `scripts/test_veto_logic_unit.ts`: All valuation veto test suites passed.
+   - `data/ai_15min_sync_payload_export.json`: Refreshed and synchronized with live-edge mark price ($2470.11 across all 4 timeframes), enclosed dealing range ($2471.03/$2420.63/$2370.22), directional magnets, and deduplicated token telemetry (12,065 est. tokens).
+   - `npx tsc --noEmit`: 0 errors.
+
+---
+
+## 🆕 V17.90 Changelog — Scheduled AI Payload Hydration, Native IPDA Primitives, Inviolable Valuation Gate & SMT Isolation (2026-09-18)
+
+### Summary
+1. **Scheduled AI Ingestion Payload Hydration (`src/lib/quantEngine/scheduledPayloadHydrator.ts`, `src/lib/daemon/headlessScheduler.ts`, `src/app/api/quant-analyze/route.ts`):**
+   - **Root Cause Resolved:** Previously, `HeadlessScheduler.executeScan()` passed an empty `ipda_metrics` block containing only session context clocks to the AI, forcing the LLM to reconstruct complex floating-point geometric levels from raw candle arrays and hallucinating invalid trade setups.
+   - **Native IPDA Pre-Computation Pipeline:** Created dedicated `scheduledPayloadHydrator.ts` pre-computing:
+     - **Structural Dealing Range & Valuation:** Runs `analyzeMarketStructure` on active 15m candle history, extracts `anchor_high`, `anchor_low`, and 50% `equilibrium`, classifying live price deterministically into `"DISCOUNT"` | `"PREMIUM"` | `"EQUILIBRIUM"`.
+     - **Auction Market Theory (AMT) Value Area:** Runs rolling 96-bar Volume Profile engine (`calculateValueAreaProfile`) to compute Point of Control (`poc`), Value Area High (`vah`), and Value Area Low (`val`), identifying if price is trading in value acceptance chop or expanding beyond boundaries (`is_outside_value_area`).
+     - **Consolidated Active FVGs:** Detects unmitigated imbalances across 15m and 5m intervals with directional tags (`BISI` vs `SIBI`), proximal edge, distal edge, and 50% Consequent Encroachment (CE), sorted by proximity to price.
+     - **Intermarket SMT Divergence Engine:** Compares ETH structural swings against correlated BTC candle extremes, evaluating micro/macro SMT with definitive status (`"BULLISH_SMT"` | `"BEARISH_SMT"` | `"NEUTRAL"`).
+     - **Order Flow & 3-Pillar Displacement Proof:** Computes volume expansion ratio (vs. SMA20), taker delta dominance percentage, and body-to-range ratio on the latest 15m closed candle, alongside the active Open Interest regime (`"RISING_WITH_PRICE"`, `"RISING_AGAINST_PRICE"`, etc.).
+2. **Constraint 1: BTC SMT Fetch Isolation (`src/lib/quantEngine/scheduledPayloadHydrator.ts`):**
+   - Wrapped Binance REST requests for BTCUSDT correlation klines in a strict 2.5-second `AbortController` timeout.
+   - If the call times out, encounters a rate-limit, or fails, the hydrator immediately fails over to a safe neutral baseline (`status: "NEUTRAL"`) without throwing an exception or disrupting the primary 15m ETH evaluation.
+3. **Constraint 2: Structural Anchor Precision & Valuation Determinism (`src/lib/quantEngine/scheduledPayloadHydrator.ts`):**
+   - Calculated 50% Equilibrium strictly using validated 15m swing pivot extremes of the active structural leg, guaranteeing deterministic `current_pricing: "DISCOUNT" | "PREMIUM" | "EQUILIBRIUM"` classification.
+4. **Constraint 3: Inviolable Valuation Gate & Veto State Cleanliness (`src/lib/sopPromptBuilder.ts`, `src/lib/aiCascadeEngine.ts`, `scripts/update_system_prompt_v19_0.ts`):**
+   - **Prompt Codification:** Reaffirmed Rule 8 in `DEFAULT_ETH_SOP_SYSTEM_PROMPT`: Longs strictly prohibited in Premium (`[VALUATION_VETO] Long prohibited in Premium territory`); Shorts strictly prohibited in Discount (`[VALUATION_VETO] Short prohibited in Discount territory`). Updated `system_settings` in PostgreSQL.
+   - **Veto Cleanliness & Programmatic Guard:** In `aiCascadeEngine.ts`, whenever the AI emits `[VALUATION_VETO]` or attempts a valuation mismatch, it deterministically sets `bias_signal: 0` (`NEUTRAL`), `tradeDirection: "NEUTRAL"`, `status: "NEUTRAL"`, and resets `next_database_state.status: "SEARCHING"` with `trade_direction: null`, preventing rogue order dispatch.
+5. **Verification & Parity Record:**
+   - `scripts/verify_scheduled_payload_hydration.ts`: 4/4 verification suites passed (100% success).
+   - `scripts/test_veto_logic_unit.ts`: All valuation veto and mismatch test cases passed.
+   - `scripts/test_headless_scheduler_autonomy.ts`: 8/8 test suites passed with 100% parity.
+   - `data/ai_15min_sync_payload_export.json`: Snapshot fully updated and synchronized.
+   - `npx tsc --noEmit`: 0 errors.
+
+---
 
 ## 🆕 V17.89 Changelog — Resting Rehydration Parity, Staged ID Traceability, Preemption Matching & Multi-Badge Canvas (2026-09-18)
 

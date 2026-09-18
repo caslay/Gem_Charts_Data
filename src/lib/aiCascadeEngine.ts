@@ -526,6 +526,55 @@ export async function runAiCascadeEvaluation(
     } else {
       status = 'COMPLETED';
     }
+
+    // ── Veto State Cleanliness & Programmatic Valuation Guard (Constraint 3) ──
+    const narrativeText = (
+      parsedResponse.narrative ||
+      parsedResponse.narrative_summary ||
+      parsedResponse.sop_report?.trade_narrative ||
+      text ||
+      ''
+    );
+    const hasValuationVeto =
+      narrativeText.includes('VALUATION_VETO') ||
+      String(parsedResponse.next_database_state?.notes || '').includes('VALUATION_VETO');
+
+    const pricingStatus = (
+      payload?.ipda_metrics as any
+    )?.pricing_context?.local_dealing_range?.current_status || (payload?.ipda_metrics as any)?.current_pricing;
+
+    const isValuationMismatch =
+      (pricingStatus === 'PREMIUM' && (tradeDirection === 'LONG' || biasSignal === 'BULLISH')) ||
+      (pricingStatus === 'DISCOUNT' && (tradeDirection === 'SHORT' || biasSignal === 'BEARISH'));
+
+    if (hasValuationVeto || isValuationMismatch) {
+      biasSignal = 'NEUTRAL';
+      tradeDirection = 'NEUTRAL';
+      status = 'NEUTRAL';
+      entryRangeLow = null;
+      entryRangeHigh = null;
+      invalidationLevel = null;
+      target1 = null;
+      target2 = null;
+      target3 = null;
+
+      parsedResponse.bias_signal = 0;
+      parsedResponse.bias_label = 'NEUTRAL';
+      if (!parsedResponse.next_database_state) {
+        parsedResponse.next_database_state = {};
+      }
+      parsedResponse.next_database_state.status = 'SEARCHING';
+      parsedResponse.next_database_state.trade_direction = null;
+      parsedResponse.next_database_state.invalidation_level = null;
+      parsedResponse.next_database_state.target_level = null;
+      parsedResponse.next_database_state.active_setup_id = null;
+
+      if (isValuationMismatch && !hasValuationVeto) {
+        const vetoMsg = `[VALUATION_VETO] ${pricingStatus === 'PREMIUM' ? 'Long prohibited in Premium territory' : 'Short prohibited in Discount territory'}. Automatic valuation gate enforced.`;
+        parsedResponse.narrative = `${vetoMsg} ${parsedResponse.narrative || ''}`.trim();
+        parsedResponse.next_database_state.notes = vetoMsg;
+      }
+    }
   }
 
   // ── Extract narrative ──
