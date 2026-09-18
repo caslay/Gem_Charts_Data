@@ -71,6 +71,7 @@ export interface HydratedDisplacementMetrics {
 export interface HydratedIntegrityBlock {
   timeframe_convergence: boolean;
   timeframe_max_deviation_percent: number;
+  closed_bars_max_deviation_percent?: number;
   dealing_range_enclosed: boolean;
   magnets_valid: boolean;
   overhead_sibi_present: boolean;
@@ -366,14 +367,21 @@ export async function hydrateIpdaMetrics(options: HydratePayloadOptions): Promis
     auction_status: auctionStatus,
   };
 
-  let valuationReconciliationNote =
-    'ALIGNED: Macro structural dealing range valuation and Volume Profile auction state are in harmonious agreement.';
-  if (currentPricing === 'DISCOUNT' && isOutsideValueArea && vah !== null && livePrice > vah) {
+  const drStatus = currentPricing;
+  const vaStatus = auctionStatus;
+
+  const isPolarityAligned =
+    (drStatus === 'DISCOUNT' && vaStatus.includes('DISCOUNT')) ||
+    (drStatus === 'PREMIUM' && vaStatus.includes('PREMIUM')) ||
+    (drStatus === 'EQUILIBRIUM' && (!isOutsideValueArea || vaStatus.includes('VALUE_ACCEPTANCE')));
+
+  let valuationReconciliationNote: string;
+  if (isPolarityAligned) {
     valuationReconciliationNote =
-      'MACRO_DISCOUNT_INTERNAL_BULLISH_EXPANSION: Price is structurally in macro DISCOUNT (< Equilibrium), with an active Auction Market Theory initiative expansion leg expanding above intraday VAH targeting higher dealing range liquidity.';
-  } else if (currentPricing === 'PREMIUM' && isOutsideValueArea && val !== null && livePrice < val) {
+      'ALIGNED: Macro structural dealing range valuation and Volume Profile auction state are in harmonious agreement.';
+  } else {
     valuationReconciliationNote =
-      'MACRO_PREMIUM_INTERNAL_BEARISH_EXPANSION: Price is structurally in macro PREMIUM (> Equilibrium), with an active Auction Market Theory initiative expansion leg expanding below intraday VAL targeting lower dealing range liquidity.';
+      `DIVERGENT: Price in macro ${drStatus} while auction profile indicates ${vaStatus} — represents an internal initiative expansion leg against macro equilibrium; requires confirmed 15m BOS and volumetric sponsorship.`;
   }
 
   // ── Workstream A.3: Consolidated Active FVGs ───────────────────────────────
@@ -461,7 +469,7 @@ export async function hydrateIpdaMetrics(options: HydratePayloadOptions): Promis
     overheadSibiStatus = `ACTIVE_OVERHEAD_SIBI_AVAILABLE (${activeSibiCount} detected, nearest proximal at $${nearestSibi.proximal_edge})`;
   } else {
     overheadSibiStatus =
-      'NONE_DETECTED_WITHIN_WINDOW (Price in PREMIUM: requires fresh SIBI formation for short execution)';
+      `NONE_DETECTED_WITHIN_WINDOW (Price in ${currentPricing}: requires fresh SIBI formation for short execution)`;
   }
 
   let discountBisiStatus: string;
@@ -469,7 +477,7 @@ export async function hydrateIpdaMetrics(options: HydratePayloadOptions): Promis
     discountBisiStatus = `ACTIVE_DISCOUNT_BISI_AVAILABLE (${activeBisiCount} detected, nearest proximal at $${nearestBisi.proximal_edge})`;
   } else {
     discountBisiStatus =
-      'NONE_DETECTED_WITHIN_WINDOW (Price in DISCOUNT: requires fresh BISI formation for long execution)';
+      `NONE_DETECTED_WITHIN_WINDOW (Price in ${currentPricing}: requires fresh BISI formation for long execution)`;
   }
 
   // ── Workstream A.4: Intermarket SMT Divergence Engine ───────────────────────
@@ -708,37 +716,41 @@ export async function hydrateIpdaMetrics(options: HydratePayloadOptions): Promis
     )
   ).sort((a, b) => b - a);
 
-  // Micro-Invariant 2: Safe fallback projection pool strictly outside clearance threshold
+  // Organic Magnet Provenance: Output strictly confirmed structural pivots (Level-2 swings, session extremes, dealing range anchors)
+  // If fewer than 3 verified levels exist, return only those confirmed points without synthesizing artificial step fillers.
   const finalBsl =
-    bslFiltered.length >= 2
+    bslFiltered.length > 0
       ? bslFiltered.slice(0, 3)
-      : bslFiltered.length === 1
-      ? [
-          bslFiltered[0],
-          parseFloat((Math.max(bslFiltered[0], anchorHigh) + minMagnetClearance * 1.5).toFixed(2)),
-          parseFloat((Math.max(bslFiltered[0], anchorHigh) + minMagnetClearance * 3.0).toFixed(2)),
-        ]
-      : [
-          parseFloat(Math.max(anchorHigh, livePrice + minMagnetClearance * 1.5).toFixed(2)),
-          parseFloat((Math.max(anchorHigh, livePrice) + minMagnetClearance * 2.5).toFixed(2)),
-        ];
+      : anchorHigh >= livePrice + minMagnetClearance
+      ? [anchorHigh]
+      : [];
 
   const finalSsl =
-    sslFiltered.length >= 2
+    sslFiltered.length > 0
       ? sslFiltered.slice(0, 3)
-      : sslFiltered.length === 1
-      ? [
-          sslFiltered[0],
-          parseFloat((Math.min(sslFiltered[0], anchorLow) - minMagnetClearance * 1.5).toFixed(2)),
-          parseFloat((Math.min(sslFiltered[0], anchorLow) - minMagnetClearance * 3.0).toFixed(2)),
-        ]
-      : [
-          parseFloat(Math.min(anchorLow, livePrice - minMagnetClearance * 1.5).toFixed(2)),
-          parseFloat((Math.min(anchorLow, livePrice) - minMagnetClearance * 2.5).toFixed(2)),
-        ];
+      : anchorLow > 0 && anchorLow <= livePrice - minMagnetClearance
+      ? [anchorLow]
+      : [];
 
   // ── Workstream D: Synthetic Integrity Verification Block ───────────────────
-  // Inspect latest closed bars across operational timeframes (excluding active forming bar)
+  // 1. Live synchronized edge deviation across operational timeframes:
+  // Evaluates active forming bar closes against livePrice (equals 0.0000% when pinned).
+  const liveEdgeBars = [
+    candles5m[candles5m.length - 1],
+    candles15m[candles15m.length - 1],
+    options.candles1h ? options.candles1h[options.candles1h.length - 1] : undefined,
+    options.candles4h ? options.candles4h[options.candles4h.length - 1] : undefined,
+  ].filter((c): c is Candle => Boolean(c && typeof c.c === 'number' && !isNaN(c.c)));
+
+  let liveMaxDeviationPercent = 0;
+  if (liveEdgeBars.length > 0) {
+    const liveCloses = liveEdgeBars.map((c) => c.c);
+    const minLive = Math.min(...liveCloses);
+    const maxLive = Math.max(...liveCloses);
+    liveMaxDeviationPercent = parseFloat((((maxLive - minLive) / livePrice) * 100).toFixed(4));
+  }
+
+  // 2. Closed-bar historical reference deviation (excluding active forming bar):
   const getLatestClosedCandle = (arr?: Candle[]): Candle | null => {
     if (!arr || arr.length === 0) return null;
     for (let i = arr.length - 1; i >= 0; i--) {
@@ -754,14 +766,15 @@ export async function hydrateIpdaMetrics(options: HydratePayloadOptions): Promis
   if (closedCandle5m) latestClosedCloses.push(closedCandle5m.c);
   if (closedCandle15m) latestClosedCloses.push(closedCandle15m.c);
 
-  let maxDeviationPercent = 0;
-  let timeframeConvergence = true;
+  let closedBarsMaxDeviationPercent = 0;
   if (latestClosedCloses.length > 0) {
     const minClose = Math.min(...latestClosedCloses);
     const maxClose = Math.max(...latestClosedCloses);
-    maxDeviationPercent = parseFloat((((maxClose - minClose) / livePrice) * 100).toFixed(4));
-    timeframeConvergence = maxDeviationPercent <= 0.20;
+    closedBarsMaxDeviationPercent = parseFloat((((maxClose - minClose) / livePrice) * 100).toFixed(4));
   }
+
+  // Live edge bars must converge within 0.01% (equals 0.0000% when pinned to live mark price)
+  const timeframeConvergence = liveMaxDeviationPercent <= 0.01;
 
   // Stale feed detection: check if any series repeats identical closes for N bars
   const checkFeedStale = (arr?: Candle[], n: number = 3): boolean => {
@@ -796,7 +809,8 @@ export async function hydrateIpdaMetrics(options: HydratePayloadOptions): Promis
 
   const integrity: HydratedIntegrityBlock = {
     timeframe_convergence: timeframeConvergence,
-    timeframe_max_deviation_percent: maxDeviationPercent,
+    timeframe_max_deviation_percent: liveMaxDeviationPercent,
+    closed_bars_max_deviation_percent: closedBarsMaxDeviationPercent,
     dealing_range_enclosed: dealingRangeEnclosed,
     magnets_valid: magnetsValid,
     overhead_sibi_present: overheadSibiPresent,

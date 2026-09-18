@@ -1,8 +1,30 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.95
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.96
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-18 (V17.95 — Chronological Candle Closure Invariant, Dual-Valuation Semantic Disambiguation & SMT Permissive Status Harmonization)
+> **Last Updated:** 2026-09-18 (V17.96 — Dynamic Valuation Reconciliation, Context-Aware FVG Statuses, Organic Magnet Provenance & Live Edge Deviation Telemetry)
+
+## 🆕 V17.96 Changelog — Dynamic Valuation Reconciliation, Context-Aware FVG Statuses, Organic Magnet Provenance & Live Edge Deviation (2026-09-18)
+
+### Summary
+1. **Dynamic Valuation Reconciliation Engine (`valuation_reconciliation_note`):**
+   - **Elimination of False Valuation Alignment:** Previously, when `local_dealing_range.current_status` was `EQUILIBRIUM` and `value_area.auction_status` was `PREMIUM_AUCTION_EXPANSION`, the note defaulted to `ALIGNED`.
+   - **Dynamic Polarity Evaluation:** Evaluates polarity agreement between macro Dealing Range and Volume Profile Auction status. If polarity matches (e.g. DISCOUNT + DISCOUNT_AUCTION, PREMIUM + PREMIUM_AUCTION, EQUILIBRIUM + VALUE_ACCEPTANCE), outputs `ALIGNED`. If states differ, dynamically outputs `DIVERGENT: Price in macro ${drStatus} while auction profile indicates ${vaStatus} — represents an internal initiative expansion leg against macro equilibrium; requires confirmed 15m BOS and volumetric sponsorship.`
+2. **Dynamic FVG Status String Formatting (`overhead_sibi_status` & `discount_bisi_status`):**
+   - **Context-Aware Empty States:** Replaced static parenthetical strings `(Price in PREMIUM: ...)` and `(Price in DISCOUNT: ...)` with dynamic interpolation of `${currentPricing}` (`EQUILIBRIUM`, `DISCOUNT`, or `PREMIUM`).
+   - Completely eliminates hardcoded pricing regime assumptions when no unmitigated gaps are detected.
+3. **Organic Magnet Provenance (Zero Synthetic Step Spacers):**
+   - **Elimination of Rigid Arithmetic Fallbacks:** Removed artificial linear step fillers (`+ minMagnetClearance * 1.5`, `+ minMagnetClearance * 3.0`) which produced synthetic $+9.33$ increments when only 1 major swing high was detected.
+   - BSL and SSL pools are now derived exclusively from genuine confirmed structural pivots (Level-2 verified swings, session extremes, dealing range anchors). If only 1 or 2 verified levels exist, the engine returns exclusively those genuine levels.
+4. **Live Synchronized Edge Deviation Telemetry (`_integrity`):**
+   - **`timeframe_max_deviation_percent`:** Measures deviation strictly across the live forming edge bars pinned to `livePrice`, registering an exact $0.0000\%$ (0.0) convergence at the synchronized edge.
+   - **`closed_bars_max_deviation_percent`:** Added dedicated metric to `HydratedIntegrityBlock` explicitly tracking asynchronous completed closed bars, eliminating LLM misinterpretation of natural bar closure intervals as data feed desynchronization.
+5. **Verification & Parity Ledger:**
+   - `npx tsc --noEmit`: Exited with 0 errors.
+   - `scripts/verify_scheduled_payload_hydration.ts`: All 8/8 tests pass with zero assertion failures.
+   - `scripts/export_live_ai_payload.ts`: 100% organic live Binance snapshot exported to `data/ai_15min_sync_payload_export.json` verifying exact live edge synchronization ($0.0000\%$) and genuine organic BSL levels ($[2496.21, 2615.12]$).
+
+---
 
 ## 🆕 V17.95 Changelog — Chronological Candle Closure Invariant, Dual-Valuation Semantic Disambiguation & SMT Status Harmonization (2026-09-18)
 
