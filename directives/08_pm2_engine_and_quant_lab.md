@@ -1,6 +1,6 @@
 # 🔬 Directive 08 — PM2 Execution Engine & Quant Lab Protocol
 
-> **Document Version:** 1.0.0 (V17.16)  
+> **Document Version:** V18.0 Institutional Baseline  
 > **Target Systems:** Headless PM2 Daemon (`scripts/headless-daemon.ts`), Live Automated Engine (`AutomatedStrategyExecutionEngine.ts`), Quant Lab Suite (`SweepReclaimEngine.ts`, `scannerPresets.ts`, `/quant-lab`, SSE routes).  
 > **Audience & Operator Mandate:** Quant Engine Experts, Expert Futures Traders, and Senior System Architecture Designers (subordinate to `AGENTS.md` Triple Mandate).  
 > **Precedence:** Subordinate only to `AGENTS.md` core protocol. Supplements `03_quant_logic.md` and `06_volumetric_sponsorship.md`.  
@@ -106,42 +106,57 @@ Both systems must determine execution entry prices using the identical pure func
 * **Exchange Order Friction Physics:**
   - **Limit Entries & Take-Profits:** Resting limit orders execute with **0.0000% Maker fees** (VIP 1).
   - **Stop Losses & Scratches:** Market-clearing liquidation triggers execute with **0.0400% Taker fees** (or **0.0360%** with BNB discount).
-* **Fee-Padded Breakeven Stop Invariant:**
-  - When Fee-Padded Breakeven is active (`enableFeePaddedBreakeven: true`, default `breakevenOffsetPct: 0.05`), the stop loss is moved past entry into positive territory upon reaching early MFE threshold:
-    - Longs: $P_{\text{BE}} = P_{\text{entry}} \times (1 + \frac{\text{OffsetPct}}{100})$
-    - Shorts: $P_{\text{BE}} = P_{\text{entry}} \times (1 - \frac{\text{OffsetPct}}{100})$
+* **Fee-Padded Breakeven Stop Invariant (Calibrated 0.015% Fee Shield):**
+  - When Fee-Padded Breakeven is active (`enableFeePaddedBreakeven: true`, standard calibrated `breakevenOffsetPct: 0.015`), the stop loss is moved past entry into positive territory upon reaching early MFE threshold:
+    - Longs: $P_{\text{BE}} = P_{\text{entry}} \times (1 + \frac{\text{OffsetPct}}{100}) = P_{\text{entry}} \times (1 + 0.00015)$
+    - Shorts: $P_{\text{BE}} = P_{\text{entry}} \times (1 - \frac{\text{OffsetPct}}{100}) = P_{\text{entry}} \times (1 - 0.00015)$
   - **Dynamic Breathing Room Guard:** The early breakeven ratchet multiple is dynamically constrained: $\text{effectiveEarlyBEMultiple} = \max(\text{earlyBreakevenMultiple}, \text{feeOffsetInR} + 0.05)$, ensuring price clears the offset with $+0.05\text{R}$ breathing room before moving the stop.
 * **True Scratch Net Cash Accounting:**
   - Price appreciation on protected scratch exits covers the exchange taker fee, resulting in exactly $0.00\text{R}$ and $\$0.00$ net cash drag. Phantom fee double-deductions are strictly prohibited.
 
 ---
 
-## 🎛️ 4. Strategy Preset Lifecycle & Management
+## 🎛️ 4. Strategy Preset Lifecycle & Canonical Manifest (V18.0 / V19.0 SOP)
 
-All strategy profiles must be immutably declared in `src/lib/quantEngine/scannerPresets.ts`:
+All active strategy profiles must be immutably declared in `src/lib/quantEngine/scannerPresets.ts`. Canonical production execution conforms strictly to the **15m Asymmetric Architecture** and **Trend Continuation Framework**:
 
-### 1. Alpha Shield Champion (Institutional Default Benchmark)
-* **Preset ID:** `factory_sr_5m_alpha_shield_early_be`
-* **Anchors:** All anchor types enabled (including 5m Swing Pivots).
-* **Entry Mode:** `FVG_PROXIMAL`.
-* **Displacement:** $1.20\times$ Volume SMA, $52\%$ Taker Delta, $0.40$ Body Ratio.
-* **Quant Shield Rules:** Active Rule 1 (Wave Deduplication), Active Rule 5 (45-min Post-Loss Cooldown), and Active Rule 4 (Early Breakeven Ratchet @ $+0.50\text{R}$ MFE).
-* **1-Year Verified Path Reality:** $+161.4\text{R}$ Net Profit, $1.37\text{ PF}$, $-13.20\text{R}$ Max DD, $+1,928\%$ Compounded Equity (\$10k $\to$ \$202,853.20) with only $-24.09\%$ Max Drawdown across 106,560 raw bars. 100% executable on live Binance Futures.
+### 🏛️ Canonical Production Factory Presets (15m Execution Anchor)
 
-### 2. FVG 50% CE Sniper (Ultra-Low Drawdown Institutional Champion)
-* **Preset ID:** `factory_sr_5m_fvg_ce_sniper`
-* **Anchors:** All anchor types enabled (including 5m Swing Pivots).
-* **Entry Mode:** `FVG_CE` (50% Consequent Encroachment).
-* **Displacement:** $1.20\times$ Volume SMA, $52\%$ Taker Delta, $0.40$ Body Ratio.
-* **Quant Shield Rules:** Active Rule 1 (Wave Deduplication) and accelerated Active Rule 4 (Early Breakeven Ratchet @ $+0.40\text{R}$ MFE).
-* **1-Year Verified Path Reality:** $+191.9\text{R}$ Net Profit, $1.61\text{ PF}$, **$-6.50\text{R}$ Max DD**, $+3,808\%$ Compounded Equity (\$10k $\to$ \$390,823.00) with only **$13.4\%$ Max Drawdown** across 106,560 raw bars. Delivers the highest profit factor and lowest drawdown in the system.
+#### 1. 15m Institutional Asymmetric Macro Sniper (Platform Primary Champion)
+* **Preset ID:** `factory_sr_15m_asymmetric_macro_sniper`
+* **Timeframe:** `15m`
+* **Strategy Type:** `SWEEP_RECLAIM`
+* **Anchors:** `['SWING_PIVOT', 'PDH', 'PDL', 'ASIAN_HIGH', 'ASIAN_LOW', 'LONDON_HIGH', 'LONDON_LOW']` (Internal pivots suppressed).
+* **Entry Mode:** `FVG_PROXIMAL` (outer shelf boundary with 12-bar TTL limit order routing).
+* **Macro Gating:** Intermarket BTC SMT Divergence, Auction Market Theory Value Area profile (Discount below VAL / Premium above VAH with POC exclusion band), 0–90m Institutional Killzones (London 07:00–08:30 & NY AM 13:00–14:30 UTC with strict 14:30 UTC cutoff), Rollover (00:00 UTC) and Pre-News Freezes.
+* **Harvest Engine:** Two-Stage Asymmetric Harvest (40%–50% @ 1.2R–1.5R Dealing Range EQ with Next-Bar BE +0.015% Fee Shield, remaining 50%–60% runner trailing 15m 3-bar swing pivots to 1:3.0R–1:5.0R Opposing External Liquidity, 45m post-loss cooldown).
 
-### 3. Baseline Champion (Unfiltered Trailing Benchmark Control)
-* **Preset ID:** `factory_sr_5m_winner_fvg_proximal`
-* **Anchors:** All anchor types enabled.
-* **Entry Mode:** `FVG_PROXIMAL`.
-* **Quant Shield Rules:** Pure baseline (`enableEarlyBreakeven: false`, `postLossCooldownMinutes: 0`).
-* **1-Year Verified Path Reality:** 1,815 sequential trades, $+5.15\text{R}$ Net Return, $1.01\text{ PF}$, $-48.79\text{R}$ Max DD (flat breakeven with heavy chop). Serves as the raw reference demonstrating why early breakeven ratchets are mathematically necessary.
+#### 2. 15m Institutional Trend Expansion Champion (HTF Directional Lock & BOS Momentum)
+* **Preset ID:** `factory_tc_15m_trend_expansion_champion`
+* **Timeframe:** `15m`
+* **Strategy Type:** `TREND_CONTINUATION`
+* **Directional Lock:** 1H/4H Rolling Level-2 Swings + 120 EMA (Strict Long-Only in bull flow, Short-Only in bear flow).
+* **Structure Confirmation:** Level-2 Major Physical Body Close Break of Structure (BOS) with 3-pillar displacement ($\ge 1.25\times$ Vol SMA20, $\ge 52\%$ Taker Delta, $\ge 50\%$ Body-to-Range).
+* **Entry Mode:** FVG Proximal Edge limit order with 12-bar TTL; Stop Loss pinned beyond origin swing of breakout leg.
+* **Harvest Engine:** Inverted 30/70 Asymmetric Model (30% @ 1.5R fee-clearing de-risking tranche with Next-Bar BE +0.015% fee shield on bar $i+1$, 70% macro runner trailing 15m 3-bar swing pivots to 3.0R–5.0R opposing liquidity or Asian SD expansions, +1.0R dynamic profit floor @ +2.0R MFE, 45m post-loss cooldown).
+
+#### 3. 15m Institutional Confluence Champion (ICT + AMT + Wyckoff + SMT)
+* **Preset ID:** `factory_sr_15m_institutional_confluence`
+* **Timeframe:** `15m`
+* **Strategy Type:** `SWEEP_RECLAIM`
+* **Confluence Stack:** ICT Deep Mitigation + AMT Value Area gating + Wyckoff Phase D confirmed MSS body close with 3-pillar displacement + Intermarket BTC SMT Divergence gatekeeper.
+
+---
+
+### ⏳ Historical Evolutionary Milestones (Archived 5m Sub-Timeframe Research)
+
+*Clarification for Operators and AI Agents:*  
+Earlier 5m prototypes represent low-timeframe evolutionary milestones and fee-resilience tournament baselines (documented in `directives/09_institutional_quant_roadmap.md` Entries 001–010):
+- `factory_sr_5m_alpha_shield_early_be` (Early Breakeven Proof of Concept, +0.50R MFE trigger)
+- `factory_sr_5m_fvg_ce_sniper` / `factory_sr_5m_fvg_ce_sniper_v3` (5m CE Imbalance Entry, 0.015% Fee Shield Tournament Winner)
+- `factory_sr_5m_winner_fvg_proximal` (Unfiltered Trailing Control Benchmark)
+
+Forensic autopsies in Directive 09 (Entry 011) proved that 5m scalping creates an unacceptable fee-churn trap under real Binance 0.04% taker friction. Consequently, active production execution is strictly anchored to the canonical 15m presets above. Under no circumstances should orphaned 5m IDs be deployed as active production defaults.
 
 ---
 

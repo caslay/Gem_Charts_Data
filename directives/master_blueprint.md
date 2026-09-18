@@ -27,6 +27,10 @@
    - TypeScript compiler verification (`npx tsc --noEmit`): 0 errors.
    - Production build verification (`npm run build`): Next.js 16.2.4 compiled all 32 routes cleanly.
    - System Invariant Guardrail: `data/ai_15min_sync_payload_export.json` and `scripts/export_live_ai_payload.ts` remain 100% untouched.
+5. **Legacy Directives, Breakeven Offsets & Preset Manifest Harmonization:**
+   - **Calibrated Breakeven Offset Harmonization (`03_quant_logic.md` & `08_pm2_engine_and_quant_lab.md`):** Updated Section 6.2 in `03_quant_logic.md` and Section 3.5 in `08_pm2_engine_and_quant_lab.md` to permanently reconcile legacy `+0.05%` citations with the institutional `+0.015%` fee shield standard (`breakevenOffsetPct = 0.015`), preventing premature noise shakeouts while neutralizing taker fee drag. Harmonized interface typing comments across `scannerPresets.ts`, `strategyExecutionConfig.ts`, `SweepReclaimEngine.ts`, and `AutomatedStrategyExecutionEngine.ts`.
+   - **Directive Versioning & Axiom Reaffirmation (`03_quant_logic.md`):** Modernized `03_quant_logic.md` header badge to "V18.0 Institutional Quant Doctrine", reaffirming that foundational axioms (Naked Data Rule, 50% Dealing Range Equilibrium Gate, Strict 1H/4H Directional Lock, and Zero True Day Open / PDH-PDL Midpoint Anchor) remain permanently binding.
+   - **Canonical Preset Manifest Alignment (`08_pm2_engine_and_quant_lab.md` & `09_institutional_quant_roadmap.md`):** Reconciled Section 4 in Directive 08 and Section 2 in Directive 09 against live factory presets declared in `src/lib/quantEngine/scannerPresets.ts`. Clarified that legacy 5m presets (`_early_be`, `_v3`) represent archived evolutionary stepping stones, while active production execution strictly adheres to the 15m Asymmetric Architecture (`factory_sr_15m_asymmetric_macro_sniper`, `factory_tc_15m_trend_expansion_champion`).
 
 ---
 

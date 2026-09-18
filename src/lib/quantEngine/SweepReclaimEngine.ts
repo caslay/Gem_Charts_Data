@@ -345,7 +345,7 @@ export interface SweepReclaimScanConfig {
   enableEarlyBreakeven?: boolean;             // Rule 4: Dynamic Early Breakeven Ratchet (default: true)
   earlyBreakevenMultiple?: number;            // Rule 4: MFE Multiple to trigger Breakeven (default: 0.60)
   enableFeePaddedBreakeven?: boolean;         // Fee-Padded Breakeven: Offset BE stop to cover Binance 0.0400% taker fee (default: true)
-  breakevenOffsetPct?: number;                // Percentage offset from entry (default: 0.05% -> Entry * (1 ± 0.0005))
+  breakevenOffsetPct?: number;                // Percentage offset from entry (calibrated default: 0.015% -> Entry * (1 ± 0.00015))
   postLossCooldownMinutes?: number;           // Rule 5: Directional cooldown minutes after stop-out (default: 45)
 
   // 💰 Institutional Binance Fee Model (USDC-M Futures)

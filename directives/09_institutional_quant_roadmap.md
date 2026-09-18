@@ -73,6 +73,14 @@ A candidate setup qualifies for live operational promotion **ONLY IF** it achiev
 4. **Fee Drag Resistance:** Taker fees paid must not exceed $25\%$ of gross realized return.
 5. **Statistical Robustness:** Out-of-sample stability demonstrated across both summer chop regimes and trending macro expansion cycles.
 
+### 🎛️ Canonical Operational Preset Manifest vs. Historical Milestones (V18.0 Parity)
+* **Canonical Operational Presets (15m Execution Anchor — V18.0 / V19.0 SOP):**
+  - `factory_sr_15m_asymmetric_macro_sniper`: Platform Primary Champion for Sweep & Reclaim Mean Reversion (SMT + AMT Value Area + FVG Proximal + 1:3.0R–1:5.0R DOL Targets).
+  - `factory_tc_15m_trend_expansion_champion`: Engine 2 Institutional Trend Continuation (HTF Trend Lock + 15m BOS + FVG Proximal Retest + Inverted 30/70 Asymmetric Model).
+  - `factory_sr_15m_institutional_confluence`: ICT Deep Mitigation + AMT + Wyckoff Phase D + SMT Confluence Profile.
+* **Historical Evolutionary Milestones (Archived 5m Sub-Timeframe Research):**
+  - Legacy 5m presets (`factory_sr_5m_alpha_shield_early_be`, `factory_sr_5m_fvg_ce_sniper`, `factory_sr_5m_fvg_ce_sniper_v3`, `factory_sr_5m_winner_fvg_proximal`) represent low-timeframe evolutionary milestones (Entries 001–010). Forensic autopsies in Entry 011 and Entry 014 proved that sub-15m scalping creates an unsustainable fee-churn trap under real Binance 0.04% taker friction. Consequently, active production execution is strictly anchored to the canonical 15m presets above. Under no circumstances should orphaned 5m IDs be deployed as active production defaults.
+
 ---
 
 ## 🧱 3. The 4 Orthogonal Factor Pillars & Engine Feature Inventory
