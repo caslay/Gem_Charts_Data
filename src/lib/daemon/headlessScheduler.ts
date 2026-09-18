@@ -716,6 +716,16 @@ export class HeadlessScheduler {
         // Fallback to environment
       }
 
+      // Auto-migrate legacy/deprecated models to DEFAULT_MODEL (gemini-3.5-flash)
+      if (
+        !activeModel ||
+        activeModel === 'gemini-2.5-flash' ||
+        activeModel === 'gemini-2.5-flash-lite' ||
+        activeModel === 'deepseek/deepseek-v4-flash-0731:free'
+      ) {
+        activeModel = DEFAULT_MODEL;
+      }
+
       if (!apiKey && !openRouterApiKey && !this.allowOfflineFallback) {
         console.warn('[HEADLESS_SCHEDULER] Neither GEMINI_LIVE_KEY nor OPENROUTER_API_KEY found. Skipping AI dispatch.');
         return;

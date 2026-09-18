@@ -262,8 +262,16 @@ export default function SettingsPage() {
       const settingsData = await settingsRes.json();
 
       const s = settingsData.settings || {};
+      const activeModel =
+        !s.ACTIVE_MODEL ||
+        s.ACTIVE_MODEL === "gemini-2.5-flash" ||
+        s.ACTIVE_MODEL === "gemini-2.5-flash-lite" ||
+        s.ACTIVE_MODEL === "deepseek/deepseek-v4-flash-0731:free"
+          ? DEFAULT_MODEL
+          : s.ACTIVE_MODEL;
+
       setQuantSettings({
-        ACTIVE_MODEL: s.ACTIVE_MODEL || DEFAULT_MODEL,
+        ACTIVE_MODEL: activeModel,
         SYSTEM_PROMPT: s.SYSTEM_PROMPT || "",
         GEMINI_LIVE_KEY: s.GEMINI_LIVE_KEY || "",
         OPENROUTER_API_KEY: s.OPENROUTER_API_KEY || "",
@@ -774,15 +782,15 @@ export default function SettingsPage() {
                     }
                     className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3.5 py-2.5 text-xs text-foreground rounded-lg transition-all cursor-pointer shadow-sm font-sans"
                   >
-                    <optgroup label="OpenRouter (DeepSeek)">
-                      {AVAILABLE_MODELS.filter((m) => m.provider === "OPENROUTER").map((model) => (
+                    <optgroup label="Google (Gemini) — Primary & Resilient Workhorses">
+                      {AVAILABLE_MODELS.filter((m) => m.provider === "GOOGLE").map((model) => (
                         <option key={model.value} value={model.value}>
                           {model.label} ({model.tierLabel} • {model.rpdQuota} RPD)
                         </option>
                       ))}
                     </optgroup>
-                    <optgroup label="Google (Gemini)">
-                      {AVAILABLE_MODELS.filter((m) => m.provider === "GOOGLE").map((model) => (
+                    <optgroup label="OpenRouter (DeepSeek) — Commercial Tier">
+                      {AVAILABLE_MODELS.filter((m) => m.provider === "OPENROUTER").map((model) => (
                         <option key={model.value} value={model.value}>
                           {model.label} ({model.tierLabel} • {model.rpdQuota} RPD)
                         </option>

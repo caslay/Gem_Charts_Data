@@ -34,7 +34,15 @@ export async function POST(req: Request) {
 
     const geminiApiKey = config['GEMINI_LIVE_KEY'] || process.env.GEMINI_LIVE_KEY;
     const openRouterApiKey = config['OPENROUTER_API_KEY'] || process.env.OPENROUTER_API_KEY;
-    const activeModel = config['ACTIVE_MODEL'] || process.env.ACTIVE_MODEL || DEFAULT_MODEL;
+    let activeModel = config['ACTIVE_MODEL'] || process.env.ACTIVE_MODEL || DEFAULT_MODEL;
+    if (
+      !activeModel ||
+      activeModel === 'gemini-2.5-flash' ||
+      activeModel === 'gemini-2.5-flash-lite' ||
+      activeModel === 'deepseek/deepseek-v4-flash-0731:free'
+    ) {
+      activeModel = DEFAULT_MODEL;
+    }
     let systemPrompt = config['SYSTEM_PROMPT'] || DEFAULT_ETH_SOP_SYSTEM_PROMPT;
 
     // Guard against outdated prompt in DB: ensure Canonical Pure Pro-Trend Continuation V19.0 is active

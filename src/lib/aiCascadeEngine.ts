@@ -96,7 +96,7 @@ export interface CascadeEvaluationResult {
 }
 
 export const CASCADE_PER_ATTEMPT_TIMEOUT_MS = 15000;
-export const CASCADE_MAX_CUMULATIVE_SCAN_MS = 60000;
+export const CASCADE_MAX_CUMULATIVE_SCAN_MS = 45000;
 
 let isAiAnalysisTableReady = false;
 
