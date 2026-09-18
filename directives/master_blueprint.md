@@ -1,8 +1,39 @@
-# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.96
+# 🏛️ MASTER BLUEPRINT — Quegar Quant Engine V17.97
 
 > **Classification:** Institutional Architecture Document  
 > **Generated:** 2026-05-30  
-> **Last Updated:** 2026-09-18 (V17.96 — Dynamic Valuation Reconciliation, Context-Aware FVG Statuses, Organic Magnet Provenance & Live Edge Deviation Telemetry)
+> **Last Updated:** 2026-09-18 (V17.97 — Telemetry & Reconciled Outcome Export Pipeline in AI Analysis History)
+
+## 🆕 V17.97 Changelog — Telemetry & Reconciled Outcome Export Pipeline (CSV & JSON) in AI Analysis History (2026-09-18)
+
+### Summary
+1. **Institutional Telemetry Export Service (`src/lib/quantEngine/telemetryExportService.ts`):**
+   - **Corpus Construction (`buildTelemetryCorpus`):** Queries `ai_analysis_log` and `agent_decision_log` within temporal window (defaulting to Cairo date bounds via `getCairoDayRange`). Ingests raw records and executes read-only terminal outcome reconciliation via `reconcileSetupOutcomes()`.
+   - **MFE/MAE Excursion & Precision Delta Extraction:** Calculates MFE ($ & R), MAE ($ & R), and Entry Precision Delta ($) measuring discrepancy between executed/simulated fill price and planned limit entry mid-range.
+   - **Automated Post-Mortem Diagnostic Tagging:** Classifies terminal outcomes into 4 standardized post-mortem pathology tags:
+     * `DEADZONE_CHOP`: Initiated or expired during deadzone window or deadzone chop narrative.
+     * `MISSED_EXPANSION`: Pre-fill cancellation resulting from direct price expansion to Target 1 prior to limit entry fill.
+     * `INSTANT_INVALIDATION`: Pre-fill cancellation resulting from Invalidation breach or bar 0/1 stop-out immediately after fill.
+     * `HARVEST_GAP_REVERSAL`: Achieved favorable expansion ($\ge 0.70\text{R}$ or banked TP1) but subsequently reversed into a breakeven scratch or stop-out before completing TP2 harvest.
+     * `NONE`: Standard clean win, active setup, or natural TTL expiry.
+2. **Multi-Format Serializers (RFC 4180 CSV & Structured JSON Corpus):**
+   - **Flat CSV Serializer (`serializeTelemetryToCsv`):** Formats 44 standardized columns with UTF-8 BOM (`\uFEFF`) and RFC 4180 escaping (Temporal/Model Telemetry, V17.96 Nomenclature, Trade Geometry & Risk, Ground Truth Outcomes, and sanitized single-line AI Narrative Summaries).
+   - **Structural JSON Corpus (`serializeTelemetryToJson`):** Outputs indented JSON array structured into `metadata`, `market_context`, `trade_plan`, `forward_audit`, and `narrative`.
+3. **Dedicated Server-Side Export Route (`/api/quant-analyze/export`):**
+   - Implemented `GET /api/quant-analyze/export` supporting `startDate`, `endDate`, `format` (`csv` | `json`), `filter` (`ALL` | `WINS` | `LOSSES` | `CANCELLED` | `ACTIVE`), and `symbol`.
+   - Attaches `Content-Disposition: attachment; filename="quegar_ai_telemetry_[START_DATE]_[END_DATE].[csv|json]"` and `Cache-Control: no-store`.
+4. **Interactive UI Action in AI Analysis History Modal (`AiAnalysisHistoryModal.tsx`):**
+   - Added header action dropdown button `[ 📥 Export Telemetry ▾ ]` offering:
+     * `Export CSV (Quant & Statistical Analysis)`
+     * `Export JSON (AI Evaluation Corpus)`
+   - Dynamically binds to active modal state (`DateScope`: Today, Yesterday, Custom, All History; active status filter).
+   - Displays subtle loading spinner on button and triggers automated browser download via Blob URL.
+5. **Verification & Quality Standards:**
+   - `npx tsc --noEmit`: 0 TypeScript compiler errors.
+   - `npm run build`: All Next.js routes built cleanly with `/api/quant-analyze/export` registered as dynamic server route.
+   - Read-only guardrail verified: `data/ai_15min_sync_payload_export.json` completely untouched.
+
+---
 
 ## 🆕 V17.96 Changelog — Dynamic Valuation Reconciliation, Context-Aware FVG Statuses, Organic Magnet Provenance & Live Edge Deviation (2026-09-18)
 
