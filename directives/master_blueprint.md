@@ -9981,6 +9981,47 @@ To guarantee 100% interoperability across external AI agents and STDIO-to-HTTP b
 
 ---
 
+## 18. OpenRouter Integration & Multi-Model Quant Cascade Architecture (V16.0)
+
+To eliminate daily rate-limit chokes, ensure multi-provider resilience, and support zero-cost quantitative evaluation, OpenRouter's OpenAI-compatible API and DeepSeek models have been fully integrated into the autonomous multi-model quant cascade:
+
+### 18.1 Environment Configuration & Client Routing (`src/lib/openRouterClient.ts`)
+- **OpenAI-Compatible Transport:** Implemented dedicated caller `callOpenRouterApi` targeting `https://openrouter.ai/api/v1/chat/completions`.
+- **Standard Headers:** Automatically passes `Authorization: Bearer <OPENROUTER_API_KEY>`, `HTTP-Referer`, `X-Title: Quegar Quant Engine`, and `Content-Type: application/json`.
+- **Deterministic Payload Shaping & Resilient JSON Mode:** Enforces `response_format: { type: "json_object" }`, `temperature: 0.2`, and `max_tokens: 4096`. If an upstream model or free community provider rejects `response_format` (HTTP 400), the client automatically retries once without the parameter while relying on the system prompt's strict JSON instructions.
+- **Robust Content Extraction & Empty Guard:** Extracts response text from `choices[0].message.content`, `choices[0].message.reasoning`, or `choices[0].text`. Empty or blank responses throw categorized HTTP 502 Bad Gateway errors to trigger cascade failover.
+- **AbortController Timeouts:** Wrapped in 45,000ms AbortController timeout; aborted or stalled queue requests throw categorized HTTP 504 / ETIMEDOUT errors that trigger seamless cascade failover.
+
+### 18.2 Centralized AI Model Registry (`src/lib/aiModels.ts`)
+- **Multi-Provider Typing:** Added `ModelProvider = 'GOOGLE' | 'OPENROUTER'` and `ModelTier = 'apex' | 'workhorse' | 'community'`.
+- **Registered Model Roster:**
+  - `deepseek/deepseek-v4-flash-0731:free`: Free Community Tier (`OPENROUTER`, 200 RPD free quota).
+  - `deepseek/deepseek-chat`: Apex Reasoning Tier (`OPENROUTER`, DeepSeek V3 flagship).
+  - Google Gemini Flash Series: 6 Apex models (3.8 down to 2.5 Flash, 20 RPD) and 2 High-Quota Lite Workhorses (3.5 Lite, 3.1 Lite, 500 RPD).
+- **Cascade Priority Ordering:**
+  - **OpenRouter Models Requested:** Attempt #1: Active Selected Model -> Attempt #2 (on failover): High-Quota Gemini Flash-Lite Workhorses (`gemini-3.5-flash-lite`, `gemini-3.1-flash-lite`) -> Attempt #3: Flash Reserve Pool (`gemini-3.8-flash` down to `gemini-2.5-flash`).
+  - **Gemini Models Requested:** Preserves existing progressive downward cascade into Lite workhorses first, ensuring zero regression across legacy configurations.
+
+### 18.3 Resilient Cascade Engine Adapter (`src/lib/aiCascadeEngine.ts`)
+- **Provider-Agnostic Dispatch Layer:** Dynamically inspects `getModelProvider(candidateModel)` on each attempt; routes to `callOpenRouterApi` or `GoogleGenerativeAI` without external dependencies.
+- **Enhanced Error Categorization (`isRecoverableAiError`):**
+  - **Recoverable (Triggers Failover):** HTTP 429 (Quota / Rate Limit), HTTP 402 (Insufficient Provider Credits), HTTP 503 (Overloaded), HTTP 504 / 408 / ETIMEDOUT (Queue Stalled / Timeout), HTTP 404 (Endpoint Unavailable).
+  - **Non-Recoverable (Halts Immediately):** HTTP 401 (Invalid API Key) and HTTP 403 (Permission Denied) abort the cascade immediately to prevent futile attempt loops.
+- **Unconfigured Fallback Provider Isolation:** If an unconfigured provider's model is encountered as a secondary fallback candidate, it is recorded and skipped without throwing a false fatal 401 that would prematurely terminate the cascade.
+
+### 18.4 Telemetry, Parsing & State Persistence
+- **Institutional SOP Parser:** Normalizes raw output from `choices[0].message.content` using `safeParseAiJson`, extracting directional bias, trade setup levels, targets, and SOP narrative.
+- **Signal Normalization:** Canonicalizes string signals (`"BULLISH"` / `"BEARISH"` / `"NEUTRAL"`) into numeric representations (`1` / `-1` / `0`) to prevent `NaN` values from disrupting downstream quantitative evaluation.
+- **Sequence Telemetry:** Captures `requested_model`, `resolved_model`, `provider`, `was_fallback`, `fallback_reason`, and granular attempt arrays with explicit `provider` attribution and millisecond latencies.
+- **Database Self-Healing:** Auto-migrates `ai_analysis_log` and `agent_decision_log` with `provider VARCHAR(32)` and widened model columns (`VARCHAR(128)`).
+- **Frontend HUD Visibility:** Displays provider badges across `Sidebar.tsx`, `HudModal.tsx`, and `AiAnalysisHistoryModal.tsx`.
+
+### 18.5 Settings & Headless Daemon Synchronization
+- **Command Center Settings (`src/app/settings/page.tsx`):** Model dropdown groups options with `<optgroup label="OpenRouter (DeepSeek)">` and `<optgroup label="Google (Gemini)">`. Added OpenRouter API Key input with password toggle and vault masking (`OPENROUTER_API_KEY`).
+- **Background Daemon (`src/lib/daemon/headlessScheduler.ts`) & API (`src/app/api/quant-analyze/route.ts`):** Reads credentials from PostgreSQL `system_settings` with environment variable fallbacks, passing provider credentials seamlessly into the cascade engine.
+
+---
+
 > **End of Master Blueprint.** This document should be treated as the canonical reference for all future modifications to the Flow-State Quant Engine. When in doubt, trace back to the source files linked throughout this document.
 
 

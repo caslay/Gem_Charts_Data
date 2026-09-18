@@ -71,6 +71,11 @@ const HudModal: React.FC<HudModalProps> = ({
                 <span className="px-1.5 py-0.2 rounded bg-purple-500/20 border border-purple-500/40 text-purple-300 font-bold">
                   {aiTelemetry.resolved_model}
                 </span>
+                {aiTelemetry.provider && (
+                  <span className="px-1 py-0.2 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-black text-[8px] uppercase">
+                    {aiTelemetry.provider}
+                  </span>
+                )}
                 <span className="text-zinc-400 font-bold">{aiTelemetry.execution_latency_ms}ms</span>
                 {aiTelemetry.was_fallback && (
                   <span className="px-1 py-0.2 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 font-black" title={aiTelemetry.fallback_reason || 'Cascade fallback'}>

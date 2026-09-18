@@ -44,6 +44,7 @@ interface QuantSettings {
   ACTIVE_MODEL: string;
   SYSTEM_PROMPT: string;
   GEMINI_LIVE_KEY: string;
+  OPENROUTER_API_KEY?: string;
 }
 
 interface AccountState {
@@ -182,8 +183,10 @@ export default function SettingsPage() {
     ACTIVE_MODEL: DEFAULT_MODEL,
     SYSTEM_PROMPT: "",
     GEMINI_LIVE_KEY: "",
+    OPENROUTER_API_KEY: "",
   });
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showOpenRouterApiKey, setShowOpenRouterApiKey] = useState(false);
 
   // ── Account & Risk State ───────────────────────────────────────────────────
   const [account, setAccount] = useState<AccountState>({
@@ -263,6 +266,7 @@ export default function SettingsPage() {
         ACTIVE_MODEL: s.ACTIVE_MODEL || DEFAULT_MODEL,
         SYSTEM_PROMPT: s.SYSTEM_PROMPT || "",
         GEMINI_LIVE_KEY: s.GEMINI_LIVE_KEY || "",
+        OPENROUTER_API_KEY: s.OPENROUTER_API_KEY || "",
       });
 
       // Merge retrieved settings on top of default settings to guarantee all keys exist
@@ -768,16 +772,25 @@ export default function SettingsPage() {
                     onChange={(e) =>
                       setQuantSettings((s) => ({ ...s, ACTIVE_MODEL: e.target.value }))
                     }
-                    className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3.5 py-2.5 text-xs text-foreground rounded-lg transition-all cursor-pointer shadow-sm"
+                    className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none px-3.5 py-2.5 text-xs text-foreground rounded-lg transition-all cursor-pointer shadow-sm font-sans"
                   >
-                    {AVAILABLE_MODELS.map((model) => (
-                      <option key={model.value} value={model.value}>
-                        {model.label} ({model.tierLabel} • {model.rpdQuota} RPD)
-                      </option>
-                    ))}
+                    <optgroup label="OpenRouter (DeepSeek)">
+                      {AVAILABLE_MODELS.filter((m) => m.provider === "OPENROUTER").map((model) => (
+                        <option key={model.value} value={model.value}>
+                          {model.label} ({model.tierLabel} • {model.rpdQuota} RPD)
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Google (Gemini)">
+                      {AVAILABLE_MODELS.filter((m) => m.provider === "GOOGLE").map((model) => (
+                        <option key={model.value} value={model.value}>
+                          {model.label} ({model.tierLabel} • {model.rpdQuota} RPD)
+                        </option>
+                      ))}
+                    </optgroup>
                   </select>
                   <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-relaxed font-sans">
-                    ⚡ <span className="font-semibold text-accent">Resilient Multi-Model Cascade Active:</span> If standard 20 RPD Apex Flash models encounter 429 quota exhaustion or 503 traffic limits, the engine will automatically cascade into high-quota 500 RPD Lite models to keep scans uninterrupted.
+                    ⚡ <span className="font-semibold text-accent">Resilient Multi-Model Cascade Active:</span> If primary OpenRouter or Apex Flash models encounter 429 quota exhaustion or 503 traffic limits, the engine will automatically cascade into high-quota 500 RPD Lite models to keep scans uninterrupted.
                   </p>
                 </div>
 
@@ -801,7 +814,7 @@ export default function SettingsPage() {
                   </div>
                 </div>
 
-                {/* API Key */}
+                {/* Google Gemini API Key */}
                 <div className="space-y-2">
                   <label className="text-[9px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
                     Google Gemini API Key
@@ -828,6 +841,37 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-2 text-[9px] text-slate-500 dark:text-zinc-400">
                       <Shield className="w-3.5 h-3.5 text-[#50ffaf]" />
                       <span>VAULT VALUE MASKED: {maskKey(quantSettings.GEMINI_LIVE_KEY)}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* OpenRouter API Key */}
+                <div className="space-y-2">
+                  <label className="text-[9px] text-slate-500 dark:text-zinc-400 uppercase font-black tracking-widest block">
+                    OpenRouter API Key (DeepSeek Models)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showOpenRouterApiKey ? "text" : "password"}
+                      value={quantSettings.OPENROUTER_API_KEY || ""}
+                      onChange={(e) =>
+                        setQuantSettings((s) => ({ ...s, OPENROUTER_API_KEY: e.target.value }))
+                      }
+                      placeholder="sk-or-v1-..."
+                      className="w-full bg-card/60 backdrop-blur-md border border-card-border focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none pl-3.5 pr-10 py-2.5 text-xs text-foreground rounded-lg transition-all placeholder:text-slate-500 dark:placeholder-zinc-600 shadow-sm font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowOpenRouterApiKey(!showOpenRouterApiKey)}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 dark:text-zinc-500 hover:text-foreground transition-colors cursor-pointer"
+                    >
+                      {showOpenRouterApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {quantSettings.OPENROUTER_API_KEY && !showOpenRouterApiKey && (
+                    <div className="flex items-center gap-2 text-[9px] text-slate-500 dark:text-zinc-400">
+                      <Shield className="w-3.5 h-3.5 text-[#50ffaf]" />
+                      <span>VAULT VALUE MASKED: {maskKey(quantSettings.OPENROUTER_API_KEY)}</span>
                     </div>
                   )}
                 </div>

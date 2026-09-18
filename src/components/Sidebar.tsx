@@ -1312,6 +1312,11 @@ const Sidebar = memo(function Sidebar({
                           <span className="font-bold text-foreground truncate" title={aiTelemetry.resolved_model}>
                             {aiTelemetry.resolved_model}
                           </span>
+                          {aiTelemetry.provider && (
+                            <span className="px-1 py-0.2 rounded text-[7.5px] font-mono font-black uppercase tracking-wider bg-accent/10 border border-accent/20 text-accent shrink-0">
+                              {aiTelemetry.provider}
+                            </span>
+                          )}
                           {aiTelemetry.was_fallback ? (
                             <span
                               className="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold uppercase tracking-wider text-[8px] shrink-0 flex items-center gap-0.5 animate-pulse"
@@ -1674,6 +1679,7 @@ const Sidebar = memo(function Sidebar({
           setAiTelemetry({
             requested_model: record.requested_model,
             resolved_model: record.resolved_model,
+            provider: (record.provider as any) || undefined,
             was_fallback: record.was_fallback,
             fallback_reason: record.fallback_reason,
             execution_latency_ms: record.execution_latency_ms,

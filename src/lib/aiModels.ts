@@ -1,27 +1,52 @@
-export type ModelTier = 'apex' | 'workhorse';
+export type ModelTier = 'apex' | 'workhorse' | 'community';
+export type ModelProvider = 'GOOGLE' | 'OPENROUTER';
 
 export interface AiModelOption {
   value: string;
   label: string;
   tier: ModelTier;
   tierLabel: string;
+  provider: ModelProvider;
   rpdQuota: number;
   description: string;
 }
 
 /**
- * Valid Active Gemini Models Registry
+ * Valid Active Multi-Model Registry (Google Gemini & OpenRouter DeepSeek)
  * 
  * Tiers:
- * - Apex Reasoning: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash, 3 Flash, 2.5 Flash (20 RPD Free Quota)
- * - High-Quota Lite Workhorse: Gemini 3.5 Flash Lite, 3.1 Flash Lite (500 RPD High Capacity)
+ * - OpenRouter Community Tier: DeepSeek V4 Flash (200 RPD Free Community Quota)
+ * - OpenRouter Flagship: DeepSeek V3 Chat (1000 RPD Commercial Quota)
+ * - Google Apex Reasoning: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash, 3 Flash, 2.5 Flash (20 RPD Free Quota)
+ * - Google High-Quota Lite Workhorse: Gemini 3.5 Flash Lite, 3.1 Flash Lite (500 RPD High Capacity)
  */
 export const AVAILABLE_MODELS: readonly AiModelOption[] = [
+  // ── OpenRouter DeepSeek Community & Commercial Tier ──────────────────────────
+  {
+    value: "deepseek/deepseek-v4-flash-0731:free",
+    label: "DeepSeek V4 Flash (Free)",
+    tier: "community",
+    tierLabel: "Free Community Tier",
+    provider: "OPENROUTER",
+    rpdQuota: 200,
+    description: "OpenRouter free community tier DeepSeek V4 Flash model for zero-cost resilient quantitative evaluation",
+  },
+  {
+    value: "deepseek/deepseek-chat",
+    label: "DeepSeek V3 (Chat)",
+    tier: "apex",
+    tierLabel: "Apex Reasoning",
+    provider: "OPENROUTER",
+    rpdQuota: 1000,
+    description: "Flagship DeepSeek V3 institutional reasoning model via OpenRouter API",
+  },
+  // ── Google Gemini Tier ───────────────────────────────────────────────────────
   {
     value: "gemini-3.8-flash",
     label: "Gemini 3.8 Flash",
     tier: "apex",
     tierLabel: "Apex Reasoning",
+    provider: "GOOGLE",
     rpdQuota: 20,
     description: "Flagship high-reasoning Flash model with deepest structural synthesis (20 RPD Free Quota)",
   },
@@ -30,6 +55,7 @@ export const AVAILABLE_MODELS: readonly AiModelOption[] = [
     label: "Gemini 3.7 Flash",
     tier: "apex",
     tierLabel: "Apex Reasoning",
+    provider: "GOOGLE",
     rpdQuota: 20,
     description: "High-reasoning Flash model with deep market structure parsing (20 RPD Free Quota)",
   },
@@ -38,6 +64,7 @@ export const AVAILABLE_MODELS: readonly AiModelOption[] = [
     label: "Gemini 3.6 Flash",
     tier: "apex",
     tierLabel: "Apex Reasoning",
+    provider: "GOOGLE",
     rpdQuota: 20,
     description: "Reliable institutional Flash model (20 RPD Free Quota)",
   },
@@ -46,6 +73,7 @@ export const AVAILABLE_MODELS: readonly AiModelOption[] = [
     label: "Gemini 3.5 Flash",
     tier: "apex",
     tierLabel: "Apex Reasoning",
+    provider: "GOOGLE",
     rpdQuota: 20,
     description: "Standard balanced reasoning Flash model (20 RPD Free Quota)",
   },
@@ -54,6 +82,7 @@ export const AVAILABLE_MODELS: readonly AiModelOption[] = [
     label: "Gemini 3 Flash",
     tier: "apex",
     tierLabel: "Apex Reasoning",
+    provider: "GOOGLE",
     rpdQuota: 20,
     description: "Baseline Gemini 3 Flash model (20 RPD Free Quota)",
   },
@@ -62,6 +91,7 @@ export const AVAILABLE_MODELS: readonly AiModelOption[] = [
     label: "Gemini 2.5 Flash",
     tier: "apex",
     tierLabel: "Apex Reasoning",
+    provider: "GOOGLE",
     rpdQuota: 20,
     description: "Fast stable predecessor model (20 RPD Free Quota)",
   },
@@ -70,6 +100,7 @@ export const AVAILABLE_MODELS: readonly AiModelOption[] = [
     label: "Gemini 3.5 Flash Lite",
     tier: "workhorse",
     tierLabel: "High-Quota Lite Workhorse",
+    provider: "GOOGLE",
     rpdQuota: 500,
     description: "High-frequency 500 RPD workhorse for continuous uninterrupted scanning",
   },
@@ -78,6 +109,7 @@ export const AVAILABLE_MODELS: readonly AiModelOption[] = [
     label: "Gemini 3.1 Flash Lite",
     tier: "workhorse",
     tierLabel: "High-Quota Lite Workhorse",
+    provider: "GOOGLE",
     rpdQuota: 500,
     description: "High-capacity 500 RPD fallback model for heavy traffic resilience",
   },
@@ -86,9 +118,9 @@ export const AVAILABLE_MODELS: readonly AiModelOption[] = [
 export const DEFAULT_MODEL = "gemini-3.8-flash";
 
 /**
- * Standard cascade sequence: Apex models first, then 500 RPD Lite workhorses.
+ * Standard baseline Gemini sequence: Apex models first, then 500 RPD Lite workhorses.
  */
-export const DEFAULT_CASCADE_ORDER: readonly string[] = [
+export const GEMINI_CASCADE_ORDER: readonly string[] = [
   "gemini-3.8-flash",
   "gemini-3.7-flash",
   "gemini-3.6-flash",
@@ -99,34 +131,92 @@ export const DEFAULT_CASCADE_ORDER: readonly string[] = [
   "gemini-3.1-flash-lite",
 ] as const;
 
+export const DEFAULT_CASCADE_ORDER: readonly string[] = [
+  ...GEMINI_CASCADE_ORDER,
+  "deepseek/deepseek-v4-flash-0731:free",
+  "deepseek/deepseek-chat",
+] as const;
+
+/**
+ * Identify the provider for a model (OPENROUTER vs GOOGLE)
+ */
+export function getModelProvider(modelName: string): ModelProvider {
+  const meta = AVAILABLE_MODELS.find((m) => m.value === modelName);
+  if (meta) return meta.provider;
+  if (modelName.toLowerCase().includes('deepseek') || modelName.includes('/')) {
+    return 'OPENROUTER';
+  }
+  return 'GOOGLE';
+}
+
+/**
+ * Check whether a model is routed through OpenRouter
+ */
+export function isOpenRouterModel(modelName: string): boolean {
+  return getModelProvider(modelName) === 'OPENROUTER';
+}
+
 /**
  * Returns an ordered pool of candidate models starting with the requested model.
- * If the requested model is already a Lite model, it will still prioritize other Lite models
- * before attempting any Apex models.
+ *
+ * Cascade Priorities:
+ * 1. If OpenRouter model is requested:
+ *    - Attempt #1: Active Selected Model (e.g., OpenRouter DeepSeek Flash)
+ *    - Attempt #2 (on failover): High-Quota Gemini Flash-Lite Workhorses (3.5 Lite, 3.1 Lite)
+ *    - Attempt #3: Flash Reserve Pool (3.8 Flash down to 2.5 Flash)
+ *    - Attempt #4: Remaining OpenRouter models
+ * 2. If Gemini Lite Workhorse is requested:
+ *    - Requested Lite model -> other Lite models -> Gemini Apex models -> OpenRouter models
+ * 3. If Gemini Apex model is requested:
+ *    - Requested Apex -> remaining downward to Lite Workhorses -> preceding Apex -> OpenRouter models
  */
 export function getFallbackCascadePool(requestedModel: string): string[] {
   const cleanRequested = (requestedModel || DEFAULT_MODEL).trim();
+  const provider = getModelProvider(cleanRequested);
+
+  // Case 1: OpenRouter model requested
+  if (provider === 'OPENROUTER') {
+    const geminiLiteWorkhorses = AVAILABLE_MODELS
+      .filter((m) => m.provider === 'GOOGLE' && m.tier === 'workhorse')
+      .map((m) => m.value);
+    const geminiApexReserve = AVAILABLE_MODELS
+      .filter((m) => m.provider === 'GOOGLE' && m.tier === 'apex')
+      .map((m) => m.value);
+    const otherOpenRouter = AVAILABLE_MODELS
+      .filter((m) => m.provider === 'OPENROUTER' && m.value !== cleanRequested)
+      .map((m) => m.value);
+
+    return [
+      cleanRequested,
+      ...geminiLiteWorkhorses,
+      ...geminiApexReserve,
+      ...otherOpenRouter,
+    ];
+  }
+
+  // Case 2: Gemini Lite Workhorse requested
   const selectedMeta = AVAILABLE_MODELS.find((m) => m.value === cleanRequested);
-
   if (selectedMeta && selectedMeta.tier === 'workhorse') {
-    // If user explicitly requested a workhorse model, cascade through Lite models first
-    const liteModels = AVAILABLE_MODELS.filter((m) => m.tier === 'workhorse').map((m) => m.value);
+    const liteModels = AVAILABLE_MODELS.filter((m) => m.provider === 'GOOGLE' && m.tier === 'workhorse').map((m) => m.value);
     const otherLite = liteModels.filter((m) => m !== cleanRequested);
-    const apexModels = AVAILABLE_MODELS.filter((m) => m.tier === 'apex').map((m) => m.value);
-    return [cleanRequested, ...otherLite, ...apexModels];
+    const apexModels = AVAILABLE_MODELS.filter((m) => m.provider === 'GOOGLE' && m.tier === 'apex').map((m) => m.value);
+    const openRouterModels = AVAILABLE_MODELS.filter((m) => m.provider === 'OPENROUTER').map((m) => m.value);
+    return [cleanRequested, ...otherLite, ...apexModels, ...openRouterModels];
   }
 
-  // Progressive downward cascade: requested -> remaining models down to Lite -> higher fallback models
-  const idx = DEFAULT_CASCADE_ORDER.indexOf(cleanRequested);
+  // Case 3: Gemini Apex model requested -> Progressive downward cascade
+  const idx = GEMINI_CASCADE_ORDER.indexOf(cleanRequested);
   if (idx !== -1) {
-    const following = DEFAULT_CASCADE_ORDER.slice(idx + 1);
-    const preceding = DEFAULT_CASCADE_ORDER.slice(0, idx);
-    return [cleanRequested, ...following, ...preceding];
+    const following = GEMINI_CASCADE_ORDER.slice(idx + 1);
+    const preceding = GEMINI_CASCADE_ORDER.slice(0, idx);
+    const openRouterModels = AVAILABLE_MODELS.filter((m) => m.provider === 'OPENROUTER').map((m) => m.value);
+    return [cleanRequested, ...following, ...preceding, ...openRouterModels];
   }
 
-  // Fallback for custom or unlisted model: start with requested, then full default cascade order
-  const rest = DEFAULT_CASCADE_ORDER.filter((m) => m !== cleanRequested);
-  return [cleanRequested, ...rest];
+  // Case 4: Fallback for custom or unlisted model
+  const geminiRest = GEMINI_CASCADE_ORDER.filter((m) => m !== cleanRequested);
+  const openRouterRest = AVAILABLE_MODELS.filter((m) => m.provider === 'OPENROUTER' && m.value !== cleanRequested).map((m) => m.value);
+  return [cleanRequested, ...geminiRest, ...openRouterRest];
 }
 
 /**
